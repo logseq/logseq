@@ -12,14 +12,12 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="https://unpkg.com/browserfs"></script>
+    <script src="https://unpkg.com/@isomorphic-git/lightning-fs"></script>
     <script src="https://unpkg.com/isomorphic-git"></script>
     <script>
-      BrowserFS.configure({ fs: "IndexedDB", options: {} }, function (err) {
-          if (err) return console.log(err);
-          window.fs = BrowserFS.BFSRequire("fs");
-          git.plugins.set('fs', window.fs);
-      });
+      window.fs = new LightningFS('gitnotes')
+      git.plugins.set('fs', window.fs)
+      window.pfs = window.fs.promises
     </script>
     <script src="/js/main.js"></script>
   </body>
