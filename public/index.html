@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no"
+      />
+    <link rel="stylesheet" href="css/style.css" type="text/css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+    <title>Gitnotes</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://unpkg.com/browserfs"></script>
+    <script src="https://unpkg.com/isomorphic-git"></script>
+    <script>
+      BrowserFS.configure({ fs: "IndexedDB", options: {} }, function (err) {
+          if (err) return console.log(err);
+          window.fs = BrowserFS.BFSRequire("fs");
+          git.plugins.set('fs', window.fs);
+      });
+    </script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>
