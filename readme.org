@@ -1,5 +1,5 @@
 * Gitnotes
-  A client-only note app which sync with your github repo. Use it at your own risk!!!!
+  A client-only note app which sync with your github repo. *Use it at your own risk!!!!*
 
 ** Demo
    http://gitnotes.tiensonqin.now.sh/
