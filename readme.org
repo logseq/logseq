@@ -1,0 +1,16 @@
+* Gitnotes
+  A client-only note app which sync with your github repo
+
+** Demo
+   http://gitnotes.tiensonqin.now.sh/
+
+** Develop
+   #+BEGIN_SRC shell
+     yarn install
+     yarn watch
+     open http://localhost:3000
+   #+END_SRC
+
+*** Or if you are using Emacs
+    1. M-x cider-jack-in
+    2. type `(cljs-repl)` in the repl
