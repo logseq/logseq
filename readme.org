@@ -4,6 +4,17 @@
 ** Demo
    http://gitnotes.tiensonqin.now.sh/
 
+
+** File directory example
+   #+BEGIN_SRC shell
+     links.org                       # the app will extract links from this file
+     tasks.org                       # the app will extract todos from this file
+     other_notes.org
+     other_notes.markdown
+     ...
+   #+END_SRC
+
+
 ** Deploy to your now.sh instance
    #+BEGIN_SRC shell
      ./deploy.sh
