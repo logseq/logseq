@@ -6,11 +6,7 @@
   [cider/cider-nrepl "0.23.0-SNAPSHOT"]
 
   [rum "0.11.4"]
-  [funcool/promesa "4.0.2"]
-  [prismatic/dommy "1.1.0"]
-  [metosin/reitit "0.3.10"]
-  [metosin/reitit-spec "0.3.10"]
-  [metosin/reitit-frontend "0.3.10"]]
+  [funcool/promesa "4.0.2"]]
 
  :nrepl        {:port 8701}
 

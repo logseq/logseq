@@ -1,3 +1,71 @@
 .grow {
     flex-grow: 1;
 }
+
+.priority {
+    color: #FFF;
+    padding: 0px 3px;
+    font-size: 12px;
+    border-radius: 2px;
+}
+
+.priority-a {
+    background: red;
+}
+
+.priority-b {
+    background: purple;
+}
+
+.priority-c {
+    background: green;
+}
+
+.marker-todo {
+
+}
+
+.marker-doing, .marker-in-progress {
+
+}
+
+.marker-waiting {
+
+}
+
+.marker-done {
+    color: green;
+    text-decoration: line-through;
+}
+
+.marker-canceled, .marker-cancelled {
+    color: #ff4500;
+    text-decoration: line-through;
+}
+
+i {
+    border: solid black;
+    border-width: 0 3px 3px 0;
+    display: inline-block;
+    padding: 3px;
+}
+
+.right {
+    transform: rotate(-45deg);
+    -webkit-transform: rotate(-45deg);
+}
+
+.left {
+    transform: rotate(135deg);
+    -webkit-transform: rotate(135deg);
+}
+
+.up {
+    transform: rotate(-135deg);
+    -webkit-transform: rotate(-135deg);
+}
+
+.down {
+    transform: rotate(45deg);
+    -webkit-transform: rotate(45deg);
+}

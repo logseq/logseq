@@ -16,7 +16,7 @@
     "@material-ui/icons": "^4.5.1",
     "browserfs": "^1.4.3",
     "isomorphic-git": "^0.72.0",
-    "mldoc_org": "^0.0.4",
+    "mldoc_org": "^0.0.6",
     "react": "^16.12.0",
     "react-dom": "^16.12.0",
     "showdown": "^1.9.1"
