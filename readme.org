@@ -4,6 +4,11 @@
 ** Demo
    http://gitnotes.tiensonqin.now.sh/
 
+** Deploy to your now.sh instance
+   #+BEGIN_SRC shell
+     ./deploy.sh
+   #+END_SRC
+
 ** Develop
    #+BEGIN_SRC shell
      yarn install
