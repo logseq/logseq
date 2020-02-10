@@ -37,4 +37,4 @@
 
 *** Or if you are using Emacs
     1. M-x cider-jack-in
-    2. type `(cljs-repl)` in the repl
+    2. type ~(cljs-repl)~ in the repl
