@@ -8,6 +8,7 @@
       />
     <link rel="stylesheet" href="css/style.css" type="text/css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+    <link rel="stylesheet" href="css/highlight.css">
     <title>Gitnotes</title>
   </head>
   <body>
@@ -15,10 +16,16 @@
     <script src="https://unpkg.com/@isomorphic-git/lightning-fs"></script>
     <script src="https://unpkg.com/isomorphic-git"></script>
     <script>
-      window.fs = new LightningFS('gitnotes')
-      git.plugins.set('fs', window.fs)
-      window.pfs = window.fs.promises
+      window.fs = new LightningFS('gitnotes');
+      git.plugins.set('fs', window.fs);
+      window.pfs = window.fs.promises;
     </script>
     <script src="/js/main.js"></script>
+    <script src="/js/highlight.pack.js"></script>
+    <script>
+      document.querySelectorAll('pre code').forEach((block) => {
+          hljs.highlightBlock(block);
+      });
+    </script>
   </body>
 </html>
