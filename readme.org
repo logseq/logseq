@@ -1,5 +1,8 @@
 * Gitnotes
   A client-only note app which sync with your github repo. *Use it at your own risk!!!!*
+  #+CAPTION: gitnote screenshot
+  #+NAME:   fig:screenshot.png
+  [[./images/screenshot.png]]
 
 ** Demo
    http://gitnotes.tiensonqin.now.sh/
