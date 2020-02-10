@@ -14,6 +14,14 @@
      ...
    #+END_SRC
 
+** Hidden directories or files
+   #+BEGIN_SRC shell
+     touch .hidden                   # root directory
+     # add directories or files like:
+     # /directory
+     # file
+     # /directory/file
+   #+END_SRC
 
 ** Deploy to your now.sh instance
    #+BEGIN_SRC shell
