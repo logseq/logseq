@@ -4,6 +4,15 @@
 ** Demo
    http://gitnotes.tiensonqin.now.sh/
 
+** Setup
+*** Create a github basic token
+    1. Go to github.com Settings / Developer settings / Personal access tokens
+    2. Click the button *Generate new token*
+    3. Input =gitnotes= or anything in the *Note*
+    4. Select the =repo= checkbox under *Select scopes*
+    5. Click the *Generate token* button
+*** Go to the demo or your now.sh instance
+    Input your github username, repo and basic token and click the *Sync* button.
 
 ** File directory example
    #+BEGIN_SRC shell
