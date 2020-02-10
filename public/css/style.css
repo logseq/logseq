@@ -1,3 +1,24 @@
+.row {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    word-break: break-word;
+}
+
+.space-between {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    word-break: break-word;
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    word-break: break-word;
+}
+
 .grow {
     flex-grow: 1;
 }
