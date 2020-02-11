@@ -889,10 +889,10 @@ mkdirp@^0.5.1:
   dependencies:
     minimist "0.0.8"
 
-mldoc_org@^0.0.8:
-  version "0.0.8"
-  resolved "https://registry.yarnpkg.com/mldoc_org/-/mldoc_org-0.0.8.tgz#ca9f85545fc49014c0f5b16f231686d5e3e3f9b1"
-  integrity sha512-sQtPisy4zC55ko0EWKMbLvA7rIaPZqx5rFq07QYUsRuD7O/Aiix7J3jYo21YfxxA/xq5PXbyS+rPJFSQhPJFFw==
+mldoc_org@^0.0.9:
+  version "0.0.9"
+  resolved "https://registry.yarnpkg.com/mldoc_org/-/mldoc_org-0.0.9.tgz#e53e1a70c1171b34a9362f7100658fc7ae004b0d"
+  integrity sha512-1CX2bQq9HmpApH87eYKO3Jss+7EEDpBbq8k8ub7vcZXcomnV89ArBJ8iSsc7L0S0XInQLpeAIlAo4WC3SDxKXg==
   dependencies:
     yargs "^12.0.2"
 

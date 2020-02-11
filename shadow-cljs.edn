@@ -15,9 +15,7 @@
   {:target :browser
    :modules {:main {:init-fn frontend.core/init}}
 
-   :compiler-options {
-                      :infer-externs :auto
-                      }
+   :compiler-options {:infer-externs :auto}
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop
