@@ -6,6 +6,7 @@
   [cider/cider-nrepl "0.23.0-SNAPSHOT"]
 
   [rum "0.11.4"]
+  [datascript "0.18.9"]
   [funcool/promesa "4.0.2"]]
 
  :nrepl        {:port 8701}
