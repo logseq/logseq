@@ -7,7 +7,8 @@
 
   [rum "0.11.4"]
   [datascript "0.18.9"]
-  [funcool/promesa "4.0.2"]]
+  [funcool/promesa "4.0.2"]
+  [medley "1.2.0"]]
 
  :nrepl        {:port 8701}
 
@@ -16,7 +17,8 @@
   {:target :browser
    :modules {:main {:init-fn frontend.core/init}}
 
-   :compiler-options {:infer-externs :auto}
+   :compiler-options {:infer-externs :auto
+                      :externs ["datascript/externs.js"]}
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop
