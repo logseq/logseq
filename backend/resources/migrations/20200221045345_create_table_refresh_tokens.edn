@@ -1,0 +1,9 @@
+{:up ["CREATE TABLE refresh_tokens (
+    user_id uuid NOT NULL UNIQUE,
+    token uuid NOT NULL UNIQUE
+)"
+      "ALTER TABLE refresh_tokens
+      ADD CONSTRAINT refresh_tokens_users_fkey FOREIGN KEY (user_id)
+      REFERENCES users (id)
+      ON UPDATE CASCADE ON DELETE CASCADE;"]
+ :down ["drop table refresh_tokens"]}

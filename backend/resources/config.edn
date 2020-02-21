@@ -1,7 +1,8 @@
 {:env #or [#env ENVIRONMENT "dev"]
  :port #or [#env PORT 8080]
  :oauth {:github {:app-key #env GITHUB_APP_KEY
-                  :app-secret #env GITHUB_APP_SECRET}}
+                  :app-secret #env GITHUB_APP_SECRET
+                  :redirect-uri #env GITHUB_REDIRECT_URI}}
  :jwt-secret #env JWT_SECRET
  :cookie-secret #env COOKIE_SECRET
  :log-path #or [#env LOG_PATH "/tmp/gitnotes"]

@@ -1,0 +1,10 @@
+{:up ["create extension if not exists \"uuid-ossp\";
+CREATE TABLE users (
+  id uuid DEFAULT uuid_generate_v4() NOT NULL UNIQUE,
+  name text NOT NULL,
+  email text NOT NULL UNIQUE,
+  created_at timestamp with time zone DEFAULT timezone('UTC'::text, now()) NOT NULL,
+  CONSTRAINT created_at_chk CHECK ((date_part('timezone'::text, created_at) = '0'::double precision))
+);
+"]
+ :down ["drop table users"]}

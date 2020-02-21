@@ -1,4 +1,4 @@
-(ns api.jwt
+(ns backend.jwt
   (:require [buddy.sign.jwt :as jwt]
             [clj-time.core :as time]
             [backend.config :refer [config]]))

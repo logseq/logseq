@@ -17,32 +17,16 @@
             [io.pedestal.http :as server]
             [reitit.pedestal :as pedestal]
             [clojure.core.async :as a]
-            [clojure.java.io :as io]
             [muuntaja.core :as m]
             [com.stuartsierra.component :as component]
             [backend.components.http :as component-http]
-            [backend.components.hikari :as hikari]))
+            [backend.components.hikari :as hikari]
+            [backend.routes :as routes]))
 
 (def router
   (pedestal/routing-interceptor
     (http/router
-      [["/swagger.json"
-        {:get {:no-doc true
-               :swagger {:info {:title "gitnotes api"
-                                :description "with pedestal & reitit-http"}}
-               :handler (swagger/create-swagger-handler)}}]
-
-       ["/login"
-        {:swagger {:tags ["Login"]}}
-
-        ["/github"
-         {:get {:summary "Login with github"
-                :swagger {:produces ["image/png"]}
-                :handler (fn [_]
-                           {:status 200
-                            :headers {"Content-Type" "image/png"}
-                            :body (io/input-stream
-                                    (io/resource "reitit.png"))})}}]]       ]
+     routes/routes
 
       {;:reitit.interceptor/transform dev/print-context-diffs ;; pretty context diffs
        ;;:validate spec/validate ;; enable spec validation for route data

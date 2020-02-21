@@ -4,7 +4,7 @@
   :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [clj-social "0.1.5"]
+                 [clj-social "0.1.6"]
                  [org.postgresql/postgresql "42.2.8"]
                  [org.clojure/java.jdbc "0.7.10"]
                  [honeysql "0.9.8"]
@@ -23,6 +23,7 @@
                  [metosin/jsonista "0.2.5"]
                  [aero "1.1.6"]
                  [com.stuartsierra/component "0.4.0"]
+                 [com.taoensso/nippy "2.14.0"]
                  ]
   ;; :main backend.core
   :profiles {:repl {:dependencies [[io.pedestal/pedestal.service-tools "0.5.7"]]
