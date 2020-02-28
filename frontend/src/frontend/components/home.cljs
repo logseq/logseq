@@ -8,6 +8,7 @@
             [frontend.components.agenda :as agenda]
             [frontend.components.file :as file]
             [frontend.components.settings :as settings]
+            [frontend.components.repo :as repo]
             [frontend.format :as format]
             [clojure.string :as string]))
 
@@ -28,7 +29,7 @@
 (rum/defc home < rum/reactive
   []
   (let [state (rum/react state/state)
-        {:keys [cloned? github-username github-token github-repo contents loadings current-file files width drawer? tasks links cloning?]} state
+        {:keys [user tokens repos repo-url cloned? github-username github-token github-repo contents loadings current-file files width drawer? tasks links cloning?]} state
         loading? (get loadings current-file)
         width (or width (util/get-width))
         mobile? (and width (<= width 600))]
@@ -39,6 +40,16 @@
               ;; TODO: fewer spacing for mobile, 24px
               :margin-top 64}}
      (cond
+       (nil? user)
+       (mui/button {:variant "contained"
+                    :color "primary"
+                    :start-icon (mui/github-icon)
+                    :href "/login/github"}
+         "Login with Github")
+
+       (empty? repos)
+       (repo/add-repo repo-url)
+
        cloned?
        (mui/grid
         {:container true
@@ -70,11 +81,6 @@
        [:div "Cloning..."]
 
        :else
-       (mui/button {:variant "contained"
-                    :color "primary"
-                    :start-icon (mui/github-icon)
-                    :href "/login/github"}
-         "Login with Github")
-
+       [:div "TBC"]
        ;; (settings/settings-form github-username github-token github-repo)
        ))))

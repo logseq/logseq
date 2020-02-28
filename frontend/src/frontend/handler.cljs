@@ -11,7 +11,8 @@
             [frontend.config :as config]
             [clojure.walk :as walk]
             [clojure.string :as string]
-            [promesa.core :as p])
+            [promesa.core :as p]
+            [frontend.api :as api])
   (:import [goog.events EventHandler]))
 
 (defn load-file
@@ -143,10 +144,6 @@
 
 (defn clone
   [github-username github-token github-repo]
-  (storage/set :github-username github-username)
-  (storage/set :github-token github-token)
-  (storage/set :github-repo github-repo)
-
   (util/p-handle
    (do
      (swap! state/state assoc
@@ -368,3 +365,42 @@
      (let [headings (extract-all-headings)]
        (reset! headings-atom headings)
        (db/transact-headings! headings)))))
+
+(defn get-me
+  []
+  (api/get-me (fn [body]
+                (let [{:keys [user tokens repos]} body]
+                  (swap! state/state assoc
+                         :user user
+                         :tokens tokens
+                         :repos repos)))
+              (fn [response]
+                (prn "Can't get user's information, error response: " response))))
+
+(defn get-user-token-repos
+  []
+  (let [user (:user @state/state)
+        token (:oauth_token (first (:tokens @state/state)))
+        repos (map :url (:repos @state/state))]
+    [user token repos]))
+
+(defn add-repo-and-clone
+  [url]
+  (api/add-repo url
+                (fn [repo]
+                  (let [[user token _] (get-user-token-repos)]
+                    (swap! state/state
+                           update :repos conj repo)
+                    ;; clone
+                    (clone (:name user) token url)))
+                (fn [response]
+                  (prn "Can't add repo: " url))))
+
+(defn sync
+  []
+  (let [[user token repos] (get-user-token-repos)]
+    (doseq [repo repos]
+      (prn {:name (:name user)
+            :token token
+            :repo repo})
+      (clone (:name user) token repo))))

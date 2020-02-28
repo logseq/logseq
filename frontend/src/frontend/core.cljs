@@ -6,7 +6,8 @@
             [frontend.state :as state]
             [frontend.handler :as handler]
             [frontend.routes :as routes]
-            [frontend.page :as page]))
+            [frontend.page :as page]
+            [frontend.api :as api]))
 
 (defn start []
   (rum/mount (page/current-page)
@@ -16,6 +17,7 @@
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
+  (handler/get-me)
 
   (handler/load-from-disk)
 
@@ -26,9 +28,9 @@
 
   (handler/listen-to-resize)
 
-  (handler/request-notifications-if-not-asked)
+  ;; (handler/request-notifications-if-not-asked)
 
-  (handler/run-notify-worker!)
+  ;; (handler/run-notify-worker!)
 
   (start))
 

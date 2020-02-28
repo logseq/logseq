@@ -39,8 +39,8 @@
 
         (mui/button {:color "inherit"
                      :on-click (fn []
-                                 (handler/change-page :links))}
-          "Links")
+                                 (handler/sync))}
+          "Sync")
 
         (mui/button {:color "inherit"
                      :on-click (fn []

@@ -6,9 +6,12 @@
             [backend.auth :as auth]
             [backend.db.user :as u]
             [backend.db.token :as token]
+            [backend.db.repo :as repo]
             [ring.util.response :as resp]
             [backend.views.home :as home]
             [backend.interceptors :as interceptors]))
+
+;; TODO: spec validate, authorization (owner?)
 
 (def routes
   [["/swagger.json"
@@ -63,10 +66,38 @@
             :handler
             (fn [{:keys [app-context] :as req}]
               (if-let [user (:user app-context)]
-                (let [tokens (token/get-user-tokens (:id user))]
+                (let [user-id (:id user)]
                   {:status 200
                    :body {:user user
-                          :tokens tokens}})
-                {:status 200
-                 :body {:user nil}}))}}]]
-   ])
+                          :tokens (token/get-user-tokens user-id)
+                          :repos (repo/get-user-repos user-id)}})
+                {:status 404
+                 :body "not-found"}))}}]
+
+    ["/repos"
+     {:post {:summary "Add a repo"
+             :handler
+             (fn [{:keys [app-context body-params] :as req}]
+               (let [user (:user app-context)
+                     result (repo/insert {:user_id (:id user)
+                                          :url (:url body-params)})]
+                 {:status 201
+                  :body result}))}
+      }]
+
+    ["/repos/:id"
+     {:patch {:summary "Update a repo's url"
+              :handler
+              (fn [{:keys [app-context params body-params] :as req}]
+                (let [user (:user app-context)
+                      result (repo/update (:id params)
+                                          (:url body-params))]
+                  {:status 200
+                   :body result}))}
+      :delete {:summary "Delete a repo"
+               :handler
+               (fn [{:keys [app-context params] :as req}]
+                 (let [user (:user app-context)
+                       result (repo/delete (:id params))]
+                   {:status 200
+                    :body {:result true}}))}}]]])

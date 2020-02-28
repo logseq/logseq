@@ -26,3 +26,7 @@
 (defn delete
   [id]
   (db/delete! Repo {:id id}))
+
+(defn update
+  [id url]
+  (db/update! Repo id {:url url}))
