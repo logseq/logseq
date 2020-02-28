@@ -70,4 +70,11 @@
        [:div "Cloning..."]
 
        :else
-       (settings/settings-form github-username github-token github-repo)))))
+       (mui/button {:variant "contained"
+                    :color "primary"
+                    :start-icon (mui/github-icon)
+                    :href "/login/github"}
+         "Login with Github")
+
+       ;; (settings/settings-form github-username github-token github-repo)
+       ))))

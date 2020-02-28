@@ -12,7 +12,7 @@
   (let [{:keys [app-key app-secret redirect-uri]} (get-in config/config [:oauth :github])
         instance (social/make-social :github app-key app-secret redirect-uri
                                      :state (str (util/uuid))
-                                     :scope "user:email")
+                                     :scope "user:email,repo")
         access-token (social/getAccessToken instance (:code data))
         info (social/getUserInfo instance access-token)
         oauth-type "github"
@@ -21,9 +21,11 @@
     (toucan.db/transaction
       (if-let [token (token/get oauth-type oauth-id)]
         ;; user already exists
-        (let [token (assoc token :token access-token)]
-          (some-> (u/get (:user_id token))
-                  (assoc :token token)))
+        (do
+          (prn {:token token})
+          (let [token (assoc token :token access-token)]
+           (some-> (u/get (:user_id token))
+                   (assoc :token token))))
         (when-let [user (u/insert {:name (:login info)
                                    :email (:email info)})]
           (let [token (token/create {:user_id (:id user)

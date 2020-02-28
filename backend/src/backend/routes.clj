@@ -5,7 +5,10 @@
             [backend.util :as util]
             [backend.auth :as auth]
             [backend.db.user :as u]
-            [ring.util.response :as resp]))
+            [backend.db.token :as token]
+            [ring.util.response :as resp]
+            [backend.views.home :as home]
+            [backend.interceptors :as interceptors]))
 
 (def routes
   [["/swagger.json"
@@ -13,6 +16,13 @@
            :swagger {:info {:title "gitnotes api"
                             :description "with pedestal & reitit-http"}}
            :handler (swagger/create-swagger-handler)}}]
+
+   [
+    "/"
+    {:get {:no-doc true
+           :handler (fn [_req]
+                      {:status 200
+                       :body (home/home)})}}]
 
    ["/login"
     {:swagger {:tags ["Login"]}}
@@ -27,9 +37,8 @@
                                                     "?referer="
                                                     (get-in req [:headers "referer"] ""))
                                                :state (str (util/uuid))
-                                               :scope "user:email")
+                                               :scope "user:email,repo")
                     url (social/getAuthorizationUrl social)]
-                (prn "url: " url)
                 (resp/redirect url))
               )}}]]
    ["/auth"
@@ -42,13 +51,22 @@
               (if (and (:code params)
                        (:state params))
                 (if-let [user (auth/github params)]
-                  (resp/header
-                    (assoc :cookies
-                           (u/generate-tokens user)
-                           :status 302)
-                    "Location" config/website-uri)
+                  (-> (resp/redirect config/website-uri)
+                      (assoc :cookies (u/generate-tokens (:id user))))
                   {:status 500
                    :body "Internal Error"})
                 {:status 401
                  :body "Invalid request"}))}}]]
+   ["/api/v1" {:interceptors [interceptors/cookie-interceptor]}
+    ["/me"
+     {:get {:summary "Get current user's information"
+            :handler
+            (fn [{:keys [app-context] :as req}]
+              (if-let [user (:user app-context)]
+                (let [tokens (token/get-user-tokens (:id user))]
+                  {:status 200
+                   :body {:user user
+                          :tokens tokens}})
+                {:status 200
+                 :body {:user nil}}))}}]]
    ])

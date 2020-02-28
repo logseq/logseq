@@ -14,27 +14,12 @@
           :direction "column"}
          (mui/text-field {:id "standard-basic"
                           :style {:margin-bottom 12}
-                          :label "Github username"
-                          :auto-focus true
-                          :on-change (fn [event]
-                                       (let [v (util/evalue event)]
-                                         (swap! state/state assoc :github-username v)))
-                          :value github-username})
-         (mui/text-field {:id "standard-basic"
-                          :style {:margin-bottom 12}
                           :label "Github repo"
                           :on-change (fn [event]
                                        (let [v (util/evalue event)]
                                          (swap! state/state assoc :github-repo v)))
                           :value github-repo
                           })
-         (mui/text-field {:id "standard-basic"
-                          :style {:margin-bottom 12}
-                          :label "Github basic token"
-                          :on-change (fn [event]
-                                       (let [v (util/evalue event)]
-                                         (swap! state/state assoc :github-token v)))
-                          :value github-token})
          (mui/button {:variant "contained"
                       :color "primary"
                       :on-click (fn []

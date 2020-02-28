@@ -18,7 +18,7 @@
 
 (defn get
   [id]
-  (db/select-one User id))
+  (db/select-one User :id id))
 
 (defn insert
   [{:keys [name email] :as args}]
@@ -39,7 +39,7 @@
     [:ok (db/update! User id {:email email})]))
 
 (defn generate-tokens
-  [db user-id]
+  [user-id]
   (cookie/token-cookie
    {:access-token  (jwt/sign {:id user-id})
     :refresh-token (refresh-token/create user-id)}))

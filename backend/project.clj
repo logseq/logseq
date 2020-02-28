@@ -24,7 +24,7 @@
                  [aero "1.1.6"]
                  [com.stuartsierra/component "0.4.0"]
                  [com.taoensso/nippy "2.14.0"]
-                 ]
+                 [hiccup "1.0.5"]]
   ;; :main backend.core
   :profiles {:repl {:dependencies [[io.pedestal/pedestal.service-tools "0.5.7"]]
                     :source-paths ["src/backend" "dev"]}

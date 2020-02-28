@@ -49,6 +49,7 @@
             ["@material-ui/core/DialogActions" :default DialogActions]
             ["@material-ui/icons/Favorite" :default FavoriteIcon]
             ["@material-ui/icons/Add" :default AddIcon]
+            ["@material-ui/icons/GitHub" :default GithubIcon]
             ["@material-ui/icons/Share" :default ShareIcon]
             ["@material-ui/icons/MoreVert" :default MoreVertIcon]
             ))
@@ -83,6 +84,7 @@
 (defonce collapse (r/adapt-class Collapse))
 (defonce avatar (r/adapt-class Avatar))
 (defonce favorite-icon (r/adapt-class FavoriteIcon))
+(defonce github-icon (r/adapt-class GithubIcon))
 (defonce add-icon (r/adapt-class AddIcon))
 (defonce fab (r/adapt-class Fab))
 (defonce share-icon (r/adapt-class ShareIcon))

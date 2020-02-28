@@ -11,6 +11,10 @@
   (db/select-one Token {:oauth_type oauth-type
                         :oauth_id oauth-id}))
 
+(defn get-user-tokens
+  [user-id]
+  (db/select Token {:user_id user-id}))
+
 (defn exists?
   [oauth-type oauth-id]
   (db/exists? Token {:oauth_type oauth-type

@@ -16,7 +16,7 @@
   (let [dev? config/dev?
         xsrf-token (str (util/uuid))
         domain (if-not dev?
-                 ".chengdongchengxi.com"
+                 ".gitnotes.com"
                  "")
         secure (if-not dev?
                  true
@@ -40,7 +40,7 @@
 
 (def delete-token
   (let [domain (if-not config/dev?
-                 ".chengdongchengxi.com"
+                 ".gitnotes.com"
                  "")]
     {"x" {:value ""
           :path "/"
