@@ -12,7 +12,8 @@
                :corsProxy "https://cors.isomorphic-git.org"
                :singleBranch true
                :depth 1
-               :username username
+               ;; :username username
+               :oauth2format "github"
                :token token
                })))
 
@@ -27,7 +28,8 @@
   (js/git.pull (clj->js
              {:dir dir
               :ref "master"
-              :username username
+              ;; :username username
+              :oauth2format "github"
               :token token
               :singleBranch true})))
 (defn add
@@ -50,6 +52,7 @@
                 {:dir dir
                  :remote "origin"
                  :ref "master"
+                 :oauth2format "github"
                  :token token})))
 
 (defn add-commit-push
