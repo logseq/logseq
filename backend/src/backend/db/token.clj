@@ -30,3 +30,7 @@
   (if (exists? oauth_type oauth_id)
     (delete oauth_type oauth_id))
   (db/insert! Token m))
+
+(defn update
+  [id new-token]
+  (db/update! Token id {:oauth_token new-token}))

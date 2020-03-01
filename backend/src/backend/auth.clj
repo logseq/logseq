@@ -22,7 +22,7 @@
       (if-let [token (token/get oauth-type oauth-id)]
         ;; user already exists
         (do
-          (prn {:token token})
+          (token/update (:id token) access-token)
           (let [token (assoc token :token access-token)]
            (some-> (u/get (:user_id token))
                    (assoc :token token))))

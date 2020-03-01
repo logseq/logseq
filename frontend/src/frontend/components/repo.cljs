@@ -6,6 +6,15 @@
             [frontend.handler :as handler]
             [clojure.string :as string]))
 
+(defn repos
+  [repos]
+  [:div#repos
+   [:ul
+    (for [{:keys [url id]} repos]
+      [:li {:key id}
+       [:a {:href url}
+        (string/replace url "https://github.com/" "")]])]])
+
 (defn add-repo
   [repo-url]
   [:form {:style {:min-width 300}}

@@ -4,6 +4,7 @@
             [frontend.state :as state]
             [frontend.components.link :as link]
             [frontend.components.file :as file]
+            [frontend.components.repo :as repo]
             [rum.core :as rum]
             [clojure.string :as string]))
 
@@ -52,6 +53,9 @@
                           :on-click (fn []
                                       (handler/toggle-link-dialog? true))}
                          (mui/add-icon))))
+
+      (repo/repos (:repos state))
+
       content
 
       (if mobile?

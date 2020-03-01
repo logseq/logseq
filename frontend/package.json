@@ -15,7 +15,7 @@
     "@material-ui/core": "^4.7.2",
     "@material-ui/icons": "^4.5.1",
     "browserfs": "^1.4.3",
-    "isomorphic-git": "^0.72.0",
+    "isomorphic-git": "^1.1.2",
     "mldoc_org": "^0.1.8",
     "react": "^16.12.0",
     "react-dom": "^16.12.0",
