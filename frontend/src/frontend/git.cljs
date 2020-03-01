@@ -2,78 +2,77 @@
   (:refer-clojure :exclude [clone])
   (:require [promesa.core :as p]
             [frontend.util :as util]
-            [frontend.config :refer [dir]]))
+            [clojure.string :as string]))
 
 ;; only support Github now
 (defn auth
   [token]
-  (prn {:token token})
-  {:onAuth (fn []
-             (clj->js
-              {:username token
-               :password "x-oauth-basic"}))})
+  {:username token
+   :password "x-oauth-basic"})
 
 (defn with-auth
   [token m]
-  (prn {:arguments (merge (auth token)
-                          m)})
   (clj->js
    (merge (auth token)
           m)))
 
+(defn get-repo-dir
+  [repo-url]
+  (str "/" (last (string/split repo-url #"/"))))
+
 (defn clone
-  [username token repo]
+  [repo-url token]
   (js/git.clone (with-auth token
-                  {:dir dir
-                   :url repo
+                  {:dir (get-repo-dir repo-url)
+                   :url repo-url
                    :corsProxy "https://cors.isomorphic-git.org"
                    :singleBranch true
                    :depth 1})))
 
 (defn list-files
-  []
+  [repo-url]
   (js/git.listFiles (clj->js
-                     {:dir dir
+                     {:dir (get-repo-dir repo-url)
                       :ref "HEAD"})))
 
 (defn pull
-  [username token]
+  [repo-url token]
   (js/git.pull (with-auth token
-                 {:dir dir
+                 {:dir (get-repo-dir repo-url)
                   :ref "master"
                   :singleBranch true})))
 (defn add
-  [file]
+  [repo-url file]
   (js/git.add (clj->js
-               {:dir dir
+               {:dir (get-repo-dir repo-url)
                 :filepath file})))
 
 (defn commit
-  [message]
+  [repo-url message]
   (js/git.commit (clj->js
-                  {:dir dir
+                  {:dir (get-repo-dir repo-url)
                    :author {:name "Orgnote"
                             :email "orgnote@hello.world"}
                    :message message})))
 
 (defn push
-  [token]
+  [repo-url token]
   (js/git.push (with-auth token
-                 {:dir dir
+                 {:dir (get-repo-dir repo-url)
                   :remote "origin"
                   :ref "master"
                   })))
 
 (defn add-commit-push
-  [file message token push-ok-handler push-error-handler]
+  [repo-url file message token push-ok-handler push-error-handler]
   (util/p-handle
    (let [files (if (coll? file) file [file])]
      (doseq [file files]
-       (add file)))
+       (add repo-url file)))
    (fn [_]
      (util/p-handle
-      (commit message)
+      (commit repo-url message)
       (fn [_]
-        (push token)
+        (push repo-url token)
         (push-ok-handler))
       push-error-handler))))

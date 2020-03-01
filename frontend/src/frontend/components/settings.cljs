@@ -7,7 +7,7 @@
             [clojure.string :as string]))
 
 (defn settings-form
-  [github-username github-token github-repo]
+  [github-token github-repo]
   [:form {:style {:min-width 300}}
         (mui/grid
          {:container true
@@ -24,14 +24,14 @@
                       :color "primary"
                       :on-click (fn []
                                   (when (and github-token github-repo)
-                                    (handler/clone github-username github-token github-repo)))}
+                                    (handler/clone github-token github-repo)))}
            "Sync"))])
 
 (rum/defc settings < rum/reactive
   []
-  ;; Change username, repo and basic token
+  ;; Change repo and basic token
   (let [state (rum/react state/state)
-        {:keys [github-username github-token github-repo]} state]
+        {:keys [github-token github-repo]} state]
     (mui/container
      {:id "root-container"
       :style {:display "flex"
@@ -40,7 +40,7 @@
 
      [:div
 
-      (settings-form github-username github-token github-repo)
+      (settings-form github-token github-repo)
 
       (mui/divider {:style {:margin "24px 0"}})
 

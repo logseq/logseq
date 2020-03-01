@@ -5,11 +5,6 @@
 
 (def conn (d/create-conn))
 
-;; links
-[:link/id
- :link/label
- :link/link]
-
 ;; TODO: added_at, started_at, schedule, deadline
 (def qualified-map
   {:file :heading/file
@@ -111,7 +106,6 @@
 ;; transactions
 (defn transact-headings!
   [headings]
-  (prn "headings: " headings)
   (let [headings (safe-headings headings)]
     (d/transact! conn headings)))
 

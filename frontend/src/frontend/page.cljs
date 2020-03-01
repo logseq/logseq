@@ -9,4 +9,4 @@
   (let [state (rum/react state/state)
         current-page (get state :current-page :home)]
     (when-let [view (get routes/routes current-page)]
-      (layout/frame (view) (:width state) (:add-link-dialog? state)))))
+      (layout/frame (view) (:width state)))))

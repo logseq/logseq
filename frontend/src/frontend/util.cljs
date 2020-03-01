@@ -86,3 +86,9 @@
        (not-empty (into {} (remove (comp nil? second)) el))
        el))
    nm))
+
+(defn index-by
+  [col k]
+  (->> (map (fn [entry] [(get entry k) entry])
+        col)
+       (into {})))

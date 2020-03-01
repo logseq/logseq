@@ -8,12 +8,13 @@
 
 (defn repos
   [repos]
-  [:div#repos
-   [:ul
-    (for [{:keys [url id]} repos]
-      [:li {:key id}
-       [:a {:href url}
-        (string/replace url "https://github.com/" "")]])]])
+  (when (seq repos)
+    [:div#repos
+     [:ul
+      (for [{:keys [url id]} (vals repos)]
+        [:li {:key id}
+         [:a {:href url}
+          (string/replace url "https://github.com/" "")]])]]))
 
 (defn add-repo
   [repo-url]

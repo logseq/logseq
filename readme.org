@@ -19,7 +19,6 @@
 
 ** File directory example
    #+BEGIN_SRC shell
-     links.org                       # the app will extract links from this file
      tasks.org                       # the app will extract todos from this file
      other_notes.org
      other_notes.markdown

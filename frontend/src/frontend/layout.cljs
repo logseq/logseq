@@ -2,16 +2,15 @@
   (:require [frontend.mui :as mui]
             [frontend.handler :as handler]
             [frontend.state :as state]
-            [frontend.components.link :as link]
             [frontend.components.file :as file]
             [frontend.components.repo :as repo]
             [rum.core :as rum]
             [clojure.string :as string]))
 
 (rum/defc frame < rum/reactive
-  [content width link-dialog?]
+  [content width]
   (let [state (rum/react state/state)
-        {:keys [files drawer? snackbar? snackbar-message]} state
+        {:keys [files drawer? snackbar? snackbar-message current-repo]} state
         mobile? (and width (<= width 600))]
     (mui/theme-provider
      {:theme (mui/custom-theme)}
@@ -46,13 +45,7 @@
         (mui/button {:color "inherit"
                      :on-click (fn []
                                  (handler/change-page :settings))}
-          "Settings")
-
-        (mui/icon-button {:color "inherit"
-                          :class "addButton"
-                          :on-click (fn []
-                                      (handler/toggle-link-dialog? true))}
-                         (mui/add-icon))))
+          "Settings")))
 
       (repo/repos (:repos state))
 
@@ -66,9 +59,7 @@
                      :on-close (fn []
                                  (handler/toggle-drawer? false))}
                     [:div {:style {:width 240}}
-                     (file/files-list files)]))
-
-      (link/dialog link-dialog?)
+                     (file/files-list current-repo files)]))
 
       (mui/snackbar {:open snackbar?
                      :auto-hide-duration 3000

@@ -1,7 +1,6 @@
 (ns frontend.core
   (:require [rum.core :as rum]
             [frontend.git :as git]
-            [frontend.fs :as fs]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.handler :as handler]
@@ -18,13 +17,6 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (handler/get-me)
-
-  (handler/load-from-disk)
-
-  (when (:cloned? @state/state)
-    (handler/initial-db!)
-    (handler/periodically-pull)
-    (handler/periodically-push-tasks))
 
   (handler/listen-to-resize)
 

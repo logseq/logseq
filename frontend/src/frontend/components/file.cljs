@@ -8,11 +8,11 @@
             [clojure.string :as string]))
 
 (rum/defc files-list
-  [files]
+  [current-repo files]
   [:div
    (if (seq files)
      (let [files-set (set files)
-           prefix [(files-set "tasks.org") (files-set "links.org")]
+           prefix [(files-set "tasks.org")]
            files (->> (remove (set prefix) files)
                       (concat prefix)
                       (remove nil?))]
@@ -23,7 +23,7 @@
             :key file
             :style {:overflow "hidden"}
             :on-click (fn []
-                        (handler/load-file file)
+                        (handler/load-file current-repo file)
                         (handler/toggle-drawer? false))}
            (mui/list-item-text file)))))
      "Loading...")])
@@ -31,7 +31,7 @@
 (rum/defc edit < rum/reactive
   []
   (let [state (rum/react state/state)
-        {:keys [current-file contents]} state]
+        {:keys [current-repo current-file contents]} state]
     (mui/container
      {:id "root-container"
       :style {:display "flex"
@@ -62,5 +62,5 @@
       (mui/button {:variant "contained"
                    :color "primary"
                    :on-click (fn []
-                               (handler/alter-file current-file))}
+                               (handler/alter-file current-repo current-file))}
         "Submit")])))

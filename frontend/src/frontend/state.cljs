@@ -3,18 +3,23 @@
 
 (def state (atom {:user nil
                   :tokens []
-                  :repos []
+                  :repos {}
+                  ;; nested in repos -> repo->url -> map
+                  ;; {
+                  ;;  :cloning? false
+                  ;;  :cloned? (storage/get :cloned?)
+                  ;;  :files []
+                  ;;  :contents {}          ; file name -> string
+
+                  ;;  :loadings {}            ; file name -> bool
+                  ;;  }
+
                   :repo-url ""
                   :current-page :home
-                  :cloning? false
-                  :cloned? (storage/get :cloned?)
-                  :files []
-                  :contents {}          ; file name -> string
+                  :current-repo nil
                   :current-file nil
-                  :loadings {}            ; file name -> bool
+
                   :width nil
                   :drawer? false
                   :tasks {}
-                  :links []
-                  :add-link-dialog? false
                   }))

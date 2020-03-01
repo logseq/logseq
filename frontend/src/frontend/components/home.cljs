@@ -29,7 +29,7 @@
 (rum/defc home < rum/reactive
   []
   (let [state (rum/react state/state)
-        {:keys [user tokens repos repo-url cloned? github-username github-token github-repo contents loadings current-file files width drawer? tasks links cloning?]} state
+        {:keys [user tokens repos repo-url cloned? github-token github-repo contents loadings current-repo current-file files width drawer? tasks cloning?]} state
         loading? (get loadings current-file)
         width (or width (util/get-width))
         mobile? (and width (<= width 600))]
@@ -56,7 +56,7 @@
          :spacing 3}
         (when-not mobile?
           (mui/grid {:xs 2}
-                    (file/files-list files)))
+                    (file/files-list current-repo files)))
 
         (if (and (not mobile?)
                  (not drawer?))
@@ -82,5 +82,5 @@
 
        :else
        [:div "TBC"]
-       ;; (settings/settings-form github-username github-token github-repo)
+       ;; (settings/settings-form github-token github-repo)
        ))))
