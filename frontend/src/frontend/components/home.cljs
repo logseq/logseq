@@ -29,10 +29,18 @@
 (rum/defc home < rum/reactive
   []
   (let [state (rum/react state/state)
-        {:keys [user tokens repos repo-url cloned? github-token github-repo contents loadings current-repo current-file files width drawer? tasks cloning?]} state
+        {:keys [user tokens repos repo-url github-token github-repo contents loadings current-repo current-file width drawer? tasks cloning?]} state
+        current-repo (or current-repo
+                         (when-let [first-repo (first (keys repos))]
+                           (handler/set-current-repo first-repo)
+                           first-repo))
+        files (get-in state [:repos current-repo :files])
+        cloned? (get-in state [:repos current-repo :cloned?])
         loading? (get loadings current-file)
         width (or width (util/get-width))
         mobile? (and width (<= width 600))]
+    (prn {:current-repo current-repo
+          :cloned? cloned?})
     (mui/container
      {:id "root-container"
       :style {:display "flex"

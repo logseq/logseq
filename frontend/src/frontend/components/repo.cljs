@@ -13,7 +13,8 @@
      [:ul
       (for [{:keys [url id]} (vals repos)]
         [:li {:key id}
-         [:a {:href url}
+         [:button {:on-click (fn []
+                               (handler/set-current-repo url))}
           (string/replace url "https://github.com/" "")]])]]))
 
 (defn add-repo

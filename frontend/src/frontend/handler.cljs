@@ -387,6 +387,9 @@
        (let [repos (map :url repos)
              cloned (load-cloned?)
              token (get-token)]
+         (doseq [[repo cloned?] cloned]
+           (swap! state/state
+                  assoc-in [:repos repo :cloned?] cloned?))
          (when (seq repos)
            (doseq [repo-url repos]
              (if (get cloned repo-url)
@@ -397,3 +400,7 @@
                       (periodically-pull-and-push repo-url))))))))))
    (fn [response]
      (prn "Can't get user's information, error response: " response))))
+
+(defn set-current-repo
+  [repo-url]
+  (swap! state/state assoc :current-repo repo-url))
