@@ -25,6 +25,10 @@
     :db/cardinality :db.cardinality/one
     :db/unique      :db.unique/value}
 
+   {:db/ident       :heading/repo
+    :db/valueType   :db.type/string
+    :db/cardinality :db.cardinality/one}
+
    {:db/ident       :heading/file
     :db/valueType   :db.type/string
     :db/cardinality :db.cardinality/one}
@@ -93,7 +97,7 @@
           (let [heading (-> (util/remove-nils heading)
                             (assoc :heading/uuid (d/squuid)))
                 heading (assoc heading :tags
-                                (->tags (:tags heading)))]
+                               (->tags (:tags heading)))]
             (medley/map-keys
              (fn [k] (get qualified-map k k))
              heading)))

@@ -10,6 +10,7 @@
      {:content
       "minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no",
       :name "viewport"}]
+    [:link {:type "text/css", :href "css/tailwind.min.css", :rel "stylesheet"}]
     [:link {:type "text/css", :href "css/style.css", :rel "stylesheet"}]
     [:link
      {:href

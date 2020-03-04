@@ -1,15 +1,5 @@
 ;; shadow-cljs configuration
-{:source-paths ["src" "dev"]
-
- :dependencies
- [[binaryage/devtools "0.9.10"]
-  [cider/cider-nrepl "0.23.0-SNAPSHOT"]
-
-  [rum "0.11.4"]
-  [datascript "0.18.9"]
-  [funcool/promesa "4.0.2"]
-  [medley "1.2.0"]]
-
+{:deps     true
  :nrepl        {:port 8701}
 
  :builds
@@ -19,6 +9,10 @@
 
    :compiler-options {:infer-externs :auto
                       :externs ["datascript/externs.js"]}
+   :build-hooks [(shadow.hooks/purge-css
+                  {:css-source "node_modules/tailwindcss/dist/tailwind.min.css"
+                   :js-globs   ["public/js/*.js"]
+                   :public-dir    "public/css"})]
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop
@@ -30,4 +24,5 @@
     :http-root    "public"
     :http-port 3000
     :preloads    [devtools.preload]}
+
    }}}

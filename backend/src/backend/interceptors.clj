@@ -22,8 +22,8 @@
                        (assoc-in [:request :app-context :uid] uid)
                        (assoc-in [:request :app-context :user] user))
                    context))
-               (catch Exception e
-                 nil))
-             ;; TODO: wrong cookie, early halt
-             ))
+               (catch Exception e       ; token is expired
+                 (when (= (ex-data e)
+                          {:type :validation, :cause :exp})
+                   (assoc context :response (u/logout)))))))
          context)))})

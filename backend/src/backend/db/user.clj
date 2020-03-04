@@ -13,7 +13,7 @@
 ;; move to handler
 (defn logout
   []
-  (-> (resp/redirect (:website-uri config/config))
+  (-> (resp/redirect config/website-uri)
       (assoc :cookies cookie/delete-token)))
 
 (defn get

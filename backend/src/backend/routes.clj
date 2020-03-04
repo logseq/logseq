@@ -65,6 +65,7 @@
      {:get {:summary "Get current user's information"
             :handler
             (fn [{:keys [app-context] :as req}]
+              (prn "request: " req)
               (if-let [user (:user app-context)]
                 (let [user-id (:id user)]
                   {:status 200

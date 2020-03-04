@@ -300,13 +300,15 @@
            (add-transaction "DONE rollbacks to TODO.")))))))
 
 (defn extract-headings
-  [file content]
+  [repo-url file content]
   (let [headings (-> content
                      (org/parse-json)
                      (util/json->clj))
         headings (block/extract-headings headings)]
     (map (fn [heading]
-           (assoc heading :file file))
+           (assoc heading
+                  :repo repo-url
+                  :file file))
       headings)))
 
 (defn load-all-contents!
@@ -328,7 +330,7 @@
     (vec
      (mapcat
       (fn [[file content] contents]
-        (extract-headings file content))
+        (extract-headings repo-url file content))
       contents))))
 
 (defonce headings-atom (atom nil))
@@ -364,7 +366,7 @@
   []
   (let [[_user token repos] (get-user-token-repos)]
     (doseq [repo repos]
-      (pull token repo))))
+      (pull repo token))))
 
 (defn periodically-pull-and-push
   [repo-url]
