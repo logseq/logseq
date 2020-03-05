@@ -8,7 +8,7 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 
-(defn transition-group
+(defn css-transition-group
   [css-options items]
   (when (seq items)
     (transition-group
@@ -24,21 +24,12 @@
              "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
              "exiting" "transition ease-in duration-75 transform opacity-100 scale-100"
              "exited" "transition ease-in duration-75 transform opacity-0 scale-95")}
-   content
-   ])
-
-(defn dropdown-listeners
-  [state]
-  (let [show? (get state ::show-dropdown?)]
-    (mixins/close-when-esc-or-outside state
-                                      show?
-                                      :on-close (fn []
-                                                  (reset! show? false)))))
+   content])
 
 ;; public exports
 (rum/defcs dropdown <
   (rum/local false ::show-dropdown?)
-  (mixins/event-mixin dropdown-listeners)
+  (mixins/event-mixin #(mixins/simple-close-listener % ::show-dropdown?))
   [state content]
   (let [show-dropdown? (get state ::show-dropdown?)]
     [:div.ml-3.relative
@@ -50,7 +41,7 @@
         {:src
          "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}]]]
      (css-transition
-      {:in @show-dropdown?}
+      {:in @show-dropdown? :timeout 0}
       (fn [state]
         (dropdown-content-wrapper state content)))]))
 

@@ -65,6 +65,14 @@
                   27 (on-close e)
                   nil))))))
 
+(defn simple-close-listener
+  [state key]
+  (let [open? (get state key)]
+    (close-when-esc-or-outside state
+                               open?
+                               :on-close (fn []
+                                           (reset! open? false)))))
+
 (defn event-mixin
   [attach-listeners]
   (merge
