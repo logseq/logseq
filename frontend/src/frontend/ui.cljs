@@ -8,7 +8,7 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 
-(defn transition
+(defn transition-group
   [css-options items]
   (when (seq items)
     (transition-group
@@ -35,6 +35,7 @@
                                       :on-close (fn []
                                                   (reset! show? false)))))
 
+;; public exports
 (rum/defcs dropdown <
   (rum/local false ::show-dropdown?)
   (mixins/event-mixin dropdown-listeners)
@@ -44,7 +45,6 @@
      [:div
       [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
        {:on-click (fn []
-                    (prn "hi")
                     (swap! show-dropdown? not))}
        [:img.h-8.w-8.rounded-full
         {:src

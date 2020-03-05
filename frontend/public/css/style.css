@@ -191,22 +191,3 @@ textarea { overflow-x: auto; }
 .org-info-js_search-highlight
 { background-color: #ffff00; color: #000000; font-weight: bold; }
 .org-svg { width: 90%; }
-
-/* transition */
-.dropdown-enter {
-    opacity: 0.01;
-}
-
-.dropdown-enter-active {
-    opacity: 1;
-    transition: opacity 200ms ease-in;
-}
-
-.dropdown-exit {
-    opacity: 1;
-}
-
-.dropdown-exit-active {
-    opacity: 0.01;
-    transition: opacity 200ms ease-in-out;
-}
