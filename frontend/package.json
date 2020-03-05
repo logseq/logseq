@@ -21,6 +21,7 @@
     "purgecss": "^2.1.0",
     "react": "^16.12.0",
     "react-dom": "^16.12.0",
+    "react-transition-group": "^4.3.0",
     "showdown": "^1.9.1",
     "tailwindcss": "^1.2.0"
   }

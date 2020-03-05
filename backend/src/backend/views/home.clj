@@ -24,5 +24,6 @@
     [:script {:src "https://unpkg.com/isomorphic-git@0.78.5/dist/bundle.umd.min.js"}]
     [:script
      "window.fs = new LightningFS('gitnotes');git.plugins.set('fs', window.fs);window.pfs = window.fs.promises;"]
+    [:script {:src "https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.0.1/dist/alpine.js" :defer true}]
     [:script {:src "/js/main.js"}]
     [:script {:src "/js/highlight.pack.js"}]]))

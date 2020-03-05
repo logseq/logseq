@@ -1,9 +1,10 @@
-(ns frontend.components.sidebar)
+(ns frontend.components.sidebar
+  (:require [frontend.ui :as ui]))
 
 (defn sidebar []
   [:div.h-screen.flex.overflow-hidden.bg-gray-100
-   {:keydown.window.escape "sidebarOpen = false",
-    :x-data "{ sidebarOpen: false }"}
+   ;; {:keydown.window.escape "sidebarOpen = false",
+   ;;  :x-data "{ sidebarOpen: false }"}
    [:div.md:hidden
     [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
      {:_:class
@@ -204,33 +205,13 @@
            :stroke-width "2",
            :stroke-linejoin "round",
            :stroke-linecap "round"}]]]
-       [:div.ml-3.relative
-        {:x-data "{ open: false }", :click.away "open = false"}
-        [:div
-         [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
-          {:click "open = !open"}
-          [:img.h-8.w-8.rounded-full
-           {:alt "",
-            :src
-            "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}]]]
-        [:div.origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg
-         {:x-transition:leave-end "transform opacity-0 scale-95",
-          :x-transition:leave-start "transform opacity-100 scale-100",
-          :x-transition:leave "transition ease-in duration-75",
-          :x-transition:enter-end "transform opacity-100 scale-100",
-          :x-transition:enter-start "transform opacity-0 scale-95",
-          :x-transition:enter "transition ease-out duration-100",
-          :x-show "open"}
-         [:div.py-1.rounded-md.bg-white.shadow-xs
-          [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150
-           {:href "#"}
-           "Your Profile"]
-          [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150
-           {:href "#"}
-           "Settings"]
-          [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150
-           {:href "#"}
-           "Sign out"]]]]]]]
+       (ui/dropdown-with-links
+        [{:title "Your Profile"
+          :options {:href "#"}}
+         {:title "Settings"
+          :options {:href "#"}}
+         {:title "Sign out"
+          :options {:href "#"}}])]]]
     [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
      {:x-init "$el.focus()", :x-data "x-data", :tabindex "0"}
      [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
@@ -238,6 +219,4 @@
      [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
       [:div.py-4
        [:div.border-4.border-dashed.border-gray-200.rounded-lg.h-96]]
-      ]]]]
-
-  )
+      ]]]])
