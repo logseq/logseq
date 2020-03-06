@@ -1,25 +1,31 @@
 (ns frontend.core
-  (:require [rum.core :as rum]
-            [frontend.git :as git]
-            [frontend.util :as util]
-            [frontend.state :as state]
+  (:require [uix.dom.alpha :as dom]
             [frontend.handler :as handler]
-            [frontend.routes :as routes]
             [frontend.page :as page]
-            [frontend.api :as api]))
+            [frontend.routes :as routes]
+            [reitit.frontend :as rf]
+            [reitit.frontend.easy :as rfe]
+            [reitit.coercion :as rc]
+            [reitit.coercion.spec :as rss]))
 
 (defn start []
-  (rum/mount (page/current-page)
-             (.getElementById js/document "root")))
+  (dom/render [page/current-page] js/root))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
+  (rfe/start!
+   (rf/router routes/routes {:data {:coercion rss/coercion}})
+   handler/set-route-match!
+   ;; set to false to enable HistoryAPI
+   {:use-fragment false})
+
   (handler/get-me)
 
   (handler/listen-to-resize)
 
+  ;; popup to notify user, could be toggled in settings
   ;; (handler/request-notifications-if-not-asked)
 
   ;; (handler/run-notify-worker!)

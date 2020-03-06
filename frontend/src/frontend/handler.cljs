@@ -406,3 +406,7 @@
 (defn set-current-repo
   [repo-url]
   (swap! state/state assoc :current-repo repo-url))
+
+(defn set-route-match!
+  [route]
+  (swap! state/state assoc :route-match route))

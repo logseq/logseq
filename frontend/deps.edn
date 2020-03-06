@@ -1,24 +1,24 @@
 {:deps
- {org.clojure/clojure         {:mvn/version "RELEASE"}
-  org.clojure/clojurescript   {:mvn/version "RELEASE"}
-
-  cljs-bean                   {:mvn/version "1.5.0"}
-
-  uix.core                    {:git/url   "https://github.com/roman01la/uix.git"
-                               :deps/root "core"
-                               :sha       "46011c8a2f1a05025971af8e26b8b6704520383c"}
-  uix.dom                     {:git/url   "https://github.com/roman01la/uix.git"
-                               :deps/root "dom"
-                               :sha       "46011c8a2f1a05025971af8e26b8b6704520383c"}
-
+ {;; dev
   thheller/shadow-cljs        {:mvn/version "RELEASE"}
   cider/cider-nrepl           {:mvn/version "0.23.0-SNAPSHOT"}
   binaryage/devtools          {:mvn/version "0.9.10"}
-  rum                         {:mvn/version "0.11.4"}
+
+  org.clojure/clojure         {:mvn/version "RELEASE"}
+  org.clojure/clojurescript   {:mvn/version "RELEASE"}
+  cljs-bean                   {:mvn/version "1.5.0"}
+  uix.core                    {:git/url   "https://github.com/tiensonqin/uix.git"
+                               :deps/root "core"
+                               :sha       "f6d82d12d62c13ff1894ac9dc2dd894a3521cd3d"}
+  uix.dom                     {:git/url   "https://github.com/roman01la/uix.git"
+                               :deps/root "dom"
+                               :sha       "46011c8a2f1a05025971af8e26b8b6704520383c"}
   datascript                  {:mvn/version "0.18.9"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
-  }
+  metosin/reitit              {:mvn/version "0.3.10"}
+  metosin/reitit-spec         {:mvn/version "0.3.10"}
+  metosin/reitit-frontend     {:mvn/version "0.3.10"}}
 
  :paths
  ["src"

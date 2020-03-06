@@ -1,18 +1,47 @@
 (ns frontend.components.sidebar
-  (:require [rum.core :as rum]
+  (:require [uix.core.alpha :as uix :refer [defui]]
+            [xframe.core.alpha :as xf :refer [<sub]]
             [frontend.ui :as ui]
-            [frontend.mixins :as mixins]))
+            [frontend.hooks :as hooks]))
 
-(rum/defcs sidebar
-  <
-  (rum/local false ::open?)
-  (mixins/event-mixin #(mixins/simple-close-listener % ::open?))
-  [state]
-  (let [open? (get state ::open?)
+(defonce active-button :a.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
+(defonce inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
+
+(defn nav-item
+  ([title href svg-d]
+   (nav-item title href svg-d false))
+  ([title href svg-d active?]
+   (let [a (if active? active-button inactive-button)]
+     [a {:href href}
+      [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
+       {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+       [:path
+        {:d svg-d
+         :stroke-width "2",
+         :stroke-linejoin "round",
+         :stroke-linecap "round"}]]
+      title])))
+
+(defn sidebar-nav
+  []
+  [:nav.flex-1.px-2.py-4.bg-gray-800
+   (nav-item "Journal" "#"
+             "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
+             true)
+   (nav-item "Repos" "#"
+             "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z")
+   (nav-item "Agenda" "#"
+             "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z")])
+
+(defn sidebar
+  []
+  (let [ref (uix/ref nil)
+        open? (uix/state false)
         close-fn (fn [] (reset! open? false))
         open-fn (fn [] (reset! open? true))]
-    (prn "open: " @open?)
-    [:div.h-screen.flex.overflow-hidden.bg-gray-100
+    ;; effects
+    (hooks/setup-close-listener! ref open?)
+    [:div.h-screen.flex.overflow-hidden.bg-gray-100 {:ref ref}
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
        {:class (if @open?
@@ -25,167 +54,35 @@
                  "-translate-x-full")}
        (if @open?
          [:div.absolute.top-0.right-0.-mr-14.p-1
-         [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
-          {:on-click close-fn}
-          [:svg.h-6.w-6.text-white
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d "M6 18L18 6M6 6l12 12",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]]])
+          [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+           {:on-click close-fn}
+           [:svg.h-6.w-6.text-white
+            {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+            [:path
+             {:d "M6 18L18 6M6 6l12 12",
+              :stroke-width "2",
+              :stroke-linejoin "round",
+              :stroke-linecap "round"}]]]])
        [:div.flex-shrink-0.flex.items-center.h-16.px-4.bg-gray-900
         [:img.h-8.w-auto
-         {:alt "Workflow",
-          :src "/img/logos/workflow-logo-on-dark.svg"}]]
+         {:alt "Gitnotes",
+          :src "https://tailwindui.com/img/logos/workflow-logo-on-dark.svg"}]]
        [:div.flex-1.h-0.overflow-y-auto
-        [:nav.px-2.py-4
-         [:a.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-4.h-6.w-6.text-gray-300.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Dashboard\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Team\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Projects\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Calendar\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Documents\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Reports\n          "]]]]]
+        [sidebar-nav]]]]
      [:div.hidden.md:flex.md:flex-shrink-0
       [:div.flex.flex-col.w-64
        [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
         [:img.h-8.w-auto
-         {:alt "Workflow",
-          :src "/img/logos/workflow-logo-on-dark.svg"}]]
+         {:alt "Gitnotes",
+          :src "https://tailwindui.com/img/logos/workflow-logo-on-dark.svg"}]]
        [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
-        [:nav.flex-1.px-2.py-4.bg-gray-800
-         [:a.group.flex.items-center.px-2.py-2.text-sm.leading-5.font-medium.text-white.rounded-md.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-3.h-6.w-6.text-gray-300.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Dashboard\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-sm.leading-5.font-medium.text-gray-300.rounded-md.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-3.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Team\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-sm.leading-5.font-medium.text-gray-300.rounded-md.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-3.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Projects\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-sm.leading-5.font-medium.text-gray-300.rounded-md.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-3.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Calendar\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-sm.leading-5.font-medium.text-gray-300.rounded-md.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-3.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Documents\n          "]
-         [:a.mt-1.group.flex.items-center.px-2.py-2.text-sm.leading-5.font-medium.text-gray-300.rounded-md.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150
-          {:href "#"}
-          [:svg.mr-3.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-          "\n            Reports\n          "]]]]]
+        [sidebar-nav]]]]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
       [:div.relative.z-10.flex-shrink-0.flex.h-16.bg-white.shadow
        [:button.px-4.border-r.border-gray-200.text-gray-500.focus:outline-none.focus:bg-gray-100.focus:text-gray-600.md:hidden
         {:on-click open-fn}
         [:svg.h-6.w-6
-         {:viewbox "0 0 24 24", :fill "none", :stroke "currentColor"}
+         {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
          [:path
           {:d "M4 6h16M4 12h16M4 18h7",
            :stroke-width "2",
@@ -230,5 +127,4 @@
         [:h1.text-2xl.font-semibold.text-gray-900 "Dashboard"]]
        [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
         [:div.py-4
-         [:div.border-4.border-dashed.border-gray-200.rounded-lg.h-96]]
-        ]]]]))
+         [:div.border-4.border-dashed.border-gray-200.rounded-lg.h-96]]]]]]))

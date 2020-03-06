@@ -1,10 +1,19 @@
 (ns frontend.routes
   (:require [frontend.components.home :as home]
-            [frontend.components.settings :as settings]
-            [frontend.components.file :as file]
-            ))
+            [frontend.components.sidebar :as sidebar]))
 
 (def routes
-  {:home home/home
-   :settings settings/settings
-   :edit-file file/edit})
+  [["/"
+    {:name :home
+     :view home/home
+     ;; :view sidebar/sidebar
+     }]
+
+   ;; TODO: edit file
+   ;; Settings
+   ;; ["/item/:id"
+   ;;  {:name ::item
+   ;;   :view item-page
+   ;;   :parameters {:path {:id int?}
+   ;;                :query {(ds/opt :foo) keyword?}}}]
+   ])

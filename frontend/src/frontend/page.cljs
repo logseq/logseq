@@ -1,15 +1,11 @@
 (ns frontend.page
-  (:require [rum.core :as rum]
-            [frontend.layout :as layout]
-            [frontend.routes :as routes]
-            [frontend.state :as state]
-            [frontend.components.sidebar :as sidebar]))
+  (:require [uix.core.alpha :as uix]
+            [frontend.state :as state]))
 
-(rum/defc current-page < rum/reactive
+(defn current-page
   []
-  (let [state (rum/react state/state)
-        current-page (get state :current-page :home)]
-    (sidebar/sidebar)
-    ;; (when-let [view (get routes/routes current-page)]
-    ;;   (layout/frame (view) (:width state)))
-    ))
+  (let [route-match @(uix/state (:route-match @state/state))]
+    (prn "route-match: " route-match)
+    (if route-match
+      (when-let [view (:view (:data route-match))]
+        (view route-match)))))

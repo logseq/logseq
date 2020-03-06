@@ -1,7 +1,8 @@
 (ns frontend.util
   (:require [goog.object :as gobj]
             [promesa.core :as p]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [clojure.string :as string]))
 
 (defn evalue
   [event]
@@ -92,3 +93,10 @@
   (->> (map (fn [entry] [(get entry k) entry])
         col)
        (into {})))
+
+;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
+(defn hiccup->class
+  [class]
+  (some->> (string/split class #"\.")
+           (string/join " ")
+           (string/trim)))

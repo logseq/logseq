@@ -22,4 +22,5 @@
                   :width nil
                   :drawer? false
                   :tasks {}
+                  :route-match nil
                   }))
