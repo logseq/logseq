@@ -1,5 +1,5 @@
 (ns frontend.core
-  (:require [uix.dom.alpha :as dom]
+  (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.page :as page]
             [frontend.routes :as routes]
@@ -9,7 +9,8 @@
             [reitit.coercion.spec :as rss]))
 
 (defn start []
-  (dom/render [page/current-page] js/root))
+  (rum/mount (page/current-page)
+             (.getElementById js/document "root")))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
@@ -21,7 +22,7 @@
    ;; set to false to enable HistoryAPI
    {:use-fragment false})
 
-  (handler/get-me)
+  ;; (handler/get-me)
 
   (handler/listen-to-resize)
 

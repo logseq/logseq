@@ -1,26 +1,26 @@
-(ns frontend.state
-  (:require [frontend.storage :as storage]))
+(ns frontend.state)
 
-(def state (atom {:user nil
-                  :tokens []
-                  :repos {}
-                  ;; nested in repos -> repo->url -> map
-                  ;; {
-                  ;;  :cloning? false
-                  ;;  :cloned? (storage/get :cloned?)
-                  ;;  :files []
-                  ;;  :contents {}          ; file name -> string
+;; TODO: replace this with datascript
+(def state (atom
+            {:route-match nil
+             :github-token nil
+             :repos {}
+             ;; nested in repos -> repo->url -> map
+             ;; {
+             ;;  :cloning? false
+             ;;  :cloned? (storage/get :cloned?)
+             ;;  :files []
+             ;;  :contents {}          ; file name -> string
 
-                  ;;  :loadings {}            ; file name -> bool
-                  ;;  }
+             ;;  :loadings {}            ; file name -> bool
+             ;;  }
 
-                  :repo-url ""
-                  :current-page :home
-                  :current-repo nil
-                  :current-file nil
+             :repo-url ""
+             :current-repo nil
+             :current-file nil
 
-                  :width nil
-                  :drawer? false
-                  :tasks {}
-                  :route-match nil
-                  }))
+             :width nil
+             :drawer? false
+             :tasks {}
+
+             }))

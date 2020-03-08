@@ -1,6 +1,7 @@
 (ns frontend.routes
   (:require [frontend.components.home :as home]
-            [frontend.components.sidebar :as sidebar]))
+            [frontend.components.sidebar :as sidebar]
+            [frontend.components.auth :as auth]))
 
 (def routes
   [["/"
@@ -8,6 +9,9 @@
      ;; :view home/home
      :view sidebar/sidebar
      }]
+   ["/auth/github"
+    {:name :github-auth
+     :view auth/auth}]
 
    ;; TODO: edit file
    ;; Settings

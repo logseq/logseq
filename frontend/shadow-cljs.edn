@@ -1,5 +1,18 @@
 ;; shadow-cljs configuration
-{:deps     true
+{:source-paths ["src" "dev"]
+
+ :dependencies
+ [[binaryage/devtools "0.9.10"]
+  [cider/cider-nrepl "0.23.0-SNAPSHOT"]
+
+  [rum "0.11.4"]
+  [datascript "0.18.9"]
+  [funcool/promesa "4.0.2"]
+  [medley "1.2.0"]
+  [metosin/reitit "0.3.10"]
+  [metosin/reitit-spec "0.3.10"]
+  [metosin/reitit-frontend "0.3.10"]]
+
  :nrepl        {:port 8701}
 
  :builds

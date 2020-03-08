@@ -1,17 +1,14 @@
 (ns frontend.ui
-  (:require ["react-transition-group" :refer [CSSTransition]]
+  (:require [rum.core :as rum]
+            [frontend.rum :as r]
+            ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             [frontend.util :as util]
-            [frontend.hooks :as hooks]
-            [uix.core.alpha :as uix]))
+            [frontend.mixins :as mixins]))
 
-(defn css-transition
-  [open? timeout state-fn]
-  [:> CSSTransition
-   {:in open? :timeout timeout}
-   (fn [state]
-     (uix/as-element (state-fn state)))])
+(defonce transition-group (r/adapt-class TransitionGroup))
+(defonce css-transition (r/adapt-class CSSTransition))
 
-(defn dropdown-content-wrapper [state content]
+(rum/defc dropdown-content-wrapper [state content]
   [:div.origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg
    {:class (case state
              "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
@@ -21,22 +18,20 @@
    content])
 
 ;; public exports
-(defn dropdown
-  [content]
-  (let [ref (uix/ref nil)
-        open? (uix/state false)]
-    (hooks/setup-close-listener! ref open?)
-    [:div.ml-3.relative {:ref ref}
+(rum/defcs dropdown < (mixins/modal)
+  [state content]
+  (let [{:keys [open? toggle-fn]} state]
+    [:div.ml-3.relative
      [:div
       [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
-       {:on-click (fn []
-                    (swap! open? not))}
+       {:on-click toggle-fn}
        [:img.h-8.w-8.rounded-full
         {:src
          "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}]]]
-     (css-transition @open? 0
-                     (fn [state]
-                       (dropdown-content-wrapper state content)))]))
+     (css-transition
+      {:in @open? :timeout 0}
+      (fn [state]
+        (dropdown-content-wrapper state content)))]))
 
 (defn dropdown-with-links
   [links]

@@ -1,11 +1,11 @@
 (ns frontend.page
-  (:require [uix.core.alpha :as uix]
+  (:require [rum.core :as rum]
             [frontend.state :as state]))
 
-(defn current-page
+(rum/defc current-page < rum/reactive
   []
-  (let [route-match @(uix/state (:route-match @state/state))]
-    (prn "route-match: " route-match)
+  (let [state (rum/react state/state)
+        route-match (:route-match state)]
     (if route-match
       (when-let [view (:view (:data route-match))]
         (view route-match)))))

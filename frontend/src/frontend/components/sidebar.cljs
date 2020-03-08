@@ -1,8 +1,7 @@
 (ns frontend.components.sidebar
-  (:require [uix.core.alpha :as uix :refer [defui]]
-            [xframe.core.alpha :as xf :refer [<sub]]
+  (:require [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.hooks :as hooks]))
+            [frontend.mixins :as mixins]))
 
 (defonce active-button :a.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
 (defonce inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
@@ -22,7 +21,7 @@
          :stroke-linecap "round"}]]
       title])))
 
-(defn sidebar-nav
+(rum/defc sidebar-nav
   []
   [:nav.flex-1.px-2.py-4.bg-gray-800
    (nav-item "Journal" "#"
@@ -33,15 +32,10 @@
    (nav-item "Agenda" "#"
              "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z")])
 
-(defn sidebar
-  []
-  (let [ref (uix/ref nil)
-        open? (uix/state false)
-        close-fn (fn [] (reset! open? false))
-        open-fn (fn [] (reset! open? true))]
-    ;; effects
-    (hooks/setup-close-listener! ref open?)
-    [:div.h-screen.flex.overflow-hidden.bg-gray-100 {:ref ref}
+(rum/defcs sidebar < (mixins/modal)
+  [state]
+  (let [{:keys [open? close-fn open-fn]} state]
+    [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
        {:class (if @open?
@@ -68,7 +62,8 @@
          {:alt "Gitnotes",
           :src "https://tailwindui.com/img/logos/workflow-logo-on-dark.svg"}]]
        [:div.flex-1.h-0.overflow-y-auto
-        [sidebar-nav]]]]
+        (sidebar-nav)]
+       ]]
      [:div.hidden.md:flex.md:flex-shrink-0
       [:div.flex.flex-col.w-64
        [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
@@ -76,7 +71,7 @@
          {:alt "Gitnotes",
           :src "https://tailwindui.com/img/logos/workflow-logo-on-dark.svg"}]]
        [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
-        [sidebar-nav]]]]
+        (sidebar-nav)]]]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
       [:div.relative.z-10.flex-shrink-0.flex.h-16.bg-white.shadow
        [:button.px-4.border-r.border-gray-200.text-gray-500.focus:outline-none.focus:bg-gray-100.focus:text-gray-600.md:hidden
