@@ -4,23 +4,27 @@
             [frontend.page :as page]
             [frontend.routes :as routes]
             [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]
-            [reitit.coercion :as rc]
-            [reitit.coercion.spec :as rss]))
+            [reitit.frontend.easy :as rfe]))
+
+(defn set-router!
+  []
+  (rfe/start!
+   (rf/router routes/routes {})
+   handler/set-route-match!
+   ;; set to false to enable HistoryAPI
+   {:use-fragment false}))
 
 (defn start []
-  (rum/mount (page/current-page)
-             (.getElementById js/document "root")))
+  (rum/mount
+             (page/current-page)
+             (.getElementById js/document "root"))
+  (set-router!))
 
 (defn ^:export init []
+  (prn "init!")
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
-  (rfe/start!
-   (rf/router routes/routes {:data {:coercion rss/coercion}})
-   handler/set-route-match!
-   ;; set to false to enable HistoryAPI
-   {:use-fragment false})
 
   ;; (handler/get-me)
 
