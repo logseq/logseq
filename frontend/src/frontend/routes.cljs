@@ -5,8 +5,8 @@
 (def routes
   [["/"
     {:name :home
-     :view home/home
-     ;; :view sidebar/sidebar
+     ;; :view home/home
+     :view sidebar/sidebar
      }]
 
    ;; TODO: edit file

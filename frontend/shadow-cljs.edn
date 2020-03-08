@@ -22,7 +22,7 @@
                                         ;:http-root   "public"
                                         ;:http-port   8700
     :http-root    "public"
-    :http-port 3000
-    :preloads    [devtools.preload]}
+    :http-port    8080
+    :preloads     [devtools.preload]}
 
    }}}

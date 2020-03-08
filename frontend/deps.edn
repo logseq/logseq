@@ -7,9 +7,9 @@
   org.clojure/clojure         {:mvn/version "RELEASE"}
   org.clojure/clojurescript   {:mvn/version "RELEASE"}
   cljs-bean                   {:mvn/version "1.5.0"}
-  uix.core                    {:git/url   "https://github.com/tiensonqin/uix.git"
+  uix.core                    {:git/url   "https://github.com/roman01la/uix.git"
                                :deps/root "core"
-                               :sha       "f6d82d12d62c13ff1894ac9dc2dd894a3521cd3d"}
+                               :sha       "46011c8a2f1a05025971af8e26b8b6704520383c"}
   uix.dom                     {:git/url   "https://github.com/roman01la/uix.git"
                                :deps/root "dom"
                                :sha       "46011c8a2f1a05025971af8e26b8b6704520383c"}
