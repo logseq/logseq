@@ -13,55 +13,119 @@
             [frontend.format :as format]
             [clojure.string :as string]))
 
+(rum/defc mytest
+  []
+  [:div.relative.min-h-screen.overflow-hidden.bg-gray-900.lg:bg-gray-300
+   [:div.hidden.lg:block.absolute.scroll-bg.scroll-background]
+   [:div.angled-background
+    {:class (util/hiccup->class ".relative.min-h-screen.lg:min-w-3xl.xl:min-w-4xl.lg:flex.lg:items-center.lg:justify-center.lg:w-3/5.lg:py-20.lg:pl-8.lg:pr-8.bg-no-repeat")}
+    [:div
+     [:div.px-6.pt-8.pb-12.md:max-w-3xl.md:mx-auto.lg:mx-0.lg:max-w-none.lg:pt-0.lg:pb-16
+      [:div.flex.items-center.justify-between
+       [:div
+        [:img.h-6.lg:h-8.xl:h-9
+         {:alt "Tailwind UI",
+          :src "/img/tailwindui-logo-on-dark.svg"}]]
+       [:div
+        [:a.text-sm.font-semibold.text-white.focus:outline-none.focus:underline
+         {:href "/login"}
+         "\n                  Login →\n                "]]]]
+     [:div.px-6.md:max-w-3xl.md:mx-auto.lg:mx-0.lg:max-w-none
+      [:p.text-sm.font-semibold.text-gray-300.uppercase.tracking-wider
+       "\n              Now in early access\n            "]
+      [:h1.mt-3.text-3xl.leading-9.font-semibold.font-display.text-white.sm:mt-6.sm:text-4xl.sm:leading-10.xl:text-5xl.xl:leading-none
+       "\n              Beautiful UI components, crafted\n              "
+       [:br.hidden.sm:inline]
+       [:span.text-teal-400
+        "\n                by the creators of Tailwind CSS.\n              "]]
+      [:p.mt-2.text-lg.leading-7.text-gray-300.sm:mt-3.sm:text-xl.sm:max-w-xl.xl:mt-4.xl:text-2xl.xl:max-w-2xl
+       "\n              Fully responsive HTML components, designed and developed by Adam Wathan and Steve Schoger.\n            "]
+      [:div.mt-6.sm:flex.sm:mt-8.xl:mt-12
+       [:a.w-full.sm:w-auto.inline-flex.items-center.justify-center.px-6.py-3.border.border-transparent.text-base.leading-6.font-semibold.rounded-md.text-gray-900.bg-white.shadow-sm.hover:text-gray-600.focus:outline-none.focus:text-gray-600.transition.ease-in-out.duration-150.xl:text-lg.xl:py-4
+        {:href "/components"}
+        "\n                Explore the preview\n              "]
+       [:a.mt-4.sm:ml-4.sm:mt-0.w-full.sm:w-auto.inline-flex.items-center.justify-center.px-6.py-3.border.border-transparent.text-base.leading-6.font-semibold.rounded-md.text-white.bg-gray-800.shadow-sm.hover:bg-gray-700.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150.xl:text-lg.xl:py-4
+        {:href "/pricing"}
+        "\n                Get early access →\n              "]]]
+     [:div.mt-8.sm:mt-12.relative.h-64.overflow-hidden.bg-gray-300.lg:hidden
+      [:div.absolute.scroll-bg.scroll-background-2]]
+     [:div.px-6.py-8.sm:pt-12.md:max-w-3xl.md:mx-auto.lg:mx-0.lg:max-w-full.lg:py-0.lg:pt-24
+      [:p.text-sm.font-semibold.text-gray-300.uppercase.tracking-wider
+       "Designed and developed by"]
+      [:div.mt-4.sm:flex
+       [:a.flex.items-center.no-underline
+        {:href "https://twitter.com/adamwathan"}]
+       [:div.flex-shrink-0
+        [:img.h-12.w-12.rounded-full.border-2.border-white
+         {:alt "", :src "/img/adam.jpg"}]]
+       [:div.ml-3
+        [:p.font-semibold.text-white.leading-tight "Adam Wathan"]
+        [:p.text-sm.text-gray-500.leading-tight
+         "Creator of Tailwind CSS"]]
+       [:a.mt-6.sm:mt-0.sm:ml-12.flex.items-center.no-underline
+        {:href "https://twitter.com/steveschoger"}]
+       [:div.flex-shrink-0
+        [:img.h-12.w-12.rounded-full.border-2.border-white
+         {:alt "", :src "/img/steve.jpg"}]]
+       [:div.ml-3
+        [:p.font-semibold.text-white.leading-tight "Steve Schoger"]
+        [:p.text-sm.text-gray-500.leading-tight
+         "Author of Refactoring UI"]]]]]]])
+
+(rum/defc head
+  [close-fn]
+  [:div.rounded-lg.shadow-md
+    [:div.rounded-lg.bg-white.shadow-xs.overflow-hidden
+     [:div.px-5.pt-4.flex.items-center.justify-between
+      [:div
+       [:img.h-8.w-auto
+        {:alt "", :src "https://tailwindui.com/img/logos/workflow-mark-on-white.svg"}]]
+      [:div.-mr-2
+       [:button.inline-flex.items-center.justify-center.p-2.rounded-md.text-gray-400.hover:text-gray-500.hover:bg-gray-100.focus:outline-none.focus:bg-gray-100.focus:text-gray-500.transition.duration-150.ease-in-out
+        {:type "button",
+         :on-click close-fn}
+        [:svg.h-6.w-6
+         {:viewBox "0 0 24 24",
+          :fill "none",
+          :stroke "currentColor"}
+         [:path
+          {:d "M6 18L18 6M6 6l12 12",
+           :stroke-width "2",
+           :stroke-linejoin "round",
+           :stroke-linecap "round"}]]]]]
+     [:div.px-2.pt-2.pb-3
+      [:a.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
+       {:href "#"}
+       "Product"]
+      [:a.mt-1.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
+       {:href "#"}
+       "Features"]
+      [:a.mt-1.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
+       {:href "#"}
+       "Marketplace"]
+      [:a.mt-1.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
+       {:href "#"}
+       "Company"]]
+     [:div
+      [:a.block.w-full.px-5.py-3.text-center.font-medium.text-indigo-600.bg-gray-50.hover:bg-gray-100.hover:text-indigo-700.focus:outline-none.focus:bg-gray-100.focus:text-indigo-700.transition.duration-150.ease-in-out
+       {:href "#"}
+       "Log in"]]]])
+
 (rum/defc transition-block
   [state close-fn]
+  (prn {:state state})
   [:div.absolute.top-0.inset-x-0.p-2.transition.transform.origin-top-right.md:hidden
-           {:class (case state
-                     "entering" "duration-150 ease-out opacity-0 scale-95"
-                     "entered" "duration-150 ease-out opacity-100 scale-100"
-                     "exiting" "duration-100 ease-in opacity-100 scale-100"
-                     "exited" "duration-100 ease-in opacity-0 scale-95")}
-           [:div.rounded-lg.shadow-md
-            [:div.rounded-lg.bg-white.shadow-xs.overflow-hidden
-             [:div.px-5.pt-4.flex.items-center.justify-between
-              [:div
-               [:img.h-8.w-auto
-                {:alt "", :src "https://tailwindui.com/img/logos/workflow-mark-on-white.svg"}]]
-              [:div.-mr-2
-               [:button.inline-flex.items-center.justify-center.p-2.rounded-md.text-gray-400.hover:text-gray-500.hover:bg-gray-100.focus:outline-none.focus:bg-gray-100.focus:text-gray-500.transition.duration-150.ease-in-out
-                {:type "button",
-                 :on-click close-fn}
-                [:svg.h-6.w-6
-                 {:viewbox "0 0 24 24",
-                  :fill "none",
-                  :stroke "currentColor"}
-                 [:path
-                  {:d "M6 18L18 6M6 6l12 12",
-                   :stroke-width "2",
-                   :stroke-linejoin "round",
-                   :stroke-linecap "round"}]]]]]
-             [:div.px-2.pt-2.pb-3
-              [:a.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
-               {:href "#"}
-               "Product"]
-              [:a.mt-1.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
-               {:href "#"}
-               "Features"]
-              [:a.mt-1.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
-               {:href "#"}
-               "Marketplace"]
-              [:a.mt-1.block.px-3.py-2.rounded-md.text-base.font-medium.text-gray-700.hover:text-gray-900.hover:bg-gray-50.focus:outline-none.focus:text-gray-900.focus:bg-gray-50.transition.duration-150.ease-in-out
-               {:href "#"}
-               "Company"]]
-             [:div
-              [:a.block.w-full.px-5.py-3.text-center.font-medium.text-indigo-600.bg-gray-50.hover:bg-gray-100.hover:text-indigo-700.focus:outline-none.focus:bg-gray-100.focus:text-indigo-700.transition.duration-150.ease-in-out
-               {:href "#"}
-               "\n                Log in\n              "]]]]])
+   {:class (case state
+             "entering" "duration-150 ease-out opacity-0 scale-95"
+             "entered" "duration-150 ease-out opacity-100 scale-100"
+             "exiting" "duration-100 ease-in opacity-100 scale-100"
+             "exited" "duration-100 ease-in opacity-0 scale-95")}
+   (head close-fn)])
+
 (rum/defcs home < (mixins/modal)
   [state]
-  (let [{:keys [open? close-fn open-fn]} state]
-    (prn {:open? open?
-          :state state})
+  (let [{:keys [open? close-fn open-fn toggle-fn]} state]
+    (prn {:open? @open?})
     [:div.relative.bg-white.overflow-hidden
      [:div.max-w-screen-xl.mx-auto
       [:div.relative.z-10.pb-8.bg-white.sm:pb-16.md:pb-20.lg:max-w-2xl.lg:w-full.lg:pb-28.xl:pb-32
@@ -73,12 +137,12 @@
             {:href "#"}
             [:img.h-8.w-auto.sm:h-10
              {:alt "", :src "https://tailwindui.com/img/logos/workflow-mark-on-white.svg"}]]
-           [:div.-mr-2.flex.items-center.md:hidden
+           [:div#foobar.-mr-2.flex.items-center.md:hidden
             [:button.inline-flex.items-center.justify-center.p-2.rounded-md.text-gray-400.hover:text-gray-500.hover:bg-gray-100.focus:outline-none.focus:bg-gray-100.focus:text-gray-500.transition.duration-150.ease-in-out
              {:type "button",
               :on-click open-fn}
              [:svg.h-6.w-6
-              {:viewbox "0 0 24 24",
+              {:viewBox "0 0 24 24",
                :fill "none",
                :stroke "currentColor"}
               [:path
@@ -127,8 +191,8 @@
             "Live demo"]]]]]
        [:svg
         {:class (util/hiccup->class ".hidden.lg:block.absolute.right-0.inset-y-0.h-full.w-48.text-white.transform.translate-x-1/2")
-         :preserveaspectratio "none",
-         :viewbox "0 0 100 100",
+         :preserveAspectRatio "none",
+         :viewBox "0 0 100 100",
          :fill "currentColor"}
         [:polygon {:points "50,0 100,0 50,100 0,100"}]]]]
      [:div

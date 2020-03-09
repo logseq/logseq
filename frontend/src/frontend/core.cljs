@@ -21,7 +21,6 @@
   (set-router!))
 
 (defn ^:export init []
-  (prn "init!")
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds

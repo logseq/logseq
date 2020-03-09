@@ -196,6 +196,7 @@ textarea { overflow-x: auto; }
     margin-right: -3.5rem;
 }
 
+/* loader */
 .loader {
     border-top-color: #3498db;
     -webkit-animation: spinner 1.5s linear infinite;
@@ -211,3 +212,29 @@ textarea { overflow-x: auto; }
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* scroll-bg */
+.scroll-background {
+    height: 400%; width: 400%; top: -25%; left: -100%; background-size: 800px auto; background-image: url('/img/hero-pattern-lg.png');
+}
+
+.angled-background {
+    background-image: url('/img/angled-background.svg'); background-size: 100% auto; background-position: -5px -5px;
+}
+
+.scroll-background-2 {
+    height: 800%; width: 400%; top: -100%; left: -100%; background-size: 400px auto; background-image: url('/img/hero-pattern-lg.png');
+}
+
+@-webkit-keyframes scrollSmall {0%{transform:rotate(-13deg) translateY(0)}to{transform:rotate(-13deg) translateY(-639px)}}
+@keyframes scrollSmall{0%{transform:rotate(-13deg) translateY(0)}to{transform:rotate(-13deg) translateY(-639px)}}
+@-webkit-keyframes scrollLarge{0%{transform:rotate(-13deg) translateY(0)}to{transform:rotate(-13deg) translateY(-1278px)}}
+@keyframes scrollLarge{0%{transform:rotate(-13deg) translateY(0)}to{transform:rotate(-13deg) translateY(-1278px)}}
+@-webkit-keyframes spin{0%{transform:rotate(0deg)}to{transform:rotate(359deg)}}
+@keyframes spin{0%{transform:rotate(0deg)}to{transform:rotate(359deg)}}
+@-webkit-keyframes pulse{0%{opacity:1}50%{opacity:.5}to{opacity:1}}
+@keyframes pulse{0%{opacity:1}50%{opacity:.5}to{opacity:1}}
+.spin{-webkit-animation:spin .5s linear infinite;animation:spin .5s linear infinite}
+.pulse{-webkit-animation:pulse 2s ease infinite;animation:pulse 2s ease infinite}
+.scroll-bg{-webkit-animation-name:scrollSmall;animation-name:scrollSmall;-webkit-animation-duration:15s;animation-duration:15s;-webkit-animation-timing-function:linear;animation-timing-function:linear;-webkit-animation-iteration-count:infinite;animation-iteration-count:infinite}
+@media (min-width:1024px){.scroll-bg{-webkit-animation-name:scrollLarge;animation-name:scrollLarge;-webkit-animation-duration:35s;animation-duration:35s;-webkit-animation-timing-function:linear;animation-timing-function:linear;-webkit-animation-iteration-count:infinite;animation-iteration-count:infinite}}

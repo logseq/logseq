@@ -6,8 +6,8 @@
 (def routes
   [["/"
     {:name :home
-     ;; :view home/home
-     :view sidebar/sidebar
+     :view home/mytest
+     ;; :view sidebar/sidebar
      }]
    ["/auth/github"
     {:name :github-auth
