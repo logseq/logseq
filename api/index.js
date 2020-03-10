@@ -1,15 +1,27 @@
 // index.js
 const express = require('express');
+const cors = require('cors');
 const app = express();
 const request = require('request');
 
+app.use(cors());
 app.use(express.json());
 
 const config = {
   clientId: process.env.GITHUB_APP_KEY,
   clientSecret: process.env.GITHUB_APP_SECRET,
   redirectUri: process.env.GITHUB_REDIRECT_URI,
-  allowedOrigins: ['https://gitnotes.tiensonqin.now.sh'],
+  allowedOrigins: ['http://localhost:8080', 'https://gitnotes.tiensonqin.now.sh'],
+};
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (config.allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
 };
 
 const githubLoginHandler = function (req, res) {
@@ -24,9 +36,9 @@ const githubLoginHandler = function (req, res) {
 const githubOauthHandler = function (req, res) {
   // Retrieve the request, more details about the event variable later
   const headers = req.headers;
-  const body = req.body;
   const origin = headers.origin || headers.Origin;
-  console.log(origin);
+  const code = req.query.code;
+  console.log(`Received code ${code}`);
 
   // Check for malicious request
   if (!config.allowedOrigins.includes(origin)) {
@@ -40,7 +52,7 @@ const githubOauthHandler = function (req, res) {
       'Accept': 'application/json',
     },
     body: JSON.stringify({
-      code: body.code,
+      code: req.query.code,
       client_id: config.clientId,
       client_secret: config.clientSecret,
       redirect_uri: config.redirectUri,
@@ -61,6 +73,7 @@ const githubOauthHandler = function (req, res) {
       return;
     }
 
+    console.log(body);
     res.send({
       success: true,
       // Access token should be stored in response.body
@@ -70,6 +83,6 @@ const githubOauthHandler = function (req, res) {
 };
 
 app.get('/login/github', githubLoginHandler);
-app.get('/api/oauth/github', githubOauthHandler);
+app.get('/api/oauth/github', cors(corsOptions), githubOauthHandler);
 
 app.listen(3001, () => console.log("Github Oauth app listening on port 3001!"));

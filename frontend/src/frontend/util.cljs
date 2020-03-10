@@ -2,7 +2,8 @@
   (:require [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.walk :as walk]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [cljs-bean.core :as bean]))
 
 (defn evalue
   [event]
@@ -100,3 +101,14 @@
   (some->> (string/split class #"\.")
            (string/join " ")
            (string/trim)))
+
+(defn fetch
+  ([url on-ok on-failed]
+   (fetch url #js {} on-ok on-failed))
+  ([url opts on-ok on-failed]
+   (-> (js/fetch url opts)
+       (.then #(if (.-ok %)
+                 (.json %)
+                 (on-failed %)))
+       (.then bean/->clj)
+       (.then #(on-ok %)))))

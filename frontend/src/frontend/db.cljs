@@ -1,9 +1,12 @@
 (ns frontend.db
   (:require [datascript.core :as d]
             [frontend.util :as util]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [posh.rum :as posh]))
 
 (def conn (d/create-conn))
+
+(posh/posh! conn)
 
 ;; TODO: added_at, started_at, schedule, deadline
 (def qualified-map
@@ -20,7 +23,9 @@
    :parent-title :heading/parent-title})
 
 (def schema
-  [{:db/ident       :heading/uuid
+  [{:db/ident {:db/unique :db.unique/identity}}
+
+   {:db/ident       :heading/uuid
     :db/valueType   :db.type/uuid
     :db/cardinality :db.cardinality/one
     :db/unique      :db.unique/value}
@@ -105,7 +110,8 @@
 
 (defn init
   []
-  (d/transact! conn [{:tx-data schema}]))
+  (d/transact! conn [{:tx-data schema}
+                     [:db/add -1 :db/ident :settings]]))
 
 ;; transactions
 (defn transact-headings!
@@ -172,3 +178,19 @@
 (comment
   (frontend.handler/initial-db!)
   )
+
+(defn pull
+  [selector eid]
+  (posh/pull conn selector eid))
+
+(defn pull-many
+  [selector eids]
+  (posh/pull-many conn selector eids))
+
+(defn q
+  [query & inputs]
+  (apply posh/q conn query inputs))
+
+(comment
+  (init)
+  (d/transact! conn [[:db/add :settings :github-token "token" ]]))

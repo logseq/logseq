@@ -27,8 +27,6 @@
 
   ;; (handler/get-me)
 
-  (handler/listen-to-resize)
-
   ;; popup to notify user, could be toggled in settings
   ;; (handler/request-notifications-if-not-asked)
 

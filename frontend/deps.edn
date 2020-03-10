@@ -4,16 +4,13 @@
   cider/cider-nrepl           {:mvn/version "0.23.0-SNAPSHOT"}
   binaryage/devtools          {:mvn/version "0.9.10"}
 
-  org.clojure/clojure         {:mvn/version "RELEASE"}
-  org.clojure/clojurescript   {:mvn/version "RELEASE"}
-  rum                         {:mvn/version "0.11.4"}
-  datascript                  {:mvn/version "0.18.9"}
+  sablono                     {:mvn/version "0.8.1"}
+  rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
-  metosin/reitit              {:mvn/version "0.3.10"}
-  metosin/reitit-spec         {:mvn/version "0.3.10"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
-  posh                        {:local/root "/home/tienson/codes/projects/posh"}
+  cljs-bean                   {:mvn/version "1.5.0"}
+
   }
 
  :paths

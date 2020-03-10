@@ -12,7 +12,8 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [promesa.core :as p]
-            [frontend.api :as api])
+            [frontend.api :as api]
+            [cljs-bean.core :as bean])
   (:import [goog.events EventHandler]))
 
 ;; We only support Github token now
@@ -159,22 +160,6 @@
    (fn [e]
      (prn "Clone failed, reason: " e))))
 
-(defonce event-handler (EventHandler.))
-
-(defn listen-to-resize
-  []
-  (util/listen event-handler js/window :resize
-               (fn []
-                 (swap! state/state assoc :width (util/get-width)))))
-
-(defn toggle-drawer?
-  [switch]
-  (swap! state/state assoc :drawer? switch))
-
-(defn change-page
-  [page]
-  (swap! state/state assoc :current-page page))
-
 (defn reset-current-file
   []
   (swap! state/state assoc :current-file nil))
@@ -254,7 +239,8 @@
                                     (swap! state/state util/dissoc-in path)
                                     (swap! state/state assoc-in [:repos repo-url :contents file] content')
                                     (show-snackbar "File updated!")
-                                    (change-page :home))
+                                    ;; (change-page :home)
+                                    )
                                   (fn []
                                     (prn "Failed to update file."))))))))))
 
@@ -376,32 +362,24 @@
   ;; automatically push
   (periodically-push-tasks repo-url))
 
-(defn get-me
-  []
-  (api/get-me
-   (fn [body]
-     (let [{:keys [user tokens repos]} body]
-       (swap! state/state assoc
-              :user user
-              :tokens tokens
-              :repos (util/index-by repos :url))
-       (db/init)
-       (let [repos (map :url repos)
-             cloned (load-cloned?)
-             token (get-token)]
-         (doseq [[repo cloned?] cloned]
-           (swap! state/state
-                  assoc-in [:repos repo :cloned?] cloned?))
-         (when (seq repos)
-           (doseq [repo-url repos]
-             (if (get cloned repo-url)
-               (periodically-pull-and-push repo-url)
-               (-> (clone token repo-url)
-                   (p/then
-                    (fn []
-                      (periodically-pull-and-push repo-url))))))))))
-   (fn [response]
-     (prn "Can't get user's information, error response: " response))))
+;; (defn get-me
+;;   []
+;;   (let [{:keys [user tokens repos]} body]
+;;     (db/init)
+;;     (let [repos (map :url repos)
+;;           cloned (load-cloned?)
+;;           token (get-token)]
+;;       (doseq [[repo cloned?] cloned]
+;;         (swap! state/state
+;;                assoc-in [:repos repo :cloned?] cloned?))
+;;       (when (seq repos)
+;;         (doseq [repo-url repos]
+;;           (if (get cloned repo-url)
+;;             (periodically-pull-and-push repo-url)
+;;             (-> (clone token repo-url)
+;;                 (p/then
+;;                  (fn []
+;;                    (periodically-pull-and-push repo-url))))))))))
 
 (defn set-current-repo
   [repo-url]
@@ -410,3 +388,13 @@
 (defn set-route-match!
   [route]
   (swap! state/state assoc :route-match route))
+
+(defn get-github-access-token
+  [code]
+  (util/fetch (str config/api "api/oauth/github?code=" code)
+              (fn [resp]
+                (if (:success resp)
+                  (swap! state/state assoc :github-token (get-in resp [:body :access_token]))
+                  (prn "Get token failed, error: " resp)))
+              (fn [error]
+                (prn "Get token failed, error: " error))))

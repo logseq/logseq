@@ -109,3 +109,9 @@
                 :toggle-fn (fn []
                              (prn "toggle-fn on " @open?)
                              (swap! open? not))))))))
+
+(defn will-mount-effect
+  [handler]
+  {:will-mount (fn [state]
+                 (handler (:rum/args state))
+                 state)})

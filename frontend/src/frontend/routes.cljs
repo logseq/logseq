@@ -6,7 +6,7 @@
 (def routes
   [["/"
     {:name :home
-     :view home/mytest
+     :view home/home
      ;; :view sidebar/sidebar
      }]
    ["/auth/github"
