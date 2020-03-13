@@ -238,3 +238,20 @@ textarea { overflow-x: auto; }
 .pulse{-webkit-animation:pulse 2s ease infinite;animation:pulse 2s ease infinite}
 .scroll-bg{-webkit-animation-name:scrollSmall;animation-name:scrollSmall;-webkit-animation-duration:15s;animation-duration:15s;-webkit-animation-timing-function:linear;animation-timing-function:linear;-webkit-animation-iteration-count:infinite;animation-iteration-count:infinite}
 @media (min-width:1024px){.scroll-bg{-webkit-animation-name:scrollLarge;animation-name:scrollLarge;-webkit-animation-duration:35s;animation-duration:35s;-webkit-animation-timing-function:linear;animation-timing-function:linear;-webkit-animation-iteration-count:infinite;animation-iteration-count:infinite}}
+
+.text-gray-700 {
+    color: #374151;
+}
+
+.form-input {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: #fff;
+    border-color: #d2d6dc;
+    border-width: 1px;
+    border-radius: .375rem;
+    padding: .5rem .75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+}

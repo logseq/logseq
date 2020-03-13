@@ -6,12 +6,11 @@
 
   sablono                     {:mvn/version "0.8.1"}
   rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
+  posh                        {:local/root "/home/tienson/codes/projects/posh"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
-  cljs-bean                   {:mvn/version "1.5.0"}
-
-  }
+  cljs-bean                   {:mvn/version "1.5.0"}}
 
  :paths
  ["src"

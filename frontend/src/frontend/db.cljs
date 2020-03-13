@@ -4,9 +4,48 @@
             [medley.core :as medley]
             [posh.rum :as posh]))
 
-(def conn (d/create-conn))
+;; TODO: don't persistent :github/token
 
-(posh/posh! conn)
+(def schema
+  {:db/ident        {:db/unique :db.unique/identity}
+   :github/token    {}
+   ;; repo
+   :repo/url        {:db/unique :db.unique/identity}
+   :repo/cloning?   {}
+   :repo/cloned?    {}
+
+   ;; file
+   :file/path       {:db/unique :db.unique/identity}
+   :file/repo       {:db/valueType   :db.type/ref}
+   :file/raw        {}
+   :file/html       {}
+   ;; TODO: calculate memory/disk usage
+   ;; :file/size       {}
+
+   ;; heading
+   :heading/uuid   {:db/unique      :db.unique/identity}
+   :heading/repo   {:db/valueType   :db.type/ref}
+   :heading/file   {}
+   :heading/anchor {}
+   :heading/marker {}
+   :heading/priority {}
+   :heading/level {}
+   :heading/tags {:db/valueType   :db.type/ref
+                  :db/cardinality :db.cardinality/many
+                  :db/isComponent true}
+
+   ;; tag
+   :tag/name       {:db/unique :db.unique/identity}
+
+   ;; task
+   :task/scheduled {:db/index       true}
+   :task/deadline  {:db/index       true}
+   })
+
+(defonce conn
+  (let [conn (d/create-conn schema)]
+    (posh/posh! conn)
+    conn))
 
 ;; TODO: added_at, started_at, schedule, deadline
 (def qualified-map
@@ -22,67 +61,20 @@
    :meta :heading/meta
    :parent-title :heading/parent-title})
 
-(def schema
-  [{:db/ident {:db/unique :db.unique/identity}}
+;; (def schema
+;;   [{:db/ident       {:db/unique :db.unique/identity}}
 
-   {:db/ident       :heading/uuid
-    :db/valueType   :db.type/uuid
-    :db/cardinality :db.cardinality/one
-    :db/unique      :db.unique/value}
+;;    ;; {:db/ident       :heading/title
+;;    ;;  :db/valueType   :db.type/string
+;;    ;;  :db/cardinality :db.cardinality/one}
 
-   {:db/ident       :heading/repo
-    :db/valueType   :db.type/string
-    :db/cardinality :db.cardinality/one}
+;;    ;; {:db/ident       :heading/parent-title
+;;    ;;  :db/valueType   :db.type/string
+;;    ;;  :db/cardinality :db.cardinality/one}
 
-   {:db/ident       :heading/file
-    :db/valueType   :db.type/string
-    :db/cardinality :db.cardinality/one}
-
-   {:db/ident       :heading/anchor
-    :db/valueType   :db.type/string
-    :db/cardinality :db.cardinality/one}
-
-   {:db/ident       :heading/marker
-    :db/valueType   :db.type/string
-    :db/cardinality :db.cardinality/one}
-
-   {:db/ident       :heading/priority
-    :db/valueType   :db.type/string
-    :db/cardinality :db.cardinality/one}
-
-   {:db/ident       :heading/level
-    :db/valueType   :db.type/long
-    :db/cardinality :db.cardinality/one}
-
-   {:db/ident       :heading/tags
-    :db/valueType   :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/isComponent true}               ;TODO: not working as Datomic, can't search :tag/name in datalog queries
-
-   {:db/ident       :task/scheduled
-    ;; :db/valueType   :db.type/string
-    :db/index       true}
-
-   {:db/ident       :task/deadline
-    ;; :db/valueType   :db.type/string
-    :db/index       true}
-
-   {:db/ident       :tag/name
-    :db/valueType   :db.type/string
-    :db/cardinality :db.cardinality/one
-    :db/unique      :db.unique/identity}
-
-   ;; {:db/ident       :heading/title
-   ;;  :db/valueType   :db.type/string
-   ;;  :db/cardinality :db.cardinality/one}
-
-   ;; {:db/ident       :heading/parent-title
-   ;;  :db/valueType   :db.type/string
-   ;;  :db/cardinality :db.cardinality/one}
-
-   ;; TODO: timestamps, meta
-   ;; scheduled, deadline
-   ])
+;;    ;; TODO: timestamps, meta
+;;    ;; scheduled, deadline
+;;    ])
 
 (defn ->tags
   [tags]
@@ -110,8 +102,7 @@
 
 (defn init
   []
-  (d/transact! conn [{:tx-data schema}
-                     [:db/add -1 :db/ident :settings]]))
+  (d/transact! conn [[:db/add -1 :db/ident :settings]]))
 
 ;; transactions
 (defn transact-headings!
@@ -189,8 +180,84 @@
 
 (defn q
   [query & inputs]
-  (apply posh/q conn query inputs))
+  (apply posh/q query inputs))
+
+(defn transact!
+  [tx-data]
+  (posh/transact! conn tx-data))
+
+(defn transact-github-token!
+  [token]
+  (when token
+    (transact! [{:db/id -1
+                 :db/ident :github/token
+                 :github/token token}])))
+
+(defn get-key-value
+  [key]
+  (some-> (d/entity (d/db conn) key)
+      key))
+
+(defn sub-github-token
+  []
+  (pull '[*] :github/token))
+
+(defn get-github-token
+  []
+  (get-key-value :github/token))
+
+(defn sub-repos
+  []
+  (q '[:find ?url
+       :where [_ :repo/url ?url]]
+    conn))
+
+(defn set-repo-cloning
+  [repo-url value]
+  (d/transact! conn
+    [{:repo/url repo-url
+      :repo/cloning? value}]))
+
+(defn mark-repo-as-cloned
+  [repo-url]
+  (d/transact! conn
+    [{:repo/url repo-url
+      :repo/cloned? true}]))
+
+;; file
+(defn transact-files!
+  [repo-url files]
+  (d/transact! conn
+    (for [file files]
+     {:file/repo [:db/ident repo-url]
+      :file/path file})))
+
+(defn get-files
+  []
+  (->> (d/q '[:find ?file
+              :where [_ :repo/path ?file]]
+         conn)
+       (map first)
+       distinct))
+
+(defn set-file-content!
+  [file content]
+  (d/transact! conn
+    {:file/path file
+     :file/content content}))
 
 (comment
-  (init)
-  (d/transact! conn [[:db/add :settings :github-token "token" ]]))
+  (d/transact! conn [{:db/id -1
+                      :repo/url "https://github.com/tiensonqin/notes"
+                      :repo/cloned? false}])
+  (d/entity (d/db conn) [:repo/url "https://github.com/tiensonqin/notes"])
+  (d/transact! conn
+    (safe-headings [{:heading/repo [:repo/url "https://github.com/tiensonqin/notes"]
+                     :heading/file "test.org"
+                     :heading/anchor "hello"
+                     :heading/marker "TODO"
+                     :heading/priority "A"
+                     :heading/level "10"
+                     :heading/title "hello world"}
+                    ]))
+  )

@@ -25,7 +25,7 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
 
-  ;; (handler/get-me)
+  (handler/init-db!)
 
   ;; popup to notify user, could be toggled in settings
   ;; (handler/request-notifications-if-not-asked)

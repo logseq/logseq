@@ -1,7 +1,9 @@
 (ns frontend.components.sidebar
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.mixins :as mixins]))
+            [frontend.mixins :as mixins]
+            [frontend.db :as db]
+            [frontend.components.repo :as repo]))
 
 (defonce active-button :a.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
 (defonce inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
@@ -24,13 +26,24 @@
 (rum/defc sidebar-nav
   []
   [:nav.flex-1.px-2.py-4.bg-gray-800
-   (nav-item "Journal" "#"
-             "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
-             true)
-   (nav-item "Repos" "#"
-             "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z")
    (nav-item "Agenda" "#"
-             "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z")])
+             "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+             true)
+   (nav-item "Journal" "#"
+             "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6")
+   (nav-item "Files" "#"
+             "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z")
+   ])
+
+(rum/defq main-content <
+  {:q (fn [] (db/sub-repos))}
+  [state repos]
+  (prn {:repos repos})
+  [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
+   (if (seq repos)
+     [:div
+      (repo/repos repos)]
+     (repo/add-repo))])
 
 (rum/defcs sidebar < (mixins/modal)
   [state]
@@ -118,8 +131,7 @@
       [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
        ;; {:x-init "$el.focus()", :x-data "x-data", :tabindex "0"}
        {:tabIndex "0"}
-       [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
-        [:h1.text-2xl.font-semibold.text-gray-900 "Dashboard"]]
+       (main-content)
        [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
         [:div.py-4
          [:div.border-4.border-dashed.border-gray-200.rounded-lg.h-96]]]]]]))
