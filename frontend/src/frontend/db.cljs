@@ -13,6 +13,7 @@
    :repo/url        {:db/unique :db.unique/identity}
    :repo/cloning?   {}
    :repo/cloned?    {}
+   :repo/current    {:db/valueType   :db.type/ref}
 
    ;; file
    :file/path       {:db/unique :db.unique/identity}
@@ -186,30 +187,58 @@
   [tx-data]
   (posh/transact! conn tx-data))
 
+(defn set-key-value
+  [key value]
+  (transact! [{:db/id -1
+               :db/ident key
+               key value}]))
+
 (defn transact-github-token!
   [token]
-  (when token
-    (transact! [{:db/id -1
-                 :db/ident :github/token
-                 :github/token token}])))
+  (set-key-value :github/token token))
 
 (defn get-key-value
   [key]
   (some-> (d/entity (d/db conn) key)
-      key))
+          key))
 
 (defn sub-github-token
   []
-  (pull '[*] :github/token))
+  (pull '[*] [:db/ident :github/token]))
 
 (defn get-github-token
   []
   (get-key-value :github/token))
 
+(defn set-current-repo!
+  [repo]
+  (set-key-value :repo/current [:repo/url repo]))
+
+(defn sub-current-repo
+  []
+  (pull '[*] [:db/ident :repo/current]))
+
 (defn sub-repos
   []
   (q '[:find ?url
        :where [_ :repo/url ?url]]
+    conn))
+
+(defn get-repos
+  []
+  (->> (d/q '[:find ?url
+              :where [_ :repo/url ?url]]
+         @conn)
+       (map first)
+       distinct))
+
+(defn sub-files
+  []
+  (q '[:find ?path
+       :where
+       [_     :repo/current ?repo]
+       [?file :file/repo ?repo]
+       [?file :file/path ?path]]
     conn))
 
 (defn set-repo-cloning
@@ -229,22 +258,66 @@
   [repo-url files]
   (d/transact! conn
     (for [file files]
-     {:file/repo [:db/ident repo-url]
-      :file/path file})))
+      {:file/repo [:repo/url repo-url]
+       :file/path file})))
 
-(defn get-files
-  []
-  (->> (d/q '[:find ?file
-              :where [_ :repo/path ?file]]
-         conn)
+(defn get-repo-files
+  [repo-url]
+  (->> (d/q '[:find ?path
+              :in $ ?repo-url
+              :where
+              [?repo :repo/url ?repo-url]
+              [?file :file/repo ?repo]
+              [?file :file/path ?path]]
+         @conn repo-url)
        (map first)
        distinct))
 
 (defn set-file-content!
-  [file content]
+  [repo-url file content]
   (d/transact! conn
-    {:file/path file
-     :file/content content}))
+    [{:file/repo [:repo/url repo-url]
+      :file/path file
+      :file/content content}]))
+
+(defn get-file-content
+  [repo-url path]
+  (->> (d/q '[:find ?content
+              :in $ ?repo-url ?path
+              :where
+              [?repo :repo/url ?repo-url]
+              [?file :file/repo ?repo]
+              [?file :file/path ?path]
+              [?file :file/content ?content]
+              ]
+         @conn repo-url path)
+       (map first)
+       first))
+
+(defn sub-file
+  [path]
+  (prn {:path path})
+  (q '[:find ?content
+       :in $ ?path
+       :where
+       [_     :repo/current ?repo]
+       [?file :file/repo ?repo]
+       [?file :file/path ?path]
+       [?file :file/content ?content]]
+    conn
+    path))
+
+(defn get-all-files-content
+  [repo-url]
+  (d/q '[:find ?path ?content
+         :in $ ?repo-url
+         :where
+         [?repo :repo/url ?repo-url]
+         [?file :file/repo ?repo]
+         [?file :file/content ?content]
+         [?file :file/path ?path]
+         ]
+    @conn repo-url))
 
 (comment
   (d/transact! conn [{:db/id -1

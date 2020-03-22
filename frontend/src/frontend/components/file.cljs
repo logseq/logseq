@@ -1,33 +1,42 @@
 (ns frontend.components.file
-  ;; (:require [rum.core :as rum]
-  ;;           [frontend.mui :as mui]
-  ;;           ["@material-ui/core/colors" :as colors]
-  ;;           [frontend.state :as state]
-  ;;           [frontend.util :as util]
-  ;;           [frontend.handler :as handler]
-  ;;           [clojure.string :as string])
-  )
+  (:require [rum.core :as rum]
+            [frontend.util :as util]
+            [frontend.handler :as handler]
+            [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.components.sidebar :as sidebar]
+            [frontend.format :as format]
+            [goog.crypt.base64 :as b64]))
 
-;; (rum/defc files-list
-;;   [current-repo files]
-;;   [:div
-;;    (if (seq files)
-;;      (let [files-set (set files)
-;;            prefix [(files-set "tasks.org")]
-;;            files (->> (remove (set prefix) files)
-;;                       (concat prefix)
-;;                       (remove nil?))]
-;;        (mui/list
-;;         (for [file files]
-;;           (mui/list-item
-;;            {:button true
-;;             :key file
-;;             :style {:overflow "hidden"}
-;;             :on-click (fn []
-;;                         (handler/load-file current-repo file)
-;;                         (handler/toggle-drawer? false))}
-;;            (mui/list-item-text file)))))
-;;      "Loading...")])
+(defn- get-path
+  [state]
+  (let [route-match (first (:rum/args state))]
+    (->> (get-in route-match [:parameters :path :path])
+         (b64/decodeString))))
+
+(rum/defq file <
+  {:q (fn [state]
+        (db/sub-file (get-path state)))
+   :did-mount (fn [state]
+                (doseq [block (-> (js/document.querySelectorAll "pre code")
+                                  (array-seq))]
+                  (js/hljs.highlightBlock block))
+                state)}
+  [state content]
+  (let [path (get-path state)
+        content (ffirst content)
+        suffix (last (string/split path #"\."))]
+    (sidebar/sidebar
+     (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
+       [:div.flex.justify-center
+        [:div.m-6.flex-1 {:style {:max-width 900}}
+         [:a {:style {:float "right"}
+              :href "/edit"}
+          "edit"]
+         (if content
+           (util/raw-html (format/to-html content suffix))
+           "Loading ...")]]
+       [:div "File " suffix " is not supported."]))))
 
 ;; (rum/defc edit < rum/reactive
 ;;   []

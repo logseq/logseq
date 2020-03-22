@@ -2,7 +2,9 @@
   (:require [frontend.components.home :as home]
             [frontend.components.sidebar :as sidebar]
             [frontend.components.auth :as auth]
-            [frontend.components.repo :as repo]))
+            [frontend.components.repo :as repo]
+            [frontend.components.file :as file]
+            ))
 
 (def routes
   [["/"
@@ -15,6 +17,10 @@
    ["/repo/add"
     {:name :repo-add
      :view repo/add-repo}]
+
+   ["/file/:path"
+    {:name :file
+     :view file/file}]
 
    ;; TODO: edit file
    ;; Settings

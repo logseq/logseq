@@ -19,7 +19,7 @@
                                 )}
            (string/replace url "https://github.com/" "")]])]])))
 
-(rum/defcs add-repo < (rum/local "" ::repo-url)
+(rum/defcs add-repo < (rum/local "https://github.com/" ::repo-url)
   [state]
   (let [repo-url (get state ::repo-url)]
     [:div.p-8.flex.items-center.justify-center.bg-white
@@ -30,7 +30,8 @@
         "Repo"]
        [:div.mt-1.relative.rounded-md.shadow-sm
         [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
-         {:placeholder "https://github.com/yourname/repo"
+         {:auto-focus true
+          :placeholder "https://github.com/yourname/repo"
           :value @repo-url
           :on-change (fn [e]
                        (reset! repo-url (util/evalue e)))}]]]

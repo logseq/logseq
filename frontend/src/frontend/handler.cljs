@@ -19,19 +19,10 @@
 
 ;; We only support Github token now
 (defn load-file
-  ([repo-url path]
-   (util/p-handle (fs/read-file (git/get-repo-dir repo-url) path)
-                  (fn [content]
-                    (let [state @state/state
-                          state' (-> state
-                                     (assoc-in [:contents path] content)
-                                     (assoc-in [:loadings path] false)
-                                     (assoc :current-file path))]
-                      (reset! state/state state')))))
-  ([repo-url path state-handler]
-   (util/p-handle (fs/read-file (git/get-repo-dir repo-url) path)
-                  (fn [content]
-                    (state-handler content)))))
+  [repo-url path state-handler]
+  (util/p-handle (fs/read-file (git/get-repo-dir repo-url) path)
+                 (fn [content]
+                   (state-handler content))))
 
 (defn- hidden?
   [path patterns]
@@ -44,35 +35,18 @@
 
 (defn load-files
   [repo-url]
-  (prn "load files: " repo-url)
-  ;; (util/p-handle (git/list-files repo-url)
-  ;;                (fn [files]
-  ;;                  (when (> (count files) 0)
-  ;;                    (let [files (js->clj files)]
-  ;;                      (if (contains? (set files) config/hidden-file)
-  ;;                        (load-file repo-url config/hidden-file
-  ;;                                   (fn [patterns-content]
-  ;;                                     (when patterns-content
-  ;;                                       (let [patterns (string/split patterns-content #"\n")
-  ;;                                             files (remove (fn [path] (hidden? path patterns)) files)]
-  ;;                                         (db/transact-files! repo-url files)))))
-  ;;                        (p/promise (db/transact-files! repo-url files)))))))
-  )
-
-;; (defn extract-links
-;;   [form]
-;;   (let [links (atom [])]
-;;     (clojure.walk/postwalk
-;;      (fn [x]
-;;        (when (and (vector? x)
-;;                   (= "Link" (first x)))
-;;          (let [[_ {:keys [url label]}] x
-;;                [_ {:keys [protocol link]}] url
-;;                link (str protocol ":" link)]
-;;            (swap! links conj link)))
-;;        x)
-;;      form)
-;;     @links))
+  (util/p-handle (git/list-files repo-url)
+                 (fn [files]
+                   (when (> (count files) 0)
+                     (let [files (js->clj files)]
+                       (if (contains? (set files) config/hidden-file)
+                         (load-file repo-url config/hidden-file
+                                    (fn [patterns-content]
+                                      (when patterns-content
+                                        (let [patterns (string/split patterns-content #"\n")
+                                              files (remove (fn [path] (hidden? path patterns)) files)]
+                                          (db/transact-files! repo-url files)))))
+                         (p/promise (db/transact-files! repo-url files))))))))
 
 
 ;; TODO: remove this
@@ -133,22 +107,19 @@
   [repo]
   (let [token (db/get-github-token)]
     (util/p-handle
-    (do
-      (prn "Debug: cloning " repo)
-      (db/set-repo-cloning repo true)
-      (git/clone repo token))
-    (fn []
-      (db/set-repo-cloning repo false)
-      (db/mark-repo-as-cloned repo)
-      ;; load contents
-      (load-files repo))
-    (fn [e]
-      (db/set-repo-cloning repo false)
-      (prn "Clone failed, reason: " e)))))
-
-(defn reset-current-file
-  []
-  (swap! state/state assoc :current-file nil))
+     (do
+       (prn "Debug: cloning " repo)
+       (db/set-repo-cloning repo true)
+       (git/clone repo token))
+     (fn []
+       (db/set-repo-cloning repo false)
+       (db/mark-repo-as-cloned repo)
+       (db/set-current-repo! repo)
+       ;; load contents
+       (load-files repo))
+     (fn [e]
+       (db/set-repo-cloning repo false)
+       (prn "Clone failed, reason: " e)))))
 
 (defn new-notification
   [text]
@@ -192,19 +163,6 @@
       (notify-fn)
       (js/setInterval notify-fn (* 1000 60)))))
 
-(defn hide-snackbar
-  []
-  (swap! state/state assoc
-         :snackbar? false
-         :snackbar-message nil))
-
-(defn show-snackbar
-  [message]
-  (swap! state/state assoc
-         :snackbar? true
-         :snackbar-message message)
-  (js/setTimeout hide-snackbar 3000))
-
 (defn alter-file
   [repo-url file]
   (when-let [content (get-in @state/state [:repos repo-url :contents file])]
@@ -224,7 +182,7 @@
                                   (fn []
                                     (swap! state/state util/dissoc-in path)
                                     (swap! state/state assoc-in [:repos repo-url :contents file] content')
-                                    (show-snackbar "File updated!")
+                                    ;; (show-snackbar "File updated!")
                                     ;; (change-page :home)
                                     )
                                   (fn []
@@ -279,11 +237,11 @@
 
 (defn load-all-contents!
   [repo-url ok-handler]
-  (let [files (db/get-files)]
+  (let [files (db/get-repo-files repo-url)]
     (-> (p/all (for [file files]
                  (load-file repo-url file
                             (fn [content]
-                              (db/set-file-content! file content)))))
+                              (db/set-file-content! repo-url file content)))))
         (p/then
          (fn [_]
            (prn "Files are loaded!")
@@ -291,7 +249,7 @@
 
 (defn extract-all-headings
   [repo-url]
-  (let [contents (get-in @state/state [:repos repo-url :contents])]
+  (let [contents (db/get-all-files-content repo-url)]
     (vec
      (mapcat
       (fn [[file content] contents]
@@ -308,18 +266,12 @@
                           (reset! headings-atom headings)
                           (db/transact-headings! headings)))))
 
-(defn get-user-token-repos
-  []
-  (let [user (:user @state/state)
-        token (:oauth_token (first (:tokens @state/state)))
-        repos (map :url (vals (:repos @state/state)))]
-    [user token repos]))
 
-(defn sync
-  []
-  (let [[_user token repos] (get-user-token-repos)]
-    (doseq [repo repos]
-      (pull repo token))))
+;; (defn sync
+;;   []
+;;   (let [[_user token repos] (get-user-token-repos)]
+;;     (doseq [repo repos]
+;;       (pull repo token))))
 
 (defn periodically-pull-and-push
   [repo-url]
@@ -328,29 +280,6 @@
 
   ;; automatically push
   (periodically-push-tasks repo-url))
-
-;; (defn get-me
-;;   []
-;;   (let [{:keys [user tokens repos]} body]
-;;     (db/init)
-;;     (let [repos (map :url repos)
-;;           cloned (load-cloned?)
-;;           token (db/get-github-token)]
-;;       (doseq [[repo cloned?] cloned]
-;;         (swap! state/state
-;;                assoc-in [:repos repo :cloned?] cloned?))
-;;       (when (seq repos)
-;;         (doseq [repo-url repos]
-;;           (if (get cloned repo-url)
-;;             (periodically-pull-and-push repo-url)
-;;             (-> (clone token repo-url)
-;;                 (p/then
-;;                  (fn []
-;;                    (periodically-pull-and-push repo-url))))))))))
-
-(defn set-current-repo
-  [repo-url]
-  (swap! state/state assoc :current-repo repo-url))
 
 (defn set-route-match!
   [route]
