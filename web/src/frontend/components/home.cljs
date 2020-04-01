@@ -70,8 +70,12 @@
         [:p.text-sm.text-gray-500.leading-tight
          "Author of Refactoring UI"]]]]]]])
 
-(rum/defq home <
-  {:q (fn [_state] (db/sub-github-token))}
+(rum/defq home < (rum/local false ::loading?)
+  {:will-mount (fn [state]
+                 (when-not (db/get-github-token)
+                   (handler/get-github-access-token))
+                 state)
+   :q (fn [_state] (db/sub-github-token))}
   [state {:keys [:github/token]}]
   (if token
     (sidebar/sidebar (sidebar/main-content))

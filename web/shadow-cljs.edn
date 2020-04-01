@@ -22,10 +22,11 @@
 
    :compiler-options {:infer-externs :auto
                       :externs ["datascript/externs.js"]}
-   :build-hooks [(shadow.hooks/purge-css
-                  {:css-source "node_modules/tailwindcss/dist/tailwind.min.css"
-                   :js-globs   ["public/js/*.js"]
-                   :public-dir    "public/css"})]
+   ;; TODO: purge-css not working properly
+   ;; :build-hooks [(shadow.hooks/purge-css
+   ;;                {:css-source "node_modules/tailwindcss/dist/tailwind.min.css"
+   ;;                 :js-globs   ["public/js/*.js"]
+   ;;                 :public-dir    "public/css"})]
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop

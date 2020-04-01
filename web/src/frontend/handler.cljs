@@ -12,7 +12,6 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [promesa.core :as p]
-            [frontend.api :as api]
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe])
   (:import [goog.events EventHandler]))
@@ -286,17 +285,25 @@
   (swap! state/state assoc :route-match route))
 
 (defn get-github-access-token
-  [code]
-  (util/fetch (str config/api "api/oauth/github?code=" code)
-              (fn [resp]
-                (if (:success resp)
-                  (do
-                    (db/transact-github-token! (get-in resp [:body :access_token]))
-                    ;; redirect to home
-                    (rfe/push-state :home))
-                  (prn "Get token failed, error: " resp)))
-              (fn [error]
-                (prn "Get token failed, error: " error))))
+  ([]
+   (util/fetch (str config/api "token/github")
+               (fn [resp]
+                 (if (:success resp)
+                   (db/transact-github-token! (get-in resp [:body :access_token]))
+                   (prn "Get token failed, error: " resp)))
+               (fn [error]
+                 (prn "Get token failed, error: " error))))
+  ([code]
+   (util/fetch (str config/api "oauth/github?code=" code)
+               (fn [resp]
+                 (if (:success resp)
+                   (do
+                     (db/transact-github-token! (get-in resp [:body :access_token]))
+                     ;; redirect to home
+                     (rfe/push-state :home))
+                   (prn "Get token failed, error: " resp)))
+               (fn [error]
+                 (prn "Get token failed, error: " error)))))
 
 (defn init-db!
   []

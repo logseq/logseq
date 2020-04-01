@@ -1,15 +1,18 @@
 {
   "name": "api",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.0.1",
+  "devDependencies": {
+    "shadow-cljs": "2.8.93"
+  },
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "watch": "npx shadow-cljs watch app",
+    "release": "npx shadow-cljs release app",
+    "server": "npx shadow-cljs server;",
+    "start": "node ./index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
+    "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
     "express": "^4.17.1",
     "request": "^2.88.2"

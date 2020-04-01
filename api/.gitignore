@@ -1,7 +1,7 @@
 node_modules/
 public/js
+index.js
 
-/.cpcache
 /target
 /checkouts
 /src/gen

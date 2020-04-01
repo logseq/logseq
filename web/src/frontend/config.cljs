@@ -6,8 +6,9 @@
 (def website
   (if dev?
     "http://localhost:8080"
-    "https://gitnotes.tiensonqin.now.sh']"))
+    "https://gitnotes.now.sh"))
+
 (def api
   (if dev?
-    "http://localhost:3001/"
-    "https://github-oauth.tiensonqin.now.sh/"))
+    "http://localhost:3000/api/"
+    (str website "/api/")))

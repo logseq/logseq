@@ -16,8 +16,8 @@
 
 (defn start []
   (rum/mount
-             (page/current-page)
-             (.getElementById js/document "root"))
+   (page/current-page)
+   (.getElementById js/document "root"))
   (set-router!))
 
 (defn ^:export init []
