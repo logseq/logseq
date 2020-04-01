@@ -2,3 +2,4 @@ web
 api/shadow-cljs.edn
 api/.shadow-cljs
 api/src
+.env
