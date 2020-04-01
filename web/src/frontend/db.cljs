@@ -2,7 +2,8 @@
   (:require [datascript.core :as d]
             [frontend.util :as util]
             [medley.core :as medley]
-            [posh.rum :as posh]))
+            [posh.rum :as posh]
+            [datascript.transit :as dt]))
 
 ;; TODO: don't persistent :github/token
 
@@ -47,6 +48,37 @@
   (let [conn (d/create-conn schema)]
     (posh/posh! conn)
     conn))
+
+;; transit serialization
+
+(defn db->string [db]
+  (dt/write-transit-str db))
+
+(defn string->db [s]
+  (dt/read-transit-str s))
+
+;; persisting DB between page reloads
+(defn persist [db]
+  (js/localStorage.setItem "gitnotes/DB" (db->string db)))
+
+(defn reset-conn! [db]
+  (reset! conn db)
+  ;; (persist db)
+  )
+
+(d/listen! conn :persistence
+           (fn [tx-report] ;; FIXME do not notify with nil as db-report
+             ;; FIXME do not notify if tx-data is empty
+             (when-let [db (:db-after tx-report)]
+               (prn "persistence: new change")
+               (js/setTimeout #(persist db) 0))))
+
+(defn restore! []
+  (d/transact! conn [[:db/add -1 :db/ident :settings]])
+  (when-let [stored (js/localStorage.getItem "datascript-todo/DB")]
+   (let [stored-db (string->db stored)]
+     (when (= (:schema stored-db) schema) ;; check for code update
+       (reset-conn! stored-db)))))
 
 ;; TODO: added_at, started_at, schedule, deadline
 (def qualified-map
@@ -100,10 +132,6 @@
              (fn [k] (get qualified-map k k))
              heading)))
         headings))
-
-(defn init
-  []
-  (d/transact! conn [[:db/add -1 :db/ident :settings]]))
 
 ;; transactions
 (defn transact-headings!

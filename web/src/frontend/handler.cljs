@@ -305,11 +305,6 @@
                (fn [error]
                  (prn "Get token failed, error: " error)))))
 
-(defn init-db!
-  []
-  ;; TODO: load storage to db
-  (db/init))
-
 (defn clone-and-pull
   [repo]
   (p/then (clone repo)
