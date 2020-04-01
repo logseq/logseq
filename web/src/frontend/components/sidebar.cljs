@@ -32,7 +32,6 @@
   [:div.cursor-pointer.my-1.flex.flex-col.ml-2
    (if (seq files)
      (let [files (->> files (map first))]
-       (prn files)
        (for [file files]
          [:a {:key file
               :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")

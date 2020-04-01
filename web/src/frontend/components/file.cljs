@@ -26,6 +26,7 @@
   (let [path (get-path state)
         content (ffirst content)
         suffix (last (string/split path #"\."))]
+    (prn {:path path})
     (sidebar/sidebar
      (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
        [:div.flex.justify-center

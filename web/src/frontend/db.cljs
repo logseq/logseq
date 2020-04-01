@@ -63,19 +63,17 @@
 
 (defn reset-conn! [db]
   (reset! conn db)
-  ;; (persist db)
-  )
+  (posh/posh! conn))
 
 (d/listen! conn :persistence
            (fn [tx-report] ;; FIXME do not notify with nil as db-report
              ;; FIXME do not notify if tx-data is empty
+             (prn "db changed.")
              (when-let [db (:db-after tx-report)]
-               (prn "persistence: new change")
                (js/setTimeout #(persist db) 0))))
 
 (defn restore! []
-  (d/transact! conn [[:db/add -1 :db/ident :settings]])
-  (when-let [stored (js/localStorage.getItem "datascript-todo/DB")]
+  (when-let [stored (js/localStorage.getItem "gitnotes/DB")]
    (let [stored-db (string->db stored)]
      (when (= (:schema stored-db) schema) ;; check for code update
        (reset-conn! stored-db)))))
@@ -324,7 +322,6 @@
 
 (defn sub-file
   [path]
-  (prn {:path path})
   (q '[:find ?content
        :in $ ?path
        :where

@@ -13,7 +13,7 @@
   ],
   "routes": [
     { "src": "/api(.*)", "dest": "api/index.js" },
-    { "src": "/(.+js|.+css|.+png|.+svg|.+jpg|.+ico|robots.txt)", "dest": "/public/$1" },
+    { "src": "/(.+js|.+css|.+png|.+svg|.+jpg|.+ico|robots.txt|.+map)", "dest": "/public/$1" },
     { "src": "/(.*)", "dest": "/public/index.html" }
   ]
 }
