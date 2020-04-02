@@ -7,6 +7,7 @@
 
 ;; TODO: don't persistent :github/token
 
+(def datascript-db "gitnotes/DB")
 (def schema
   {:db/ident        {:db/unique :db.unique/identity}
    :github/token    {}
@@ -27,7 +28,7 @@
    ;; heading
    :heading/uuid   {:db/unique      :db.unique/identity}
    :heading/repo   {:db/valueType   :db.type/ref}
-   :heading/file   {}
+   :heading/file   {:db/valueType   :db.type/ref}
    :heading/anchor {}
    :heading/marker {}
    :heading/priority {}
@@ -59,8 +60,7 @@
 
 ;; persisting DB between page reloads
 (defn persist [db]
-  (prn "DB size: " (count (db->string db)))
-  (js/localStorage.setItem "gitnotes/DB" (db->string db)))
+  (js/localStorage.setItem datascript-db (db->string db)))
 
 (defn reset-conn! [db]
   (reset! conn db)
@@ -73,8 +73,15 @@
              (when-let [db (:db-after tx-report)]
                (js/setTimeout #(persist db) 0))))
 
+;; (new TextEncoder().encode('foo')).length
+(defn db-size
+  []
+  (when-let [store (js/localStorage.getItem datascript-db)]
+    (let [bytes (.-length (.encode (js/TextEncoder.) store))]
+      (/ bytes 1000))))
+
 (defn restore! []
-  (when-let [stored (js/localStorage.getItem "gitnotes/DB")]
+  (when-let [stored (js/localStorage.getItem datascript-db)]
    (let [stored-db (string->db stored)]
      (when (= (:schema stored-db) schema) ;; check for code update
        (reset-conn! stored-db)))))
@@ -132,16 +139,6 @@
              heading)))
         headings))
 
-(defn delete-headings!
-  []
-  )
-
-;; transactions
-(defn reset-headings!
-  [headings]
-  (let [headings (safe-headings headings)]
-    (d/transact! conn headings)))
-
 ;; queries
 
 (defn- distinct-result
@@ -160,6 +157,29 @@
           :where
           [?h :heading/tags ?tags]]
      @conn)))
+
+(defn get-repo-headings
+  [repo-url]
+  (-> (d/q '[:find ?heading
+          :in $ ?repo-url
+          :where
+          [?repo :repo/url ?repo-url]
+          [?heading :heading/repo ?repo]]
+        @conn repo-url)
+      seq-flatten))
+
+(defn delete-headings!
+  [repo-url]
+  (let [headings (get-repo-headings repo-url)
+        headings (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)]
+    (d/transact! conn headings)))
+
+;; transactions
+(defn reset-headings!
+  [repo-url headings]
+  (delete-headings! repo-url)
+  (let [headings (safe-headings headings)]
+    (d/transact! conn headings)))
 
 (defn get-all-headings
   []
@@ -365,6 +385,4 @@
                      :heading/marker "TODO"
                      :heading/priority "A"
                      :heading/level "10"
-                     :heading/title "hello world"}
-                    ]))
-  )
+                     :heading/title "hello world"}])))

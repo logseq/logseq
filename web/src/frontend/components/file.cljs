@@ -31,9 +31,9 @@
     (sidebar/sidebar
      (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
        [:div#content.flex.justify-center
-        [:div.m-6.flex-1 {:style {:max-width 900}}
-         [:a {:style {:float "right"}
-              :href (str "/file/" encoded-path "/edit")}
+        [:div.m-6.flex-1 {:style {:position "relative"
+                                  :max-width 800}}
+         [:a {:href (str "/file/" encoded-path "/edit")}
           "edit"]
          (if content
            (util/raw-html (format/to-html content suffix))
@@ -75,5 +75,4 @@
                              (let [commit-message (if (string/blank? @commit-message)
                                                     (str "Update " path)
                                                     @commit-message)]
-                               (prn "commit!")
                                (handler/alter-file path commit-message @content)))))]])))

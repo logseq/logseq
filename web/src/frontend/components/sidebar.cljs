@@ -46,13 +46,7 @@
              true)
    (nav-item "Agenda" "#"
              "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z")
-   (nav-item "Budgets" "#"
-             "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z")
-   (nav-item "Files" "#"
-             "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z")
-
-   (files-list)
-   ])
+   (files-list)])
 
 (rum/defq main-content <
   {:q (fn [_state] (db/sub-repos))}
@@ -152,6 +146,6 @@
        main-content
        [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
         [:div.py-4
-         [:div.border-4.border-dashed.border-gray-200.rounded-lg.h-96]]]
-       ]
-      ]]))
+         [:div.border-4.border-dashed.border-gray-200.rounded-lg.h-96]]]]
+
+      (ui/notification)]]))

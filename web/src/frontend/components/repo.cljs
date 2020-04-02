@@ -14,7 +14,6 @@
         (for [url repos]
           [:li {:key url}
            [:button {:on-click (fn []
-                                 (prn "set current repo: " url)
                                  ;; (handler/set-current-repo url)
                                  )}
             (string/replace url "https://github.com/" "")]])]])))
@@ -27,8 +26,8 @@
       [:div
        [:label.block.text-sm.font-medium.leading-5.text-gray-700
         {:for "Repo"}
-        "Repo"]
-       [:div.mt-1.relative.rounded-md.shadow-sm
+        "Specify your repo: "]
+       [:div.mt-2.mb-2.relative.rounded-md.shadow-sm
         [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
          {:auto-focus true
           :placeholder "https://github.com/yourname/repo"

@@ -30,13 +30,10 @@
             font-size: medium;
             font-weight: bold;
             margin-top:0; }
-.todo   { font-family: monospace; color: red; }
-.done   { font-family: monospace; color: green; }
-.priority { font-family: monospace; color: orange; }
 .tag    { background-color: #eee; font-family: monospace;
           padding: 2px; font-size: 80%; font-weight: normal; }
-.timestamp { color: #bebebe; }
-.timestamp-kwd { color: #5f9ea0; }
+.timestamp { color: #bebebe; margin-left: 6px; }
+.timestamp-kwd { color: #5f9ea0; margin-left: 6px; }
 .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
 .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
 .org-center { margin-left: auto; margin-right: auto; text-align: center; }

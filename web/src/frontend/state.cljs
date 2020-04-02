@@ -4,4 +4,6 @@
 (def state (atom
             {:route-match nil
              :tasks {}
+             :notification/show? false
+             :notification/text nil
              }))

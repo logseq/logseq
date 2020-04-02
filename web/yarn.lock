@@ -1126,10 +1126,10 @@ mkdirp@^0.5.1:
   dependencies:
     minimist "0.0.8"
 
-mldoc_org@^0.1.8:
-  version "0.1.8"
-  resolved "https://registry.yarnpkg.com/mldoc_org/-/mldoc_org-0.1.8.tgz#f3241a308a11319d948a20ae5e6401c375301b6c"
-  integrity sha512-xaV4pbCV6eumQ4tS/TD40EnsGKN8tZhfKk0llxO+TcNaVEdLAIoilUyJJMiCRwq8esJlMjq53v+ULlC3cQeU6w==
+mldoc_org@^0.2.0:
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/mldoc_org/-/mldoc_org-0.2.0.tgz#b9643333939dbddf6b38e76ec130c4b2cc72d6ab"
+  integrity sha512-s5QuzNWRX8XuAV6ymrBB43qwqvxjsCfUZX6/3AuCJ/dka3+jPxcQVjjOfueTFdzbQdPOBMxAhutV+AX9oQnv1A==
   dependencies:
     yargs "^12.0.2"
 

@@ -101,13 +101,10 @@
          (assoc state
                 k open?
                 :close-fn (fn []
-                            (prn "close-fn on " @open?)
                             (reset! open? false))
                 :open-fn (fn []
-                           (prn "open-fn on " @open?)
                            (reset! open? true))
                 :toggle-fn (fn []
-                             (prn "toggle-fn on " @open?)
                              (swap! open? not))))))))
 
 (defn will-mount-effect

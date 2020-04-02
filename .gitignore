@@ -1,5 +1,5 @@
 node_modules/
-public/js
+public/static/js
 
 /.cpcache
 /target

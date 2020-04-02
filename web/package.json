@@ -9,15 +9,13 @@
     "watch": "npx shadow-cljs watch app",
     "release": "npx shadow-cljs release app",
     "server": "npx shadow-cljs server;",
-    "clean": "rm -rf target; rm -rf public/js/compiled; rm -rf public/js/cljs-runtime"
+    "clean": "rm -rf target; rm -rf public/static/js/compiled; rm -rf public/static/js/cljs-runtime"
   },
   "dependencies": {
-    "@material-ui/core": "^4.7.2",
-    "@material-ui/icons": "^4.5.1",
     "browserfs": "^1.4.3",
     "dev": "^0.1.3",
     "isomorphic-git": "^1.1.2",
-    "mldoc_org": "^0.1.8",
+    "mldoc_org": "^0.2.0",
     "purgecss": "^2.1.0",
     "react": "^16.12.0",
     "react-dom": "^16.12.0",

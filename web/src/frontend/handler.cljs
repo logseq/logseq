@@ -66,7 +66,7 @@
   (when-let [token (db/get-github-token)]
     (pull repo-url token)
     (js/setInterval #(pull repo-url token)
-                    (* 10 1000))))
+                    (* 60 1000))))
 
 (defn add-transaction
   [tx]
@@ -107,7 +107,6 @@
   (let [token (db/get-github-token)]
     (util/p-handle
      (do
-       (prn "Debug: cloning " repo)
        (db/set-repo-cloning repo true)
        (git/clone repo token))
      (fn []
@@ -162,15 +161,20 @@
       (notify-fn)
       (js/setInterval notify-fn (* 1000 60)))))
 
+(defn show-notification!
+  [text]
+  (swap! state/state assoc
+         :notification/show? true
+         :notification/text text)
+  (js/setTimeout #(swap! state/state assoc
+                         :notification/show? false
+                         :notification/text nil)
+                 3000))
+
 (defn alter-file
   [path commit-message content]
   (let [token (db/get-github-token)
         repo-url (db/get-current-repo)]
-    (prn {:repo-url repo-url
-          :token token
-          :path path
-          :content content
-          :commit-message commit-message})
     (util/p-handle
      (fs/write-file (git/get-repo-dir repo-url) path content)
      (fn [_]
@@ -180,8 +184,7 @@
                             token
                             (fn []
                               (db/set-file-content! repo-url path content)
-                              ;; (show-snackbar "File updated!")
-                              )
+                              (show-notification! "File updated!"))
                             (fn [error]
                               (prn "Failed to update file, error: " error)))))))
 
@@ -228,8 +231,8 @@
         headings (block/extract-headings headings)]
     (map (fn [heading]
            (assoc heading
-                  :repo [:repo/url repo-url]
-                  :file file))
+                  :heading/repo [:repo/url repo-url]
+                  :heading/file [:file/path file]))
       headings)))
 
 (defn load-all-contents!
@@ -241,7 +244,6 @@
                               (db/set-file-content! repo-url file content)))))
         (p/then
          (fn [_]
-           (prn "Files are loaded!")
            (ok-handler))))))
 
 (defn extract-all-headings
@@ -261,7 +263,7 @@
                       (fn []
                         (let [headings (extract-all-headings repo-url)]
                           (reset! headings-atom headings)
-                          (db/reset-headings! headings)))))
+                          (db/reset-headings! repo-url headings)))))
 
 
 ;; (defn sync
@@ -313,7 +315,6 @@
   []
   (db/restore!)
   (when-let [first-repo (first (db/get-repos))]
-    (prn "first-repo: " first-repo)
     (db/set-current-repo! first-repo))
   (let [repos (db/get-repos)]
     (doseq [repo repos]

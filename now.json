@@ -12,8 +12,9 @@
     { "src": "/public/**", "use": "@now/static"}
   ],
   "routes": [
-    { "src": "/api(.*)", "dest": "api/index.js" },
-    { "src": "/(.+js|.+css|.+png|.+svg|.+jpg|.+ico|robots.txt|.+map)", "dest": "/public/$1" },
-    { "src": "/(.*)", "dest": "/public/index.html" }
+      { "src": "/api(.*)", "dest": "api/index.js" },
+      { "src": "/static/(.*)", "dest": "/public/static/$1" },
+      { "src": "/(.+js|.+css|.+png|.+svg|.+jpg|.+ico|robots.txt|.+map)", "dest": "/public/$1" },
+      { "src": "/(.*)", "dest": "/public/index.html" }
   ]
 }
