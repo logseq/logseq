@@ -59,6 +59,7 @@
 
 ;; persisting DB between page reloads
 (defn persist [db]
+  (prn "DB size: " (count (db->string db)))
   (js/localStorage.setItem "gitnotes/DB" (db->string db)))
 
 (defn reset-conn! [db]
@@ -131,8 +132,12 @@
              heading)))
         headings))
 
+(defn delete-headings!
+  []
+  )
+
 ;; transactions
-(defn transact-headings!
+(defn reset-headings!
   [headings]
   (let [headings (safe-headings headings)]
     (d/transact! conn headings)))
@@ -243,6 +248,10 @@
 (defn sub-current-repo
   []
   (pull '[*] [:db/ident :repo/current]))
+
+(defn get-current-repo
+  []
+  (:repo/url (get-key-value :repo/current)))
 
 (defn sub-repos
   []

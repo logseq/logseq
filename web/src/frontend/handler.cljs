@@ -66,7 +66,7 @@
   (when-let [token (db/get-github-token)]
     (pull repo-url token)
     (js/setInterval #(pull repo-url token)
-                    (* 60 1000))))
+                    (* 10 1000))))
 
 (defn add-transaction
   [tx]
@@ -163,29 +163,27 @@
       (js/setInterval notify-fn (* 1000 60)))))
 
 (defn alter-file
-  [repo-url file]
-  (when-let [content (get-in @state/state [:repos repo-url :contents file])]
-    (let [content' (get-in @state/state [:repos repo-url :editing-files file])]
-      (when-not (= (string/trim content)
-                   (string/trim content'))
-        (let [token (db/get-github-token)
-              path [:repos repo-url :commit-message file]
-              message (get-in @state/state path (str "Update " file))]
-          (util/p-handle
-           (fs/write-file (git/get-repo-dir repo-url) file content')
-           (fn [_]
-             (git/add-commit-push repo-url
-                                  file
-                                  message
-                                  token
-                                  (fn []
-                                    (swap! state/state util/dissoc-in path)
-                                    (swap! state/state assoc-in [:repos repo-url :contents file] content')
-                                    ;; (show-snackbar "File updated!")
-                                    ;; (change-page :home)
-                                    )
-                                  (fn []
-                                    (prn "Failed to update file."))))))))))
+  [path commit-message content]
+  (let [token (db/get-github-token)
+        repo-url (db/get-current-repo)]
+    (prn {:repo-url repo-url
+          :token token
+          :path path
+          :content content
+          :commit-message commit-message})
+    (util/p-handle
+     (fs/write-file (git/get-repo-dir repo-url) path content)
+     (fn [_]
+       (git/add-commit-push repo-url
+                            path
+                            commit-message
+                            token
+                            (fn []
+                              (db/set-file-content! repo-url path content)
+                              ;; (show-snackbar "File updated!")
+                              )
+                            (fn [error]
+                              (prn "Failed to update file, error: " error)))))))
 
 (defn clear-storage
   [repo-url]
@@ -263,7 +261,7 @@
                       (fn []
                         (let [headings (extract-all-headings repo-url)]
                           (reset! headings-atom headings)
-                          (db/transact-headings! headings)))))
+                          (db/reset-headings! headings)))))
 
 
 ;; (defn sync
@@ -279,10 +277,6 @@
 
   ;; automatically push
   (periodically-push-tasks repo-url))
-
-(defn set-route-match!
-  [route]
-  (swap! state/state assoc :route-match route))
 
 (defn get-github-access-token
   ([]
@@ -310,3 +304,17 @@
   (p/then (clone repo)
           (fn []
             (periodically-pull-and-push repo))))
+
+(defn set-route-match!
+  [route]
+  (swap! state/state assoc :route-match route))
+
+(defn start!
+  []
+  (db/restore!)
+  (when-let [first-repo (first (db/get-repos))]
+    (prn "first-repo: " first-repo)
+    (db/set-current-repo! first-repo))
+  (let [repos (db/get-repos)]
+    (doseq [repo repos]
+      (periodically-pull-and-push repo))))

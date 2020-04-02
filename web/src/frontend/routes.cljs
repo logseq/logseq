@@ -22,6 +22,10 @@
     {:name :file
      :view file/file}]
 
+   ["/file/:path/edit"
+    {:name :file-edit
+     :view file/edit}]
+
    ;; TODO: edit file
    ;; Settings
    ;; ["/item/:id"

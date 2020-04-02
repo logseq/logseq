@@ -46,10 +46,10 @@ p.verse { margin-left: 3%; }
 pre {
     border: 1px solid #ccc;
     box-shadow: 3px 3px 3px #eee;
-    padding: 8pt;
+    padding: 8px;
     font-family: monospace;
     overflow: auto;
-    margin: 1.2em;
+    margin: 1.2em 0;
 }
 pre.src {
     position: relative;
@@ -182,7 +182,6 @@ dt { font-weight: bold; }
 }
 #org-div-home-and-up
 { text-align: right; font-size: 70%; white-space: nowrap; }
-textarea { overflow-x: auto; }
 .linenr { font-size: smaller }
 .code-highlighted { background-color: #ffff00; }
 .org-info-js_info-navigation { border-style: none; }
@@ -254,4 +253,20 @@ textarea { overflow-x: auto; }
     padding: .5rem .75rem;
     font-size: 1rem;
     line-height: 1.5;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: bold;
+}
+
+textarea {
+    overflow: auto;
+    padding: 8px;
+    border: 1px solid rgba(39,41,43,.15);
+    border-radius: 4px;
+    font-size: 1rem;
+    line-height: 1.5;
+    width: 100%;
+    resize: none;
+    outline: none;
 }

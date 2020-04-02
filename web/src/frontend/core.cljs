@@ -1,7 +1,6 @@
 (ns frontend.core
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
-            [frontend.db :as db]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [reitit.frontend :as rf]
@@ -26,7 +25,7 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
 
-  (db/restore!)
+  (handler/start!)
 
   ;; popup to notify user, could be toggled in settings
   ;; (handler/request-notifications-if-not-asked)

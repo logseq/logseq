@@ -5,73 +5,75 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.components.sidebar :as sidebar]
+            [frontend.ui :as ui]
             [frontend.format :as format]
             [goog.crypt.base64 :as b64]))
 
 (defn- get-path
   [state]
-  (let [route-match (first (:rum/args state))]
-    (->> (get-in route-match [:parameters :path :path])
-         (b64/decodeString))))
+  (let [route-match (first (:rum/args state))
+        encoded-path (get-in route-match [:parameters :path :path])
+        decoded-path (b64/decodeString encoded-path)]
+    [encoded-path decoded-path]))
 
 (rum/defq file <
   {:q (fn [state]
-        (db/sub-file (get-path state)))
+        (db/sub-file (last (get-path state))))
    :did-mount (fn [state]
                 (doseq [block (-> (js/document.querySelectorAll "pre code")
                                   (array-seq))]
                   (js/hljs.highlightBlock block))
                 state)}
   [state content]
-  (let [path (get-path state)
+  (let [[encoded-path path] (get-path state)
         content (ffirst content)
         suffix (last (string/split path #"\."))]
-    (prn {:path path})
     (sidebar/sidebar
      (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
-       [:div.flex.justify-center
+       [:div#content.flex.justify-center
         [:div.m-6.flex-1 {:style {:max-width 900}}
          [:a {:style {:float "right"}
-              :href "/edit"}
+              :href (str "/file/" encoded-path "/edit")}
           "edit"]
          (if content
            (util/raw-html (format/to-html content suffix))
            "Loading ...")]]
        [:div "File " suffix " is not supported."]))))
 
-;; (rum/defc edit < rum/reactive
-;;   []
-;;   (let [state (rum/react state/state)
-;;         {:keys [current-repo current-file contents]} state]
-;;     (mui/container
-;;      {:id "root-container"
-;;       :style {:display "flex"
-;;               :justify-content "center"
-;;               :margin-top 64}}
-;;      [:div.column
-;;       (let [paths [:editing-files current-file]]
-;;         (mui/textarea {:style {:margin-bottom 12
-;;                                :padding 8
-;;                                :min-height 300}
-;;                        :auto-focus true
-;;                        :on-change (fn [event]
-;;                                     (let [v (util/evalue event)]
-;;                                       (swap! state/state assoc-in paths v)))
-;;                        :default-value (get contents current-file)
-;;                        :value (get-in state/state paths)}))
-;;       (let [path [:commit-message current-file]]
-;;         (mui/text-field {:id "standard-basic"
-;;                         :style {:margin-bottom 12}
-;;                         :label "Commit message"
-;;                         :auto-focus true
-;;                         :on-change (fn [event]
-;;                                      (let [v (util/evalue event)]
-;;                                        (when-not (string/blank? v)
-;;                                          (swap! state/state assoc-in path v))))
-;;                         :default-value (str "Update " current-file)
-;;                         :value (get-in state/state path)}))
-;;       (mui/button {:variant "contained"
-;;                    :color "primary"
-;;                    :on-click (fn []
-;;                                (handler/alter-file current-repo current-file))}
-;;         "Submit")])))
+(defn- count-newlines
+  [s]
+  (count (re-seq #"\n" (or s ""))))
+
+(rum/defq edit <
+  (rum/local nil ::content)
+  (rum/local "" ::commit-message)
+  {:q (fn [state]
+        (db/sub-file (last (get-path state))))}
+  [state initial-content]
+  (let [content (get state ::content)
+        commit-message (get state ::commit-message)
+        [_encoded-path path] (get-path state)]
+    (sidebar/sidebar
+     [:div#content.flex.justify-center
+      [:div.m-6.flex-1 {:style {:max-width 900}}
+       [:h3.mb-2 (str "Update " path)]
+       [:textarea
+        {:rows (+ 3 (count-newlines @content))
+         :style {:min-height 300}
+         :default-value initial-content
+         :on-change #(reset! content (.. % -target -value))
+         :auto-focus true}]
+       [:div.mt-1.mb-1.relative.rounded-md.shadow-sm
+        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
+         {:placeholder "Commit message"
+          :on-change (fn [e]
+                       (reset! commit-message (util/evalue e)))}]]
+       (ui/button "Save" (fn []
+                           (when (and (not (string/blank? @content))
+                                      (not (= initial-content
+                                              @content)))
+                             (let [commit-message (if (string/blank? @commit-message)
+                                                    (str "Update " path)
+                                                    @commit-message)]
+                               (prn "commit!")
+                               (handler/alter-file path commit-message @content)))))]])))
