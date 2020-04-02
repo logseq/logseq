@@ -4,6 +4,7 @@
             [frontend.components.auth :as auth]
             [frontend.components.repo :as repo]
             [frontend.components.file :as file]
+            [frontend.components.agenda :as agenda]
             ))
 
 (def routes
@@ -25,6 +26,10 @@
    ["/file/:path/edit"
     {:name :file-edit
      :view file/edit}]
+
+   ["/agenda"
+    {:name :agenda
+     :view agenda/agenda}]
 
    ;; TODO: edit file
    ;; Settings

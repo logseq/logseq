@@ -1,46 +1,49 @@
 (ns frontend.components.agenda
-  ;; (:require [rum.core :as rum]
-  ;;           [frontend.mui :as mui]
-  ;;           [frontend.util :as util]
-  ;;           [frontend.handler :as handler]
-  ;;           [frontend.format.org.block :as block]
-  ;;           [frontend.state :as state]
-  ;;           [clojure.string :as string]
-  ;;           [frontend.format.org-mode :as org])
-  )
+  (:require [rum.core :as rum]
+            [frontend.util :as util]
+            [frontend.handler :as handler]
+            [frontend.format.org.block :as block]
+            [frontend.state :as state]
+            [clojure.string :as string]
+            [frontend.format.org-mode :as org]
+            [frontend.components.sidebar :as sidebar]))
 
-;; (rum/defc timestamps-cp
-;;   [timestamps]
-;;   [:ul
-;;    (for [[type {:keys [date time]}] timestamps]
-;;      (let [{:keys [year month day]} date
-;;            {:keys [hour min]} time]
-;;        [:li {:key type}
-;;         [:span {:style {:margin-right 6}} type]
-;;         [:span (if time
-;;                  (str year "-" month "-" day " " hour ":" min)
-;;                  (str year "-" month "-" day))]]))])
+(rum/defc agenda
+  []
+  (sidebar/sidebar [:div "Agenda"]))
 
-;; (rum/defc title-cp
-;;   [title]
-;;   (let [title-json (js/JSON.stringify (clj->js title))
-;;         html (org/inline-list->html title-json)]
-;;     (util/raw-html html)))
+(rum/defc timestamps-cp
+  [timestamps]
+  [:ul
+   (for [[type {:keys [date time]}] timestamps]
+     (let [{:keys [year month day]} date
+           {:keys [hour min]} time]
+       [:li {:key type}
+        [:span {:style {:margin-right 6}} type]
+        [:span (if time
+                 (str year "-" month "-" day " " hour ":" min)
+                 (str year "-" month "-" day))]]))])
 
-;; (rum/defc marker-cp
-;;   [marker]
-;;   [:span {:class (str "marker-" (string/lower-case marker))
-;;           :style {:margin-left 8}}
-;;    (if (contains? #{"DOING" "IN-PROGRESS"} marker)
-;;      (str " (" marker ")"))])
+(rum/defc title-cp
+  [title]
+  (let [title-json (js/JSON.stringify (clj->js title))
+        html (org/inline-list->html title-json)]
+    (util/raw-html html)))
 
-;; (rum/defc tags-cp
-;;   [tags]
-;;   [:span
-;;    (for [tag tags]
-;;      [:span.tag {:key tag}
-;;       [:span
-;;        tag]])])
+(rum/defc marker-cp
+  [marker]
+  [:span {:class (str "marker-" (string/lower-case marker))
+          :style {:margin-left 8}}
+   (if (contains? #{"DOING" "IN-PROGRESS"} marker)
+     (str " (" marker ")"))])
+
+(rum/defc tags-cp
+  [tags]
+  [:span
+   (for [tag tags]
+     [:span.tag {:key tag}
+      [:span
+       tag]])])
 
 ;; (rum/defc agenda
 ;;   [tasks]

@@ -55,7 +55,7 @@
         [_encoded-path path] (get-path state)]
     (sidebar/sidebar
      [:div#content.flex.justify-center
-      [:div.m-6.flex-1 {:style {:max-width 900}}
+      [:div.m-6.flex-1 {:style {:max-width 800}}
        [:h3.mb-2 (str "Update " path)]
        [:textarea
         {:rows (+ 3 (count-newlines @content))

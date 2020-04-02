@@ -6,7 +6,7 @@
             [frontend.components.repo :as repo]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
-            ))
+            [frontend.state :as state]))
 
 (defonce active-button :a.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
 (defonce inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
@@ -28,25 +28,32 @@
 
 (rum/defq files-list <
   {:q (fn [] (db/sub-files))}
-  [state files]
+  [state files file-active?]
   [:div.cursor-pointer.my-1.flex.flex-col.ml-2
    (if (seq files)
      (let [files (->> files (map first))]
        (for [file files]
-         [:a {:key file
-              :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
-              :href (str "/file/" (b64/encodeString file))}
-          file])))])
+         (let [encoded-path (b64/encodeString file)]
+           [:a {:key file
+                :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
+                :style {:color (if (file-active? encoded-path) "#FFF")}
+                :href (str "/file/" encoded-path)}
+            file]))))])
 
-(rum/defc sidebar-nav
+(rum/defc sidebar-nav < rum/reactive
   []
-  [:nav.flex-1.px-2.py-4.bg-gray-800
-   (nav-item "Daily notes" "#"
-             "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
-             true)
-   (nav-item "Agenda" "#"
-             "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z")
-   (files-list)])
+  (let [{:keys [:route-match]} (rum/react state/state)
+        active? (fn [route] (= route (get-in route-match [:data :name])))
+        file-active? (fn [path]
+                       (= path (get-in route-match [:parameters :path :path])))]
+    [:nav.flex-1.px-2.py-4.bg-gray-800
+     (nav-item "Daily notes" "/"
+               "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
+               (active? :home))
+     (nav-item "Agenda" "/agenda"
+               "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+               (active? :agenda))
+     (files-list file-active?)]))
 
 (rum/defq main-content <
   {:q (fn [_state] (db/sub-repos))}
