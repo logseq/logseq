@@ -13,7 +13,8 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
-            [reitit.frontend.easy :as rfe])
+            [reitit.frontend.easy :as rfe]
+            [goog.crypt.base64 :as b64])
   (:import [goog.events EventHandler]))
 
 ;; We only support Github token now
@@ -184,6 +185,7 @@
                             token
                             (fn []
                               (db/set-file-content! repo-url path content)
+                              (rfe/push-state :file {:path (b64/encodeString path)})
                               (show-notification! "File updated!"))
                             (fn [error]
                               (prn "Failed to update file, error: " error)))))))
