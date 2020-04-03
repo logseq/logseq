@@ -65,7 +65,7 @@
       [:div.flex.items-start
        [:div.flex-shrink-0
         [:svg.h-6.w-6.text-green-400
-         {:stroke "currentColor", :viewbox "0 0 24 24", :fill "none"}
+         {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
          [:path
           {:d "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
            :stroke-width "2",
@@ -79,7 +79,7 @@
          {:on-click (fn []
                       (swap! state/state assoc :notification/show? false))}
          [:svg.h-5.w-5
-          {:fill "currentColor", :viewbox "0 0 20 20"}
+          {:fill "currentColor", :viewBox "0 0 20 20"}
           [:path
            {:clip-rule "evenodd",
             :d
@@ -93,3 +93,14 @@
      {:in show? :timeout 100}
      (fn [state]
        (notification-content state text)))))
+
+(rum/defc checkbox
+  [option]
+  [:input.form-checkbox.h-4.w-4.text-indigo-600.transition.duration-150.ease-in-out
+   (merge {:type "checkbox"} option)])
+
+(rum/defc badge
+  [text option]
+  [:span.inline-flex.items-center.px-2.5.py-0.5.rounded-full.text-xs.font-medium.leading-4.bg-purple-100.text-purple-800
+   option
+   text])

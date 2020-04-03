@@ -30,14 +30,12 @@
         suffix (last (string/split path #"\."))]
     (sidebar/sidebar
      (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
-       [:div#content.flex.justify-center
-        [:div.m-6.flex-1 {:style {:position "relative"
-                                  :max-width 800}}
-         [:a {:href (str "/file/" encoded-path "/edit")}
-          "edit"]
-         (if content
-           (util/raw-html (format/to-html content suffix))
-           "Loading ...")]]
+       [:div#content
+        [:a {:href (str "/file/" encoded-path "/edit")}
+         "edit"]
+        (if content
+          (util/raw-html (format/to-html content suffix))
+          "Loading ...")]
        [:div "File " suffix " is not supported."]))))
 
 (defn- count-newlines
@@ -54,25 +52,24 @@
         commit-message (get state ::commit-message)
         [_encoded-path path] (get-path state)]
     (sidebar/sidebar
-     [:div#content.flex.justify-center
-      [:div.m-6.flex-1 {:style {:max-width 800}}
-       [:h3.mb-2 (str "Update " path)]
-       [:textarea
-        {:rows (+ 3 (count-newlines @content))
-         :style {:min-height 300}
-         :default-value initial-content
-         :on-change #(reset! content (.. % -target -value))
-         :auto-focus true}]
-       [:div.mt-1.mb-1.relative.rounded-md.shadow-sm
-        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
-         {:placeholder "Commit message"
-          :on-change (fn [e]
-                       (reset! commit-message (util/evalue e)))}]]
-       (ui/button "Save" (fn []
-                           (when (and (not (string/blank? @content))
-                                      (not (= initial-content
-                                              @content)))
-                             (let [commit-message (if (string/blank? @commit-message)
-                                                    (str "Update " path)
-                                                    @commit-message)]
-                               (handler/alter-file path commit-message @content)))))]])))
+     [:div#content
+      [:h3.mb-2 (str "Update " path)]
+      [:textarea
+       {:rows (+ 3 (count-newlines @content))
+        :style {:min-height 300}
+        :default-value initial-content
+        :on-change #(reset! content (.. % -target -value))
+        :auto-focus true}]
+      [:div.mt-1.mb-1.relative.rounded-md.shadow-sm
+       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
+        {:placeholder "Commit message"
+         :on-change (fn [e]
+                      (reset! commit-message (util/evalue e)))}]]
+      (ui/button "Save" (fn []
+                          (when (and (not (string/blank? @content))
+                                     (not (= initial-content
+                                             @content)))
+                            (let [commit-message (if (string/blank? @commit-message)
+                                                   (str "Update " path)
+                                                   @commit-message)]
+                              (handler/alter-file path commit-message @content)))))])))

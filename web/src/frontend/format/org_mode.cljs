@@ -2,19 +2,26 @@
   (:require ["mldoc_org" :as org]
             [frontend.format.protocol :as protocol]))
 
+(def config
+  (js/JSON.stringify
+   #js {:toc false
+        :heading_number false}))
+
+(def Org (.-MldocOrg org))
+
 (defrecord OrgMode [content]
   protocol/Format
   (toHtml [this]
-    (.parseHtml (.-MldocOrg org)
-                content
-                (js/JSON.stringify
-                 #js {:toc false
-                      :heading_number false}))))
+    (.parseHtml Org content config)))
 
 (defn parse-json
   [content]
-  (.parseJson (.-MldocOrg org) content))
+  (.parseJson Org content))
 
 (defn inline-list->html
   [json]
-  (.inlineListToHtmlStr (.-MldocOrg org) json))
+  (.inlineListToHtmlStr Org json))
+
+(defn json->html
+  [json]
+  (.jsonToHtmlStr Org json config))

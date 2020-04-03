@@ -6,11 +6,9 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.format.org-mode :as org]
-            [frontend.components.sidebar :as sidebar]))
-
-(rum/defc agenda
-  []
-  (sidebar/sidebar [:div "Agenda"]))
+            [frontend.components.sidebar :as sidebar]
+            [frontend.db :as db]
+            [frontend.ui :as ui]))
 
 (rum/defc timestamps-cp
   [timestamps]
@@ -30,73 +28,94 @@
         html (org/inline-list->html title-json)]
     (util/raw-html html)))
 
+(rum/defc children-cp
+  [children]
+  (let [children-json (js/JSON.stringify (clj->js children))
+        html (org/json->html children-json)]
+    (util/raw-html html)))
+
 (rum/defc marker-cp
   [marker]
-  [:span {:class (str "marker-" (string/lower-case marker))
-          :style {:margin-left 8}}
-   (if (contains? #{"DOING" "IN-PROGRESS"} marker)
-     (str " (" marker ")"))])
+  (if marker
+    [:span {:class (str "marker-" (string/lower-case marker))
+            :style {:margin-left 8}}
+     (if (contains? #{"DOING" "IN-PROGRESS"} marker)
+       (str " (" marker ")"))]))
 
 (rum/defc tags-cp
   [tags]
   [:span
-   (for [tag tags]
-     [:span.tag {:key tag}
+   (for [{:keys [tag/name]} tags]
+     [:span.tag {:key name}
       [:span
-       tag]])])
+       name]])])
 
-;; (rum/defc agenda
-;;   [tasks]
-;;   [:span "TBD"]
-;;   ;; [:div#agenda
-;;   ;;  (if (seq tasks)
-;;   ;;    (for [[section-name tasks] tasks]
-;;   ;;      [:div.section {:key (str "section-" section-name)}
-;;   ;;       [:h3 section-name]
-;;   ;;       (mui/list
-;;   ;;        (for [[idx {:keys [marker title priority level tags children timestamps meta]}] (util/indexed (block/sort-tasks tasks))]
-;;   ;;          (mui/list-item
-;;   ;;           {:key (str "task-" section-name "-" idx)
-;;   ;;            :style {:padding-left 8
-;;   ;;                    :padding-right 8}}
-;;   ;;           [:div.column
-;;   ;;            [:div.row {:style {:align-items "center"}}
-;;   ;;             (let [marker (case marker
-;;   ;;                            (list "DOING" "IN-PROGRESS" "TODO")
-;;   ;;                            (mui/checkbox {:checked false
-;;   ;;                                           :on-change (fn [_]
-;;   ;;                                                        ;; FIXME: Log timestamp
-;;   ;;                                                        (handler/check marker (:pos meta)))
-;;   ;;                                           :color "primary"
-;;   ;;                                           :style {:padding 0}})
+(rum/defq agenda <
+  {:q (fn [state] (db/sub-agenda))}
+  [state tasks]
+  (let [tasks-ids (db/seq-flatten tasks)
+        tasks (db/pull-many tasks-ids)]
+    (sidebar/sidebar
+     [:div#agenda
+      [:h2.mb-3 "Agenda"]
+      (if (seq tasks)
+        [:div.ml-1
+         (let [parent-tasks (block/group-by-parent (block/sort-tasks tasks))]
+           (for [[parent tasks] parent-tasks]
+             (let [parent (cond
+                            (string? parent)
+                            parent
 
-;;   ;;                            "WAIT"
-;;   ;;                            [:span {:style {:font-weight "bold"}}
-;;   ;;                             "WAIT"]
+                            (and (map? parent)
+                                 (:label parent))
+                            (title-cp (:label parent))
 
-;;   ;;                            "DONE"
-;;   ;;                            (mui/checkbox {:checked true
-;;   ;;                                           :on-change (fn [_]
-;;   ;;                                                        ;; FIXME: rollback to the last state if exists.
-;;   ;;                                                        ;; it must not be `TODO`
-;;   ;;                                                        (handler/uncheck (:pos meta)))
-;;   ;;                                           :color "primary"
-;;   ;;                                           :style {:padding 0}})
+                            :else
+                            "uncategorized")]
+               [:div.mt-10
+                [:h4.mb-3.text-gray-500 parent]
+                (for [{:heading/keys [uuid marker title priority level tags children timestamps meta] :as task} tasks]
+                  [:div.mb-2
+                   {:key (str "task-" uuid)
+                    :style {:padding-left 8
+                            :padding-right 8}}
+                   [:div.column
+                    [:div.row {:style {:align-items "center"}}
+                     (case marker
+                       (list "DOING" "IN-PROGRESS" "TODO")
+                       (ui/checkbox {:on-change (fn [_]
+                                                  ;; FIXME: Log timestamp
+                                                  ;; (handler/check marker (:pos meta))
+                                                  )})
 
-;;   ;;                            nil)]
-;;   ;;               (if priority
-;;   ;;                 (mui/badge {:badge-content (string/lower-case priority)
-;;   ;;                             :overlay "circle"}
-;;   ;;                            marker)
-;;   ;;                 marker))
+                       "WAIT"
+                       [:span {:style {:font-weight "bold"}}
+                        "WAIT"]
 
-;;   ;;             [:div.row {:style {:margin-left 8}}
-;;   ;;              (title-cp title)
-;;   ;;              (marker-cp marker)
-;;   ;;              (when (seq tags)
-;;   ;;                (tags-cp tags))]]
-;;   ;;            (when (seq timestamps)
-;;   ;;              (timestamps-cp timestamps))
-;;   ;;            ])))])
-;;   ;;    "Empty")]
-;;   )
+                       "DONE"
+                       (do
+                         (prn marker)
+                         (ui/checkbox {:checked true
+                                       :on-change (fn [_]
+                                                    ;; FIXME: Log timestamp
+                                                    ;; (handler/uncheck marker (:pos meta))
+                                                    )}))
+
+                       nil)
+                     [:div.row.ml-2
+                      (if priority
+                        [:span.priority.mr-1
+                         (str "#[" priority "]")])
+                      (title-cp title)
+                      (marker-cp marker)
+                      (when (seq tags)
+                        (tags-cp tags))]]
+                    (when (seq timestamps)
+                      (timestamps-cp timestamps))
+
+                    ;; FIXME: parse error
+                    ;; (when (seq children)
+                    ;;   (children-cp children))
+
+                    ]])])))]
+        "Empty")])))

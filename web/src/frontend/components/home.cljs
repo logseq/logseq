@@ -23,7 +23,7 @@
        [:div
         [:img.h-6.lg:h-8.xl:h-9
          {:alt "Gitnotes",
-          :src "/img/tailwindui-logo-on-dark.svg"}]]
+          :src "/static/img/tailwindui-logo-on-dark.svg"}]]
        [:div
         [:a.text-sm.font-semibold.text-white.focus:outline-none.focus:underline
          {:href (str config/api "login/github")}
@@ -55,7 +55,7 @@
         {:href "https://twitter.com/adamwathan"}]
        [:div.flex-shrink-0
         [:img.h-12.w-12.rounded-full.border-2.border-white
-         {:alt "", :src "/img/adam.jpg"}]]
+         {:alt "", :src "/static/img/adam.jpg"}]]
        [:div.ml-3
         [:p.font-semibold.text-white.leading-tight "Adam Wathan"]
         [:p.text-sm.text-gray-500.leading-tight
@@ -64,7 +64,7 @@
         {:href "https://twitter.com/steveschoger"}]
        [:div.flex-shrink-0
         [:img.h-12.w-12.rounded-full.border-2.border-white
-         {:alt "", :src "/img/steve.jpg"}]]
+         {:alt "", :src "/static/img/steve.jpg"}]]
        [:div.ml-3
         [:p.font-semibold.text-white.leading-tight "Steve Schoger"]
         [:p.text-sm.text-gray-500.leading-tight

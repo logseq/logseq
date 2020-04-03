@@ -82,18 +82,6 @@
                 (recur child-level children children-headings result (rest rblocks) timestamps)))))
         (reverse result)))))
 
-(defn get-sections
-  [section-headings]
-  (map first section-headings))
-
-(defn get-section-headings
-  [section-name section-headings]
-  (-> (util/find-first
-       (fn [[name headings]]
-         (= name section-name))
-       section-headings)
-      second))
-
 ;; marker: DOING | IN-PROGRESS > TODO > WAITING | WAIT > DONE > CANCELED | CANCELLED
 ;; priority: A > B > C
 (defn sort-tasks
@@ -103,11 +91,15 @@
         priorities ["A" "B" "C" "D" "E" "F" "G"]
         priorities (zipmap priorities (reverse (range 1 (count priorities))))]
     (sort (fn [t1 t2]
-            (let [m1 (get markers (:marker t1) 0)
-                  m2 (get markers (:marker t2) 0)
-                  p1 (get priorities (:priority t1) 0)
-                  p2 (get priorities (:priority t2) 0)]
+            (let [m1 (get markers (:heading/marker t1) 0)
+                  m2 (get markers (:heading/marker t2) 0)
+                  p1 (get priorities (:heading/priority t1) 0)
+                  p2 (get priorities (:heading/priority t2) 0)]
               (if (= m1 m2)
                 (> p1 p2)
                 (> m1 m2))))
           headings)))
+
+(defn group-by-parent
+  [headings]
+  (group-by :heading/parent-title headings))

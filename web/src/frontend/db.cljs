@@ -71,7 +71,9 @@
              ;; FIXME do not notify if tx-data is empty
              (prn "db changed.")
              (when-let [db (:db-after tx-report)]
-               (js/setTimeout #(persist db) 0))))
+               (js/setTimeout #(do
+                                 (persist db)
+                                 (posh/posh! conn)) 0))))
 
 ;; (new TextEncoder().encode('foo')).length
 (defn db-size
@@ -82,9 +84,9 @@
 
 (defn restore! []
   (when-let [stored (js/localStorage.getItem datascript-db)]
-   (let [stored-db (string->db stored)]
-     (when (= (:schema stored-db) schema) ;; check for code update
-       (reset-conn! stored-db)))))
+    (let [stored-db (string->db stored)]
+      (when (= (:schema stored-db) schema) ;; check for code update
+        (reset-conn! stored-db)))))
 
 ;; TODO: added_at, started_at, schedule, deadline
 (def qualified-map
@@ -161,10 +163,10 @@
 (defn get-repo-headings
   [repo-url]
   (-> (d/q '[:find ?heading
-          :in $ ?repo-url
-          :where
-          [?repo :repo/url ?repo-url]
-          [?heading :heading/repo ?repo]]
+             :in $ ?repo-url
+             :where
+             [?repo :repo/url ?repo-url]
+             [?heading :heading/repo ?repo]]
         @conn repo-url)
       seq-flatten))
 
@@ -189,21 +191,6 @@
           [?h :heading/title]]
      @conn)))
 
-;; marker should be one of: TODO, DOING, IN-PROGRESS
-;; time duration
-(defn get-agenda
-  [time]
-  (let [duration (case time
-                   :today []
-                   :week  []
-                   :month [])]
-    (d/q '[:find (pull ?h [*])
-           :where
-           (or [?h :heading/marker "TODO"]
-               [?h :heading/marker "DOING"]
-               [?h :heading/marker "IN-PROGRESS"])]
-      @conn)))
-
 (defn search-headings-by-title
   [title])
 
@@ -227,8 +214,10 @@
   (posh/pull conn selector eid))
 
 (defn pull-many
-  [selector eids]
-  (posh/pull-many conn selector eids))
+  ([eids]
+   (pull-many '[*] eids))
+  ([selector eids]
+   (d/pull-many (d/db conn) selector eids)))
 
 (defn q
   [query & inputs]
@@ -369,9 +358,26 @@
          [?repo :repo/url ?repo-url]
          [?file :file/repo ?repo]
          [?file :file/content ?content]
-         [?file :file/path ?path]
-         ]
+         [?file :file/path ?path]]
     @conn repo-url))
+
+;; marker should be one of: TODO, DOING, IN-PROGRESS
+;; time duration
+(defn sub-agenda
+  ([]
+   (sub-agenda :week))
+  ([time]
+   (let [duration (case time
+                    :today []
+                    :week  []
+                    :month [])]
+     (q '[:find ?h
+          :where
+          (or [?h :heading/marker "TODO"]
+              [?h :heading/marker "DOING"]
+              [?h :heading/marker "IN-PROGRESS"]
+              [?h :heading/marker "DONE"])]
+       conn))))
 
 (comment
   (d/transact! conn [{:db/id -1

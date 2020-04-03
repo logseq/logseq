@@ -150,9 +150,9 @@
       [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
        ;; {:x-init "$el.focus()", :x-data "x-data", :tabindex "0"}
        {:tabIndex "0"}
-       main-content
-       [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
-        [:div.py-4
-         [:div.border-4.border-dashed.border-gray-200.rounded-lg.h-96]]]]
+       [:div.flex.justify-center
+        [:div.flex-1.m-6 {:style {:position "relative"
+                                  :max-width 800}}
+         main-content]]]
 
       (ui/notification)]]))
