@@ -63,17 +63,16 @@
   (js/localStorage.setItem datascript-db (db->string db)))
 
 (defn reset-conn! [db]
-  (reset! conn db)
-  (posh/posh! conn))
+  (reset! conn db))
 
 (d/listen! conn :persistence
            (fn [tx-report] ;; FIXME do not notify with nil as db-report
              ;; FIXME do not notify if tx-data is empty
-             (prn "db changed.")
              (when-let [db (:db-after tx-report)]
-               (js/setTimeout #(do
-                                 (persist db)
-                                 (posh/posh! conn)) 0))))
+               (prn "DB changed")
+               (js/setTimeout (fn []
+                                (posh/posh! conn)
+                                (persist db)) 0))))
 
 ;; (new TextEncoder().encode('foo')).length
 (defn db-size
@@ -217,7 +216,7 @@
   ([eids]
    (pull-many '[*] eids))
   ([selector eids]
-   (d/pull-many (d/db conn) selector eids)))
+   (posh/pull-many conn selector eids)))
 
 (defn q
   [query & inputs]
@@ -370,14 +369,36 @@
    (let [duration (case time
                     :today []
                     :week  []
+                    :month [])
+         tasks-ids (-> @(q '[:find ?h
+                             :where
+                             (or [?h :heading/marker "TODO"]
+                                 [?h :heading/marker "DOING"]
+                                 [?h :heading/marker "IN-PROGRESS"]
+                                 [?h :heading/marker "DONE"])]
+                          conn)
+                       seq-flatten)]
+     (pull-many tasks-ids))))
+
+(defn get-agenda
+  ([]
+   (get-agenda :week))
+  ([time]
+   (let [duration (case time
+                    :today []
+                    :week  []
                     :month [])]
-     (q '[:find ?h
-          :where
-          (or [?h :heading/marker "TODO"]
-              [?h :heading/marker "DOING"]
-              [?h :heading/marker "IN-PROGRESS"]
-              [?h :heading/marker "DONE"])]
-       conn))))
+     (d/q '[:find (pull ?h [*])
+            :where
+            (or [?h :heading/marker "TODO"]
+                [?h :heading/marker "DOING"]
+                [?h :heading/marker "IN-PROGRESS"]
+                [?h :heading/marker "DONE"])]
+       @conn))))
+
+(defn entity
+  [id-or-lookup-ref]
+  (d/entity (d/db conn) id-or-lookup-ref))
 
 (comment
   (d/transact! conn [{:db/id -1

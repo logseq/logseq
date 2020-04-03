@@ -14,7 +14,8 @@
             [promesa.core :as p]
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
-            [goog.crypt.base64 :as b64])
+            [goog.crypt.base64 :as b64]
+            [goog.object :as gobj])
   (:import [goog.events EventHandler]))
 
 ;; We only support Github token now
@@ -52,22 +53,44 @@
 ;; TODO: remove this
 (declare load-repo-to-db!)
 
+(defn get-latest-commit
+  [handler]
+  (-> (git/log (db/get-current-repo)
+               (db/get-github-token)
+               1)
+      (.then (fn [commits]
+               (handler (first commits))))
+      (.catch (fn [error]
+                (prn "get latest commit failed: " error)))))
+
+(defonce latest-commit (atom nil))
+
+;; TODO: Maybe replace with fetch?
+;; TODO: callback hell
 (defn pull
   [repo-url token]
   (util/p-handle (git/pull repo-url token)
                  (fn [result]
-                   ;; TODO: diff
-                   (-> (load-files repo-url)
-                       (p/then
-                        (fn []
-                          (load-repo-to-db! repo-url)))))))
+                   (get-latest-commit
+                    (fn [commit]
+                      (when (or (nil? @latest-commit)
+                                (and @latest-commit
+                                     commit
+                                     (not= (gobj/get commit "oid")
+                                           (gobj/get @latest-commit "oid"))))
+                        (prn "New commit oid: " (gobj/get commit "oid"))
+                        (-> (load-files repo-url)
+                            (p/then
+                             (fn []
+                               (load-repo-to-db! repo-url)))))
+                      (reset! latest-commit commit))))))
 
 (defn periodically-pull
   [repo-url]
   (when-let [token (db/get-github-token)]
     (pull repo-url token)
     (js/setInterval #(pull repo-url token)
-                    (* 60 1000))))
+                    (* 10 1000))))
 
 (defn add-transaction
   [tx]
@@ -84,24 +107,18 @@
      "Gitnotes auto save tasks.\n\n"
      (string/join "\n" transactions))))
 
-(defn periodically-push-tasks
-  [repo-url]
-  (let [token (db/get-github-token)
-        push (fn []
-               (let [transactions (:tasks-transactions @state/state)]
-                 (when (seq transactions)
-                   (git/add-commit-push
-                    repo-url
-                    config/tasks-org
-                    (transactions->commit-msg transactions)
-                    token
-                    (fn []
-                      (prn "Commit tasks to Github.")
-                      (clear-transactions!))
-                    (fn []
-                      (prn "Failed to push."))))))]
-    (js/setInterval push
-                    (* 5 1000))))
+(defn push
+  [repo-url file message]
+  (let [token (db/get-github-token)]
+    (git/add-commit-push
+     repo-url
+     file
+     message
+     token
+     (fn []
+       (prn "Push successfully!"))
+     (fn []
+       (prn "Failed to push.")))))
 
 (defn clone
   [repo]
@@ -196,34 +213,38 @@
   (clone repo-url))
 
 (defn check
-  [repo-url file marker pos]
-  (let [token (db/get-github-token)]
-    (when-let [content (get-in @state/state [:repos repo-url :contents file])]
+  [repo file marker pos]
+  (let [repo (db/entity (:db/id repo))
+        file (db/entity (:db/id file))
+        repo-url (:repo/url repo)
+        file (:file/path file)
+        token (db/get-github-token)]
+    (when-let [content (db/get-file-content repo-url file)]
       (let [content' (str (subs content 0 pos)
                           (-> (subs content pos)
                               (string/replace-first marker "DONE")))]
-        ;; TODO: optimize, only update the specific block
-        ;; (build-tasks content' file)
+        (db/set-file-content! repo-url file content')
         (util/p-handle
          (fs/write-file (git/get-repo-dir repo-url) file content')
          (fn [_]
-           (swap! state/state assoc-in [:repos repo-url :contents file] content')
-           (add-transaction (util/format "`%s` marked as DONE." marker))))))))
+           (push repo-url file (util/format "`%s` marked as DONE." marker))))))))
 
 (defn uncheck
-  [repo-url file pos]
-  (let [token (db/get-github-token)]
-    (when-let [content (get-in @state/state [:repos repo-url :contents file])]
+  [repo file pos]
+  (let [repo (db/entity (:db/id repo))
+        file (db/entity (:db/id file))
+        repo-url (:repo/url repo)
+        file (:file/path file)
+        token (db/get-github-token)]
+    (when-let [content (db/get-file-content repo-url file)]
       (let [content' (str (subs content 0 pos)
                           (-> (subs content pos)
                               (string/replace-first "DONE" "TODO")))]
-        ;; TODO: optimize, only update the specific block
-        ;; (build-tasks content' file)
+        (db/set-file-content! repo-url file content')
         (util/p-handle
          (fs/write-file (git/get-repo-dir repo-url) file content')
          (fn [_]
-           (swap! state/state assoc-in [:repos repo-url :contents file] content')
-           (add-transaction "DONE rollbacks to TODO.")))))))
+           (push repo-url file "DONE rollbacks to TODO.")))))))
 
 (defn extract-headings
   [repo-url file content]
@@ -274,14 +295,6 @@
 ;;     (doseq [repo repos]
 ;;       (pull repo token))))
 
-(defn periodically-pull-and-push
-  [repo-url]
-  ;; automatically pull
-  (periodically-pull repo-url)
-
-  ;; automatically push
-  (periodically-push-tasks repo-url))
-
 (defn get-github-access-token
   ([]
    (util/fetch (str config/api "token/github")
@@ -307,7 +320,7 @@
   [repo]
   (p/then (clone repo)
           (fn []
-            (periodically-pull-and-push repo))))
+            (periodically-pull repo))))
 
 (defn set-route-match!
   [route]
@@ -320,4 +333,4 @@
     (db/set-current-repo! first-repo))
   (let [repos (db/get-repos)]
     (doseq [repo repos]
-      (periodically-pull-and-push repo))))
+      (periodically-pull repo))))

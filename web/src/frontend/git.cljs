@@ -35,6 +35,21 @@
                      {:dir (get-repo-dir repo-url)
                       :ref "HEAD"})))
 
+(defn fetch
+  [repo-url token]
+  (js/git.fetch (with-auth token
+                 {:dir (get-repo-dir repo-url)
+                  :ref "master"
+                  :singleBranch true})))
+
+(defn log
+  [repo-url token depth]
+  (js/git.log (with-auth token
+                  {:dir (get-repo-dir repo-url)
+                   :ref "master"
+                   :depth depth
+                   :singleBranch true})))
+
 (defn pull
   [repo-url token]
   (js/git.pull (with-auth token
