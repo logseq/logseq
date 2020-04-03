@@ -26,19 +26,18 @@
          :stroke-linecap "round"}]]
       title])))
 
-(rum/defq files-list <
-  {:q (fn [] (db/sub-files))}
-  [state files file-active?]
-  [:div.cursor-pointer.my-1.flex.flex-col.ml-2
-   (if (seq files)
-     (let [files (->> files (map first))]
+(rum/defc files-list
+  [file-active?]
+  (let [files (db/get-files)]
+    [:div.cursor-pointer.my-1.flex.flex-col.ml-2
+     (if (seq files)
        (for [file files]
          (let [encoded-path (b64/encodeString file)]
            [:a {:key file
                 :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
                 :style {:color (if (file-active? encoded-path) "#FFF")}
                 :href (str "/file/" encoded-path)}
-            file]))))])
+            file])))]))
 
 (rum/defc sidebar-nav < rum/reactive
   []
@@ -55,14 +54,14 @@
                (active? :agenda))
      (files-list file-active?)]))
 
-(rum/defq main-content <
-  {:q (fn [_state] (db/sub-repos))}
-  [state repos]
-  [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
-   (if (seq repos)
-     [:div
-      (repo/repos repos)]
-     (repo/add-repo))])
+(rum/defc main-content
+  []
+  (let [repos (db/get-repos)]
+    [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
+    (if (seq repos)
+      [:div
+       (repo/repos repos)]
+      (repo/add-repo))]))
 
 (rum/defcs sidebar < (mixins/modal)
   [state main-content]

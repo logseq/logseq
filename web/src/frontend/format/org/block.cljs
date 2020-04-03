@@ -95,11 +95,19 @@
                   m2 (get markers (:heading/marker t2) 0)
                   p1 (get priorities (:heading/priority t1) 0)
                   p2 (get priorities (:heading/priority t2) 0)]
-              (if (= m1 m2)
+              (cond
+                (and (= m1 m2)
+                     (= p1 p2))
+                (compare (:heading/title t1) (:heading/title t2))
+
+                (= m1 m2)
                 (> p1 p2)
+                :else
                 (> m1 m2))))
           headings)))
 
 (defn group-by-parent
   [headings]
-  (group-by :heading/parent-title headings))
+  (->> (group-by :heading/parent-title headings)
+       (into (sorted-map-by (fn [x y]
+                              (compare (str x) (str y)))))))

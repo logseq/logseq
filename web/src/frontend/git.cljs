@@ -62,6 +62,7 @@
                {:dir (get-repo-dir repo-url)
                 :filepath file})))
 
+;; TODO: cache email and name
 (defn commit
   [repo-url message]
   (js/git.commit (clj->js

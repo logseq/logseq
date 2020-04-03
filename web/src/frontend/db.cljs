@@ -2,8 +2,9 @@
   (:require [datascript.core :as d]
             [frontend.util :as util]
             [medley.core :as medley]
-            [posh.rum :as posh]
-            [datascript.transit :as dt]))
+            [datascript.transit :as dt]
+            [frontend.format.org-mode :as org]
+            [frontend.format.org.block :as block]))
 
 ;; TODO: don't persistent :github/token
 
@@ -46,9 +47,7 @@
    })
 
 (defonce conn
-  (let [conn (d/create-conn schema)]
-    (posh/posh! conn)
-    conn))
+  (d/create-conn schema))
 
 ;; transit serialization
 
@@ -64,15 +63,6 @@
 
 (defn reset-conn! [db]
   (reset! conn db))
-
-(d/listen! conn :persistence
-           (fn [tx-report] ;; FIXME do not notify with nil as db-report
-             ;; FIXME do not notify if tx-data is empty
-             (when-let [db (:db-after tx-report)]
-               (prn "DB changed")
-               (js/setTimeout (fn []
-                                (posh/posh! conn)
-                                (persist db)) 0))))
 
 ;; (new TextEncoder().encode('foo')).length
 (defn db-size
@@ -175,6 +165,23 @@
         headings (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)]
     (d/transact! conn headings)))
 
+(defn get-file-headings
+  [repo-url path]
+  (-> (d/q '[:find ?heading
+             :in $ ?repo-url ?path
+             :where
+             [?repo :repo/url ?repo-url]
+             [?file :file/path ?path]
+             [?heading :heading/file ?file]
+             [?heading :heading/repo ?repo]]
+        @conn repo-url path)
+      seq-flatten))
+
+(defn delete-file-headings!
+  [repo-url path]
+  (let [headings (get-file-headings repo-url path)]
+    (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
+
 ;; transactions
 (defn reset-headings!
   [repo-url headings]
@@ -204,27 +211,9 @@
            [(?pred $ ?tags)]]
       @conn pred)))
 
-(comment
-  (frontend.handler/initial-db!)
-  )
-
-(defn pull
-  [selector eid]
-  (posh/pull conn selector eid))
-
-(defn pull-many
-  ([eids]
-   (pull-many '[*] eids))
-  ([selector eids]
-   (posh/pull-many conn selector eids)))
-
-(defn q
-  [query & inputs]
-  (apply posh/q query inputs))
-
 (defn transact!
   [tx-data]
-  (posh/transact! conn tx-data))
+  (d/transact! conn tx-data))
 
 (defn set-key-value
   [key value]
@@ -241,10 +230,6 @@
   (some-> (d/entity (d/db conn) key)
           key))
 
-(defn sub-github-token
-  []
-  (pull '[*] [:db/ident :github/token]))
-
 (defn get-github-token
   []
   (get-key-value :github/token))
@@ -253,19 +238,9 @@
   [repo]
   (set-key-value :repo/current [:repo/url repo]))
 
-(defn sub-current-repo
-  []
-  (pull '[*] [:db/ident :repo/current]))
-
 (defn get-current-repo
   []
   (:repo/url (get-key-value :repo/current)))
-
-(defn sub-repos
-  []
-  (q '[:find ?url
-       :where [_ :repo/url ?url]]
-    conn))
 
 (defn get-repos
   []
@@ -275,14 +250,16 @@
        (map first)
        distinct))
 
-(defn sub-files
+(defn get-files
   []
-  (q '[:find ?path
-       :where
-       [_     :repo/current ?repo]
-       [?file :file/repo ?repo]
-       [?file :file/path ?path]]
-    conn))
+  (->> (d/q '[:find ?path
+              :where
+              [_     :repo/current ?repo]
+              [?file :file/repo ?repo]
+              [?file :file/path ?path]]
+         @conn)
+       (map first)
+       distinct))
 
 (defn set-repo-cloning
   [repo-url value]
@@ -323,31 +300,17 @@
       :file/path file
       :file/content content}]))
 
-(defn get-file-content
-  [repo-url path]
-  (->> (d/q '[:find ?content
-              :in $ ?repo-url ?path
-              :where
-              [?repo :repo/url ?repo-url]
-              [?file :file/repo ?repo]
-              [?file :file/path ?path]
-              [?file :file/content ?content]
-              ]
-         @conn repo-url path)
-       (map first)
-       first))
-
-(defn sub-file
-  [path]
-  (q '[:find ?content
-       :in $ ?path
-       :where
-       [_     :repo/current ?repo]
-       [?file :file/repo ?repo]
-       [?file :file/path ?path]
-       [?file :file/content ?content]]
-    conn
-    path))
+(defn extract-headings
+  [repo-url file content]
+  (let [headings (-> content
+                     (org/parse-json)
+                     (util/json->clj))
+        headings (block/extract-headings headings)]
+    (map (fn [heading]
+           (assoc heading
+                  :heading/repo [:repo/url repo-url]
+                  :heading/file [:file/path file]))
+      headings)))
 
 (defn get-all-files-content
   [repo-url]
@@ -360,26 +323,54 @@
          [?file :file/path ?path]]
     @conn repo-url))
 
+(defn extract-all-headings
+  [repo-url]
+  (let [contents (get-all-files-content repo-url)]
+    (vec
+     (mapcat
+      (fn [[file content] contents]
+        (extract-headings repo-url file content))
+      contents))))
+
+(defn reset-file!
+  [repo-url file content]
+  (let [file-content [{:file/repo [:repo/url repo-url]
+                       :file/path file
+                       :file/content content}]
+        delete-headings (delete-file-headings! repo-url file)
+        headings (extract-headings repo-url file content)
+        headings (safe-headings headings)]
+    (d/transact! conn (concat file-content delete-headings headings))))
+
+(defn get-file-content
+  [repo-url path]
+  (->> (d/q '[:find ?content
+              :in $ ?repo-url ?path
+              :where
+              [?repo :repo/url ?repo-url]
+              [?file :file/repo ?repo]
+              [?file :file/path ?path]
+              [?file :file/content ?content]]
+         @conn repo-url path)
+       (map first)
+       first))
+
+(defn get-file
+  [path]
+  (->
+   (d/q '[:find ?content
+          :in $ ?path
+          :where
+          [_     :repo/current ?repo]
+          [?file :file/repo ?repo]
+          [?file :file/path ?path]
+          [?file :file/content ?content]]
+     @conn
+     path)
+   ffirst))
+
 ;; marker should be one of: TODO, DOING, IN-PROGRESS
 ;; time duration
-(defn sub-agenda
-  ([]
-   (sub-agenda :week))
-  ([time]
-   (let [duration (case time
-                    :today []
-                    :week  []
-                    :month [])
-         tasks-ids (-> @(q '[:find ?h
-                             :where
-                             (or [?h :heading/marker "TODO"]
-                                 [?h :heading/marker "DOING"]
-                                 [?h :heading/marker "IN-PROGRESS"]
-                                 [?h :heading/marker "DONE"])]
-                          conn)
-                       seq-flatten)]
-     (pull-many tasks-ids))))
-
 (defn get-agenda
   ([]
    (get-agenda :week))
@@ -388,13 +379,15 @@
                     :today []
                     :week  []
                     :month [])]
-     (d/q '[:find (pull ?h [*])
-            :where
-            (or [?h :heading/marker "TODO"]
-                [?h :heading/marker "DOING"]
-                [?h :heading/marker "IN-PROGRESS"]
-                [?h :heading/marker "DONE"])]
-       @conn))))
+     (->
+      (d/q '[:find (pull ?h [*])
+             :where
+             (or [?h :heading/marker "TODO"]
+                 [?h :heading/marker "DOING"]
+                 [?h :heading/marker "IN-PROGRESS"]
+                 [?h :heading/marker "DONE"])]
+        @conn)
+      seq-flatten))))
 
 (defn entity
   [id-or-lookup-ref]

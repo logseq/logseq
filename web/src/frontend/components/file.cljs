@@ -16,17 +16,15 @@
         decoded-path (b64/decodeString encoded-path)]
     [encoded-path decoded-path]))
 
-(rum/defq file <
-  {:q (fn [state]
-        (db/sub-file (last (get-path state))))
-   :did-mount (fn [state]
+(rum/defcs file <
+  {:did-mount (fn [state]
                 (doseq [block (-> (js/document.querySelectorAll "pre code")
                                   (array-seq))]
                   (js/hljs.highlightBlock block))
                 state)}
   [state content]
-  (let [[encoded-path path] (get-path state)
-        content (ffirst content)
+  (let [content (db/get-file (last (get-path state)))
+        [encoded-path path] (get-path state)
         suffix (last (string/split path #"\."))]
     (sidebar/sidebar
      (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
@@ -42,21 +40,23 @@
   [s]
   (count (re-seq #"\n" (or s ""))))
 
-(rum/defq edit <
+(rum/defcs edit <
   (rum/local nil ::content)
   (rum/local "" ::commit-message)
-  {:q (fn [state]
-        (db/sub-file (last (get-path state))))}
-  [state initial-content]
-  (let [content (get state ::content)
+  {:will-mount (fn [state]
+                 (assoc state ::initial-content (db/get-file (last (get-path state)))))}
+  [state]
+  (let [initial-content (get state ::initial-content)
+        initial-rows (+ 3 (count-newlines initial-content))
+        content (get state ::content)
         commit-message (get state ::commit-message)
+        rows (if (nil? @content) initial-rows (+ 3 (count-newlines @content)))
         [_encoded-path path] (get-path state)]
     (sidebar/sidebar
      [:div#content
       [:h3.mb-2 (str "Update " path)]
       [:textarea
-       {:rows (+ 3 (count-newlines @content))
-        :style {:min-height 300}
+       {:rows rows
         :default-value initial-content
         :on-change #(reset! content (.. % -target -value))
         :auto-focus true}]

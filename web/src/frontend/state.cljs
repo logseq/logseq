@@ -5,4 +5,5 @@
             {:route-match nil
              :notification/show? false
              :notification/text nil
-             :tasks-transactions nil}))
+             :root-component nil
+             :pushing? false}))

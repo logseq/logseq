@@ -4,9 +4,7 @@
   cider/cider-nrepl           {:mvn/version "0.23.0-SNAPSHOT"}
   binaryage/devtools          {:mvn/version "0.9.10"}
 
-  sablono                     {:mvn/version "0.8.1"}
-  rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
-  posh                        {:local/root "/home/tienson/codes/projects/posh"}
+  rum                         {:mvn/version "0.11.4"}
   datascript-transit          {:mvn/version "0.3.0"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}

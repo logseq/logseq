@@ -8,15 +8,14 @@
 (defn repos
   [repos]
   (when (seq repos)
-    (let [repos (->> repos (map first) distinct)]
-      [:div#repos
-       [:ul
-        (for [url repos]
-          [:li {:key url}
-           [:button {:on-click (fn []
-                                 ;; (handler/set-current-repo url)
-                                 )}
-            (string/replace url "https://github.com/" "")]])]])))
+    [:div#repos
+     [:ul
+      (for [url repos]
+        [:li {:key url}
+         [:button {:on-click (fn []
+                               ;; (handler/set-current-repo url)
+                               )}
+          (string/replace url "https://github.com/" "")]])]]))
 
 (rum/defcs add-repo < (rum/local "https://github.com/" ::repo-url)
   [state]

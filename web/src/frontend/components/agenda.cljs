@@ -50,68 +50,68 @@
       [:span
        name]])])
 
-(rum/defq agenda <
-  {:q (fn [state] (db/sub-agenda))}
-  [state tasks]
-  (sidebar/sidebar
-   [:div#agenda
-    [:h2.mb-3 "Agenda"]
-    (if (seq tasks)
-      [:div.ml-1
-       (let [parent-tasks (block/group-by-parent (block/sort-tasks tasks))]
-         (for [[parent tasks] parent-tasks]
-           (let [parent (cond
-                          (string? parent)
-                          parent
+(rum/defc agenda
+  []
+  (let [tasks (db/get-agenda)]
+    (sidebar/sidebar
+     [:div#agenda
+      [:h2.mb-3 "Agenda"]
+      (if (seq tasks)
+        [:div.ml-1
+         (let [parent-tasks (block/group-by-parent (block/sort-tasks tasks))]
+           (for [[parent tasks] parent-tasks]
+             (let [parent (cond
+                            (string? parent)
+                            parent
 
-                          (and (map? parent)
-                               (:label parent))
-                          (title-cp (:label parent))
+                            (and (map? parent)
+                                 (:label parent))
+                            (title-cp (:label parent))
 
-                          :else
-                          "uncategorized")]
-             [:div.mt-10
-              [:h4.mb-3.text-gray-500 parent]
-              (for [{:heading/keys [uuid marker title priority level tags children timestamps meta repo file] :as task} tasks]
-                [:div.mb-2
-                 {:key (str "task-" uuid)
-                  :style {:padding-left 8
-                          :padding-right 8}}
-                 [:div.column
-                  [:div.row {:style {:align-items "center"}}
-                   (case marker
-                     (list "DOING" "IN-PROGRESS" "TODO")
-                     (ui/checkbox {:on-change (fn [_]
-                                                ;; FIXME: Log timestamp
-                                                (handler/check repo file marker (:pos meta)))})
+                            :else
+                            "uncategorized")]
+               [:div.mt-10
+                [:h4.mb-3.text-gray-500 parent]
+                (for [{:heading/keys [uuid marker title priority level tags children timestamps meta repo file] :as task} tasks]
+                  [:div.mb-2
+                   {:key (str "task-" uuid)
+                    :style {:padding-left 8
+                            :padding-right 8}}
+                   [:div.column
+                    [:div.row {:style {:align-items "center"}}
+                     (case marker
+                       (list "DOING" "IN-PROGRESS" "TODO")
+                       (ui/checkbox {:on-change (fn [_]
+                                                  ;; FIXME: Log timestamp
+                                                  (handler/check task))})
 
-                     "WAIT"
-                     [:span {:style {:font-weight "bold"}}
-                      "WAIT"]
+                       "WAIT"
+                       [:span {:style {:font-weight "bold"}}
+                        "WAIT"]
 
-                     "DONE"
-                     (ui/checkbox {:checked true
-                                   :on-change (fn [_]
-                                                ;; FIXME: Log timestamp
-                                                (handler/uncheck repo file (:pos meta))
-                                                )})
+                       "DONE"
+                       (ui/checkbox {:checked true
+                                     :on-change (fn [_]
+                                                  ;; FIXME: Log timestamp
+                                                  (handler/uncheck task)
+                                                  )})
 
-                     nil)
-                   [:div.row.ml-2
-                    (if priority
-                      [:span.priority.mr-1
-                       (str "#[" priority "]")])
-                    (title-cp title)
-                    (marker-cp marker)
-                    (when (seq tags)
-                      (tags-cp tags))]]
-                  (when (seq timestamps)
-                    (timestamps-cp timestamps))
+                       nil)
+                     [:div.row.ml-2
+                      (if priority
+                        [:span.priority.mr-1
+                         (str "#[" priority "]")])
+                      (title-cp title)
+                      (marker-cp marker)
+                      (when (seq tags)
+                        (tags-cp tags))]]
+                    (when (seq timestamps)
+                      (timestamps-cp timestamps))
 
-                  ;; FIXME: parse error
-                  ;; (when (seq children)
-                  ;;   (children-cp children))
+                    ;; FIXME: parse error
+                    ;; (when (seq children)
+                    ;;   (children-cp children))
 
-                  ]]
-                )])))]
-      "Empty")]))
+                    ]]
+                  )])))]
+        "Empty")])))

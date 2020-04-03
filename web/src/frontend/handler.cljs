@@ -6,8 +6,6 @@
             [frontend.db :as db]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [frontend.format.org-mode :as org]
-            [frontend.format.org.block :as block]
             [frontend.config :as config]
             [clojure.walk :as walk]
             [clojure.string :as string]
@@ -15,7 +13,9 @@
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
             [goog.crypt.base64 :as b64]
-            [goog.object :as gobj])
+            [goog.object :as gobj]
+            [rum.core :as rum]
+            [datascript.core :as d])
   (:import [goog.events EventHandler]))
 
 ;; We only support Github token now
@@ -69,21 +69,24 @@
 ;; TODO: callback hell
 (defn pull
   [repo-url token]
-  (util/p-handle (git/pull repo-url token)
-                 (fn [result]
-                   (get-latest-commit
-                    (fn [commit]
-                      (when (or (nil? @latest-commit)
-                                (and @latest-commit
-                                     commit
-                                     (not= (gobj/get commit "oid")
-                                           (gobj/get @latest-commit "oid"))))
-                        (prn "New commit oid: " (gobj/get commit "oid"))
-                        (-> (load-files repo-url)
-                            (p/then
-                             (fn []
-                               (load-repo-to-db! repo-url)))))
-                      (reset! latest-commit commit))))))
+  (prn "pushing? " (:pushing? @state/state))
+  (when-not (:pushing? @state/state)
+    (util/p-handle
+     (git/pull repo-url token)
+     (fn [result]
+       (get-latest-commit
+        (fn [commit]
+          (when (or (nil? @latest-commit)
+                    (and @latest-commit
+                         commit
+                         (not= (gobj/get commit "oid")
+                               (gobj/get @latest-commit "oid"))))
+            (prn "New commit oid: " (gobj/get commit "oid"))
+            (-> (load-files repo-url)
+                (p/then
+                 (fn []
+                   (load-repo-to-db! repo-url)))))
+          (reset! latest-commit commit)))))))
 
 (defn periodically-pull
   [repo-url]
@@ -92,23 +95,10 @@
     (js/setInterval #(pull repo-url token)
                     (* 10 1000))))
 
-(defn add-transaction
-  [tx]
-  (swap! state/state update :tasks-transactions conj tx))
-
-(defn clear-transactions!
-  []
-  (swap! state/state assoc :tasks-transactions nil))
-
-(defn- transactions->commit-msg
-  [transactions]
-  (let [transactions (reverse transactions)]
-    (str
-     "Gitnotes auto save tasks.\n\n"
-     (string/join "\n" transactions))))
-
+;; TODO: update latest commit
 (defn push
   [repo-url file message]
+  (swap! state/state assoc :pushing? true)
   (let [token (db/get-github-token)]
     (git/add-commit-push
      repo-url
@@ -116,9 +106,11 @@
      message
      token
      (fn []
-       (prn "Push successfully!"))
+       (prn "Push successfully!")
+       (swap! state/state assoc :pushing? false))
      (fn []
-       (prn "Failed to push.")))))
+       (prn "Failed to push.")
+       (swap! state/state assoc :pushing? false)))))
 
 (defn clone
   [repo]
@@ -196,14 +188,16 @@
     (util/p-handle
      (fs/write-file (git/get-repo-dir repo-url) path content)
      (fn [_]
+       (rfe/push-state :file {:path (b64/encodeString path)})
+       (db/reset-file! repo-url path content)
+
        (git/add-commit-push repo-url
                             path
                             commit-message
                             token
                             (fn []
-                              (db/set-file-content! repo-url path content)
-                              (rfe/push-state :file {:path (b64/encodeString path)})
-                              (show-notification! "File updated!"))
+                              ;; (show-notification! "File updated!")
+                              )
                             (fn [error]
                               (prn "Failed to update file, error: " error)))))))
 
@@ -213,8 +207,10 @@
   (clone repo-url))
 
 (defn check
-  [repo file marker pos]
-  (let [repo (db/entity (:db/id repo))
+  [heading]
+  (let [{:heading/keys [repo file marker meta uuid]} heading
+        pos (:pos meta)
+        repo (db/entity (:db/id repo))
         file (db/entity (:db/id file))
         repo-url (:repo/url repo)
         file (:file/path file)
@@ -223,15 +219,18 @@
       (let [content' (str (subs content 0 pos)
                           (-> (subs content pos)
                               (string/replace-first marker "DONE")))]
-        (db/set-file-content! repo-url file content')
         (util/p-handle
          (fs/write-file (git/get-repo-dir repo-url) file content')
          (fn [_]
+           (prn "check successfully, " file)
+           (db/reset-file! repo-url file content')
            (push repo-url file (util/format "`%s` marked as DONE." marker))))))))
 
 (defn uncheck
-  [repo file pos]
-  (let [repo (db/entity (:db/id repo))
+  [heading]
+  (let [{:heading/keys [repo file marker meta]} heading
+        pos (:pos meta)
+        repo (db/entity (:db/id repo))
         file (db/entity (:db/id file))
         repo-url (:repo/url repo)
         file (:file/path file)
@@ -240,23 +239,12 @@
       (let [content' (str (subs content 0 pos)
                           (-> (subs content pos)
                               (string/replace-first "DONE" "TODO")))]
-        (db/set-file-content! repo-url file content')
         (util/p-handle
          (fs/write-file (git/get-repo-dir repo-url) file content')
          (fn [_]
+           (prn "uncheck successfully, " file)
+           (db/reset-file! repo-url file content')
            (push repo-url file "DONE rollbacks to TODO.")))))))
-
-(defn extract-headings
-  [repo-url file content]
-  (let [headings (-> content
-                     (org/parse-json)
-                     (util/json->clj))
-        headings (block/extract-headings headings)]
-    (map (fn [heading]
-           (assoc heading
-                  :heading/repo [:repo/url repo-url]
-                  :heading/file [:file/path file]))
-      headings)))
 
 (defn load-all-contents!
   [repo-url ok-handler]
@@ -269,22 +257,13 @@
          (fn [_]
            (ok-handler))))))
 
-(defn extract-all-headings
-  [repo-url]
-  (let [contents (db/get-all-files-content repo-url)]
-    (vec
-     (mapcat
-      (fn [[file content] contents]
-        (extract-headings repo-url file content))
-      contents))))
-
 (defonce headings-atom (atom nil))
 
 (defn load-repo-to-db!
   [repo-url]
   (load-all-contents! repo-url
                       (fn []
-                        (let [headings (extract-all-headings repo-url)]
+                        (let [headings (db/extract-all-headings repo-url)]
                           (reset! headings-atom headings)
                           (db/reset-headings! repo-url headings)))))
 
@@ -326,9 +305,34 @@
   [route]
   (swap! state/state assoc :route-match route))
 
+(defn set-ref-component!
+  [k ref]
+  (swap! state/state assoc :ref-components k ref))
+
+(defn set-root-component!
+  [comp]
+  (swap! state/state assoc :root-component comp))
+
+(defn re-render!
+  []
+  (when-let [comp (get @state/state :root-component)]
+    (rum/request-render comp)))
+
+(defn db-listen-to-tx!
+  []
+  (d/listen! db/conn :persistence
+             (fn [tx-report] ;; FIXME do not notify with nil as db-report
+               ;; FIXME do not notify if tx-data is empty
+               (when-let [db (:db-after tx-report)]
+                 (prn "DB changed, re-rendered!")
+                 (re-render!)
+                 (js/setTimeout (fn []
+                                  (db/persist db)) 0)))))
+
 (defn start!
   []
   (db/restore!)
+  (db-listen-to-tx!)
   (when-let [first-repo (first (db/get-repos))]
     (db/set-current-repo! first-repo))
   (let [repos (db/get-repos)]
