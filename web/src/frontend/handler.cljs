@@ -15,7 +15,8 @@
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [datascript.core :as d])
+            [datascript.core :as d]
+            [frontend.utf8 :as utf8])
   (:import [goog.events EventHandler]))
 
 ;; We only support Github token now
@@ -69,8 +70,8 @@
 ;; TODO: callback hell
 (defn pull
   [repo-url token]
-  (prn "pushing? " (:pushing? @state/state))
-  (when-not (:pushing? @state/state)
+  (when (and (nil? (:git-error @state/state))
+             (nil? (:git-status @state/state)))
     (util/p-handle
      (git/pull repo-url token)
      (fn [result]
@@ -95,22 +96,46 @@
     (js/setInterval #(pull repo-url token)
                     (* 10 1000))))
 
+(defn git-add-commit
+  [repo-url file message content]
+  (swap! state/state assoc :git-status :commit)
+  (db/reset-file! repo-url file content)
+  (git/add-commit repo-url file message
+                  (fn []
+                    (swap! state/state assoc
+                           :git-status :should-push))
+                  (fn [error]
+                    (prn "Commit failed, "
+                         {:repo repo-url
+                          :file file
+                          :message message})
+                    (swap! state/state assoc
+                           :git-status :commit-failed
+                           :git-error error))))
+
 ;; TODO: update latest commit
 (defn push
-  [repo-url file message]
-  (swap! state/state assoc :pushing? true)
-  (let [token (db/get-github-token)]
-    (git/add-commit-push
-     repo-url
-     file
-     message
-     token
-     (fn []
-       (prn "Push successfully!")
-       (swap! state/state assoc :pushing? false))
-     (fn []
-       (prn "Failed to push.")
-       (swap! state/state assoc :pushing? false)))))
+  [repo-url file]
+  (when (and (= :should-push (:git-status @state/state))
+             (nil? (:git-error @state/state)))
+    (swap! state/state assoc :git-status :push)
+    (let [token (db/get-github-token)]
+      (util/p-handle
+       (git/push repo-url token)
+       (fn []
+         (prn "Push successfully!")
+         (swap! state/state assoc
+                :git-status nil
+                :git-error nil)
+         ;; TODO: update latest-commit
+         (get-latest-commit
+          (fn [commit]
+            (reset! latest-commit commit))))
+       (fn [error]
+         (prn "Failed to push, error: " error)
+         (swap! state/state assoc
+                :git-status :push-failed
+                :git-error error))))))
 
 (defn clone
   [repo]
@@ -189,23 +214,14 @@
      (fs/write-file (git/get-repo-dir repo-url) path content)
      (fn [_]
        (rfe/push-state :file {:path (b64/encodeString path)})
-       (db/reset-file! repo-url path content)
-
-       (git/add-commit-push repo-url
-                            path
-                            commit-message
-                            token
-                            (fn []
-                              ;; (show-notification! "File updated!")
-                              )
-                            (fn [error]
-                              (prn "Failed to update file, error: " error)))))))
+       (git-add-commit repo-url path commit-message content)))))
 
 (defn clear-storage
   [repo-url]
   (js/window.pfs._idb.wipe)
   (clone repo-url))
 
+;; TODO: utf8 encode performance
 (defn check
   [heading]
   (let [{:heading/keys [repo file marker meta uuid]} heading
@@ -216,15 +232,17 @@
         file (:file/path file)
         token (db/get-github-token)]
     (when-let [content (db/get-file-content repo-url file)]
-      (let [content' (str (subs content 0 pos)
-                          (-> (subs content pos)
+      (let [encoded-content (utf8/encode content)
+            content' (str (utf8/substring encoded-content 0 pos)
+                          (-> (utf8/substring encoded-content pos)
                               (string/replace-first marker "DONE")))]
         (util/p-handle
          (fs/write-file (git/get-repo-dir repo-url) file content')
          (fn [_]
            (prn "check successfully, " file)
-           (db/reset-file! repo-url file content')
-           (push repo-url file (util/format "`%s` marked as DONE." marker))))))))
+           (git-add-commit repo-url file
+                           (util/format "`%s` marked as DONE." marker)
+                           content')))))))
 
 (defn uncheck
   [heading]
@@ -236,15 +254,17 @@
         file (:file/path file)
         token (db/get-github-token)]
     (when-let [content (db/get-file-content repo-url file)]
-      (let [content' (str (subs content 0 pos)
-                          (-> (subs content pos)
+      (let [encoded-content (utf8/encode content)
+            content' (str (utf8/substring encoded-content 0 pos)
+                          (-> (utf8/substring encoded-content pos)
                               (string/replace-first "DONE" "TODO")))]
         (util/p-handle
          (fs/write-file (git/get-repo-dir repo-url) file content')
          (fn [_]
            (prn "uncheck successfully, " file)
-           (db/reset-file! repo-url file content')
-           (push repo-url file "DONE rollbacks to TODO.")))))))
+           (git-add-commit repo-url file
+                           "DONE rollbacks to TODO."
+                           content')))))))
 
 (defn load-all-contents!
   [repo-url ok-handler]
@@ -329,6 +349,19 @@
                  (js/setTimeout (fn []
                                   (db/persist db)) 0)))))
 
+(defn periodically-push-tasks
+  [repo-url]
+  (let [token (db/get-github-token)
+        push (fn []
+               (push repo-url token))]
+    (js/setInterval push
+                    (* 10 1000))))
+
+(defn periodically-pull-and-push
+  [repo-url]
+  (periodically-pull repo-url)
+  (periodically-push-tasks repo-url))
+
 (defn start!
   []
   (db/restore!)
@@ -337,4 +370,4 @@
     (db/set-current-repo! first-repo))
   (let [repos (db/get-repos)]
     (doseq [repo repos]
-      (periodically-pull repo))))
+      (periodically-pull-and-push repo))))

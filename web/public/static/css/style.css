@@ -248,3 +248,7 @@ textarea {
     resize: none;
     outline: none;
 }
+
+li ol, li ul {
+    margin-left: 1rem;
+}

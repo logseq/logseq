@@ -6,4 +6,5 @@
              :notification/show? false
              :notification/text nil
              :root-component nil
-             :pushing? false}))
+             :git-status nil
+             :git-error nil}))
