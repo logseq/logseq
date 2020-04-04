@@ -52,6 +52,7 @@
         commit-message (get state ::commit-message)
         rows (if (nil? @content) initial-rows (+ 3 (count-newlines @content)))
         [_encoded-path path] (get-path state)]
+    (prn {:rows rows})
     (sidebar/sidebar
      [:div#content
       [:h3.mb-2 (str "Update " path)]

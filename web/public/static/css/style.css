@@ -238,7 +238,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 textarea {
-    overflow: auto;
+    overflow: hidden;
     padding: 8px;
     border: 1px solid rgba(39,41,43,.15);
     border-radius: 4px;
@@ -249,6 +249,7 @@ textarea {
     outline: none;
 }
 
-li ol, li ul {
-    margin-left: 1rem;
+#content ol, #content ui {
+    list-style: disc;
+    margin-left: 1em;
 }

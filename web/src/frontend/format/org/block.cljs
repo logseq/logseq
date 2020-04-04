@@ -46,41 +46,32 @@
 
 (defn extract-headings
   [blocks]
-  [blocks]
-  (let [reversed-blocks (reverse blocks)]
-    (loop [child-level 0
-           current-heading-children []
-           children-headings []
-           result []
-           rblocks reversed-blocks
-           timestamps {}]
-      (if (seq rblocks)
-        (let [block (first rblocks)
-              level (:level (second block))]
-          (cond
-            (and (>= level child-level) (heading-block? block))
-            (let [heading (assoc (second block)
-                                 :children (reverse current-heading-children)
-                                 :timestamps timestamps)
-                  children-headings (conj children-headings heading)]
-              (recur level [] children-headings result (rest rblocks) {}))
+  (loop [headings []
+         heading-children []
+         blocks (reverse blocks)
+         timestamps {}
+         last-pos nil]
+    (if (seq blocks)
+      (let [block (first blocks)
+            level (:level (second block))]
+        (cond
+          (paragraph-timestamp-block? block)
+          (let [timestamp (extract-timestamp block)
+                timestamps' (conj timestamps timestamp)]
+            (recur headings heading-children (rest blocks) timestamps' last-pos))
 
-            (paragraph-timestamp-block? block)
-            (let [timestamp (extract-timestamp block)
-                  timestamps' (conj timestamps timestamp)]
-              (recur child-level current-heading-children children-headings result (rest rblocks) timestamps'))
+          (heading-block? block)
+          (let [heading (-> (assoc (second block)
+                                   :children (reverse heading-children)
+                                   :timestamps timestamps)
+                            (assoc-in [:meta :end-pos] last-pos))
+                last-pos' (get-in heading [:meta :pos])]
+            (recur (conj headings heading) [] (rest blocks) {} last-pos'))
 
-            :else
-            (let [children (conj current-heading-children block)]
-              (if (and level (< level child-level))
-                (let [parent-title (extract-title block)
-                      children-headings (map (fn [heading]
-                                               (assoc heading :parent-title parent-title))
-                                          children-headings)
-                      result (concat result children-headings)]
-                  (recur 0 children [] result (rest rblocks) timestamps))
-                (recur child-level children children-headings result (rest rblocks) timestamps)))))
-        (reverse result)))))
+          :else
+          (let [heading-children' (conj heading-children block)]
+            (recur headings heading-children' (rest blocks) timestamps last-pos))))
+      (reverse headings))))
 
 ;; marker: DOING | IN-PROGRESS > TODO > WAITING | WAIT > DONE > CANCELED | CANCELLED
 ;; priority: A > B > C
@@ -98,16 +89,11 @@
               (cond
                 (and (= m1 m2)
                      (= p1 p2))
-                (compare (:heading/title t1) (:heading/title t2))
+                (compare (str (:heading/title t1))
+                         (str (:heading/title t2)))
 
                 (= m1 m2)
                 (> p1 p2)
                 :else
                 (> m1 m2))))
           headings)))
-
-(defn group-by-parent
-  [headings]
-  (->> (group-by :heading/parent-title headings)
-       (into (sorted-map-by (fn [x y]
-                              (compare (str x) (str y)))))))

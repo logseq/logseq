@@ -89,7 +89,7 @@
    :children :heading/children
    :tags :heading/tags
    :meta :heading/meta
-   :parent-title :heading/parent-title})
+   })
 
 ;; (def schema
 ;;   [{:db/ident       {:db/unique :db.unique/identity}}

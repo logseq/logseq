@@ -4,6 +4,7 @@
             [frontend.mixins :as mixins]
             [frontend.db :as db]
             [frontend.components.repo :as repo]
+            [frontend.components.journal :as journal]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]))
@@ -59,8 +60,7 @@
   (let [repos (db/get-repos)]
     [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
     (if (seq repos)
-      [:div
-       (repo/repos repos)]
+      (journal/journal)
       (repo/add-repo))]))
 
 (rum/defcs sidebar < (mixins/modal)

@@ -58,60 +58,47 @@
       [:h2.mb-3 "Agenda"]
       (if (seq tasks)
         [:div.ml-1
-         (let [parent-tasks (block/group-by-parent (block/sort-tasks tasks))]
-           (for [[parent tasks] parent-tasks]
-             (let [parent (cond
-                            (string? parent)
-                            parent
+         (let [tasks (block/sort-tasks tasks)]
+           (for [{:heading/keys [uuid marker title priority level tags children timestamps meta repo file] :as task} tasks]
+             [:div.mb-2
+              {:key (str "task-" uuid)
+               :style {:padding-left 8
+                       :padding-right 8}}
+              [:div.column
+               [:div.row {:style {:align-items "center"}}
+                (case marker
+                  (list "DOING" "IN-PROGRESS" "TODO")
+                  (ui/checkbox {:on-change (fn [_]
+                                             ;; FIXME: Log timestamp
+                                             (handler/check task))})
 
-                            (and (map? parent)
-                                 (:label parent))
-                            (title-cp (:label parent))
+                  "WAIT"
+                  [:span {:style {:font-weight "bold"}}
+                   "WAIT"]
 
-                            :else
-                            "uncategorized")]
-               [:div.mt-10
-                [:h4.mb-3.text-gray-500 parent]
-                (for [{:heading/keys [uuid marker title priority level tags children timestamps meta repo file] :as task} tasks]
-                  [:div.mb-2
-                   {:key (str "task-" uuid)
-                    :style {:padding-left 8
-                            :padding-right 8}}
-                   [:div.column
-                    [:div.row {:style {:align-items "center"}}
-                     (case marker
-                       (list "DOING" "IN-PROGRESS" "TODO")
-                       (ui/checkbox {:on-change (fn [_]
-                                                  ;; FIXME: Log timestamp
-                                                  (handler/check task))})
+                  "DONE"
+                  (ui/checkbox {:checked true
+                                :on-change (fn [_]
+                                             ;; FIXME: Log timestamp
+                                             (handler/uncheck task)
+                                             )})
 
-                       "WAIT"
-                       [:span {:style {:font-weight "bold"}}
-                        "WAIT"]
+                  nil)
+                [:div.row.ml-2
+                 (if priority
+                   [:span.priority.mr-1
+                    (str "#[" priority "]")])
+                 (title-cp title)
+                 (marker-cp marker)
+                 (when (seq tags)
+                   (tags-cp tags))]]
+               (when (seq timestamps)
+                 (timestamps-cp timestamps))
 
-                       "DONE"
-                       (ui/checkbox {:checked true
-                                     :on-change (fn [_]
-                                                  ;; FIXME: Log timestamp
-                                                  (handler/uncheck task)
-                                                  )})
+               ;; FIXME: parse error
+               ;; (when (seq children)
+               ;;   (children-cp children))
 
-                       nil)
-                     [:div.row.ml-2
-                      (if priority
-                        [:span.priority.mr-1
-                         (str "#[" priority "]")])
-                      (title-cp title)
-                      (marker-cp marker)
-                      (when (seq tags)
-                        (tags-cp tags))]]
-                    (when (seq timestamps)
-                      (timestamps-cp timestamps))
-
-                    ;; FIXME: parse error
-                    ;; (when (seq children)
-                    ;;   (children-cp children))
-
-                    ]]
-                  )])))]
+               ]]
+             ))]
         "Empty")])))

@@ -67,7 +67,7 @@
 
 (defn event-mixin
   ([attach-listeners]
-   (event-mixin identity))
+   (event-mixin attach-listeners identity))
   ([attach-listeners init-callback]
    (merge
     event-handler-mixin
