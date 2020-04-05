@@ -4,7 +4,8 @@
             [medley.core :as medley]
             [datascript.transit :as dt]
             [frontend.format.org-mode :as org]
-            [frontend.format.org.block :as block]))
+            [frontend.format.org.block :as block]
+            [clojure.string :as string]))
 
 ;; TODO: don't persistent :github/token
 
@@ -302,15 +303,17 @@
 
 (defn extract-headings
   [repo-url file content]
-  (let [headings (-> content
-                     (org/parse-json)
-                     (util/json->clj))
-        headings (block/extract-headings headings)]
-    (map (fn [heading]
-           (assoc heading
-                  :heading/repo [:repo/url repo-url]
-                  :heading/file [:file/path file]))
-      headings)))
+  (if (string/blank? content)
+    []
+    (let [headings (-> content
+                       (org/parse-json)
+                       (util/json->clj))
+          headings (block/extract-headings headings)]
+      (map (fn [heading]
+             (assoc heading
+                    :heading/repo [:repo/url repo-url]
+                    :heading/file [:file/path file]))
+        headings))))
 
 (defn get-all-files-content
   [repo-url]
@@ -392,6 +395,10 @@
 (defn entity
   [id-or-lookup-ref]
   (d/entity (d/db conn) id-or-lookup-ref))
+
+(defn get-current-journal
+  []
+  (get-file (util/current-journal-path)))
 
 (comment
   (d/transact! conn [{:db/id -1

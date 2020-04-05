@@ -49,20 +49,24 @@
 ;;      (dissoc state name))})
 
 (defn close-when-esc-or-outside
-  [state open? & {:keys [on-close]}]
-  (let [node (rum/dom-node state)]
-    (when open?
+  [state open? & {:keys [on-close node]}]
+  (let [node (or node (rum/dom-node state))]
+    (when @open?
       (listen state js/window "click"
               (fn [e]
                 ;; If the click target is outside of current node
                 (when-not (dom/contains node (.. e -target))
+                  (prn "hide b")
                   (on-close e))))
 
       (listen state js/window "keydown"
               (fn [e]
+                (prn "key code: " (.-keyCode e))
                 (case (.-keyCode e)
                   ;; Esc
-                  27 (on-close e)
+                  27 (do
+                       (prn "hide a")
+                       (on-close e))
                   nil))))))
 
 (defn event-mixin

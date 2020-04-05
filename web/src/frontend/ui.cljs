@@ -2,12 +2,16 @@
   (:require [rum.core :as rum]
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
+            ["react-textarea-autosize" :as Textarea]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [goog.object :as gobj]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
+
+(defonce textarea-autosize (r/adapt-class (gobj/get Textarea "default")))
 
 (rum/defc dropdown-content-wrapper [state content]
   [:div.origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg

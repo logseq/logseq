@@ -112,3 +112,16 @@
                  (on-failed %)))
        (.then bean/->clj)
        (.then #(on-ok %)))))
+
+(defn get-date
+  []
+  (let [date (js/Date.)]
+    {:year (.getFullYear date)
+     :month (inc (.getMonth date))
+     :day (.getDate date)
+     :weekday (.toLocaleString date "en-us" (clj->js {:weekday "long"}))}))
+
+(defn current-journal-path
+  []
+  (let [{:keys [year month]} (get-date)]
+    (str "journals/" year "_" month ".org")))

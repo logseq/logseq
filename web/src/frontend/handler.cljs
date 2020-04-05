@@ -94,7 +94,7 @@
   (when-let [token (db/get-github-token)]
     (pull repo-url token)
     (js/setInterval #(pull repo-url token)
-                    (* 10 1000))))
+                    (* 60 1000))))
 
 (defn git-add-commit
   [repo-url file message content]
@@ -207,14 +207,17 @@
                  3000))
 
 (defn alter-file
-  [path commit-message content]
-  (let [token (db/get-github-token)
-        repo-url (db/get-current-repo)]
-    (util/p-handle
-     (fs/write-file (git/get-repo-dir repo-url) path content)
-     (fn [_]
-       (rfe/push-state :file {:path (b64/encodeString path)})
-       (git-add-commit repo-url path commit-message content)))))
+  ([path commit-message content]
+   (alter-file path commit-message content true))
+  ([path commit-message content redirect?]
+   (let [token (db/get-github-token)
+         repo-url (db/get-current-repo)]
+     (util/p-handle
+      (fs/write-file (git/get-repo-dir repo-url) path content)
+      (fn [_]
+        (when redirect?
+          (rfe/push-state :file {:path (b64/encodeString path)}))
+        (git-add-commit repo-url path commit-message content))))))
 
 (defn clear-storage
   [repo-url]
@@ -315,10 +318,34 @@
                (fn [error]
                  (prn "Get token failed, error: " error)))))
 
+;; journals
+(defn create-month-journal-if-not-exists
+  [repo-url]
+  (let [repo-dir (git/get-repo-dir repo-url)
+        path (util/current-journal-path)
+        {:keys [year month day weekday]} (util/get-date)
+        file-path (str "/" path)
+        ;; org-journal format, something like `* Tuesday, 06/04/13`
+        default-content (util/format "* %s, %d/%d/%d\n" weekday month day year)]
+    (->
+     (util/p-handle
+      (fs/mkdir (str repo-dir "/journals"))
+      (fn [result]
+        (fs/create-if-not-exists repo-dir file-path default-content))
+      (fn [error]
+        ;; exists
+        (fs/create-if-not-exists repo-dir file-path default-content)))
+     (util/p-handle
+      (fn [result]
+        (git-add-commit repo-url path "create a month journal" default-content))
+      (fn [error]
+        (prn error))))))
+
 (defn clone-and-pull
   [repo]
   (p/then (clone repo)
           (fn []
+            (create-month-journal-if-not-exists repo)
             (periodically-pull repo))))
 
 (defn set-route-match!
@@ -370,4 +397,5 @@
     (db/set-current-repo! first-repo))
   (let [repos (db/get-repos)]
     (doseq [repo repos]
+      (create-month-journal-if-not-exists repo)
       (periodically-pull-and-push repo))))

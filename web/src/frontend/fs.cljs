@@ -1,4 +1,6 @@
-(ns frontend.fs)
+(ns frontend.fs
+  (:require [frontend.util :as util]
+            [promesa.core :as p]))
 
 (defn mkdir
   [dir]
@@ -16,3 +18,17 @@
 (defn write-file
   [dir path content]
   (js/pfs.writeFile (str dir "/" path) content))
+
+(defn stat
+  [dir path]
+  (js/pfs.stat (str dir "/" path)))
+
+(defn create-if-not-exists
+  ([dir path]
+   (create-if-not-exists dir path ""))
+  ([dir path initial-content]
+   (util/p-handle
+    (stat dir path)
+    (fn [_stat] true)
+    (fn [_error]
+      (write-file dir path initial-content)))))

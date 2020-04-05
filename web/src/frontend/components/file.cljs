@@ -31,8 +31,14 @@
        [:div#content
         [:a {:href (str "/file/" encoded-path "/edit")}
          "edit"]
-        (if content
+        (cond
+          (string/blank? content)
+          [:span]
+
+          content
           (util/raw-html (format/to-html content suffix))
+
+          :else
           "Loading ...")]
        [:div "File " suffix " is not supported."]))))
 
