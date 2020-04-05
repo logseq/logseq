@@ -253,3 +253,7 @@ textarea {
     list-style: disc;
     margin-left: 1em;
 }
+
+#content p, #content div {
+    word-break: break-all;
+}

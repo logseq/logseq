@@ -10,6 +10,14 @@
 (defonce content-atom (atom ""))
 (defonce edit?-atom (atom false))
 
+(defn today
+  []
+  (.toLocaleDateString (js/Date.) "default" (clj->js {:month "long"
+                                                      :year "numeric"
+                                                      :day "numeric"
+                                                      :weekday "long"})))
+
+
 (rum/defc editor-box <
   (mixins/event-mixin
    (fn [state]
@@ -32,7 +40,7 @@
   (let [content (rum/react content-atom)
         edit? (rum/react edit?-atom)]
     [:div#content
-     [:h1.text-gray-600 "April 4th, 2020"]
+     [:h1.text-gray-600 (today)]
      (if (or edit? (string/blank? content))
        (editor-box content-atom)
        [:div {:on-click (fn []
