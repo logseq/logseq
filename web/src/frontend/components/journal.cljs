@@ -11,6 +11,10 @@
 
 (def edit-content (atom ""))
 (rum/defc editor-box <
+  {:will-mount (fn [state]
+                 (let [default-content (first (:rum/args state))]
+                   (reset! edit-content default-content)
+                   state))}
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
