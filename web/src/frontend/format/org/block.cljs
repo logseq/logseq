@@ -1,13 +1,13 @@
 (ns frontend.format.org.block
   (:require [frontend.util :as util]))
 
-(defn- heading-block?
+(defn heading-block?
   [block]
   (and
    (vector? block)
    (= "Heading" (first block))))
 
-(defn- task-block?
+(defn task-block?
   [block]
   (and
    (heading-block? block)

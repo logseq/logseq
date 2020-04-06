@@ -60,7 +60,7 @@
   (let [repos (db/get-repos)]
     [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
     (if (seq repos)
-      (journal/journal)
+      (journal/journals)
       (repo/add-repo))]))
 
 (rum/defcs sidebar < (mixins/modal)

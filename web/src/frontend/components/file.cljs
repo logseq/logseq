@@ -28,7 +28,7 @@
         suffix (last (string/split path #"\."))]
     (sidebar/sidebar
      (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
-       [:div#content
+       [:div.content
         [:a {:href (str "/file/" encoded-path "/edit")}
          "edit"]
         (cond
@@ -60,7 +60,7 @@
         [_encoded-path path] (get-path state)]
     (prn {:rows rows})
     (sidebar/sidebar
-     [:div#content
+     [:div.content
       [:h3.mb-2 (str "Update " path)]
       [:textarea
        {:rows rows

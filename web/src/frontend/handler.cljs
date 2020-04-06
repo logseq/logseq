@@ -326,18 +326,23 @@
         {:keys [year month day weekday]} (util/get-date)
         file-path (str "/" path)
         ;; org-journal format, something like `* Tuesday, 06/04/13`
-        default-content (util/format "* %s, %d/%d/%d\n" weekday month day year)]
+        month (if (< month 10) (str "0" month) month)
+        day (if (< day 10) (str "0" day) day)
+        default-content (util/format "* %s, %s/%s/%d\n" weekday month day year)]
     (->
      (util/p-handle
       (fs/mkdir (str repo-dir "/journals"))
       (fn [result]
         (fs/create-if-not-exists repo-dir file-path default-content))
       (fn [error]
-        ;; exists
         (fs/create-if-not-exists repo-dir file-path default-content)))
      (util/p-handle
-      (fn [result]
-        (git-add-commit repo-url path "create a month journal" default-content))
+      (fn [file-exists?]
+        (if file-exists?
+          (prn "Month journal already exists!")
+          (do
+            (prn "create a month journal")
+            (git-add-commit repo-url path "create a month journal" default-content))))
       (fn [error]
         (prn error))))))
 
@@ -363,7 +368,8 @@
 (defn re-render!
   []
   (when-let [comp (get @state/state :root-component)]
-    (rum/request-render comp)))
+    (when-not (:edit? @state/state)
+      (rum/request-render comp))))
 
 (defn db-listen-to-tx!
   []
@@ -389,6 +395,46 @@
   (periodically-pull repo-url)
   (periodically-push-tasks repo-url))
 
+(defn set-state-kv!
+  [key value]
+  (swap! state/state assoc key value))
+
+(defn edit-journal!
+  [content journal]
+  (swap! state/state assoc
+         :edit? true
+         :edit-journal journal))
+
+(defn set-latest-journals!
+  []
+  (set-state-kv! :latest-journals (db/get-latest-journals {})))
+
+(defn set-journal-content!
+  [uuid content]
+  (swap! state/state update :latest-journals
+         (fn [journals]
+           (mapv
+            (fn [journal]
+              (if (= (:uuid journal) uuid)
+                (assoc journal :content content)
+                journal))
+            journals))))
+
+(defn save-current-edit-journal!
+  [edit-content]
+  (let [{:keys [edit-journal]} @state/state
+        {:keys [start-pos end-pos]} edit-journal]
+    (swap! state/state assoc
+           :edit? false
+           :edit-journal nil)
+    (when-not (= edit-content (:content edit-journal)) ; if new changes
+      (let [path (:file-path edit-journal)
+            current-journals (db/get-file path)
+            new-content (utf8/insert! current-journals start-pos end-pos edit-content)]
+        (prn {:new-content new-content})
+        (set-state-kv! :latest-journals (db/get-latest-journals {:content new-content}))
+        (alter-file path "Auto save" new-content false)))))
+
 (defn start!
   []
   (db/restore!)
@@ -398,4 +444,5 @@
   (let [repos (db/get-repos)]
     (doseq [repo repos]
       (create-month-journal-if-not-exists repo)
-      (periodically-pull-and-push repo))))
+      ;; (periodically-pull-and-push repo)
+      )))

@@ -5,7 +5,8 @@
             [datascript.transit :as dt]
             [frontend.format.org-mode :as org]
             [frontend.format.org.block :as block]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.utf8 :as utf8]))
 
 ;; TODO: don't persistent :github/token
 
@@ -305,9 +306,7 @@
   [repo-url file content]
   (if (string/blank? content)
     []
-    (let [headings (-> content
-                       (org/parse-json)
-                       (util/json->clj))
+    (let [headings (org/->clj content)
           headings (block/extract-headings headings)]
       (map (fn [heading]
              (assoc heading
@@ -399,6 +398,36 @@
 (defn get-current-journal
   []
   (get-file (util/current-journal-path)))
+
+(defn get-latest-journals
+  ([]
+   (get-latest-journals {}))
+  ([{:keys [days content]
+     :or {days 7}}]
+   (when-let [content (or content (get-current-journal))]
+    (let [journal-path (util/current-journal-path)
+          content-arr (utf8/encode content)
+          end-pos (utf8/length content-arr)
+          blocks (take days (reverse (org/->clj content)))
+          headings (some->>
+                    blocks
+                    (filter (fn [block]
+                              (and (block/heading-block? block)
+                                   (= 1 (:level (second block))))))
+                    (map (fn [[_ {:keys [title meta]}]]
+                           {:title (last (first title))
+                            :file-path journal-path
+                            :start-pos (:pos meta)})))
+          [_ journals] (reduce (fn [[last-end-pos acc] heading]
+                                 (let [end-pos last-end-pos
+                                       acc (conj acc (assoc heading
+                                                            :uuid (cljs.core/random-uuid)
+                                                            :end-pos end-pos
+                                                            :content (utf8/substring content-arr
+                                                                                     (:start-pos heading)
+                                                                                     end-pos)))]
+                                   [(:start-pos heading) acc])) [end-pos []] headings)]
+      journals))))
 
 (comment
   (d/transact! conn [{:db/id -1

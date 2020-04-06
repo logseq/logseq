@@ -249,11 +249,11 @@ textarea {
     outline: none;
 }
 
-#content ol, #content ui {
+.content ol, .content ui {
     list-style: disc;
     margin-left: 1em;
 }
 
-#content p, #content div {
+.content p, .content div {
     word-break: break-word;
 }

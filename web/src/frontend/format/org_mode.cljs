@@ -1,6 +1,8 @@
 (ns frontend.format.org-mode
   (:require ["mldoc_org" :as org]
-            [frontend.format.protocol :as protocol]))
+            [frontend.format.protocol :as protocol]
+            [frontend.util :as util]
+            [clojure.string :as string]))
 
 (def config
   (js/JSON.stringify
@@ -17,6 +19,14 @@
 (defn parse-json
   [content]
   (.parseJson Org content))
+
+(defn ->clj
+  [content]
+  (if (string/blank? content)
+    {}
+    (-> content
+       (parse-json)
+       (util/json->clj))))
 
 (defn inline-list->html
   [json]

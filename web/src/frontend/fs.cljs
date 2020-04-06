@@ -30,5 +30,6 @@
    (util/p-handle
     (stat dir path)
     (fn [_stat] true)
-    (fn [_error]
-      (write-file dir path initial-content)))))
+    (fn [error]
+      (write-file dir path initial-content)
+      false))))

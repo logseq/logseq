@@ -1,4 +1,6 @@
-(ns frontend.utf8)
+(ns frontend.utf8
+  (:require [goog.object :as gobj]))
+
 (defonce encoder
   (js/TextEncoder. "utf-8"))
 
@@ -16,3 +18,14 @@
   ([arr start end]
    (->> (.subarray arr start end)
         (.decode decoder))))
+
+(defn length
+  [arr]
+  (gobj/get arr "length"))
+
+(defn insert!
+  [s start-pos end-pos content]
+  (let [arr (encode s)]
+    (str (substring arr 0 start-pos)
+         content
+         (substring arr end-pos))))

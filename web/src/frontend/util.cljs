@@ -123,5 +123,14 @@
 
 (defn current-journal-path
   []
-  (let [{:keys [year month]} (get-date)]
+  (let [{:keys [year month]} (get-date)
+        month (if (< month 10) (str "0" month) month)]
     (str "journals/" year "_" month ".org")))
+
+(defn today
+  []
+  (.toLocaleDateString (js/Date.) "default"
+                       (clj->js {:month "long"
+                                 :year "numeric"
+                                 :day "numeric"
+                                 :weekday "long"})))

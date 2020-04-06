@@ -7,4 +7,6 @@
              :notification/text nil
              :root-component nil
              :git-status nil
-             :git-error nil}))
+             :git-error nil
+             :edit? false
+             :latest-journals []}))
