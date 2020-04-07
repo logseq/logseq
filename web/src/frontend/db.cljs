@@ -408,7 +408,7 @@
     (let [journal-path (util/current-journal-path)
           content-arr (utf8/encode content)
           end-pos (utf8/length content-arr)
-          blocks (take days (reverse (org/->clj content)))
+          blocks (reverse (org/->clj content))
           headings (some->>
                     blocks
                     (filter (fn [block]
@@ -417,7 +417,8 @@
                     (map (fn [[_ {:keys [title meta]}]]
                            {:title (last (first title))
                             :file-path journal-path
-                            :start-pos (:pos meta)})))
+                            :start-pos (:pos meta)}))
+                    (take days))
           [_ journals] (reduce (fn [[last-end-pos acc] heading]
                                  (let [end-pos last-end-pos
                                        acc (conj acc (assoc heading

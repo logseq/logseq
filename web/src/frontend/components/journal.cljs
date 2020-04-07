@@ -11,10 +11,6 @@
 
 (def edit-content (atom ""))
 (rum/defc editor-box <
-  {:will-mount (fn [state]
-                 (let [default-content (first (:rum/args state))]
-                   (reset! edit-content default-content)
-                   state))}
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
@@ -42,7 +38,8 @@
     (if (and edit? (= uuid (:uuid edit-journal)))
       (editor-box content)
       [:div.flex-1 {:on-click (fn []
-                                (handler/edit-journal! content journal))
+                                (handler/edit-journal! content journal)
+                                (reset! edit-content content))
                     :style {:padding 8
                             :min-height 200}}
        (util/raw-html (format/to-html content "org"))])))

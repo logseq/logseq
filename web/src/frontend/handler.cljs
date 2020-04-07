@@ -284,11 +284,12 @@
 
 (defn load-repo-to-db!
   [repo-url]
-  (load-all-contents! repo-url
-                      (fn []
-                        (let [headings (db/extract-all-headings repo-url)]
-                          (reset! headings-atom headings)
-                          (db/reset-headings! repo-url headings)))))
+  (load-all-contents!
+   repo-url
+   (fn []
+     (let [headings (db/extract-all-headings repo-url)]
+       (reset! headings-atom headings)
+       (db/reset-headings! repo-url headings)))))
 
 
 ;; (defn sync
