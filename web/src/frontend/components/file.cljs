@@ -7,6 +7,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.ui :as ui]
             [frontend.format :as format]
+            [frontend.components.content :as content]
             [goog.crypt.base64 :as b64]))
 
 (defn- get-path
@@ -17,29 +18,32 @@
     [encoded-path decoded-path]))
 
 (rum/defcs file <
-  {:did-mount (fn [state]
-                (doseq [block (-> (js/document.querySelectorAll "pre code")
-                                  (array-seq))]
-                  (js/hljs.highlightBlock block))
-                state)}
-  [state content]
-  (let [content (db/get-file (last (get-path state)))
-        [encoded-path path] (get-path state)
-        suffix (last (string/split path #"\."))]
+
+  [state]
+  (let [[encoded-path path] (get-path state)
+        suffix (keyword (string/lower-case (last (string/split path #"\."))))]
     (sidebar/sidebar
-     (if (and suffix (contains? #{"md" "markdown" "org"} suffix))
+     (cond
+       (and suffix (contains? #{:md :markdown :org} suffix))
        [:div.content
         [:a {:href (str "/file/" encoded-path "/edit")}
          "edit"]
-        (cond
-          (string/blank? content)
-          [:span]
+        (let [content (db/get-file (last (get-path state)))]
+          (cond
+            (string/blank? content)
+            [:span]
 
-          content
-          (util/raw-html (format/to-html content suffix))
+            content
+            (content/html content suffix)
 
-          :else
-          "Loading ...")]
+            :else
+            "Loading ..."))]
+
+       ;; image type
+       (and suffix (contains? #{:png :jpg :jpeg} suffix))
+       (content/html [:img.img-local {:id encoded-path}] suffix)
+
+       :else
        [:div "File " suffix " is not supported."]))))
 
 (defn- count-newlines

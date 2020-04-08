@@ -15,6 +15,11 @@
   (js/pfs.readFile (str dir "/" path)
                    (clj->js {:encoding "utf8"})))
 
+(defn read-file-2
+  [dir path]
+  (js/pfs.readFile (str dir "/" path)
+                   (clj->js {})))
+
 (defn write-file
   [dir path content]
   (js/pfs.writeFile (str dir "/" path) content))
@@ -33,3 +38,7 @@
     (fn [error]
       (write-file dir path initial-content)
       false))))
+
+(comment
+  (def dir "/notes")
+  )

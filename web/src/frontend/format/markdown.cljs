@@ -7,4 +7,7 @@
 (defrecord Markdown [content]
   protocol/Format
   (toHtml [this]
+    (.makeHtml converter content))
+  (toHtml [this config]
+    ;; TODO:
     (.makeHtml converter content)))

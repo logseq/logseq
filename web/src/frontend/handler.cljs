@@ -14,9 +14,11 @@
             [reitit.frontend.easy :as rfe]
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]
+            [goog.dom :as gdom]
             [rum.core :as rum]
             [datascript.core :as d]
-            [frontend.utf8 :as utf8])
+            [frontend.utf8 :as utf8]
+            [frontend.image :as image])
   (:import [goog.events EventHandler]))
 
 ;; We only support Github token now
@@ -41,6 +43,7 @@
                  (fn [files]
                    (when (> (count files) 0)
                      (let [files (js->clj files)]
+                       ;; FIXME: don't load blobs
                        (if (contains? (set files) config/hidden-file)
                          (load-file repo-url config/hidden-file
                                     (fn [patterns-content]
@@ -75,6 +78,7 @@
     (util/p-handle
      (git/pull repo-url token)
      (fn [result]
+       (prn "pull successfully!")
        (get-latest-commit
         (fn [commit]
           (when (or (nil? @latest-commit)
@@ -269,9 +273,22 @@
                            "DONE rollbacks to TODO."
                            content')))))))
 
+(defn remove-non-text-files
+  [files]
+  (remove
+   (fn [file]
+     (not (contains?
+           #{"org"
+             "md"
+             "markdown"
+             "txt"}
+           (string/lower-case (last (string/split file #"\."))))))
+   files))
+
 (defn load-all-contents!
   [repo-url ok-handler]
-  (let [files (db/get-repo-files repo-url)]
+  (let [files (db/get-repo-files repo-url)
+        files (remove-non-text-files files)]
     (-> (p/all (for [file files]
                  (load-file repo-url file
                             (fn [content]
@@ -394,7 +411,8 @@
 (defn periodically-pull-and-push
   [repo-url]
   (periodically-pull repo-url)
-  (periodically-push-tasks repo-url))
+  ;; (periodically-push-tasks repo-url)
+  )
 
 (defn set-state-kv!
   [key value]
@@ -436,6 +454,31 @@
         (set-state-kv! :latest-journals (db/get-latest-journals {:content new-content}))
         (alter-file path "Auto save" new-content false)))))
 
+(defn render-local-images!
+  []
+  (prn "re-render images"
+       (count (array-seq (gdom/getElementsByClass "img-local"))))
+  (doseq [img (array-seq (gdom/getElementsByClass "img-local"))]
+    (prn {:img img})
+    (let [id (gobj/get img "id")
+          path (b64/decodeString id)]
+      (util/p-handle
+       (fs/read-file-2 (git/get-repo-dir (db/get-current-repo))
+                       path)
+       (fn [blob]
+         (let [blob (js/Blob. (array blob) (clj->js {:type "image/png"}))
+               img-url (image/create-object-url blob)
+               element (gdom/getElement id)]
+           (gobj/set element "src" img-url)))))))
+
+;; FIXME:
+(defn set-username-email
+  []
+  (git/set-username-email
+   (git/get-repo-dir (db/get-current-repo))
+   "Tienson Qin"
+   "tiensonqin@gmail.com"))
+
 (defn start!
   []
   (db/restore!)
@@ -445,5 +488,12 @@
   (let [repos (db/get-repos)]
     (doseq [repo repos]
       (create-month-journal-if-not-exists repo)
-      ;; (periodically-pull-and-push repo)
-      )))
+      (periodically-pull-and-push repo))))
+
+(comment
+  (util/p-handle (fs/read-file (git/get-repo-dir (db/get-current-repo)) "test.org")
+                 (fn [content]
+                   (prn content)))
+
+  (pull (db/get-current-repo) (db/get-github-token))
+  )

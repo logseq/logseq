@@ -10,7 +10,8 @@
             [frontend.state :as state]
             [frontend.format.org-mode :as org]
             [goog.object :as gobj]
-            [frontend.image :as image]))
+            [frontend.image :as image]
+            [frontend.components.content :as content]))
 
 (def edit-content (atom ""))
 (rum/defc editor-box <
@@ -64,7 +65,10 @@
 
 (defn- split-heading-body
   [content]
-  (split-first #"\n" content))
+  (let [result (split-first #"\n" content)]
+    (if (= 1 (count result))
+      [result ""]
+      result)))
 
 (rum/defc journal-cp < rum/reactive
   [{:keys [uuid title content] :as journal}]
@@ -81,8 +85,10 @@
                           (reset! edit-content content))
               :style {:padding 8
                       :min-height 200}}
-        (util/raw-html (format/to-html content "org"
-                                       org/config-with-line-break))])]))
+        (if (or (not content)
+                (string/blank? content))
+          [:div]
+          (content/html content "org"))])]))
 
 (rum/defcs journals < rum/reactive
   {:will-mount (fn [state]

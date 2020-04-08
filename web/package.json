@@ -14,7 +14,7 @@
   "dependencies": {
     "browserfs": "^1.4.3",
     "dev": "^0.1.3",
-    "isomorphic-git": "^1.1.2",
+    "isomorphic-git": "^1.3.1",
     "mldoc_org": "^0.2.6",
     "purgecss": "^2.1.0",
     "react": "^16.12.0",

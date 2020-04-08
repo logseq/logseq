@@ -65,6 +65,17 @@
    (fn [orientation]
      (fix-orientation img orientation cb max-width max-height))))
 
+(defn create-object-url
+  [file]
+  (.createObjectURL (or (.-URL js/window)
+                        (.-webkitURL js/window))
+                    file))
+
+;; (defn build-image
+;;   []
+;;   (let [img (js/Image.)]
+;;     ))
+
 (defn upload
   [files file-cb & {:keys [max-width max-height]
                     :or {max-width 1920
@@ -87,6 +98,4 @@
                                    max-width
                                    max-height)))
           (set! (.-src img)
-                (.createObjectURL (or (.-URL js/window)
-                                      (.-webkitURL js/window))
-                                  file)))))))
+                (create-object-url file)))))))

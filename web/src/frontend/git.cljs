@@ -10,6 +10,23 @@
   {:username token
    :password "x-oauth-basic"})
 
+(defn set-username-email
+  [dir username email]
+  (prn {:dir dir
+        :username username
+        :email email})
+  (util/p-handle (js/git.config (clj->js
+                   {:dir dir
+                    :path "user.name"
+                    :value username}))
+                 (fn [result]
+                   (js/git.config (clj->js
+                                   {:dir dir
+                                    :path "user.email"
+                                    :value email})))
+                 (fn [error]
+                   (prn "error:" error))))
+
 (defn with-auth
   [token m]
   (clj->js

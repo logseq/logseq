@@ -7,10 +7,10 @@
   ([content suffix]
    (to-html content suffix nil))
   ([content suffix config]
-   (when-let [record (case suffix
-                       "org"
+   (when-let [record (case (keyword suffix)
+                       :org
                        (->OrgMode content)
-                       (list "md" "markdown")
+                       (list :md :markdown)
                        (->Markdown content)
                        nil)]
      (if config
