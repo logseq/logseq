@@ -456,20 +456,26 @@
 
 (defn render-local-images!
   []
-  (prn "re-render images"
-       (count (array-seq (gdom/getElementsByClass "img-local"))))
-  (doseq [img (array-seq (gdom/getElementsByClass "img-local"))]
-    (prn {:img img})
-    (let [id (gobj/get img "id")
-          path (b64/decodeString id)]
-      (util/p-handle
-       (fs/read-file-2 (git/get-repo-dir (db/get-current-repo))
-                       path)
-       (fn [blob]
-         (let [blob (js/Blob. (array blob) (clj->js {:type "image/png"}))
-               img-url (image/create-object-url blob)
-               element (gdom/getElement id)]
-           (gobj/set element "src" img-url)))))))
+  (let [images (array-seq (gdom/getElementsByTagName "img"))
+        get-src (fn [image] (.getAttribute image "src"))
+        local-images (filter
+                      (fn [image]
+                        (let [src (get-src image)]
+                          (not (or (string/starts-with? src "http://")
+                                   (string/starts-with? src "https://")))))
+                      images)]
+    (doseq [img local-images]
+      (let [path (get-src img)
+            path (if (= (first path) \.)
+                   (subs path 1)
+                   path)]
+        (util/p-handle
+         (fs/read-file-2 (git/get-repo-dir (db/get-current-repo))
+                         path)
+         (fn [blob]
+           (let [blob (js/Blob. (array blob) (clj->js {:type "image"}))
+                 img-url (image/create-object-url blob)]
+             (gobj/set img "src" img-url))))))))
 
 ;; FIXME:
 (defn set-username-email

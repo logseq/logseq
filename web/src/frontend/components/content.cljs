@@ -18,7 +18,6 @@
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
-                 (prn "did update")
                  (highlight!)
                  state)}
   [content format]
