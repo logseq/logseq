@@ -134,3 +134,10 @@
                                  :year "numeric"
                                  :day "numeric"
                                  :weekday "long"})))
+
+(defn year-month-day-concat
+  []
+  (let [{:keys [year month day]} (get-date)
+        month (if (< month 10) (str "0" month) month)
+        day (if (< day 10) (str "0" day) day)]
+    (str year "_" month "_" day)))

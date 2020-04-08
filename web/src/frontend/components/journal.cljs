@@ -8,14 +8,15 @@
             [frontend.mixins :as mixins]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.format.org-mode :as org]))
+            [frontend.format.org-mode :as org]
+            [goog.object :as gobj]
+            [frontend.image :as image]))
 
 (def edit-content (atom ""))
 (rum/defc editor-box <
   (mixins/event-mixin
    (fn [state]
      (let [heading (first (:rum/args state))]
-       (prn "heading: " heading)
        (mixins/hide-when-esc-or-outside
         state
         nil
@@ -33,7 +34,30 @@
      :style {:border "none"
              :border-radius 0
              :background "transparent"
-             :margin-top 12.5}})])
+             :margin-top 12.5}})
+   [:input
+    {:id "files"
+     :type "file"
+     :on-change (fn [e]
+                  (let [files (.-files (.-target e))]
+                    (image/upload
+                     files
+                     (fn [file file-form-data file-name file-type]
+                       ;; TODO: set uploading
+                       (.append file-form-data "name" file-name)
+                       (.append file-form-data file-type true)
+
+                       ;; (citrus/dispatch!
+                       ;;  :image/upload
+                       ;;  file-form-data
+                       ;;  (fn [url]
+                       ;;    (reset! uploading? false)
+                       ;;    (swap! form assoc name url)
+                       ;;    (if on-uploaded
+                       ;;      (on-uploaded form name url))))
+                       ))))
+     ;; :hidden true
+     }]])
 
 (defn split-first [re s]
   (clojure.string/split s re 2))
