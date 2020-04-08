@@ -7,20 +7,23 @@
             [frontend.format :as format]
             [frontend.mixins :as mixins]
             [frontend.db :as db]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.format.org-mode :as org]))
 
 (def edit-content (atom ""))
 (rum/defc editor-box <
   (mixins/event-mixin
    (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      nil
-      :show-fn (fn []
-                 (:edit? @state/state))
-      :on-hide (fn []
-                 (handler/save-current-edit-journal! @edit-content)))))
-  [content]
+     (let [heading (first (:rum/args state))]
+       (prn "heading: " heading)
+       (mixins/hide-when-esc-or-outside
+        state
+        nil
+        :show-fn (fn []
+                   (:edit? @state/state))
+        :on-hide (fn []
+                   (handler/save-current-edit-journal! (str heading "\n" @edit-content)))))))
+  [heading content]
   [:div.flex-1
    (ui/textarea-autosize
     {:on-change (fn [e]
@@ -32,17 +35,30 @@
              :background "transparent"
              :margin-top 12.5}})])
 
+(defn split-first [re s]
+  (clojure.string/split s re 2))
+
+(defn- split-heading-body
+  [content]
+  (split-first #"\n" content))
+
 (rum/defc journal-cp < rum/reactive
-  [{:keys [uuid _title content] :as journal}]
-  (let [{:keys [edit? edit-journal]} (rum/react state/state)]
-    (if (and edit? (= uuid (:uuid edit-journal)))
-      (editor-box content)
-      [:div.flex-1 {:on-click (fn []
-                                (handler/edit-journal! content journal)
-                                (reset! edit-content content))
-                    :style {:padding 8
-                            :min-height 200}}
-       (util/raw-html (format/to-html content "org"))])))
+  [{:keys [uuid title content] :as journal}]
+  (let [{:keys [edit? edit-journal]} (rum/react state/state)
+        [heading content] (split-heading-body content)]
+    [:div.flex-1
+     [:h1.text-gray-600 {:style {:font-weight "450"}}
+      title]
+
+     (if (and edit? (= uuid (:uuid edit-journal)))
+       (editor-box heading content)
+       [:div {:on-click (fn []
+                          (handler/edit-journal! content journal)
+                          (reset! edit-content content))
+              :style {:padding 8
+                      :min-height 200}}
+        (util/raw-html (format/to-html content "org"
+                                       org/config-with-line-break))])]))
 
 (rum/defcs journals < rum/reactive
   {:will-mount (fn [state]
@@ -50,7 +66,7 @@
                  state)}
   [state]
   (let [{:keys [latest-journals]} (rum/react state/state)]
-    [:div#journals.content
+    [:div#journals
      (for [journal latest-journals]
-       [:div.journal {:key (cljs.core/random-uuid)}
+       [:div.journal.content {:key (cljs.core/random-uuid)}
         (journal-cp journal)])]))

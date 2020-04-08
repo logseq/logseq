@@ -257,3 +257,22 @@ textarea {
 .content p, .content div {
     word-break: break-word;
 }
+
+#journals .journal:first-child {
+    border-top: none;
+    min-height: 500px;
+}
+
+#journals .journal {
+    border-top: 1px solid #738694;
+    padding: 48px 0;
+    margin: 24px 0 48px 0;
+}
+
+#journals {
+    margin-bottom: 300px;
+}
+
+p {
+    line-height: 1.5;
+}

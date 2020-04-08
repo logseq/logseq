@@ -4,21 +4,32 @@
             [frontend.util :as util]
             [clojure.string :as string]))
 
-(def config
+(def default-config
   (js/JSON.stringify
    #js {:toc false
-        :heading_number false}))
+        :heading_number false
+        :keep_line_break false}))
+
+(def config-with-line-break
+  (js/JSON.stringify
+   #js {:toc false
+        :heading_number false
+        :keep_line_break true}))
 
 (def Org (.-MldocOrg org))
 
 (defrecord OrgMode [content]
   protocol/Format
   (toHtml [this]
+    (.parseHtml Org content default-config))
+  (toHtml [this config]
     (.parseHtml Org content config)))
 
 (defn parse-json
-  [content]
-  (.parseJson Org content))
+  ([content]
+   (parse-json content default-config))
+  ([content config]
+   (.parseJson Org content config)))
 
 (defn ->clj
   [content]
@@ -34,4 +45,4 @@
 
 (defn json->html
   [json]
-  (.jsonToHtmlStr Org json config))
+  (.jsonToHtmlStr Org json default-config))
