@@ -120,13 +120,10 @@
 
 (defn on-scroll
   [on-load]
-  (let [scroll-top (get-scroll-top)
-        scrolled-bottom (+ scrolled viewport-height)
-        bottom-reached? (>= scrolled-bottom (- full-height 500))]
-    (let [scroll-top (get-scroll-top)]
-      ;; TODO: set scroll top
-      (prn "scroll top: " scroll-top)
-      )
+  (let [node (main-node)
+        full-height (gobj/get node "scrollHeight")
+        scroll-top (gobj/get node "scrollTop")
+        bottom-reached? (>= (- full-height scroll-top 300) 0)]
     (when bottom-reached?
       (on-load))))
 
@@ -135,9 +132,7 @@
   [state]
   (let [opts (-> state :rum/args second)
         debounced-on-scroll (util/debounce 500 #(on-scroll (:on-load opts)))]
-    ;; (mixins/listen state js/window :scroll debounced-on-scroll)
-    (mixins/listen state (main-node) :scroll debounced-on-scroll)
-    ))
+    (mixins/listen state (main-node) :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)

@@ -102,4 +102,4 @@
         [:div.journal.content {:key (cljs.core/random-uuid)}
          (journal-cp journal)])
       {:on-load (fn []
-                  (prn "load more"))})]))
+                  (handler/load-more-journals!))})]))

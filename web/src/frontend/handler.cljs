@@ -502,6 +502,17 @@
    "Tienson Qin"
    "tiensonqin@gmail.com"))
 
+(defn load-more-journals!
+  []
+  (let [journals (:latest-journals @state/state)]
+    (when-let [title (:title (last journals))]
+     (let [before-date (last (string/split title #", "))
+           more-journals (->> (db/get-latest-journals {:before-date before-date
+                                                       :days 4})
+                              (drop 1))
+           journals (concat journals more-journals)]
+       (set-state-kv! :latest-journals journals)))))
+
 (defn start!
   []
   (db/restore!)
