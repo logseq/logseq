@@ -6,7 +6,8 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [goog.dom :as gdom]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -108,3 +109,39 @@
   [:span.inline-flex.items-center.px-2.5.py-0.5.rounded-full.text-xs.font-medium.leading-4.bg-purple-100.text-purple-800
    option
    text])
+
+;; scroll
+(defn main-node
+  []
+  (first (array-seq (js/document.querySelectorAll "main"))))
+
+(defn get-scroll-top []
+  (.-scrollTop (main-node)))
+
+(defn on-scroll
+  [on-load]
+  (let [scroll-top (get-scroll-top)
+        scrolled-bottom (+ scrolled viewport-height)
+        bottom-reached? (>= scrolled-bottom (- full-height 500))]
+    (let [scroll-top (get-scroll-top)]
+      ;; TODO: set scroll top
+      (prn "scroll top: " scroll-top)
+      )
+    (when bottom-reached?
+      (on-load))))
+
+(defn attach-listeners
+  "Attach scroll and resize listeners."
+  [state]
+  (let [opts (-> state :rum/args second)
+        debounced-on-scroll (util/debounce 500 #(on-scroll (:on-load opts)))]
+    ;; (mixins/listen state js/window :scroll debounced-on-scroll)
+    (mixins/listen state (main-node) :scroll debounced-on-scroll)
+    ))
+
+(rum/defcs infinite-list <
+  (mixins/event-mixin attach-listeners)
+  "Render an infinite list."
+  [state body {:keys [on-load]
+               :as opts}]
+  body)

@@ -336,17 +336,27 @@
                (fn [error]
                  (prn "Get token failed, error: " error)))))
 
+;; org-journal format, something like `* Tuesday, 06/04/13`
+(defn default-month-journal-content
+  []
+  (let [{:keys [year month day]} (util/get-date)
+        last-day (util/get-month-last-day)
+        month-pad (if (< month 10) (str "0" month) month)]
+    (->> (map
+           (fn [day]
+             (let [day-pad (if (< day 10) (str "0" day) day)
+                   weekday (util/get-weekday (js/Date. year (dec month) (dec day)))]
+               (util/format "* %s, %s/%s/%d\n\n" weekday month-pad day-pad year)))
+           (range 1 (inc last-day)))
+         (apply str))))
+
 ;; journals
 (defn create-month-journal-if-not-exists
   [repo-url]
   (let [repo-dir (git/get-repo-dir repo-url)
         path (util/current-journal-path)
-        {:keys [year month day weekday]} (util/get-date)
         file-path (str "/" path)
-        ;; org-journal format, something like `* Tuesday, 06/04/13`
-        month (if (< month 10) (str "0" month) month)
-        day (if (< day 10) (str "0" day) day)
-        default-content (util/format "* %s, %s/%s/%d\n" weekday month day year)]
+        default-content (default-month-journal-content)]
     (->
      (util/p-handle
       (fs/mkdir (str repo-dir "/journals"))
@@ -450,7 +460,6 @@
       (let [path (:file-path edit-journal)
             current-journals (db/get-file path)
             new-content (utf8/insert! current-journals start-pos end-pos edit-content)]
-        (prn {:new-content new-content})
         (set-state-kv! :latest-journals (db/get-latest-journals {:content new-content}))
         (alter-file path "Auto save" new-content false)))))
 

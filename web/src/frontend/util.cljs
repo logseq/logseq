@@ -113,19 +113,27 @@
        (.then bean/->clj)
        (.then #(on-ok %)))))
 
+(defn get-weekday
+  [date]
+  (.toLocaleString date "en-us" (clj->js {:weekday "long"})))
+
 (defn get-date
   []
   (let [date (js/Date.)]
     {:year (.getFullYear date)
      :month (inc (.getMonth date))
      :day (.getDate date)
-     :weekday (.toLocaleString date "en-us" (clj->js {:weekday "long"}))}))
+     :weekday (get-weekday date)}))
+
+(defn journals-path
+  [year month]
+  (let [month (if (< month 10) (str "0" month) month)]
+    (str "journals/" year "_" month ".org")))
 
 (defn current-journal-path
   []
-  (let [{:keys [year month]} (get-date)
-        month (if (< month 10) (str "0" month) month)]
-    (str "journals/" year "_" month ".org")))
+  (let [{:keys [year month]} (get-date)]
+    (journals-path year month)))
 
 (defn today
   []
@@ -135,9 +143,42 @@
                                  :day "numeric"
                                  :weekday "long"})))
 
-(defn year-month-day-concat
+(defn zero-pad
+  [n]
+  (if (< n 10)
+    (str "0" n)
+    (str n)))
+
+(defn year-month-day-padded
   []
-  (let [{:keys [year month day]} (get-date)
-        month (if (< month 10) (str "0" month) month)
-        day (if (< day 10) (str "0" day) day)]
-    (str year "_" month "_" day)))
+  (let [{:keys [year month day]} (get-date)]
+    {:year year
+     :month (zero-pad month)
+     :day (zero-pad day)}))
+
+(defn get-month-last-day
+  []
+  (let [today (js/Date.)
+        date (js/Date. (.getFullYear today) (inc (.getMonth today)) 0)]
+    (.getDate date)))
+
+(defn parse-int
+  [x]
+  (if (string? x)
+    (js/parseInt x)
+    x))
+
+(defn debounce
+  "Returns a function that will call f only after threshold has passed without new calls
+  to the function. Calls prep-fn on the args in a sync way, which can be used for things like
+  calling .persist on the event object to be able to access the event attributes in f"
+  ([threshold f] (debounce threshold f (constantly nil)))
+  ([threshold f prep-fn]
+   (let [t (atom nil)]
+     (fn [& args]
+       (when @t (js/clearTimeout @t))
+       (apply prep-fn args)
+       (reset! t (js/setTimeout #(do
+                                   (reset! t nil)
+                                   (apply f args))
+                                threshold))))))

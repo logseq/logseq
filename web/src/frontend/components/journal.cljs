@@ -97,6 +97,9 @@
   [state]
   (let [{:keys [latest-journals]} (rum/react state/state)]
     [:div#journals
-     (for [journal latest-journals]
-       [:div.journal.content {:key (cljs.core/random-uuid)}
-        (journal-cp journal)])]))
+     (ui/infinite-list
+      (for [journal latest-journals]
+        [:div.journal.content {:key (cljs.core/random-uuid)}
+         (journal-cp journal)])
+      {:on-load (fn []
+                  (prn "load more"))})]))

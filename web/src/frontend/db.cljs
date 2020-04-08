@@ -399,36 +399,74 @@
   []
   (get-file (util/current-journal-path)))
 
+(defn get-month-journals
+  [journal-path content before-date days]
+  (let [[month day year] (string/split before-date #"/")
+        day' (util/zero-pad (inc (util/parse-int day)))
+        before-date (string/join "/" [month day' year])
+        content-arr (utf8/encode content)
+        end-pos (utf8/length content-arr)
+        blocks (reverse (org/->clj content))
+        headings (some->>
+                  blocks
+                  (filter (fn [block]
+                            (and
+                             (block/heading-block? block)
+
+                             (= 1 (:level (second block)))
+
+                             (let [[_ {:keys [title meta]}] block]
+                               (when-let [title (last (first title))]
+                                 (let [date (last (string/split title #", "))]
+                                   (<= (compare date before-date) 0)))))))
+                  (map (fn [[_ {:keys [title meta]}]]
+                         {:title (last (first title))
+                          :file-path journal-path
+                          :start-pos (:pos meta)}))
+                  (take (inc days)))
+        [_ journals] (reduce (fn [[last-end-pos acc] heading]
+                               (let [end-pos last-end-pos
+                                     acc (conj acc (assoc heading
+                                                          :uuid (cljs.core/random-uuid)
+                                                          :end-pos end-pos
+                                                          :content (utf8/substring content-arr
+                                                                                   (:start-pos heading)
+                                                                                   end-pos)))]
+                                 [(:start-pos heading) acc])) [end-pos []] headings)]
+    (if (> (count journals) days)
+      (drop 1 journals)
+      journals)))
+
+(defn- compute-journal-path
+  [before-date]
+  (let [[month day year] (->> (string/split before-date #"/")
+                              (mapv util/parse-int))
+        [year month] (cond
+                       (and (= month 1)
+                            (= day 1))
+                       [(dec year) 12]
+
+                       (= day 1)
+                       [year (dec month)]
+
+                       :else
+                       [year month])]
+    (util/journals-path year month)))
+
+;; before-date should be a string joined with "/", like "month/day/year"
 (defn get-latest-journals
   ([]
    (get-latest-journals {}))
-  ([{:keys [days content]
-     :or {days 7}}]
-   (when-let [content (or content (get-current-journal))]
-    (let [journal-path (util/current-journal-path)
-          content-arr (utf8/encode content)
-          end-pos (utf8/length content-arr)
-          blocks (reverse (org/->clj content))
-          headings (some->>
-                    blocks
-                    (filter (fn [block]
-                              (and (block/heading-block? block)
-                                   (= 1 (:level (second block))))))
-                    (map (fn [[_ {:keys [title meta]}]]
-                           {:title (last (first title))
-                            :file-path journal-path
-                            :start-pos (:pos meta)}))
-                    (take days))
-          [_ journals] (reduce (fn [[last-end-pos acc] heading]
-                                 (let [end-pos last-end-pos
-                                       acc (conj acc (assoc heading
-                                                            :uuid (cljs.core/random-uuid)
-                                                            :end-pos end-pos
-                                                            :content (utf8/substring content-arr
-                                                                                     (:start-pos heading)
-                                                                                     end-pos)))]
-                                   [(:start-pos heading) acc])) [end-pos []] headings)]
-      journals))))
+  ([{:keys [content before-date days]
+     :or {days 3}}]
+   (let [before-date (if before-date
+                       before-date
+                       (let [{:keys [year month day]} (util/year-month-day-padded)]
+                         (string/join "/" [month day year])))
+
+         journal-path (compute-journal-path before-date)]
+     (when-let [content (or content (get-file journal-path))]
+       (get-month-journals journal-path content before-date days)))))
 
 (comment
   (d/transact! conn [{:db/id -1

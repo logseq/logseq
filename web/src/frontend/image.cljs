@@ -2,7 +2,8 @@
   (:require [goog.object :as gobj]
             [frontend.blob :as blob]
             ["/frontend/exif" :as exif]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [clojure.string :as string]))
 
 (defn reverse?
   [exif-orientation]
@@ -82,8 +83,9 @@
                          max-height 1080}}]
   (doseq [file (array-seq files)]
     (let [file-type (gobj/get file "type")
-          file-name (str (util/year-month-day-concat) "_"
-                     (gobj/get file "name"))]
+          ymd (->> (vals (util/year-month-day-padded))
+                   (string/join "_"))
+          file-name (str ymd "_" (gobj/get file "name"))]
       (if (= 0 (.indexOf type "image/"))
         (let [img (js/Image.)]
           (set! (.-onload img)
