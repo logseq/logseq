@@ -88,7 +88,7 @@
         (if (or (not content)
                 (string/blank? content))
           [:div]
-          (content/html content "org"))])]))
+          (content/html content "org" org/config-with-line-break))])]))
 
 (rum/defcs journals < rum/reactive
   {:will-mount (fn [state]

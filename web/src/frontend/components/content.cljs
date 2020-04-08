@@ -14,15 +14,14 @@
 (rum/defc html <
   {:did-mount (fn [state]
                 (highlight!)
-
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (highlight!)
                  state)}
-  [content format]
+  [content format config]
   (case format
     (list :png :jpg :jpeg)
     content
     (util/raw-html (format/to-html content format
-                                   org/config-with-line-break))))
+                                   config))))

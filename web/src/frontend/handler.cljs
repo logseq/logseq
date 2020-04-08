@@ -461,10 +461,16 @@
         local-images (filter
                       (fn [image]
                         (let [src (get-src image)]
-                          (not (or (string/starts-with? src "http://")
-                                   (string/starts-with? src "https://")))))
+                          (and src
+                               (not (or (string/starts-with? src "http://")
+                                        (string/starts-with? src "https://"))))))
                       images)]
     (doseq [img local-images]
+      (gobj/set img
+                "onerror"
+                (fn []
+                  (gobj/set (gobj/get img "style")
+                            "display" "none")))
       (let [path (get-src img)
             path (if (= (first path) \.)
                    (subs path 1)
@@ -475,7 +481,9 @@
          (fn [blob]
            (let [blob (js/Blob. (array blob) (clj->js {:type "image"}))
                  img-url (image/create-object-url blob)]
-             (gobj/set img "src" img-url))))))))
+             (gobj/set img "src" img-url)
+             (gobj/set (gobj/get img "style")
+                       "display" "initial"))))))))
 
 ;; FIXME:
 (defn set-username-email

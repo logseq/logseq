@@ -7,6 +7,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.ui :as ui]
             [frontend.format :as format]
+            [frontend.format.org-mode :as org]
             [frontend.components.content :as content]
             [goog.crypt.base64 :as b64]))
 
@@ -18,7 +19,6 @@
     [encoded-path decoded-path]))
 
 (rum/defcs file <
-
   [state]
   (let [[encoded-path path] (get-path state)
         suffix (keyword (string/lower-case (last (string/split path #"\."))))]
@@ -34,17 +34,17 @@
             [:span]
 
             content
-            (content/html content suffix)
+            (content/html content suffix org/default-config)
 
             :else
             "Loading ..."))]
 
        ;; image type
        (and suffix (contains? #{:png :jpg :jpeg} suffix))
-       (content/html [:img.img-local {:id encoded-path}] suffix)
+       (content/html [:img {:src path}] suffix org/default-config)
 
        :else
-       [:div "File " suffix " is not supported."]))))
+       [:div "Format ." (name suffix) " is not supported."]))))
 
 (defn- count-newlines
   [s]
