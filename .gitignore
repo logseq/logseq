@@ -1,4 +1,17 @@
-node_modules/
+/target
+/classes
+/checkouts
+profiles.clj
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+/.lein-*
+/.nrepl-port
+.hgignore
+.hg/
+
+web/node_modules/
 web/public/js/main.js
 
 /.cpcache
@@ -6,19 +19,10 @@ web/public/js/main.js
 /checkouts
 /src/gen
 
-pom.xml
-pom.xml.asc
 *.iml
-*.jar
 *.log
 .shadow-cljs
 .idea
 .lein-*
 .nrepl-*
 .DS_Store
-
-.hgignore
-.hg/
-
-.now
-.env
