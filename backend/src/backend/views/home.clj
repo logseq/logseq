@@ -10,7 +10,9 @@
      {:content
       "minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no",
       :name "viewport"}]
-    [:link {:type "text/css", :href "css/tailwind.min.css", :rel "stylesheet"}]
+    ;; [:link {:type "text/css", :href "css/tailwind.min.css", :rel "stylesheet"}]
+    [:link {:type "text/css", :href "https://cdn.jsdelivr.net/npm/@tailwindcss/ui@latest/dist/tailwind-ui.min.css", :rel "stylesheet"}]
+    [:link {:type "text/css", :href "css/org.css", :rel "stylesheet"}]
     [:link {:type "text/css", :href "css/style.css", :rel "stylesheet"}]
     [:link
      {:href
@@ -24,6 +26,5 @@
     [:script {:src "https://unpkg.com/isomorphic-git@0.78.5/dist/bundle.umd.min.js"}]
     [:script
      "window.fs = new LightningFS('logseq');git.plugins.set('fs', window.fs);window.pfs = window.fs.promises;"]
-    [:script {:src "https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.0.1/dist/alpine.js" :defer true}]
-    [:script {:src "/js/main.js"}]
-    [:script {:src "/js/highlight.pack.js"}]]))
+    [:script {:src "/js/highlight.pack.js"}]
+    [:script {:src "/js/main.js"}]]))

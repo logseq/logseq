@@ -5,8 +5,8 @@
 (defonce dev? ^boolean goog.DEBUG)
 (def website
   (if dev?
-    "http://localhost:8080"
-    "https://logseq.now.sh"))
+    "http://localhost:3000"
+    "https://logseq.com"))
 
 (def api
   (if dev?

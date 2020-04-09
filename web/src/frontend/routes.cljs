@@ -1,7 +1,6 @@
 (ns frontend.routes
   (:require [frontend.components.home :as home]
             [frontend.components.sidebar :as sidebar]
-            [frontend.components.auth :as auth]
             [frontend.components.repo :as repo]
             [frontend.components.file :as file]
             [frontend.components.agenda :as agenda]
@@ -11,9 +10,6 @@
   [["/"
     {:name :home
      :view home/home}]
-   ["/auth/github"
-    {:name :github-auth
-     :view auth/auth}]
 
    ["/repo/add"
     {:name :repo-add

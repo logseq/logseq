@@ -41,8 +41,7 @@
                                                :state (str (util/uuid))
                                                :scope "user:email,repo")
                     url (social/getAuthorizationUrl social)]
-                (resp/redirect url))
-              )}}]]
+                (resp/redirect url)))}}]]
    ["/auth"
     {:swagger {:tags ["Authenticate"]}}
 

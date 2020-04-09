@@ -161,8 +161,8 @@
 (defn new-notification
   [text]
   (js/Notification. "Logseq" #js {:body text
-                                    ;; :icon logo
-                                    }))
+                                  ;; :icon logo
+                                  }))
 
 (defn request-notifications
   []
@@ -315,26 +315,22 @@
 ;;     (doseq [repo repos]
 ;;       (pull repo token))))
 
+;; {:resp {:user {:name "tiensonqin", :email "tiensonqin@gmail.com", :id "2e3a6ebf-9ee6-40a8-8734-47f9f2697a1a", :created_at "2020-03-01T04:27:08Z"}, :tokens [{:user_id "2e3a6ebf-9ee6-40a8-8734-47f9f2697a1a", :oauth_token "", :id "203ca06a-0721-4322-b184-931c4c5f3dc3", :created_at "2020-03-01T04:27:08Z", :oauth_id "479169", :oauth_type "github"}], :repos [{:created_at "2020-03-01T04:27:43Z", :user_id "2e3a6ebf-9ee6-40a8-8734-47f9f2697a1a", :url "https://github.com/tiensonqin/notes", :id "0fcd3cfb-ce1f-4f9c-9d88-eecd8776777d"}]}}
+
+(defn- extract-github-token
+  [{:keys [user tokens repos]}]
+  (:oauth_token (first tokens)))
+
 (defn get-github-access-token
-  ([]
-   (util/fetch (str config/api "token/github")
-               (fn [resp]
-                 (if (:success resp)
-                   (db/transact-github-token! (get-in resp [:body :access_token]))
-                   (prn "Get token failed, error: " resp)))
-               (fn [error]
-                 (prn "Get token failed, error: " error))))
-  ([code]
-   (util/fetch (str config/api "oauth/github?code=" code)
-               (fn [resp]
-                 (if (:success resp)
-                   (do
-                     (db/transact-github-token! (get-in resp [:body :access_token]))
-                     ;; redirect to home
-                     (rfe/push-state :home))
-                   (prn "Get token failed, error: " resp)))
-               (fn [error]
-                 (prn "Get token failed, error: " error)))))
+  []
+  (util/fetch (str config/api "me")
+              (fn [resp]
+                (when-let [github-token (extract-github-token resp)]
+                  (prn {:github-token github-token})
+                  (db/transact-github-token! github-token)))
+              (fn [_error]
+                ;; (prn "Get token failed, error: " error)
+                )))
 
 ;; org-journal format, something like `* Tuesday, 06/04/13`
 (defn default-month-journal-content
@@ -506,12 +502,12 @@
   []
   (let [journals (:latest-journals @state/state)]
     (when-let [title (:title (last journals))]
-     (let [before-date (last (string/split title #", "))
-           more-journals (->> (db/get-latest-journals {:before-date before-date
-                                                       :days 4})
-                              (drop 1))
-           journals (concat journals more-journals)]
-       (set-state-kv! :latest-journals journals)))))
+      (let [before-date (last (string/split title #", "))
+            more-journals (->> (db/get-latest-journals {:before-date before-date
+                                                        :days 4})
+                               (drop 1))
+            journals (concat journals more-journals)]
+        (set-state-kv! :latest-journals journals)))))
 
 (defn start!
   []

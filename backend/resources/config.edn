@@ -1,5 +1,5 @@
 {:env #or [#env ENVIRONMENT "dev"]
- :port #or [#env PORT 8080]
+ :port #or [#env PORT 3000]
  :oauth {:github {:app-key #env GITHUB_APP_KEY
                   :app-secret #env GITHUB_APP_SECRET
                   :redirect-uri #env GITHUB_REDIRECT_URI}}

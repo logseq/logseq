@@ -8,5 +8,5 @@
 (def dev? (= "dev" (:env config)))
 (def test? (= "test" (:env config)))
 (def website-uri (if dev?
-                   "http://localhost:8080"
+                   "http://localhost:3000"
                    "https://logseq.com"))

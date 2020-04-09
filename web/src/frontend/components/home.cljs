@@ -26,7 +26,7 @@
           :src "/img/logo.png"}]]
        [:div
         [:a.text-sm.font-semibold.text-white.focus:outline-none.focus:underline
-         {:href (str config/api "login/github")}
+         {:href "/login/github"}
          "Login →"]]]]
      [:div.px-6.md:max-w-3xl.md:mx-auto.lg:mx-0.lg:max-w-none
       [:p.text-sm.font-semibold.text-gray-300.uppercase.tracking-wider
