@@ -1,7 +1,7 @@
 node_modules/
-public/static/js/cljs-runtime
-public/static/js/main.js
-public/static/js/manifest.edn
+public/js/cljs-runtime
+public/js/main.js
+public/js/manifest.edn
 
 /.cpcache
 /target

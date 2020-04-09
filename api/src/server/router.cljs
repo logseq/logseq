@@ -13,7 +13,7 @@
 ;; utils
 (def dev? ^boolean goog.DEBUG)
 
-(def cookie-domain (if dev? "" ".gitnotes.now.sh"))
+(def cookie-domain (if dev? "" ".logseq.now.sh"))
 
 (def cookie-options
   {:maxAge (* 1000 60 60 24 30)         ; 30 days

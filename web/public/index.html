@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no" name="viewport">
-    <!-- <link href="/static/css/tailwind.min.css" rel="stylesheet" type="text/css"> -->
+    <!-- <link href="/css/tailwind.min.css" rel="stylesheet" type="text/css"> -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tailwindcss/ui@latest/dist/tailwind-ui.min.css">
-    <link href="/static/css/org.css" rel="stylesheet">
-    <link href="/static/css/style.css" rel="stylesheet" type="text/css">
+    <link href="/css/org.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet" type="text/css">
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&amp;display=swap" rel="stylesheet">
-    <link href="/static/css/highlight.css" rel="stylesheet">
-    <title>Gitnotes</title>
+    <link href="/css/highlight.css" rel="stylesheet">
+    <title>Logseq</title>
   </head>
   <body>
     <div id="root"></div>
@@ -17,11 +17,11 @@
     </script>
     <script src="https://unpkg.com/isomorphic-git@0.78.5/dist/bundle.umd.min.js"></script>
     <script>
-      window.fs = new LightningFS('gitnotes');
+      window.fs = new LightningFS('logseq');
       git.plugins.set('fs', window.fs);
       window.pfs = window.fs.promises;
     </script>
-    <script src="/static/js/highlight.pack.js"></script>
-    <script src="/static/js/main.js"></script>
+    <script src="/js/highlight.pack.js"></script>
+    <script src="/js/main.js"></script>
   </body>
 </html>

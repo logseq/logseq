@@ -160,7 +160,7 @@
 
 (defn new-notification
   [text]
-  (js/Notification. "Gitnotes" #js {:body text
+  (js/Notification. "Logseq" #js {:body text
                                     ;; :icon logo
                                     }))
 

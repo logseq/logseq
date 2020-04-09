@@ -10,7 +10,7 @@
 
 ;; TODO: don't persistent :github/token
 
-(def datascript-db "gitnotes/DB")
+(def datascript-db "logseq/DB")
 (def schema
   {:db/ident        {:db/unique :db.unique/identity}
    :github/token    {}

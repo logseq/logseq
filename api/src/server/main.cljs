@@ -7,7 +7,7 @@
 (defonce server (atom nil))
 
 (defonce config
-  {:allowed-origins #{"http://localhost:8080" "https://gitnotes.now.sh"}})
+  {:allowed-origins #{"http://localhost:8080" "https://logseq.now.sh"}})
 
 (def cors-options
   {:origin (fn [origin callback]

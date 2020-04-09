@@ -209,15 +209,15 @@ dt { font-weight: bold; }
 
 /* scroll-bg */
 .scroll-background {
-    height: 400%; width: 400%; top: -25%; left: -100%; background-size: 800px auto; background-image: url('/static/img/hero-pattern-lg.png');
+    height: 400%; width: 400%; top: -25%; left: -100%; background-size: 800px auto; background-image: url('/img/hero-pattern-lg.png');
 }
 
 .angled-background {
-    background-image: url('/static/img/angled-background.svg'); background-size: 100% auto; background-position: -5px -5px;
+    background-image: url('/img/angled-background.svg'); background-size: 100% auto; background-position: -5px -5px;
 }
 
 .scroll-background-2 {
-    height: 800%; width: 400%; top: -100%; left: -100%; background-size: 400px auto; background-image: url('/static/img/hero-pattern-lg.png');
+    height: 800%; width: 400%; top: -100%; left: -100%; background-size: 400px auto; background-image: url('/img/hero-pattern-lg.png');
 }
 
 @-webkit-keyframes scrollSmall {0%{transform:rotate(-13deg) translateY(0)}to{transform:rotate(-13deg) translateY(-639px)}}

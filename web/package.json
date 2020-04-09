@@ -1,5 +1,5 @@
 {
-  "name": "gitnotes",
+  "name": "logseq",
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
@@ -9,7 +9,7 @@
     "watch": "npx shadow-cljs watch app",
     "release": "npx shadow-cljs release app",
     "server": "npx shadow-cljs server;",
-    "clean": "rm -rf target; rm -rf public/static/js/compiled; rm -rf public/static/js/cljs-runtime"
+    "clean": "rm -rf target; rm -rf public/js/compiled; rm -rf public/js/cljs-runtime"
   },
   "dependencies": {
     "browserfs": "^1.4.3",

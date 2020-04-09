@@ -90,8 +90,8 @@
               :stroke-linecap "round"}]]]])
        [:div.flex-shrink-0.flex.items-center.h-16.px-4.bg-gray-900
         [:img.h-8.w-auto
-         {:alt "Gitnotes",
-          :src "/static/img/logo.png"}]]
+         {:alt "Logseq",
+          :src "/img/logo.png"}]]
        [:div.flex-1.h-0.overflow-y-auto
         (sidebar-nav)]
        ]]
@@ -99,8 +99,8 @@
       [:div.flex.flex-col.w-64
        [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
         [:img.h-8.w-auto
-         {:alt "Gitnotes",
-          :src "/static/img/logo.png"}]]
+         {:alt "Logseq",
+          :src "/img/logo.png"}]]
        [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
         (sidebar-nav)]]]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden

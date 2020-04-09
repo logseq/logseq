@@ -6,9 +6,9 @@
 (def website
   (if dev?
     "http://localhost:8080"
-    "https://gitnotes.now.sh"))
+    "https://logseq.now.sh"))
 
 (def api
   (if dev?
-    "http://localhost:3000/api/"
-    (str website "/api/")))
+    "http://localhost:3000/api/v1/"
+    (str website "/api/v1/")))

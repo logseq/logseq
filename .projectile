@@ -5,5 +5,5 @@
 -/web/.cpcache
 -/web/.shadow-cljs/
 -/web/node_modules/
--/web/public/static/js/cljs-runtime/
--/web/public/static/js/main.js
+-/web/public/js/cljs-runtime/
+-/web/public/js/main.js
