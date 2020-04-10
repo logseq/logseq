@@ -11,7 +11,6 @@
         "shadow-cljs": "2.8.81"
     },
     "scripts": {
-        "heroku-postbuild": "./bin/build",
         "watch": "clj -A:cljs watch app",
         "release": "clj -A:cljs release app",
         "clean": "rm -rf target; rm -rf resources/public/js/compiled; rm -rf resources/public/js/cljs-runtime"
