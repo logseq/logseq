@@ -30,3 +30,4 @@ resources/static/style.css
 .lein-*
 .nrepl-*
 .DS_Store
+report.html

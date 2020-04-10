@@ -14,6 +14,7 @@
         "watch": "clojure -A:cljs watch app",
         "release": "clojure -A:cljs release app",
         "debug": "clojure -A:cljs release app --debug",
+        "report": "clojure -A:cljs run shadow.cljs.build-report app report.html",
         "clean": "rm -rf target; rm -rf resources/static/js/compiled; rm -rf resources/static/js/cljs-runtime"
     },
     "dependencies": {
