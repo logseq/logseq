@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 yarn install
 clojure -A:cljs release app
-clojure -A:uberdeps
+clojure -A:depstar -m hf.depstar.uberjar ./target/logseq.jar
