@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 yarn install
-yarn release
-clj -A:uberdeps
+clojure -A:cljs release app
+clojure -A:uberdeps
