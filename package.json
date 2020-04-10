@@ -1,7 +1,8 @@
 {
     "name": "logseq",
     "engines": {
-        "node": "12.16.x"
+        "node": "11.15.x",
+        "npm": "6.13.x"
     },
     "version": "0.0.1",
     "private": true,
