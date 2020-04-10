@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+yarn install
+yarn release
+clj -A:uberdeps

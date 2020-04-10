@@ -6,10 +6,9 @@
     "shadow-cljs": "2.8.81"
   },
   "scripts": {
-    "watch": "npx shadow-cljs watch app",
-    "release": "npx shadow-cljs release app",
-    "server": "npx shadow-cljs server;",
-    "clean": "rm -rf target; rm -rf public/js/compiled; rm -rf public/js/cljs-runtime"
+    "watch": "clj -A:cljs watch app",
+    "release": "clj -A:cljs release app",
+    "clean": "rm -rf target; rm -rf resources/public/js/compiled; rm -rf resources/public/js/cljs-runtime"
   },
   "dependencies": {
     "browserfs": "^1.4.3",

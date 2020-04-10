@@ -11,8 +11,10 @@ pom.xml.asc
 .hgignore
 .hg/
 
-web/node_modules/
-web/public/js/main.js
+node_modules/
+resources/public/js/main.js
+resources/public/js/cljs-runtime
+resources/public/js/manifest.edn
 
 /.cpcache
 /target

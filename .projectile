@@ -1,9 +1,8 @@
 -/.git
--/api/.cpcache
--/api/.shadow-cljs/
--/api/node_modules/
--/web/.cpcache
--/web/.shadow-cljs/
--/web/node_modules/
--/web/public/js/cljs-runtime/
--/web/public/js/main.js
+-/.cpcache
+-/.shadow-cljs/
+-/node_modules/
+-/.cpcache
+-/.shadow-cljs/
+-/resources/public/js/cljs-runtime/
+-/resources/public/js/main.js

@@ -1,18 +1,5 @@
 ;; shadow-cljs configuration
 {:deps     true
-
- ;; :dependencies
- ;; [[binaryage/devtools "0.9.10"]
- ;;  [cider/cider-nrepl "0.23.0-SNAPSHOT"]
-
- ;;  [rum "0.11.4"]
- ;;  [datascript "0.18.9"]
- ;;  [funcool/promesa "4.0.2"]
- ;;  [medley "1.2.0"]
- ;;  [metosin/reitit "0.3.10"]
- ;;  [metosin/reitit-spec "0.3.10"]
- ;;  [metosin/reitit-frontend "0.3.10"]]
-
  :nrepl        {:port 8701}
 
  :builds
@@ -20,7 +7,7 @@
   {:target :browser
    :modules {:main {:init-fn frontend.core/init}}
 
-   :output-dir "public/js"
+   :output-dir "resources/public/js"
    :asset-path "/js"
 
    :compiler-options {:infer-externs :auto
@@ -35,11 +22,4 @@
    {:before-load frontend.core/stop
     ;; after live-reloading finishes call this function
     :after-load frontend.core/start
-    ;; serve the public directory over http at port 8700
-                                        ;:http-root   "public"
-                                        ;:http-port   8700
-    ;; :http-root    "public"
-    ;; :http-port    8080
-    :preloads     [devtools.preload]}
-
-   }}}
+    :preloads     [devtools.preload]}}}}
