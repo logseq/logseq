@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 yarn install
+yarn global add clean-css-cli
+cleancss -o ./resources/static/style.css ./resources/static/css/style.css
 clojure -A:cljs release app
 clojure -A:uberjar

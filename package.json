@@ -14,9 +14,10 @@
         "watch": "clojure -A:cljs watch app",
         "release": "clojure -A:cljs release app",
         "debug": "clojure -A:cljs release app --debug",
-        "clean": "rm -rf target; rm -rf resources/public/js/compiled; rm -rf resources/public/js/cljs-runtime"
+        "clean": "rm -rf target; rm -rf resources/static/js/compiled; rm -rf resources/static/js/cljs-runtime"
     },
     "dependencies": {
+        "@tailwindcss/ui": "^0.1.3",
         "browserfs": "^1.4.3",
         "dev": "^0.1.3",
         "isomorphic-git": "^1.3.1",
