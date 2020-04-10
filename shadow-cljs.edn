@@ -7,7 +7,7 @@
   {:target :browser
    :modules {:main {:init-fn frontend.core/init}}
 
-   :output-dir "resources/public/js"
+   :output-dir "resources/static/js"
    :asset-path "/js"
 
    :compiler-options {:infer-externs :auto
@@ -15,8 +15,8 @@
    ;; TODO: purge-css not working properly
    ;; :build-hooks [(shadow.hooks/purge-css
    ;;                {:css-source "node_modules/tailwindcss/dist/tailwind.min.css"
-   ;;                 :js-globs   ["public/js/*.js"]
-   ;;                 :public-dir    "public/css"})]
+   ;;                 :js-globs   ["static/js/*.js"]
+   ;;                 :public-dir    "static/css"})]
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop

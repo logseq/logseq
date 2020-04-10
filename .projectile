@@ -4,5 +4,5 @@
 -/node_modules/
 -/.cpcache
 -/.shadow-cljs/
--/resources/public/js/cljs-runtime/
--/resources/public/js/main.js
+-/resources/static/js/cljs-runtime/
+-/resources/static/js/main.js
