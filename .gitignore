@@ -12,6 +12,7 @@ pom.xml.asc
 .hg/
 
 node_modules/
+resources/public/js/*.map
 resources/public/js/main.js
 resources/public/js/cljs-runtime
 resources/public/js/manifest.edn

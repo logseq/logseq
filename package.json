@@ -11,8 +11,9 @@
         "shadow-cljs": "2.8.81"
     },
     "scripts": {
-        "watch": "clj -A:cljs watch app",
-        "release": "clj -A:cljs release app",
+        "watch": "clojure -A:cljs watch app",
+        "release": "clojure -A:cljs release app",
+        "debug": "clojure -A:cljs release app --debug",
         "clean": "rm -rf target; rm -rf resources/public/js/compiled; rm -rf resources/public/js/cljs-runtime"
     },
     "dependencies": {
