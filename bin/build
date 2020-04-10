@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-yarn install
-yarn release
+npm install
+npm release
 clj -A:uberdeps
