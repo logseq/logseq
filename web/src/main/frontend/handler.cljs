@@ -449,7 +449,8 @@
 (defn periodically-pull-and-push
   [repo-url]
   (periodically-pull repo-url)
-  (periodically-push-tasks repo-url))
+  ;; (periodically-push-tasks repo-url)
+  )
 
 (defn edit-journal!
   [content journal]
