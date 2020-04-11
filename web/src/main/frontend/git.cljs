@@ -1,8 +1,9 @@
 (ns frontend.git
-  (:refer-clojure :exclude [clone])
+  (:refer-clojure :exclude [clone merge])
   (:require [promesa.core :as p]
             [frontend.util :as util]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.state :as state]))
 
 ;; only support Github now
 (defn auth
@@ -13,9 +14,9 @@
 (defn set-username-email
   [dir username email]
   (util/p-handle (js/git.config (clj->js
-                   {:dir dir
-                    :path "user.name"
-                    :value username}))
+                                 {:dir dir
+                                  :path "user.name"
+                                  :value username}))
                  (fn [result]
                    (js/git.config (clj->js
                                    {:dir dir
@@ -27,8 +28,8 @@
 (defn with-auth
   [token m]
   (clj->js
-   (merge (auth token)
-          m)))
+   (clojure.core/merge (auth token)
+                       m)))
 
 (defn get-repo-dir
   [repo-url]
@@ -54,7 +55,16 @@
   (js/git.fetch (with-auth token
                   {:dir (get-repo-dir repo-url)
                    :ref "master"
-                   :singleBranch true})))
+                   :singleBranch true
+                   :depth 1
+                   :tags false})))
+
+(defn merge
+  [repo-url]
+  (js/git.merge (clj->js
+                 {:dir (get-repo-dir repo-url)
+                  :ours "master"
+                  :theirs "remotes/origin/master"})))
 
 (defn log
   [repo-url token depth]
@@ -69,21 +79,22 @@
   (js/git.pull (with-auth token
                  {:dir (get-repo-dir repo-url)
                   :ref "master"
-                  :singleBranch true})))
+                  :singleBranch true
+                  :fast true})))
 (defn add
   [repo-url file]
   (js/git.add (clj->js
                {:dir (get-repo-dir repo-url)
                 :filepath file})))
 
-;; TODO: cache email and name
 (defn commit
   [repo-url message]
-  (js/git.commit (clj->js
-                  {:dir (get-repo-dir repo-url)
-                   :author {:name "Orgnote"
-                            :email "orgnote@hello.world"}
-                   :message message})))
+  (let [{:keys [name email]} (:me @state/state)]
+    (js/git.commit (clj->js
+                   {:dir (get-repo-dir repo-url)
+                    :message message
+                    :author {:name name
+                             :email email}}))))
 
 (defn push
   [repo-url token]

@@ -12,7 +12,8 @@
 (defn p-handle
   ([p ok-handler]
    (p-handle p ok-handler (fn [error]
-                            (js/console.error error))))
+                            (js/console.error error)
+                            )))
   ([p ok-handler error-handler]
    (-> p
        (p/then (fn [result]

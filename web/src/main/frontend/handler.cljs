@@ -19,7 +19,8 @@
             [datascript.core :as d]
             [frontend.utf8 :as utf8]
             [frontend.image :as image]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [cljs-bean.core :as bean])
   (:import [goog.events EventHandler]))
 
 (defn set-state-kv!
@@ -94,41 +95,51 @@
 ;; TODO: remove this
 (declare load-repo-to-db!)
 
-(defn get-latest-commit
-  [handler]
-  (-> (git/log (db/get-current-repo)
-               (get-github-token)
-               1)
-      (.then (fn [commits]
-               (handler (first commits))))
-      (.catch (fn [error]
-                (prn "get latest commit failed: " error)))))
-
 (defonce latest-commit (atom nil))
+
+(defn- set-latest-commit!
+  [hash]
+  (set-state-kv! :git/latest-commit hash)
+  (storage/set :git/latest-commit hash))
+
+(defn- set-git-status!
+  [value]
+  (set-state-kv! :git/status value)
+  (storage/set :git/status value))
+
+(defn- set-git-error!
+  [value]
+  (set-state-kv! :git/error value)
+  (storage/set :git/error value))
 
 ;; TODO: Maybe replace with fetch?
 ;; TODO: callback hell
 (defn pull
   [repo-url token]
-  (when (and (nil? (:git-error @state/state))
-             (nil? (:git-status @state/state)))
-    (util/p-handle
-     (git/pull repo-url token)
-     (fn [result]
-       (prn "pull successfully!")
-       (get-latest-commit
-        (fn [commit]
-          (when (or (nil? @latest-commit)
-                    (and @latest-commit
-                         commit
-                         (not= (gobj/get commit "oid")
-                               (gobj/get @latest-commit "oid"))))
-            (prn "New commit oid: " (gobj/get commit "oid"))
+  (when (and (nil? (:git/error @state/state))
+             (nil? (:git/status @state/state)))
+    (let [remote-changed? (atom false)
+          latest-commit (:git/latest-commit @state/state)]
+      (->
+       (util/p-handle
+        (git/fetch repo-url token)
+        (fn [result]
+          (let [{:keys [fetchHead]} (bean/->clj result)]
+            (when (or
+                   (nil? latest-commit)
+                   (and latest-commit (not= fetchHead latest-commit)))
+              (reset! remote-changed? true))
+            (set-latest-commit! fetchHead)
+            (git/merge repo-url))))
+       (util/p-handle
+        (fn [merge-result]
+          (prn {:merge-result merge-result
+                :remote-changed? @remote-changed?})
+          (when @remote-changed?
             (-> (load-files repo-url)
                 (p/then
                  (fn []
-                   (load-repo-to-db! repo-url)))))
-          (reset! latest-commit commit)))))))
+                   (load-repo-to-db! repo-url)))))))))))
 
 (defn periodically-pull
   [repo-url]
@@ -139,44 +150,36 @@
 
 (defn git-add-commit
   [repo-url file message content]
-  (swap! state/state assoc :git-status :commit)
+  (set-git-status! :commit)
   (db/reset-file! repo-url file content)
   (git/add-commit repo-url file message
                   (fn []
-                    (swap! state/state assoc
-                           :git-status :should-push))
+                    (set-git-status! :should-push))
                   (fn [error]
                     (prn "Commit failed, "
                          {:repo repo-url
                           :file file
                           :message message})
-                    (swap! state/state assoc
-                           :git-status :commit-failed
-                           :git-error error))))
+                    (set-git-status! :commit-failed)
+                    (set-git-error! error))))
 
 ;; TODO: update latest commit
 (defn push
-  [repo-url file]
-  (when (and (= :should-push (:git-status @state/state))
-             (nil? (:git-error @state/state)))
-    (swap! state/state assoc :git-status :push)
+  [repo-url]
+  (when (and (= :should-push (:git/status @state/state))
+             (nil? (:git/error @state/state)))
+    (set-git-status! :push)
     (let [token (get-github-token)]
       (util/p-handle
        (git/push repo-url token)
        (fn []
          (prn "Push successfully!")
-         (swap! state/state assoc
-                :git-status nil
-                :git-error nil)
-         ;; TODO: update latest-commit
-         (get-latest-commit
-          (fn [commit]
-            (reset! latest-commit commit))))
+         (set-git-status! nil)
+         (set-git-error! nil))
        (fn [error]
          (prn "Failed to push, error: " error)
-         (swap! state/state assoc
-                :git-status :push-failed
-                :git-error error))))))
+         (set-git-status! :push-failed)
+         (set-git-error! error))))))
 
 (defn clone
   [repo]
@@ -406,8 +409,8 @@
   [repo]
   (p/then (clone repo)
           (fn []
-            (create-month-journal-if-not-exists repo)
-            (periodically-pull repo))))
+            (periodically-pull repo)
+            (create-month-journal-if-not-exists repo))))
 
 (defn set-route-match!
   [route]
@@ -442,15 +445,14 @@
   [repo-url]
   (let [token (get-github-token)
         push (fn []
-               (push repo-url token))]
+               (push repo-url))]
     (js/setInterval push
                     (* 10 1000))))
 
 (defn periodically-pull-and-push
   [repo-url]
   (periodically-pull repo-url)
-  ;; (periodically-push-tasks repo-url)
-  )
+  (periodically-push-tasks repo-url))
 
 (defn edit-journal!
   [content journal]
@@ -552,11 +554,11 @@
     (db/set-current-repo! first-repo))
   (let [repos (db/get-repos)]
     (doseq [repo repos]
-      (create-month-journal-if-not-exists repo)
-      (periodically-pull-and-push repo))))
+      (periodically-pull-and-push repo)
+      (create-month-journal-if-not-exists repo))))
 
 (comment
-  (util/p-handle (fs/read-file (git/get-repo-dir (db/get-current-repo)) "/journals/2020_04.org")
+  (util/p-handle (fs/read-file (git/get-repo-dir (db/get-current-repo)) "journals/2020_04.org")
                  (fn [content]
                    (prn content)))
 
