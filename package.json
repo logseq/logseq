@@ -1,10 +1,5 @@
 {
     "name": "logseq",
-    "engines": {
-        "node": "11.15.x",
-        "npm": "6.13.x",
-        "yarn": "1.22.0"
-    },
     "version": "0.0.1",
     "private": true,
     "devDependencies": {
