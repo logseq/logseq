@@ -106,7 +106,6 @@
   ([url on-ok on-failed]
    (fetch url #js {} on-ok on-failed))
   ([url opts on-ok on-failed]
-   (prn {:opts opts})
    (-> (js/fetch url opts)
        (.then #(if (.-ok %)
                  (.json %)

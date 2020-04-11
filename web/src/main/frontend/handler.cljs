@@ -342,12 +342,21 @@
 ;;     (doseq [repo repos]
 ;;       (pull repo token))))
 
+(defn set-username-email
+  [name email]
+  (when (and name email)
+    (git/set-username-email
+     (git/get-repo-dir (db/get-current-repo))
+     name
+     email)))
+
 (defn get-me
   []
   (util/fetch (str config/api "me")
               (fn [resp]
                 (when resp
-                  (set-state-kv! :me resp)))
+                  (set-state-kv! :me resp)
+                  (set-username-email (:name resp) (:email resp))))
               (fn [_error]
                 ;; (prn "Get token failed, error: " error)
                 )))
@@ -461,7 +470,6 @@
 
 (defn save-current-edit-journal!
   [edit-content]
-  (prn {:edit-content edit-content})
   (let [{:keys [edit-journal]} @state/state
         {:keys [start-pos end-pos]} edit-journal]
     (swap! state/state assoc
@@ -504,14 +512,6 @@
              (gobj/set img "src" img-url)
              (gobj/set (gobj/get img "style")
                        "display" "initial"))))))))
-
-;; FIXME:
-(defn set-username-email
-  []
-  (git/set-username-email
-   (git/get-repo-dir (db/get-current-repo))
-   "Tienson Qin"
-   "tiensonqin@gmail.com"))
 
 (defn load-more-journals!
   []

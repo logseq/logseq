@@ -12,9 +12,6 @@
 
 (defn set-username-email
   [dir username email]
-  (prn {:dir dir
-        :username username
-        :email email})
   (util/p-handle (js/git.config (clj->js
                    {:dir dir
                     :path "user.name"
