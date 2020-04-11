@@ -1,0 +1,26 @@
+{:paths ["src/main"]
+ :deps
+ {org.clojure/clojure {:mvn/version "1.10.0"}
+  rum                         {:mvn/version "0.11.4"}
+  datascript-transit          {:mvn/version "0.3.0"}
+  funcool/promesa             {:mvn/version "4.0.2"}
+  medley                      {:mvn/version "1.2.0"}
+  metosin/reitit-frontend     {:mvn/version "0.3.10"}
+  cljs-bean                   {:mvn/version "1.5.0"}}
+
+ :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
+                  :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}
+                                thheller/shadow-cljs        {:mvn/version "RELEASE"}
+                                binaryage/devtools          {:mvn/version "0.9.10"}
+                                org.clojure/tools.namespace {:mvn/version "0.2.11"}
+                                cider/cider-nrepl           {:mvn/version "0.23.0-SNAPSHOT"}}
+                  :main-opts ["-m" "shadow.cljs.devtools.cli"]}
+           :test
+           {:extra-paths ["test"],
+            :extra-deps {org.clojure/test.check {:mvn/version "RELEASE"}}}
+           :runner
+           {:extra-deps
+            {com.cognitect/test-runner
+             {:git/url "https://github.com/cognitect-labs/test-runner",
+              :sha "76568540e7f40268ad2b646110f237a60295fa3c"}},
+            :main-opts ["-m" "cognitect.test-runner" "-d" "test"]}}}

@@ -18,7 +18,7 @@ resources/static/js/cljs-runtime
 resources/static/js/manifest.edn
 resources/static/style.css
 
-/.cpcache
+.cpcache/
 /target
 /checkouts
 /src/gen
