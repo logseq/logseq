@@ -1,11 +1,8 @@
 * Logseq
   A client-only note app which sync with your github repo. *Use it at your own risk!!!!*
-  #+CAPTION: gitnote screenshot
-  #+NAME:   fig:screenshot.png
-  [[./images/screenshot.png]]
 
-** Demo
-   http://logseq.tiensonqin.now.sh/
+** Website
+   https://logseq.com
 
 ** Setup
 *** Create a github basic token
