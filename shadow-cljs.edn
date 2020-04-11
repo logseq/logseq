@@ -8,7 +8,7 @@
    :modules {:main {:init-fn frontend.core/init}}
 
    :output-dir "resources/static/js"
-   :asset-path "/js"
+   :asset-path "/static/js"
 
    :compiler-options {:infer-externs :auto
                       :externs ["datascript/externs.js"]}
