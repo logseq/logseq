@@ -72,6 +72,7 @@
 
 (defn load-files
   [repo-url]
+  (set-state-kv! :repo/cloning? false)
   (set-state-kv! :repo/loading-files? true)
   (util/p-handle (git/list-files repo-url)
                  (fn [files]
@@ -84,11 +85,9 @@
                                       (when patterns-content
                                         (let [patterns (string/split patterns-content #"\n")
                                               files (remove (fn [path] (hidden? path patterns)) files)]
-                                          (set-state-kv! :repo/loading-files? false)
                                           (db/transact-files! repo-url files)))))
                          (p/promise
                           (do
-                            (set-state-kv! :repo/loading-files? false)
                             (db/transact-files! repo-url files)))))))))
 
 
@@ -110,36 +109,35 @@
 (defn- set-git-error!
   [value]
   (set-state-kv! :git/error value)
-  (storage/set :git/error value))
+  (storage/set :git/error (pr-str value)))
 
-;; TODO: Maybe replace with fetch?
-;; TODO: callback hell
+(defn set-latest-journals!
+  []
+  (set-state-kv! :latest-journals (db/get-latest-journals {})))
+
 (defn pull
   [repo-url token]
   (when (and (nil? (:git/error @state/state))
              (nil? (:git/status @state/state)))
     (let [remote-changed? (atom false)
           latest-commit (:git/latest-commit @state/state)]
-      (->
-       (util/p-handle
-        (git/fetch repo-url token)
-        (fn [result]
-          (let [{:keys [fetchHead]} (bean/->clj result)]
-            (when (or
-                   (nil? latest-commit)
-                   (and latest-commit (not= fetchHead latest-commit)))
-              (reset! remote-changed? true))
-            (set-latest-commit! fetchHead)
-            (git/merge repo-url))))
-       (util/p-handle
-        (fn [merge-result]
-          (prn {:merge-result merge-result
-                :remote-changed? @remote-changed?})
-          (when @remote-changed?
-            (-> (load-files repo-url)
-                (p/then
-                 (fn []
-                   (load-repo-to-db! repo-url)))))))))))
+      (p/let [result (git/fetch repo-url token)
+              {:keys [fetchHead]} (bean/->clj result)
+              merge-result (do
+                             (when (or
+                                    (nil? latest-commit)
+                                    (and latest-commit (not= fetchHead latest-commit)))
+                               (reset! remote-changed? true))
+                             (set-latest-commit! fetchHead)
+                             (git/merge repo-url))
+              _ (prn {:merge-result merge-result})
+              files (when @remote-changed?
+                      (load-files repo-url))
+              load-repo (when @remote-changed?
+                          (load-repo-to-db! repo-url))]
+        (when (or @remote-changed?
+                  (empty? (:latest-journals @state/state)))
+          (set-latest-journals!))))))
 
 (defn periodically-pull
   [repo-url]
@@ -189,13 +187,14 @@
        (set-state-kv! :repo/cloning? true)
        (git/clone repo token))
      (fn []
-       (set-state-kv! :repo/cloning? false)
        (db/mark-repo-as-cloned repo)
        (db/set-current-repo! repo)
        ;; load contents
        (load-files repo))
      (fn [e]
        (set-state-kv! :repo/cloning? false)
+       (set-git-status! :clone-failed)
+       (set-git-error! e)
        (prn "Clone failed, reason: " e)))))
 
 (defn new-notification
@@ -329,6 +328,7 @@
 
 (defn load-repo-to-db!
   [repo-url]
+  (set-state-kv! :repo/loading-files? false)
   (set-state-kv! :repo/importing-to-db? true)
   (load-all-contents!
    repo-url
@@ -379,9 +379,6 @@
          (apply str))))
 
 ;; journals
-(defn set-latest-journals!
-  []
-  (set-state-kv! :latest-journals (db/get-latest-journals {})))
 
 (defn create-month-journal-if-not-exists
   [repo-url]
@@ -400,17 +397,9 @@
       (fn [file-exists?]
         (when-not file-exists?
           (prn "create a month journal")
-          (git-add-commit repo-url path "create a month journal" default-content)
-          (set-latest-journals!)))
+          (git-add-commit repo-url path "create a month journal" default-content)))
       (fn [error]
         (prn error))))))
-
-(defn clone-and-pull
-  [repo]
-  (p/then (clone repo)
-          (fn []
-            (periodically-pull repo)
-            (create-month-journal-if-not-exists repo))))
 
 (defn set-route-match!
   [route]
@@ -453,6 +442,13 @@
   [repo-url]
   (periodically-pull repo-url)
   (periodically-push-tasks repo-url))
+
+(defn clone-and-pull
+  [repo]
+  (p/then (clone repo)
+          (fn []
+            (periodically-pull-and-push repo)
+            (create-month-journal-if-not-exists repo))))
 
 (defn edit-journal!
   [content journal]

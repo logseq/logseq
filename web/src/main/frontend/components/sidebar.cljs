@@ -57,16 +57,13 @@
      (files-list file-active?)]))
 
 (rum/defc main-content < rum/reactive
-  {:will-mount (fn [state]
-                 (handler/set-latest-journals!)
-                 state)}
   []
-  (let [{:repo/keys [cloning? loading-files?]
+  (let [{:repo/keys [cloning? loading-files? importing-to-db?]
          :keys [latest-journals]} (rum/react state/state)]
     [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
      (cond
-       ;; importing-to-db?
-       ;; [:div "Parsing files ..."]
+       importing-to-db?
+       [:div "Parsing files ..."]
 
        (seq latest-journals)
        (journal/journals latest-journals)
