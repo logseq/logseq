@@ -189,11 +189,12 @@
          :notification/show? true
          :notification/text text
          :notification/status status)
-  (js/setTimeout #(swap! state/state assoc
-                        :notification/show? false
-                        :notification/text nil
-                        :notification/status nil)
-                 5000))
+  (when-not (= status :error)
+    (js/setTimeout #(swap! state/state assoc
+                           :notification/show? false
+                           :notification/text nil
+                           :notification/status nil)
+                   5000)))
 
 (defn pull
   [repo-url token]
