@@ -11,6 +11,12 @@
 (def datascript-db "logseq/DB")
 (def schema
   {:db/ident        {:db/unique :db.unique/identity}
+
+   ;; user
+   :me/name  {}
+   :me/email {}
+   :me/avatar {}
+
    ;; repo
    :repo/url        {:db/unique :db.unique/identity}
    :repo/cloning?   {}
@@ -70,11 +76,11 @@
     (let [bytes (.-length (.encode (js/TextEncoder.) store))]
       (/ bytes 1000))))
 
-(defn restore! []
-  (when-let [stored (js/localStorage.getItem datascript-db)]
-    (let [stored-db (string->db stored)]
-      (when (= (:schema stored-db) schema) ;; check for code update
-        (reset-conn! stored-db)))))
+(defn kv
+  [key value]
+  {:db/id -1
+   :db/ident key
+   key value})
 
 ;; TODO: added_at, started_at, schedule, deadline
 (def qualified-map
@@ -236,20 +242,16 @@
   [tx-data]
   (d/transact! conn tx-data))
 
-(defn kv
-  [key value]
-  {:db/id -1
-   :db/ident key
-   key value})
-
 (defn set-key-value
   [key value]
   (transact! [(kv key value)]))
 
 (defn get-key-value
-  [key]
-  (some-> (d/entity (d/db conn) key)
-          key))
+  ([key]
+   (get-key-value (d/db conn)))
+  ([db key]
+   (some-> (d/entity db key)
+           key)))
 
 (defn set-current-repo!
   [repo]
@@ -262,9 +264,22 @@
       :repo/cloned? true}
      (kv :repo/current [:repo/url repo-url])]))
 
+(defn cloned?
+  [repo-url]
+  (->
+   (d/q '[:find ?cloned
+          :in $ ?repo-url
+          :where
+          [?repo :repo/url ?repo-url]
+          [?repo :repo/cloned? ?cloned]]
+     @conn repo-url)
+   first))
+
 (defn get-current-repo
-  []
-  (:repo/url (get-key-value :repo/current)))
+  ([]
+   (get-current-repo (d/db conn)))
+  ([db]
+   (:repo/url (get-key-value db :repo/current))))
 
 (defn get-repos
   []
@@ -471,6 +486,29 @@
          journal-path (compute-journal-path before-date)]
      (when-let [content (or content (get-file journal-path))]
        (get-month-journals journal-path content before-date days)))))
+
+(defn me-tx
+  [db {:keys [name email avatar repos]}]
+  (let [me-tx [{:me/name name
+                :me/email email
+                :me/avatar avatar}]
+        repos-tx (mapv (fn [repo]
+                         {:repo/url (:url repo)})
+                       repos)
+        current-repo (get-current-repo db)
+        current-repo-tx (if (or current-repo (empty? repos))
+                          nil
+                          [(kv :repo/current [:repo/url (:url (first repos))])])]
+    (->> (concat me-tx repos-tx current-repo-tx)
+         (remove nil?))))
+
+(defn restore! [me]
+  (if-let [stored (js/localStorage.getItem datascript-db)]
+    (let [stored-db (string->db stored)
+          attached-db (d/db-with stored-db (me-tx stored-db me))]
+      (if (= (:schema stored-db) schema) ;; check for code update
+        (reset-conn! attached-db)))
+    (d/transact! conn (me-tx (d/db conn) me))))
 
 (comment
   (d/transact! conn [{:db/id -1

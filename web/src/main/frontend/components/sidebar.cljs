@@ -154,11 +154,12 @@
              :stroke-linecap "round"}]]]
          (ui/dropdown-with-links
           [{:title "Your Profile"
-            :options {:href "#"}}
+            :options {:href "/me"}}
            {:title "Settings"
-            :options {:href "#"}}
+            :options {:href "/settings"}}
            {:title "Sign out"
-            :options {:href "#"}}])]]]
+            :options {:href "/logout"
+                      :on-click handler/sign-out!}}])]]]
       [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
        ;; {:x-init "$el.focus()", :x-data "x-data", :tabindex "0"}
        {:tabIndex "0"}

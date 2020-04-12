@@ -232,7 +232,14 @@
        (set-state-kv! :repo/cloning? true)
        (git/clone repo token))
      (fn []
-       (db/mark-repo-as-cloned repo))
+       (db/mark-repo-as-cloned repo)
+       (util/post (str config/api "repos")
+                  {:url repo}
+                  (fn [result]
+                    (swap! state/state
+                           update-in [:user :repos] conj result))
+                  (fn [error]
+                    (prn "Something wrong!"))))
      (fn [e]
        (set-state-kv! :repo/cloning? false)
        (set-git-status! :clone-failed)
@@ -304,11 +311,6 @@
           (rfe/push-state :file {:path (b64/encodeString path)}))
         (git-add-commit repo-url path commit-message content))))))
 
-(defn clear-storage
-  [repo-url]
-  (js/window.pfs._idb.wipe)
-  (clone repo-url))
-
 ;; TODO: utf8 encode performance
 (defn check
   [heading]
@@ -354,31 +356,13 @@
                            "DONE rollbacks to TODO."
                            content')))))))
 
-
-;; (defn sync
-;;   []
-;;   (let [[_user token repos] (get-user-token-repos)]
-;;     (doseq [repo repos]
-;;       (pull repo token))))
-
-(defn set-username-email
-  [name email]
+(defn git-set-username-email!
+  [{:keys [name email]}]
   (when (and name email)
     (git/set-username-email
      (git/get-repo-dir (db/get-current-repo))
      name
      email)))
-
-(defn get-me
-  []
-  (util/fetch (str config/api "me")
-              (fn [resp]
-                (when resp
-                  (set-state-kv! :me resp)
-                  (set-username-email (:name resp) (:email resp))))
-              (fn [_error]
-                ;; (prn "Get token failed, error: " error)
-                )))
 
 (defn set-route-match!
   [route]
@@ -427,6 +411,7 @@
   [repo-url]
   (p/then (clone repo-url)
           (fn []
+            (git-set-username-email! (:me @state/state))
             (load-db-and-journals! repo-url false true)
             (periodically-pull-and-push repo-url {:pull-now? false}))))
 
@@ -519,18 +504,25 @@
 (defn set-me-if-exists!
   []
   (when js/window.user
-    (let [user (js->clj js/window.user :keywordize-keys true)]
-      (set-state-kv! :me user))))
+    (when-let [me (bean/->clj js/window.user)]
+      (set-state-kv! :me me)
+      me)))
+
+(defn sign-out!
+  [e]
+  (.preventDefault e)
+  (p/let [_idb-clear (js/window.pfs._idb.wipe)]
+    (js/localStorage.clear)
+    (set! (.-href js/window.location) "/logout")))
 
 (defn start!
   []
-  (set-me-if-exists!)
-  (db/restore!)
-  (set-latest-journals!)
-  (db-listen-to-tx!)
-  (when-let [first-repo (first (db/get-repos))]
-    (db/set-current-repo! first-repo))
-  (let [repos (db/get-repos)]
-    (doseq [repo repos]
-      (periodically-pull-and-push repo {:pull-now? true})
-      (create-month-journal-if-not-exists repo))))
+  (let [me (set-me-if-exists!)]
+    (db/restore! me)
+    (set-latest-journals!)
+    (db-listen-to-tx!)
+    ;; Currently, we support only one repo.
+    (let [repo (first (db/get-repos))]
+      (if (db/cloned? repo)
+        (periodically-pull-and-push repo {:pull-now? true})
+        (clone-and-pull repo)))))

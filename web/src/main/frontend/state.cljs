@@ -15,5 +15,4 @@
              :me nil
              :git/latest-commit (storage/get :git/latest-commit)
              :git/status (storage/get :git/status)
-             :git/error (storage/get :git/error)
-             }))
+             :git/error (storage/get :git/error)}))
