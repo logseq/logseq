@@ -183,6 +183,18 @@
                 (empty? (:latest-journals @state/state)))
         (set-latest-journals!)))))
 
+(defn show-notification!
+  [text status]
+  (swap! state/state assoc
+         :notification/show? true
+         :notification/text text
+         :notification/status status)
+  (js/setTimeout #(swap! state/state assoc
+                        :notification/show? false
+                        :notification/text nil
+                        :notification/status nil)
+                 5000))
+
 (defn pull
   [repo-url token]
   (when (and
@@ -193,14 +205,16 @@
           latest-commit (:git/latest-commit @state/state)]
       (p/let [result (git/fetch repo-url token)
               {:keys [fetchHead]} (bean/->clj result)
-              merge-result (do
-                             (when (or
-                                    (nil? latest-commit)
-                                    (and latest-commit (not= fetchHead latest-commit)))
-                               (reset! remote-changed? true))
-                             (set-latest-commit! fetchHead)
-                             (git/merge repo-url))]
-        (load-db-and-journals! repo-url @remote-changed? false)))))
+              _ (when (or
+                       (nil? latest-commit)
+                       (and latest-commit (not= fetchHead latest-commit)))
+                  (reset! remote-changed? true))
+              _ (set-latest-commit! fetchHead)]
+        (-> (git/merge repo-url)
+            (p/then (fn []
+                      (load-db-and-journals! repo-url @remote-changed? false)))
+            (p/catch (fn [_error]
+                       (show-notification! "Merges with conflicts are not supported yet, please save your local changes, logout and login again." :error))))))))
 
 (defn periodically-pull
   [repo-url pull-now?]
@@ -292,16 +306,6 @@
                                     (new-notification notification-text)))))))))]
       (notify-fn)
       (js/setInterval notify-fn (* 1000 60)))))
-
-(defn show-notification!
-  [text]
-  (swap! state/state assoc
-         :notification/show? true
-         :notification/text text)
-  (js/setTimeout #(swap! state/state assoc
-                         :notification/show? false
-                         :notification/text nil)
-                 3000))
 
 (defn alter-file
   ([path commit-message content]

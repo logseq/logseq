@@ -58,47 +58,50 @@
    text])
 
 (rum/defc notification-content
-  [state text]
-  [:div.fixed.inset-0.flex.items-end.justify-center.px-4.py-6.pointer-events-none.sm:p-6.sm:items-start.sm:justify-end
-   [:div.max-w-sm.w-full.bg-white.shadow-lg.rounded-lg.pointer-events-auto
-    {:class (case state
-              "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
-              "entered" "transition ease-out duration-300 transform translate-y-0 opacity-100 sm:translate-x-0"
-              "exiting" "transition ease-in duration-100 opacity-100"
-              "exited" "transition ease-in duration-100 opacity-0")}
-    [:div.rounded-lg.shadow-xs.overflow-hidden
-     [:div.p-4
-      [:div.flex.items-start
-       [:div.flex-shrink-0
-        [:svg.h-6.w-6.text-green-400
-         {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
-         [:path
-          {:d "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
-           :stroke-width "2",
-           :stroke-linejoin "round",
-           :stroke-linecap "round"}]]]
-       [:div.ml-3.w-0.flex-1.pt-0.5
-        [:p.text-sm.leading-5.font-medium.text-gray-900
-         text]]
-       [:div.ml-4.flex-shrink-0.flex
-        [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
-         {:on-click (fn []
-                      (swap! state/state assoc :notification/show? false))}
-         [:svg.h-5.w-5
-          {:fill "currentColor", :viewBox "0 0 20 20"}
-          [:path
-           {:clip-rule "evenodd",
-            :d
-            "M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z",
-            :fill-rule "evenodd"}]]]]]]]]])
+  [state text status]
+  (when (and text status)
+      (let [[color-class svg] (case status
+                             :success
+                             ["text-gray-900"
+                              [:svg.h-6.w-6.text-green-400
+                               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+                               [:path
+                                {:d "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+                                 :stroke-width "2",
+                                 :stroke-linejoin "round",
+                                 :stroke-linecap "round"}]]]
+                             ["text-red-500"
+                              [:svg.h-6.w-6.text-red-500
+                               {:viewbox "0 0 20 20", :fill "currentColor"}
+                               [:path
+                                {:clip-rule "evenodd",
+                                 :d
+                                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z",
+                                 :fill-rule "evenodd"}]]])]
+     [:div.fixed.inset-0.flex.items-end.justify-center.px-4.py-6.pointer-events-none.sm:p-6.sm:items-start.sm:justify-end {:style {:top "3.2em"}}
+      [:div.max-w-sm.w-full.bg-white.shadow-lg.rounded-lg.pointer-events-auto
+       {:class (case state
+                 "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
+                 "entered" "transition ease-out duration-300 transform translate-y-0 opacity-100 sm:translate-x-0"
+                 "exiting" "transition ease-in duration-100 opacity-100"
+                 "exited" "transition ease-in duration-100 opacity-0")}
+       [:div.rounded-lg.shadow-xs.overflow-hidden
+        [:div.p-4
+         [:div.flex.items-start
+          [:div.flex-shrink-0
+           svg]
+          [:div.ml-3.w-0.flex-1.pt-0.5
+           [:p.text-sm.leading-5.font-medium {:style {:margin 0}
+                                              :class color-class}
+            text]]]]]]])))
 
 (rum/defc notification < rum/reactive
   []
-  (let [{:keys [:notification/show? :notification/text]} (rum/react state/state)]
+  (let [{:keys [:notification/show? :notification/text :notification/status]} (rum/react state/state)]
     (css-transition
      {:in show? :timeout 100}
      (fn [state]
-       (notification-content state text)))))
+       (notification-content state text status)))))
 
 (rum/defc checkbox
   [option]
