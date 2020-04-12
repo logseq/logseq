@@ -3,4 +3,4 @@
 (defprotocol Format
   (toHtml [this content config])
   (loaded? [this])
-  (lazyLoad [this ok-handler error-handler]))
+  (lazyLoad [this ok-handler]))

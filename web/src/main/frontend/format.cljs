@@ -48,9 +48,4 @@
        (handler/set-format-js-loading! format true)
        (protocol/lazyLoad record
                           (fn [result]
-                            (handler/set-format-js-loading! format false))
-                          (fn [error]
-                            (prn format " js failed to load.")
-                            (handler/set-format-js-loading! format false)
-                            ;; TODO: notification
-                            (js/console.error error)))))))
+                            (handler/set-format-js-loading! format false)))))))

@@ -23,8 +23,7 @@
         (.convert (js/window.Asciidoctor) content (clj->js config)))))
   (loaded? [this]
     (some? (loaded?)))
-  (lazyLoad [this ok-handler error-handler]
+  (lazyLoad [this ok-handler]
     (loader/load
      "https://cdnjs.cloudflare.com/ajax/libs/asciidoctor.js/1.5.9/asciidoctor.min.js"
-     ok-handler
-     error-handler)))
+     ok-handler)))

@@ -18,8 +18,7 @@
       (.makeHtml (js/window.showdown.Converter.) content)))
   (loaded? [this]
     (some? (loaded?)))
-  (lazyLoad [this ok-handler error-handler]
+  (lazyLoad [this ok-handler]
     (loader/load
      "https://cdnjs.cloudflare.com/ajax/libs/showdown/1.9.1/showdown.min.js"
-     ok-handler
-     error-handler)))
+     ok-handler)))

@@ -17,21 +17,27 @@
   #{:org :md :markdown
     :adoc :asciidoc})
 
+(defn lazy-load-js
+  [state]
+  (let [format (keyword (second (:rum/args state)))
+        loader? (contains? render-formats format)]
+    (when loader?
+      (when-not (format/loaded? format)
+        (format/lazy-load format)))))
+
 ;; TODO: lazy load highlight.js
 (rum/defcs html < rum/reactive
-  {:init (fn [state props]
-           (let [format (keyword (second (:rum/args state)))
-                 loader? (contains? render-formats format)]
-             (when loader?
-               (when-not (format/loaded? format)
-                 (format/lazy-load format)))
-             state))
+  {:will-mount (fn [state]
+                 (lazy-load-js state)
+                 state)
    :did-mount (fn [state]
                 (highlight!)
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (highlight!)
+                 (handler/render-local-images!)
+                 (lazy-load-js state)
                  state)}
   [state content format config]
   (let [format (format/normalize format)]

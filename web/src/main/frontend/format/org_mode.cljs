@@ -27,11 +27,10 @@
       (.parseHtml js/window.MldocOrg content config)))
   (loaded? [this]
     (some? (loaded?)))
-  (lazyLoad [this ok-handler error-handler]
+  (lazyLoad [this ok-handler]
     (loader/load
      (config/asset-uri "/static/js/mldoc_org.min.js")
-     ok-handler
-     error-handler)))
+     ok-handler)))
 
 (defn parse-json
   ([content]

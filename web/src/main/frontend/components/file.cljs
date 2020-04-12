@@ -17,13 +17,13 @@
         decoded-path (b64/decodeString encoded-path)]
     [encoded-path decoded-path]))
 
-(rum/defcs file <
+(rum/defcs file
   [state]
   (let [[encoded-path path] (get-path state)
-        suffix (keyword (string/lower-case (last (string/split path #"\."))))]
+        format (keyword (string/lower-case (last (string/split path #"\."))))]
     (sidebar/sidebar
      (cond
-       (and suffix (contains? handler/text-formats suffix))
+       (and format (contains? handler/text-formats format))
        [:div.content
         [:a {:href (str "/file/" encoded-path "/edit")}
          "edit"]
@@ -33,17 +33,17 @@
             [:span]
 
             content
-            (content/html content suffix org/default-config)
+            (content/html content format org/default-config)
 
             :else
             "Loading ..."))]
 
        ;; image type
-       (and suffix (contains? #{:png :jpg :jpeg} suffix))
-       (content/html [:img {:src path}] suffix org/default-config)
+       (and format (contains? #{:png :jpg :jpeg} format))
+       (content/html [:img {:src path}] format org/default-config)
 
        :else
-       [:div "Format ." (name suffix) " is not supported."]))))
+       [:div "Format ." (name format) " is not supported."]))))
 
 (defn- count-newlines
   [s]
