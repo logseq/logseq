@@ -526,6 +526,7 @@
   []
   (set-me-if-exists!)
   (db/restore!)
+  (set-latest-journals!)
   (db-listen-to-tx!)
   (when-let [first-repo (first (db/get-repos))]
     (db/set-current-repo! first-repo))
