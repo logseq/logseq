@@ -522,7 +522,7 @@
     (set-latest-journals!)
     (db-listen-to-tx!)
     ;; Currently, we support only one repo.
-    (let [repo (first (db/get-repos))]
+    (when-let [repo (first (db/get-repos))]
       (if (db/cloned? repo)
         (periodically-pull-and-push repo {:pull-now? true})
         (clone-and-pull repo)))))
