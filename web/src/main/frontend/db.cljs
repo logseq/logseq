@@ -158,11 +158,27 @@
         @conn repo-url)
       seq-flatten))
 
-(defn delete-headings!
+(defn delete-headings
   [repo-url]
-  (let [headings (get-repo-headings repo-url)
-        headings (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)]
-    (d/transact! conn headings)))
+  (let [headings (get-repo-headings repo-url)]
+    (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
+
+(defn get-repo-files
+  [repo-url]
+  (->> (d/q '[:find ?path
+              :in $ ?repo-url
+              :where
+              [?repo :repo/url ?repo-url]
+              [?file :file/repo ?repo]
+              [?file :file/path ?path]]
+         @conn repo-url)
+       (map first)
+       distinct))
+
+(defn delete-files
+  [repo-url]
+  (let [files (get-repo-files repo-url)]
+    (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files)))
 
 (defn get-file-headings
   [repo-url path]
@@ -181,12 +197,18 @@
   (let [headings (get-file-headings repo-url path)]
     (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
 
-;; transactions
-(defn reset-headings!
-  [repo-url headings]
-  (delete-headings! repo-url)
-  (let [headings (safe-headings headings)]
-    (d/transact! conn headings)))
+(defn reset-contents-and-headings!
+  [repo-url contents headings]
+  (let [delete-files (delete-files repo-url)
+        delete-headings (delete-headings repo-url)
+        headings (safe-headings headings)
+        file-contents (map (fn [[file content]]
+                             {:file/repo [:repo/url repo-url]
+                              :file/path file
+                              :file/content content})
+                        contents)
+        all-data (concat delete-files delete-headings file-contents headings)]
+    (d/transact! conn all-data)))
 
 (defn get-all-headings
   []
@@ -214,11 +236,15 @@
   [tx-data]
   (d/transact! conn tx-data))
 
+(defn kv
+  [key value]
+  {:db/id -1
+   :db/ident key
+   key value})
+
 (defn set-key-value
   [key value]
-  (transact! [{:db/id -1
-               :db/ident key
-               key value}]))
+  (transact! [(kv key value)]))
 
 (defn get-key-value
   [key]
@@ -228,6 +254,13 @@
 (defn set-current-repo!
   [repo]
   (set-key-value :repo/current [:repo/url repo]))
+
+(defn mark-repo-as-cloned
+  [repo-url]
+  (d/transact! conn
+    [{:repo/url repo-url
+      :repo/cloned? true}
+     (kv :repo/current [:repo/url repo-url])]))
 
 (defn get-current-repo
   []
@@ -252,12 +285,6 @@
        (map first)
        distinct))
 
-(defn mark-repo-as-cloned
-  [repo-url]
-  (d/transact! conn
-    [{:repo/url repo-url
-      :repo/cloned? true}]))
-
 ;; file
 (defn transact-files!
   [repo-url files]
@@ -265,18 +292,6 @@
     (for [file files]
       {:file/repo [:repo/url repo-url]
        :file/path file})))
-
-(defn get-repo-files
-  [repo-url]
-  (->> (d/q '[:find ?path
-              :in $ ?repo-url
-              :where
-              [?repo :repo/url ?repo-url]
-              [?file :file/repo ?repo]
-              [?file :file/path ?path]]
-         @conn repo-url)
-       (map first)
-       distinct))
 
 (defn set-file-content!
   [repo-url file content]
@@ -309,13 +324,12 @@
     @conn repo-url))
 
 (defn extract-all-headings
-  [repo-url]
-  (let [contents (get-all-files-content repo-url)]
-    (vec
-     (mapcat
-      (fn [[file content] contents]
-        (extract-headings repo-url file content))
-      contents))))
+  [repo-url contents]
+  (vec
+   (mapcat
+    (fn [[file content] contents]
+      (extract-headings repo-url file content))
+    contents)))
 
 (defn reset-file!
   [repo-url file content]

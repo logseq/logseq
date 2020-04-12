@@ -23,6 +23,8 @@
             [cljs-bean.core :as bean])
   (:import [goog.events EventHandler]))
 
+;; TODO: replace all util/p-handle with p/let
+
 (defn set-state-kv!
   [key value]
   (swap! state/state assoc key value))
@@ -31,12 +33,9 @@
   []
   (get-in @state/state [:me :access-token]))
 
-;; We only support Github token now
 (defn load-file
-  [repo-url path state-handler]
-  (util/p-handle (fs/read-file (git/get-repo-dir repo-url) path)
-                 (fn [content]
-                   (state-handler content))))
+  [repo-url path]
+  (fs/read-file (git/get-repo-dir repo-url) path))
 
 (defn- hidden?
   [path patterns]
@@ -70,31 +69,25 @@
        (contains? formats format)))
    files))
 
+(defn- only-text-formats
+  [files]
+  (keep-formats files text-formats))
+
+;; TODO: no atom version
 (defn load-files
   [repo-url]
   (set-state-kv! :repo/cloning? false)
   (set-state-kv! :repo/loading-files? true)
-  (util/p-handle (git/list-files repo-url)
-                 (fn [files]
-                   (when (> (count files) 0)
-                     (let [files (js->clj files)]
-                       ;; FIXME: don't load blobs
-                       (if (contains? (set files) config/hidden-file)
-                         (load-file repo-url config/hidden-file
-                                    (fn [patterns-content]
-                                      (when patterns-content
-                                        (let [patterns (string/split patterns-content #"\n")
-                                              files (remove (fn [path] (hidden? path patterns)) files)]
-                                          (db/transact-files! repo-url files)))))
-                         (p/promise
-                          (do
-                            (db/transact-files! repo-url files)))))))))
-
-
-;; TODO: remove this
-(declare load-repo-to-db!)
-
-(defonce latest-commit (atom nil))
+  (let [files-atom (atom nil)]
+    (-> (p/let [files (bean/->clj (git/list-files repo-url))
+                patterns-content (load-file repo-url config/hidden-file)]
+          (reset! files-atom files)
+          (when patterns-content
+            (let [patterns (string/split patterns-content #"\n")]
+              (reset! files-atom (remove (fn [path] (hidden? path patterns)) files)))))
+        (p/finally
+          (fn []
+            @files-atom)))))
 
 (defn- set-latest-commit!
   [hash]
@@ -115,37 +108,6 @@
   []
   (set-state-kv! :latest-journals (db/get-latest-journals {})))
 
-(defn pull
-  [repo-url token]
-  (when (and (nil? (:git/error @state/state))
-             (nil? (:git/status @state/state)))
-    (let [remote-changed? (atom false)
-          latest-commit (:git/latest-commit @state/state)]
-      (p/let [result (git/fetch repo-url token)
-              {:keys [fetchHead]} (bean/->clj result)
-              merge-result (do
-                             (when (or
-                                    (nil? latest-commit)
-                                    (and latest-commit (not= fetchHead latest-commit)))
-                               (reset! remote-changed? true))
-                             (set-latest-commit! fetchHead)
-                             (git/merge repo-url))
-              _ (prn {:merge-result merge-result})
-              files (when @remote-changed?
-                      (load-files repo-url))
-              load-repo (when @remote-changed?
-                          (load-repo-to-db! repo-url))]
-        (when (or @remote-changed?
-                  (empty? (:latest-journals @state/state)))
-          (set-latest-journals!))))))
-
-(defn periodically-pull
-  [repo-url]
-  (when-let [token (get-github-token)]
-    (pull repo-url token)
-    (js/setInterval #(pull repo-url token)
-                    (* 60 1000))))
-
 (defn git-add-commit
   [repo-url file message content]
   (set-git-status! :commit)
@@ -160,6 +122,89 @@
                           :message message})
                     (set-git-status! :commit-failed)
                     (set-git-error! error))))
+
+;; journals
+
+;; org-journal format, something like `* Tuesday, 06/04/13`
+(defn default-month-journal-content
+  []
+  (let [{:keys [year month day]} (util/get-date)
+        last-day (util/get-month-last-day)
+        month-pad (if (< month 10) (str "0" month) month)]
+    (->> (map
+           (fn [day]
+             (let [day-pad (if (< day 10) (str "0" day) day)
+                   weekday (util/get-weekday (js/Date. year (dec month) day))]
+               (str "* " weekday ", " month-pad "/" day-pad "/" year "\n\n")))
+           (range 1 (inc last-day)))
+         (apply str))))
+
+(defn create-month-journal-if-not-exists
+  [repo-url]
+  (let [repo-dir (git/get-repo-dir repo-url)
+        path (util/current-journal-path)
+        file-path (str "/" path)
+        default-content (default-month-journal-content)]
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
+                  (p/catch identity))
+            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+      (when-not file-exists?
+        (git-add-commit repo-url path "create a month journal" default-content)))))
+
+(defn load-all-contents!
+  [repo-url files ok-handler]
+  (let [files (only-text-formats files)]
+    (p/let [contents (p/all (doall
+                             (for [file files]
+                               (load-file repo-url file))))]
+      (ok-handler
+       (zipmap files contents)))))
+
+(defn load-repo-to-db!
+  [repo-url files]
+  (set-state-kv! :repo/loading-files? false)
+  (set-state-kv! :repo/importing-to-db? true)
+  (load-all-contents!
+   repo-url
+   files
+   (fn [contents]
+     (let [headings (db/extract-all-headings repo-url contents)]
+       (db/reset-contents-and-headings! repo-url contents headings)
+       (set-state-kv! :repo/importing-to-db? false)))))
+
+(defn load-db-and-journals!
+  [repo-url remote-changed? first-clone?]
+  (when (or remote-changed? first-clone?)
+    (p/let [files (load-files repo-url)
+            loaded (load-repo-to-db! repo-url files)
+            _ (create-month-journal-if-not-exists repo-url)]
+      (when (or remote-changed?
+                (empty? (:latest-journals @state/state)))
+        (set-latest-journals!)))))
+
+(defn pull
+  [repo-url token]
+  (when (and (nil? (:git/error @state/state))
+             (nil? (:git/status @state/state)))
+    (let [remote-changed? (atom false)
+          latest-commit (:git/latest-commit @state/state)]
+      (p/let [result (git/fetch repo-url token)
+              {:keys [fetchHead]} (bean/->clj result)
+              merge-result (do
+                             (when (or
+                                    (nil? latest-commit)
+                                    (and latest-commit (not= fetchHead latest-commit)))
+                               (reset! remote-changed? true))
+                             (set-latest-commit! fetchHead)
+                             (git/merge repo-url))]
+        (load-db-and-journals! repo-url @remote-changed? false)))))
+
+(defn periodically-pull
+  [repo-url pull-now?]
+  (when-let [token (get-github-token)]
+    (when pull-now? (pull repo-url token))
+    (js/setInterval #(pull repo-url token)
+                    (* 60 1000))))
 
 ;; TODO: update latest commit
 (defn push
@@ -187,10 +232,7 @@
        (set-state-kv! :repo/cloning? true)
        (git/clone repo token))
      (fn []
-       (db/mark-repo-as-cloned repo)
-       (db/set-current-repo! repo)
-       ;; load contents
-       (load-files repo))
+       (db/mark-repo-as-cloned repo))
      (fn [e]
        (set-state-kv! :repo/cloning? false)
        (set-git-status! :clone-failed)
@@ -312,32 +354,6 @@
                            "DONE rollbacks to TODO."
                            content')))))))
 
-(defn load-all-contents!
-  [repo-url ok-handler]
-  (let [files (db/get-repo-files repo-url)
-        files (keep-formats files text-formats)]
-    (-> (p/all (for [file files]
-                 (load-file repo-url file
-                            (fn [content]
-                              (db/set-file-content! repo-url file content)))))
-        (p/then
-         (fn [_]
-           (ok-handler))))))
-
-(defonce headings-atom (atom nil))
-
-(defn load-repo-to-db!
-  [repo-url]
-  (set-state-kv! :repo/loading-files? false)
-  (set-state-kv! :repo/importing-to-db? true)
-  (load-all-contents!
-   repo-url
-   (fn []
-     (let [headings (db/extract-all-headings repo-url)]
-       (reset! headings-atom headings)
-       (db/reset-headings! repo-url headings)
-       (set-state-kv! :repo/importing-to-db? false)))))
-
 
 ;; (defn sync
 ;;   []
@@ -363,43 +379,6 @@
               (fn [_error]
                 ;; (prn "Get token failed, error: " error)
                 )))
-
-;; org-journal format, something like `* Tuesday, 06/04/13`
-(defn default-month-journal-content
-  []
-  (let [{:keys [year month day]} (util/get-date)
-        last-day (util/get-month-last-day)
-        month-pad (if (< month 10) (str "0" month) month)]
-    (->> (map
-           (fn [day]
-             (let [day-pad (if (< day 10) (str "0" day) day)
-                   weekday (util/get-weekday (js/Date. year (dec month) day))]
-               (str "* " weekday ", " month-pad "/" day-pad "/" year "\n\n")))
-           (range 1 (inc last-day)))
-         (apply str))))
-
-;; journals
-
-(defn create-month-journal-if-not-exists
-  [repo-url]
-  (let [repo-dir (git/get-repo-dir repo-url)
-        path (util/current-journal-path)
-        file-path (str "/" path)
-        default-content (default-month-journal-content)]
-    (->
-     (util/p-handle
-      (fs/mkdir (str repo-dir "/journals"))
-      (fn [result]
-        (fs/create-if-not-exists repo-dir file-path default-content))
-      (fn [error]
-        (fs/create-if-not-exists repo-dir file-path default-content)))
-     (util/p-handle
-      (fn [file-exists?]
-        (when-not file-exists?
-          (prn "create a month journal")
-          (git-add-commit repo-url path "create a month journal" default-content)))
-      (fn [error]
-        (prn error))))))
 
 (defn set-route-match!
   [route]
@@ -439,16 +418,17 @@
                     (* 10 1000))))
 
 (defn periodically-pull-and-push
-  [repo-url]
-  (periodically-pull repo-url)
+  [repo-url {:keys [pull-now?]
+             :or {pull-now? true}}]
+  (periodically-pull repo-url pull-now?)
   (periodically-push-tasks repo-url))
 
 (defn clone-and-pull
-  [repo]
-  (p/then (clone repo)
+  [repo-url]
+  (p/then (clone repo-url)
           (fn []
-            (periodically-pull-and-push repo)
-            (create-month-journal-if-not-exists repo))))
+            (load-db-and-journals! repo-url false true)
+            (periodically-pull-and-push repo-url {:pull-now? false}))))
 
 (defn edit-journal!
   [content journal]
@@ -483,34 +463,35 @@
 
 (defn render-local-images!
   []
-  (let [images (array-seq (gdom/getElementsByTagName "img"))
-        get-src (fn [image] (.getAttribute image "src"))
-        local-images (filter
-                      (fn [image]
-                        (let [src (get-src image)]
-                          (and src
-                               (not (or (string/starts-with? src "http://")
-                                        (string/starts-with? src "https://"))))))
-                      images)]
-    (doseq [img local-images]
-      (gobj/set img
-                "onerror"
-                (fn []
-                  (gobj/set (gobj/get img "style")
-                            "display" "none")))
-      (let [path (get-src img)
-            path (if (= (first path) \.)
-                   (subs path 1)
-                   path)]
-        (util/p-handle
-         (fs/read-file-2 (git/get-repo-dir (db/get-current-repo))
-                         path)
-         (fn [blob]
-           (let [blob (js/Blob. (array blob) (clj->js {:type "image"}))
-                 img-url (image/create-object-url blob)]
-             (gobj/set img "src" img-url)
-             (gobj/set (gobj/get img "style")
-                       "display" "initial"))))))))
+  (when-let [content-node (gdom/getElement "content")]
+    (let [images (array-seq (gdom/getElementsByTagName "img" content-node))
+          get-src (fn [image] (.getAttribute image "src"))
+          local-images (filter
+                        (fn [image]
+                          (let [src (get-src image)]
+                            (and src
+                                 (not (or (string/starts-with? src "http://")
+                                          (string/starts-with? src "https://"))))))
+                        images)]
+      (doseq [img local-images]
+        (gobj/set img
+                  "onerror"
+                  (fn []
+                    (gobj/set (gobj/get img "style")
+                              "display" "none")))
+        (let [path (get-src img)
+              path (if (= (first path) \.)
+                     (subs path 1)
+                     path)]
+          (util/p-handle
+           (fs/read-file-2 (git/get-repo-dir (db/get-current-repo))
+                           path)
+           (fn [blob]
+             (let [blob (js/Blob. (array blob) (clj->js {:type "image"}))
+                   img-url (image/create-object-url blob)]
+               (gobj/set img "src" img-url)
+               (gobj/set (gobj/get img "style")
+                         "display" "initial")))))))))
 
 (defn load-more-journals!
   []
@@ -550,13 +531,5 @@
     (db/set-current-repo! first-repo))
   (let [repos (db/get-repos)]
     (doseq [repo repos]
-      (periodically-pull-and-push repo)
+      (periodically-pull-and-push repo {:pull-now? true})
       (create-month-journal-if-not-exists repo))))
-
-(comment
-  (util/p-handle (fs/read-file (git/get-repo-dir (db/get-current-repo)) "journals/2020_04.org")
-                 (fn [content]
-                   (prn content)))
-
-  (pull (db/get-current-repo) (get-github-token))
-  )

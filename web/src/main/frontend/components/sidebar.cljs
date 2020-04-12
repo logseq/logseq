@@ -107,8 +107,7 @@
          {:alt "Logseq",
           :src "/static/img/logo.png"}]]
        [:div.flex-1.h-0.overflow-y-auto
-        (sidebar-nav)]
-       ]]
+        (sidebar-nav)]]]
      [:div.hidden.md:flex.md:flex-shrink-0
       [:div.flex.flex-col.w-64
        [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
