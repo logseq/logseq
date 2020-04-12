@@ -12,3 +12,10 @@
   (if dev?
     "http://localhost:3000/api/v1/"
     (str website "/api/v1/")))
+
+(def asset-domain "https://asset.logseq.com")
+
+(defn asset-uri
+  [path]
+  (if dev? path
+      (str asset-domain path)))

@@ -482,7 +482,6 @@
                        before-date
                        (let [{:keys [year month day]} (util/year-month-day-padded)]
                          (string/join "/" [month day year])))
-
          journal-path (compute-journal-path before-date)]
      (when-let [content (or content (get-file journal-path))]
        (get-month-journals journal-path content before-date days)))))

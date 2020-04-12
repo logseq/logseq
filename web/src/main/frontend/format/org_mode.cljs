@@ -1,7 +1,9 @@
 (ns frontend.format.org-mode
   (:require [frontend.format.protocol :as protocol]
             [frontend.util :as util]
-            [clojure.string :as string]))
+            [frontend.config :as config]
+            [clojure.string :as string]
+            [frontend.loader :as loader]))
 
 (def default-config
   (js/JSON.stringify
@@ -15,33 +17,43 @@
         :heading_number false
         :keep_line_break true}))
 
-(def Org js/window.MldocOrg)
+(defn loaded? []
+  js/window.MldocOrg)
 
-(defrecord OrgMode [content]
+(defrecord OrgMode []
   protocol/Format
-  (toHtml [this]
-    (.parseHtml Org content default-config))
-  (toHtml [this config]
-    (.parseHtml Org content config)))
+  (toHtml [this content config]
+    (when (loaded?)
+      (.parseHtml js/window.MldocOrg content config)))
+  (loaded? [this]
+    (some? (loaded?)))
+  (lazyLoad [this ok-handler error-handler]
+    (loader/load
+     (config/asset-uri "/static/js/mldoc_org.min.js")
+     ok-handler
+     error-handler)))
 
 (defn parse-json
   ([content]
    (parse-json content default-config))
   ([content config]
-   (.parseJson Org content config)))
+   (when (loaded?)
+     (.parseJson js/window.MldocOrg content config))))
 
 (defn ->clj
   [content]
   (if (string/blank? content)
     {}
     (-> content
-       (parse-json)
-       (util/json->clj))))
+        (parse-json)
+        (util/json->clj))))
 
 (defn inline-list->html
   [json]
-  (.inlineListToHtmlStr Org json))
+  (when (loaded?)
+    (.inlineListToHtmlStr js/window.MldocOrg json)))
 
 (defn json->html
   [json]
-  (.jsonToHtmlStr Org json default-config))
+  (when (loaded?)
+    (.jsonToHtmlStr js/window.MldocOrg json default-config)))

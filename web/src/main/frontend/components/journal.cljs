@@ -4,7 +4,6 @@
             [frontend.handler :as handler]
             [clojure.string :as string]
             [frontend.ui :as ui]
-            [frontend.format :as format]
             [frontend.mixins :as mixins]
             [frontend.db :as db]
             [frontend.state :as state]

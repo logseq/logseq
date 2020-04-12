@@ -1,13 +1,25 @@
 (ns frontend.format.markdown
-  (:require ["showdown" :refer [Converter]]
-            [frontend.format.protocol :as protocol]))
+  (:require [frontend.format.protocol :as protocol]
+            [frontend.config :as config]
+            [frontend.loader :as loader]))
 
-(defonce converter (Converter.))
+(defn loaded? []
+  js/window.showdown)
 
-(defrecord Markdown [content]
+(defn to-html
+  [content config]
+  (when (loaded?)
+    (.makeHtml (js/window.showdown.Converter.) content)))
+
+(defrecord MdMode []
   protocol/Format
-  (toHtml [this]
-    (.makeHtml converter content))
-  (toHtml [this config]
-    ;; TODO:
-    (.makeHtml converter content)))
+  (toHtml [this content config]
+    (when (loaded?)
+      (.makeHtml (js/window.showdown.Converter.) content)))
+  (loaded? [this]
+    (some? (loaded?)))
+  (lazyLoad [this ok-handler error-handler]
+    (loader/load
+     "https://cdnjs.cloudflare.com/ajax/libs/showdown/1.9.1/showdown.min.js"
+     ok-handler
+     error-handler)))

@@ -50,22 +50,21 @@
   [file]
   (string/lower-case (last (string/split file #"\."))))
 
-(def text-formats
-  #{"org" "md" "markdown" "adoc" "asciidoc" "rst" "dat" "txt" "json" "yml" "xml"
-    ;; maybe should support coding
-    })
+;; Add coding too
+(defonce text-formats
+  #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c})
 
-(def img-formats
-  #{"png" "jpg" "jpeg" "gif" "svg" "bmp" "ico"})
+(defonce img-formats
+  #{:gif :svg :jpeg :ico :png :jpg :bmp})
 
-(def all-formats
+(defonce all-formats
   (set/union text-formats img-formats))
 
 (defn- keep-formats
   [files formats]
   (filter
    (fn [file]
-     (let [format (get-format file)]
+     (let [format (keyword (get-format file))]
        (contains? formats format)))
    files))
 
@@ -102,7 +101,9 @@
 (defn- set-git-error!
   [value]
   (set-state-kv! :git/error value)
-  (storage/set :git/error (pr-str value)))
+  (if value
+    (storage/set :git/error (str value))
+    (storage/remove :git/error)))
 
 (defn set-latest-journals!
   []
@@ -184,8 +185,10 @@
 
 (defn pull
   [repo-url token]
-  (when (and (nil? (:git/error @state/state))
-             (nil? (:git/status @state/state)))
+  (when (and
+         (not (:edit? @state/state))
+         (nil? (:git/error @state/state))
+         (nil? (:git/status @state/state)))
     (let [remote-changed? (atom false)
           latest-commit (:git/latest-commit @state/state)]
       (p/let [result (git/fetch repo-url token)
@@ -209,8 +212,10 @@
 ;; TODO: update latest commit
 (defn push
   [repo-url]
-  (when (and (= :should-push (:git/status @state/state))
-             (nil? (:git/error @state/state)))
+  (when (and
+         (not (:edit? @state/state))
+         (= :should-push (:git/status @state/state))
+         (nil? (:git/error @state/state)))
     (set-git-status! :push)
     (let [token (get-github-token)]
       (util/p-handle
@@ -514,6 +519,11 @@
   (p/let [_idb-clear (js/window.pfs._idb.wipe)]
     (js/localStorage.clear)
     (set! (.-href js/window.location) "/logout")))
+
+(defn set-format-js-loading!
+  [format value]
+  (when format
+    (swap! state/state assoc-in [:format/loading format] value)))
 
 (defn start!
   []

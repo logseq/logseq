@@ -6,7 +6,6 @@
             [frontend.db :as db]
             [frontend.components.sidebar :as sidebar]
             [frontend.ui :as ui]
-            [frontend.format :as format]
             [frontend.format.org-mode :as org]
             [frontend.components.content :as content]
             [goog.crypt.base64 :as b64]))
@@ -24,7 +23,7 @@
         suffix (keyword (string/lower-case (last (string/split path #"\."))))]
     (sidebar/sidebar
      (cond
-       (and suffix (contains? #{:md :markdown :org} suffix))
+       (and suffix (contains? handler/text-formats suffix))
        [:div.content
         [:a {:href (str "/file/" encoded-path "/edit")}
          "edit"]
