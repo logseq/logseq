@@ -1,6 +1,5 @@
 (ns frontend.format.org-mode
-  (:require ["mldoc_org" :as org]
-            [frontend.format.protocol :as protocol]
+  (:require [frontend.format.protocol :as protocol]
             [frontend.util :as util]
             [clojure.string :as string]))
 
@@ -16,7 +15,7 @@
         :heading_number false
         :keep_line_break true}))
 
-(def Org (.-MldocOrg org))
+(def Org js/window.MldocOrg)
 
 (defrecord OrgMode [content]
   protocol/Format

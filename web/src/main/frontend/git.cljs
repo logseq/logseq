@@ -120,22 +120,12 @@
 
 (defn add-commit
   [repo-url file message commit-ok-handler commit-error-handler]
-  (let [get-seconds (fn []
-                      (/ (.getTime (js/Date.)) 1000))]
-    (let [t1 (get-seconds)]
-      (util/p-handle
-       (add repo-url file)
-       (fn [_]
-         (let [t2 (get-seconds)]
-           (prn "Add time: " (- t2 t1))
-           (util/p-handle
-            (commit repo-url message)
-            (fn []
-              (let [t3 (get-seconds)]
-                (prn "Commit time: " (- t3 t2)))
-              (prn "Commited")
-              (commit-ok-handler))
-            (fn [error]
-              (commit-error-handler error))))
-         )))
-    ))
+  (util/p-handle
+   (add repo-url file)
+   (fn [_]
+     (util/p-handle
+      (commit repo-url message)
+      (fn []
+        (commit-ok-handler))
+      (fn [error]
+        (commit-error-handler error))))))
