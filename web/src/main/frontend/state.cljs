@@ -5,7 +5,7 @@
 (def state (atom
             {:route-match nil
              :notification/show? false
-             :notification/text nil
+             :notification/content nil
              :root-component nil
              :edit? false
              :latest-journals []

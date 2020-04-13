@@ -24,7 +24,7 @@
   (:import [goog.events EventHandler]))
 
 ;; TODO: replace all util/p-handle with p/let
-
+;; TODO: separate git status for push-failed, pull-failed, etc
 (defn set-state-kv!
   [key value]
   (swap! state/state assoc key value))
@@ -184,17 +184,23 @@
         (set-latest-journals!)))))
 
 (defn show-notification!
-  [text status]
+  [content status]
   (swap! state/state assoc
          :notification/show? true
-         :notification/text text
+         :notification/content content
          :notification/status status)
   (when-not (= status :error)
     (js/setTimeout #(swap! state/state assoc
                            :notification/show? false
-                           :notification/text nil
+                           :notification/content nil
                            :notification/status nil)
                    5000)))
+
+(defn- clear-storage
+  []
+  (p/let [_idb-clear (js/window.pfs._idb.wipe)]
+    (js/localStorage.clear)
+    (set! (.-href js/window.location) "/")))
 
 (defn pull
   [repo-url token]
@@ -215,7 +221,17 @@
             (p/then (fn []
                       (load-db-and-journals! repo-url @remote-changed? false)))
             (p/catch (fn [_error]
-                       (show-notification! "Merges with conflicts are not supported yet, please save your local changes, logout and login again." :error))))))))
+                       (show-notification!
+                        [:p.content
+                         "Merges with conflicts are not supported yet, please "
+                         [:span.text-gray-700.font-bold
+                          "make sure saving your local changes first"]
+                         ". After that, click "
+                         [:a.font-bold {:href ""
+                                        :on-click clear-storage}
+                          "Pull again"]
+                         " to pull the latest changes."]
+                        :error))))))))
 
 (defn periodically-pull
   [repo-url pull-now?]
@@ -223,6 +239,15 @@
     (when pull-now? (pull repo-url token))
     (js/setInterval #(pull repo-url token)
                     (* 60 1000))))
+
+(defn get-latest-commit
+  [handler]
+  (-> (p/let [commits (git/log (db/get-current-repo)
+                               (get-github-token)
+                               1)]
+        (handler (first commits)))
+      (p/catch (fn [error]
+                 (prn "get latest commit failed: " error)))))
 
 ;; TODO: update latest commit
 (defn push
@@ -238,7 +263,11 @@
        (fn []
          (prn "Push successfully!")
          (set-git-status! nil)
-         (set-git-error! nil))
+         (set-git-error! nil)
+         (get-latest-commit
+          (fn [commit]
+            (when-let [hash (gobj/get commit "oid")]
+              (set-latest-commit! hash)))))
        (fn [error]
          (prn "Failed to push, error: " error)
          (set-git-status! :push-failed)
