@@ -78,26 +78,30 @@
 ;;     ))
 
 (defn upload
-  [files file-cb & {:keys [max-width max-height]
+  [files file-handler & {:keys [max-width max-height files-limit]
                     :or {max-width 1920
-                         max-height 1080}}]
-  (doseq [file (array-seq files)]
+                         max-height 1080
+                         files-limit 1}}]
+  (doseq [file (take files-limit (array-seq files))]
     (let [file-type (gobj/get file "type")
           ymd (->> (vals (util/year-month-day-padded))
                    (string/join "_"))
           file-name (str ymd "_" (gobj/get file "name"))]
-      (if (= 0 (.indexOf type "image/"))
-        (let [img (js/Image.)]
-          (set! (.-onload img)
-                (fn []
-                  (get-orientation img
-                                   (fn [^js off-canvas]
-                                     (let [file-form-data ^js (js/FormData.)
-                                           data-url (.toDataURL off-canvas)
-                                           blob (blob/blob data-url)]
-                                       (.append file-form-data "file" blob)
-                                       (file-cb file file-form-data file-name file-type)))
-                                   max-width
-                                   max-height)))
-          (set! (.-src img)
-                (create-object-url file)))))))
+      (prn {:type file-type})
+      (when (= 0 (.indexOf file-type "image/"))
+        (file-handler file file-name file-type)
+        ;; (let [img (js/Image.)]
+        ;;   (set! (.-onload img)
+        ;;         (fn []
+        ;;           (get-orientation img
+        ;;                            (fn [^js off-canvas]
+        ;;                              (let [file-form-data ^js (js/FormData.)
+        ;;                                    data-url (.toDataURL off-canvas)
+        ;;                                    blob (blob/blob data-url)]
+        ;;                                (.append file-form-data "file" blob)
+        ;;                                (file-cb file file-form-data file-name file-type)))
+        ;;                            max-width
+        ;;                            max-height)))
+        ;;   (set! (.-src img)
+        ;;         (create-object-url file)))
+        ))))

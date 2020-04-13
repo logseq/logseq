@@ -42,20 +42,9 @@
                   (let [files (.-files (.-target e))]
                     (image/upload
                      files
-                     (fn [file file-form-data file-name file-type]
-                       ;; TODO: set uploading
-                       (.append file-form-data "name" file-name)
-                       (.append file-form-data file-type true)
-
-                       ;; (citrus/dispatch!
-                       ;;  :image/upload
-                       ;;  file-form-data
-                       ;;  (fn [url]
-                       ;;    (reset! uploading? false)
-                       ;;    (swap! form assoc name url)
-                       ;;    (if on-uploaded
-                       ;;      (on-uploaded form name url))))
-                       ))))
+                     (fn [file file-name file-type]
+                       (handler/request-presigned-url file file-name file-type
+                                                      )))))
      ;; :hidden true
      }]])
 

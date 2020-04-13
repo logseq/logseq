@@ -111,20 +111,6 @@
                   :remote "origin"
                   :ref default-branch})))
 
-(defn add-commit-push
-  [repo-url file message token push-ok-handler push-error-handler]
-  (util/p-handle
-   (let [files (if (coll? file) file [file])]
-     (doseq [file files]
-       (add repo-url file)))
-   (fn [_]
-     (util/p-handle
-      (commit repo-url message)
-      (fn [_]
-        (push repo-url token)
-        (push-ok-handler))
-      push-error-handler))))
-
 (defn add-commit
   [repo-url file message commit-ok-handler commit-error-handler]
   (util/p-handle

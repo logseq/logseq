@@ -555,12 +555,14 @@
         (set-state-kv! :latest-journals journals)))))
 
 (defn request-presigned-url
-  [folder filename mime-type]
+  [file filename mime-type]
+  (prn {:filename filename
+        :mime-type mime-type})
   (util/post (str config/api "presigned_url")
-             {:folder folder
-              :filename filename
+             {:filename filename
               :mime-type mime-type}
              (fn [resp]
+               ;; TODO: upload url
                (prn {:resp resp}))
              (fn [_error]
                ;; (prn "Get token failed, error: " error)
