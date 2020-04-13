@@ -25,11 +25,6 @@
   []
   (gobj/get js/window "innerWidth"))
 
-(defn listen
-  "Register an event `handler` for events of `type` on `target`."
-  [event-handler target type handler & [opts]]
-  (.listen event-handler target (name type) handler (clj->js opts)))
-
 (defn indexed
   [coll]
   (map-indexed vector coll))
@@ -94,7 +89,7 @@
 (defn index-by
   [col k]
   (->> (map (fn [entry] [(get entry k) entry])
-        col)
+         col)
        (into {})))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
@@ -114,6 +109,14 @@
                  (on-failed %)))
        (.then bean/->clj)
        (.then #(on-ok %)))))
+
+(defn upload
+  [url file on-ok on-failed]
+  (-> (js/fetch url (clj->js {:method "put"
+                              :body file}))
+      (.then #(if (.-ok %)
+                (on-ok %)
+                (on-failed %)))))
 
 (defn post
   [url body on-ok on-failed]

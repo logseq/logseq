@@ -19,3 +19,7 @@
              ;; format => boolean
              :format/loading {}}
             ))
+
+(def edit-node (atom nil))
+(def edit-content (atom ""))
+(def cursor-pos (atom nil))

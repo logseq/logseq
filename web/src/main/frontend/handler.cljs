@@ -555,18 +555,39 @@
         (set-state-kv! :latest-journals journals)))))
 
 (defn request-presigned-url
-  [file filename mime-type]
-  (prn {:filename filename
-        :mime-type mime-type})
-  (util/post (str config/api "presigned_url")
-             {:filename filename
-              :mime-type mime-type}
-             (fn [resp]
-               ;; TODO: upload url
-               (prn {:resp resp}))
-             (fn [_error]
-               ;; (prn "Get token failed, error: " error)
-               )))
+  [file filename mime-type url-handler]
+  (cond
+    (> (gobj/get file "size") (* 5 1024 1024))
+    (show-notification! [:p "Sorry, we don't support any file that's larger than 5MB."] :error)
+
+    :else
+    (util/post (str config/api "presigned_url")
+               {:filename filename
+                :mime-type mime-type}
+               (fn [{:keys [presigned-url s3-object-key] :as resp}]
+                 (if presigned-url
+                   (util/upload presigned-url
+                                file
+                                (fn [_result]
+                                  ;; request cdn signed url
+                                  (util/post (str config/api "signed_url")
+                                             {:s3-object-key s3-object-key}
+                                             (fn [{:keys [signed-url]}]
+                                               (if signed-url
+                                                 (do
+                                                   (prn "Get a singed url: " signed-url)
+                                                   (url-handler signed-url))
+                                                 (prn "Something error, can't get a valid signed url.")))
+                                             (fn [error]
+                                               (prn "Something error, can't get a valid signed url."))))
+                                (fn [error]
+                                  (prn "upload failed.")
+                                  (js/console.dir error)))
+                   ;; TODO: notification, or re-try
+                   (prn "failed to get any presigned url, resp: " resp)))
+               (fn [_error]
+                 ;; (prn "Get token failed, error: " error)
+                 ))))
 
 (defn set-me-if-exists!
   []
@@ -586,6 +607,31 @@
   [format value]
   (when format
     (swap! state/state assoc-in [:format/loading format] value)))
+
+(defn reset-cursor-pos!
+  [e]
+  (let [new-pos (gobj/getValueByKeys e "target" "selectionEnd")]
+    (println "cursor position: " new-pos)
+    (reset! state/cursor-pos new-pos)))
+
+(defn set-edit-node!
+  [ref]
+  (reset! state/edit-node ref))
+
+(defn move-cursor-to-end [input]
+  (let [n (count (.-value input))]
+    (set! (.-selectionStart input) n)
+    (set! (.-selectionEnd input) n)))
+
+(defn insert-image!
+  [image-url]
+  (let [content @state/edit-content
+        image (str "<img src=\"" image-url "\" />")
+        new-content (str content "\n" "#+BEGIN_EXPORT html\n" image "\n#+END_EXPORT\n")
+        node @state/edit-node]
+    (reset! state/edit-content new-content)
+    (set! (.-value node) new-content)
+    (move-cursor-to-end node)))
 
 (defn start!
   []

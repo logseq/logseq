@@ -87,7 +87,6 @@
           ymd (->> (vals (util/year-month-day-padded))
                    (string/join "_"))
           file-name (str ymd "_" (gobj/get file "name"))]
-      (prn {:type file-type})
       (when (= 0 (.indexOf file-type "image/"))
         (file-handler file file-name file-type)
         ;; (let [img (js/Image.)]

@@ -6,13 +6,12 @@
             [frontend.ui :as ui]
             [frontend.mixins :as mixins]
             [frontend.db :as db]
-            [frontend.state :as state]
+            [frontend.state :as state :refer [edit-content]]
             [frontend.format.org-mode :as org]
             [goog.object :as gobj]
             [frontend.image :as image]
             [frontend.components.content :as content]))
 
-(def edit-content (atom ""))
 (rum/defc editor-box <
   (mixins/event-mixin
    (fn [state]
@@ -27,14 +26,19 @@
   [heading content]
   [:div.flex-1
    (ui/textarea-autosize
-    {:on-change (fn [e]
+    {:ref (fn [ref]
+            (handler/set-edit-node! ref))
+     :on-change (fn [e]
+                  (handler/reset-cursor-pos! e)
                   (reset! edit-content (util/evalue e)))
      :default-value content
      :auto-focus true
      :style {:border "none"
              :border-radius 0
              :background "transparent"
-             :margin-top 12.5}})
+             :margin-top 12.5}
+     :on-key-down handler/reset-cursor-pos!
+     :on-click handler/reset-cursor-pos!})
    [:input
     {:id "files"
      :type "file"
@@ -43,8 +47,11 @@
                     (image/upload
                      files
                      (fn [file file-name file-type]
-                       (handler/request-presigned-url file file-name file-type
-                                                      )))))
+                       (handler/request-presigned-url
+                        file file-name file-type
+                        (fn [signed-url]
+                          ;; insert into the text
+                          (handler/insert-image! signed-url)))))))
      ;; :hidden true
      }]])
 
