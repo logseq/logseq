@@ -271,7 +271,18 @@
        (fn [error]
          (prn "Failed to push, error: " error)
          (set-git-status! :push-failed)
-         (set-git-error! error))))))
+         (set-git-error! error)
+         (show-notification!
+          [:p.content
+           "Failed to push, please "
+           [:span.text-gray-700.font-bold
+            "make sure saving your local changes first"]
+           ". After that, click "
+           [:a.font-bold {:href ""
+                          :on-click clear-storage}
+            "Pull again"]
+           " to pull the latest changes."]
+          :error))))))
 
 (defn clone
   [repo]
