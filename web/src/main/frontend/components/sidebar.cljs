@@ -78,8 +78,11 @@
        (repo/add-repo))]))
 
 (rum/defcs sidebar < (mixins/modal)
+  rum/reactive
   [state main-content]
-  (let [{:keys [open? close-fn open-fn]} state]
+  (let [{:keys [open? close-fn open-fn]} state
+        {:keys [git/status]} (rum/react state/state)
+        pulling? (= :pulling status)]
     [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
@@ -143,26 +146,17 @@
            [:input#search_field.block.w-full.h-full.pl-8.pr-3.py-2.rounded-md.text-gray-900.placeholder-gray-500.focus:outline-none.focus:placeholder-gray-400.sm:text-sm
             {:placeholder "Search"}]]]]
         [:div.ml-4.flex.items-center.md:ml-6
-         [:button.p-1.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500
-          {:on-click handler/pull-current-repo}
-          [:svg.h-6.w-6
-           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-           [:path
-            {:d
-             "M6 18.7V21a1 1 0 0 1-2 0v-5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2H7.1A7 7 0 0 0 19 12a1 1 0 1 1 2 0 9 9 0 0 1-15 6.7zM18 5.3V3a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1h-5a1 1 0 0 1 0-2h2.9A7 7 0 0 0 5 12a1 1 0 1 1-2 0 9 9 0 0 1 15-6.7z"
-             :stroke-width "2",
-             :stroke-linejoin "round",
-             :stroke-linecap "round"}]]
-
-          ;; [:svg.h-6.w-6
-          ;;  {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-          ;;  [:path
-          ;;   {:d
-          ;;    "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
-          ;;    :stroke-width "2",
-          ;;    :stroke-linejoin "round",
-          ;;    :stroke-linecap "round"}]]
-          ]
+         [:div {:class (if pulling? "loader")}
+          [:button.p-1.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500
+           {:on-click handler/pull-current-repo}
+           [:svg.h-6.w-6
+            {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+            [:path
+             {:d
+              "M6 18.7V21a1 1 0 0 1-2 0v-5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2H7.1A7 7 0 0 0 19 12a1 1 0 1 1 2 0 9 9 0 0 1-15 6.7zM18 5.3V3a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1h-5a1 1 0 0 1 0-2h2.9A7 7 0 0 0 5 12a1 1 0 1 1-2 0 9 9 0 0 1 15-6.7z"
+              :stroke-width "1",
+              :stroke-linejoin "round",
+              :stroke-linecap "round"}]]]]
          (ui/dropdown-with-links
           [{:title "Your Profile"
             :options {:href "/me"}}

@@ -208,6 +208,7 @@
          (not (:edit? @state/state))
          (nil? (:git/error @state/state))
          (nil? (:git/status @state/state)))
+    (set-git-status! :pulling)
     (let [remote-changed? (atom false)
           latest-commit (:git/latest-commit @state/state)]
       (p/let [result (git/fetch repo-url token)
@@ -221,15 +222,19 @@
             (p/then (fn [result]
                       (-> (git/checkout repo-url)
                           (p/then (fn [result]
+                                    (set-git-status! nil)
                                     (load-db-and-journals! repo-url @remote-changed? false)))
                           (p/catch (fn [error]
-                                     (prn "checkout error: " error))))))
-            (p/catch (fn [_error]
+                                     (set-git-status! :checkout-failed)
+                                     (set-git-error! error))))))
+            (p/catch (fn [error]
+                       (set-git-status! :merge-failed)
+                       (set-git-error! error)
                        (show-notification!
                         [:p.content
                          "Merges with conflicts are not supported yet, please "
                          [:span.text-gray-700.font-bold
-                          "make sure saving your local changes first"]
+                          "make sure saving all your changes elsewhere"]
                          ". After that, click "
                          [:a.font-bold {:href ""
                                         :on-click clear-storage}
@@ -286,7 +291,7 @@
           [:p.content
            "Failed to push, please "
            [:span.text-gray-700.font-bold
-            "make sure saving your local changes first"]
+            "make sure saving all your changes elsewhere"]
            ". After that, click "
            [:a.font-bold {:href ""
                           :on-click clear-storage}
