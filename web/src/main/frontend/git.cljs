@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [frontend.state :as state]))
 
+(defonce default-branch "master")
 ;; only support Github now
 (defn auth
   [token]
@@ -54,7 +55,7 @@
   [repo-url token]
   (js/git.fetch (with-auth token
                   {:dir (get-repo-dir repo-url)
-                   :ref "master"
+                   :ref default-branch
                    :singleBranch true
                    :depth 1
                    :tags false})))
@@ -63,14 +64,21 @@
   [repo-url]
   (js/git.merge (clj->js
                  {:dir (get-repo-dir repo-url)
-                  :ours "master"
-                  :theirs "remotes/origin/master"})))
+                  :ours default-branch
+                  :theirs (str "remotes/origin/" default-branch)
+                  :fastForwardOnly true})))
+
+(defn checkout
+  [repo-url]
+  (js/git.checkout (clj->js
+                    {:dir (get-repo-dir repo-url)
+                     :ref default-branch})))
 
 (defn log
   [repo-url token depth]
   (js/git.log (with-auth token
                 {:dir (get-repo-dir repo-url)
-                 :ref "master"
+                 :ref default-branch
                  :depth depth
                  :singleBranch true})))
 
@@ -78,7 +86,7 @@
   [repo-url token]
   (js/git.pull (with-auth token
                  {:dir (get-repo-dir repo-url)
-                  :ref "master"
+                  :ref default-branch
                   :singleBranch true
                   :fast true})))
 (defn add
@@ -91,18 +99,17 @@
   [repo-url message]
   (let [{:keys [name email]} (:me @state/state)]
     (js/git.commit (clj->js
-                   {:dir (get-repo-dir repo-url)
-                    :message message
-                    :author {:name name
-                             :email email}}))))
+                    {:dir (get-repo-dir repo-url)
+                     :message message
+                     :author {:name name
+                              :email email}}))))
 
 (defn push
   [repo-url token]
   (js/git.push (with-auth token
                  {:dir (get-repo-dir repo-url)
                   :remote "origin"
-                  :ref "master"
-                  })))
+                  :ref default-branch})))
 
 (defn add-commit-push
   [repo-url file message token push-ok-handler push-error-handler]

@@ -218,8 +218,12 @@
                   (reset! remote-changed? true))
               _ (set-latest-commit! fetchHead)]
         (-> (git/merge repo-url)
-            (p/then (fn []
-                      (load-db-and-journals! repo-url @remote-changed? false)))
+            (p/then (fn [result]
+                      (-> (git/checkout repo-url)
+                          (p/then (fn [result]
+                                    (load-db-and-journals! repo-url @remote-changed? false)))
+                          (p/catch (fn [error]
+                                     (prn "checkout error: " error))))))
             (p/catch (fn [_error]
                        (show-notification!
                         [:p.content
@@ -232,6 +236,12 @@
                           "Pull again"]
                          " to pull the latest changes."]
                         :error))))))))
+
+(defn pull-current-repo
+  []
+  (when-let [repo (db/get-current-repo)]
+    (when-let [token (get-github-token)]
+      (pull repo token))))
 
 (defn periodically-pull
   [repo-url pull-now?]
