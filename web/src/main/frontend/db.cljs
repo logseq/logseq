@@ -399,7 +399,8 @@
              (or [?h :heading/marker "TODO"]
                  [?h :heading/marker "DOING"]
                  [?h :heading/marker "IN-PROGRESS"]
-                 [?h :heading/marker "DONE"])]
+                 ;; [?h :heading/marker "DONE"]
+                 )]
         @conn)
       seq-flatten))))
 
