@@ -152,7 +152,7 @@
       (when-not file-exists?
         (git-add-commit repo-url path "create a month journal" default-content)))))
 
-(defn load-all-contents!
+(defn load-files-contents!
   [repo-url files ok-handler]
   (let [files (only-text-formats files)]
     (p/let [contents (p/all (doall
@@ -162,24 +162,44 @@
        (zipmap files contents)))))
 
 (defn load-repo-to-db!
-  [repo-url files]
+  [repo-url files diffs first-clone?]
   (set-state-kv! :repo/loading-files? false)
   (set-state-kv! :repo/importing-to-db? true)
-  (load-all-contents!
-   repo-url
-   files
-   (fn [contents]
-     (let [headings (db/extract-all-headings repo-url contents)]
-       (db/reset-contents-and-headings! repo-url contents headings)
-       (set-state-kv! :repo/importing-to-db? false)))))
+  (let [load-contents (fn [files delete-files delete-headings]
+                        (load-files-contents!
+                         repo-url
+                         files
+                         (fn [contents]
+                           (let [headings (db/extract-all-headings repo-url contents)]
+                             (db/reset-contents-and-headings! repo-url contents headings delete-files delete-headings)
+                             (set-state-kv! :repo/importing-to-db? false)))))]
+
+    (if first-clone?
+      (load-contents files nil nil)
+      (when (seq diffs)
+        (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
+                                           (map :path)))
+              remove-files (filter-diffs "remove")
+              modify-files (filter-diffs "modify")
+              add-files (filter-diffs "add")
+              delete-files (if (seq remove-files)
+                             (db/delete-files repo-url remove-files))
+              delete-headings (db/delete-headings repo-url (concat remove-files modify-files))
+              add-or-modify-files (util/remove-nils (concat add-files modify-files))]
+          (load-contents add-or-modify-files delete-files delete-headings))))))
+
+(defn journal-file-changed?
+  [repo-url diffs]
+  (contains? (set (map :path diffs))
+             (db/get-current-journal-path)))
 
 (defn load-db-and-journals!
-  [repo-url remote-changed? first-clone?]
-  (when (or remote-changed? first-clone?)
+  [repo-url diffs first-clone?]
+  (when (or diffs first-clone?)
     (p/let [files (load-files repo-url)
-            loaded (load-repo-to-db! repo-url files)
+            _ (load-repo-to-db! repo-url files diffs first-clone?)
             _ (create-month-journal-if-not-exists repo-url)]
-      (when (or remote-changed?
+      (when (or (journal-file-changed? repo-url diffs)
                 (empty? (:latest-journals @state/state)))
         (set-latest-journals!)))))
 
@@ -204,43 +224,43 @@
 
 (defn pull
   [repo-url token]
-  (when (and
-         (not (:edit? @state/state))
-         (nil? (:git/error @state/state))
-         (nil? (:git/status @state/state)))
-    (set-git-status! :pulling)
-    (let [remote-changed? (atom false)
-          latest-commit (:git/latest-commit @state/state)]
-      (p/let [result (git/fetch repo-url token)
-              {:keys [fetchHead]} (bean/->clj result)
-              _ (when (or
-                       (nil? latest-commit)
-                       (and latest-commit (not= fetchHead latest-commit)))
-                  (reset! remote-changed? true))
-              _ (set-latest-commit! fetchHead)]
-        (-> (git/merge repo-url)
-            (p/then (fn [result]
-                      (-> (git/checkout repo-url)
-                          (p/then (fn [result]
-                                    (set-git-status! nil)
-                                    (load-db-and-journals! repo-url @remote-changed? false)))
-                          (p/catch (fn [error]
-                                     (set-git-status! :checkout-failed)
-                                     (set-git-error! error))))))
-            (p/catch (fn [error]
-                       (set-git-status! :merge-failed)
-                       (set-git-error! error)
-                       (show-notification!
-                        [:p.content
-                         "Merges with conflicts are not supported yet, please "
-                         [:span.text-gray-700.font-bold
-                          "make sure saving all your changes elsewhere"]
-                         ". After that, click "
-                         [:a.font-bold {:href ""
-                                        :on-click clear-storage}
-                          "Pull again"]
-                         " to pull the latest changes."]
-                        :error))))))))
+  (let [status (:git/status @state/state)]
+    (when (and
+          (not (:edit? @state/state))
+          (nil? (:git/error @state/state))
+          (or (nil? status)
+              (= status :pulling)))
+     (set-git-status! :pulling)
+     (let [latest-commit (:git/latest-commit @state/state)]
+       (p/let [result (git/fetch repo-url token)
+               {:keys [fetchHead]} (bean/->clj result)
+               _ (set-latest-commit! fetchHead)]
+         (-> (git/merge repo-url)
+             (p/then (fn [result]
+                       (-> (git/checkout repo-url)
+                           (p/then (fn [result]
+                                     (set-git-status! nil)
+                                     (when (and latest-commit fetchHead
+                                                (not= latest-commit fetchHead))
+                                       (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                         (load-db-and-journals! repo-url diffs false)))))
+                           (p/catch (fn [error]
+                                      (set-git-status! :checkout-failed)
+                                      (set-git-error! error))))))
+             (p/catch (fn [error]
+                        (set-git-status! :merge-failed)
+                        (set-git-error! error)
+                        (show-notification!
+                         [:p.content
+                          "Merges with conflicts are not supported yet, please "
+                          [:span.text-gray-700.font-bold
+                           "make sure saving all your changes elsewhere"]
+                          ". After that, click "
+                          [:a.font-bold {:href ""
+                                         :on-click clear-storage}
+                           "Pull again"]
+                          " to pull the latest changes."]
+                         :error)))))))))
 
 (defn pull-current-repo
   []
@@ -253,7 +273,7 @@
   (when-let [token (get-github-token)]
     (when pull-now? (pull repo-url token))
     (js/setInterval #(pull repo-url token)
-                    (* 60 1000))))
+                    (* config/auto-pull-secs 1000))))
 
 (defn get-latest-commit
   [handler]
@@ -263,6 +283,12 @@
         (handler (first commits)))
       (p/catch (fn [error]
                  (prn "get latest commit failed: " error)))))
+
+(defn set-latest-commit-if-exists! []
+  (get-latest-commit
+   (fn [commit]
+     (when-let [hash (gobj/get commit "oid")]
+       (set-latest-commit! hash)))))
 
 ;; TODO: update latest commit
 (defn push
@@ -279,10 +305,7 @@
          (prn "Push successfully!")
          (set-git-status! nil)
          (set-git-error! nil)
-         (get-latest-commit
-          (fn [commit]
-            (when-let [hash (gobj/get commit "oid")]
-              (set-latest-commit! hash)))))
+         (set-latest-commit-if-exists!))
        (fn [error]
          (prn "Failed to push, error: " error)
          (set-git-status! :push-failed)
@@ -308,6 +331,7 @@
        (git/clone repo token))
      (fn []
        (db/mark-repo-as-cloned repo)
+       (set-latest-commit-if-exists!)
        (util/post (str config/api "repos")
                   {:url repo}
                   (fn [result]
@@ -444,14 +468,13 @@
 (defn re-render!
   []
   (when-let [comp (get @state/state :root-component)]
-    (when-not (:edit? @state/state)
+    (when (and (not (:edit? @state/state)))
       (rum/request-render comp))))
 
 (defn db-listen-to-tx!
   []
   (d/listen! db/conn :persistence
-             (fn [tx-report] ;; FIXME do not notify with nil as db-report
-               ;; FIXME do not notify if tx-data is empty
+             (fn [tx-report]
                (when-let [db (:db-after tx-report)]
                  (prn "DB changed, re-rendered!")
                  (re-render!)
@@ -464,7 +487,7 @@
         push (fn []
                (push repo-url))]
     (js/setInterval push
-                    (* 10 1000))))
+                    (* config/auto-push-secs 1000))))
 
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
@@ -477,7 +500,7 @@
   (p/then (clone repo-url)
           (fn []
             (git-set-username-email! (:me @state/state))
-            (load-db-and-journals! repo-url false true)
+            (load-db-and-journals! repo-url nil true)
             (periodically-pull-and-push repo-url {:pull-now? false}))))
 
 (defn edit-journal!

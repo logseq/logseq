@@ -11,6 +11,7 @@
    :asset-path "/static/js"
 
    :compiler-options {:infer-externs :auto
+                      :output-feature-set :es6
                       :externs ["datascript/externs.js"]}
    ;; TODO: purge-css not working properly
    ;; :build-hooks [(shadow.hooks/purge-css

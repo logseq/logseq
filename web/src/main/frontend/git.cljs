@@ -3,7 +3,11 @@
   (:require [promesa.core :as p]
             [frontend.util :as util]
             [clojure.string :as string]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [goog.object :as gobj]
+            ["/frontend/git_ext" :as git-ext]))
+
+;; TODO: move to a js worker
 
 (defonce default-branch "master")
 ;; only support Github now
@@ -122,3 +126,22 @@
         (commit-ok-handler))
       (fn [error]
         (commit-error-handler error))))))
+
+(defn get-diffs
+  [repo-url hash-1 hash-2]
+  (let [dir (get-repo-dir repo-url)]
+    (p/let [diffs (git-ext/getFileStateChanges hash-1 hash-2 dir)
+            diffs (cljs-bean.core/->clj diffs)
+            diffs (remove #(= (:type %) "equal") diffs)
+            diffs (map (fn [diff]
+                         (update diff :path #(subs % 1))) diffs)]
+      diffs)))
+
+(comment
+  (def hash-2 "1fc9cd212018755ab3ba7791f6801c9933fbe0cf")
+  (def hash-1 "fa7107c2cb9567ebb6d396130f8ebab27dcf719a")
+  (promesa.core/let [diffs (get-diffs (frontend.db/get-current-repo)
+                                      hash-1
+                                      hash-2)]
+    (prn diffs))
+  )

@@ -19,3 +19,6 @@
   [path]
   (if dev? path
       (str asset-domain path)))
+
+(def auto-pull-secs 60)
+(def auto-push-secs 10)

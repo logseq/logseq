@@ -164,10 +164,30 @@
         @conn repo-url)
       seq-flatten))
 
+(defn get-files-headings
+  [repo-url paths]
+  (let [paths (set paths)
+        pred (fn [db e]
+               (contains? paths e))]
+    (-> (d/q '[:find ?heading
+               :in $ ?repo-url ?pred
+               :where
+               [?repo :repo/url ?repo-url]
+               [?file :file/path ?path]
+               [(?pred $ ?path)]
+               [?heading :heading/file ?file]
+               [?heading :heading/repo ?repo]]
+          @conn repo-url pred)
+        seq-flatten)))
+
 (defn delete-headings
-  [repo-url]
-  (let [headings (get-repo-headings repo-url)]
-    (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
+  ([repo-url]
+   (let [headings (get-repo-headings repo-url)]
+     (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
+  ([repo-url files]
+   (when (seq files)
+     (let [headings (get-files-headings repo-url files)]
+       (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))))
 
 (defn get-repo-files
   [repo-url]
@@ -182,9 +202,10 @@
        distinct))
 
 (defn delete-files
-  [repo-url]
-  (let [files (get-repo-files repo-url)]
-    (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files)))
+  ([repo-url]
+   (delete-files repo-url (get-repo-files repo-url)))
+  ([repo-url files]
+   (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files)))
 
 (defn get-file-headings
   [repo-url path]
@@ -204,16 +225,16 @@
     (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
 
 (defn reset-contents-and-headings!
-  [repo-url contents headings]
-  (let [delete-files (delete-files repo-url)
-        delete-headings (delete-headings repo-url)
-        headings (safe-headings headings)
+  [repo-url contents headings delete-files delete-headings]
+  (let [headings (safe-headings headings)
         file-contents (map (fn [[file content]]
-                             {:file/repo [:repo/url repo-url]
-                              :file/path file
-                              :file/content content})
+                             (when content
+                               {:file/repo [:repo/url repo-url]
+                                :file/path file
+                                :file/content content}))
                         contents)
-        all-data (concat delete-files delete-headings file-contents headings)]
+        all-data (-> (concat delete-files delete-headings file-contents headings)
+                     (util/remove-nils))]
     (d/transact! conn all-data)))
 
 (defn get-all-headings
@@ -343,7 +364,8 @@
   (vec
    (mapcat
     (fn [[file content] contents]
-      (extract-headings repo-url file content))
+      (when content
+        (extract-headings repo-url file content)))
     contents)))
 
 (defn reset-file!
@@ -457,7 +479,7 @@
       (drop 1 journals)
       journals)))
 
-(defn- compute-journal-path
+(defn compute-journal-path
   [before-date]
   (let [[month day year] (->> (string/split before-date #"/")
                               (mapv util/parse-int))
@@ -471,6 +493,11 @@
 
                        :else
                        [year month])]
+    (util/journals-path year month)))
+
+(defn get-current-journal-path
+  []
+  (let [{:keys [year month]} (util/get-date)]
     (util/journals-path year month)))
 
 ;; before-date should be a string joined with "/", like "month/day/year"
