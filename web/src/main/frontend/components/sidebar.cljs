@@ -5,6 +5,7 @@
             [frontend.db :as db]
             [frontend.components.repo :as repo]
             [frontend.components.journal :as journal]
+            [frontend.components.search :as search]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -131,20 +132,7 @@
            :stroke-linejoin "round",
            :stroke-linecap "round"}]]]
        [:div.flex-1.px-4.flex.justify-between
-        [:div.flex-1.flex
-         [:div.w-full.flex.md:ml-0
-          [:label.sr-only {:for "search_field"} "Search"]
-          [:div.relative.w-full.text-gray-400.focus-within:text-gray-600
-           [:div.absolute.inset-y-0.left-0.flex.items-center.pointer-events-none
-            [:svg.h-5.w-5
-             {:viewBox "0 0 20 20", :fill "currentColor"}
-             [:path
-              {:d
-               "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z",
-               :clip-rule "evenodd",
-               :fill-rule "evenodd"}]]]
-           [:input#search_field.block.w-full.h-full.pl-8.pr-3.py-2.rounded-md.text-gray-900.placeholder-gray-500.focus:outline-none.focus:placeholder-gray-400.sm:text-sm
-            {:placeholder "Search"}]]]]
+        (search/search)
         [:div.ml-4.flex.items-center.md:ml-6
          [:div {:class (if pulling? "loader")}
           [:button.p-1.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500

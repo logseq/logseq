@@ -64,11 +64,11 @@
     (sidebar/sidebar
      [:div.content
       [:h3.mb-2 (str "Update " path)]
-      [:textarea
-       {:rows rows
-        :default-value initial-content
+      (ui/textarea
+       {:initial-value initial-content
+        :value-atom content
         :on-change #(reset! content (.. % -target -value))
-        :auto-focus true}]
+        :auto-focus true})
       [:div.mt-1.mb-1.relative.rounded-md.shadow-sm
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
         {:placeholder "Commit message"

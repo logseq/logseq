@@ -17,9 +17,11 @@
              :git/status (storage/get :git/status)
              :git/error (storage/get :git/error)
              ;; format => boolean
-             :format/loading {}}
-            ))
+             :format/loading {}
+             :search/result nil}))
 
 (def edit-node (atom nil))
 (def edit-content (atom ""))
 (def cursor-pos (atom nil))
+
+(def q (atom nil))

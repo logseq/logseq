@@ -2,17 +2,52 @@
   (:require [rum.core :as rum]
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
-            ["react-textarea-autosize" :as Textarea]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
+            [clojure.string :as string]
             [goog.object :as gobj]
             [goog.dom :as gdom]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 
-(defonce textarea-autosize (r/adapt-class (gobj/get Textarea "default")))
+(defn- force-update-input
+  [comp opts]
+  (assoc (-> opts (dissoc :on-change))
+         :on-change (fn [e]
+                      (when-let [on-change (:on-change opts)]
+                        (on-change e))
+                      (.forceUpdate comp))))
+
+(defn- count-newlines
+  [s]
+  (count (re-seq #"\n" (or s ""))))
+
+(rum/defcc textarea <
+  {:init (fn [state props]
+           (let [{:keys [initial-value value-atom]} (first (:rum/args state))]
+             (reset! value-atom (string/trim initial-value)))
+           state)}
+  [comp opts]
+  (when-let [value-atom (:value-atom opts)]
+    (let [inc-rows (get opts :inc-rows 1)
+          rows (+ inc-rows (count-newlines @value-atom))]
+      [:textarea
+       (-> (force-update-input comp opts)
+           (assoc :rows rows
+                  :value @value-atom))])))
+
+(rum/defc content-editable <
+  {:did-mount (fn [state]
+                (let [{:keys [id value]} (first (:rum/args state))
+                      node (rum/ref-node state id)]
+                  (set! (.-innerText node) value)
+                  state))}
+  [{:keys [id on-change value]}]
+  [:div.textarea {:ref id
+                  :on-input #(on-change (.-innerText (.-target %)))
+                  :content-editable "true"}])
 
 (rum/defc dropdown-content-wrapper [state content]
   [:div.origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg

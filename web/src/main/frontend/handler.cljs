@@ -5,6 +5,7 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.storage :as storage]
+            [frontend.search :as search]
             [frontend.util :as util]
             [frontend.config :as config]
             [clojure.walk :as walk]
@@ -147,7 +148,8 @@
         file-path (str "/" path)
         default-content (default-month-journal-content)]
     (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
-                  (p/catch identity))
+                  (p/catch (fn [e]
+                             (prn e))))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (git-add-commit repo-url path "create a month journal" default-content)))))
@@ -634,7 +636,6 @@
 (defn reset-cursor-pos!
   [e]
   (let [new-pos (gobj/getValueByKeys e "target" "selectionEnd")]
-    (println "cursor position: " new-pos)
     (reset! state/cursor-pos new-pos)))
 
 (defn set-edit-node!
@@ -655,6 +656,15 @@
     (reset! state/edit-content new-content)
     (set! (.-value node) new-content)
     (move-cursor-to-end node)))
+
+(defn search
+  [q]
+  (swap! state/state assoc :search/result (search/search q)))
+
+(defn clear-search!
+  []
+  (swap! state/state assoc :search/result nil)
+  (reset! state/q nil))
 
 (defn start!
   []
