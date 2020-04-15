@@ -1,9 +1,11 @@
 (ns frontend.util
   (:require [goog.object :as gobj]
+            [goog.dom :as gdom]
             [promesa.core :as p]
             [clojure.walk :as walk]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            ["caret-pos" :as caret]))
 
 (defn evalue
   [event]
@@ -195,3 +197,11 @@
                                    (reset! t nil)
                                    (apply f args))
                                 threshold))))))
+
+(defn caret-pos
+  [input]
+  ((gobj/get caret "position") input))
+
+(defn caret-offset
+  [input]
+  ((gobj/get caret "offset") input))

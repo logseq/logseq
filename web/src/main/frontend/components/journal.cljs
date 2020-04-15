@@ -10,7 +10,8 @@
             [frontend.format.org-mode :as org]
             [goog.object :as gobj]
             [frontend.image :as image]
-            [frontend.components.content :as content]))
+            [frontend.components.content :as content]
+            [goog.dom :as gdom]))
 
 (rum/defc editor-box <
   (mixins/event-mixin
@@ -66,24 +67,56 @@
       result)))
 
 (rum/defc journal-cp < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (let [{:keys [title content]} (first (:rum/args state))]
+       (mixins/hide-when-esc-or-outside
+        state
+        nil
+        :show-fn (fn []
+                   (:edit? @state/state))
+        :on-hide (fn []
+                   (let [[heading content] (split-heading-body content)]
+                     (handler/save-current-edit-journal! (str heading "\n" (string/trimr @edit-content) "\n\n"))))
+        :node (gdom/getElement "journal-edit")))))
   [{:keys [uuid title content] :as journal}]
   (let [{:keys [edit? edit-journal]} (rum/react state/state)
         [heading content] (split-heading-body content)]
     [:div.flex-1
      [:h1.text-gray-600 {:style {:font-weight "450"}}
       title]
+     [:div {:id (str "journal-edit")
+            :content-editable true
+            :on-input (fn [e]
+                        (let [value (gobj/getValueByKeys e "currentTarget" "textContent")]
+                              (prn "value: " value)
+                              (reset! edit-content value)))
 
-     (if (and edit? (= uuid (:uuid edit-journal)))
-       (editor-box heading content)
-       [:div {:on-click (fn []
-                          (handler/edit-journal! content journal)
-                          (reset! edit-content content))
-              :style {:padding 8
-                      :min-height 200}}
-        (if (or (not content)
-                (string/blank? content))
-          [:div]
-          (content/html content "org" org/config-with-line-break))])]))
+            ;; :on-click (fn []
+            ;;             (handler/edit-journal! content journal)
+            ;;             (reset! edit-content content))
+            :style {:padding 8
+                    :min-height 200}}
+      (if (or (not content)
+              (string/blank? content))
+        [:div]
+        (content/html content "org" org/config-with-line-break))]
+     ;; (if (and edit? (= uuid (:uuid edit-journal)))
+     ;;   (editor-box heading content)
+     ;;   [:div {:id (str "journal-" uuid)
+     ;;          :on-change (fn [e]
+     ;;                       (reset! edit-content (util/evalue e)))
+     ;;          :content-editable true
+     ;;          ;; :on-click (fn []
+     ;;          ;;             (handler/edit-journal! content journal)
+     ;;          ;;             (reset! edit-content content))
+     ;;          :style {:padding 8
+     ;;                  :min-height 200}}
+     ;;    (if (or (not content)
+     ;;            (string/blank? content))
+     ;;      [:div]
+     ;;      (content/html content "org" org/config-with-line-break))])
+     ]))
 
 (rum/defc journals
   [latest-journals]
