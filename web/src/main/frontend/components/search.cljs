@@ -34,6 +34,7 @@
            :fill-rule "evenodd"}]]]
        [:input#search_field.block.w-full.h-full.pl-8.pr-3.py-2.rounded-md.text-gray-900.placeholder-gray-500.focus:outline-none.focus:placeholder-gray-400.sm:text-sm
         {:placeholder "Search"
+         :auto-complete "off"
          :default-value ""
          :on-change (fn [e]
                       (let [value (util/evalue e)]
@@ -46,10 +47,10 @@
           (if show-result?
             (dropdown-content-wrapper
              state
-             [:div
-              [:ul.m-3
-               (for [[file content] search-result]
-                 [:li.py-2 {:key (str "search-" file)}
-                  [:a {:href (str "/file/" (b64/encodeString file))
-                       :on-click handler/clear-search!}
-                   (str file)]])]]))))]]]))
+             [:div {:class "py-1 rounded-md bg-white shadow-xs"}
+              (for [[file content] search-result]
+                (ui/menu-link
+                 {:key (str "search-" file)
+                  :href (str "/file/" (b64/encodeString file))
+                  :on-click handler/clear-search!}
+                 (str file)))]))))]]]))

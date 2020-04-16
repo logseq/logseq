@@ -76,15 +76,21 @@
         (when @open?
           (dropdown-content-wrapper state content))))]))
 
+(rum/defc menu-link
+  [options text]
+  [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150
+   options
+   text])
+
 (defn dropdown-with-links
   [links]
   (dropdown
    [:div.py-1.rounded-md.bg-white.shadow-xs
     (for [{:keys [options title]} links]
-      [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150
+      (menu-link
        (merge {:key (cljs.core/random-uuid)}
               options)
-       title])]))
+       title))]))
 
 (rum/defc button
   [text on-click]

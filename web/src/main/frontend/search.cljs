@@ -3,7 +3,7 @@
             [medley.core :as medley]
             [frontend.util :as util]))
 
-;; TODO: should be very slow!
+;; TODO: optimization
 ;; get matched files/pages and highlighted content
 (defn search
   [q]
@@ -14,7 +14,6 @@
                       [file
                        (if (re-find (re-pattern (str "(?i)" q))
                                     content)
-                         content
-                         nil)])
+                         content)])
                     contents)
      (util/remove-nils))))

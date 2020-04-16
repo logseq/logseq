@@ -148,8 +148,7 @@
         file-path (str "/" path)
         default-content (default-month-journal-content)]
     (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
-                  (p/catch (fn [e]
-                             (prn e))))
+                  (p/catch (fn [_e])))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (git-add-commit repo-url path "create a month journal" default-content)))))
