@@ -5,7 +5,8 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [clojure.string :as string]
-            [goog.crypt.base64 :as b64]))
+            [goog.crypt.base64 :as b64]
+            [goog.object :as gobj]))
 
 (rum/defc dropdown-content-wrapper [state content]
   [:div.origin-top-left.absolute.left-0.mt-0.w-48.rounded-md.shadow-lg
@@ -38,9 +39,13 @@
          :default-value ""
          :on-change (fn [e]
                       (let [value (util/evalue e)]
-                        (if-not (string/blank? value)
-                          (handler/search value)
-                          (handler/clear-search!))))}]
+                        (when (string/blank? value)
+                          (handler/clear-search!))))
+         :on-key-up (fn [e]
+                      ;; Enter
+                      (let [value (util/evalue e)]
+                        (when (= 13 (gobj/get e "keyCode"))
+                         (handler/search value))))}]
        (ui/css-transition
         {:in show-result? :timeout 0}
         (fn [state]

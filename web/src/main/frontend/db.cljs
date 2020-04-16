@@ -23,11 +23,19 @@
    :repo/cloned?    {}
    :repo/current    {:db/valueType   :db.type/ref}
 
+   ;; page
+   :page/name       {:db/unique :db.unique/identity}
+   :page/repo       {:db/valueType   :db.type/ref}
+   :page/file       {:db/valueType   :db.type/ref}
+   ;; bytes instead of string length
+   :page/start-pos  {}
+   :page/end-pos    {}
+   :page/html       {}
+
    ;; file
    :file/path       {:db/unique :db.unique/identity}
    :file/repo       {:db/valueType   :db.type/ref}
-   :file/raw        {}
-   :file/html       {}
+   :file/content    {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
@@ -164,6 +172,35 @@
         @conn repo-url)
       seq-flatten))
 
+(defn- remove-journal-files
+  [files]
+  (remove
+   (fn [file]
+     (string/starts-with? file "journals/"))
+   files))
+
+(defn get-files
+  ([]
+   (->> (d/q '[:find ?path
+               :where
+               [_     :repo/current ?repo]
+               [?file :file/repo ?repo]
+               [?file :file/path ?path]]
+          @conn)
+        (map first)
+        distinct
+        remove-journal-files))
+  ([repo-url]
+   (->> (d/q '[:find ?path
+               :where
+               [?repo :repo/url ?repo-url]
+               [?file :file/repo ?repo]
+               [?file :file/path ?path]]
+          @conn repo-url)
+        (map first)
+        distinct
+        remove-journal-files)))
+
 (defn get-files-headings
   [repo-url paths]
   (let [paths (set paths)
@@ -189,21 +226,9 @@
      (let [headings (get-files-headings repo-url files)]
        (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))))
 
-(defn get-repo-files
-  [repo-url]
-  (->> (d/q '[:find ?path
-              :in $ ?repo-url
-              :where
-              [?repo :repo/url ?repo-url]
-              [?file :file/repo ?repo]
-              [?file :file/path ?path]]
-         @conn repo-url)
-       (map first)
-       distinct))
-
 (defn delete-files
   ([repo-url]
-   (delete-files repo-url (get-repo-files repo-url)))
+   (delete-files repo-url (get-files repo-url)))
   ([repo-url files]
    (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files)))
 
@@ -306,17 +331,6 @@
   []
   (->> (d/q '[:find ?url
               :where [_ :repo/url ?url]]
-         @conn)
-       (map first)
-       distinct))
-
-(defn get-files
-  []
-  (->> (d/q '[:find ?path
-              :where
-              [_     :repo/current ?repo]
-              [?file :file/repo ?repo]
-              [?file :file/path ?path]]
          @conn)
        (map first)
        distinct))

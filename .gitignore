@@ -12,11 +12,11 @@ pom.xml.asc
 .hg/
 
 node_modules/
-resources/static/js/*.map
-resources/static/js/main.js
-resources/static/js/cljs-runtime
-resources/static/js/manifest.edn
-resources/static/style.css
+/resources/static/js/*.map
+/resources/static/js/main.js
+/resources/static/js/cljs-runtime
+/resources/static/js/manifest.edn
+/resources/static/style.css
 
 .cpcache/
 /target

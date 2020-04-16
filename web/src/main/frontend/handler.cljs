@@ -55,6 +55,10 @@
 (defonce text-formats
   #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c})
 
+(defonce html-render-formats
+  #{:org :md :markdown
+    :adoc :asciidoc})
+
 (defonce img-formats
   #{:gif :svg :jpeg :ico :png :jpg :bmp})
 
@@ -72,6 +76,10 @@
 (defn- only-text-formats
   [files]
   (keep-formats files text-formats))
+
+(defn- only-html-render-formats
+  [files]
+  (keep-formats files html-render-formats))
 
 ;; TODO: no atom version
 (defn load-files
@@ -664,6 +672,12 @@
   []
   (swap! state/state assoc :search/result nil)
   (reset! state/q nil))
+
+(defn pre-cache-htmls
+  [repo-url]
+  (let [files (-> (db/get-files repo-url)
+                  (only-html-render-formats))]
+    files))
 
 (defn start!
   []

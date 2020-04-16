@@ -13,14 +13,10 @@
                     (array-seq))]
     (js/hljs.highlightBlock block)))
 
-(defonce render-formats
-  #{:org :md :markdown
-    :adoc :asciidoc})
-
 (defn lazy-load-js
   [state]
   (let [format (keyword (second (:rum/args state)))
-        loader? (contains? render-formats format)]
+        loader? (contains? handler/html-render-formats format)]
     (when loader?
       (when-not (format/loaded? format)
         (format/lazy-load format)))))
@@ -45,7 +41,7 @@
      (contains? handler/img-formats format)
      content
 
-     (contains? render-formats format)
+     (contains? handler/html-render-formats format)
      (let [{:keys [format/loading]} (rum/react state/state)
            loading? (get loading (format/normalize format))]
        (if loading?
