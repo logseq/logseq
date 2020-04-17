@@ -34,7 +34,6 @@
    (ui/textarea
     {:id "edit-journal-box"
      :on-change (fn [e]
-                  (prn "value: " (util/evalue e))
                   (reset! edit-content (util/evalue e)))
      :initial-value content
      :value-atom edit-content
