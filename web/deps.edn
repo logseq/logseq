@@ -1,12 +1,13 @@
 {:paths ["src/main"]
  :deps
- {org.clojure/clojure {:mvn/version "1.10.0"}
+ {org.clojure/clojure         {:mvn/version "1.10.0"}
   rum                         {:mvn/version "0.11.4"}
   datascript-transit          {:mvn/version "0.3.0"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
-  cljs-bean                   {:mvn/version "1.5.0"}}
+  cljs-bean                   {:mvn/version "1.5.0"}
+  org.clojars.rymndhng/clj-diff {:mvn/version "1.1.1-SNAPSHOT"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}

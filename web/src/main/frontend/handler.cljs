@@ -8,6 +8,7 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.config :as config]
+            [frontend.diff :as diff]
             [clojure.walk :as walk]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -640,10 +641,27 @@
   (when format
     (swap! state/state assoc-in [:format/loading format] value)))
 
+(defn reset-cursor-range!
+  ([]
+   (reset-cursor-range! (gdom/getElement "edit-journal-box")))
+  ([node]
+   (when node
+     (reset! state/cursor-range
+             (util/caret-range node)))))
+
 (defn reset-cursor-pos!
-  [e]
-  (let [new-pos (gobj/getValueByKeys e "target" "selectionEnd")]
-    (reset! state/cursor-pos new-pos)))
+  []
+  (when-let [node (gdom/getElement "edit-journal-box")]
+    (let [pos (util/caret-pos node)]
+      (prn {:pos pos}))))
+
+(defn restore-cursor-pos!
+  [markup]
+  (when-let [node (gdom/getElement "edit-journal-box")]
+    (when-let [range @state/cursor-range]
+      (let [pos (inc (diff/find-position markup range))]
+        (prn {:pos pos})
+        (util/set-caret-pos! node pos)))))
 
 (defn set-edit-node!
   [ref]

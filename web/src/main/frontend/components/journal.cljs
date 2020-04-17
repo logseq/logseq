@@ -8,6 +8,7 @@
             [frontend.db :as db]
             [frontend.state :as state :refer [edit-content]]
             [frontend.format.org-mode :as org]
+            [frontend.format :as format]
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.image :as image]
@@ -25,14 +26,15 @@
         :on-hide (fn []
                    (handler/save-current-edit-journal! (str heading "\n" (string/trimr @edit-content) "\n\n")))))))
   {:did-mount (fn [state]
-                (handler/move-cursor-to-end (gdom/getElement "journal-edit-box"))
+                (when-let [content (second (:rum/args state))]
+                  (handler/restore-cursor-pos! content))
                 state)}
   [heading content]
   [:div.flex-1
    (ui/textarea
-    {:id "journal-edit-box"
+    {:id "edit-journal-box"
      :on-change (fn [e]
-                  (handler/reset-cursor-pos! e)
+                  (prn "value: " (util/evalue e))
                   (reset! edit-content (util/evalue e)))
      :initial-value content
      :value-atom edit-content
@@ -42,7 +44,8 @@
              :background "transparent"
              :margin-top 12.5}
      :on-key-down handler/reset-cursor-pos!
-     :on-click handler/reset-cursor-pos!})
+     :on-click handler/reset-cursor-pos!
+     })
    [:input
     {:id "files"
      :type "file"
@@ -66,7 +69,8 @@
   (let [result (split-first #"\n" content)]
     (if (= 1 (count result))
       [result ""]
-      result)))
+      [(string/trim (first result))
+       (string/trim (second result))])))
 
 (rum/defc journal-cp < rum/reactive
   [{:keys [uuid title content] :as journal}]
@@ -75,18 +79,19 @@
     [:div.flex-1
      [:h1.text-gray-600 {:style {:font-weight "450"}}
       title]
-
      (if (and edit? (= uuid (:uuid edit-journal)))
        (editor-box heading content)
-       [:div {:on-click (fn []
-                          (handler/edit-journal! content journal)
-                          (reset! edit-content content))
-              :style {:padding 8
-                      :min-height 200}}
-        (if (or (not content)
-                (string/blank? content))
-          [:div]
-          (content/html content "org" org/config-with-line-break))])]))
+       (let [id (str "journal-" uuid)
+             html (-> (format/to-html content "org" org/config-with-line-break)
+                      (util/minimize-html))]
+         [:div
+          {:id id
+           :content-editable true
+           :on-click (fn [_e]
+                       (handler/reset-cursor-range! (gdom/getElement id))
+                       (handler/edit-journal! content journal)
+                       (reset! edit-content content))
+           :dangerouslySetInnerHTML {:__html html}}]))]))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

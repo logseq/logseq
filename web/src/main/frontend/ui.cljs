@@ -34,7 +34,9 @@
     (let [inc-rows (get opts :inc-rows 1)
           rows (+ inc-rows (count-newlines @value-atom))]
       [:textarea
-       (-> (force-update-input comp opts)
+       (-> (force-update-input comp (dissoc opts
+                                            :value-atom
+                                            :initial-value))
            (assoc :rows rows
                   :value @value-atom))])))
 

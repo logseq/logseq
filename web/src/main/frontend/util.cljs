@@ -4,7 +4,9 @@
             [promesa.core :as p]
             [clojure.walk :as walk]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            ["/frontend/caret_pos" :as caret-pos]))
 
 (defn evalue
   [event]
@@ -13,8 +15,7 @@
 (defn p-handle
   ([p ok-handler]
    (p-handle p ok-handler (fn [error]
-                            (js/console.error error)
-                            )))
+                            (js/console.error error))))
   ([p ok-handler error-handler]
    (-> p
        (p/then (fn [result]
@@ -196,3 +197,22 @@
                                    (reset! t nil)
                                    (apply f args))
                                 threshold))))))
+
+(def caret-range caret-pos/getCaretRange)
+
+(defn caret-pos
+  [input]
+  (-> (caret-pos/getCaretPos input)
+      (bean/->clj)
+      :end))
+
+(defn set-caret-pos!
+  [input pos]
+  (.setSelectionRange input pos pos))
+
+(defn minimize-html
+  [s]
+  (->> s
+       (string/split-lines)
+       (map string/trim)
+       (string/join "")))

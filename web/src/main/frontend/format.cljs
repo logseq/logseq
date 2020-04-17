@@ -3,7 +3,8 @@
             [frontend.format.markdown :refer [->MdMode]]
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
-            [frontend.handler :as handler]))
+            [frontend.handler :as handler]
+            [clojure.string :as string]))
 
 (defonce org-record (->OrgMode))
 (defonce markdown-record (->MdMode))
@@ -30,10 +31,12 @@
 
 (defn to-html
   [content format config]
-  (if-let [record (get-format-record format)]
-    (protocol/toHtml record content config)
-    ;; TODO: preserve newlines
-    content))
+  (if (string/blank? content)
+    ""
+    (if-let [record (get-format-record format)]
+     (protocol/toHtml record content config)
+     ;; TODO: preserve newlines
+     content)))
 
 (defn loaded?
   [format]
