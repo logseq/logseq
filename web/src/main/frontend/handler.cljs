@@ -653,14 +653,13 @@
   []
   (when-let [node (gdom/getElement "edit-journal-box")]
     (let [pos (util/caret-pos node)]
-      (prn {:pos pos}))))
+      (reset! state/cursor-pos pos))))
 
 (defn restore-cursor-pos!
   [markup]
   (when-let [node (gdom/getElement "edit-journal-box")]
     (when-let [range @state/cursor-range]
       (let [pos (inc (diff/find-position markup range))]
-        (prn {:pos pos})
         (util/set-caret-pos! node pos)))))
 
 (defn set-edit-node!
