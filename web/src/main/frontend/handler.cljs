@@ -236,6 +236,7 @@
     (when (and
           (not (:edit? @state/state))
           (nil? (:git/error @state/state))
+          (not= status )
           (or (nil? status)
               (= status :pulling)))
      (set-git-status! :pulling)
@@ -265,6 +266,7 @@
                            "make sure saving all your changes elsewhere"]
                           ". After that, click "
                           [:a.font-bold {:href ""
+                                         ;; TODO: discard current changes then continue to pull instead of clone again
                                          :on-click clear-storage}
                            "Pull again"]
                           " to pull the latest changes."]
@@ -305,7 +307,7 @@
          (not (:edit? @state/state))
          (= :should-push (:git/status @state/state))
          (nil? (:git/error @state/state)))
-    (set-git-status! :push)
+    (set-git-status! :pushing)
     (let [token (get-github-token)]
       (util/p-handle
        (git/push repo-url token)
@@ -510,8 +512,9 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url))
+  ;; (periodically-pull repo-url pull-now?)
+  ;; (periodically-push-tasks repo-url)
+  )
 
 (defn clone-and-pull
   [repo-url]
