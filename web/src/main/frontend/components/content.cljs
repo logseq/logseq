@@ -94,8 +94,7 @@
       (editor-box content {:on-hide on-hide})
       (let [format (format/normalize format)
             loading? (get loading format)
-            ;; html (if html html (format/to-html content format config))
-            html (format/to-html content format config)
+            html (if html html (format/to-html content format config))
             markup? (contains? handler/html-render-formats format)
             on-click (fn [_e]
                        (handler/reset-cursor-range! (gdom/getElement id))

@@ -512,9 +512,8 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  ;; (periodically-pull repo-url pull-now?)
-  ;; (periodically-push-tasks repo-url)
-  )
+  (periodically-pull repo-url pull-now?)
+  (periodically-push-tasks repo-url))
 
 (defn clone-and-pull
   [repo-url]
