@@ -12,7 +12,8 @@
 
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es6
-                      :externs ["datascript/externs.js"]}
+                      :externs ["datascript/externs.js"
+                                "externs.js"]}
    ;; TODO: purge-css not working properly
    ;; :build-hooks [(shadow.hooks/purge-css
    ;;                {:css-source "node_modules/@tailwindcss/ui/dist/tailwind-ui.min.css"
