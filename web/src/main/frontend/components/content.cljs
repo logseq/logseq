@@ -37,7 +37,10 @@
   {:did-mount (fn [state]
                 (when-let [content (first (:rum/args state))]
                   (handler/restore-cursor-pos! content))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (handler/clear-edit!)
+                   state)}
   [content {:keys [on-hide]}]
   [:div.flex-1 {:style {:margin-bottom 400}}
    (ui/textarea
@@ -91,7 +94,8 @@
       (editor-box content {:on-hide on-hide})
       (let [format (format/normalize format)
             loading? (get loading format)
-            html (if html html (format/to-html content format config))
+            ;; html (if html html (format/to-html content format config))
+            html (format/to-html content format config)
             markup? (contains? handler/html-render-formats format)
             on-click (fn [_e]
                        (handler/reset-cursor-range! (gdom/getElement id))
