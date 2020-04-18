@@ -1,6 +1,7 @@
 (ns frontend.ui
   (:require [rum.core :as rum]
             [frontend.rum :as r]
+            ["react-textarea-autosize" :as AutosizeTextarea]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
@@ -11,6 +12,7 @@
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
+(defonce autosize-textarea (r/adapt-class (gobj/get AutosizeTextarea "default")))
 
 (defn- force-update-input
   [comp opts]
@@ -31,14 +33,12 @@
            state)}
   [comp opts]
   (when-let [value-atom (:value-atom opts)]
-    (let [inc-rows (get opts :inc-rows 1)
-          rows (+ inc-rows (count-newlines @value-atom))]
-      [:textarea
-       (-> (force-update-input comp (dissoc opts
-                                            :value-atom
-                                            :initial-value))
-           (assoc :rows rows
-                  :value @value-atom))])))
+    (autosize-textarea
+     (-> (force-update-input comp (dissoc opts
+                                          :value-atom
+                                          :initial-value))
+         (assoc
+          :value @value-atom)))))
 
 (rum/defc content-editable <
   {:did-mount (fn [state]

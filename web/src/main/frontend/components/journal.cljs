@@ -32,7 +32,7 @@
   [heading content]
   [:div.flex-1
    (ui/textarea
-    {:id "edit-journal-box"
+    {:id "edit-box"
      :on-change (fn [e]
                   (reset! edit-content (util/evalue e)))
      :initial-value content
@@ -43,8 +43,7 @@
              :background "transparent"
              :margin-top 12.5}
      :on-key-down handler/reset-cursor-pos!
-     :on-click handler/reset-cursor-pos!
-     })
+     :on-click handler/reset-cursor-pos!})
    [:input
     {:id "files"
      :type "file"
@@ -88,7 +87,7 @@
            :content-editable true
            :on-click (fn [_e]
                        (handler/reset-cursor-range! (gdom/getElement id))
-                       (handler/edit-journal! content journal)
+                       (handler/edit-journal! journal)
                        (reset! edit-content content))
            :dangerouslySetInnerHTML {:__html html}}]))]))
 

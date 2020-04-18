@@ -3,6 +3,7 @@
             [frontend.util :as util]
             [medley.core :as medley]
             [datascript.transit :as dt]
+            [frontend.format :as format]
             [frontend.format.org-mode :as org]
             [frontend.format.org.block :as block]
             [clojure.string :as string]
@@ -23,21 +24,19 @@
    :repo/cloned?    {}
    :repo/current    {:db/valueType   :db.type/ref}
 
-   ;; page
-   :page/name       {:db/unique :db.unique/identity}
-   :page/repo       {:db/valueType   :db.type/ref}
-   :page/file       {:db/valueType   :db.type/ref}
-   ;; bytes instead of string length
-   :page/start-pos  {}
-   :page/end-pos    {}
-   :page/html       {}
-
    ;; file
    :file/path       {:db/unique :db.unique/identity}
    :file/repo       {:db/valueType   :db.type/ref}
    :file/content    {}
+   ;; don't cache journals html
+   :file/html       {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
+
+   :reference/uuid    {:db/unique      :db.unique/identity}
+   :reference/text    {}
+   :reference/file    {:db/valueType   :db.type/ref}
+   :reference/heading {:db/valueType   :db.type/ref}
 
    ;; heading
    :heading/uuid   {:db/unique      :db.unique/identity}
@@ -256,7 +255,8 @@
                              (when content
                                {:file/repo [:repo/url repo-url]
                                 :file/path file
-                                :file/content content}))
+                                :file/content content
+                                :file/html (format/to-html content (format/get-format file))}))
                         contents)
         all-data (-> (concat delete-files delete-headings file-contents headings)
                      (util/remove-nils))]
@@ -542,6 +542,31 @@
                           [(kv :repo/current [:repo/url (:url (first repos))])])]
     (->> (concat me-tx repos-tx current-repo-tx)
          (remove nil?))))
+
+(defn set-html!
+  [path html]
+  (transact! [{:file/path path
+               :file/html html}]))
+
+(defn get-cached-html
+  [path]
+  (if-let [result (->
+                   (d/q '[:find ?html
+                          :in $ ?path
+                          :where
+                          [_     :repo/current ?repo]
+                          [?file :file/repo ?repo]
+                          [?file :file/path ?path]
+                          [?file :file/html ?html]]
+                     @conn
+                     path)
+                   ffirst)]
+    result
+    (let [content (get-file path)
+          html (format/to-html content (format/get-format path))]
+      (when html
+        (set-html! path html)
+        html))))
 
 (defn restore! [me]
   (if-let [stored (js/localStorage.getItem datascript-db)]

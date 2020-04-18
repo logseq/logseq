@@ -23,62 +23,22 @@
         format (keyword (string/lower-case (last (string/split path #"\."))))]
     (sidebar/sidebar
      (cond
-       (and format (contains? handler/text-formats format))
-       [:div.content
-        [:a {:href (str "/file/" encoded-path "/edit")}
-         "edit"]
-        (let [content (db/get-file (last (get-path state)))]
-          (cond
-            (string/blank? content)
-            [:span]
-
-            content
-            (content/html content format org/default-config)
-
-            :else
-            "Loading ..."))]
-
        ;; image type
        (and format (contains? #{:png :jpg :jpeg} format))
-       (content/html [:img {:src path}] format org/default-config)
+       [:img {:src path}]
+
+       (and format (contains? handler/text-formats format))
+       (let [content (db/get-file (last (get-path state)))
+             html (db/get-cached-html (last (get-path state)))]
+         [:div.content
+          (content/content encoded-path html format
+                           {:content content
+                            :on-click (fn []
+                                        (handler/edit-file!
+                                         {:path encoded-path
+                                          :content content}))
+                            :on-hide (fn []
+                                       (handler/alter-file path))})])
 
        :else
        [:div "Format ." (name format) " is not supported."]))))
-
-(defn- count-newlines
-  [s]
-  (count (re-seq #"\n" (or s ""))))
-
-(rum/defcs edit <
-  (rum/local nil ::content)
-  (rum/local "" ::commit-message)
-  {:will-mount (fn [state]
-                 (assoc state ::initial-content (db/get-file (last (get-path state)))))}
-  [state]
-  (let [initial-content (get state ::initial-content)
-        initial-rows (+ 3 (count-newlines initial-content))
-        content (get state ::content)
-        commit-message (get state ::commit-message)
-        rows (if (nil? @content) initial-rows (+ 3 (count-newlines @content)))
-        [_encoded-path path] (get-path state)]
-    (sidebar/sidebar
-     [:div.content
-      [:h3.mb-2 (str "Update " path)]
-      (ui/textarea
-       {:initial-value initial-content
-        :value-atom content
-        :on-change #(reset! content (.. % -target -value))
-        :auto-focus true})
-      [:div.mt-1.mb-1.relative.rounded-md.shadow-sm
-       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5
-        {:placeholder "Commit message"
-         :on-change (fn [e]
-                      (reset! commit-message (util/evalue e)))}]]
-      (ui/button "Save" (fn []
-                          (when (and (not (string/blank? @content))
-                                     (not (= initial-content
-                                             @content)))
-                            (let [commit-message (if (string/blank? @commit-message)
-                                                   (str "Update " path)
-                                                   @commit-message)]
-                              (handler/alter-file path commit-message @content)))))])))

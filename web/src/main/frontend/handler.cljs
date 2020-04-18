@@ -22,7 +22,9 @@
             [frontend.utf8 :as utf8]
             [frontend.image :as image]
             [clojure.set :as set]
-            [cljs-bean.core :as bean])
+            [cljs-bean.core :as bean]
+            [frontend.format :as format]
+            [frontend.format.protocol :as protocol])
   (:import [goog.events EventHandler]))
 
 ;; TODO: replace all util/p-handle with p/let
@@ -48,10 +50,6 @@
                 (= (str "/" (first (string/split path #"/")))
                    pattern)))) patterns))
 
-(defn- get-format
-  [file]
-  (string/lower-case (last (string/split file #"\."))))
-
 ;; Add coding too
 (defonce text-formats
   #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c})
@@ -70,7 +68,7 @@
   [files formats]
   (filter
    (fn [file]
-     (let [format (keyword (get-format file))]
+     (let [format (format/get-format file)]
        (contains? formats format)))
    files))
 
@@ -397,18 +395,28 @@
       (notify-fn)
       (js/setInterval notify-fn (* 1000 60)))))
 
+(defn clear-edit!
+  []
+  (swap! state/state assoc
+         :edit? nil
+         :edit-file nil
+         :edit-journal nil)
+  (reset! state/edit-content nil)
+  (reset! state/edit-node nil))
+
 (defn alter-file
+  ([path]
+   (alter-file path @state/edit-content))
+  ([path content]
+   (alter-file path (str "Update " path) content))
   ([path commit-message content]
-   (alter-file path commit-message content true))
-  ([path commit-message content redirect?]
    (let [token (get-github-token)
          repo-url (db/get-current-repo)]
      (util/p-handle
       (fs/write-file (git/get-repo-dir repo-url) path content)
       (fn [_]
-        (when redirect?
-          (rfe/push-state :file {:path (b64/encodeString path)}))
-        (git-add-commit repo-url path commit-message content))))))
+        (git-add-commit repo-url path commit-message content)
+        (clear-edit!))))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -514,10 +522,16 @@
             (periodically-pull-and-push repo-url {:pull-now? false}))))
 
 (defn edit-journal!
-  [content journal]
+  [journal]
   (swap! state/state assoc
          :edit? true
          :edit-journal journal))
+
+(defn edit-file!
+  [file]
+  (swap! state/state assoc
+         :edit? true
+         :edit-file file))
 
 (defn set-journal-content!
   [uuid content]
@@ -542,7 +556,7 @@
             current-journals (db/get-file path)
             new-content (utf8/insert! current-journals start-pos end-pos edit-content)]
         (set-state-kv! :latest-journals (db/get-latest-journals {:content new-content}))
-        (alter-file path "Auto save" new-content false)))))
+        (alter-file path "Auto save" new-content)))))
 
 (defn render-local-images!
   []
@@ -641,9 +655,19 @@
   (when format
     (swap! state/state assoc-in [:format/loading format] value)))
 
+(defn lazy-load
+  [format]
+  (let [format (format/normalize format)]
+    (when-let [record (format/get-format-record format)]
+      (when-not (protocol/loaded? record)
+        (set-format-js-loading! format true)
+        (protocol/lazyLoad record
+                           (fn [result]
+                             (set-format-js-loading! format false)))))))
+
 (defn reset-cursor-range!
   ([]
-   (reset-cursor-range! (gdom/getElement "edit-journal-box")))
+   (reset-cursor-range! (gdom/getElement "edit-box")))
   ([node]
    (when node
      (reset! state/cursor-range
@@ -651,15 +675,16 @@
 
 (defn reset-cursor-pos!
   []
-  (when-let [node (gdom/getElement "edit-journal-box")]
+  (when-let [node (gdom/getElement "edit-box")]
     (let [pos (util/caret-pos node)]
       (reset! state/cursor-pos pos))))
 
 (defn restore-cursor-pos!
   [markup]
-  (when-let [node (gdom/getElement "edit-journal-box")]
-    (when-let [range @state/cursor-range]
+  (when-let [node (gdom/getElement "edit-box")]
+    (when-let [range (string/trim @state/cursor-range)]
       (let [pos (inc (diff/find-position markup range))]
+        (println "Edit position: " pos)
         (util/set-caret-pos! node pos)))))
 
 (defn set-edit-node!

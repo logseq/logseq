@@ -18,7 +18,9 @@
              :git/error (storage/get :git/error)
              ;; format => boolean
              :format/loading {}
-             :search/result nil}))
+             :search/result nil
+             :edit/journal nil
+             :edit/file nil}))
 
 ;; TODO: add to global state
 (def edit-node (atom nil))

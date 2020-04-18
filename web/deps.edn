@@ -6,8 +6,7 @@
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
-  cljs-bean                   {:mvn/version "1.5.0"}
-  org.clojars.rymndhng/clj-diff {:mvn/version "1.1.1-SNAPSHOT"}}
+  cljs-bean                   {:mvn/version "1.5.0"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}

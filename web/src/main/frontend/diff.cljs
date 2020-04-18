@@ -1,49 +1,45 @@
 (ns frontend.diff
-  (:require [clj-diff.core :refer [diff]]))
+  (:require [clojure.string :as string]))
 
-;; TODO: optimization, no need to get the whole diffs
-;; or implement a specific loop, notice it needs backtrack
-;; for retrying.
+"** hello _w_ hello _w_" "hello w"
+
 ;; (find-position "** hello _w_" "hello w")
+;; {:text "Startup\nWho're your target users?\nWhen you have an idea for a startup, ask yourself: who wants this    right now? Who wants this so much that they'll use it even when it's a    crappy version one made by a two-person startup they've never heard    of? If you can't answer that, the idea is probably bad",
+;;  :markup "* Startup\n\n** Who're your target users?\n   When you have an idea for a startup, ask yourself: who wants this\n   right now? Who wants this so much that they'll use it even when it's a\n   crappy version one made by a two-person startup they've never heard\n   of? If you can't answer that, the idea is probably bad.\n"}
 (defn find-position
   [markup text]
-  (let [diff-result (diff markup text)
-        _ (when (seq (:+ diff-result))
-            (prn "Something error: "
-                 (:+ diff-result)))
-        deleted (:- diff-result)
-        text-length (count text)
-        markup-length (count markup)]
-    (if (seq deleted)
-      (let [[last-pos & rdeleted] (reverse deleted)
-            result (loop [last-pos last-pos
-                          rdeleted rdeleted]
-                     ;; (prn {:last-char (nth markup last-pos)
-                     ;;       :last-pos last-pos
-                     ;;       :markup-length markup-length
-                     ;;       :text text
-                     ;;       :markup markup})
-                     (cond
-                       (and (contains? #{" " "\n"} (nth markup last-pos))
-                            (< last-pos markup-length)
-                            (let [last-part (subs markup
-                                                  (inc last-pos)
-                                                  markup-length)
-                                  last-part-count (count last-part)
-                                  text-last-part (subs text (- text-length last-part-count) text-length)]
-                              (= last-part text-last-part)))
-                       markup-length
+  (let [text (->> (string/split-lines text)
+                  (map string/trim)
+                  (string/join "\n"))
+        v1 (vec markup)
+        v2 (vec text)]
+    (loop [v1-chars v1
+           v2-chars v2
+           v1-idx 0
+           v2-idx 0]
+      (cond
+        (empty? v2-chars)
+        (dec v1-idx)
 
-                       (< last-pos text-length)
-                       markup-length
+        (= " "(nth v2 v2-idx))
+        (recur v1-chars
+               (rest v2-chars)
+               v1-idx
+               (inc v2-idx))
 
-                       (empty? rdeleted)
-                       last-pos
-
-                       (not= (dec last-pos) (first rdeleted))
-                       last-pos
-
-                       :else
-                       (recur (dec last-pos) (rest rdeleted))))]
-        (dec result))
-      (dec markup-length))))
+        :else
+        (do
+          (prn {:v1-idx v1-idx
+                :v2-idx v2-idx
+                :v1-char (nth v1 v1-idx)
+                :v2-char (nth v2 v2-idx)})
+          (if (= (nth v1 v1-idx)
+                 (nth v2 v2-idx))
+            (recur (rest v1-chars)
+                   (rest v2-chars)
+                   (inc v1-idx)
+                   (inc v2-idx))
+            (recur (rest v1-chars)
+                   v2-chars
+                   (inc v1-idx)
+                   v2-idx)))))))

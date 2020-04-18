@@ -9,7 +9,8 @@
   (js/JSON.stringify
    #js {:toc false
         :heading_number false
-        :keep_line_break false}))
+        :keep_line_break false
+        }))
 
 (def config-with-line-break
   (js/JSON.stringify
