@@ -18,8 +18,13 @@
       (let [[last-pos & rdeleted] (reverse deleted)
             result (loop [last-pos last-pos
                           rdeleted rdeleted]
+                     ;; (prn {:last-char (nth markup last-pos)
+                     ;;       :last-pos last-pos
+                     ;;       :markup-length markup-length
+                     ;;       :text text
+                     ;;       :markup markup})
                      (cond
-                       (and (= "\n" (nth markup last-pos))
+                       (and (contains? #{" " "\n"} (nth markup last-pos))
                             (< last-pos markup-length)
                             (let [last-part (subs markup
                                                   (inc last-pos)
