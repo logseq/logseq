@@ -24,6 +24,7 @@
    :repo/cloned?    {}
    :repo/current    {:db/valueType   :db.type/ref}
 
+   ;; TODO: how to express compound unique, [:file/repo, :file/path]
    ;; file
    :file/path       {:db/unique :db.unique/identity}
    :file/repo       {:db/valueType   :db.type/ref}

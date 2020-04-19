@@ -69,15 +69,21 @@
             control-id (str "control-" id)
             element (d/create-element "a")]
         (d/set-attr! element :id control-id)
+        (d/set-style! element
+                      :float "left"
+                      :margin-right "5px"
+                      :margin-left "-10px")
         (d/listen! heading
                    :mouseover (fn [e]
-                                (let [class-name (if (d/has-class? element "caret-down")
-                                                   "caret-right"
-                                                   "caret-down")]
+                                (let [class-name (if
+                                                   (and (not (d/has-class? element "caret-down"))
+                                                        (not (d/has-class? element "caret-right")))
+                                                   "caret-down"
+                                                   "caret-right")]
                                   (d/set-class! element class-name))))
         (d/listen! heading
                    :mouseout (fn [e]
-                               (d/set-class! element "")))
+                               (d/remove-class! element "caret-down")))
         (d/listen! element
                    :click (fn [e]
                             (prn "clicked " id)
@@ -87,7 +93,7 @@
                               (prn {:class-name class-name})
                               (d/set-class! element class-name)
                               (f id))))
-        (d/prepend! heading element)))))
+        (d/insert-before! element heading)))))
 
 (comment
   (def all-nodes (get-content-children))

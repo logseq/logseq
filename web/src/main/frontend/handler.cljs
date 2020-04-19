@@ -234,43 +234,43 @@
   [repo-url token]
   (let [status (:git/status @state/state)]
     (when (and
-          (not (:edit? @state/state))
-          (nil? (:git/error @state/state))
-          (not= status )
-          (or (nil? status)
-              (= status :pulling)))
-     (set-git-status! :pulling)
-     (let [latest-commit (:git/latest-commit @state/state)]
-       (p/let [result (git/fetch repo-url token)
-               {:keys [fetchHead]} (bean/->clj result)
-               _ (set-latest-commit! fetchHead)]
-         (-> (git/merge repo-url)
-             (p/then (fn [result]
-                       (-> (git/checkout repo-url)
-                           (p/then (fn [result]
-                                     (set-git-status! nil)
-                                     (when (and latest-commit fetchHead
-                                                (not= latest-commit fetchHead))
-                                       (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                         (load-db-and-journals! repo-url diffs false)))))
-                           (p/catch (fn [error]
-                                      (set-git-status! :checkout-failed)
-                                      (set-git-error! error))))))
-             (p/catch (fn [error]
-                        (set-git-status! :merge-failed)
-                        (set-git-error! error)
-                        (show-notification!
-                         [:p.content
-                          "Merges with conflicts are not supported yet, please "
-                          [:span.text-gray-700.font-bold
-                           "make sure saving all your changes elsewhere"]
-                          ". After that, click "
-                          [:a.font-bold {:href ""
-                                         ;; TODO: discard current changes then continue to pull instead of clone again
-                                         :on-click clear-storage}
-                           "Pull again"]
-                          " to pull the latest changes."]
-                         :error)))))))))
+           (not (:edit? @state/state))
+           (nil? (:git/error @state/state))
+           (not= status )
+           (or (nil? status)
+               (= status :pulling)))
+      (set-git-status! :pulling)
+      (let [latest-commit (:git/latest-commit @state/state)]
+        (p/let [result (git/fetch repo-url token)
+                {:keys [fetchHead]} (bean/->clj result)
+                _ (set-latest-commit! fetchHead)]
+          (-> (git/merge repo-url)
+              (p/then (fn [result]
+                        (-> (git/checkout repo-url)
+                            (p/then (fn [result]
+                                      (set-git-status! nil)
+                                      (when (and latest-commit fetchHead
+                                                 (not= latest-commit fetchHead))
+                                        (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                          (load-db-and-journals! repo-url diffs false)))))
+                            (p/catch (fn [error]
+                                       (set-git-status! :checkout-failed)
+                                       (set-git-error! error))))))
+              (p/catch (fn [error]
+                         (set-git-status! :merge-failed)
+                         (set-git-error! error)
+                         (show-notification!
+                          [:p.content
+                           "Merges with conflicts are not supported yet, please "
+                           [:span.text-gray-700.font-bold
+                            "make sure saving all your changes elsewhere"]
+                           ". After that, click "
+                           [:a.font-bold {:href ""
+                                          ;; TODO: discard current changes then continue to pull instead of clone again
+                                          :on-click clear-storage}
+                            "Pull again"]
+                           " to pull the latest changes."]
+                          :error)))))))))
 
 (defn pull-current-repo
   []
@@ -406,19 +406,25 @@
   (reset! state/edit-content nil)
   (reset! state/edit-node nil))
 
+(defn file-changed?
+  [content]
+  (not= (string/trim content)
+        (string/trim @state/edit-content)))
+
 (defn alter-file
   ([path]
    (alter-file path @state/edit-content))
   ([path content]
    (alter-file path (str "Update " path) content))
   ([path commit-message content]
+   ;; update cached html
+   (db/set-html! path (format/to-html content (format/get-format path)))
    (let [token (get-github-token)
          repo-url (db/get-current-repo)]
      (util/p-handle
       (fs/write-file (git/get-repo-dir repo-url) path content)
       (fn [_]
-        (git-add-commit repo-url path commit-message content)
-        (clear-edit!))))))
+        (git-add-commit repo-url path commit-message content))))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -512,8 +518,9 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url))
+  (when-not config/dev?
+    (periodically-pull repo-url pull-now?)
+    (periodically-push-tasks repo-url)))
 
 (defn clone-and-pull
   [repo-url]

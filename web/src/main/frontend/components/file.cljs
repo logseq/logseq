@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler :as handler]
+            [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.components.sidebar :as sidebar]
@@ -38,7 +39,10 @@
                                          {:path encoded-path
                                           :content content}))
                             :on-hide (fn []
-                                       (handler/alter-file path))})])
+                                       (when (handler/file-changed? content)
+                                         (prn "file changed")
+                                         (handler/alter-file path))
+                                       (handler/clear-edit!))})])
 
        :else
        [:div "Format ." (name format) " is not supported."]))))
