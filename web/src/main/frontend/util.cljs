@@ -235,8 +235,8 @@
     ;; set scrollTop
     (gobj/set! js/window "scrollTop" scroll-top)
 
-    (.scroll js/window #js {:top scroll-top
-                            :behavior "smooth"})))
+    (js/window.scroll #js {:top scroll-top
+                           :behavior "smooth"})))
 
 (defn scroll-to-element
   [fragment]
