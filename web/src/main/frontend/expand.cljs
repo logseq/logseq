@@ -68,14 +68,13 @@
       (let [id (gobj/get heading "id")
             control-id (str "control-" id)
             element (d/create-element "a")]
-        (d/set-attr! element
-                     :id control-id)
+        (d/set-attr! element :id control-id)
         (d/listen! heading
                    :mouseover (fn [e]
-                            (let [class-name (if (d/has-class? element "caret-down")
+                                (let [class-name (if (d/has-class? element "caret-down")
                                                    "caret-right"
                                                    "caret-down")]
-                              (d/set-class! element class-name))))
+                                  (d/set-class! element class-name))))
         (d/listen! heading
                    :mouseout (fn [e]
                                (d/set-class! element "")))

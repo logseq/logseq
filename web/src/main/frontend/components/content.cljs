@@ -10,7 +10,8 @@
             [frontend.image :as image]
             [frontend.ui :as ui]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [clojure.string :as string]))
 
 (defn- highlight!
   []
@@ -20,7 +21,7 @@
 
 (defn lazy-load-js
   [state]
-  (let [format (keyword (second (:rum/args state)))
+  (let [format (nth (:rum/args state) 2)
         loader? (contains? handler/html-render-formats format)]
     (when loader?
       (when-not (format/loaded? format)
@@ -101,7 +102,7 @@
       (editor-box content {:on-hide on-hide})
       (let [format (format/normalize format)
             loading? (get loading format)
-            html (if html html (format/to-html content format config))
+            html (if-not (string/blank? html) html (format/to-html content format config))
             markup? (contains? handler/html-render-formats format)
             on-click (fn [e]
                        (when-not (node-link? (gobj/get e "target"))
