@@ -103,8 +103,8 @@
    :did-update (fn [state]
                  (highlight!)
                  (handler/render-local-images!)
-                 (lazy-load-js state)
                  (expand/attach-controls!)
+                 (lazy-load-js state)
                  state)}
   [state id html format {:keys [config
                                 content
