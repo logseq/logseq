@@ -30,4 +30,5 @@
                   (inc v1-idx)
                   v2-idx)))))
     (catch js/Error e
+      (prn "diff error: " e)
       (dec (count markup)))))

@@ -9,7 +9,8 @@
             [frontend.mixins :as mixins]
             [frontend.image :as image]
             [frontend.ui :as ui]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [goog.object :as gobj]))
 
 (defn- highlight!
   []
@@ -71,6 +72,12 @@
                           (handler/insert-image! signed-url)))))))
      :hidden true}]])
 
+(defn- node-link?
+  [node]
+  (contains?
+   #{"A" "BUTTON"}
+   (gobj/get node "tagName")))
+
 ;; TODO: lazy load highlight.js
 (rum/defcs content < rum/reactive
   {:will-mount (fn [state]
@@ -96,11 +103,12 @@
             loading? (get loading format)
             html (if html html (format/to-html content format config))
             markup? (contains? handler/html-render-formats format)
-            on-click (fn [_e]
-                       (handler/reset-cursor-range! (gdom/getElement id))
-                       (if on-click
-                         (on-click))
-                       (reset! state/edit-content content))]
+            on-click (fn [e]
+                       (when-not (node-link? (gobj/get e "target"))
+                         (handler/reset-cursor-range! (gdom/getElement id))
+                         (if on-click
+                           (on-click))
+                         (reset! state/edit-content content)))]
         (cond
           (and markup? loading?)
           [:div "loading ..."]
