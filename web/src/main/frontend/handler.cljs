@@ -481,7 +481,9 @@
 
 (defn set-route-match!
   [route]
-  (swap! state/state assoc :route-match route))
+  (swap! state/state assoc :route-match route)
+  (when-let [fragment (util/get-fragment)]
+    (util/scroll-to-element fragment)))
 
 (defn set-ref-component!
   [k ref]

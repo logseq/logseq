@@ -4,7 +4,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.file :as file]
             [frontend.components.agenda :as agenda]
-            ))
+            [clojure.string :as string]))
 
 (def routes
   [["/"
@@ -23,7 +23,6 @@
     {:name :agenda
      :view agenda/agenda}]
 
-   ;; TODO: edit file
    ;; Settings
    ;; ["/item/:id"
    ;;  {:name ::item

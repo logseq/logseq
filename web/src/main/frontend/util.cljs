@@ -219,3 +219,28 @@
 
 (defn stop [e]
   (doto e (.preventDefault) (.stopPropagation)))
+
+(defn get-fragment
+  []
+  (when-let [hash js/window.location.hash]
+    (when (> (count hash) 2)
+      (-> (subs hash 1)
+          (string/split #"\?")
+          (first)))))
+
+(defn scroll-into-view
+  [element]
+  (let [scroll-top (gobj/get element "offsetTop")
+        scroll-top (- scroll-top 80)]
+    ;; set scrollTop
+    (gobj/set! js/window "scrollTop" scroll-top)
+
+    (.scroll js/window #js {:top scroll-top
+                            :behavior "smooth"})))
+
+(defn scroll-to-element
+  [fragment]
+  (when fragment
+    (when-not (string/blank? fragment)
+      (when-let [element (gdom/getElement fragment)]
+        (scroll-into-view element)))))

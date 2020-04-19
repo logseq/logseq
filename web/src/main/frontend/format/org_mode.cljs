@@ -7,7 +7,7 @@
 
 (def default-config
   (js/JSON.stringify
-   #js {:toc false
+   #js {:toc true
         :heading_number false
         :keep_line_break false
         }))
