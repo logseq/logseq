@@ -9,6 +9,7 @@
             [frontend.mixins :as mixins]
             [frontend.image :as image]
             [frontend.ui :as ui]
+            [frontend.expand :as expand]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]))
@@ -81,17 +82,29 @@
 
 ;; TODO: lazy load highlight.js
 (rum/defcs content < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/listen state js/window "keyup"
+                    (fn [e]
+                      ;; t
+                      (when (and
+                             ;; not in search
+                             (nil? @state/q)
+                             (= 84 (.-keyCode e)))
+                        (expand/toggle-all!))))))
   {:will-mount (fn [state]
                  (lazy-load-js state)
                  state)
    :did-mount (fn [state]
                 (highlight!)
                 (handler/render-local-images!)
+                (expand/attach-controls!)
                 state)
    :did-update (fn [state]
                  (highlight!)
                  (handler/render-local-images!)
                  (lazy-load-js state)
+                 (expand/attach-controls!)
                  state)}
   [state id html format {:keys [config
                                 content

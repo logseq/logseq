@@ -81,7 +81,7 @@
                   state)
      :did-remount (fn [old-state new-state]
                     (detach old-state)
-                    (attach-listeners new-state)
+                   (attach-listeners new-state)
                     new-state)})))
 
 ;; TODO: is it possible that multiple nested components using the same key `:open?`?
@@ -92,9 +92,9 @@
      (fn [state]
        (let [open? (get state k)]
          (hide-when-esc-or-outside state
-                                    open?
-                                    :on-hide (fn []
-                                                (reset! open? false)))))
+                                   open?
+                                   :on-hide (fn []
+                                              (reset! open? false)))))
      (fn [state]
        (let [open? (atom false)
              component (:rum/react-component state)]

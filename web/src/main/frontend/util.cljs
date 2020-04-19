@@ -216,3 +216,6 @@
        (string/split-lines)
        (map string/trim)
        (string/join "")))
+
+(defn stop [e]
+  (doto e (.preventDefault) (.stopPropagation)))
