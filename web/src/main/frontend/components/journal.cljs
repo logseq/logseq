@@ -33,7 +33,6 @@
                        :on-click (fn []
                                    (handler/edit-journal! journal))
                        :on-hide (fn []
-                                  (prn content (str heading "\n" (string/trimr @edit-content) "\n\n"))
                                   (handler/save-current-edit-journal! (str heading "\n" (string/trimr @edit-content) "\n\n")))})]))
 
 (rum/defc journals < rum/reactive

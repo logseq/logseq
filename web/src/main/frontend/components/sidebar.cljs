@@ -6,6 +6,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
+            [frontend.components.settings :as settings]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -60,9 +61,12 @@
 (rum/defc main-content < rum/reactive
   []
   (let [{:repo/keys [cloning? loading-files? importing-to-db?]
-         :keys [latest-journals]} (rum/react state/state)]
+         :keys [me latest-journals]} (rum/react state/state)]
     [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
      (cond
+       (nil? (:email me))
+       (settings/set-email)
+
        importing-to-db?
        [:div "Parsing files ..."]
 

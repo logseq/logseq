@@ -143,5 +143,5 @@
   (promesa.core/let [diffs (get-diffs (frontend.db/get-current-repo)
                                       hash-1
                                       hash-2)]
-    (prn diffs))
+    )
   )

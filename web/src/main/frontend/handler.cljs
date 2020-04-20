@@ -25,7 +25,8 @@
             [cljs-bean.core :as bean]
             [frontend.format :as format]
             [frontend.format.protocol :as protocol])
-  (:import [goog.events EventHandler]))
+  (:import [goog.events EventHandler]
+           [goog.format EmailAddress]))
 
 ;; TODO: replace all util/p-handle with p/let
 ;; TODO: separate git status for push-failed, pull-failed, etc
@@ -702,8 +703,6 @@
 
 (defn set-edit-content!
   [content]
-  (prn "set edit content: "
-       content)
   (reset! state/edit-content content))
 
 (defn move-cursor-to-end [input]
@@ -735,6 +734,22 @@
   (let [files (-> (db/get-files repo-url)
                   (only-html-render-formats))]
     files))
+
+(defn email? [v]
+  (and v
+       (.isValid (EmailAddress. v))))
+
+(defn set-email!
+  [email]
+  (when (email? email)
+    (util/post (str config/api "email")
+               {:email email}
+               (fn [result]
+                 (db/transact! [{:me/email email}])
+                 (swap! state/state assoc-in [:me :email] email))
+               (fn [error]
+                 (show-notification! "Email already exists!"
+                                     :error)))))
 
 (defn start!
   []

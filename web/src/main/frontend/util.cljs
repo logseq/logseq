@@ -106,11 +106,14 @@
    (fetch url #js {} on-ok on-failed))
   ([url opts on-ok on-failed]
    (-> (js/fetch url opts)
-       (.then #(if (.-ok %)
-                 (.json %)
-                 (on-failed %)))
-       (.then bean/->clj)
-       (.then #(on-ok %)))))
+       (.then (fn [resp]
+                (if (>= (.-status resp) 400)
+                  (on-failed resp)
+                  (if (.-ok resp)
+                    (-> (.json resp)
+                        (.then bean/->clj)
+                        (.then #(on-ok %)))
+                   (on-failed resp))))))))
 
 (defn upload
   [url file on-ok on-failed]
