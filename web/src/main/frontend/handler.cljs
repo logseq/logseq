@@ -236,7 +236,6 @@
     (when (and
            (not (:edit? @state/state))
            (nil? (:git/error @state/state))
-           (not= status )
            (or (nil? status)
                (= status :pulling)))
       (set-git-status! :pulling)
@@ -695,12 +694,17 @@
   (when-let [node (gdom/getElement "edit-box")]
     (when-let [range (string/trim @state/cursor-range)]
       (let [pos (inc (diff/find-position markup range))]
-        (println "Edit position: " pos)
         (util/set-caret-pos! node pos)))))
 
 (defn set-edit-node!
   [ref]
   (reset! state/edit-node ref))
+
+(defn set-edit-content!
+  [content]
+  (prn "set edit content: "
+       content)
+  (reset! state/edit-content content))
 
 (defn move-cursor-to-end [input]
   (let [n (count (.-value input))]

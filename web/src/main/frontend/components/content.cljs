@@ -49,7 +49,7 @@
    (ui/textarea
     {:id "edit-box"
      :on-change (fn [e]
-                  (reset! state/edit-content (util/evalue e)))
+                  (handler/set-edit-content! (util/evalue e)))
      :initial-value content
      :value-atom state/edit-content
      :auto-focus true
@@ -110,25 +110,27 @@
                                 content
                                 on-click
                                 on-hide]}]
-  (let [{:keys [edit? format/loading]} (rum/react state/state)]
-    (if edit?
+  (let [{:keys [edit? edit-id format/loading edit-journal edit-file]} (rum/react state/state)
+        edit-id (rum/react state/edit-id)]
+    (if (and edit? (= id edit-id))
       (editor-box content {:on-hide on-hide})
       (let [format (format/normalize format)
             loading? (get loading format)
-            html (if-not (string/blank? html) html (format/to-html content format config))
             markup? (contains? handler/html-render-formats format)
             on-click (fn [e]
                        (when-not (node-link? (gobj/get e "target"))
-                         (handler/reset-cursor-range! (gdom/getElement id))
-                         (if on-click
+                         (reset! state/edit-id id)
+                         (handler/reset-cursor-range! (gdom/getElement (str id)))
+                         (when on-click
                            (on-click))
-                         (reset! state/edit-content content)))]
+                         (handler/set-edit-content! content)))]
         (cond
           (and markup? loading?)
           [:div "loading ..."]
 
           markup?
-          (let [html (if html html "<span></span>")]
+          (let [html (if-not (string/blank? html) html (format/to-html content format config))
+                html (if html html "<span></span>")]
             [:div
              {:id id
               :on-click on-click
@@ -137,6 +139,5 @@
           :else                       ; other text formats
           [:div.pre-white-space
            {:id id
-            :content-editable true
             :on-click on-click}
            content])))))

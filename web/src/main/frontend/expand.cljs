@@ -61,6 +61,28 @@
       (drop-last nodes)
       nodes)))
 
+(defn get-heading-non-heading-children
+  [all-nodes heading]
+  (let [heading-id (gobj/get heading "id")
+        heading-tag-name (gobj/get heading "tagName")
+        control? (fn [node]
+                   (d/has-class? node "control"))
+        level (get-level heading-tag-name)
+        nodes (->> all-nodes
+                   ;; drop preceding nodes
+                   (drop-while (fn [node]
+                                 (not= heading-id (gobj/get node "id"))))
+                   ;; drop self
+                   (next)
+                   ;; take the children
+                   (take-while (fn [node]
+                                 (let [tag-name (gobj/get node "tagName")]
+                                   (not (heading? node))))))]
+    (if (and (last nodes)
+             (control? (last nodes)))
+      (drop-last nodes)
+      nodes)))
+
 (defn collapse!
   [all-nodes id]
   (when-let [node (gdom/getElement id)]
@@ -131,45 +153,64 @@
   (let [all-nodes (get-content-children)
         headings (get-all-headings)]
     (doseq [heading headings]
-      (when-let [heading-children (seq (get-heading-children all-nodes heading))]
-        (indent-non-headings! heading heading-children)
-        (let [id (gobj/get heading "id")
-              control-id (str "control-" id)
-              element (d/create-element "a")
-              mouseover (fn [e]
-                          (when (and
-                                 (not (d/has-class? element "caret-down"))
-                                 (not (d/has-class? element "caret-right")))
-                            (d/add-class! element "caret-down")))
-              mouseout (fn [e]
-                         (d/remove-class! element "caret-down"))]
-          (when-let [old-node (gdom/getElement control-id)]
-            (d/remove! old-node))
-          (d/set-style! heading
-                        :position "relative")
-          (d/set-attr! element
-                       :id control-id
-                       :class "control block no-underline text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150")
-          (d/set-style! element
-                        :position "absolute"
-                        :top 0
-                        :left "-20px")
-          (d/listen! heading :mouseover mouseover)
-          (d/listen! heading :mouseout mouseout)
-          (d/listen! element :mouseover mouseover)
-          (d/listen! element :mouseout mouseout)
-          (d/listen! element
-                     :click (fn [e]
-                              (if (d/has-class? element "caret-down")
-                                (do
-                                  (d/remove-class! element "caret-down")
-                                  (d/add-class! element "caret-right")
-                                  (collapse! all-nodes id))
-                                (do
-                                  (d/remove-class! element "caret-right")
-                                  (d/add-class! element "caret-down")
-                                  (expand! all-nodes id)))))
-          (d/prepend! heading element))))))
+      (let [heading-parent (d/parent heading)]
+        (when-let [heading-children (seq (get-heading-children all-nodes heading))]
+         (indent-non-headings! heading heading-children)
+         (let [id (gobj/get heading "id")
+               control-id (str "control-" id)
+               element (d/create-element "a")
+               mouseover (fn [e]
+                           (when (and
+                                  (not (d/has-class? element "caret-down"))
+                                  (not (d/has-class? element "caret-right")))
+                             (d/add-class! element "caret-down")))
+               mouseout (fn [e]
+                          (d/remove-class! element "caret-down"))]
+           (when-let [old-node (gdom/getElement control-id)]
+             (d/remove! old-node))
+           (d/set-style! heading
+                         :position "relative")
+           (d/set-attr! element
+                        :id control-id
+                        :class "control block no-underline text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150")
+           (d/set-style! element
+                         :position "absolute"
+                         :top 0
+                         :left "-20px")
+           (d/listen! heading :mouseover mouseover)
+           (d/listen! heading :mouseout mouseout)
+           (d/listen! element :mouseover mouseover)
+           (d/listen! element :mouseout mouseout)
+           (d/listen! element
+                      :click (fn [e]
+                               (if (d/has-class? element "caret-down")
+                                 (do
+                                   (d/remove-class! element "caret-down")
+                                   (d/add-class! element "caret-right")
+                                   (collapse! all-nodes id))
+                                 (do
+                                   (d/remove-class! element "caret-right")
+                                   (d/add-class! element "caret-down")
+                                   (expand! all-nodes id)))))
+           ;; create a div wrapper
+           ;; (let [wrapper (d/create-element "div")
+           ;;       non-heading-children (get-heading-non-heading-children all-nodes heading)]
+           ;;   ;; (d/replace! heading wrapper)
+           ;;   ;; (prn "remove " )
+           ;;   ;; (js/console.dir heading)
+           ;;   (d/set-class! wrapper "heading-group")
+           ;;   (d/remove! heading)
+           ;;   (doseq [child non-heading-children]
+           ;;     (d/remove! child))
+           ;;   (apply d/append! wrapper
+           ;;     element
+           ;;     heading
+           ;;     non-heading-children)
+           ;;   (d/append! heading-parent wrapper)
+           ;;   )
+
+           (d/prepend! heading element)
+           ))))))
 
 (comment
   (def all-nodes (get-content-children))

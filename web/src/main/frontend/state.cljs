@@ -19,11 +19,12 @@
              ;; format => boolean
              :format/loading {}
              :search/result nil
-             :edit/journal nil
-             :edit/file nil}))
+             :edit-journal nil
+             :edit-file nil}))
 
 ;; TODO: add to global state
 (def edit-node (atom nil))
+(def edit-id (atom nil))
 (def edit-content (atom ""))
 (def cursor-range (atom nil))
 (def cursor-pos (atom nil))

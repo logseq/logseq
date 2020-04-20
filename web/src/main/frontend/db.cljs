@@ -531,9 +531,10 @@
 
 (defn me-tx
   [db {:keys [name email avatar repos]}]
-  (let [me-tx [{:me/name name
-                :me/email email
-                :me/avatar avatar}]
+  (let [me (util/remove-nils {:me/name name
+                              :me/email email
+                              :me/avatar avatar})
+        me-tx [me]
         repos-tx (mapv (fn [repo]
                          {:repo/url (:url repo)})
                        repos)

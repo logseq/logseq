@@ -231,10 +231,15 @@
 (defn scroll-into-view
   [element]
   (let [scroll-top (gobj/get element "offsetTop")
-        scroll-top (- scroll-top 80)]
+        scroll-top (if (zero? scroll-top)
+                     (-> (gobj/get element "parentElement")
+                         (gobj/get "offsetTop"))
+                     scroll-top)]
+
     (when-let [main (first (array-seq (gdom/getElementsByTagName "main")))]
       (.scroll main #js {:top scroll-top
-                         :behavior "smooth"}))))
+                         ;; :behavior "smooth"
+                         }))))
 
 (defn scroll-to-element
   [fragment]

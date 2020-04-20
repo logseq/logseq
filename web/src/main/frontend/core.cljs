@@ -3,11 +3,15 @@
             [frontend.handler :as handler]
             [frontend.page :as page]
             [frontend.routes :as routes]
+            [frontend.util :as util]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 
 (defn set-router!
   []
+  (when-let [fragment (util/get-fragment)]
+    (util/scroll-to-element fragment))
+
   (rfe/start!
    (rf/router routes/routes {})
    handler/set-route-match!
