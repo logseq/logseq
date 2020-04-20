@@ -10,6 +10,7 @@
             [frontend.image :as image]
             [frontend.ui :as ui]
             [frontend.expand :as expand]
+            [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]))
@@ -23,7 +24,7 @@
 (defn lazy-load-js
   [state]
   (let [format (nth (:rum/args state) 2)
-        loader? (contains? handler/html-render-formats format)]
+        loader? (contains? config/html-render-formats format)]
     (when loader?
       (when-not (format/loaded? format)
         (handler/lazy-load format)))))
@@ -98,12 +99,12 @@
    :did-mount (fn [state]
                 (highlight!)
                 (handler/render-local-images!)
-                (expand/attach-controls!)
+                ;; (expand/attach-controls!)
                 state)
    :did-update (fn [state]
                  (highlight!)
                  (handler/render-local-images!)
-                 (expand/attach-controls!)
+                 ;; (expand/attach-controls!)
                  (lazy-load-js state)
                  state)}
   [state id html format {:keys [config
@@ -116,7 +117,7 @@
       (editor-box content {:on-hide on-hide})
       (let [format (format/normalize format)
             loading? (get loading format)
-            markup? (contains? handler/html-render-formats format)
+            markup? (contains? config/html-render-formats format)
             on-click (fn [e]
                        (when-not (node-link? (gobj/get e "target"))
                          (reset! state/edit-id id)
@@ -129,12 +130,19 @@
           [:div "loading ..."]
 
           markup?
-          (let [html (if-not (string/blank? html) html (format/to-html content format config))
+          (let [html (if (string/blank? html)
+                       (format/to-html content format config)
+                       html )
                 html (if html html "<span></span>")]
-            [:div
-             {:id id
-              :on-click on-click
-              :dangerouslySetInnerHTML {:__html html}}])
+            (if (= format :org)
+              [:div
+               {:id id
+                :on-click on-click}
+               (format/to-html content format config)]
+              [:div
+               {:id id
+                :on-click on-click
+                :dangerouslySetInnerHTML {:__html html}}]))
 
           :else                       ; other text formats
           [:div.pre-white-space

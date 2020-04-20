@@ -51,20 +51,6 @@
                 (= (str "/" (first (string/split path #"/")))
                    pattern)))) patterns))
 
-;; Add coding too
-(defonce text-formats
-  #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c})
-
-(defonce html-render-formats
-  #{:org :md :markdown
-    :adoc :asciidoc})
-
-(defonce img-formats
-  #{:gif :svg :jpeg :ico :png :jpg :bmp})
-
-(defonce all-formats
-  (set/union text-formats img-formats))
-
 (defn- keep-formats
   [files formats]
   (filter
@@ -75,11 +61,11 @@
 
 (defn- only-text-formats
   [files]
-  (keep-formats files text-formats))
+  (keep-formats files config/text-formats))
 
 (defn- only-html-render-formats
   [files]
-  (keep-formats files html-render-formats))
+  (keep-formats files config/html-render-formats))
 
 ;; TODO: no atom version
 (defn load-files

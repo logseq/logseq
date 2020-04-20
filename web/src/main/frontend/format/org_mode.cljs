@@ -3,7 +3,8 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [clojure.string :as string]
-            [frontend.loader :as loader]))
+            [frontend.loader :as loader]
+            [frontend.format.html :as html]))
 
 (def default-config
   (js/JSON.stringify
@@ -19,18 +20,6 @@
 
 (defn loaded? []
   js/window.MldocOrg)
-
-(defrecord OrgMode []
-  protocol/Format
-  (toHtml [this content config]
-    (when (loaded?)
-      (.parseHtml js/window.MldocOrg content config)))
-  (loaded? [this]
-    (some? (loaded?)))
-  (lazyLoad [this ok-handler]
-    (loader/load
-     (config/asset-uri "/static/js/mldoc_org.min.js")
-     ok-handler)))
 
 (defn parse-json
   ([content]
@@ -56,3 +45,25 @@
   [json]
   (when (loaded?)
     (.jsonToHtmlStr js/window.MldocOrg json default-config)))
+
+(defn ->html
+  [content config]
+  (html/->elem
+   :div.content
+   (->> (->clj content)
+        (html/blocks config))))
+
+(defrecord OrgMode []
+  protocol/Format
+  (toHtml [this content config]
+    (when (loaded?)
+      (->html content config)
+      ;; (.parseHtml js/window.MldocOrg content config)
+
+      ))
+  (loaded? [this]
+    (some? (loaded?)))
+  (lazyLoad [this ok-handler]
+    (loader/load
+     (config/asset-uri "/static/js/mldoc_org.min.js")
+     ok-handler)))

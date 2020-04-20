@@ -9,6 +9,7 @@
             [frontend.ui :as ui]
             [frontend.format.org-mode :as org]
             [frontend.components.content :as content]
+            [frontend.config :as config]
             [goog.crypt.base64 :as b64]))
 
 (defn- get-path
@@ -25,10 +26,10 @@
     (sidebar/sidebar
      (cond
        ;; image type
-       (and format (contains? #{:png :jpg :jpeg} format))
+       (and format (contains? config/img-formats format))
        [:img {:src path}]
 
-       (and format (contains? handler/text-formats format))
+       (and format (contains? config/text-formats format))
        (let [content (db/get-file (last (get-path state)))
              html (db/get-cached-html (last (get-path state)))]
          [:div.content

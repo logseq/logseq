@@ -256,3 +256,7 @@
     (when-not (string/blank? fragment)
       (when-let [element (gdom/getElement fragment)]
         (scroll-into-view element)))))
+
+(defn url-encode
+  [string]
+  (some-> string str (js/encodeURIComponent) (.replace "+" "%20")))
