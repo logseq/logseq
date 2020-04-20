@@ -6,7 +6,13 @@
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            ["/frontend/caret_pos" :as caret-pos]))
+            ["/frontend/caret_pos" :as caret-pos]
+            [goog.string :as gstring]
+            [goog.string.format]))
+
+(defn format
+  [fmt & args]
+  (apply gstring/format fmt args))
 
 (defn evalue
   [event]

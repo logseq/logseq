@@ -7,7 +7,8 @@
   medley                      {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
   cljs-bean                   {:mvn/version "1.5.0"}
-  prismatic/dommy             {:mvn/version "1.1.0"}}
+  prismatic/dommy             {:mvn/version "1.1.0"}
+  org.clojure/core.match      {:mvn/version "1.0.0"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}
