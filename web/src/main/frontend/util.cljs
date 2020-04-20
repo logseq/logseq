@@ -232,11 +232,9 @@
   [element]
   (let [scroll-top (gobj/get element "offsetTop")
         scroll-top (- scroll-top 80)]
-    ;; set scrollTop
-    (gobj/set! js/window "scrollTop" scroll-top)
-
-    (js/window.scroll #js {:top scroll-top
-                           :behavior "smooth"})))
+    (when-let [main (first (array-seq (gdom/getElementsByTagName "main")))]
+      (.scroll main #js {:top scroll-top
+                         :behavior "smooth"}))))
 
 (defn scroll-to-element
   [fragment]
