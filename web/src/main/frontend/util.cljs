@@ -142,12 +142,13 @@
   (.toLocaleString date "en-us" (clj->js {:weekday "long"})))
 
 (defn get-date
-  []
-  (let [date (js/Date.)]
-    {:year (.getFullYear date)
-     :month (inc (.getMonth date))
-     :day (.getDate date)
-     :weekday (get-weekday date)}))
+  ([]
+   (get-date (js/Date.)))
+  ([date]
+   {:year (.getFullYear date)
+    :month (inc (.getMonth date))
+    :day (.getDate date)
+    :weekday (get-weekday date)}))
 
 (defn journals-path
   [year month]
@@ -174,11 +175,26 @@
     (str n)))
 
 (defn year-month-day-padded
-  []
-  (let [{:keys [year month day]} (get-date)]
-    {:year year
-     :month (zero-pad month)
-     :day (zero-pad day)}))
+  ([]
+   (year-month-day-padded (get-date)))
+  ([date]
+   (let [{:keys [year month day]} date]
+     {:year year
+      :month (zero-pad month)
+      :day (zero-pad day)})))
+
+(defn mdy
+  ([]
+   (mdy (js/Date.)))
+  ([date]
+   (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
+     (str month "/" day "/" year))))
+
+(defn journal-name
+  ([]
+   (journal-name (js/Date.)))
+  ([date]
+   (str (get-weekday date) ", " (mdy date))))
 
 (defn get-month-last-day
   []
@@ -260,3 +276,9 @@
 (defn url-encode
   [string]
   (some-> string str (js/encodeURIComponent) (.replace "+" "%20")))
+
+(defn link?
+  [node]
+  (contains?
+   #{"A" "BUTTON"}
+   (gobj/get node "tagName")))

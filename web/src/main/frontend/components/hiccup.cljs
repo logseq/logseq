@@ -1,4 +1,4 @@
-(ns frontend.format.hiccup
+(ns frontend.components.hiccup
   (:refer-clojure :exclude [range])
   (:require [frontend.config :as config]
             [cljs.core.match :refer-macros [match]]
@@ -6,9 +6,13 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.state :as state]
+            [frontend.db :as db]
             [dommy.core :as d]
             [goog.dom :as gdom]
-            [frontend.expand :as expand]))
+            [frontend.expand :as expand]
+            [frontend.components.editor :as editor]
+            [frontend.handler :as handler]
+            [goog.object :as gobj]))
 
 ;; TODO:
 ;; add `key`
@@ -243,8 +247,10 @@
 
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::control-show?)
-  [state {:heading/keys [uuid level children] :as heading} heading-part config]
-  (let [control-show? (get state ::control-show?)
+  [state {:heading/keys [uuid level children meta] :as heading} heading-part config]
+  (let [{:keys [edit?]} (rum/react state/state)
+        edit-id (rum/react state/edit-id)
+        control-show? (get state ::control-show?)
         collapsed-headings (rum/react state/collapsed-headings)
         collapsed? (contains? collapsed-headings uuid)
         class "control block no-underline text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150"
@@ -256,34 +262,47 @@
                 (str class " caret-down")
 
                 :else
-                class)]
-    [:div.ls-heading-parent {:id (str "ls-heading-parent-" uuid)
-                             :level level}
-     ;; control
-     [:div.flex.flex-row.content-center
-      {:style {:cursor "pointer"}
-       :on-mouse-over (fn []
-                        (reset! control-show? true))
-       :on-mouse-out (fn []
-                       (reset! control-show? false))}
-      [:a {:id (str "control-" uuid)
-           :class class
-           :on-click (fn []
-                       (let [id (str "ls-heading-parent-" uuid)]
-                         (if collapsed?
-                           (do
-                             (expand/expand! (:id config) id)
-                             (swap! state/collapsed-headings disj uuid))
-                           (do
-                             (expand/collapse! (:id config) id)
-                             (swap! state/collapsed-headings conj uuid)))))}]
-      heading-part]
+                class)
+        heading-id (str "ls-heading-parent-" uuid)
+        content (db/get-heading-content heading)
+        on-hide (fn []
+                  (prn "edit when changed!"))]
+    (if (and edit? (= uuid edit-id))
+      (editor/box content {:on-hide on-hide})
+      [:div.ls-heading-parent {:id heading-id
+                               :level level
+                               :on-click (fn [e]
+                                           (when-not (util/link? (gobj/get e "target"))
+                                             (reset! state/edit-id uuid)
+                                             (swap! state/state assoc :edit? true)
+                                             (handler/reset-cursor-range! (gdom/getElement heading-id))
+                                             (handler/set-edit-content! content))
+                                           (prn "edit directly"))}
+       ;; control
+       [:div.flex.flex-row.content-center
+        {:style {:cursor "pointer"}
+         :on-mouse-over (fn []
+                          (reset! control-show? true))
+         :on-mouse-out (fn []
+                         (reset! control-show? false))}
+        [:a {:id (str "control-" uuid)
+             :class class
+             :on-click (fn []
+                         (let [id (str "ls-heading-parent-" uuid)]
+                           (if collapsed?
+                             (do
+                               (expand/expand! (:id config) id)
+                               (swap! state/collapsed-headings disj uuid))
+                             (do
+                               (expand/collapse! (:id config) id)
+                               (swap! state/collapsed-headings conj uuid)))))}]
+        heading-part]
 
-     ;; non-heading children
-     [:div {:class (str "h" level "-child")
-            :style {:padding-left 20}}
-      (for [child children]
-        (block config child))]]))
+       ;; non-heading children
+       [:div {:class (str "h" level "-child")
+              :style {:padding-left 20}}
+        (for [child children]
+          (block config child))]])))
 
 (defn heading
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children]
@@ -494,6 +513,14 @@
 (defn blocks
   [config col]
   (map #(block config %) col))
+
+;; TODO: handle case of no headings
+(defn ->hiccup
+  [headings config]
+  (let [headings (mapv (fn [heading] ["Heading" heading]) headings)]
+    (->elem
+     :div.content
+     (blocks config headings))))
 
 (comment
   ;; timestamps

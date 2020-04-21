@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.components.sidebar :as sidebar]
+            [frontend.components.hiccup :as hiccup]
             [frontend.ui :as ui]
             [frontend.format.org-mode :as org]
             [frontend.format :as format]
@@ -32,19 +33,19 @@
 
        (and format (contains? config/text-formats format))
        (let [content (db/get-file path)
-             hiccup (handler/->hiccup encoded-path path format)]
-         [:div.content
-          (content/content encoded-path format
-                           {:hiccup hiccup
-                            :content content
-                            :on-click (fn []
-                                        (handler/edit-file!
-                                         {:path encoded-path
-                                          :content content}))
-                            :on-hide (fn []
-                                       (when (handler/file-changed? content)
-                                         (handler/alter-file path))
-                                       (handler/clear-edit!))})])
+             headings (db/get-file-by-concat-headings path)
+             hiccup (hiccup/->hiccup headings {:id encoded-path})]
+         (content/content encoded-path format
+                          {:hiccup hiccup
+                           :content content
+                           :on-click (fn []
+                                       (handler/edit-file!
+                                        {:path encoded-path
+                                         :content content}))
+                           :on-hide (fn []
+                                      (when (handler/file-changed? content)
+                                        (handler/alter-file path))
+                                      (handler/clear-edit!))}))
 
        :else
        [:div "Format ." (name format) " is not supported."]))))

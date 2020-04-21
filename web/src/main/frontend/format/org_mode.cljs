@@ -3,8 +3,7 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [clojure.string :as string]
-            [frontend.loader :as loader]
-            [frontend.format.hiccup :as hiccup]))
+            [frontend.loader :as loader]))
 
 (def default-config
   (js/JSON.stringify
@@ -46,19 +45,8 @@
   (when (loaded?)
     (.jsonToHtmlStr js/window.MldocOrg json default-config)))
 
-;; TODO: handle case of no headings
-(defn ->hiccup
-  [headings config]
-  (let [headings (mapv (fn [heading] ["Heading" heading]) headings)]
-    (hiccup/->elem
-     :div.content
-     (hiccup/blocks config headings))))
-
 (defrecord OrgMode []
   protocol/Format
-  (toHiccup [this headings config]
-    (when (loaded?)
-      (->hiccup headings config)))
   (toHtml [this content config]
     (.parseHtml js/window.MldocOrg content config))
   (loaded? [this]

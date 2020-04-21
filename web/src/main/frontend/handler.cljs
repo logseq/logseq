@@ -103,7 +103,8 @@
 
 (defn set-latest-journals!
   []
-  (set-state-kv! :latest-journals (db/get-latest-journals {})))
+  (set-state-kv! :latest-journals [(db/get-journal)])
+  )
 
 (defn git-add-commit
   [repo-url file message content]
@@ -166,8 +167,8 @@
                          repo-url
                          files
                          (fn [contents]
-                           (let [headings (db/extract-all-headings repo-url contents)]
-                             (db/reset-contents-and-headings! repo-url contents headings delete-files delete-headings)
+                           (let [headings-pages (db/extract-all-headings-pages repo-url contents)]
+                             (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
                              (set-state-kv! :repo/importing-to-db? false)))))]
 
     (if first-clone?
@@ -212,7 +213,7 @@
                            :notification/status nil)
                    5000)))
 
-(defn- clear-storage
+(defn clear-storage
   []
   (p/let [_idb-clear (js/window.pfs._idb.wipe)]
     (js/localStorage.clear)
@@ -542,17 +543,19 @@
 
 (defn save-current-edit-journal!
   [edit-content]
-  (let [{:keys [edit-journal]} @state/state
-        {:keys [start-pos end-pos]} edit-journal]
-    (swap! state/state assoc
-           :edit? false
-           :edit-journal nil)
-    (when-not (= edit-content (:content edit-journal)) ; if new changes
-      (let [path (:file-path edit-journal)
-            current-journals (db/get-file path)
-            new-content (utf8/insert! current-journals start-pos end-pos edit-content)]
-        (set-state-kv! :latest-journals (db/get-latest-journals {:content new-content}))
-        (alter-file path "Auto save" new-content)))))
+  ;; TODO:
+  ;; (let [{:keys [edit-journal]} @state/state
+  ;;       {:keys [start-pos end-pos]} edit-journal]
+  ;;   (swap! state/state assoc
+  ;;          :edit? false
+  ;;          :edit-journal nil)
+  ;;   (when-not (= edit-content (:content edit-journal)) ; if new changes
+  ;;     (let [path (:file-path edit-journal)
+  ;;           current-journals (db/get-file path)
+  ;;           new-content (utf8/insert! current-journals start-pos end-pos edit-content)]
+  ;;       (set-state-kv! :latest-journals (db/get-latest-journals {:content new-content}))
+  ;;       (alter-file path "Auto save" new-content))))
+  )
 
 (defn render-local-images!
   []
@@ -589,11 +592,15 @@
 (defn load-more-journals!
   []
   (let [journals (:latest-journals @state/state)]
-    (when-let [title (:title (last journals))]
-      (let [before-date (last (string/split title #", "))
-            more-journals (->> (db/get-latest-journals {:before-date before-date
-                                                        :days 4})
-                               (drop 1))
+    (when-let [title (first (last journals))]
+      (let [[m d y] (->>
+                     (-> (last (string/split title #", "))
+                         (string/split #"/"))
+                     (map util/parse-int))
+            new-date (js/Date. y (dec m) d)
+            _ (.setDate new-date (dec (.getDate new-date)))
+            next-day (util/journal-name new-date)
+            more-journals [(db/get-journal next-day)]
             journals (concat journals more-journals)]
         (set-state-kv! :latest-journals journals)))))
 
@@ -735,27 +742,6 @@
                (fn [error]
                  (show-notification! "Email already exists!"
                                      :error)))))
-
-(defn ->hiccup
-  [id path format]
-  (let [headings (db/get-file-by-concat-headings path)]
-    (format/to-hiccup headings format {:id id})))
-
-;; (defn show-or-hide-children-headings!
-;;   [{:heading/keys [uuid level file]} collapse?]
-;;   (let [children (db/get-children-headings file uuid level)]
-;;     (doseq [{:heading/keys [uuid]} children]
-;;       (when-let [elem (gdom/getElement (str "ls-heading-parent-" uuid))]
-;;         (if collapse?
-;;           (dom/hide! elem)
-;;           (dom/show! elem))))))
-
-;; ;; hack to avoid ns cyclic, should avoid this!
-;; (add-watch state/expand-collapse
-;;            :expand-collapse-handler
-;;            (fn [_k _r _o state]
-;;              (doseq [[heading collapse?] state]
-;;                (show-or-hide-children-headings! heading collapse?))))
 
 (defn start!
   []
