@@ -249,7 +249,7 @@
         collapsed? (contains? collapsed-headings uuid)
         class "control block no-underline text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150"
         class (cond
-                (and @control-show? collapsed?)
+                collapsed?
                 (str class " caret-right")
 
                 (and @control-show? (not collapsed?))
