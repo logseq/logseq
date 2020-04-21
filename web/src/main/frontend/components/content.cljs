@@ -23,7 +23,7 @@
 
 (defn lazy-load-js
   [state]
-  (let [format (nth (:rum/args state) 2)
+  (let [format (nth (:rum/args state) 1)
         loader? (contains? config/html-render-formats format)]
     (when loader?
       (when-not (format/loaded? format)
@@ -92,25 +92,26 @@
                              ;; not in search
                              (nil? @state/q)
                              (= 84 (.-keyCode e)))
-                        (expand/toggle-all!))))))
+                        (let [id (first (:rum/args state))]
+                          (expand/toggle-all! id))
+                        )))))
   {:will-mount (fn [state]
                  (lazy-load-js state)
                  state)
    :did-mount (fn [state]
                 (highlight!)
                 (handler/render-local-images!)
-                ;; (expand/attach-controls!)
                 state)
    :did-update (fn [state]
                  (highlight!)
                  (handler/render-local-images!)
-                 ;; (expand/attach-controls!)
                  (lazy-load-js state)
                  state)}
-  [state id html format {:keys [config
-                                content
-                                on-click
-                                on-hide]}]
+  [state id format {:keys [config
+                           hiccup
+                           content
+                           on-click
+                           on-hide]}]
   (let [{:keys [edit? edit-id format/loading edit-journal edit-file]} (rum/react state/state)
         edit-id (rum/react state/edit-id)]
     (if (and edit? (= id edit-id))
@@ -129,22 +130,24 @@
           (and markup? loading?)
           [:div "loading ..."]
 
+          (and markup? (contains? #{:org} format))
+          [:div
+           {:id id
+            :style {:min-height 300}
+            :on-click on-click}
+           hiccup]
+
           markup?
-          (let [html (if (string/blank? html)
-                       (format/to-html content format config)
-                       html )
-                html (if html html "<span></span>")]
-            (if (= format :org)
-              [:div
-               {:id id
-                :style {:min-height 300}
-                :on-click on-click}
-               (format/to-html content format config)]
-              [:div
-               {:id id
-                :style {:min-height 300}
-                :on-click on-click
-                :dangerouslySetInnerHTML {:__html html}}]))
+          (let [html (format/to-html content format config)
+                html (if html html "<div></div>")]
+            (prn {:html html
+                  :format format
+                  :content content})
+            [:div
+             {:id id
+              :style {:min-height 300}
+              :on-click on-click
+              :dangerouslySetInnerHTML {:__html html}}])
 
           :else                       ; other text formats
           [:div.pre-white-space

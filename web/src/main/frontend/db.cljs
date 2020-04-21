@@ -29,8 +29,6 @@
    :file/path       {:db/unique :db.unique/identity}
    :file/repo       {:db/valueType   :db.type/ref}
    :file/content    {}
-   ;; don't cache journals html
-   :file/html       {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
@@ -119,25 +117,11 @@
 ;;    ;; scheduled, deadline
 ;;    ])
 
-(defn ->tags
-  [tags]
-  (map (fn [tag]
-         {:db/id tag
-          :tag/name tag})
-    tags))
-
-(defn extract-timestamps
-  [{:keys [meta] :as heading}]
-  (let [{:keys [pos timestamps]} meta]
-    ))
-
 (defn- safe-headings
   [headings]
   (mapv (fn [heading]
           (let [heading (-> (util/remove-nils heading)
-                            (assoc :heading/uuid (d/squuid)))
-                heading (assoc heading :tags
-                               (->tags (:tags heading)))]
+                            (assoc :heading/uuid (d/squuid)))]
             (medley/map-keys
              (fn [k] (get qualified-map k k))
              heading)))
@@ -256,8 +240,7 @@
                              (when content
                                {:file/repo [:repo/url repo-url]
                                 :file/path file
-                                :file/content content
-                                :file/html (format/to-html content (format/get-format file))}))
+                                :file/content content}))
                         contents)
         all-data (-> (concat delete-files delete-headings file-contents headings)
                      (util/remove-nils))]
@@ -300,6 +283,61 @@
    (some-> (d/entity db key)
            key)))
 
+(defn get-current-repo
+  ([]
+   (get-current-repo (d/db conn)))
+  ([db]
+   (:repo/url (get-key-value db :repo/current))))
+
+(defn sort-by-pos
+  [headings]
+  (sort-by (fn [heading]
+             (get-in heading [:heading/meta :pos]))
+           headings))
+
+(defn get-file-by-concat-headings
+  ([path]
+   (get-file-by-concat-headings (get-current-repo)
+                                path))
+  ([repo-url path]
+   (->> (d/q '[:find (pull ?heading [*])
+               :in $ ?repo-url ?path
+               :where
+               [?repo :repo/url ?repo-url]
+               [?file :file/path ?path]
+               [?heading :heading/file ?file]
+               [?heading :heading/repo ?repo]]
+          @conn repo-url path)
+        seq-flatten
+        sort-by-pos)))
+
+;; TODO: quite slow
+(defn get-children-headings
+  [file heading-uuid heading-level]
+  (let [file (:db/id file)
+        pred (fn [db meta level child-meta child-level]
+               (and
+                (>= child-level level)
+                (< (:pos meta) (:pos child-meta))))]
+    (->> (d/q '[:find (pull ?child [*])
+                :in $ ?file ?heading-uuid ?pred
+                :where
+                [?heading :heading/file ?file]
+                [?heading :heading/uuid ?heading-uuid]
+                [?heading :heading/repo ?repo]
+                [?child   :heading/file ?file]
+                [?child   :heading/repo ?repo]
+                [?heading :heading/level ?level]
+                [?heading :heading/meta ?meta]
+                [?child   :heading/meta ?child-meta]
+                [?child   :heading/level ?child-level]
+                [(?pred $ ?meta ?level ?child-meta ?child-level)]]
+           @conn file heading-uuid pred)
+         seq-flatten
+         sort-by-pos
+         (take-while (fn [{:heading/keys [level]}]
+                       (> level heading-level))))))
+
 (defn set-current-repo!
   [repo]
   (set-key-value :repo/current [:repo/url repo]))
@@ -321,12 +359,6 @@
           [?repo :repo/cloned? ?cloned]]
      @conn repo-url)
    first))
-
-(defn get-current-repo
-  ([]
-   (get-current-repo (d/db conn)))
-  ([db]
-   (:repo/url (get-key-value db :repo/current))))
 
 (defn get-repos
   []
@@ -545,31 +577,6 @@
     (->> (concat me-tx repos-tx current-repo-tx)
          (remove nil?))))
 
-(defn set-html!
-  [path html]
-  (transact! [{:file/path path
-               :file/html html}]))
-
-(defn get-cached-html
-  [path]
-  (if-let [result (->
-                   (d/q '[:find ?html
-                          :in $ ?path
-                          :where
-                          [_     :repo/current ?repo]
-                          [?file :file/repo ?repo]
-                          [?file :file/path ?path]
-                          [?file :file/html ?html]]
-                     @conn
-                     path)
-                   ffirst)]
-    result
-    (let [content (get-file path)
-          html (format/to-html content (format/get-format path))]
-      (when html
-        (set-html! path html)
-        html))))
-
 (defn restore! [me]
   (if-let [stored (js/localStorage.getItem datascript-db)]
     (let [stored-db (string->db stored)
@@ -577,6 +584,7 @@
       (if (= (:schema stored-db) schema) ;; check for code update
         (reset-conn! attached-db)))
     (d/transact! conn (me-tx (d/db conn) me))))
+
 
 (comment
   (d/transact! conn [{:db/id -1

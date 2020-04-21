@@ -29,4 +29,8 @@
 (def cursor-range (atom nil))
 (def cursor-pos (atom nil))
 
+;; TODO: Add more states
+(def toggle-state (atom false))
+(def collapsed-headings (atom #{}))
+
 (def q (atom nil))

@@ -19,6 +19,7 @@
             [goog.dom :as gdom]
             [rum.core :as rum]
             [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.utf8 :as utf8]
             [frontend.image :as image]
             [clojure.set :as set]
@@ -222,7 +223,7 @@
   (let [status (:git/status @state/state)]
     (when (and
            (not (:edit? @state/state))
-           (nil? (:git/error @state/state))
+           ;; (nil? (:git/error @state/state))
            (or (nil? status)
                (= status :pulling)))
       (set-git-status! :pulling)
@@ -291,8 +292,8 @@
   [repo-url]
   (when (and
          (not (:edit? @state/state))
-         (= :should-push (:git/status @state/state))
-         (nil? (:git/error @state/state)))
+         ;; (nil? (:git/error @state/state))
+         (= :should-push (:git/status @state/state)))
     (set-git-status! :pushing)
     (let [token (get-github-token)]
       (util/p-handle
@@ -403,8 +404,6 @@
   ([path content]
    (alter-file path (str "Update " path) content))
   ([path commit-message content]
-   ;; update cached html
-   (db/set-html! path (format/to-html content (format/get-format path)))
    (let [token (get-github-token)
          repo-url (db/get-current-repo)]
      (util/p-handle
@@ -736,6 +735,27 @@
                (fn [error]
                  (show-notification! "Email already exists!"
                                      :error)))))
+
+(defn ->hiccup
+  [id path format]
+  (let [headings (db/get-file-by-concat-headings path)]
+    (format/to-hiccup headings format {:id id})))
+
+;; (defn show-or-hide-children-headings!
+;;   [{:heading/keys [uuid level file]} collapse?]
+;;   (let [children (db/get-children-headings file uuid level)]
+;;     (doseq [{:heading/keys [uuid]} children]
+;;       (when-let [elem (gdom/getElement (str "ls-heading-parent-" uuid))]
+;;         (if collapse?
+;;           (dom/hide! elem)
+;;           (dom/show! elem))))))
+
+;; ;; hack to avoid ns cyclic, should avoid this!
+;; (add-watch state/expand-collapse
+;;            :expand-collapse-handler
+;;            (fn [_k _r _o state]
+;;              (doseq [[heading collapse?] state]
+;;                (show-or-hide-children-headings! heading collapse?))))
 
 (defn start!
   []

@@ -13,6 +13,10 @@
 
 (defrecord MdMode []
   protocol/Format
+  (toHiccup [this headings config]
+    (when (loaded?)
+      ;; not supported yet
+      nil))
   (toHtml [this content config]
     (when (loaded?)
       (.makeHtml (js/window.showdown.Converter.) content)))

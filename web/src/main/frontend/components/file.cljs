@@ -8,6 +8,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.ui :as ui]
             [frontend.format.org-mode :as org]
+            [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]
             [goog.crypt.base64 :as b64]))
@@ -30,11 +31,12 @@
        [:img {:src path}]
 
        (and format (contains? config/text-formats format))
-       (let [content (db/get-file (last (get-path state)))
-             html (db/get-cached-html (last (get-path state)))]
+       (let [content (db/get-file path)
+             hiccup (handler/->hiccup encoded-path path format)]
          [:div.content
-          (content/content encoded-path html format
-                           {:content content
+          (content/content encoded-path format
+                           {:hiccup hiccup
+                            :content content
                             :on-click (fn []
                                         (handler/edit-file!
                                          {:path encoded-path

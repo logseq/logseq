@@ -44,6 +44,14 @@
       first
       second))
 
+(defn ->tags
+  [tags]
+  (mapv (fn [tag]
+          {:db/id tag
+           :tag/name tag})
+        tags))
+
+;; TODO create a dummy heading if no headings exists
 (defn extract-headings
   [blocks]
   (loop [headings []
@@ -64,7 +72,8 @@
           (let [heading (-> (assoc (second block)
                                    :children (reverse heading-children)
                                    :timestamps timestamps)
-                            (assoc-in [:meta :end-pos] last-pos))
+                            (assoc-in [:meta :end-pos] last-pos)
+                            (update :tags ->tags))
                 last-pos' (get-in heading [:meta :pos])]
             (recur (conj headings heading) [] (rest blocks) {} last-pos'))
 

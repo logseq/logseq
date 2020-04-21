@@ -1,9 +1,14 @@
-(ns frontend.format.html
+(ns frontend.format.hiccup
   (:refer-clojure :exclude [range])
   (:require [frontend.config :as config]
             [cljs.core.match :refer-macros [match]]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [rum.core :as rum]
+            [frontend.state :as state]
+            [dommy.core :as d]
+            [goog.dom :as gdom]
+            [frontend.expand :as expand]))
 
 ;; TODO:
 ;; add `key`
@@ -233,8 +238,55 @@
     :else
     ""))
 
+(declare block)
+(declare blocks)
+
+(rum/defcs heading-cp < rum/reactive
+  (rum/local false ::control-show?)
+  [state {:heading/keys [uuid level children] :as heading} heading-part config]
+  (let [control-show? (get state ::control-show?)
+        collapsed-headings (rum/react state/collapsed-headings)
+        collapsed? (contains? collapsed-headings uuid)
+        class "control block no-underline text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150"
+        class (cond
+                (and @control-show? collapsed?)
+                (str class " caret-right")
+
+                (and @control-show? (not collapsed?))
+                (str class " caret-down")
+
+                :else
+                class)]
+    [:div.ls-heading-parent {:id (str "ls-heading-parent-" uuid)
+                             :level level}
+     ;; control
+     [:div.flex.flex-row.content-center
+      {:style {:cursor "pointer"}
+       :on-mouse-over (fn []
+                        (reset! control-show? true))
+       :on-mouse-out (fn []
+                       (reset! control-show? false))}
+      [:a {:id (str "control-" uuid)
+           :class class
+           :on-click (fn []
+                       (let [id (str "ls-heading-parent-" uuid)]
+                         (if collapsed?
+                           (do
+                             (expand/expand! (:id config) id)
+                             (swap! state/collapsed-headings disj uuid))
+                           (do
+                             (expand/collapse! (:id config) id)
+                             (swap! state/collapsed-headings conj uuid)))))}]
+      heading-part]
+
+     ;; non-heading children
+     [:div {:class (str "h" level "-child")
+            :style {:padding-left 20}}
+      (for [child children]
+        (block config child))]]))
+
 (defn heading
-  [config {:keys [title tags marker level priority anchor meta numbering]
+  [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children]
            :as t}]
   (let [marker (if marker
                  [:span {:class (str "task-status " (string/lower-case marker))
@@ -245,21 +297,25 @@
                            :style {:margin-right 6}}
                     (util/format "[#%s]" (str priority))])
         tags (when-not (empty? tags)
-               [:span.heading-tags
-                (for [tag tags]
-                  [:span.tag {:key tag}
-                   [:span {:class tag}
-                    tag]])])
-        element (keyword (str "h" level))]
-
-    (->elem element
-            {:id anchor}
-            (remove-nils
-             (concat
-              [marker
-               priority]
-              (map-inline title)
-              [tags])))))
+               (->elem
+                :span
+                {:class "heading-tags"}
+                (mapv (fn [{:keys [db/id tag/name]}]
+                        [:span.tag {:key (str "tag-" id)}
+                         [:span {:class name}
+                          name]])
+                      tags)))
+        element (keyword (str "h" level))
+        heading-part (->elem element
+                             {:id anchor
+                              :uuid (str uuid)}
+                             (remove-nils
+                              (concat
+                               [marker
+                                priority]
+                               (map-inline title)
+                               [tags])))]
+    (heading-cp t heading-part config)))
 
 (defn list-element
   [l]
@@ -277,14 +333,14 @@
     :else
     :ul))
 
-(declare blocks)
-
 (defn list-item
   [config {:keys [name content checkbox items number] :as l}]
   (let [content (when-not (empty? content)
                   (match content
                     [["Paragraph" i] & rest]
-                    (map-inline i (blocks config rest))
+                    (vec-cat
+                     (map-inline i)
+                     (blocks config rest))
                     :else
                     (blocks config content)))
         checked? (some? checkbox)
@@ -335,14 +391,14 @@
                        (map-inline col)))
                     cols)))
         tb-col-groups (try
-                     (mapv (fn [number]
-                             (let [col-elem [:col {:class "org-left"}]]
-                               (->elem
-                                :colgroup
-                                (repeat number col-elem))))
-                           col_groups)
-                     (catch js/Error e
-                       []))
+                        (mapv (fn [number]
+                                (let [col-elem [:col {:class "org-left"}]]
+                                  (->elem
+                                   :colgroup
+                                   (repeat number col-elem))))
+                              col_groups)
+                        (catch js/Error e
+                          []))
         head (if header
                [:thead (tr :th header)])
         groups (mapv (fn [group]
@@ -440,8 +496,6 @@
   (map #(block config %) col))
 
 (comment
-  (def ->html fronend. org-content->html)
-
   ;; timestamps
   ;; [2020-02-10 Mon 13:22]
   ;; repetition

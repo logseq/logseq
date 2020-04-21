@@ -27,7 +27,6 @@
      [:h1.text-gray-600 {:style {:font-weight "450"}}
       title]
      (content/content id
-                      nil
                       :org
                       {:content content
                        :on-click (fn []

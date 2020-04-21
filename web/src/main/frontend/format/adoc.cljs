@@ -13,6 +13,10 @@
 
 (defrecord AdocMode []
   protocol/Format
+  (toHiccup [this headings config]
+    (when (loaded?)
+      ;; not supported yet
+      nil))
   (toHtml [this content config]
     (when (loaded?)
       (let [config {:attributes {:showTitle false

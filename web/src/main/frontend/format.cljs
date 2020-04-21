@@ -33,10 +33,25 @@
     adoc-record
     nil))
 
+;; html
 (defn get-default-config
   []
   ;; TODO
   org/default-config)
+
+(defn get-hiccup-default-config
+  []
+  ;; TODO
+  nil)
+
+(defn to-hiccup
+  ([headings format]
+   (to-hiccup headings format (get-hiccup-default-config)))
+  ([headings format config]
+   (let [config (if config config (get-hiccup-default-config))]
+     (if-let [record (get-format-record format)]
+       (protocol/toHiccup record headings config)
+       headings))))
 
 (defn to-html
   ([content format]
@@ -44,11 +59,10 @@
   ([content format config]
    (let [config (if config config (get-default-config))]
      (if (string/blank? content)
-      ""
-      (if-let [record (get-format-record format)]
-        (protocol/toHtml record content config)
-        ;; TODO: preserve newlines
-        content)))))
+       ""
+       (if-let [record (get-format-record format)]
+         (protocol/toHtml record content config)
+         content)))))
 
 (defn loaded?
   [format]
