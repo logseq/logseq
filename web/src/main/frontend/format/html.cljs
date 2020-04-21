@@ -334,7 +334,7 @@
                         :class "org-left"}
                        (map-inline col)))
                     cols)))
-        col-groups (try
+        tb-col-groups (try
                      (mapv (fn [number]
                              (let [col-elem [:col {:class "org-left"}]]
                                (->elem
@@ -358,7 +358,7 @@
       :rules "groups"
       :frame "hsides"}
      (vec-cat
-      col-groups
+      tb-col-groups
       (cons head groups)))))
 
 (defn map-inline

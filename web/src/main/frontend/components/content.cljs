@@ -137,10 +137,12 @@
             (if (= format :org)
               [:div
                {:id id
+                :style {:min-height 300}
                 :on-click on-click}
                (format/to-html content format config)]
               [:div
                {:id id
+                :style {:min-height 300}
                 :on-click on-click
                 :dangerouslySetInnerHTML {:__html html}}]))
 
