@@ -57,6 +57,7 @@
    :heading/tags {:db/valueType   :db.type/ref
                   :db/cardinality :db.cardinality/many
                   :db/isComponent true}
+   ;; :heading/parent {:db/valueType   :db.type/ref}
 
    ;; tag
    :tag/name       {:db/unique :db.unique/identity}
@@ -111,22 +112,8 @@
    :meta :heading/meta
    :content :heading/content
    :page :heading/page
+   ;; :parent :heading/parent
    })
-
-;; (def schema
-;;   [{:db/ident       {:db/unique :db.unique/identity}}
-
-;;    ;; {:db/ident       :heading/title
-;;    ;;  :db/valueType   :db.type/string
-;;    ;;  :db/cardinality :db.cardinality/one}
-
-;;    ;; {:db/ident       :heading/parent-title
-;;    ;;  :db/valueType   :db.type/string
-;;    ;;  :db/cardinality :db.cardinality/one}
-
-;;    ;; TODO: timestamps, meta
-;;    ;; scheduled, deadline
-;;    ])
 
 (defn- safe-headings
   [headings]

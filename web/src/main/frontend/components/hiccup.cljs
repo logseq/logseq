@@ -352,7 +352,8 @@
                           name]])
                       tags)))
         element (keyword (str "h" level))
-        level-str (str (apply str (repeat level "*")) " ")
+        level-str [:a {:href (str "/page/" uuid)}
+                   (str (apply str (repeat level "*")) " ")]
         heading-part (->elem element
                              {:id anchor
                               :uuid (str uuid)}

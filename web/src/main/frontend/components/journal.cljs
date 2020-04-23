@@ -19,7 +19,10 @@
         hiccup (hiccup/->hiccup headings {:id page-id})]
     [:div.flex-1
      [:h1.mb-2.font-medium.text-2xl {:style {:color "#161E2E"}}
-      (str "* " title)]
+      [:a {:href (str "/page/" (:heading/uuid (first headings)))}
+       "* "]
+
+      title]
      (content/content page-id :org
                       {:hiccup hiccup})]))
 

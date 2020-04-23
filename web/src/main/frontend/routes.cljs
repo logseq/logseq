@@ -3,6 +3,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.components.repo :as repo]
             [frontend.components.file :as file]
+            [frontend.components.page :as page]
             [frontend.components.agenda :as agenda]
             [clojure.string :as string]))
 
@@ -18,6 +19,10 @@
    ["/file/:path"
     {:name :file
      :view file/file}]
+
+   ["/page/:name"
+    {:name :page
+     :view page/page}]
 
    ["/agenda"
     {:name :agenda
