@@ -31,20 +31,23 @@
        (and format (contains? config/img-formats format))
        [:img {:src path}]
 
-       (and format (contains? config/text-formats format))
-       (let [content (db/get-file path)
-             headings (db/get-file-by-concat-headings path)
+       (and format (contains? config/hiccup-support-formats format))
+       (let [headings (db/get-file-by-concat-headings path)
+             headings (db/with-dummy-heading headings)
              hiccup (hiccup/->hiccup headings {:id encoded-path})]
+         (content/content encoded-path format {:hiccup hiccup}))
+
+       (and format (contains? config/text-formats format))
+       (let [content (db/get-file path)]
          (content/content encoded-path format
-                          {:hiccup hiccup
-                           :content content
+                          {:content content
                            :on-click (fn []
                                        (handler/edit-file!
                                         {:path encoded-path
                                          :content content}))
                            :on-hide (fn []
                                       (when (handler/file-changed? content)
-                                        (handler/alter-file path))
+                                        (handler/alter-file path @state/edit-content))
                                       (handler/clear-edit!))}))
 
        :else

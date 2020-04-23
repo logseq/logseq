@@ -39,10 +39,11 @@
                       (when (and
                              ;; not in search
                              (nil? @state/q)
+                             ;; not input
+                             (not (:edit? @state/state))
                              (= 84 (.-keyCode e)))
                         (let [id (first (:rum/args state))]
-                          (expand/toggle-all! id))
-                        )))))
+                          (expand/toggle-all! id)))))))
   {:will-mount (fn [state]
                  (lazy-load-js state)
                  state)
@@ -60,41 +61,38 @@
                            content
                            on-click
                            on-hide]}]
-  (let [{:keys [edit? format/loading edit-journal edit-file]} (rum/react state/state)
-        edit-id (rum/react state/edit-id)]
-    (if (and edit? (= id edit-id))
-      (editor/box content {:on-hide on-hide})
-      (let [format (format/normalize format)
-            loading? (get loading format)
-            markup? (contains? config/html-render-formats format)
-            on-click (fn [e]
-                       (when-not (util/link? (gobj/get e "target"))
-                         (reset! state/edit-id id)
-                         (handler/reset-cursor-range! (gdom/getElement (str id)))
-                         (when on-click
-                           (on-click))
-                         (handler/set-edit-content! content)))]
-        (cond
-          (and markup? loading?)
-          [:div "loading ..."]
+  (let [format (format/normalize format)]
+    (if (contains? config/hiccup-support-formats format)
+      [:div
+       {:id id
+        :style {:min-height 300}}
+       hiccup]
+      (let [{:keys [edit? format/loading edit-journal edit-file]} (rum/react state/state)]
+        (if edit?
+          (editor/box content {:on-hide on-hide} id)
+          (let [format (format/normalize format)
+                loading? (get loading format)
+                markup? (contains? config/html-render-formats format)
+                on-click (fn [e]
+                           (when-not (util/link? (gobj/get e "target"))
+                             (handler/reset-cursor-range! (gdom/getElement (str id)))
+                             (when on-click
+                               (on-click))))]
+            (cond
+              (and markup? loading?)
+              [:div "loading ..."]
 
-          (and markup? (contains? #{:org} format))
-          [:div
-           {:id id
-            :style {:min-height 300}}
-           hiccup]
+              markup?
+              (let [html (format/to-html content format config)
+                    html (if html html "<div></div>")]
+                [:div
+                 {:id id
+                  :style {:min-height 300}
+                  :on-click on-click
+                  :dangerouslySetInnerHTML {:__html html}}])
 
-          markup?
-          (let [html (format/to-html content format config)
-                html (if html html "<div></div>")]
-            [:div
-             {:id id
-              :style {:min-height 300}
-              :on-click on-click
-              :dangerouslySetInnerHTML {:__html html}}])
-
-          :else                       ; other text formats
-          [:div.pre-white-space
-           {:id id
-            :on-click on-click}
-           content])))))
+              :else                       ; other text formats
+              [:div.pre-white-space
+               {:id id
+                :on-click on-click}
+               content])))))))

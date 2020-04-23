@@ -28,15 +28,20 @@
 
 (rum/defcc textarea <
   {:init (fn [state props]
-           (let [{:keys [initial-value value-atom]} (first (:rum/args state))]
-             (reset! value-atom (string/trim initial-value)))
+           (let [{:keys [initial-value value-atom dummy?]} (first (:rum/args state))]
+             (reset! value-atom (if initial-value
+                                  (if dummy?
+                                    (string/triml initial-value)
+                                    (string/trim initial-value))
+                                  "")))
            state)}
   [comp opts]
   (when-let [value-atom (:value-atom opts)]
     (autosize-textarea
      (-> (force-update-input comp (dissoc opts
                                           :value-atom
-                                          :initial-value))
+                                          :initial-value
+                                          :dummy?))
          (assoc
           :value @value-atom)))))
 

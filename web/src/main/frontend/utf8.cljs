@@ -25,7 +25,8 @@
 
 (defn insert!
   [s start-pos end-pos content]
-  (let [arr (encode s)]
+  (let [arr (encode s)
+        end-pos (or end-pos (length arr))]
     (str (substring arr 0 start-pos)
          content
          (substring arr end-pos))))

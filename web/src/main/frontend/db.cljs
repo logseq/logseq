@@ -36,6 +36,8 @@
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/journal?   {}
+   :page/journal-day {}
+   :page/repo       {:db/valueType   :db.type/ref}
 
    :reference/uuid    {:db/unique      :db.unique/identity}
    :reference/text    {}
@@ -47,6 +49,7 @@
    :heading/repo   {:db/valueType   :db.type/ref}
    :heading/file   {:db/valueType   :db.type/ref}
    :heading/page   {:db/valueType   :db.type/ref}
+   :heading/content {}
    :heading/anchor {}
    :heading/marker {}
    :heading/priority {}
@@ -106,6 +109,8 @@
    :children :heading/children
    :tags :heading/tags
    :meta :heading/meta
+   :content :heading/content
+   :page :heading/page
    })
 
 ;; (def schema
@@ -417,13 +422,31 @@
   (and title
        (not (js/isNaN (js/Date.parse title)))))
 
+(defn get-heading-content
+  [utf8-content heading]
+  (let [meta (:meta heading)]
+    (if-let [end-pos (:end-pos meta)]
+      (utf8/substring utf8-content
+                      (:pos meta)
+                      end-pos)
+      (utf8/substring utf8-content
+                      (:pos meta)))))
+
 (defonce debug-headings (atom nil))
+
 ;; file
+
+(defn journal-page-name->int
+  [page-name]
+  (let [[m d y] (-> (last (string/split page-name #", "))
+                    (string/split #"/"))]
+    (util/parse-int (str y m d))))
+
 ;; check journal formats and report errors
 (defn extract-journal-pages-and-headings
-  [repo-url file content]
-  (let [ast (org/->clj content)
-        headings (block/extract-headings ast)
+  [repo-url file content utf8-content]
+  (let [ast (org/->clj content org/config-with-line-break)
+        headings (block/extract-headings ast (utf8/length utf8-content))
         pages (loop [pages {}
                      last-page-name nil
                      headings headings]
@@ -444,6 +467,7 @@
                     (if page
                       (map (fn [heading]
                              (assoc heading
+                                    :heading/content (get-heading-content utf8-content heading)
                                     :heading/repo [:repo/url repo-url]
                                     :heading/file [:file/path file]
                                     :heading/page [:page/name page]))
@@ -455,7 +479,9 @@
                   {:page/uuid (d/squuid)
                    :page/name page
                    :page/file [:file/path file]
-                   :page/journal? true})
+                   :page/journal? true
+                   :page/journal-day (journal-page-name->int page)
+                   :page/repo [:repo/url repo-url]})
                 (keys pages))]
     (reset! debug-headings headings)
     (vec
@@ -463,51 +489,19 @@
       pages
       headings))))
 
-(comment
-  (def file "journals/2020_04.org")
-  (def content (get-file file))
-  (def ast (org/->clj content))
-  (def headings (block/extract-headings ast))
-  (def pages (loop [pages {}
-                    last-page-name nil
-                    headings headings]
-               (if (seq headings)
-                 (let [[{:keys [level title] :as heading} & tl] headings]
-                   (if (and (= level 1)
-                            (when-let [title (last (first title))]
-                              (valid-journal-title? title)))
-                     (let [page-name (last (first title))
-                           new-pages (assoc pages page-name [heading])]
-                       (recur new-pages page-name tl))
-                     (let [new-pages (update pages last-page-name (fn [headings]
-                                                                    (vec (conj headings heading))))]
-                       (recur new-pages last-page-name tl))))
-                 pages)))
-  (def pages (partition-by (fn [{:keys [level title]}]
-                             (and
-                              (= level 1)
-                              (when-let [title (last (first title))]
-                                (valid-journal-title? title)
-                                title)))
-                           headings))
-  (def page-headings (extract-journal-pages-and-headings
-                      (get-current-repo)
-                      file
-                      (get-file file)))
-  )
-
 (defn extract-headings-pages
-  [repo-url file content]
+  [repo-url file content utf8-content]
   (if (string/blank? content)
     []
     (let [journal? (string/starts-with? file "journals/")]
       (if journal?
-        (extract-journal-pages-and-headings repo-url file content)
-        (let [ast (org/->clj content)
-              headings (block/extract-headings ast)
+        (extract-journal-pages-and-headings repo-url file content utf8-content)
+        (let [ast (org/->clj content org/config-with-line-break)
+              headings (block/extract-headings ast (utf8/length utf8-content))
               page-name (get-page-name file ast)
               headings (map (fn [heading]
                               (assoc heading
+                                     :heading/content (get-heading-content utf8-content heading)
                                      :heading/repo [:repo/url repo-url]
                                      :heading/file [:file/path file]
                                      :heading/page [:page/name page-name]))
@@ -516,7 +510,9 @@
               pages [{:page/uuid (d/squuid)
                       :page/name page-name
                       :page/file [:file/path file]
-                      :page/journal? false}]]
+                      :page/journal? false
+                      :page/journal-day 0
+                      :page/repo [:repo/url repo-url]}]]
           (vec
            (concat
             pages
@@ -539,16 +535,18 @@
    (mapcat
     (fn [[file content] contents]
       (when content
-        (extract-headings-pages repo-url file content)))
+        (let [utf8-content (utf8/encode content)]
+          (extract-headings-pages repo-url file content utf8-content))))
     contents)))
 
 (defn reset-file!
   [repo-url file content]
-  (let [file-content [{:file/repo [:repo/url repo-url]
+  (let [utf8-content (utf8/encode content)
+        file-content [{:file/repo [:repo/url repo-url]
                        :file/path file
                        :file/content content}]
         delete-headings (delete-file-headings! repo-url file)
-        headings-pages (extract-headings-pages repo-url file content)]
+        headings-pages (extract-headings-pages repo-url file content utf8-content)]
     (d/transact! conn (concat file-content delete-headings headings-pages))))
 
 (defn get-file-content
@@ -563,23 +561,6 @@
          @conn repo-url path)
        (map first)
        first))
-
-;; {:repo {:db/id 2}, :file {:db/id 6}}
-(defn get-heading-content
-  [{:heading/keys [uuid meta file repo]
-    :as t}]
-  (when-let [content (->> (d/q '[:find ?content
-                                 :in $ ?repo ?file
-                                 :where
-                                 [?file :file/repo ?repo]
-                                 [?file :file/content ?content]]
-                            @conn (:db/id repo) (:db/id file))
-                          (map first)
-                          first)]
-    (let [content (utf8/substring (utf8/encode content)
-                                  (:pos meta)
-                                  (:end-pos meta))]
-      (string/trim content))))
 
 (defn get-file
   [path]
@@ -631,6 +612,58 @@
   ([page-name]
    [page-name (get-page-by-concat-headings page-name)]))
 
+;; cache this
+
+(defn get-journal-pages
+  ([]
+   (get-journal-pages (get-current-repo)))
+  ([repo-url]
+   (->>
+    (d/q '[:find ?page-name
+           :in $ ?repo-url
+           :where
+           [?repo :repo/url ?repo-url]
+           [?page :page/repo ?repo]
+           [?page :page/name ?page-name]
+           [?page :page/journal? true]]
+      @conn
+      repo-url)
+    seq-flatten)))
+
+(defn get-latest-journals
+  ([n]
+   (get-latest-journals (get-current-repo) n))
+  ([repo-url n]
+   (let [date (js/Date.)
+         _ (.setDate date (- (.getDate date) (dec n)))
+         date->int (fn [date]
+                     (util/parse-int
+                      (string/replace (util/ymd date) "/" "")))
+         before-day (date->int date)
+         today (date->int (js/Date.))
+         pages (->>
+                (d/q '[:find ?page-name ?journal-day
+                       :in $ ?repo-url ?before-day ?today
+                       :where
+                       [?repo :repo/url ?repo-url]
+                       [?page :page/repo ?repo]
+                       [?page :page/name ?page-name]
+                       [?page :page/journal? true]
+                       [?page :page/journal-day ?journal-day]
+                       [(<= ?before-day ?journal-day ?today)]
+                       ]
+                  @conn
+                  repo-url
+                  before-day
+                  today)
+                (sort-by last)
+                (reverse)
+                (map first))]
+     (mapv
+      (fn [page]
+        [page (get-page-by-concat-headings repo-url page)])
+      pages))))
+
 (defn me-tx
   [db {:keys [name email avatar repos]}]
   (let [me (util/remove-nils {:me/name name
@@ -646,6 +679,25 @@
                           [(kv :repo/current [:repo/url (:url (first repos))])])]
     (->> (concat me-tx repos-tx current-repo-tx)
          (remove nil?))))
+
+(defn with-dummy-heading
+  [headings]
+  (when (seq headings)
+    (let [last-heading (last headings)
+          end-pos (get-in last-heading [:heading/meta :end-pos])
+          dummy (merge last-heading
+                       (let [uuid (d/squuid)]
+                         {:heading/uuid (d/squuid)
+                          :heading/title ""
+                          :heading/content "** "
+                          :heading/level 2
+                          :heading/priority nil
+                          :heading/anchor (str uuid)
+                          :heading/meta {:pos end-pos
+                                         :end-pos nil}
+                          :heading/children nil
+                          :heading/dummy? true}))]
+     (concat headings [dummy]))))
 
 (defn restore! [me]
   (if-let [stored (js/localStorage.getItem datascript-db)]

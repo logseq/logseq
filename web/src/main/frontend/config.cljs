@@ -38,3 +38,6 @@
 
 (defonce all-formats
   (set/union text-formats img-formats))
+
+(defonce hiccup-support-formats
+  #{:org})

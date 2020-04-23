@@ -28,12 +28,14 @@
      (.parseJson js/window.MldocOrg content config))))
 
 (defn ->clj
-  [content]
-  (if (string/blank? content)
-    {}
-    (-> content
-        (parse-json)
-        (util/json->clj))))
+  ([content]
+   (->clj content default-config))
+  ([content config]
+   (if (string/blank? content)
+     {}
+     (-> content
+         (parse-json config)
+         (util/json->clj)))))
 
 (defn inline-list->html
   [json]

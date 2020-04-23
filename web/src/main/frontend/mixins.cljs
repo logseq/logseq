@@ -59,7 +59,7 @@
               (fn [e]
                 ;; If the click target is outside of current node
                 (when-not (dom/contains node (.. e -target))
-                  (on-hide e))))
+                  (on-hide state e))))
 
       (listen state js/window "keydown"
               (fn [e]

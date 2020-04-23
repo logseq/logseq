@@ -8,7 +8,7 @@
              :notification/content nil
              :root-component nil
              :edit? false
-             :latest-journals []
+             :edit-input-id nil
              :repo/cloning? nil
              :repo/loading-files? nil
              :repo/importing-to-db? nil
@@ -20,11 +20,10 @@
              :format/loading {}
              :search/result nil
              :edit-journal nil
-             :edit-file nil}))
+             :edit-file nil
+             :journals-length 1}))
 
 ;; TODO: add to global state
-(def edit-node (atom nil))
-(def edit-id (atom nil))
 (def edit-content (atom ""))
 (def cursor-range (atom nil))
 (def cursor-pos (atom nil))

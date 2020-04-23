@@ -119,7 +119,7 @@
                     (-> (.json resp)
                         (.then bean/->clj)
                         (.then #(on-ok %)))
-                   (on-failed resp))))))))
+                    (on-failed resp))))))))
 
 (defn upload
   [url file on-ok on-failed]
@@ -189,6 +189,13 @@
   ([date]
    (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
      (str month "/" day "/" year))))
+
+(defn ymd
+  ([]
+   (ymd (js/Date.)))
+  ([date]
+   (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
+     (str year "/" month "/" day))))
 
 (defn journal-name
   ([]
@@ -282,3 +289,14 @@
   (contains?
    #{"A" "BUTTON"}
    (gobj/get node "tagName")))
+
+(defn journal?
+  [path]
+  (string/starts-with? path "journals/"))
+
+(defn drop-first-line
+  [s]
+  (let [lines (string/split-lines s)
+        others (some->> (next lines)
+                        (string/join "\n"))]
+    [(first lines)]))

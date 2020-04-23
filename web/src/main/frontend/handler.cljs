@@ -101,23 +101,13 @@
     (storage/set :git/error (str value))
     (storage/remove :git/error)))
 
-(defn set-latest-journals!
-  []
-  (set-state-kv! :latest-journals [(db/get-journal)])
-  )
-
 (defn git-add-commit
   [repo-url file message content]
   (set-git-status! :commit)
-  (db/reset-file! repo-url file content)
   (git/add-commit repo-url file message
                   (fn []
                     (set-git-status! :should-push))
                   (fn [error]
-                    (prn "Commit failed, "
-                         {:repo repo-url
-                          :file file
-                          :message message})
                     (set-git-status! :commit-failed)
                     (set-git-error! error))))
 
@@ -133,7 +123,7 @@
            (fn [day]
              (let [day-pad (if (< day 10) (str "0" day) day)
                    weekday (util/get-weekday (js/Date. year (dec month) day))]
-               (str "* " weekday ", " month-pad "/" day-pad "/" year "\n\n")))
+               (str "* " weekday ", " month-pad "/" day-pad "/" year "\n")))
            (range 1 (inc last-day)))
          (apply str))))
 
@@ -147,6 +137,7 @@
                   (p/catch (fn [_e])))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
+        (db/reset-file! repo-url path default-content)
         (git-add-commit repo-url path "create a month journal" default-content)))))
 
 (defn load-files-contents!
@@ -194,11 +185,8 @@
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [files (load-files repo-url)
-            _ (load-repo-to-db! repo-url files diffs first-clone?)
-            _ (create-month-journal-if-not-exists repo-url)]
-      (when (or (journal-file-changed? repo-url diffs)
-                (empty? (:latest-journals @state/state)))
-        (set-latest-journals!)))))
+            _ (load-repo-to-db! repo-url files diffs first-clone?)]
+      (create-month-journal-if-not-exists repo-url))))
 
 (defn show-notification!
   [content status]
@@ -388,11 +376,10 @@
 (defn clear-edit!
   []
   (swap! state/state assoc
-         :edit? nil
+         :edit? false
          :edit-file nil
          :edit-journal nil)
-  (reset! state/edit-content nil)
-  (reset! state/edit-node nil))
+  (reset! state/edit-content nil))
 
 (defn file-changed?
   [content]
@@ -400,16 +387,20 @@
         (string/trim @state/edit-content)))
 
 (defn alter-file
-  ([path]
-   (alter-file path @state/edit-content))
   ([path content]
    (alter-file path (str "Update " path) content))
   ([path commit-message content]
+   (alter-file path commit-message content false))
+  ([path commit-message content before?]
    (let [token (get-github-token)
          repo-url (db/get-current-repo)]
+     (if before?
+       (db/reset-file! repo-url path content))
      (util/p-handle
       (fs/write-file (git/get-repo-dir repo-url) path content)
       (fn [_]
+        (if-not before?
+          (db/reset-file! repo-url path content))
         (git-add-commit repo-url path commit-message content))))))
 
 ;; TODO: utf8 encode performance
@@ -420,20 +411,13 @@
         repo (db/entity (:db/id repo))
         file (db/entity (:db/id file))
         repo-url (:repo/url repo)
-        file (:file/path file)
-        token (get-github-token)]
+        file (:file/path file)]
     (when-let [content (db/get-file-content repo-url file)]
       (let [encoded-content (utf8/encode content)
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first marker "DONE")))]
-        (util/p-handle
-         (fs/write-file (git/get-repo-dir repo-url) file content')
-         (fn [_]
-           (prn "check successfully, " file)
-           (git-add-commit repo-url file
-                           (str marker " marked as DONE")
-                           content')))))))
+        (alter-file file (str marker " marked as DONE") content')))))
 
 (defn uncheck
   [heading]
@@ -449,13 +433,7 @@
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first "DONE" "TODO")))]
-        (util/p-handle
-         (fs/write-file (git/get-repo-dir repo-url) file content')
-         (fn [_]
-           (prn "uncheck successfully, " file)
-           (git-add-commit repo-url file
-                           "DONE rollbacks to TODO."
-                           content')))))))
+        (alter-file file "DONE rollbacks to TODO." content')))))
 
 (defn git-set-username-email!
   [{:keys [name email]}]
@@ -530,33 +508,6 @@
          :edit? true
          :edit-file file))
 
-(defn set-journal-content!
-  [uuid content]
-  (swap! state/state update :latest-journals
-         (fn [journals]
-           (mapv
-            (fn [journal]
-              (if (= (:uuid journal) uuid)
-                (assoc journal :content content)
-                journal))
-            journals))))
-
-(defn save-current-edit-journal!
-  [edit-content]
-  ;; TODO:
-  ;; (let [{:keys [edit-journal]} @state/state
-  ;;       {:keys [start-pos end-pos]} edit-journal]
-  ;;   (swap! state/state assoc
-  ;;          :edit? false
-  ;;          :edit-journal nil)
-  ;;   (when-not (= edit-content (:content edit-journal)) ; if new changes
-  ;;     (let [path (:file-path edit-journal)
-  ;;           current-journals (db/get-file path)
-  ;;           new-content (utf8/insert! current-journals start-pos end-pos edit-content)]
-  ;;       (set-state-kv! :latest-journals (db/get-latest-journals {:content new-content}))
-  ;;       (alter-file path "Auto save" new-content))))
-  )
-
 (defn render-local-images!
   []
   (when-let [content-node (gdom/getElement "content")]
@@ -591,6 +542,7 @@
 
 (defn load-more-journals!
   []
+  (swap! state/state update :journals-length inc)
   (let [journals (:latest-journals @state/state)]
     (when-let [title (first (last journals))]
       (let [[m d y] (->>
@@ -669,29 +621,26 @@
                              (set-format-js-loading! format false)))))))
 
 (defn reset-cursor-range!
-  ([]
-   (reset-cursor-range! (gdom/getElement "edit-box")))
-  ([node]
-   (when node
-     (reset! state/cursor-range
-             (util/caret-range node)))))
+  [node]
+  (when node
+    (reset! state/cursor-range
+            (util/caret-range node))))
 
 (defn reset-cursor-pos!
-  []
-  (when-let [node (gdom/getElement "edit-box")]
+  [id]
+  (when-let [node (gdom/getElement (str id))]
     (let [pos (util/caret-pos node)]
       (reset! state/cursor-pos pos))))
 
 (defn restore-cursor-pos!
-  [markup]
-  (when-let [node (gdom/getElement "edit-box")]
-    (when-let [range (string/trim @state/cursor-range)]
-      (let [pos (inc (diff/find-position markup range))]
-        (util/set-caret-pos! node pos)))))
-
-(defn set-edit-node!
-  [ref]
-  (reset! state/edit-node ref))
+  ([id markup]
+   (restore-cursor-pos! id markup false))
+  ([id markup dummy?]
+   (when-let [node (gdom/getElement (str id))]
+     (when-let [range (string/trim @state/cursor-range)]
+       (let [pos (inc (diff/find-position markup range))
+             pos (if dummy? (inc pos) pos)]
+         (util/set-caret-pos! node pos))))))
 
 (defn set-edit-content!
   [content]
@@ -704,13 +653,15 @@
 
 (defn insert-image!
   [image-url]
-  (let [content @state/edit-content
-        image (str "<img src=\"" image-url "\" />")
-        new-content (str content "\n" "#+BEGIN_EXPORT html\n" image "\n#+END_EXPORT\n")
-        node @state/edit-node]
-    (reset! state/edit-content new-content)
-    (set! (.-value node) new-content)
-    (move-cursor-to-end node)))
+  ;; (let [content @state/edit-content
+  ;;       image (str "<img src=\"" image-url "\" />")
+  ;;       new-content (str content "\n" "#+BEGIN_EXPORT html\n" image "\n#+END_EXPORT\n")
+  ;;       ;; node @state/edit-node
+  ;;       ]
+  ;;   (reset! state/edit-content new-content)
+  ;;   (set! (.-value node) new-content)
+  ;;   (move-cursor-to-end node))
+  )
 
 (defn search
   [q]
@@ -743,11 +694,29 @@
                  (show-notification! "Email already exists!"
                                      :error)))))
 
+(defn save-heading-if-changed!
+  [{:heading/keys [uuid content meta file dummy?] :as heading} value]
+  (let [value (string/trim value)]
+    (if (not= (string/trim content)
+              value)
+      (let [file (db/entity (:db/id file))
+            file-content (:file/content file)
+            file-path (:file/path file)
+            new-content (str value "\n")
+            new-content (if dummy?
+                          (str "\n" new-content)
+                          new-content)
+            new-file-content (utf8/insert! file-content
+                                           (:pos meta)
+                                           (:end-pos meta)
+                                           new-content)
+            new-file-content (string/trim new-file-content)]
+        (alter-file file-path (str "Update " file) new-file-content true)))))
+
 (defn start!
   []
   (let [me (set-me-if-exists!)]
     (db/restore! me)
-    (set-latest-journals!)
     (db-listen-to-tx!)
     ;; Currently, we support only one repo.
     (when-let [repo (first (db/get-repos))]

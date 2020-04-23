@@ -53,12 +53,12 @@
 
 ;; TODO create a dummy heading if no headings exists
 (defn extract-headings
-  [blocks]
+  [blocks last-pos]
   (loop [headings []
          heading-children []
          blocks (reverse blocks)
          timestamps {}
-         last-pos nil]
+         last-pos last-pos]
     (if (seq blocks)
       (let [block (first blocks)
             level (:level (second block))]

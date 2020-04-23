@@ -6,39 +6,18 @@
             [clojure.string :as string]
             [frontend.ui :as ui]
             [frontend.format :as format]
-            [frontend.state :as state :refer [edit-content]]
             [frontend.components.content :as content]
             [frontend.components.hiccup :as hiccup]
-            ))
-
-(defn split-first [re s]
-  (clojure.string/split s re 2))
-
-(defn- split-heading-body
-  [content]
-  (let [result (split-first #"\n" content)]
-    (if (= 1 (count result))
-      [result ""]
-      [(string/trim (first result))
-       (string/trim (second result))])))
+            [frontend.utf8 :as utf8]))
 
 (rum/defc journal-cp < rum/reactive
   [[title headings]]
-  (let [page-id (str (db/get-page-uuid title))
-        headings (next headings)
+  (let [headings (db/with-dummy-heading headings)
+        page-id (str (db/get-page-uuid title))
         hiccup (hiccup/->hiccup headings {:id page-id})]
     [:div.flex-1
-     [:h1.text-gray-600 {:style {:font-weight "450"}}
-      title]
      (content/content page-id :org
-                      {:hiccup hiccup
-                       :content "hello world"
-                       :on-click (fn []
-                                   ;; (handler/edit-journal! page)
-                                   )
-                       :on-hide (fn []
-                                  ;; (handler/save-current-edit-journal! (str heading "\n" (string/trimr @edit-content) "\n\n"))
-                                  )})]))
+                      {:hiccup hiccup})]))
 
 (rum/defc journals < rum/reactive
   [latest-journals]
