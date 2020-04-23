@@ -698,7 +698,7 @@
                           :heading/children nil
                           :heading/dummy? true
                           :heading/marker nil}))]
-     (concat headings [dummy]))))
+      (vec (concat headings [dummy])))))
 
 (defn restore! [me]
   (if-let [stored (js/localStorage.getItem datascript-db)]

@@ -13,9 +13,13 @@
 (rum/defc journal-cp < rum/reactive
   [[title headings]]
   (let [headings (db/with-dummy-heading headings)
+        ;; Don't edit the journal title
+        headings (update headings 0 assoc :heading/lock? true)
         page-id (str (db/get-page-uuid title))
         hiccup (hiccup/->hiccup headings {:id page-id})]
     [:div.flex-1
+     [:h1.mb-2.font-medium.text-2xl {:style {:color "#161E2E"}}
+      (str "* " title)]
      (content/content page-id :org
                       {:hiccup hiccup})]))
 

@@ -1,7 +1,8 @@
 {:paths ["src/main"]
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
-  rum                         {:mvn/version "0.11.4"}
+  rum {:git/url "https://github.com/tonsky/rum"
+       :sha "5d3c7b43db7746bf098658958acfc663e0232cad"}
   datascript-transit          {:mvn/version "0.3.0"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}

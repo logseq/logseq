@@ -63,7 +63,7 @@
   (let [{:repo/keys [cloning? loading-files? importing-to-db?]
          :keys [me journals-length]} (rum/react state/state)
         latest-journals (db/get-latest-journals journals-length)]
-    [:div.max-w-7xl.mx-auto.px-4.sm:px-6.md:px-8
+    [:div.max-w-7xl.mx-auto
      (cond
        (nil? (:email me))
        (settings/set-email)

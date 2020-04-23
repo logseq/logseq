@@ -155,7 +155,8 @@
                  "Strike_through" :del)]
       (->elem elem (map-inline data)))
     ["Entity" e]
-    (:html e)
+    [:span {:dangerouslySetInnerHTML
+            {:__html (:html e)}}]
 
     ["Latex_Fragment" ["Displayed" s]]
     (util/format "\\[%s\\]" s)
@@ -248,7 +249,7 @@
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::control-show?)
   (rum/local false ::edit?)
-  [state {:heading/keys [uuid level children meta content dummy?] :as heading} heading-part config]
+  [state {:heading/keys [uuid level children meta content dummy? lock?] :as heading} heading-part config]
   (let [edit? (get state ::edit?)
         control-show? (get state ::control-show?)
         heading-id (str "ls-heading-parent-" uuid)
@@ -322,7 +323,9 @@
                                       (swap! state/state assoc
                                              :edit? true
                                              :edit-input-id edit-input-id)))}
-           heading-part
+           (when-not lock?
+             heading-part)
+
            ;; non-heading children
            (when (seq children)
              (for [child children]
