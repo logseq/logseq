@@ -92,6 +92,10 @@
     (let [bytes (.-length (.encode (js/TextEncoder.) store))]
       (/ bytes 1000))))
 
+(defn entity
+  [id-or-lookup-ref]
+  (d/entity (d/db conn) id-or-lookup-ref))
+
 (defn kv
   [key value]
   {:db/id -1
@@ -318,6 +322,30 @@
         seq-flatten
         sort-by-pos)))
 
+;; (defn get-heading-with-children
+;;   [heading-id]
+;;   (let [heading (entity [:heading/uuid heading-id])
+;;         heading-level (:heading/level heading)]
+;;     (->> (d/q '[:find (pull ?c [*])
+;;                 :in $ ?repo-url ?heading-id
+;;                 :where
+;;                 [?p :heading/uuid ?heading-id]
+;;                 [?p :heading/repo ?r]
+;;                 [?p :heading/file ?f]
+;;                 [?p :heading/meta ?pm]
+;;                 [?p :heading/level ?pl]
+;;                 [?c :heading/repo ?r]
+;;                 [?c :heading/file ?f]
+;;                 [?c :heading/meta ?cm]
+;;                 [?c :heading/level ?cl]
+;;                 [(>= cl ?pl)]
+;;                 [(< (:pos ?pm) (:pos ?cm))]]
+;;            @conn heading-id)
+;;          seq-flatten
+;;          sort-by-pos
+;;          (take-while (fn [{:heading/keys [level meta]}]
+;;                        (>= level heading-level))))))
+
 (defn get-page-by-concat-headings
   ([page]
    (get-page-by-concat-headings (get-current-repo)
@@ -335,16 +363,19 @@
         sort-by-pos)))
 
 ;; TODO: quite slow
-(defn get-children-headings
-  [file heading-uuid heading-level]
-  (let [file (:db/id file)
+(defn get-heading-with-children
+  [heading-uuid]
+  (let [heading (entity [:heading/uuid heading-uuid])
+        heading-level (:heading/level heading)
+        _ (prn heading-level)
         pred (fn [db meta level child-meta child-level]
                (and
                 (>= child-level level)
                 (< (:pos meta) (:pos child-meta))))]
     (->> (d/q '[:find (pull ?child [*])
-                :in $ ?file ?heading-uuid ?pred
+                :in $ ?heading-uuid ?pred
                 :where
+                [?heading :heading/file ?heading-uuid]
                 [?heading :heading/file ?file]
                 [?heading :heading/uuid ?heading-uuid]
                 [?heading :heading/repo ?repo]
@@ -355,11 +386,11 @@
                 [?child   :heading/meta ?child-meta]
                 [?child   :heading/level ?child-level]
                 [(?pred $ ?meta ?level ?child-meta ?child-level)]]
-           @conn file heading-uuid pred)
+           @conn heading-uuid pred)
          seq-flatten
          sort-by-pos
          (take-while (fn [{:heading/keys [level]}]
-                       (> level heading-level))))))
+                       (>= level heading-level))))))
 
 (defn set-current-repo!
   [repo]
@@ -583,10 +614,6 @@
                  )]
         @conn)
       seq-flatten))))
-
-(defn entity
-  [id-or-lookup-ref]
-  (d/entity (d/db conn) id-or-lookup-ref))
 
 (defn get-current-journal-path
   []

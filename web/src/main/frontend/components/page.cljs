@@ -12,7 +12,7 @@
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]
-            [goog.crypt.base64 :as b64]))
+            [frontend.db :as db]))
 
 (defn- get-page-name
   [state]
@@ -24,12 +24,11 @@
 (rum/defcs page
   [state]
   (let [page-name (get-page-name state)
-        id (uuid page-name)]
-    (prn id)
+        id (uuid page-name)
+        headings (db/get-heading-with-children id)
+        headings (db/with-dummy-heading headings)
+        hiccup (hiccup/->hiccup headings {:id id})]
     (sidebar/sidebar
-     [:div "page"]
-     ;; (let [headings (db/get-file-by-concat-headings path)
-     ;;       headings (db/with-dummy-heading headings)
-     ;;       hiccup (hiccup/->hiccup headings {:id encoded-path})]
-     ;;   (content/content encoded-path format {:hiccup hiccup}))
-     )))
+     [:div.flex-1
+      (content/content id :org
+                       {:hiccup hiccup})])))
