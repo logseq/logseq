@@ -696,7 +696,8 @@
                           :heading/meta {:pos end-pos
                                          :end-pos nil}
                           :heading/children nil
-                          :heading/dummy? true}))]
+                          :heading/dummy? true
+                          :heading/marker nil}))]
      (concat headings [dummy]))))
 
 (defn restore! [me]
