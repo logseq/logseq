@@ -711,7 +711,7 @@
                                            (:end-pos meta)
                                            new-content)
             new-file-content (string/trim new-file-content)]
-        (alter-file file-path (str "Update " file) new-file-content true)))))
+        (alter-file file-path (str "Update " file-path) new-file-content true)))))
 
 (defn start!
   []
