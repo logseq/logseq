@@ -708,7 +708,9 @@
                           new-content)
             new-file-content (utf8/insert! file-content
                                            (:pos meta)
-                                           (:pos meta)
+                                           (if (or dummy? (string/blank? content))
+                                             (:pos meta)
+                                             (+ (:pos meta) (utf8/length (utf8/encode content))))
                                            new-content)
             new-file-content (string/trim new-file-content)]
         (alter-file file-path (str "Update " file-path) new-file-content true)))))

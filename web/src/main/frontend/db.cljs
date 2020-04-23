@@ -367,30 +367,31 @@
   [heading-uuid]
   (let [heading (entity [:heading/uuid heading-uuid])
         heading-level (:heading/level heading)
-        _ (prn heading-level)
-        pred (fn [db meta level child-meta child-level]
-               (and
-                (>= child-level level)
+        pred (fn [db uuid meta level child-meta child-level]
+               (or
+                (= uuid heading-uuid)
                 (< (:pos meta) (:pos child-meta))))]
     (->> (d/q '[:find (pull ?child [*])
                 :in $ ?heading-uuid ?pred
                 :where
-                [?heading :heading/file ?heading-uuid]
-                [?heading :heading/file ?file]
                 [?heading :heading/uuid ?heading-uuid]
+                [?heading :heading/file ?file]
                 [?heading :heading/repo ?repo]
                 [?child   :heading/file ?file]
                 [?child   :heading/repo ?repo]
+                [?child   :heading/uuid ?child-uuid]
                 [?heading :heading/level ?level]
                 [?heading :heading/meta ?meta]
                 [?child   :heading/meta ?child-meta]
                 [?child   :heading/level ?child-level]
-                [(?pred $ ?meta ?level ?child-meta ?child-level)]]
+                [(?pred $ ?child-uuid ?meta ?level ?child-meta ?child-level)]]
            @conn heading-uuid pred)
          seq-flatten
          sort-by-pos
-         (take-while (fn [{:heading/keys [level]}]
-                       (>= level heading-level))))))
+         (take-while (fn [{:heading/keys [uuid level meta]}]
+                       (or
+                        (= uuid heading-uuid)
+                        (> level heading-level)))))))
 
 (defn set-current-repo!
   [repo]

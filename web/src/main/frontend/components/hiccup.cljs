@@ -291,7 +291,6 @@
                          (reset! control-show? false))}
         [:a.control
          {:id (str "control-" uuid)
-          :style {:margin-left (str (dec level) "em")}
           :class class
           :on-click (fn []
                       (let [id (str "ls-heading-parent-" uuid)]
@@ -316,7 +315,6 @@
                                :dummy? dummy?}
                       edit-input-id)
           [:div.flex-1 {:on-click (fn [e]
-                                    (prn "clicked")
                                     (when-not (util/link? (gobj/get e "target"))
                                       (reset! edit? true)
                                       (handler/reset-cursor-range! (gdom/getElement heading-id))
