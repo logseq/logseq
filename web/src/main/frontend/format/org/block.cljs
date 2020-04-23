@@ -1,11 +1,19 @@
 (ns frontend.format.org.block
-  (:require [frontend.util :as util]))
+  (:require [frontend.util :as util]
+            [clojure.walk :as walk]
+            [clojure.string :as string]))
 
 (defn heading-block?
   [block]
   (and
    (vector? block)
    (= "Heading" (first block))))
+
+(defn target-block?
+  [block]
+  (and
+   (vector? block)
+   (contains? #{"Target" "Radio_Target"} (first block))))
 
 (defn task-block?
   [block]
@@ -51,6 +59,17 @@
            :tag/name tag})
         tags))
 
+(defn with-refs
+  [{:keys [title children] :as heading}]
+  (let [ref-pages (atom [])]
+    (walk/postwalk
+    (fn [form]
+      (when (target-block? form)
+        (swap! ref-pages conj (string/lower-case (last form))))
+      form)
+    (concat title children))
+    (assoc heading :ref-pages (vec @ref-pages))))
+
 ;; TODO create a dummy heading if no headings exists
 (defn extract-headings
   [blocks last-pos]
@@ -74,6 +93,7 @@
                                    :timestamps timestamps)
                             (assoc-in [:meta :end-pos] last-pos)
                             (update :tags ->tags))
+                heading (with-refs heading)
                 last-pos' (get-in heading [:meta :pos])]
             (recur (conj headings heading) [] (rest blocks) {} last-pos'))
 

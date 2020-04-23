@@ -9,6 +9,8 @@
             [clojure.string :as string]
             [frontend.utf8 :as utf8]))
 
+;; TODO: Create a database for each repo.
+;; Multiple databases
 (def datascript-db "logseq/DB")
 (def schema
   {:db/ident        {:db/unique :db.unique/identity}
@@ -32,23 +34,20 @@
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
-   :page/uuid       {:db/unique      :db.unique/identity}
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/journal?   {}
    :page/journal-day {}
    :page/repo       {:db/valueType   :db.type/ref}
 
-   :reference/uuid    {:db/unique      :db.unique/identity}
-   :reference/text    {}
-   :reference/file    {:db/valueType   :db.type/ref}
-   :reference/heading {:db/valueType   :db.type/ref}
-
    ;; heading
    :heading/uuid   {:db/unique      :db.unique/identity}
    :heading/repo   {:db/valueType   :db.type/ref}
    :heading/file   {:db/valueType   :db.type/ref}
    :heading/page   {:db/valueType   :db.type/ref}
+   :heading/ref-pages {:db/valueType   :db.type/ref
+                       :db/cardinality :db.cardinality/many
+                       :db/isComponent true}
    :heading/content {}
    :heading/anchor {}
    :heading/marker {}
@@ -116,6 +115,7 @@
    :meta :heading/meta
    :content :heading/content
    :page :heading/page
+   :ref-pages :heading/ref-pages
    ;; :parent :heading/parent
    })
 
@@ -191,7 +191,7 @@
   []
   (->> (d/q '[:find ?page-name
               :where
-              [_     :repo/current ?repo]
+              ;; [_     :repo/current ?repo]
               [?page :page/name ?page-name]]
          @conn)
        (map first)
@@ -431,11 +431,6 @@
       (str title)
       (first (string/split file #"\.")))))
 
-(defn get-page-uuid
-  [page-name]
-  (:page/uuid (d/entity (d/db conn)
-                        [:page/name page-name])))
-
 (defn valid-journal-title?
   [title]
   (and title
@@ -489,14 +484,17 @@
                                     :heading/content (get-heading-content utf8-content heading)
                                     :heading/repo [:repo/url repo-url]
                                     :heading/file [:file/path file]
-                                    :heading/page [:page/name page]))
+                                    :heading/page [:page/name page]
+                                    :heading/ref-pages (mapv
+                                                        (fn [page]
+                                                          {:page/name page})
+                                                        (:ref-pages heading))))
                         headings)))
                   pages)
         headings (safe-headings headings)
         pages (map
                 (fn [page]
-                  {:page/uuid (d/squuid)
-                   :page/name page
+                  {:page/name page
                    :page/file [:file/path file]
                    :page/journal? true
                    :page/journal-day (journal-page-name->int page)
@@ -523,11 +521,14 @@
                                      :heading/content (get-heading-content utf8-content heading)
                                      :heading/repo [:repo/url repo-url]
                                      :heading/file [:file/path file]
-                                     :heading/page [:page/name page-name]))
+                                     :heading/page [:page/name page-name]
+                                     :heading/ref-pages (mapv
+                                                         (fn [page]
+                                                           {:page/name page})
+                                                         (:ref-pages heading))))
                          headings)
               headings (safe-headings headings)
-              pages [{:page/uuid (d/squuid)
-                      :page/name page-name
+              pages [{:page/name page-name
                       :page/file [:file/path file]
                       :page/journal? false
                       :page/journal-day 0
@@ -714,6 +715,20 @@
                           :heading/dummy? true
                           :heading/marker nil}))]
       (vec (concat headings [dummy])))))
+
+;; TODO: Sorted by last-modified-time
+(defn get-page-referenced-headings
+  [page]
+  (let [page-name (string/lower-case page)]
+    (-> (d/q '[:find (pull ?heading [*])
+               :in $ ?page-name
+               :where
+               [?repo :repo/url ?repo-url]
+               [?page :page/name ?page-name]
+               [?heading :heading/ref-pages ?page]]
+          @conn
+          page-name)
+        seq-flatten)))
 
 (defn restore! [me]
   (if-let [stored (js/localStorage.getItem datascript-db)]

@@ -284,6 +284,10 @@
   [string]
   (some-> string str (js/encodeURIComponent) (.replace "+" "%20")))
 
+(defn url-decode
+  [string]
+  (some-> string str (js/decodeURIComponent)))
+
 (defn link?
   [node]
   (contains?

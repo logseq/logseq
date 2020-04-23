@@ -165,7 +165,10 @@
     (util/format "\\(%s\\)" s)
 
     ["Target" s]
-    [:a {:id s} s]
+    [:a {:href (str "/page/" (util/url-encode s))} (str "<<" s ">>")]
+
+    ["Radio_Target" s]
+    [:a {:href (str "/page/" (util/url-encode s))} (str "<<<" s ">>>")]
 
     ["Link" link]
     (let [{:keys [url label]} link]

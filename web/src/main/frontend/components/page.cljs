@@ -23,12 +23,13 @@
 
 (rum/defcs page
   [state]
-  (let [page-name (get-page-name state)
-        id (uuid page-name)
-        headings (db/get-heading-with-children id)
-        headings (db/with-dummy-heading headings)
-        hiccup (hiccup/->hiccup headings {:id id})]
+  (let [encoded-page-name (get-page-name state)
+        page-name (string/lower-case (util/url-decode encoded-page-name))
+        headings (db/get-page-referenced-headings page-name)
+        hiccup (hiccup/->hiccup headings {:id encoded-page-name})]
     (sidebar/sidebar
      [:div.flex-1
-      (content/content id :org
+      [:h1.mb-2.font-medium.text-2xl {:style {:color "#161E2E"}}
+       (string/capitalize page-name)]
+      (content/content encoded-page-name :org
                        {:hiccup hiccup})])))
