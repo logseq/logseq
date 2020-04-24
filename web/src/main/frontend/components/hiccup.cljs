@@ -105,17 +105,17 @@
   (let [prefix (case kind
                  "Scheduled"
                  [:i {:class "fa fa-calendar"
-                      :style {:margin-right 6}}]
+                      :style {:margin-right 3.5}}]
                  "Deadline"
                  [:i {:class "fa fa-calendar-times-o"
-                      :style {:margin-right 6}}]
+                      :style {:margin-right 3.5}}]
                  "Date"
                  nil
                  "Closed"
                  nil
                  "Started"
                  [:i {:class "fa fa-clock-o"
-                      :style {:margin-right 6}}]
+                      :style {:margin-right 3.5}}]
                  "Start"
                  "From: "
                  "Stop"
@@ -270,12 +270,10 @@
   (rum/local false ::control-show?)
   (rum/local false ::edit?)
   [state {:heading/keys [uuid level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
-  (if dummy?
-    (prn "re-render " uuid))
   (let [edit? (get state ::edit?)
         control-show? (get state ::control-show?)
         heading-id (str "ls-heading-parent-" uuid)
-        collapsed-headings (rum/react state/collapsed-headings)
+        collapsed-headings (state/sub :ui/collapsed-headings)
         collapsed? (contains? collapsed-headings uuid)
         class "control block no-underline text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150 mr-1"
         class (cond
@@ -318,21 +316,21 @@
                         (if collapsed?
                           (do
                             (expand/expand! (:id config) id)
-                            (swap! state/collapsed-headings disj uuid))
+                            (state/remove-collapsed-heading! uuid))
                           (do
                             (expand/collapse! (:id config) id)
-                            (swap! state/collapsed-headings conj uuid)))))}]
+                            (state/add-collapsed-heading! uuid)))))}]
 
         (if @edit?
           (editor/box content {:on-hide (fn [value]
-                                          (handler/save-heading-if-changed! heading value)
                                           (reset! edit? false)
                                           (let [current-input (:edit-input-id @state/state)]
                                             (when (or (nil? current-input)
                                                       (= current-input edit-input-id))
                                               (swap! state/state assoc
                                                      :edit? false
-                                                     :edit-input-id nil))))
+                                                     :edit-input-id nil)))
+                                          (handler/save-heading-if-changed! heading value))
                                :dummy? dummy?}
                       edit-input-id)
           [:div.flex-1 {:on-click (fn [e]
@@ -361,7 +359,7 @@
                   (string/upper-case marker)])
         priority (if priority
                    [:span {:class "priority"
-                           :style {:margin-right 6}}
+                           :style {:margin-right 3.5}}
                     (util/format "[#%s]" (str priority))])
         tags (when-not (empty? tags)
                (->elem

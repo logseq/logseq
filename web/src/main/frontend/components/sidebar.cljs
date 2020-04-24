@@ -16,16 +16,31 @@
 (defonce active-button :a.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
 (defonce inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
 
-(rum/defc logo-or-repos
+(rum/defc logo-or-repos < rum/reactive
   [current-repo]
   (if current-repo
-    [:div.flex-1
-     [:div.flex.justify-between.text-gray-500.font-bold
-      [:a.hover:text-gray-300 {:href current-repo
-           :target "_blank"}
-       (db/get-repo-path current-repo)]
-      [:a.hover:text-gray-300 {:href "/repo/add"}
-       "+"]]]
+    (let [repos (state/sub [:me :repos])]
+      [:div.flex-1
+       [:div.flex.justify-between
+        [:div.flex
+         [:a.hover:text-gray-300.text-gray-500.font-bold {:href current-repo
+                                  :target "_blank"}
+          (db/get-repo-path current-repo)]
+         (when (> (count repos) 1)
+           (ui/dropdown-with-links
+            (fn [{:keys [toggle-fn]}]
+              [:a.cursor {:on-click toggle-fn}
+               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+            (mapv
+             (fn [{:keys [id url]}]
+               {:title (db/get-repo-path url)
+                :options {:on-click (fn []
+                                      (state/set-current-repo! url))}})
+             repos)
+            (util/hiccup->class
+             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")))]
+        [:a.text-gray-500.font-bold.hover:text-gray-300 {:href "/repo/add"}
+         "+"]]])
 
     [:img.h-8.w-auto
      {:alt "Logseq",
@@ -128,6 +143,7 @@
   rum/reactive
   [state main-content]
   (let [{:keys [open? close-fn open-fn]} state
+        me (state/sub :me)
         status (state/sub :git/status)
         current-repo (state/sub :git/current-repo)
         pulling? (= :pulling status)]
@@ -189,6 +205,11 @@
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]]
          (ui/dropdown-with-links
+          (fn [{:keys [toggle-fn]}]
+            [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
+             {:on-click toggle-fn}
+             [:img.h-8.w-8.rounded-full
+              {:src (:avatar me)}]])
           [{:title "Your Profile"
             :options {:href "/me"}}
            {:title "Settings"

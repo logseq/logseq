@@ -37,8 +37,6 @@
                     (fn [e]
                       ;; t
                       (when (and
-                             ;; not in search
-                             (nil? @state/q)
                              ;; not input
                              (not (:edit? @state/state))
                              (= 84 (.-keyCode e)))

@@ -51,22 +51,22 @@
 (defn hide-when-esc-or-outside
   [state show? & {:keys [on-hide node show-fn]}]
   (let [node (or node (rum/dom-node state))
-        show? (if (and show-fn (fn? show-fn))
-                (show-fn)
-                @show?)]
-    (when show?
-      (listen state js/window "click"
-              (fn [e]
-                ;; If the click target is outside of current node
-                (when-not (dom/contains node (.. e -target))
-                  (on-hide state e))))
+        ;; show? (if (and show-fn (fn? show-fn))
+        ;;         (show-fn)
+        ;;         @show?)
+        ]
+    (listen state js/window "click"
+            (fn [e]
+              ;; If the click target is outside of current node
+              (when-not (dom/contains node (.. e -target))
+                (on-hide state e))))
 
-      (listen state js/window "keydown"
-              (fn [e]
-                (case (.-keyCode e)
-                  ;; Esc
-                  27 (on-hide e)
-                  nil))))))
+    (listen state js/window "keydown"
+            (fn [e]
+              (case (.-keyCode e)
+                ;; Esc
+                27 (on-hide e)
+                nil)))))
 
 (defn event-mixin
   ([attach-listeners]

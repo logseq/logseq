@@ -51,11 +51,11 @@
 (defn conj-heading!
   [heading-id]
   (let [id (uuid (string/replace heading-id "ls-heading-parent-" ""))]
-    (swap! state/collapsed-headings conj id)))
+    (state/add-collapsed-heading! id)))
 (defn disj-heading!
   [heading-id]
   (let [id (uuid (string/replace heading-id "ls-heading-parent-" ""))]
-    (swap! state/collapsed-headings disj id)))
+    (state/remove-collapsed-heading! id)))
 
 (defn collapse!
   [headings-id heading-id]
@@ -91,7 +91,7 @@
   (let [all-headings (get-headings id)
         headings (next all-headings)]
     (when (seq headings)
-      (let [toggle-state @state/toggle-state]
+      (let [toggle-state (:ui/toggle-state @state/state)]
        (doseq [heading headings]
          (when-let [element (get-control-node heading)]
            (if toggle-state
@@ -106,5 +106,5 @@
                (d/add-class! element "caret-right")
                (collapse! id (gobj/get heading "id"))))))
        (when toggle-state
-         (reset! state/collapsed-headings #{}))
-       (swap! state/toggle-state not)))))
+         (state/clear-collapsed-headings!))
+       (state/ui-toggle-state!)))))

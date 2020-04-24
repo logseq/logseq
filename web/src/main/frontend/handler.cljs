@@ -310,7 +310,7 @@
 
 (defn re-render!
   []
-  (when-let [comp (get @state/state :root-component)]
+  (when-let [comp (:root-component @state/state)]
     (when (and (not (:edit? @state/state)))
       (rum/request-render comp))))
 
@@ -319,7 +319,6 @@
   (d/listen! db-conn :persistence
              (fn [tx-report]
                (when-let [db (:db-after tx-report)]
-                 (prn "DB changed, re-rendered!")
                  (re-render!)
                  (js/setTimeout (fn []
                                   (db/persist repo db)) 0)))))
@@ -398,13 +397,13 @@
   (swap! state/state assoc
          :edit? false
          :edit-file nil
-         :edit-journal nil)
-  (reset! state/edit-content nil))
+         :edit-journal nil
+         :edit-content ""))
 
 (defn file-changed?
   [content]
   (not= (string/trim content)
-        (string/trim @state/edit-content)))
+        (string/trim (state/get-edit-content))))
 
 (defn alter-file
   ([path content]
@@ -481,7 +480,6 @@
   [repo-url]
   (let [token (get-github-token)
         push (fn []
-               (prn "push!")
                (push repo-url))]
     (js/setInterval push
                     (* config/auto-push-secs 1000))))
@@ -489,12 +487,9 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url)
-  ;; (when-not config/dev?
-  ;;   (periodically-pull repo-url pull-now?)
-  ;;   (periodically-push-tasks repo-url))
-  )
+  (when-not config/dev?
+    (periodically-pull repo-url pull-now?)
+    (periodically-push-tasks repo-url)))
 
 (defn edit-journal!
   [journal]
@@ -623,28 +618,23 @@
 (defn reset-cursor-range!
   [node]
   (when node
-    (reset! state/cursor-range
-            (util/caret-range node))))
+    (state/set-cursor-range! (util/caret-range node))))
 
 (defn reset-cursor-pos!
   [id]
   (when-let [node (gdom/getElement (str id))]
     (let [pos (util/caret-pos node)]
-      (reset! state/cursor-pos pos))))
+      (state/set-cursor-pos! pos))))
 
 (defn restore-cursor-pos!
   ([id markup]
    (restore-cursor-pos! id markup false))
   ([id markup dummy?]
    (when-let [node (gdom/getElement (str id))]
-     (when-let [range (string/trim @state/cursor-range)]
+     (when-let [range (string/trim (state/get-cursor-range))]
        (let [pos (inc (diff/find-position markup range))
              pos (if dummy? (inc pos) pos)]
          (util/set-caret-pos! node pos))))))
-
-(defn set-edit-content!
-  [content]
-  (reset! state/edit-content content))
 
 (defn move-cursor-to-end [input]
   (let [n (count (.-value input))]
@@ -653,12 +643,12 @@
 
 (defn insert-image!
   [image-url]
-  ;; (let [content @state/edit-content
+  ;; (let [content (state/get-edit-content)
   ;;       image (str "<img src=\"" image-url "\" />")
   ;;       new-content (str content "\n" "#+BEGIN_EXPORT html\n" image "\n#+END_EXPORT\n")
   ;;       ;; node @state/edit-node
   ;;       ]
-  ;;   (reset! state/edit-content new-content)
+  ;;   (state/set-edit-content! new-content)
   ;;   (set! (.-value node) new-content)
   ;;   (move-cursor-to-end node))
   )
@@ -669,8 +659,7 @@
 
 (defn clear-search!
   []
-  (swap! state/state assoc :search/result nil)
-  (reset! state/q nil))
+  (swap! state/state assoc :search/result nil))
 
 (defn email? [v]
   (and v

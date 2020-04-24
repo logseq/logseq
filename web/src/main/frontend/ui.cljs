@@ -1,7 +1,6 @@
 (ns frontend.ui
   (:require [rum.core :as rum]
             [frontend.rum :as r]
-            ["react-textarea-autosize" :as AutosizeTextarea]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
@@ -12,7 +11,6 @@
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
-(defonce autosize-textarea (r/adapt-class (gobj/get AutosizeTextarea "default")))
 
 (defn- force-update-input
   [comp opts]
@@ -26,78 +24,65 @@
   [s]
   (count (re-seq #"\n" (or s ""))))
 
-(rum/defcc textarea <
-  {:init (fn [state props]
-           (let [{:keys [initial-value value-atom dummy?]} (first (:rum/args state))]
-             (reset! value-atom (if initial-value
-                                  (if dummy?
-                                    (string/triml initial-value)
-                                    (string/trim initial-value))
-                                  "")))
-           state)}
+(rum/defcc textarea
   [comp opts]
-  (when-let [value-atom (:value-atom opts)]
-    (autosize-textarea
-     (-> (force-update-input comp (dissoc opts
-                                          :value-atom
-                                          :initial-value
-                                          :dummy?))
-         (assoc
-          :value @value-atom)))))
+  (let [inc-rows (get opts :inc-rows 1)
+        rows (+ inc-rows (count-newlines (:value opts)))]
+    [:textarea
+     (-> (force-update-input comp opts)
+         (assoc :rows rows))]))
 
-(rum/defc content-editable <
-  {:did-mount (fn [state]
-                (let [{:keys [id value]} (first (:rum/args state))
-                      node (rum/ref-node state id)]
-                  (set! (.-innerText node) value)
-                  state))}
-  [{:keys [id on-change value]}]
-  [:div.textarea {:ref id
-                  :on-input #(on-change (.-innerText (.-target %)))
-                  :content-editable "true"}])
-
-(rum/defc dropdown-content-wrapper [state content]
-  [:div.origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg
-   {:class (case state
-             "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
-             "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
-             "exiting" "transition ease-in duration-75 transform opacity-100 scale-100"
-             "exited" "transition ease-in duration-75 transform opacity-0 scale-95")}
-   content])
+(rum/defc dropdown-content-wrapper [state content class]
+  (let [class (or class
+                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg"))]
+    [:div
+     {:class (str class " "
+                  (case state
+                    "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
+                    "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
+                    "exiting" "transition ease-in duration-75 transform opacity-100 scale-100"
+                    "exited" "transition ease-in duration-75 transform opacity-0 scale-95"))}
+     content]))
 
 ;; public exports
-(rum/defcs dropdown < rum/reactive
-  (mixins/modal)
-  [state content]
-  (let [me (state/sub :me)
-        {:keys [open? toggle-fn]} state]
-    [:div.ml-3.relative
-     [:div
-      [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
-       {:on-click toggle-fn}
-       [:img.h-8.w-8.rounded-full
-        {:src (:avatar me)}]]]
+(rum/defcs dropdown < (mixins/modal)
+  [state content-fn modal-content-fn modal-class]
+  (let [{:keys [open? toggle-fn]} state
+        modal-content (modal-content-fn state)]
+    [:div.ml-1.relative {:style {:z-index 999}}
+     (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
-      (fn [state]
+      (fn [dropdown-state]
         (when @open?
-          (dropdown-content-wrapper state content))))]))
+          (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
 (rum/defc menu-link
   [options text]
-  [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150
+  [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150.cursor
    options
    text])
 
-(defn dropdown-with-links
-  [links]
-  (dropdown
-   [:div.py-1.rounded-md.bg-white.shadow-xs
-    (for [{:keys [options title]} links]
-      (menu-link
-       (merge {:key (cljs.core/random-uuid)}
-              options)
-       title))]))
+(rum/defc dropdown-with-links
+  ([content-fn links]
+   (dropdown-with-links content-fn links nil))
+  ([content-fn links modal-class]
+   (dropdown
+    content-fn
+    (fn [{:keys [close-fn] :as state}]
+      [:div.py-1.rounded-md.bg-white.shadow-xs
+       (for [{:keys [options title]} links]
+         (let [new-options
+               (assoc options
+                      :on-click (fn []
+                                  ((:on-click options))
+                                  (close-fn)
+                                  ))]
+           (menu-link
+            (merge {:key (cljs.core/random-uuid)}
+                   new-options)
+            title)))])
+    modal-class)))
 
 (rum/defc button
   [text on-click]

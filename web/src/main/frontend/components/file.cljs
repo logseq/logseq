@@ -47,7 +47,7 @@
                                          :content content}))
                            :on-hide (fn []
                                       (when (handler/file-changed? content)
-                                        (handler/alter-file path @state/edit-content))
+                                        (handler/alter-file path (state/get-edit-content)))
                                       (handler/clear-edit!))}))
 
        :else

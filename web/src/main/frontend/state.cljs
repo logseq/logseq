@@ -2,7 +2,6 @@
   (:require [frontend.storage :as storage]
             [rum.core :as rum]))
 
-;; TODO: replace this with datascript
 (def state (atom
             {:route-match nil
              :notification/show? false
@@ -23,18 +22,20 @@
              :search/result nil
              :edit-journal nil
              :edit-file nil
-             :journals-length 1}))
+             :journals-length 1
 
-;; TODO: add to global state
-(def edit-content (atom ""))
-(def cursor-range (atom nil))
-(def cursor-pos (atom nil))
+             ;; :search/q nil
+             :ui/toggle-state false
+             :ui/collapsed-headings #{}
+             ;; :edit-content ""
+             :cursor-range nil
+             :cursor-pos nil}))
 
-;; TODO: Add more states
-(def toggle-state (atom false))
-(def collapsed-headings (atom #{}))
-
-(def q (atom nil))
+(defn sub
+  [ks]
+  (if (coll? ks)
+    (rum/react (rum/cursor-in state ks))
+    (rum/react (rum/cursor state ks))))
 
 (defn get-current-repo
   []
@@ -45,8 +46,64 @@
   (swap! state assoc :git/current-repo repo)
   (storage/set :git/current-repo repo))
 
-(defn sub
-  [ks]
-  (if (coll? ks)
-    (rum/react (rum/cursor-in state ks))
-    (rum/react (rum/cursor state ks))))
+(defn set-state!
+  [path value]
+  (if (vector? path)
+    (swap! state assoc-in path value)
+    (swap! state assoc path value)))
+
+(defn update-state!
+  [path f]
+  (if (vector? path)
+    (swap! state update-in path f)
+    (swap! state update path f)))
+
+(defn ui-toggle-state!
+  []
+  (update-state! :ui/toggle-state not))
+
+(defn add-collapsed-heading!
+  [heading]
+  (update-state! :ui/collapsed-headings (fn [headings]
+                                          (conj headings heading))))
+
+(defn remove-collapsed-heading!
+  [heading]
+  (update-state! :ui/collapsed-headings (fn [headings]
+                                          (disj headings heading))))
+
+(defn clear-collapsed-headings!
+  []
+  (set-state! :ui/collapsed-headings #{}))
+
+(defonce edit-content (atom ""))
+(defn get-edit-content
+  []
+  @edit-content)
+(defn set-edit-content!
+  [value]
+  (reset! edit-content value))
+
+;; TODO: not working well, input cursor jumps to the end when typing the first character.
+;; (defn get-edit-content
+;;   []
+;;   (:edit-content @state))
+;; (defn set-edit-content!
+;;   [value]
+;;   (set-state! :edit-content value))
+
+(defn clear-edit-content!
+  []
+  (set-edit-content! ""))
+
+(defn get-cursor-range
+  []
+  (:cursor-range @state))
+
+(defn set-cursor-range!
+  [range]
+  (set-state! :cursor-range range))
+
+(defn set-cursor-pos!
+  [value]
+  (set-state! :cursor-pos value))
