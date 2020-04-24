@@ -42,3 +42,16 @@
       [:h2.font-bold.text-gray-400.mt-6 (str (count ref-headings) " Linked References")]
       (content/content encoded-page-name :org
                        {:hiccup ref-hiccup})])))
+
+(rum/defc all-pages
+  []
+  (sidebar/sidebar
+   [:div.flex-1
+    [:h1.mb-2.font-medium.text-3xl {:style {:color "#161E2E"}}
+     "All Pages"]
+    (let [pages (db/get-pages)]
+      (for [page pages]
+        (let [page-id (util/url-encode page)]
+          [:div {:key page-id}
+           [:a {:href (str "/page/" page-id)}
+            page]])))]))

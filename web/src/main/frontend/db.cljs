@@ -13,6 +13,10 @@
 ;; TODO: Create a database for each repo.
 ;; Multiple databases
 (def datascript-db "logseq/DB")
+;; A page can corresponds to multiple files (same title),
+;; a month journal file can have multiple pages,
+;; also, each heading can be treated as a page if we support
+;; "zoom edit".
 (def schema
   {:db/ident        {:db/unique :db.unique/identity}
 
@@ -25,7 +29,6 @@
    :repo/url        {:db/unique :db.unique/identity}
    :repo/cloning?   {}
    :repo/cloned?    {}
-   :repo/current    {:db/valueType   :db.type/ref}
 
    ;; TODO: how to express compound unique, [:file/repo, :file/path]
    ;; file
@@ -168,7 +171,6 @@
   ([]
    (->> (d/q '[:find ?path
                :where
-               [_     :repo/current ?repo]
                [?file :file/repo ?repo]
                [?file :file/path ?path]]
           @conn)
@@ -190,7 +192,6 @@
   []
   (->> (d/q '[:find ?page-name
               :where
-              ;; [_     :repo/current ?repo]
               [?page :page/name ?page-name]]
          @conn)
        (map first)

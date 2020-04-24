@@ -28,6 +28,10 @@
     {:name :agenda
      :view agenda/agenda}]
 
+   ["/all-pages"
+    {:name :all-pages
+     :view page/all-pages}]
+
    ;; Settings
    ;; ["/item/:id"
    ;;  {:name ::item

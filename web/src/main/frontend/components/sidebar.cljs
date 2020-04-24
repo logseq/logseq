@@ -30,25 +30,26 @@
          :stroke-linecap "round"}]]
       title])))
 
-(rum/defc files-list
-  [file-active?]
-  (let [files (db/get-files)]
-    [:div.cursor-pointer.my-1.flex.flex-col.ml-2
-     (if (seq files)
-       (for [file files]
-         (let [encoded-path (b64/encodeString file)]
-           [:a {:key file
-                :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
-                :style {:color (if (file-active? encoded-path) "#FFF")}
-                :href (str "/file/" encoded-path)}
-            file])))]))
+;; (rum/defc files-list
+;;   [file-active?]
+;;   (let [files (db/get-files)]
+;;     [:div.cursor-pointer.my-1.flex.flex-col.ml-2
+;;      (if (seq files)
+;;        (for [file files]
+;;          (let [encoded-path (b64/encodeString file)]
+;;            [:a {:key file
+;;                 :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
+;;                 :style {:color (if (file-active? encoded-path) "#FFF")}
+;;                 :href (str "/file/" encoded-path)}
+;;             file])))]))
 
 (rum/defc sidebar-nav < rum/reactive
   []
   (let [{:keys [:route-match]} (rum/react state/state)
         active? (fn [route] (= route (get-in route-match [:data :name])))
-        file-active? (fn [path]
-                       (= path (get-in route-match [:parameters :path :path])))]
+        ;; file-active? (fn [path]
+        ;;                (= path (get-in route-match [:parameters :path :path])))
+        ]
     [:nav.flex-1.px-2.py-4.bg-gray-800
      (nav-item "Journals" "/"
                "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
@@ -56,7 +57,26 @@
      (nav-item "Agenda" "/agenda"
                "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                (active? :agenda))
-     (files-list file-active?)]))
+     (nav-item "All Pages" "/all-pages"
+               "M6 2h9a1 1 0 0 1 .7.3l4 4a1 1 0 0 1 .3.7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.1.9-2 2-2zm9 2.41V7h2.59L15 4.41zM18 9h-3a2 2 0 0 1-2-2V4H6v16h12V9zm-2 7a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm0-4a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm-5-4a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1z"
+               (active? :all-pages))
+     [:div {:style {:height 1
+                    :background-color "rgb(57, 75, 89)"
+                    :margin 12}}]
+     ;; shortcuts
+     [:div.flex {:class "mt-1 flex items-center px-2 py-2 text-base leading-6 rounded-md text-gray-200 transition ease-in-out duration-150"}
+      [:svg.ml-1.h-4.w-4.text-gray-500.transition.ease-in-out.duration-150
+       {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"
+        :style {:margin-right 20}}
+       [:path
+        {:d "M6.1 21.98a1 1 0 0 1-1.45-1.06l1.03-6.03-4.38-4.26a1 1 0 0 1 .56-1.71l6.05-.88 2.7-5.48a1 1 0 0 1 1.8 0l2.7 5.48 6.06.88a1 1 0 0 1 .55 1.7l-4.38 4.27 1.04 6.03a1 1 0 0 1-1.46 1.06l-5.4-2.85-5.42 2.85zm4.95-4.87a1 1 0 0 1 .93 0l4.08 2.15-.78-4.55a1 1 0 0 1 .29-.88l3.3-3.22-4.56-.67a1 1 0 0 1-.76-.54l-2.04-4.14L9.47 9.4a1 1 0 0 1-.75.54l-4.57.67 3.3 3.22a1 1 0 0 1 .3.88l-.79 4.55 4.09-2.15z"
+         :stroke-width "2",
+         :stroke-linejoin "round",
+         :stroke-linecap "round"}]]
+      [:span.font-bold.text-gray-500
+       "Favorites"]]
+     ;; (files-list file-active?)
+     ]))
 
 (rum/defc main-content < rum/reactive
   []
