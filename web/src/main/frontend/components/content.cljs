@@ -64,8 +64,7 @@
   (let [format (format/normalize format)]
     (if (contains? config/hiccup-support-formats format)
       [:div
-       {:id id
-        :style {:min-height 300}}
+       {:id id}
        hiccup]
       (let [{:keys [edit? format/loading edit-journal edit-file]} (rum/react state/state)]
         (if edit?
@@ -87,7 +86,6 @@
                     html (if html html "<div></div>")]
                 [:div
                  {:id id
-                  :style {:min-height 300}
                   :on-click on-click
                   :dangerouslySetInnerHTML {:__html html}}])
 

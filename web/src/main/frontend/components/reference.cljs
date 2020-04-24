@@ -1,0 +1,26 @@
+(ns frontend.components.reference
+  (:require [rum.core :as rum]
+            [frontend.util :as util]
+            [frontend.handler :as handler]
+            [frontend.state :as state]
+            [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.components.hiccup :as hiccup]
+            [frontend.ui :as ui]
+            [frontend.format.org-mode :as org]
+            [frontend.format :as format]
+            [frontend.components.content :as content]
+            [frontend.config :as config]
+            [frontend.db :as db]))
+
+(rum/defc references
+  [page-name]
+  (let [page-name (string/capitalize page-name)
+        encoded-page-name (util/url-encode page-name)
+        ref-headings (db/get-page-referenced-headings page-name)
+        ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
+        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name})]
+    [:div.page-references
+     [:h2.font-bold.text-gray-400.mt-6 (str (count ref-headings) " Linked References")]
+     (content/content encoded-page-name :org
+                      {:hiccup ref-hiccup})]))

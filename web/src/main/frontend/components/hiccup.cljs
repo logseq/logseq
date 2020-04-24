@@ -252,7 +252,7 @@
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::control-show?)
   (rum/local false ::edit?)
-  [state {:heading/keys [uuid level children meta content dummy? lock?] :as heading} heading-part config]
+  [state {:heading/keys [uuid level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
   (let [edit? (get state ::edit?)
         control-show? (get state ::control-show?)
         heading-id (str "ls-heading-parent-" uuid)
@@ -285,6 +285,12 @@
       [:div.ls-heading-parent.flex-1 {:key (str uuid)
                                       :id heading-id
                                       :level level}
+       (if show-page?
+         (let [page (db/entity (:db/id page))]
+           [:h2
+            [:a {:href (str "/page/" (util/url-encode (:page/name page)))}
+             (:page/name page)]]))
+
        ;; control
        [:div.flex.flex-row
         {:style {:cursor "pointer"}
@@ -353,7 +359,7 @@
                           name]])
                       tags)))
         element (keyword (str "h" level))
-        level-str [:a {:href (str "/page/" uuid)}
+        level-str [:a.control-level {:href (str "/page/" uuid)}
                    (str (apply str (repeat level "*")) " ")]
         heading-part (->elem element
                              {:id anchor

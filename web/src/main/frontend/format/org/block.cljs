@@ -65,7 +65,7 @@
     (walk/postwalk
     (fn [form]
       (when (target-block? form)
-        (swap! ref-pages conj (string/lower-case (last form))))
+        (swap! ref-pages conj (string/capitalize (last form))))
       form)
     (concat title children))
     (assoc heading :ref-pages (vec @ref-pages))))

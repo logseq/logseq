@@ -8,6 +8,7 @@
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.components.hiccup :as hiccup]
+            [frontend.components.reference :as reference]
             [frontend.utf8 :as utf8]))
 
 (rum/defc journal-cp < rum/reactive
@@ -15,16 +16,16 @@
   (let [headings (db/with-dummy-heading headings)
         ;; Don't edit the journal title
         headings (update headings 0 assoc :heading/lock? true)
-        page-id (util/url-encode title)
-        hiccup (hiccup/->hiccup headings {:id page-id})]
+        encoded-page-name (util/url-encode (string/capitalize title))]
     [:div.flex-1
      [:h1.mb-2.font-medium.text-2xl {:style {:color "#161E2E"}}
-      [:a {:href (str "/page/" (:heading/uuid (first headings)))}
+      [:a.control-level {:href (str "/page/" encoded-page-name)}
        "* "]
-
       title]
-     (content/content page-id :org
-                      {:hiccup hiccup})]))
+     (content/content encoded-page-name :org
+                      {:hiccup (hiccup/->hiccup headings {:id encoded-page-name})})
+
+     (reference/references title)]))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

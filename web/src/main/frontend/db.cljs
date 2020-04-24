@@ -7,6 +7,7 @@
             [frontend.format.org-mode :as org]
             [frontend.format.org.block :as block]
             [clojure.string :as string]
+            [clojure.set :as set]
             [frontend.utf8 :as utf8]))
 
 ;; TODO: Create a database for each repo.
@@ -46,16 +47,14 @@
    :heading/file   {:db/valueType   :db.type/ref}
    :heading/page   {:db/valueType   :db.type/ref}
    :heading/ref-pages {:db/valueType   :db.type/ref
-                       :db/cardinality :db.cardinality/many
-                       :db/isComponent true}
+                       :db/cardinality :db.cardinality/many}
    :heading/content {}
    :heading/anchor {}
    :heading/marker {}
    :heading/priority {}
    :heading/level {}
    :heading/tags {:db/valueType   :db.type/ref
-                  :db/cardinality :db.cardinality/many
-                  :db/isComponent true}
+                  :db/cardinality :db.cardinality/many}
    ;; :heading/parent {:db/valueType   :db.type/ref}
 
    ;; tag
@@ -195,7 +194,8 @@
               [?page :page/name ?page-name]]
          @conn)
        (map first)
-       distinct))
+       ;; distinct
+       ))
 
 (defn get-files-headings
   [repo-url paths]
@@ -346,9 +346,9 @@
 ;;          (take-while (fn [{:heading/keys [level meta]}]
 ;;                        (>= level heading-level))))))
 
-(defn get-page-by-concat-headings
+(defn get-page-headings
   ([page]
-   (get-page-by-concat-headings (get-current-repo)
+   (get-page-headings (get-current-repo)
                                 page))
   ([repo-url page]
    (->> (d/q '[:find (pull ?heading [*])
@@ -446,8 +446,6 @@
       (utf8/substring utf8-content
                       (:pos meta)))))
 
-(defonce debug-headings (atom nil))
-
 ;; file
 
 (defn journal-page-name->int
@@ -456,87 +454,85 @@
                     (string/split #"/"))]
     (util/parse-int (str y m d))))
 
-;; check journal formats and report errors
-(defn extract-journal-pages-and-headings
-  [repo-url file content utf8-content]
+(defn extract-pages-and-headings
+  [repo-url file content utf8-content journal? pages-fn]
   (let [ast (org/->clj content org/config-with-line-break)
         headings (block/extract-headings ast (utf8/length utf8-content))
-        pages (loop [pages {}
-                     last-page-name nil
-                     headings headings]
-                (if (seq headings)
-                  (let [[{:keys [level title] :as heading} & tl] headings]
-                    (if (and (= level 1)
-                             (when-let [title (last (first title))]
-                               (valid-journal-title? title)))
-                      (let [page-name (last (first title))
-                            new-pages (assoc pages page-name [heading])]
-                        (recur new-pages page-name tl))
-                      (let [new-pages (update pages last-page-name (fn [headings]
-                                                                     (vec (conj headings heading))))]
-                        (recur new-pages last-page-name tl))))
-                  pages))
+        pages (pages-fn headings ast)
+        ref-pages (atom #{})
         headings (mapcat
                   (fn [[page headings]]
                     (if page
                       (map (fn [heading]
-                             (assoc heading
-                                    :heading/content (get-heading-content utf8-content heading)
-                                    :heading/repo [:repo/url repo-url]
-                                    :heading/file [:file/path file]
-                                    :heading/page [:page/name page]
-                                    :heading/ref-pages (mapv
-                                                        (fn [page]
-                                                          {:page/name page})
-                                                        (:ref-pages heading))))
+                             (let [heading-ref-pages (seq (:ref-pages heading))]
+                               (when heading-ref-pages
+                                 (swap! ref-pages set/union (set heading-ref-pages)))
+                               (-> heading
+                                (dissoc :ref-pages)
+                                (assoc :heading/content (get-heading-content utf8-content heading)
+                                       :heading/repo [:repo/url repo-url]
+                                       :heading/file [:file/path file]
+                                       :heading/page [:page/name (string/capitalize page)]
+                                       :heading/ref-pages (mapv
+                                                           (fn [page]
+                                                             {:page/name (string/capitalize page)})
+                                                           heading-ref-pages)))))
                         headings)))
                   pages)
         headings (safe-headings headings)
         pages (map
                 (fn [page]
-                  {:page/name page
+                  {:page/name (if page
+                                (string/capitalize page)
+                                (string/capitalize (first (string/split #"\." file))))
                    :page/file [:file/path file]
-                   :page/journal? true
-                   :page/journal-day (journal-page-name->int page)
+                   :page/journal? journal?
+                   :page/journal-day (if journal?
+                                       (journal-page-name->int page)
+                                       0)
                    :page/repo [:repo/url repo-url]})
-                (keys pages))]
-    (reset! debug-headings headings)
+                (map first pages))
+        pages (concat
+               pages
+               (map
+                 (fn [page]
+                   {:page/name (string/capitalize page)})
+                 @ref-pages))]
     (vec
-     (concat
-      pages
-      headings))))
+     (->> (concat
+           pages
+           headings)
+          (remove nil?)))))
 
+;; check journal formats and report errors
 (defn extract-headings-pages
   [repo-url file content utf8-content]
   (if (string/blank? content)
     []
     (let [journal? (string/starts-with? file "journals/")]
       (if journal?
-        (extract-journal-pages-and-headings repo-url file content utf8-content)
-        (let [ast (org/->clj content org/config-with-line-break)
-              headings (block/extract-headings ast (utf8/length utf8-content))
-              page-name (get-page-name file ast)
-              headings (map (fn [heading]
-                              (assoc heading
-                                     :heading/content (get-heading-content utf8-content heading)
-                                     :heading/repo [:repo/url repo-url]
-                                     :heading/file [:file/path file]
-                                     :heading/page [:page/name page-name]
-                                     :heading/ref-pages (mapv
-                                                         (fn [page]
-                                                           {:page/name page})
-                                                         (:ref-pages heading))))
-                         headings)
-              headings (safe-headings headings)
-              pages [{:page/name page-name
-                      :page/file [:file/path file]
-                      :page/journal? false
-                      :page/journal-day 0
-                      :page/repo [:repo/url repo-url]}]]
-          (vec
-           (concat
-            pages
-            headings)))))))
+        (extract-pages-and-headings
+         repo-url file content utf8-content true
+         (fn [headings _ast]
+           (loop [pages {}
+                  last-page-name nil
+                  headings headings]
+             (if (seq headings)
+               (let [[{:keys [level title] :as heading} & tl] headings]
+                 (if (and (= level 1)
+                          (when-let [title (last (first title))]
+                            (valid-journal-title? title)))
+                   (let [page-name (last (first title))
+                         new-pages (assoc pages page-name [heading])]
+                     (recur new-pages page-name tl))
+                   (let [new-pages (update pages last-page-name (fn [headings]
+                                                                  (vec (conj headings heading))))]
+                     (recur new-pages last-page-name tl))))
+               pages))))
+        (extract-pages-and-headings
+         repo-url file content utf8-content false
+         (fn [headings ast]
+           [[(get-page-name file ast) headings]]))))))
 
 (defn get-all-files-content
   [repo-url]
@@ -626,7 +622,7 @@
   ([]
    (get-journal (util/journal-name)))
   ([page-name]
-   [page-name (get-page-by-concat-headings page-name)]))
+   [page-name (get-page-headings page-name)]))
 
 ;; cache this
 
@@ -677,7 +673,7 @@
                 (map first))]
      (mapv
       (fn [page]
-        [page (get-page-by-concat-headings repo-url page)])
+        [page (get-page-headings repo-url page)])
       pages))))
 
 (defn me-tx
@@ -719,13 +715,14 @@
 ;; TODO: Sorted by last-modified-time
 (defn get-page-referenced-headings
   [page]
-  (let [page-name (string/lower-case page)]
+  (let [page-name (string/capitalize page)]
     (-> (d/q '[:find (pull ?heading [*])
                :in $ ?page-name
                :where
                [?repo :repo/url ?repo-url]
                [?page :page/name ?page-name]
-               [?heading :heading/ref-pages ?page]]
+               [?heading :heading/ref-pages ?page]
+               ]
           @conn
           page-name)
         seq-flatten)))
