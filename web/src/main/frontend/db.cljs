@@ -36,6 +36,10 @@
        @conn
        conn))))
 
+(defn remove-conn!
+  [repo]
+  (swap! conns dissoc (datascript-db repo)))
+
 ;; A page can corresponds to multiple files (same title),
 ;; a month journal file can have multiple pages,
 ;; also, each heading can be treated as a page if we support

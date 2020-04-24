@@ -2,6 +2,8 @@
   (:require [frontend.storage :as storage]
             [rum.core :as rum]))
 
+;; TODO: move git/latest-commit, git/status, git/error to corresponding datascript
+;; dbs.
 (def state (atom
             {:route-match nil
              :notification/show? false
@@ -37,15 +39,6 @@
     (rum/react (rum/cursor-in state ks))
     (rum/react (rum/cursor state ks))))
 
-(defn get-current-repo
-  []
-  (:git/current-repo @state))
-
-(defn set-current-repo!
-  [repo]
-  (swap! state assoc :git/current-repo repo)
-  (storage/set :git/current-repo repo))
-
 (defn set-state!
   [path value]
   (if (vector? path)
@@ -57,6 +50,30 @@
   (if (vector? path)
     (swap! state update-in path f)
     (swap! state update path f)))
+
+(defn get-current-repo
+  []
+  (:git/current-repo @state))
+
+(defn get-repos
+  []
+  (get-in @state [:me :repos]))
+
+(defn delete-repo!
+  [repo]
+  (swap! state update-in [:me :repos]
+         (fn [repos]
+           (remove #(= (:url repo)
+                       (:url %))
+                   repos)))
+  (when (= (get-current-repo) (:url repo))
+    (set-state! :git/current-repo
+                (first (get-repos)))))
+
+(defn set-current-repo!
+  [repo]
+  (swap! state assoc :git/current-repo repo)
+  (storage/set :git/current-repo repo))
 
 (defn ui-toggle-state!
   []

@@ -75,7 +75,8 @@
          (let [new-options
                (assoc options
                       :on-click (fn []
-                                  ((:on-click options))
+                                  (when-let [on-click-fn (:on-click options)]
+                                    (on-click-fn))
                                   (close-fn)
                                   ))]
            (menu-link

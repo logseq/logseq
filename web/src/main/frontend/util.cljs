@@ -137,6 +137,13 @@
          on-ok
          on-failed))
 
+(defn delete
+  [url on-ok on-failed]
+  (fetch url (clj->js {:method "delete"
+                       :headers {:Content-Type "application/json"}})
+         on-ok
+         on-failed))
+
 (defn get-weekday
   [date]
   (.toLocaleString date "en-us" (clj->js {:weekday "long"})))

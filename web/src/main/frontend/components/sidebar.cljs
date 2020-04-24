@@ -121,9 +121,6 @@
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
     [:div.max-w-7xl.mx-auto
      (cond
-       (empty? (:repos me))
-       (widgets/add-repo)
-
        cloning?
        [:div "Cloning ..."]
 
@@ -132,6 +129,9 @@
 
        loading-files?
        [:div "Loading files ..."]
+
+       (empty? (:repos me))
+       (widgets/add-repo)
 
        (nil? (:email me))
        (settings/set-email)
@@ -194,7 +194,7 @@
         (search/search)
         [:div.ml-4.flex.items-center.md:ml-6
          [:div {:class (if pulling? "loader")}
-          [:button.p-1.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500
+          [:button.p-1.mr-1.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500
            {:on-click handler/pull-current-repo}
            [:svg.h-6.w-6
             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
@@ -210,13 +210,12 @@
              {:on-click toggle-fn}
              [:img.h-8.w-8.rounded-full
               {:src (:avatar me)}]])
-          [{:title "Your Profile"
-            :options {:href "/me"}}
+          [{:title "Your Repos"
+            :options {:href "/repos"}}
            {:title "Settings"
             :options {:href "/settings"}}
            {:title "Sign out"
-            :options {:href "/logout"
-                      :on-click handler/sign-out!}}])]]]
+            :options {:on-click handler/sign-out!}}])]]]
       [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
        {:tabIndex "0"}
        [:div.flex.justify-center

@@ -12,6 +12,10 @@
     {:name :home
      :view home/home}]
 
+   ["/repos"
+    {:name :repos
+     :view repo/repos}]
+
    ["/repo/add"
     {:name :repo-add
      :view repo/add-repo}]

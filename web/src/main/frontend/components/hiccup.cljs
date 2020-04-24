@@ -308,7 +308,7 @@
          :on-mouse-out (fn []
                          (when (has-children? heading-id level)
                            (reset! control-show? false)))}
-        [:a.control
+        [:a.heading-control
          {:id (str "control-" uuid)
           :class class
           :on-click (fn []

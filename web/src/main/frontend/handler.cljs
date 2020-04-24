@@ -595,7 +595,6 @@
 
 (defn sign-out!
   [e]
-  (.preventDefault e)
   (p/let [_idb-clear (js/window.pfs._idb.wipe)]
     (js/localStorage.clear)
     (set! (.-href js/window.location) "/logout")))
@@ -705,6 +704,25 @@
             (git-set-username-email! (:me @state/state))
             (load-db-and-journals! repo-url nil true)
             (periodically-pull-and-push repo-url {:pull-now? false}))))
+
+
+(defn remove-repo!
+  [{:keys [id url] :as repo}]
+  (util/delete (str config/api "repos/" id)
+               (fn []
+                 (db/remove-conn! url)
+                 (storage/remove (db/datascript-db url))
+                 (state/delete-repo! repo)
+                 ;; TODO: clear indexdb
+                 )
+               (fn [error]
+                 (prn "Delete repo failed, error: " error))))
+
+(defn rebuild-index!
+  [{:keys [id url] :as repo}]
+  (db/remove-conn! url)
+  (storage/remove (db/datascript-db url))
+  (clone-and-pull url))
 
 (defn start!
   []
