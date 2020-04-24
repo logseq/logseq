@@ -6,13 +6,36 @@
             [frontend.format :as format]
             [frontend.format.org-mode :as org]
             [frontend.format.org.block :as block]
+            [frontend.state :as state]
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.utf8 :as utf8]))
 
 ;; TODO: Create a database for each repo.
 ;; Multiple databases
-(def datascript-db "logseq/DB")
+(defn get-repo-path
+  [url]
+  (->> (take-last 2 (string/split url #"/"))
+       (string/join "/")))
+
+(defn datascript-db
+  [repo]
+  (str "logseq-db/" (get-repo-path repo)))
+
+(defonce conns
+  (atom {}))
+
+(defn get-conn
+  ([]
+   (get-conn (state/get-current-repo) true))
+  ([repo]
+   (get-conn repo true))
+  ([repo deref?]
+   (when-let [conn (get @conns (datascript-db repo))]
+     (if deref?
+       @conn
+       conn))))
+
 ;; A page can corresponds to multiple files (same title),
 ;; a month journal file can have multiple pages,
 ;; also, each heading can be treated as a page if we support
@@ -30,10 +53,8 @@
    :repo/cloning?   {}
    :repo/cloned?    {}
 
-   ;; TODO: how to express compound unique, [:file/repo, :file/path]
    ;; file
    :file/path       {:db/unique :db.unique/identity}
-   :file/repo       {:db/valueType   :db.type/ref}
    :file/content    {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
@@ -42,11 +63,9 @@
    :page/file       {:db/valueType   :db.type/ref}
    :page/journal?   {}
    :page/journal-day {}
-   :page/repo       {:db/valueType   :db.type/ref}
 
    ;; heading
    :heading/uuid   {:db/unique      :db.unique/identity}
-   :heading/repo   {:db/valueType   :db.type/ref}
    :heading/file   {:db/valueType   :db.type/ref}
    :heading/page   {:db/valueType   :db.type/ref}
    :heading/ref-pages {:db/valueType   :db.type/ref
@@ -68,9 +87,6 @@
    :task/deadline  {:db/index       true}
    })
 
-(defonce conn
-  (d/create-conn schema))
-
 ;; transit serialization
 
 (defn db->string [db]
@@ -80,22 +96,26 @@
   (dt/read-transit-str s))
 
 ;; persisting DB between page reloads
-(defn persist [db]
-  (js/localStorage.setItem datascript-db (db->string db)))
+(defn persist [repo db]
+  (js/localStorage.setItem (datascript-db repo) (db->string db)))
 
-(defn reset-conn! [db]
+(defn reset-conn! [conn db]
   (reset! conn db))
 
+(defn transact!
+  [tx-data]
+  (d/transact! (get-conn (state/get-current-repo) false) tx-data))
+
 ;; (new TextEncoder().encode('foo')).length
-(defn db-size
-  []
-  (when-let [store (js/localStorage.getItem datascript-db)]
-    (let [bytes (.-length (.encode (js/TextEncoder.) store))]
-      (/ bytes 1000))))
+;; (defn db-size
+;;   [repo]
+;;   (when-let [store (js/localStorage.getItem (datascript-db repo))]
+;;     (let [bytes (.-length (.encode (js/TextEncoder.) store))]
+;;       (/ bytes 1000))))
 
 (defn entity
   [id-or-lookup-ref]
-  (d/entity (d/db conn) id-or-lookup-ref))
+  (d/entity (d/db (get-conn (state/get-current-repo) false)) id-or-lookup-ref))
 
 (defn kv
   [key value]
@@ -143,22 +163,12 @@
 (def seq-flatten (comp flatten seq))
 
 (defn get-all-tags
-  []
+  [repo]
   (distinct-result
    (d/q '[:find ?tags
           :where
           [?h :heading/tags ?tags]]
-     @conn)))
-
-(defn get-repo-headings
-  [repo-url]
-  (-> (d/q '[:find ?heading
-             :in $ ?repo-url
-             :where
-             [?repo :repo/url ?repo-url]
-             [?heading :heading/repo ?repo]]
-        @conn repo-url)
-      seq-flatten))
+     (get-conn repo))))
 
 (defn- remove-journal-files
   [files]
@@ -167,33 +177,12 @@
      (string/starts-with? file "journals/"))
    files))
 
-(defn get-files
-  ([]
-   (->> (d/q '[:find ?path
-               :where
-               [?file :file/repo ?repo]
-               [?file :file/path ?path]]
-          @conn)
-        (map first)
-        distinct
-        remove-journal-files))
-  ([repo-url]
-   (->> (d/q '[:find ?path
-               :where
-               [?repo :repo/url ?repo-url]
-               [?file :file/repo ?repo]
-               [?file :file/path ?path]]
-          @conn repo-url)
-        (map first)
-        distinct
-        remove-journal-files)))
-
 (defn get-pages
-  []
+  [repo]
   (->> (d/q '[:find ?page-name
               :where
               [?page :page/name ?page-name]]
-         @conn)
+         (get-conn repo))
        (map first)
        ;; distinct
        ))
@@ -204,41 +193,32 @@
         pred (fn [db e]
                (contains? paths e))]
     (-> (d/q '[:find ?heading
-               :in $ ?repo-url ?pred
+               :in $ ?pred
                :where
-               [?repo :repo/url ?repo-url]
                [?file :file/path ?path]
                [(?pred $ ?path)]
-               [?heading :heading/file ?file]
-               [?heading :heading/repo ?repo]]
-          @conn repo-url pred)
+               [?heading :heading/file ?file]]
+          (get-conn repo-url) pred)
         seq-flatten)))
 
 (defn delete-headings
-  ([repo-url]
-   (let [headings (get-repo-headings repo-url)]
-     (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
-  ([repo-url files]
-   (when (seq files)
-     (let [headings (get-files-headings repo-url files)]
-       (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))))
+  [repo-url files]
+  (when (seq files)
+    (let [headings (get-files-headings repo-url files)]
+      (mapv (fn [eid] [:db.fn/retractEntity eid]) headings))))
 
 (defn delete-files
-  ([repo-url]
-   (delete-files repo-url (get-files repo-url)))
-  ([repo-url files]
-   (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files)))
+  [files]
+  (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files))
 
 (defn get-file-headings
   [repo-url path]
   (-> (d/q '[:find ?heading
-             :in $ ?repo-url ?path
+             :in $ ?path
              :where
-             [?repo :repo/url ?repo-url]
              [?file :file/path ?path]
-             [?heading :heading/file ?file]
-             [?heading :heading/repo ?repo]]
-        @conn repo-url path)
+             [?heading :heading/file ?file]]
+        (get-conn repo-url) path)
       seq-flatten))
 
 (defn delete-file-headings!
@@ -250,27 +230,15 @@
   [repo-url contents headings-pages delete-files delete-headings]
   (let [file-contents (map (fn [[file content]]
                              (when content
-                               {:file/repo [:repo/url repo-url]
-                                :file/path file
+                               {:file/path file
                                 :file/content content}))
                         contents)
         all-data (-> (concat delete-files delete-headings file-contents headings-pages)
                      (util/remove-nils))]
-    (d/transact! conn all-data)))
-
-(defn get-all-headings
-  []
-  (seq-flatten
-   (d/q '[:find (pull ?h [*])
-          :where
-          [?h :heading/title]]
-     @conn)))
-
-(defn search-headings-by-title
-  [title])
+    (transact! all-data)))
 
 (defn get-headings-by-tag
-  [tag]
+  [repo tag]
   (let [pred (fn [db tags]
                (some #(= tag %) tags))]
     (d/q '[:find (flatten (pull ?h [*]))
@@ -278,11 +246,7 @@
            :where
            [?h :heading/tags ?tags]
            [(?pred $ ?tags)]]
-      @conn pred)))
-
-(defn transact!
-  [tx-data]
-  (d/transact! conn tx-data))
+      (get-conn repo) pred)))
 
 (defn set-key-value
   [key value]
@@ -290,16 +254,10 @@
 
 (defn get-key-value
   ([key]
-   (get-key-value (d/db conn)))
+   (get-key-value (d/db (get-conn (state/get-current-repo) false))))
   ([db key]
    (some-> (d/entity db key)
            key)))
-
-(defn get-current-repo
-  ([]
-   (get-current-repo (d/db conn)))
-  ([db]
-   (:repo/url (get-key-value db :repo/current))))
 
 (defn sort-by-pos
   [headings]
@@ -309,64 +267,37 @@
 
 (defn get-file-by-concat-headings
   ([path]
-   (get-file-by-concat-headings (get-current-repo)
+   (get-file-by-concat-headings (state/get-current-repo)
                                 path))
   ([repo-url path]
    (->> (d/q '[:find (pull ?heading [*])
-               :in $ ?repo-url ?path
+               :in $ ?path
                :where
-               [?repo :repo/url ?repo-url]
                [?file :file/path ?path]
-               [?heading :heading/file ?file]
-               [?heading :heading/repo ?repo]]
-          @conn repo-url path)
+               [?heading :heading/file ?file]]
+          (get-conn repo-url) path)
         seq-flatten
         sort-by-pos)))
 
-;; (defn get-heading-with-children
-;;   [heading-id]
-;;   (let [heading (entity [:heading/uuid heading-id])
-;;         heading-level (:heading/level heading)]
-;;     (->> (d/q '[:find (pull ?c [*])
-;;                 :in $ ?repo-url ?heading-id
-;;                 :where
-;;                 [?p :heading/uuid ?heading-id]
-;;                 [?p :heading/repo ?r]
-;;                 [?p :heading/file ?f]
-;;                 [?p :heading/meta ?pm]
-;;                 [?p :heading/level ?pl]
-;;                 [?c :heading/repo ?r]
-;;                 [?c :heading/file ?f]
-;;                 [?c :heading/meta ?cm]
-;;                 [?c :heading/level ?cl]
-;;                 [(>= cl ?pl)]
-;;                 [(< (:pos ?pm) (:pos ?cm))]]
-;;            @conn heading-id)
-;;          seq-flatten
-;;          sort-by-pos
-;;          (take-while (fn [{:heading/keys [level meta]}]
-;;                        (>= level heading-level))))))
-
 (defn get-page-headings
   ([page]
-   (get-page-headings (get-current-repo)
-                                page))
+   (get-page-headings (state/get-current-repo)
+                      page))
   ([repo-url page]
    (->> (d/q '[:find (pull ?heading [*])
-               :in $ ?repo-url ?page
+               :in $ ?page
                :where
-               [?repo :repo/url ?repo-url]
                [?p :page/name ?page]
-               [?heading :heading/page ?p]
-               [?heading :heading/repo ?repo]]
-          @conn repo-url page)
+               [?heading :heading/page ?p]]
+          (get-conn repo-url) page)
         seq-flatten
         sort-by-pos)))
 
 ;; TODO: quite slow
 (defn get-heading-with-children
   [heading-uuid]
-  (let [heading (entity [:heading/uuid heading-uuid])
+  (let [repo-url (state/get-current-repo)
+        heading (entity [:heading/uuid heading-uuid])
         heading-level (:heading/level heading)
         pred (fn [db uuid meta level child-meta child-level]
                (or
@@ -377,16 +308,14 @@
                 :where
                 [?heading :heading/uuid ?heading-uuid]
                 [?heading :heading/file ?file]
-                [?heading :heading/repo ?repo]
                 [?child   :heading/file ?file]
-                [?child   :heading/repo ?repo]
                 [?child   :heading/uuid ?child-uuid]
                 [?heading :heading/level ?level]
                 [?heading :heading/meta ?meta]
                 [?child   :heading/meta ?child-meta]
                 [?child   :heading/level ?child-level]
                 [(?pred $ ?child-uuid ?meta ?level ?child-meta ?child-level)]]
-           @conn heading-uuid pred)
+           (get-conn repo-url) heading-uuid pred)
          seq-flatten
          sort-by-pos
          (take-while (fn [{:heading/keys [uuid level meta]}]
@@ -394,16 +323,11 @@
                         (= uuid heading-uuid)
                         (> level heading-level)))))))
 
-(defn set-current-repo!
-  [repo]
-  (set-key-value :repo/current [:repo/url repo]))
-
 (defn mark-repo-as-cloned
   [repo-url]
-  (d/transact! conn
+  (transact!
     [{:repo/url repo-url
-      :repo/cloned? true}
-     (kv :repo/current [:repo/url repo-url])]))
+      :repo/cloned? true}]))
 
 (defn cloned?
   [repo-url]
@@ -413,16 +337,8 @@
           :where
           [?repo :repo/url ?repo-url]
           [?repo :repo/cloned? ?cloned]]
-     @conn repo-url)
+     (get-conn repo-url) repo-url)
    first))
-
-(defn get-repos
-  []
-  (->> (d/q '[:find ?url
-              :where [_ :repo/url ?url]]
-         @conn)
-       (map first)
-       distinct))
 
 (defn get-page-name
   [file ast]
@@ -456,7 +372,7 @@
     (util/parse-int (str y m d))))
 
 (defn extract-pages-and-headings
-  [repo-url file content utf8-content journal? pages-fn]
+  [file content utf8-content journal? pages-fn]
   (let [ast (org/->clj content org/config-with-line-break)
         headings (block/extract-headings ast (utf8/length utf8-content))
         pages (pages-fn headings ast)
@@ -469,15 +385,14 @@
                                (when heading-ref-pages
                                  (swap! ref-pages set/union (set heading-ref-pages)))
                                (-> heading
-                                (dissoc :ref-pages)
-                                (assoc :heading/content (get-heading-content utf8-content heading)
-                                       :heading/repo [:repo/url repo-url]
-                                       :heading/file [:file/path file]
-                                       :heading/page [:page/name (string/capitalize page)]
-                                       :heading/ref-pages (mapv
-                                                           (fn [page]
-                                                             {:page/name (string/capitalize page)})
-                                                           heading-ref-pages)))))
+                                   (dissoc :ref-pages)
+                                   (assoc :heading/content (get-heading-content utf8-content heading)
+                                          :heading/file [:file/path file]
+                                          :heading/page [:page/name (string/capitalize page)]
+                                          :heading/ref-pages (mapv
+                                                              (fn [page]
+                                                                {:page/name (string/capitalize page)})
+                                                              heading-ref-pages)))))
                         headings)))
                   pages)
         headings (safe-headings headings)
@@ -490,8 +405,7 @@
                    :page/journal? journal?
                    :page/journal-day (if journal?
                                        (journal-page-name->int page)
-                                       0)
-                   :page/repo [:repo/url repo-url]})
+                                       0)})
                 (map first pages))
         pages (concat
                pages
@@ -507,13 +421,13 @@
 
 ;; check journal formats and report errors
 (defn extract-headings-pages
-  [repo-url file content utf8-content]
+  [file content utf8-content]
   (if (string/blank? content)
     []
     (let [journal? (string/starts-with? file "journals/")]
       (if journal?
         (extract-pages-and-headings
-         repo-url file content utf8-content true
+         file content utf8-content true
          (fn [headings _ast]
            (loop [pages {}
                   last-page-name nil
@@ -531,51 +445,45 @@
                      (recur new-pages last-page-name tl))))
                pages))))
         (extract-pages-and-headings
-         repo-url file content utf8-content false
+         file content utf8-content false
          (fn [headings ast]
            [[(get-page-name file ast) headings]]))))))
 
 (defn get-all-files-content
   [repo-url]
   (d/q '[:find ?path ?content
-         :in $ ?repo-url
          :where
-         [?repo :repo/url ?repo-url]
-         [?file :file/repo ?repo]
          [?file :file/content ?content]
          [?file :file/path ?path]]
-    @conn repo-url))
+    (get-conn repo-url)))
 
 (defn extract-all-headings-pages
-  [repo-url contents]
+  [contents]
   (vec
    (mapcat
     (fn [[file content] contents]
       (when content
         (let [utf8-content (utf8/encode content)]
-          (extract-headings-pages repo-url file content utf8-content))))
+          (extract-headings-pages file content utf8-content))))
     contents)))
 
 (defn reset-file!
   [repo-url file content]
   (let [utf8-content (utf8/encode content)
-        file-content [{:file/repo [:repo/url repo-url]
-                       :file/path file
+        file-content [{:file/path file
                        :file/content content}]
         delete-headings (delete-file-headings! repo-url file)
-        headings-pages (extract-headings-pages repo-url file content utf8-content)]
-    (d/transact! conn (concat file-content delete-headings headings-pages))))
+        headings-pages (extract-headings-pages file content utf8-content)]
+    (transact! (concat file-content delete-headings headings-pages))))
 
 (defn get-file-content
   [repo-url path]
   (->> (d/q '[:find ?content
-              :in $ ?repo-url ?path
+              :in $ ?path
               :where
-              [?repo :repo/url ?repo-url]
-              [?file :file/repo ?repo]
               [?file :file/path ?path]
               [?file :file/content ?content]]
-         @conn repo-url path)
+         (get-conn repo-url) path)
        (map first)
        first))
 
@@ -585,11 +493,9 @@
    (d/q '[:find ?content
           :in $ ?path
           :where
-          [_     :repo/current ?repo]
-          [?file :file/repo ?repo]
           [?file :file/path ?path]
           [?file :file/content ?content]]
-     @conn
+     (get-conn)
      path)
    ffirst))
 
@@ -611,7 +517,7 @@
                  [?h :heading/marker "IN-PROGRESS"]
                  ;; [?h :heading/marker "DONE"]
                  )]
-        @conn)
+        (get-conn))
       seq-flatten))))
 
 (defn get-current-journal-path
@@ -626,26 +532,9 @@
    [page-name (get-page-headings page-name)]))
 
 ;; cache this
-
-(defn get-journal-pages
-  ([]
-   (get-journal-pages (get-current-repo)))
-  ([repo-url]
-   (->>
-    (d/q '[:find ?page-name
-           :in $ ?repo-url
-           :where
-           [?repo :repo/url ?repo-url]
-           [?page :page/repo ?repo]
-           [?page :page/name ?page-name]
-           [?page :page/journal? true]]
-      @conn
-      repo-url)
-    seq-flatten)))
-
 (defn get-latest-journals
   ([n]
-   (get-latest-journals (get-current-repo) n))
+   (get-latest-journals (state/get-current-repo) n))
   ([repo-url n]
    (let [date (js/Date.)
          _ (.setDate date (- (.getDate date) (dec n)))
@@ -656,17 +545,14 @@
          today (date->int (js/Date.))
          pages (->>
                 (d/q '[:find ?page-name ?journal-day
-                       :in $ ?repo-url ?before-day ?today
+                       :in $ ?before-day ?today
                        :where
-                       [?repo :repo/url ?repo-url]
-                       [?page :page/repo ?repo]
                        [?page :page/name ?page-name]
                        [?page :page/journal? true]
                        [?page :page/journal-day ?journal-day]
                        [(<= ?before-day ?journal-day ?today)]
                        ]
-                  @conn
-                  repo-url
+                  (get-conn repo-url)
                   before-day
                   today)
                 (sort-by last)
@@ -679,19 +565,9 @@
 
 (defn me-tx
   [db {:keys [name email avatar repos]}]
-  (let [me (util/remove-nils {:me/name name
-                              :me/email email
-                              :me/avatar avatar})
-        me-tx [me]
-        repos-tx (mapv (fn [repo]
-                         {:repo/url (:url repo)})
-                       repos)
-        current-repo (get-current-repo db)
-        current-repo-tx (if (or current-repo (empty? repos))
-                          nil
-                          [(kv :repo/current [:repo/url (:url (first repos))])])]
-    (->> (concat me-tx repos-tx current-repo-tx)
-         (remove nil?))))
+  (util/remove-nils {:me/name name
+                     :me/email email
+                     :me/avatar avatar}))
 
 (defn with-dummy-heading
   [headings]
@@ -700,7 +576,7 @@
           end-pos (get-in last-heading [:heading/meta :end-pos])
           dummy (merge last-heading
                        (let [uuid (d/squuid)]
-                         {:heading/uuid (d/squuid)
+                         {:heading/uuid uuid
                           :heading/title ""
                           :heading/content "** "
                           :heading/level 2
@@ -720,18 +596,30 @@
     (-> (d/q '[:find (pull ?heading [*])
                :in $ ?page-name
                :where
-               [?repo :repo/url ?repo-url]
                [?page :page/name ?page-name]
-               [?heading :heading/ref-pages ?page]
-               ]
-          @conn
+               [?heading :heading/ref-pages ?page]]
+          (get-conn)
           page-name)
         seq-flatten)))
 
-(defn restore! [me]
-  (if-let [stored (js/localStorage.getItem datascript-db)]
-    (let [stored-db (string->db stored)
-          attached-db (d/db-with stored-db (me-tx stored-db me))]
-      (if (= (:schema stored-db) schema) ;; check for code update
-        (reset-conn! attached-db)))
-    (d/transact! conn (me-tx (d/db conn) me))))
+(defn start-db-conn!
+  [me repo listen-handler]
+  (let [db-name (datascript-db repo)
+        db-conn (d/create-conn schema)]
+    (swap! conns assoc db-name db-conn)
+    (listen-handler repo db-conn)
+    (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
+
+(defn restore! [{:keys [repos] :as me} listen-handler]
+  (doseq [{:keys [id url]} repos]
+    (let [repo url
+          db-name (datascript-db repo)
+          db-conn (d/create-conn schema)]
+      (swap! conns assoc db-name db-conn)
+      (if-let [stored (js/localStorage.getItem db-name)]
+        (let [stored-db (string->db stored)
+              attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+          (when (= (:schema stored-db) schema) ;; check for code update
+            (reset-conn! db-conn attached-db)))
+        (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+      (listen-handler repo db-conn))))

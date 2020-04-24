@@ -69,7 +69,7 @@
 (rum/defcs dropdown < rum/reactive
   (mixins/modal)
   [state content]
-  (let [{:keys [me]} (rum/react state/state)
+  (let [me (state/sub :me)
         {:keys [open? toggle-fn]} state]
     [:div.ml-3.relative
      [:div
@@ -158,7 +158,9 @@
 
 (rum/defc notification < rum/reactive
   []
-  (let [{:keys [:notification/show? :notification/content :notification/status]} (rum/react state/state)]
+  (let [show? (state/sub :notification/content)
+        status (state/sub :notification/status)
+        content (state/sub :notification/content)]
     (css-transition
      {:in show? :timeout 100}
      (fn [state]

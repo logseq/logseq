@@ -3,17 +3,33 @@
             [frontend.ui :as ui]
             [frontend.mixins :as mixins]
             [frontend.db :as db]
-            [frontend.components.repo :as repo]
+            [frontend.components.widgets :as widgets]
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.handler :as handler]))
+            [frontend.handler :as handler]
+            ))
 
 (defonce active-button :a.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
 (defonce inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
+
+(rum/defc logo-or-repos
+  [current-repo]
+  (if current-repo
+    [:div.flex-1
+     [:div.flex.justify-between.text-gray-500.font-bold
+      [:a.hover:text-gray-300 {:href current-repo
+           :target "_blank"}
+       (db/get-repo-path current-repo)]
+      [:a.hover:text-gray-300 {:href "/repo/add"}
+       "+"]]]
+
+    [:img.h-8.w-auto
+     {:alt "Logseq",
+      :src "/static/img/logo.png"}]))
 
 (defn nav-item
   ([title href svg-d]
@@ -45,7 +61,7 @@
 
 (rum/defc sidebar-nav < rum/reactive
   []
-  (let [{:keys [:route-match]} (rum/react state/state)
+  (let [route-match (state/sub :route-match)
         active? (fn [route] (= route (get-in route-match [:data :name])))
         ;; file-active? (fn [path]
         ;;                (= path (get-in route-match [:parameters :path :path])))
@@ -78,36 +94,42 @@
      ;; (files-list file-active?)
      ]))
 
+;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   []
-  (let [{:repo/keys [cloning? loading-files? importing-to-db?]
-         :keys [me journals-length]} (rum/react state/state)
-        latest-journals (db/get-latest-journals journals-length)]
+  (let [cloning? (state/sub :cloning?)
+        importing-to-db? (state/sub :importing-to-db?)
+        loading-files? (state/sub :loading-files?)
+        me (state/sub :me)
+        journals-length (state/sub :journals-length)
+        current-repo (state/sub :git/current-repo)
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
     [:div.max-w-7xl.mx-auto
      (cond
-       (nil? (:email me))
-       (settings/set-email)
-
-       importing-to-db?
-       [:div "Parsing files ..."]
-
-       (seq latest-journals)
-       (journal/journals latest-journals)
-
-       loading-files?
-       [:div "Loading files ..."]
+       (empty? (:repos me))
+       (widgets/add-repo)
 
        cloning?
        [:div "Cloning ..."]
 
-       :else
-       (repo/add-repo))]))
+       importing-to-db?
+       [:div "Parsing files ..."]
+
+       loading-files?
+       [:div "Loading files ..."]
+
+       (nil? (:email me))
+       (settings/set-email)
+
+       (seq latest-journals)
+       (journal/journals latest-journals))]))
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
   [state main-content]
   (let [{:keys [open? close-fn open-fn]} state
-        {:keys [git/status]} (rum/react state/state)
+        status (state/sub :git/status)
+        current-repo (state/sub :git/current-repo)
         pulling? (= :pulling status)]
     [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden
@@ -132,17 +154,13 @@
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]])
        [:div.flex-shrink-0.flex.items-center.h-16.px-4.bg-gray-900
-        [:img.h-8.w-auto
-         {:alt "Logseq",
-          :src "/static/img/logo.png"}]]
+        (logo-or-repos current-repo)]
        [:div.flex-1.h-0.overflow-y-auto
         (sidebar-nav)]]]
      [:div.hidden.md:flex.md:flex-shrink-0
       [:div.flex.flex-col.w-64
        [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
-        [:img.h-8.w-auto
-         {:alt "Logseq",
-          :src "/static/img/logo.png"}]]
+        (logo-or-repos current-repo)]
        [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
         (sidebar-nav)]]]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
@@ -179,7 +197,6 @@
             :options {:href "/logout"
                       :on-click handler/sign-out!}}])]]]
       [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
-       ;; {:x-init "$el.focus()", :x-data "x-data", :tabindex "0"}
        {:tabIndex "0"}
        [:div.flex.justify-center
         [:div.flex-1.m-6 {:style {:position "relative"

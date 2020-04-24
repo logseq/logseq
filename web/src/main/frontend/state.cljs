@@ -1,5 +1,6 @@
 (ns frontend.state
-  (:require [frontend.storage :as storage]))
+  (:require [frontend.storage :as storage]
+            [rum.core :as rum]))
 
 ;; TODO: replace this with datascript
 (def state (atom
@@ -16,6 +17,7 @@
              :git/latest-commit (storage/get :git/latest-commit)
              :git/status (storage/get :git/status)
              :git/error (storage/get :git/error)
+             :git/current-repo (storage/get :git/current-repo)
              ;; format => boolean
              :format/loading {}
              :search/result nil
@@ -33,3 +35,18 @@
 (def collapsed-headings (atom #{}))
 
 (def q (atom nil))
+
+(defn get-current-repo
+  []
+  (:git/current-repo @state))
+
+(defn set-current-repo!
+  [repo]
+  (swap! state assoc :git/current-repo repo)
+  (storage/set :git/current-repo repo))
+
+(defn sub
+  [ks]
+  (if (coll? ks)
+    (rum/react (rum/cursor-in state ks))
+    (rum/react (rum/cursor state ks))))

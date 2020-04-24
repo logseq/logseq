@@ -249,10 +249,29 @@
 (declare block)
 (declare blocks)
 
+(rum/defc heading-child
+  [block]
+  block)
+
+(defn- has-children?
+  [heading-id level]
+  (or
+   ;; non heading children
+   (when-let [node (gdom/getElement heading-id)]
+     (> (count (array-seq (d/children node))) 1))
+
+   ;; other headings children
+   (when-let [next-heading (gobj/get (gdom/getElement heading-id)
+                                     "nextSibling")]
+     (when-let [child-level (d/attr next-heading "level")]
+       (> child-level level)))))
+
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::control-show?)
   (rum/local false ::edit?)
   [state {:heading/keys [uuid level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
+  (if dummy?
+    (prn "re-render " uuid))
   (let [edit? (get state ::edit?)
         control-show? (get state ::control-show?)
         heading-id (str "ls-heading-parent-" uuid)
@@ -267,16 +286,7 @@
                      (not collapsed?)
                      ;; have heading children
                      ;; (.nextElementSibling (gdom/getElement heading-id))
-                     (or
-                      ;; non heading children
-                      (when-let [node (gdom/getElement heading-id)]
-                        (> (count (array-seq (d/children node))) 1))
-
-                      ;; other headings children
-                      (when-let [next-heading (gobj/get (gdom/getElement heading-id)
-                                                        "nextSibling")]
-                        (when-let [child-level (d/attr next-heading "level")]
-                          (> child-level level)))))
+                     (has-children? heading-id level))
                 (str class " caret-down")
 
                 :else
@@ -295,9 +305,11 @@
        [:div.flex.flex-row
         {:style {:cursor "pointer"}
          :on-mouse-over (fn []
-                          (reset! control-show? true))
+                          (when (has-children? heading-id level)
+                              (reset! control-show? true)))
          :on-mouse-out (fn []
-                         (reset! control-show? false))}
+                         (when (has-children? heading-id level)
+                           (reset! control-show? false)))}
         [:a.control
          {:id (str "control-" uuid)
           :class class
@@ -336,7 +348,9 @@
            ;; non-heading children
            (when (seq children)
              (for [child children]
-               (block config child)))])]])))
+               (let [block (block config child)]
+                 (rum/with-key (heading-child block)
+                   (cljs.core/random-uuid)))))])]])))
 
 (defn heading
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children]

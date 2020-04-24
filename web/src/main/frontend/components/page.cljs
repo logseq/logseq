@@ -49,7 +49,7 @@
    [:div.flex-1
     [:h1.mb-2.font-medium.text-3xl {:style {:color "#161E2E"}}
      "All Pages"]
-    (let [pages (db/get-pages)]
+    (let [pages (db/get-pages (state/get-current-repo))]
       (for [page pages]
         (let [page-id (util/url-encode page)]
           [:div {:key page-id}

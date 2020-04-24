@@ -19,7 +19,7 @@
 
 (rum/defc search < rum/reactive
   []
-  (let [search-result (:search/result (rum/react state/state))
+  (let [search-result (state/sub :search/result)
         show-result? (boolean (seq search-result))]
     [:div.flex-1.flex
      [:div.w-full.flex.md:ml-0

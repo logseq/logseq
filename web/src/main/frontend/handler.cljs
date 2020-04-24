@@ -74,12 +74,12 @@
   (set-state-kv! :repo/cloning? false)
   (set-state-kv! :repo/loading-files? true)
   (let [files-atom (atom nil)]
-    (-> (p/let [files (bean/->clj (git/list-files repo-url))
-                patterns-content (load-file repo-url config/hidden-file)]
-          (reset! files-atom files)
-          (when patterns-content
-            (let [patterns (string/split patterns-content #"\n")]
-              (reset! files-atom (remove (fn [path] (hidden? path patterns)) files)))))
+    (-> (p/let [files (bean/->clj (git/list-files repo-url))]
+          (if (contains? (set files) config/hidden-file)
+            (let [patterns-content (load-file repo-url config/hidden-file)]
+              (let [patterns (string/split patterns-content #"\n")]
+                (reset! files-atom (remove (fn [path] (hidden? path patterns)) files))))
+            (reset! files-atom files)))
         (p/finally
           (fn []
             @files-atom)))))
@@ -158,7 +158,7 @@
                          repo-url
                          files
                          (fn [contents]
-                           (let [headings-pages (db/extract-all-headings-pages repo-url contents)]
+                           (let [headings-pages (db/extract-all-headings-pages contents)]
                              (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
                              (set-state-kv! :repo/importing-to-db? false)))))]
 
@@ -171,7 +171,7 @@
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
               delete-files (if (seq remove-files)
-                             (db/delete-files repo-url remove-files))
+                             (db/delete-files remove-files))
               delete-headings (db/delete-headings repo-url (concat remove-files modify-files))
               add-or-modify-files (util/remove-nils (concat add-files modify-files))]
           (load-contents add-or-modify-files delete-files delete-headings))))))
@@ -250,7 +250,7 @@
 
 (defn pull-current-repo
   []
-  (when-let [repo (db/get-current-repo)]
+  (when-let [repo (state/get-current-repo)]
     (when-let [token (get-github-token)]
       (pull repo token))))
 
@@ -263,7 +263,7 @@
 
 (defn get-latest-commit
   [handler]
-  (-> (p/let [commits (git/log (db/get-current-repo)
+  (-> (p/let [commits (git/log (state/get-current-repo)
                                (get-github-token)
                                1)]
         (handler (first commits)))
@@ -308,6 +308,22 @@
            " to pull the latest changes."]
           :error))))))
 
+(defn re-render!
+  []
+  (when-let [comp (get @state/state :root-component)]
+    (when (and (not (:edit? @state/state)))
+      (rum/request-render comp))))
+
+(defn db-listen-to-tx!
+  [repo db-conn]
+  (d/listen! db-conn :persistence
+             (fn [tx-report]
+               (when-let [db (:db-after tx-report)]
+                 (prn "DB changed, re-rendered!")
+                 (re-render!)
+                 (js/setTimeout (fn []
+                                  (db/persist repo db)) 0)))))
+
 (defn clone
   [repo]
   (let [token (get-github-token)]
@@ -316,13 +332,17 @@
        (set-state-kv! :repo/cloning? true)
        (git/clone repo token))
      (fn []
+       (state/set-current-repo! repo)
+       (db/start-db-conn! (:me @state/state)
+                          repo
+                          db-listen-to-tx!)
        (db/mark-repo-as-cloned repo)
        (set-latest-commit-if-exists!)
        (util/post (str config/api "repos")
                   {:url repo}
                   (fn [result]
                     (swap! state/state
-                           update-in [:user :repos] conj result))
+                           update-in [:me :repos] conj result))
                   (fn [error]
                     (prn "Something wrong!"))))
      (fn [e]
@@ -393,7 +413,7 @@
    (alter-file path commit-message content false))
   ([path commit-message content before?]
    (let [token (get-github-token)
-         repo-url (db/get-current-repo)]
+         repo-url (state/get-current-repo)]
      (if before?
        (db/reset-file! repo-url path content))
      (util/p-handle
@@ -439,7 +459,7 @@
   [{:keys [name email]}]
   (when (and name email)
     (git/set-username-email
-     (git/get-repo-dir (db/get-current-repo))
+     (git/get-repo-dir (state/get-current-repo))
      name
      email)))
 
@@ -457,26 +477,11 @@
   [comp]
   (swap! state/state assoc :root-component comp))
 
-(defn re-render!
-  []
-  (when-let [comp (get @state/state :root-component)]
-    (when (and (not (:edit? @state/state)))
-      (rum/request-render comp))))
-
-(defn db-listen-to-tx!
-  []
-  (d/listen! db/conn :persistence
-             (fn [tx-report]
-               (when-let [db (:db-after tx-report)]
-                 (prn "DB changed, re-rendered!")
-                 (re-render!)
-                 (js/setTimeout (fn []
-                                  (db/persist db)) 0)))))
-
 (defn periodically-push-tasks
   [repo-url]
   (let [token (get-github-token)
         push (fn []
+               (prn "push!")
                (push repo-url))]
     (js/setInterval push
                     (* config/auto-push-secs 1000))))
@@ -484,17 +489,12 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (when-not config/dev?
-    (periodically-pull repo-url pull-now?)
-    (periodically-push-tasks repo-url)))
-
-(defn clone-and-pull
-  [repo-url]
-  (p/then (clone repo-url)
-          (fn []
-            (git-set-username-email! (:me @state/state))
-            (load-db-and-journals! repo-url nil true)
-            (periodically-pull-and-push repo-url {:pull-now? false}))))
+  (periodically-pull repo-url pull-now?)
+  (periodically-push-tasks repo-url)
+  ;; (when-not config/dev?
+  ;;   (periodically-pull repo-url pull-now?)
+  ;;   (periodically-push-tasks repo-url))
+  )
 
 (defn edit-journal!
   [journal]
@@ -531,7 +531,7 @@
                      (subs path 1)
                      path)]
           (util/p-handle
-           (fs/read-file-2 (git/get-repo-dir (db/get-current-repo))
+           (fs/read-file-2 (git/get-repo-dir (state/get-current-repo))
                            path)
            (fn [blob]
              (let [blob (js/Blob. (array blob) (clj->js {:type "image"}))
@@ -672,12 +672,6 @@
   (swap! state/state assoc :search/result nil)
   (reset! state/q nil))
 
-(defn pre-cache-htmls
-  [repo-url]
-  (let [files (-> (db/get-files repo-url)
-                  (only-html-render-formats))]
-    files))
-
 (defn email? [v]
   (and v
        (.isValid (EmailAddress. v))))
@@ -715,13 +709,20 @@
             new-file-content (string/trim new-file-content)]
         (alter-file file-path (str "Update " file-path) new-file-content true)))))
 
+(defn clone-and-pull
+  [repo-url]
+  (p/then (clone repo-url)
+          (fn []
+            (git-set-username-email! (:me @state/state))
+            (load-db-and-journals! repo-url nil true)
+            (periodically-pull-and-push repo-url {:pull-now? false}))))
+
 (defn start!
   []
-  (let [me (set-me-if-exists!)]
-    (db/restore! me)
-    (db-listen-to-tx!)
-    ;; Currently, we support only one repo.
-    (when-let [repo (first (db/get-repos))]
-      (if (db/cloned? repo)
-        (periodically-pull-and-push repo {:pull-now? true})
-        (clone-and-pull repo)))))
+  (let [{:keys [repos] :as me} (set-me-if-exists!)]
+    (db/restore! me db-listen-to-tx!)
+    (doseq [{:keys [id url]} repos]
+      (let [repo url]
+        (if (db/cloned? repo)
+          (periodically-pull-and-push repo {:pull-now? true})
+          (clone-and-pull repo))))))

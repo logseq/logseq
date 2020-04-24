@@ -8,8 +8,7 @@
                 (handler/set-root-component! (:rum/react-component state))
                 state)}
   []
-  (let [state (rum/react state/state)
-        route-match (:route-match state)]
+  (let [route-match (state/sub :route-match)]
     (if route-match
       (when-let [view (:view (:data route-match))]
         (view route-match))

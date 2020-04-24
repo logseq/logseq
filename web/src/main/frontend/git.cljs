@@ -18,6 +18,9 @@
 
 (defn set-username-email
   [dir username email]
+  (prn "set username and email: " {:dir dir
+                                   :username username
+                                   :email email})
   (util/p-handle (js/git.config (clj->js
                                  {:dir dir
                                   :path "user.name"
@@ -136,12 +139,3 @@
             diffs (map (fn [diff]
                          (update diff :path #(subs % 1))) diffs)]
       diffs)))
-
-(comment
-  (def hash-2 "1fc9cd212018755ab3ba7791f6801c9933fbe0cf")
-  (def hash-1 "fa7107c2cb9567ebb6d396130f8ebab27dcf719a")
-  (promesa.core/let [diffs (get-diffs (frontend.db/get-current-repo)
-                                      hash-1
-                                      hash-2)]
-    )
-  )

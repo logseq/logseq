@@ -66,7 +66,10 @@
       [:div
        {:id id}
        hiccup]
-      (let [{:keys [edit? format/loading edit-journal edit-file]} (rum/react state/state)]
+      (let [edit? (state/sub :edit?)
+            loading (state/sub :format/loading)
+            edit-journal (state/sub :edit-journal)
+            edit-file (state/sub :edit-file)]
         (if edit?
           (editor/box content {:on-hide on-hide} id)
           (let [format (format/normalize format)
