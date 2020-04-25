@@ -114,7 +114,8 @@
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
-   (d/transact! (get-conn repo-url false) tx-data)))
+   (when-let [conn (get-conn repo-url false)]
+     (d/transact! conn tx-data))))
 
 ;; (new TextEncoder().encode('foo')).length
 ;; (defn db-size
@@ -125,7 +126,8 @@
 
 (defn entity
   [id-or-lookup-ref]
-  (d/entity (d/db (get-conn (state/get-current-repo) false)) id-or-lookup-ref))
+  (when-let [conn (get-conn (state/get-current-repo) false)]
+    (d/entity (d/db conn) id-or-lookup-ref)))
 
 (defn kv
   [key value]
@@ -274,9 +276,10 @@
   ([key]
    (get-key-value (state/get-current-repo) key))
   ([repo-url key]
-   (when-let [db (d/db (get-conn repo-url false))]
-     (some-> (d/entity db key)
-             key))))
+   (when-let [conn (get-conn repo-url false)]
+     (when-let [db (d/db conn)]
+      (some-> (d/entity db key)
+              key)))))
 
 (defn debug!
   []
