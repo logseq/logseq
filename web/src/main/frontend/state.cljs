@@ -1,6 +1,7 @@
 (ns frontend.state
   (:require [frontend.storage :as storage]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.util :as util]))
 
 ;; TODO: move git/latest-commit, git/status, git/error to corresponding datascript
 ;; dbs.
@@ -11,14 +12,11 @@
              :root-component nil
              :edit? false
              :edit-input-id nil
+             :repo/cloning? false
              :repo/loading-files? nil
              :repo/importing-to-db? nil
              :me nil
-             :git/latest-commit (storage/get :git/latest-commit)
-             :git/status (storage/get :git/status)
-             :git/error (storage/get :git/error)
              :git/current-repo (storage/get :git/current-repo)
-             ;; format => boolean
              :format/loading {}
              :search/result nil
              :edit-journal nil
@@ -28,7 +26,7 @@
              ;; :search/q nil
              :ui/toggle-state false
              :ui/collapsed-headings #{}
-             ;; :edit-content ""
+             :edit-content ""
              :cursor-range nil
              :cursor-pos nil}))
 
@@ -67,9 +65,10 @@
   [repo]
   (swap! state update-in [:me :repos]
          (fn [repos]
-           (remove #(= (:url repo)
-                       (:url %))
-                   repos)))
+           (->> (remove #(= (:url repo)
+                            (:url %))
+                        repos)
+                (util/distinct-by :url))))
   (when (= (get-current-repo) (:url repo))
     (set-current-repo! (:url (first (get-repos))))))
 
@@ -91,21 +90,12 @@
   []
   (set-state! :ui/collapsed-headings #{}))
 
-(defonce edit-content (atom ""))
 (defn get-edit-content
   []
-  @edit-content)
+  (:edit-content @state))
 (defn set-edit-content!
   [value]
-  (reset! edit-content value))
-
-;; TODO: not working well, input cursor jumps to the end when typing the first character.
-;; (defn get-edit-content
-;;   []
-;;   (:edit-content @state))
-;; (defn set-edit-content!
-;;   [value]
-;;   (set-state! :edit-content value))
+  (set-state! :edit-content value))
 
 (defn clear-edit-content!
   []
@@ -122,3 +112,11 @@
 (defn set-cursor-pos!
   [value]
   (set-state! :cursor-pos value))
+
+(defn cloning?
+  []
+  (:repo/cloning? @state))
+
+(defn set-cloning?
+  [value]
+  (set-state! :repo/cloning? value))

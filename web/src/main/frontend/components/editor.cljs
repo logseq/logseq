@@ -37,7 +37,7 @@
                 state)}
   [content {:keys [on-hide dummy?]
             :or {dummy? false}} id]
-  (let [value (rum/react state/edit-content)]
+  (let [value (state/sub :edit-content)]
     (ui/textarea
      {:id id
       :on-change (fn [e]

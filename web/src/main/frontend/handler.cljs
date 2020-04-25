@@ -84,31 +84,26 @@
             @files-atom)))))
 
 (defn- set-latest-commit!
-  [hash]
-  (set-state-kv! :git/latest-commit hash)
-  (storage/set :git/latest-commit hash))
+  [repo-url hash]
+  (db/set-key-value repo-url :git/latest-commit hash))
 
 (defn- set-git-status!
-  [value]
-  (set-state-kv! :git/status value)
-  (storage/set :git/status value))
+  [repo-url value]
+  (db/set-key-value repo-url :git/status value))
 
 (defn- set-git-error!
-  [value]
-  (set-state-kv! :git/error value)
-  (if value
-    (storage/set :git/error (str value))
-    (storage/remove :git/error)))
+  [repo-url value]
+  (db/set-key-value repo-url :git/error (if value (str value))))
 
 (defn git-add-commit
   [repo-url file message content]
-  (set-git-status! :commit)
+  (set-git-status! repo-url :commit)
   (git/add-commit repo-url file message
                   (fn []
-                    (set-git-status! :should-push))
+                    (set-git-status! repo-url :should-push))
                   (fn [error]
-                    (set-git-status! :commit-failed)
-                    (set-git-error! error))))
+                    (set-git-status! repo-url :commit-failed)
+                    (set-git-error! repo-url error))))
 
 ;; journals
 
@@ -208,32 +203,31 @@
 
 (defn pull
   [repo-url token]
-  (let [status (:git/status @state/state)]
+  (let [status (db/get-key-value repo-url :git/status)]
     (when (and
            (not (:edit? @state/state))
-           ;; (nil? (:git/error @state/state))
            (or (nil? status)
                (= status :pulling)))
-      (set-git-status! :pulling)
-      (let [latest-commit (:git/latest-commit @state/state)]
+      (set-git-status! repo-url :pulling)
+      (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
         (p/let [result (git/fetch repo-url token)
                 {:keys [fetchHead]} (bean/->clj result)
-                _ (set-latest-commit! fetchHead)]
+                _ (set-latest-commit! repo-url fetchHead)]
           (-> (git/merge repo-url)
               (p/then (fn [result]
                         (-> (git/checkout repo-url)
                             (p/then (fn [result]
-                                      (set-git-status! nil)
+                                      (set-git-status! repo-url nil)
                                       (when (and latest-commit fetchHead
                                                  (not= latest-commit fetchHead))
                                         (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
                                           (load-db-and-journals! repo-url diffs false)))))
                             (p/catch (fn [error]
-                                       (set-git-status! :checkout-failed)
-                                       (set-git-error! error))))))
+                                       (set-git-status! repo-url :checkout-failed)
+                                       (set-git-error! repo-url error))))))
               (p/catch (fn [error]
-                         (set-git-status! :merge-failed)
-                         (set-git-error! error)
+                         (set-git-status! repo-url :merge-failed)
+                         (set-git-error! repo-url error)
                          (show-notification!
                           [:p.content
                            "Merges with conflicts are not supported yet, please "
@@ -261,40 +255,39 @@
                     (* config/auto-pull-secs 1000))))
 
 (defn get-latest-commit
-  [handler]
-  (-> (p/let [commits (git/log (state/get-current-repo)
+  [repo-url handler]
+  (-> (p/let [commits (git/log repo-url
                                (get-github-token)
                                1)]
         (handler (first commits)))
       (p/catch (fn [error]
                  (prn "get latest commit failed: " error)))))
 
-(defn set-latest-commit-if-exists! []
+(defn set-latest-commit-if-exists! [repo-url]
   (get-latest-commit
+   repo-url
    (fn [commit]
      (when-let [hash (gobj/get commit "oid")]
-       (set-latest-commit! hash)))))
-
+       (set-latest-commit! repo-url hash)))))
 ;; TODO: update latest commit
 (defn push
   [repo-url]
   (when (and
          (not (:edit? @state/state))
-         ;; (nil? (:git/error @state/state))
-         (= :should-push (:git/status @state/state)))
-    (set-git-status! :pushing)
+         (= :should-push (db/get-key-value repo-url :git/status)))
+    (set-git-status! repo-url :pushing)
     (let [token (get-github-token)]
       (util/p-handle
        (git/push repo-url token)
        (fn []
          (prn "Push successfully!")
-         (set-git-status! nil)
-         (set-git-error! nil)
-         (set-latest-commit-if-exists!))
+         (set-git-status! repo-url nil)
+         (set-git-error! repo-url nil)
+         (set-latest-commit-if-exists! repo-url))
        (fn [error]
          (prn "Failed to push, error: " error)
-         (set-git-status! :push-failed)
-         (set-git-error! error)
+         (set-git-status! repo-url :push-failed)
+         (set-git-error! repo-url error)
          (show-notification!
           [:p.content
            "Failed to push, please "
@@ -323,30 +316,33 @@
                                   (db/persist repo db)) 0)))))
 
 (defn clone
-  [repo]
+  [repo-url]
   (let [token (get-github-token)]
     (util/p-handle
      (do
-       (set-state-kv! :git/status :cloning)
-       (git/clone repo token))
+       (state/set-cloning? true)
+       (git/clone repo-url token))
      (fn []
-       (set-git-status! nil)
-       (state/set-current-repo! repo)
+       (state/set-cloning? false)
+       (state/set-current-repo! repo-url)
        (db/start-db-conn! (:me @state/state)
-                          repo
+                          repo-url
                           db-listen-to-tx!)
-       (db/mark-repo-as-cloned repo)
-       (set-latest-commit-if-exists!)
+       (db/mark-repo-as-cloned repo-url)
+       (set-latest-commit-if-exists! repo-url)
        (util/post (str config/api "repos")
-                  {:url repo}
+                  {:url repo-url}
                   (fn [result]
                     (swap! state/state
-                           update-in [:me :repos] conj result))
+                           update-in [:me :repos]
+                           (fn [repos]
+                             (util/distinct-by :url (conj repos result)))))
                   (fn [error]
                     (prn "Something wrong!"))))
      (fn [e]
-       (set-git-status! :clone-failed)
-       (set-git-error! e)
+       (state/set-cloning? false)
+       (set-git-status! repo-url :clone-failed)
+       (set-git-error! repo-url e)
        (prn "Clone failed, reason: " e)))))
 
 (defn new-notification
@@ -405,13 +401,12 @@
         (string/trim (state/get-edit-content))))
 
 (defn alter-file
-  ([path content]
-   (alter-file path (str "Update " path) content))
-  ([path commit-message content]
-   (alter-file path commit-message content false))
-  ([path commit-message content before?]
-   (let [token (get-github-token)
-         repo-url (state/get-current-repo)]
+  ([repo-url path content]
+   (alter-file repo-url path (str "Update " path) content))
+  ([repo-url path commit-message content]
+   (alter-file repo-url path commit-message content false))
+  ([repo-url path commit-message content before?]
+   (let [token (get-github-token)]
      (if before?
        (db/reset-file! repo-url path content))
      (util/p-handle
@@ -424,26 +419,24 @@
 ;; TODO: utf8 encode performance
 (defn check
   [heading]
-  (let [{:heading/keys [repo file marker meta uuid]} heading
+  (let [repo-url (state/get-current-repo)
+        {:heading/keys [file marker meta uuid]} heading
         pos (:pos meta)
-        repo (db/entity (:db/id repo))
         file (db/entity (:db/id file))
-        repo-url (:repo/url repo)
         file (:file/path file)]
     (when-let [content (db/get-file-content repo-url file)]
       (let [encoded-content (utf8/encode content)
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first marker "DONE")))]
-        (alter-file file (str marker " marked as DONE") content')))))
+        (alter-file repo-url file (str marker " marked as DONE") content')))))
 
 (defn uncheck
   [heading]
-  (let [{:heading/keys [repo file marker meta]} heading
+  (let [repo-url (state/get-current-repo)
+        {:heading/keys [file marker meta]} heading
         pos (:pos meta)
-        repo (db/entity (:db/id repo))
         file (db/entity (:db/id file))
-        repo-url (:repo/url repo)
         file (:file/path file)
         token (get-github-token)]
     (when-let [content (db/get-file-content repo-url file)]
@@ -451,7 +444,7 @@
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first "DONE" "TODO")))]
-        (alter-file file "DONE rollbacks to TODO." content')))))
+        (alter-file repo-url file "DONE rollbacks to TODO." content')))))
 
 (defn git-set-username-email!
   [{:keys [name email]}]
@@ -486,9 +479,12 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (when-not config/dev?
-    (periodically-pull repo-url pull-now?)
-    (periodically-push-tasks repo-url)))
+  (periodically-pull repo-url pull-now?)
+  (periodically-push-tasks repo-url)
+  ;; (when-not config/dev?
+  ;;   (periodically-pull repo-url pull-now?)
+  ;;   (periodically-push-tasks repo-url))
+  )
 
 (defn edit-journal!
   [journal]
@@ -677,7 +673,8 @@
 
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file dummy?] :as heading} value]
-  (let [value (string/trim value)]
+  (let [repo-url (state/get-current-repo)
+        value (string/trim value)]
     (if (not= (string/trim content)
               value)
       (let [file (db/entity (:db/id file))
@@ -694,7 +691,7 @@
                                              (+ (:pos meta) (utf8/length (utf8/encode content))))
                                            new-content)
             new-file-content (string/trim new-file-content)]
-        (alter-file file-path (str "Update " file-path) new-file-content true)))))
+        (alter-file repo-url file-path (str "Update " file-path) new-file-content true)))))
 
 (defn clone-and-pull
   [repo-url]

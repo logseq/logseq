@@ -31,10 +31,11 @@
   ([repo]
    (get-conn repo true))
   ([repo deref?]
-   (when-let [conn (get @conns (datascript-db repo))]
-     (if deref?
-       @conn
-       conn))))
+   (let [repo (if repo repo (state/get-current-repo))]
+     (when-let [conn (get @conns (datascript-db repo))]
+      (if deref?
+        @conn
+        conn)))))
 
 (defn remove-conn!
   [repo]
@@ -55,6 +56,10 @@
    ;; repo
    :repo/url        {:db/unique :db.unique/identity}
    :repo/cloned?    {}
+   :git/latest-commit {}
+   :git/status {}
+   ;; last error, better we should record all the errors
+   :git/error {}
 
    ;; file
    :file/path       {:db/unique :db.unique/identity}
@@ -106,8 +111,10 @@
   (reset! conn db))
 
 (defn transact!
-  [tx-data]
-  (d/transact! (get-conn (state/get-current-repo) false) tx-data))
+  ([tx-data]
+   (transact! (state/get-current-repo) tx-data))
+  ([repo-url tx-data]
+   (d/transact! (get-conn repo-url false) tx-data)))
 
 ;; (new TextEncoder().encode('foo')).length
 ;; (defn db-size
@@ -238,7 +245,7 @@
                         contents)
         all-data (-> (concat delete-files delete-headings file-contents headings-pages)
                      (util/remove-nils))]
-    (transact! all-data)))
+    (transact! repo-url all-data)))
 
 (defn get-headings-by-tag
   [repo tag]
@@ -251,16 +258,37 @@
            [(?pred $ ?tags)]]
       (get-conn repo) pred)))
 
+(defn remove-key
+  [repo-url key]
+  (transact! repo-url [[:db.fn/retractEntity [:db/ident key]]]))
+
 (defn set-key-value
-  [key value]
-  (transact! [(kv key value)]))
+  ([key value]
+   (set-key-value (state/get-current-repo) key))
+  ([repo-url key value]
+   (if value
+     (transact! repo-url [(kv key value)])
+     (remove-key repo-url key))))
 
 (defn get-key-value
   ([key]
-   (get-key-value (d/db (get-conn (state/get-current-repo) false))))
-  ([db key]
-   (some-> (d/entity db key)
-           key)))
+   (get-key-value (state/get-current-repo) key))
+  ([repo-url key]
+   (when-let [db (d/db (get-conn repo-url false))]
+     (some-> (d/entity db key)
+             key))))
+
+(defn debug!
+  []
+  (let [repos (->> (get-in @state/state [:me :repos])
+                   (map :url))]
+    (mapv (fn [repo]
+            {:repo/current (state/get-current-repo)
+             :repo repo
+             :git/status (get-key-value repo :git/status)
+             :git/latest-commit (get-key-value repo :git/latest-commit)
+             :git/error (get-key-value repo :git/error)})
+          repos)))
 
 (defn sort-by-pos
   [headings]
@@ -477,18 +505,20 @@
                        :file/content content}]
         delete-headings (delete-file-headings! repo-url file)
         headings-pages (extract-headings-pages file content utf8-content)]
-    (transact! (concat file-content delete-headings headings-pages))))
+    (transact! repo-url (concat file-content delete-headings headings-pages))))
 
 (defn get-file-content
-  [repo-url path]
-  (->> (d/q '[:find ?content
-              :in $ ?path
-              :where
-              [?file :file/path ?path]
-              [?file :file/content ?content]]
-         (get-conn repo-url) path)
-       (map first)
-       first))
+  ([path]
+   (get-file-content (state/get-current-repo) path))
+  ([repo-url path]
+   (->> (d/q '[:find ?content
+               :in $ ?path
+               :where
+               [?file :file/path ?path]
+               [?file :file/content ?content]]
+          (get-conn repo-url) path)
+        (map first)
+        first)))
 
 (defn get-file
   [path]

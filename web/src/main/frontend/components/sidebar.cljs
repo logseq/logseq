@@ -116,7 +116,7 @@
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   []
-  (let [cloning? (= :cloning (state/sub :git/status))
+  (let [cloning? (state/sub :repo/cloning?)
         importing-to-db? (state/sub :repo/importing-to-db?)
         loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)
@@ -148,8 +148,8 @@
   [state main-content]
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)
-        status (state/sub :git/status)
         current-repo (state/sub :git/current-repo)
+        status (db/get-key-value :git/status)
         pulling? (= :pulling status)]
     [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden
@@ -198,7 +198,7 @@
         (search/search)
         [:div.ml-4.flex.items-center.md:ml-6
          [:div {:class (if pulling? "loader")}
-          [:button.p-1.mr-1.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500
+          [:button.p-1.m-2.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500
            {:on-click handler/pull-current-repo}
            [:svg.h-6.w-6
             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
