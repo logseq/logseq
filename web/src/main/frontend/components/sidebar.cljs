@@ -19,17 +19,18 @@
 (rum/defc logo-or-repos < rum/reactive
   [current-repo]
   (if current-repo
-    (let [repos (state/sub [:me :repos])]
+    (let [repos (state/sub [:me :repos])
+          repos (->> repos
+                     (remove #(= (:url %) current-repo))
+                     (util/distinct-by :url))]
       [:div.flex-1
        [:div.flex.justify-between
         [:div.flex
-         [:a.hover:text-gray-300.text-gray-500.font-bold {:href current-repo
-                                  :target "_blank"}
-          (db/get-repo-path current-repo)]
-         (when (> (count repos) 1)
+         (if (>= (count repos) 1)
            (ui/dropdown-with-links
             (fn [{:keys [toggle-fn]}]
-              [:a.cursor {:on-click toggle-fn}
+              [:a.hover:text-gray-300.text-gray-500.font-bold {:on-click toggle-fn}
+               [:span (db/get-repo-path current-repo)]
                [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
             (mapv
              (fn [{:keys [id url]}]
@@ -38,7 +39,10 @@
                                       (state/set-current-repo! url))}})
              repos)
             (util/hiccup->class
-             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")))]
+             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg"))
+           [:a.hover:text-gray-300.text-gray-500.font-bold {:href current-repo
+                                                            :target "_blank"}
+            (db/get-repo-path current-repo)])]
         [:a.text-gray-500.font-bold.hover:text-gray-300 {:href "/repo/add"}
          "+"]]])
 
@@ -112,9 +116,9 @@
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   []
-  (let [cloning? (state/sub :cloning?)
-        importing-to-db? (state/sub :importing-to-db?)
-        loading-files? (state/sub :loading-files?)
+  (let [cloning? (= :cloning (state/sub :git/status))
+        importing-to-db? (state/sub :repo/importing-to-db?)
+        loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)
         journals-length (state/sub :journals-length)
         current-repo (state/sub :git/current-repo)

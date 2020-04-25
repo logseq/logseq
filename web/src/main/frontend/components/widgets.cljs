@@ -27,4 +27,5 @@
       (ui/button
         "Clone"
         (fn []
-          (handler/clone-and-pull (str prefix @repo-url))))]]))
+          (handler/clone-and-pull (str prefix @repo-url))
+          (handler/redirect! {:to :home})))]]))

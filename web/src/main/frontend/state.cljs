@@ -11,7 +11,6 @@
              :root-component nil
              :edit? false
              :edit-input-id nil
-             :repo/cloning? nil
              :repo/loading-files? nil
              :repo/importing-to-db? nil
              :me nil
@@ -59,6 +58,11 @@
   []
   (get-in @state [:me :repos]))
 
+(defn set-current-repo!
+  [repo]
+  (swap! state assoc :git/current-repo repo)
+  (storage/set :git/current-repo repo))
+
 (defn delete-repo!
   [repo]
   (swap! state update-in [:me :repos]
@@ -67,13 +71,7 @@
                        (:url %))
                    repos)))
   (when (= (get-current-repo) (:url repo))
-    (set-state! :git/current-repo
-                (first (get-repos)))))
-
-(defn set-current-repo!
-  [repo]
-  (swap! state assoc :git/current-repo repo)
-  (storage/set :git/current-repo repo))
+    (set-current-repo! (:url (first (get-repos))))))
 
 (defn ui-toggle-state!
   []

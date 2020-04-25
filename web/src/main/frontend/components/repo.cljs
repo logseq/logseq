@@ -4,7 +4,8 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.handler :as handler]))
+            [frontend.handler :as handler]
+            [frontend.util :as util]))
 
 (rum/defc add-repo
   []
@@ -14,7 +15,8 @@
 (rum/defc repos < rum/reactive
   []
   (sidebar/sidebar
-   (let [{:keys [repos]} (state/sub :me)]
+   (let [{:keys [repos]} (state/sub :me)
+         repos (util/distinct-by :url repos)]
      (if (seq repos)
        [:div#repos
         [:h1.title "Your Repos: "]

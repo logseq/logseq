@@ -64,8 +64,8 @@
               {:key (str "task-" uuid)
                :style {:padding-left 8
                        :padding-right 8}}
-              [:div.column
-               [:div.row {:style {:align-items "center"}}
+              [:div
+               [:div.flex.flex-row {:style {:align-items "center"}}
                 (case marker
                   (list "DOING" "IN-PROGRESS" "TODO")
                   (ui/checkbox {:on-change (fn [_]
@@ -84,7 +84,7 @@
                                              )})
 
                   nil)
-                [:div.row.ml-2
+                [:div.flex.flex-row.ml-2
                  (if priority
                    [:span.priority.mr-1
                     (str "#[" priority "]")])

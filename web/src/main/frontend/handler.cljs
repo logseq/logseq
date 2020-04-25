@@ -71,7 +71,6 @@
 ;; TODO: no atom version
 (defn load-files
   [repo-url]
-  (set-state-kv! :repo/cloning? false)
   (set-state-kv! :repo/loading-files? true)
   (let [files-atom (atom nil)]
     (-> (p/let [files (bean/->clj (git/list-files repo-url))]
@@ -328,9 +327,10 @@
   (let [token (get-github-token)]
     (util/p-handle
      (do
-       (set-state-kv! :repo/cloning? true)
+       (set-state-kv! :git/status :cloning)
        (git/clone repo token))
      (fn []
+       (set-git-status! nil)
        (state/set-current-repo! repo)
        (db/start-db-conn! (:me @state/state)
                           repo
@@ -345,7 +345,6 @@
                   (fn [error]
                     (prn "Something wrong!"))))
      (fn [e]
-       (set-state-kv! :repo/cloning? false)
        (set-git-status! :clone-failed)
        (set-git-error! e)
        (prn "Clone failed, reason: " e)))))
@@ -723,6 +722,14 @@
   (db/remove-conn! url)
   (storage/remove (db/datascript-db url))
   (clone-and-pull url))
+
+(defn redirect!
+  "If `push` is truthy, previous page will be left in history."
+  [{:keys [to path-params query-params push]
+    :or {push true}}]
+  (if push
+    (rfe/push-state to path-params query-params)
+    (rfe/replace-state to path-params query-params)))
 
 (defn start!
   []

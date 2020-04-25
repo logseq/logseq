@@ -4,8 +4,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.components.file :as file]
             [frontend.components.page :as page]
-            [frontend.components.agenda :as agenda]
-            [clojure.string :as string]))
+            [frontend.components.agenda :as agenda]))
 
 (def routes
   [["/"

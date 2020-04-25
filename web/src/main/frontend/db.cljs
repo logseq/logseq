@@ -54,7 +54,6 @@
 
    ;; repo
    :repo/url        {:db/unique :db.unique/identity}
-   :repo/cloning?   {}
    :repo/cloned?    {}
 
    ;; file

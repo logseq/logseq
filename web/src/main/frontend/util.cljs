@@ -311,3 +311,14 @@
         others (some->> (next lines)
                         (string/join "\n"))]
     [(first lines)]))
+
+(defn distinct-by
+  [k col]
+  (reduce
+   (fn [acc x]
+     (let [v (get x k)]
+       (if (some #(= v (get % k)) acc)
+         acc
+         (vec (conj acc x)))))
+   []
+   col))
