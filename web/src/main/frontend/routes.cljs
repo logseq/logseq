@@ -4,6 +4,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.components.file :as file]
             [frontend.components.page :as page]
+            [frontend.components.diff :as diff]
             [frontend.components.agenda :as agenda]))
 
 (def routes
@@ -34,6 +35,10 @@
    ["/all-pages"
     {:name :all-pages
      :view page/all-pages}]
+
+   ["/diff"
+    {:name :diff
+     :view diff/diff}]
 
    ;; Settings
    ;; ["/item/:id"

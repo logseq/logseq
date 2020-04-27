@@ -3,8 +3,10 @@
   (:require [promesa.core :as p]
             [frontend.util :as util]
             [clojure.string :as string]
+            [clojure.set :as set]
             [frontend.state :as state]
             [goog.object :as gobj]
+            [cljs-bean.core :as bean]
             ["/frontend/git_ext" :as git-ext]))
 
 ;; TODO: move to a js worker
@@ -61,7 +63,7 @@
                   {:dir (get-repo-dir repo-url)
                    :ref default-branch
                    :singleBranch true
-                   :depth 1
+                   :depth 100
                    :tags false})))
 
 (defn merge
@@ -108,6 +110,12 @@
                      :author {:name name
                               :email email}}))))
 
+(defn read-commit
+  [repo-url oid]
+  (js/git.readCommit (clj->js
+                      {:dir (get-repo-dir repo-url)
+                       :oid oid})))
+
 (defn push
   [repo-url token]
   (js/git.push (with-auth token
@@ -136,3 +144,64 @@
             diffs (map (fn [diff]
                          (update diff :path #(subs % 1))) diffs)]
       diffs)))
+
+;; https://isomorphic-git.org/docs/en/statusMatrix
+;; TODO: status should not be `pulling`, otherwise the `:deleted` part is weird.
+(defn get-status-matrix
+  ([repo-url]
+   (get-status-matrix repo-url "master"))
+  ([repo-url branch]
+   (p/let [matrix (js/git.statusMatrix
+                   (clj->js
+                    {:dir (get-repo-dir repo-url)
+                     :ref "HEAD"}))]
+     (let [matrix (bean/->clj matrix)]
+       (prn matrix)
+       ;; added, modified, deleted
+       {:added (filter (fn [[_file head-status _workdir-status _stage-status]]
+                         (= head-status 0))
+                       matrix)
+        :modified (filter (fn [[_file _head-status workdir-status _stage-status]]
+                            (= workdir-status 2))
+                          matrix)
+        :deleted (filter (fn [[_file _head-status workdir-status _stage-status]]
+                           (= workdir-status 0))
+                         matrix)}))))
+
+(defn find-common-base
+  ([repo-url remote-id local-id]
+   (find-common-base repo-url remote-id local-id (atom [local-id]) (atom [remote-id])))
+  ([repo-url remote-id local-id local-commits remote-commits]
+   ;; FIXME: p/plet not working
+   (p/let
+    [local-commit (read-commit repo-url local-id)]
+     (p/let [remote-commit (read-commit repo-url remote-id)]
+       (let [local-parent (first (get-in (bean/->clj local-commit) [:commit :parent]))
+
+             remote-parent (first (get-in (bean/->clj remote-commit) [:commit :parent]))]
+         (swap! local-commits conj local-parent)
+         (swap! remote-commits conj remote-parent)
+         (let [commons (set/intersection (set @local-commits)
+                                         (set @remote-commits))]
+           (if (seq commons)
+             (first commons)
+             (find-common-base repo-url local-parent remote-parent local-commits remote-commits))))))))
+
+(defn get-local-diffs
+  [repo-url remote-id local-id]
+  (get-diffs repo-url remote-id local-id))
+
+(defn read-blob
+  [repo-url oid path]
+  (js/git.readBlob (clj->js
+                    {:dir (get-repo-dir repo-url)
+                     :gitdir (str (get-repo-dir repo-url) ".git")
+                     :oid oid
+                     :path path})))
+
+(comment
+  (def local-id "fbf162130a5f1bb3479f53476cbcd3d563f10858")
+  (def remote-id "5c6472331d82dcac3baf49a9b9cdd526d42ad92f")
+  (def repo-url (state/get-current-repo))
+  (handle-merge-conflicts! repo-url remote-id local-id)
+  )

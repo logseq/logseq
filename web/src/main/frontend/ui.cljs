@@ -144,7 +144,7 @@
 
 (rum/defc notification < rum/reactive
   []
-  (let [show? (state/sub :notification/content)
+  (let [show? (state/sub :notification/show?)
         status (state/sub :notification/status)
         content (state/sub :notification/content)]
     (css-transition

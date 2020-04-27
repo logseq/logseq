@@ -255,13 +255,24 @@
                     (* config/auto-pull-secs 1000))))
 
 (defn get-latest-commit
-  [repo-url handler]
-  (-> (p/let [commits (git/log repo-url
-                               (get-github-token)
-                               1)]
-        (handler (first commits)))
-      (p/catch (fn [error]
-                 (prn "get latest commit failed: " error)))))
+  ([repo-url handler]
+   (get-latest-commit repo-url handler 1))
+  ([repo-url handler length]
+   (-> (p/let [commits (git/log repo-url
+                                (get-github-token)
+                                length)]
+         (handler (if (= length 1)
+                    (first commits)
+                    commits)))
+       (p/catch (fn [error]
+                  (prn "get latest commit failed: " error))))))
+
+(defn debug-latest-commits!
+  []
+  (get-latest-commit (state/get-current-repo)
+                    (fn [commits]
+                      (prn (mapv :oid (bean/->clj commits))))
+                    3))
 
 (defn set-latest-commit-if-exists! [repo-url]
   (get-latest-commit
@@ -269,6 +280,7 @@
    (fn [commit]
      (when-let [hash (gobj/get commit "oid")]
        (set-latest-commit! repo-url hash)))))
+
 ;; TODO: update latest commit
 (defn push
   [repo-url]

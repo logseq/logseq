@@ -13,7 +13,7 @@
      [:div.w-full.max-w-xs.mx-auto
       [:div
        [:div
-        [:h2 "Specify your repo:"]
+        [:h2 "Clone your repo:"]
         [:div.mt-2.mb-2.relative.rounded-md.shadow-sm
          [:div.absolute.inset-y-0.left-0.pl-3.flex.items-center.pointer-events-none
           [:span.text-gray-500.sm:text-sm.sm:leading-5
