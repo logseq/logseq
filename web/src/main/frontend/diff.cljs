@@ -1,5 +1,14 @@
 (ns frontend.diff
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            ;; [clj-diff.core :as diff]
+            ["diff" :as jsdiff]
+            [goog.object :as gobj]
+            [cljs-bean.core :as bean]))
+
+(defn diff
+  [s1 s2]
+  (-> ((gobj/get jsdiff "diffWords") s1 s2)
+      bean/->clj))
 
 ;; (find-position "** hello _w_" "hello w")
 (defn find-position

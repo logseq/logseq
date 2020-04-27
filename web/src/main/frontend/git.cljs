@@ -117,11 +117,14 @@
                        :oid oid})))
 
 (defn push
-  [repo-url token]
-  (js/git.push (with-auth token
-                 {:dir (get-repo-dir repo-url)
-                  :remote "origin"
-                  :ref default-branch})))
+  ([repo-url token]
+   (push repo-url token false))
+  ([repo-url token force?]
+   (js/git.push (with-auth token
+                  {:dir (get-repo-dir repo-url)
+                   :remote "origin"
+                   :ref default-branch
+                   :force force?}))))
 
 (defn add-commit
   [repo-url file message commit-ok-handler commit-error-handler]
@@ -199,9 +202,38 @@
                      :oid oid
                      :path path})))
 
+;; * await git.writeRef({
+;;                       *   fs,
+;;                       *   dir: '/tutorial',
+;;                       *   ref: 'refs/heads/another-branch',
+;;                       *   value: 'HEAD'
+;;                       * })
+(defn write-ref!
+  [repo-url oid]
+  (js/git.writeRef (clj->js
+                    {:dir (get-repo-dir repo-url)
+                     :ref (str "refs/heads/" default-branch)
+                     :value oid
+                     :force true})))
+
 (comment
   (def local-id "fbf162130a5f1bb3479f53476cbcd3d563f10858")
   (def remote-id "5c6472331d82dcac3baf49a9b9cdd526d42ad92f")
   (def repo-url (state/get-current-repo))
-  (handle-merge-conflicts! repo-url remote-id local-id)
+
+  (util/p-handle
+   (commit (frontend.state/get-current-repo) "merge resolve")
+   (fn []
+     (prn "commit success"))
+   (fn [error]
+     (prn error)))
+
+  (p/let [result (write-ref! (frontend.state/get-current-repo)
+                             "f47e3492e48cd6add268a7af7ca56a58601897de")]
+    (prn result))
+
+  (p/let [result (push (frontend.state/get-current-repo)
+                       (frontend.handler/get-github-token)
+                       true)]
+    (prn "push successfully!"))
   )

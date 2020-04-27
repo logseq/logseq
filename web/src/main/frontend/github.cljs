@@ -7,28 +7,37 @@
 ;; GET /repos/:owner/:repo/contents/:path?ref=oid
 ;; header 'authorization: Basic PASSWORD'
 (defn get-content
-  [token owner repo-name path ref]
-  (let [token (str "Basic "(b64/encodeString (str token ":x-oauth-basic")))
+  [token repo-url path ref ok-handler error-handler]
+  (let [[owner repo-name] (util/get-git-owner-and-repo repo-url)
+        token (str "Basic "(b64/encodeString (str token ":x-oauth-basic")))
         url (util/format "https://api.github.com/repos/%s/%s/contents/%s?ref=%s"
                          owner
                          repo-name
                          path
                          ref)]
-    (util/fetch url
-                (bean/->js {:method "get"
-                            :headers {:Accept "application/json"
-                                      :Content-Type "application/json"
-                                      :Authorization token}})
-                (fn [result]
-                  (prn (b64/decodeString (:content result))))
-                (fn [error]
-                  (prn "Github get content error: ")
-                  (js/console.dir error)))))
+    (util/fetch-raw url
+                    (bean/->js {:method "get"
+                                :headers {:Accept "application/vnd.github.v3.raw"
+                                          :Content-Type "application/json"
+                                          :Authorization token}})
+                    (fn [content]
+                      (ok-handler
+                       {:repo-url repo-url
+                        :path path
+                        :ref ref
+                        :content content}))
+                    (fn [error]
+                      (error-handler error)))))
 
 (comment
-  (get-content (frontend.handler/get-github-token)
-               "tiensonqin"
-               "notes"
-               "journals/2020_04.org"
-               "5c6472331d82dcac3baf49a9b9cdd526d42ad92f")
+  (let [repo (frontend.state/get-current-repo)]
+    (get-content (frontend.handler/get-github-token)
+                 repo
+                 "journals/2020_04.org"
+                 "5c6472331d82dcac3baf49a9b9cdd526d42ad92f"
+                 (fn [{:keys [owner repo path ref content]}]
+                   (swap! frontend.state/state
+                          assoc-in [:github/contents [repo path ref]] content))
+                 prn
+                 ))
   )

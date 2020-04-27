@@ -107,6 +107,20 @@
            (string/join " ")
            (string/trim)))
 
+(defn fetch-raw
+  ([url on-ok on-failed]
+   (fetch-raw url #js {} on-ok on-failed))
+  ([url opts on-ok on-failed]
+   (-> (js/fetch url opts)
+       (.then (fn [resp]
+                (if (>= (.-status resp) 400)
+                  (on-failed resp)
+                  (if (.-ok resp)
+                    (-> (.text resp)
+                        (.then bean/->clj)
+                        (.then #(on-ok %)))
+                    (on-failed resp))))))))
+
 (defn fetch
   ([url on-ok on-failed]
    (fetch url #js {} on-ok on-failed))
@@ -322,3 +336,7 @@
          (vec (conj acc x)))))
    []
    col))
+
+(defn get-git-owner-and-repo
+  [repo-url]
+  (take-last 2 (string/split repo-url #"/")))

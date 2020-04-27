@@ -28,7 +28,10 @@
              :ui/collapsed-headings #{}
              :edit-content ""
              :cursor-range nil
-             :cursor-pos nil}))
+             :cursor-pos nil
+
+             ;; [owner repo-name commit path] -> content
+             :github/contents {}}))
 
 (defn sub
   [ks]

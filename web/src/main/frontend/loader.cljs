@@ -3,5 +3,5 @@
             [goog.html.legacyconversions :as conv]))
 
 (defn load [url ok-handler]
-  (let [loader ^js (jsloader/safeLoad (conv/trustedResourceUrlFromString (str url)))]
-    (.addCallback loader ok-handler)))
+  (let [loader (jsloader/safeLoad (conv/trustedResourceUrlFromString (str url)))]
+    (.addCallback ^goog.net.jsloader loader ok-handler)))

@@ -21,7 +21,7 @@
   (if dev? path
       (str asset-domain path)))
 
-(def auto-pull-secs (if dev? 10 60))
+(def auto-pull-secs 60)
 (def auto-push-secs 10)
 
 ;; Add coding too

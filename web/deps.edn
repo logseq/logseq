@@ -13,7 +13,7 @@
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}
-                                thheller/shadow-cljs        {:mvn/version "RELEASE"}
+                                thheller/shadow-cljs        {:mvn/version "2.8.81"}
                                 binaryage/devtools          {:mvn/version "0.9.10"}
                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
                                 cider/cider-nrepl           {:mvn/version "0.23.0-SNAPSHOT"}}

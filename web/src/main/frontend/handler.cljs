@@ -206,8 +206,9 @@
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
            (not (:edit? @state/state))
-           (or (nil? status)
-               (= status :pulling)))
+           ;; (or (nil? status)
+           ;;     (= status :pulling))
+           )
       (set-git-status! repo-url :pulling)
       (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
         (p/let [result (git/fetch repo-url token)
@@ -270,9 +271,9 @@
 (defn debug-latest-commits!
   []
   (get-latest-commit (state/get-current-repo)
-                    (fn [commits]
-                      (prn (mapv :oid (bean/->clj commits))))
-                    3))
+                     (fn [commits]
+                       (prn (mapv :oid (bean/->clj commits))))
+                     3))
 
 (defn set-latest-commit-if-exists! [repo-url]
   (get-latest-commit
@@ -413,20 +414,20 @@
         (string/trim (state/get-edit-content))))
 
 (defn alter-file
-  ([repo-url path content]
-   (alter-file repo-url path (str "Update " path) content))
-  ([repo-url path commit-message content]
-   (alter-file repo-url path commit-message content false))
-  ([repo-url path commit-message content before?]
-   (let [token (get-github-token)]
-     (if before?
-       (db/reset-file! repo-url path content))
-     (util/p-handle
-      (fs/write-file (git/get-repo-dir repo-url) path content)
-      (fn [_]
-        (if-not before?
-          (db/reset-file! repo-url path content))
-        (git-add-commit repo-url path commit-message content))))))
+  [repo-url path content {:keys [commit-message before? commit?]
+                          :or {before? false
+                               commit? true}}]
+  (let [commit-message (or commit-message (str "Update " path))]
+    (if before?
+      (db/reset-file! repo-url path content))
+    (util/p-handle
+     (fs/write-file (git/get-repo-dir repo-url) path content)
+     (fn [_]
+       (if-not before?
+         (db/reset-file! repo-url path content))
+       (if commit?
+         (git-add-commit repo-url path commit-message content)
+         (git/add repo-url path))))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -441,7 +442,8 @@
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first marker "DONE")))]
-        (alter-file repo-url file (str marker " marked as DONE") content')))))
+        (alter-file repo-url file content'
+                    {:commit-message (str marker " marked as DONE")})))))
 
 (defn uncheck
   [heading]
@@ -456,7 +458,8 @@
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first "DONE" "TODO")))]
-        (alter-file repo-url file "DONE rollbacks to TODO." content')))))
+        (alter-file repo-url file content'
+                    {:commit-message "DONE rollbacks to TODO."})))))
 
 (defn git-set-username-email!
   [{:keys [name email]}]
@@ -703,7 +706,9 @@
                                              (+ (:pos meta) (utf8/length (utf8/encode content))))
                                            new-content)
             new-file-content (string/trim new-file-content)]
-        (alter-file repo-url file-path (str "Update " file-path) new-file-content true)))))
+        (alter-file repo-url file-path new-file-content
+                    {:commit-message (str "Update " file-path)
+                     :before? true})))))
 
 (defn clone-and-pull
   [repo-url]
