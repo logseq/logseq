@@ -28,16 +28,3 @@
                         :content content}))
                     (fn [error]
                       (error-handler error)))))
-
-(comment
-  (let [repo (frontend.state/get-current-repo)]
-    (get-content (frontend.handler/get-github-token)
-                 repo
-                 "journals/2020_04.org"
-                 "5c6472331d82dcac3baf49a9b9cdd526d42ad92f"
-                 (fn [{:keys [owner repo path ref content]}]
-                   (swap! frontend.state/state
-                          assoc-in [:github/contents [repo path ref]] content))
-                 prn
-                 ))
-  )
