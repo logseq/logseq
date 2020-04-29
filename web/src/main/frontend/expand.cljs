@@ -105,7 +105,7 @@
 ;; ;; Collapse acts like TOC
 (defn toggle-all!
   [id]
-  ;; default to level 3
+  ;; default to level 2
   (let [all-headings (get-headings id)
         headings (next all-headings)]
     (when (seq headings)
@@ -115,7 +115,7 @@
                 level (util/parse-int (d/attr heading "level"))]
             (if toggle-state
               (expand! id heading-id)
-              (when (= level 3)
+              (when (= level 2)
                 (collapse! id heading-id)
                 (state/collapse-heading! heading-id)))))
         (when toggle-state
