@@ -58,10 +58,10 @@
           (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
 (rum/defc menu-link
-  [options text]
+  [options child]
   [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150.cursor
    options
-   text])
+   child])
 
 (rum/defc dropdown-with-links
   ([content-fn links]

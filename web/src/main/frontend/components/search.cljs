@@ -9,7 +9,7 @@
             [goog.object :as gobj]))
 
 (rum/defc dropdown-content-wrapper [state content]
-  [:div.origin-top-left.absolute.left-0.mt-0.w-48.rounded-md.shadow-lg
+  [:div.origin-top-left.absolute.left-0.mt-0.rounded-md.shadow-lg
    {:class (case state
              "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
              "entered" "transition ease-out duration-100 transform opacity-100 scale-100"
@@ -17,9 +17,26 @@
              "exited" "transition ease-in duration-75 transform opacity-0 scale-95")}
    content])
 
+(rum/defc highlight
+  [content q]
+  (let [n (count content)
+        [before after] (string/split content (re-find (re-pattern (str "(?i)" q))
+                                                      content))
+        [before after] (if (>= n 64)
+                         [(if before (apply str (take-last 16 before)))
+                          (if after (apply str (take 16 after)))]
+                         [before after])]
+    [:p
+     (when-not (string/blank? before)
+       [:span before])
+     [:mark q]
+     (when-not (string/blank? after)
+       [:span after])]))
+
 (rum/defc search < rum/reactive
   []
   (let [search-result (state/sub :search/result)
+        search-q (state/sub :search/q)
         show-result? (boolean (seq search-result))]
     [:div.flex-1.flex
      [:div.w-full.flex.md:ml-0
@@ -39,13 +56,11 @@
          :default-value ""
          :on-change (fn [e]
                       (let [value (util/evalue e)]
-                        (when (string/blank? value)
-                          (handler/clear-search!))))
-         :on-key-up (fn [e]
-                      ;; Enter
-                      (let [value (util/evalue e)]
-                        (when (= 13 (gobj/get e "keyCode"))
-                         (handler/search value))))}]
+                        (if (string/blank? value)
+                          (handler/clear-search!)
+                          (do
+                            (state/set-q! value)
+                            (handler/search value)))))}]
        (ui/css-transition
         {:in show-result? :timeout 0}
         (fn [state]
@@ -53,9 +68,12 @@
             (dropdown-content-wrapper
              state
              [:div {:class "py-1 rounded-md bg-white shadow-xs"}
-              (for [[file content] search-result]
-                (ui/menu-link
-                 {:key (str "search-" file)
-                  :href (str "/file/" (b64/encodeString file))
-                  :on-click handler/clear-search!}
-                 (str file)))]))))]]]))
+              (for [{:heading/keys [uuid page content]} search-result]
+                (let [page (:page/name page)]
+                  (ui/menu-link
+                   {:key (str "search-" uuid)
+                    :href (str "/page/" (util/url-encode page) "#ls-heading-parent-" uuid)
+                    :on-click handler/clear-search!}
+                   [:div.flex-1
+                    [:div.text-sm.font-bold page]
+                    (highlight content search-q)])))]))))]]]))

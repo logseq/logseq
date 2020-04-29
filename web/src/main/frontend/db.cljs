@@ -33,9 +33,9 @@
   ([repo deref?]
    (let [repo (if repo repo (state/get-current-repo))]
      (when-let [conn (get @conns (datascript-db repo))]
-      (if deref?
-        @conn
-        conn)))))
+       (if deref?
+         @conn
+         conn)))))
 
 (defn remove-conn!
   [repo]
@@ -278,8 +278,8 @@
   ([repo-url key]
    (when-let [conn (get-conn repo-url false)]
      (when-let [db (d/db conn)]
-      (some-> (d/entity db key)
-              key)))))
+       (some-> (d/entity db key)
+               key)))))
 
 (defn debug!
   []
@@ -637,6 +637,16 @@
           (get-conn)
           page-name)
         seq-flatten)))
+
+(defn get-all-headings
+  []
+  (-> (d/q '[:find (pull ?h [:heading/uuid
+                             :heading/content
+                             {:heading/page [:page/name]}])
+             :where
+             [?h :heading/uuid]]
+        (get-conn))
+      seq-flatten))
 
 (defn start-db-conn!
   [me repo listen-handler]

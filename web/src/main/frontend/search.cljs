@@ -4,17 +4,15 @@
             [medley.core :as medley]
             [frontend.util :as util]))
 
-;; TODO: optimization
-;; get matched files/pages and highlighted content
+;; TODO: optimization, maybe something like elasticsearch?
 (defn search
-  [q]
-  (let [contents (->> (db/get-all-files-content (state/get-current-repo))
-                      (into {}))]
-    (->>
-     (medley/map-kv (fn [file content]
-                      [file
-                       (if (re-find (re-pattern (str "(?i)" q))
-                                    content)
-                         content)])
-                    contents)
-     (util/remove-nils))))
+  ([q]
+   (search q 5))
+  ([q limit]
+   (let [headings (db/get-all-headings)]
+     (some->>
+      (filter (fn [{:heading/keys [content]}]
+                (re-find (re-pattern (str "(?i)" q))
+                         content))
+              headings)
+      (take limit)))))

@@ -23,7 +23,7 @@
              :edit-file nil
              :journals-length 1
 
-             ;; :search/q nil
+             :search/q nil
              :ui/toggle-state false
              :ui/collapsed-headings {}
              :edit-content ""
@@ -121,3 +121,7 @@
 (defn clear-collapsed-headings!
   []
   (set-state! :ui/collapsed-headings {}))
+
+(defn set-q!
+  [value]
+  (set-state! :search/q value))
