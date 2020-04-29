@@ -1,7 +1,7 @@
 (ns frontend.config
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [frontend.state :as state]))
 
-(defonce tasks-org "tasks.org")
 (defonce hidden-file ".hidden")
 (defonce dev? ^boolean goog.DEBUG)
 (def website
@@ -21,23 +21,41 @@
   (if dev? path
       (str asset-domain path)))
 
-(def auto-pull-secs 60)
-(def auto-push-secs 10)
+(defn git-pull-secs
+  []
+  (or 60 (get-in @state/state [:config :git-pull-secs])))
 
-;; Add coding too
+(defn git-push-secs
+  []
+  (or 10 (get-in @state/state [:config :git-push-secs])))
 
-(defonce text-formats
-  #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c})
+;; TODO: 1. add more formats
+;;       2. configure in the file `logseq.json`
+
+(defn text-formats
+  []
+  (let [config-formats (some->> (get-in @state/state [:config :text-formats])
+                                (map :keyword)
+                                (set))]
+    (set/union
+     config-formats
+     #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c}
+     )))
+
+(defn img-formats
+  []
+  (let [config-formats (some->> (get-in @state/state [:config :image-formats])
+                                (map :keyword)
+                                (set))]
+    (set/union
+     config-formats
+     #{:gif :svg :jpeg :ico :png :jpg :bmp})))
 
 (defonce html-render-formats
   #{:org :md :markdown
     :adoc :asciidoc})
 
-(defonce img-formats
-  #{:gif :svg :jpeg :ico :png :jpg :bmp})
-
-(defonce all-formats
-  (set/union text-formats img-formats))
-
 (defonce hiccup-support-formats
   #{:org})
+
+(defonce config-file "logseq.json")

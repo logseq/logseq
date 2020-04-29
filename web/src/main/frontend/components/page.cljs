@@ -8,6 +8,7 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.components.hiccup :as hiccup]
             [frontend.components.reference :as reference]
+            [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [frontend.format.org-mode :as org]
             [frontend.format :as format]
@@ -21,7 +22,7 @@
     (get-in route-match [:parameters :path :name])))
 
 ;; A page is just a logical heading
-(rum/defcs page
+(rum/defcs page < rum/reactive
   [state]
   (let [encoded-page-name (get-page-name state)
         page-name (string/capitalize (util/url-decode encoded-page-name))
@@ -31,11 +32,25 @@
 
         ref-headings (db/get-page-referenced-headings page-name)
         ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
-        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name})]
+        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name})
+        page-name (string/capitalize page-name)
+        repo (state/get-current-repo)
+        starred? (contains? (set
+                             (some->> (state/sub [:config repo :starred])
+                                      (map string/capitalize)))
+                            page-name)]
     (sidebar/sidebar
      [:div.flex-1
-      [:h1.mb-2.font-medium.text-3xl {:style {:color "#161E2E"}}
-       (string/capitalize page-name)]
+      [:div.flex.flex-row
+       [:h1.title
+        page-name]
+       [:a.ml-1.text-gray-500.hover:text-indigo-900
+        {:on-click (fn []
+                     (handler/star-page! page-name starred?))}
+        (if starred?
+          (svg/star-solid "stroke-current")
+          (svg/star-outline "stroke-current"))]]
+
       (content/content encoded-page-name :org
                        {:hiccup hiccup})
 

@@ -7,10 +7,12 @@
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
+            [frontend.components.svg :as svg]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.handler :as handler]))
+            [frontend.handler :as handler]
+            [frontend.config :as config]))
 
 (def active-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
 (def inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
@@ -64,25 +66,26 @@
          :stroke-linecap "round"}]]
       title])))
 
-;; (rum/defc files-list
-;;   [file-active?]
-;;   (let [files (db/get-files)]
-;;     [:div.cursor-pointer.my-1.flex.flex-col.ml-2
-;;      (if (seq files)
-;;        (for [file files]
-;;          (let [encoded-path (b64/encodeString file)]
-;;            [:a {:key file
-;;                 :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
-;;                 :style {:color (if (file-active? encoded-path) "#FFF")}
-;;                 :href (str "/file/" encoded-path)}
-;;             file])))]))
+(rum/defc starred-pages < rum/reactive
+  [page-active?]
+  (let [repo (state/get-current-repo)
+        starred (state/sub [:config repo :starred])]
+    [:div.cursor-pointer.my-1.flex.flex-col.ml-2
+     (if (seq starred)
+       (for [page starred]
+         (let [encoded-page (util/url-encode page)]
+           [:a {:key encoded-page
+                :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
+                :style {:color (if (page-active? encoded-page) "#FFF")}
+                :href (str "/page/" encoded-page)}
+            page])))]))
 
 (rum/defc sidebar-nav < rum/reactive
   []
   (let [route-match (state/sub :route-match)
         active? (fn [route] (= route (get-in route-match [:data :name])))
-        ;; file-active? (fn [path]
-        ;;                (= path (get-in route-match [:parameters :path :path])))
+        page-active? (fn [page]
+                       (= page (get-in route-match [:parameters :path :name])))
         ]
     [:nav.flex-1.px-2.py-4.bg-gray-800
      (nav-item "Journals" "/"
@@ -99,18 +102,10 @@
                     :margin 12}}]
      ;; shortcuts
      [:div.flex {:class "mt-1 flex items-center px-2 py-2 text-base leading-6 rounded-md text-gray-200 transition ease-in-out duration-150"}
-      [:svg.ml-1.h-4.w-4.text-gray-500.transition.ease-in-out.duration-150
-       {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"
-        :style {:margin-right 20}}
-       [:path
-        {:d "M6.1 21.98a1 1 0 0 1-1.45-1.06l1.03-6.03-4.38-4.26a1 1 0 0 1 .56-1.71l6.05-.88 2.7-5.48a1 1 0 0 1 1.8 0l2.7 5.48 6.06.88a1 1 0 0 1 .55 1.7l-4.38 4.27 1.04 6.03a1 1 0 0 1-1.46 1.06l-5.4-2.85-5.42 2.85zm4.95-4.87a1 1 0 0 1 .93 0l4.08 2.15-.78-4.55a1 1 0 0 1 .29-.88l3.3-3.22-4.56-.67a1 1 0 0 1-.76-.54l-2.04-4.14L9.47 9.4a1 1 0 0 1-.75.54l-4.57.67 3.3 3.22a1 1 0 0 1 .3.88l-.79 4.55 4.09-2.15z"
-         :stroke-width "2",
-         :stroke-linejoin "round",
-         :stroke-linecap "round"}]]
+      (svg/star-solid (util/hiccup->class "mr-5.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150"))
       [:span.font-bold.text-gray-500
-       "Favorites"]]
-     ;; (files-list file-active?)
-     ]))
+       "Starred"]]
+     (starred-pages page-active?)]))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
@@ -216,7 +211,7 @@
           [{:title "Your Repos"
             :options {:href "/repos"}}
            {:title "Settings"
-            :options {:href "/settings"}}
+            :options {:href (str "/file/" (util/url-encode config/config-file))}}
            {:title "Sign out"
             :options {:on-click handler/sign-out!}}])]]]
       [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
@@ -225,5 +220,4 @@
         [:div.flex-1.m-6 {:style {:position "relative"
                                   :max-width 800}}
          main-content]]]
-
       (ui/notification)]]))

@@ -11,14 +11,13 @@
             [frontend.format.org-mode :as org]
             [frontend.format :as format]
             [frontend.components.content :as content]
-            [frontend.config :as config]
-            [goog.crypt.base64 :as b64]))
+            [frontend.config :as config]))
 
 (defn- get-path
   [state]
   (let [route-match (first (:rum/args state))
         encoded-path (get-in route-match [:parameters :path :path])
-        decoded-path (b64/decodeString encoded-path)]
+        decoded-path (util/url-decode encoded-path)]
     [encoded-path decoded-path]))
 
 (rum/defcs file
@@ -28,7 +27,7 @@
     (sidebar/sidebar
      (cond
        ;; image type
-       (and format (contains? config/img-formats format))
+       (and format (contains? (config/img-formats) format))
        [:img {:src path}]
 
        (and format (contains? config/hiccup-support-formats format))
@@ -37,7 +36,7 @@
              hiccup (hiccup/->hiccup headings {:id encoded-path})]
          (content/content encoded-path format {:hiccup hiccup}))
 
-       (and format (contains? config/text-formats format))
+       (and format (contains? (config/text-formats) format))
        (let [content (db/get-file path)]
          (content/content encoded-path format
                           {:content content

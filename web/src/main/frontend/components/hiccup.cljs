@@ -174,7 +174,7 @@
     ["Link" link]
     (let [{:keys [url label]} link]
       (let [href (string-of-url url)
-            img-formats (set (map name config/img-formats))]
+            img-formats (set (map name (config/img-formats)))]
         (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
           (image-link url href label)
           (let [[href label] (match url

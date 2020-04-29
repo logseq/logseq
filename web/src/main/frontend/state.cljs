@@ -1,7 +1,8 @@
 (ns frontend.state
   (:require [frontend.storage :as storage]
             [rum.core :as rum]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [clojure.string :as string]))
 
 ;; TODO: move git/latest-commit, git/status, git/error to corresponding datascript
 ;; dbs.
@@ -31,7 +32,9 @@
              :cursor-pos nil
 
              ;; [owner repo-name commit path] -> content
-             :github/contents {}}))
+             :github/contents {}
+             :config {}
+             }))
 
 (defn sub
   [ks]
@@ -125,3 +128,18 @@
 (defn set-q!
   [value]
   (set-state! :search/q value))
+
+(defn set-config!
+  [repo-url value]
+  (set-state! [:config repo-url] value))
+
+(defn star-page!
+  [repo-url page starred?]
+  (update-state! [:config repo-url :starred]
+                 (fn [pages]
+                   (if starred?
+                     (vec
+                      (remove
+                       #(= (string/lower-case page) (string/lower-case %))
+                       pages))
+                     (vec (distinct (conj pages page)))))))

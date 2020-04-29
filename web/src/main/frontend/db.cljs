@@ -9,7 +9,9 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [clojure.set :as set]
-            [frontend.utf8 :as utf8]))
+            [frontend.utf8 :as utf8]
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]))
 
 ;; TODO: Create a database for each repo.
 ;; Multiple databases
@@ -648,6 +650,14 @@
         (get-conn))
       seq-flatten))
 
+(defn reset-config!
+  [repo-url content]
+  (let [config (some->> content
+                        (js/JSON.parse)
+                        (bean/->clj))]
+    (state/set-config! repo-url config)
+    config))
+
 (defn start-db-conn!
   [me repo listen-handler]
   (let [db-name (datascript-db repo)
@@ -668,4 +678,7 @@
           (when (= (:schema stored-db) schema) ;; check for code update
             (reset-conn! db-conn attached-db)))
         (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-      (listen-handler repo db-conn))))
+      (listen-handler repo db-conn)
+
+      (let [config-content (get-file-content url config/config-file)]
+        (reset-config! url config-content)))))

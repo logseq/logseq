@@ -38,12 +38,4 @@
 
    ["/diff"
     {:name :diff
-     :view diff/diff}]
-
-   ;; Settings
-   ;; ["/item/:id"
-   ;;  {:name ::item
-   ;;   :view item-page
-   ;;   :parameters {:path {:id int?}
-   ;;                :query {(ds/opt :foo) keyword?}}}]
-   ])
+     :view diff/diff}]])

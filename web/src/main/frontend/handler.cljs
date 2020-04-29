@@ -70,7 +70,7 @@
 
 (defn- only-text-formats
   [files]
-  (keep-formats files config/text-formats))
+  (keep-formats files (config/text-formats)))
 
 (defn- only-html-render-formats
   [files]
@@ -82,9 +82,10 @@
   (set-state-kv! :repo/loading-files? true)
   (let [files-atom (atom nil)]
     (-> (p/let [files (bean/->clj (git/list-files repo-url))]
-          (if (contains? (set files) config/hidden-file)
-            (let [patterns-content (load-file repo-url config/hidden-file)]
-              (let [patterns (string/split patterns-content #"\n")]
+          (if (contains? (set files) config/config-file)
+            (p/let [config-content (load-file repo-url config/config-file)
+                    config (db/reset-config! repo-url config-content)]
+              (when-let [patterns (:hidden config)]
                 (reset! files-atom (remove (fn [path] (hidden? path patterns)) files))))
             (reset! files-atom files)))
         (p/finally
@@ -140,7 +141,20 @@
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
-        (git-add-commit repo-url path "create a month journal" default-content)))))
+        (git-add-commit repo-url path "Create a month journal"
+                        default-content)))))
+
+(defn create-config-file-if-not-exists
+  [repo-url]
+  (let [repo-dir (git/get-repo-dir repo-url)
+        path config/config-file
+        file-path (str "/" path)
+        default-content "{}"]
+    (p/let [file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+      (when-not file-exists?
+        (db/reset-file! repo-url path default-content)
+        (git-add-commit repo-url path "Create config file"
+                        default-content)))))
 
 (defn load-files-contents!
   [repo-url files ok-handler]
@@ -188,7 +202,8 @@
   (when (or diffs first-clone?)
     (p/let [files (load-files repo-url)
             _ (load-repo-to-db! repo-url files diffs first-clone?)]
-      (create-month-journal-if-not-exists repo-url))))
+      (create-month-journal-if-not-exists repo-url)
+      (create-config-file-if-not-exists repo-url))))
 
 (defn show-notification!
   [content status]
@@ -256,7 +271,7 @@
   (when-let [token (get-github-token)]
     (when pull-now? (pull repo-url token))
     (js/setInterval #(pull repo-url token)
-                    (* config/auto-pull-secs 1000))))
+                    (* (config/git-pull-secs) 1000))))
 
 (defn get-latest-commit
   ([repo-url handler]
@@ -321,12 +336,12 @@
     (p/let [changes (git/get-status-matrix repo)]
       (let [changes (seq (flatten (concat (vals changes))))]
         (p/let [commit-oid (if changes (git/commit repo commit-message))
-               _ (if changes (git/write-ref! repo commit-oid))
-               _ (git/push repo
-                           (get-github-token)
-                           true)]
-         (reset! pushing? false)
-         (redirect! {:to :home}))))))
+                _ (if changes (git/write-ref! repo commit-oid))
+                _ (git/push repo
+                            (get-github-token)
+                            true)]
+          (reset! pushing? false)
+          (redirect! {:to :home}))))))
 
 (defn re-render!
   []
@@ -504,7 +519,7 @@
         push (fn []
                (push repo-url))]
     (js/setInterval push
-                    (* config/auto-push-secs 1000))))
+                    (* (config/git-push-secs) 1000))))
 
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
@@ -729,6 +744,9 @@
             (load-db-and-journals! repo-url nil true)
             (periodically-pull-and-push repo-url {:pull-now? false}))))
 
+(defn star-page!
+  [page-name starred?]
+  (state/star-page! (state/get-current-repo) page-name starred?))
 
 (defn remove-repo!
   [{:keys [id url] :as repo}]
@@ -748,6 +766,28 @@
   (storage/remove (db/datascript-db url))
   (clone-and-pull url))
 
+(defn watch-config!
+  []
+  (add-watch state/state
+            :config-changed
+            (fn [_k _r old-state new-state]
+              (let [repos (seq (keys (:config new-state)))]
+                (doseq [repo repos]
+                  (when (not= (get-in new-state [:config repo])
+                              (get-in old-state [:config repo]))
+                    ;; persistent to file
+                    (let [repo-dir (git/get-repo-dir repo)
+                          file-path (str "/" config/config-file)
+                          content (js/JSON.stringify (bean/->js (get-in new-state [:config repo]))
+                                                     nil
+                                                     ;; indent spacing level
+                                                     2)]
+                      (fs/write-file repo-dir file-path content)
+                      (db/reset-file! repo config/config-file content)
+                      (git-add-commit repo config/config-file
+                                      "Config changed"
+                                      content))))))))
+
 (defn start!
   []
   (let [{:keys [repos] :as me} (set-me-if-exists!)]
@@ -756,4 +796,5 @@
       (let [repo url]
         (if (db/cloned? repo)
           (periodically-pull-and-push repo {:pull-now? true})
-          (clone-and-pull repo))))))
+          (clone-and-pull repo))))
+    (watch-config!)))

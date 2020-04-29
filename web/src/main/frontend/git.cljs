@@ -214,25 +214,3 @@
                      :ref (str "refs/heads/" default-branch)
                      :value oid
                      :force true})))
-
-(comment
-  (def local-id "fbf162130a5f1bb3479f53476cbcd3d563f10858")
-  (def remote-id "5c6472331d82dcac3baf49a9b9cdd526d42ad92f")
-  (def repo-url (state/get-current-repo))
-
-  (util/p-handle
-
-   (fn []
-     (prn "commit success"))
-   (fn [error]
-     (prn error)))
-
-  (p/let [result (write-ref! (frontend.state/get-current-repo)
-                             "f47e3492e48cd6add268a7af7ca56a58601897de")]
-    (prn result))
-
-  (p/let [result (push (frontend.state/get-current-repo)
-                       (frontend.handler/get-github-token)
-                       true)]
-    (prn "push successfully!"))
-  )
