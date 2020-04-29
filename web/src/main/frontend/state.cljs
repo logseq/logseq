@@ -25,7 +25,7 @@
 
              ;; :search/q nil
              :ui/toggle-state false
-             :ui/collapsed-headings #{}
+             :ui/collapsed-headings {}
              :edit-content ""
              :cursor-range nil
              :cursor-pos nil
@@ -79,20 +79,6 @@
   []
   (update-state! :ui/toggle-state not))
 
-(defn add-collapsed-heading!
-  [heading]
-  (update-state! :ui/collapsed-headings (fn [headings]
-                                          (conj headings heading))))
-
-(defn remove-collapsed-heading!
-  [heading]
-  (update-state! :ui/collapsed-headings (fn [headings]
-                                          (disj headings heading))))
-
-(defn clear-collapsed-headings!
-  []
-  (set-state! :ui/collapsed-headings #{}))
-
 (defn get-edit-content
   []
   (:edit-content @state))
@@ -123,3 +109,15 @@
 (defn set-cloning?
   [value]
   (set-state! :repo/cloning? value))
+
+(defn collapse-heading!
+  [heading-id]
+  (set-state! [:ui/collapsed-headings heading-id] true))
+
+(defn expand-heading!
+  [heading-id]
+  (set-state! [:ui/collapsed-headings heading-id] false))
+
+(defn clear-collapsed-headings!
+  []
+  (set-state! :ui/collapsed-headings {}))

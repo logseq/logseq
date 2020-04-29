@@ -159,7 +159,6 @@
                     {:dir (get-repo-dir repo-url)
                      :ref "HEAD"}))]
      (let [matrix (bean/->clj matrix)]
-       (prn matrix)
        ;; added, modified, deleted
        {:added (filter (fn [[_file head-status _workdir-status _stage-status]]
                          (= head-status 0))
@@ -222,7 +221,7 @@
   (def repo-url (state/get-current-repo))
 
   (util/p-handle
-   (commit (frontend.state/get-current-repo) "merge resolve")
+
    (fn []
      (prn "commit success"))
    (fn [error]

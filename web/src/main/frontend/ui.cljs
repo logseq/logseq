@@ -86,11 +86,14 @@
     modal-class)))
 
 (rum/defc button
-  [text on-click]
-  [:button.inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1
-   {:type "button"
-    :on-click on-click}
-   text])
+  [text on-click & {:keys [background]}]
+  (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
+        class (if background (string/replace class "indigo" background) class)]
+    [:button
+    {:type "button"
+     :class (util/hiccup->class class)
+     :on-click on-click}
+    text]))
 
 (rum/defc notification-content
   [state content status]

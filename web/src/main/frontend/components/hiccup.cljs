@@ -11,6 +11,7 @@
             [goog.dom :as gdom]
             [frontend.expand :as expand]
             [frontend.components.editor :as editor]
+            [frontend.components.svg :as svg]
             [frontend.handler :as handler]
             [goog.object :as gobj]))
 
@@ -258,7 +259,8 @@
   (or
    ;; non heading children
    (when-let [node (gdom/getElement heading-id)]
-     (> (count (array-seq (d/children node))) 1))
+     (> (count (expand/get-heading-body node))
+        1))
 
    ;; other headings children
    (when-let [next-heading (gobj/get (gdom/getElement heading-id)
@@ -269,86 +271,82 @@
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::control-show?)
   (rum/local false ::edit?)
+  (rum/local false ::collapsed?)
   [state {:heading/keys [uuid level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
   (let [edit? (get state ::edit?)
         control-show? (get state ::control-show?)
         heading-id (str "ls-heading-parent-" uuid)
-        collapsed-headings (state/sub :ui/collapsed-headings)
-        collapsed? (contains? collapsed-headings uuid)
-        class "control block no-underline text-gray-700 hover:bg-gray-100 transition ease-in-out duration-150 mr-1"
-        class (cond
-                collapsed?
-                (str class " caret-right")
-
-                (and @control-show?
-                     (not collapsed?)
-                     ;; have heading children
-                     ;; (.nextElementSibling (gdom/getElement heading-id))
-                     (has-children? heading-id level))
-                (str class " caret-down")
-
-                :else
-                class)]
+        collapsed-atom? (get state ::collapsed?)
+        toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
+        collapsed? (or toggle-collapsed? @collapsed-atom?)]
     (let [edit-input-id (str "edit-box-" uuid)]
-      [:div.ls-heading-parent.flex-1 {:key (str uuid)
-                                      :id heading-id
-                                      :level level}
-       (if show-page?
-         (let [page (db/entity (:db/id page))]
-           [:h2
-            [:a {:href (str "/page/" (util/url-encode (:page/name page)))}
-             (:page/name page)]]))
+      (when-not lock?
+        [:div.ls-heading-parent.flex-1 {:key (str uuid)
+                                        :id heading-id
+                                        :level level}
+         (if show-page?
+           (let [page (db/entity (:db/id page))]
+             [:h2
+              [:a {:href (str "/page/" (util/url-encode (:page/name page)))}
+               (:page/name page)]]))
 
-       ;; control
-       [:div.flex.flex-row
-        {:style {:cursor "pointer"}
-         :on-mouse-over (fn []
-                          (when (has-children? heading-id level)
+         ;; control
+         [:div.flex.flex-row
+          {:style {:cursor "pointer"}
+           :on-mouse-over (fn []
+                            (when (has-children? heading-id level)
                               (reset! control-show? true)))
-         :on-mouse-out (fn []
-                         (when (has-children? heading-id level)
-                           (reset! control-show? false)))}
-        [:a.heading-control
-         {:id (str "control-" uuid)
-          :class class
-          :on-click (fn []
-                      (let [id (str "ls-heading-parent-" uuid)]
-                        (if collapsed?
-                          (do
+           :on-mouse-out (fn []
+                           (when (has-children? heading-id level)
+                             (reset! control-show? false)))}
+          [:a.heading-control.pt-1
+           {:id (str "control-" uuid)
+            :class "block no-underline text-gray-700 hover:text-gray-700 transition ease-in-out duration-150 mr-1"
+            :on-click (fn []
+                        (let [id (str "ls-heading-parent-" uuid)]
+                          (if collapsed?
                             (expand/expand! (:id config) id)
-                            (state/remove-collapsed-heading! uuid))
-                          (do
-                            (expand/collapse! (:id config) id)
-                            (state/add-collapsed-heading! uuid)))))}]
+                            (expand/collapse! (:id config) id))
+                          (reset! collapsed-atom? (not collapsed?))))}
+           (cond
+             collapsed?
+             (svg/caret-right)
 
-        (if @edit?
-          (editor/box content {:on-hide (fn [value]
-                                          (reset! edit? false)
-                                          (let [current-input (:edit-input-id @state/state)]
-                                            (when (or (nil? current-input)
-                                                      (= current-input edit-input-id))
-                                              (swap! state/state assoc
-                                                     :edit? false
-                                                     :edit-input-id nil)))
-                                          (handler/save-heading-if-changed! heading value))
-                               :dummy? dummy?}
-                      edit-input-id)
-          [:div.flex-1 {:on-click (fn [e]
-                                    (when-not (util/link? (gobj/get e "target"))
-                                      (reset! edit? true)
-                                      (handler/reset-cursor-range! (gdom/getElement heading-id))
-                                      (swap! state/state assoc
-                                             :edit? true
-                                             :edit-input-id edit-input-id)))}
-           (when-not lock?
-             heading-part)
+             (and @control-show?
+                  (has-children? heading-id level))
+             (svg/caret-down)
 
-           ;; non-heading children
-           (when (seq children)
-             (for [child children]
-               (let [block (block config child)]
-                 (rum/with-key (heading-child block)
-                   (cljs.core/random-uuid)))))])]])))
+             :else
+             nil)]
+
+          (if @edit?
+            (editor/box content {:on-hide (fn [value]
+                                            (reset! edit? false)
+                                            (let [current-input (:edit-input-id @state/state)]
+                                              (when (or (nil? current-input)
+                                                        (= current-input edit-input-id))
+                                                (swap! state/state assoc
+                                                       :edit? false
+                                                       :edit-input-id nil)))
+                                            (handler/save-heading-if-changed! heading value))
+                                 :dummy? dummy?}
+                        edit-input-id)
+            [:div.flex-1.heading-body
+             {:on-click (fn [e]
+                          (when-not (util/link? (gobj/get e "target"))
+                            (reset! edit? true)
+                            (handler/reset-cursor-range! (gdom/getElement heading-id))
+                            (swap! state/state assoc
+                                   :edit? true
+                                   :edit-input-id edit-input-id)))}
+             heading-part
+
+             ;; non-heading children
+             (when (seq children)
+               (for [child children]
+                 (let [block (block config child)]
+                   (rum/with-key (heading-child block)
+                     (cljs.core/random-uuid)))))])]]))))
 
 (defn heading
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children]

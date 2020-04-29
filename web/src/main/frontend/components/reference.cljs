@@ -21,6 +21,9 @@
         ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
         ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name})]
     [:div.page-references
-     [:h2.font-bold.text-gray-400.mt-6 (str (count ref-headings) " Linked References")]
+     (let [n-ref (count ref-headings)]
+       (if (> n-ref 0)
+         [:h2.font-bold.text-gray-400.mt-6 (let []
+                                             (str n-ref " Linked References"))]))
      (content/content encoded-page-name :org
                       {:hiccup ref-hiccup})]))

@@ -39,7 +39,10 @@
       (content/content encoded-page-name :org
                        {:hiccup hiccup})
 
-      [:h2.font-bold.text-gray-400.mt-6 (str (count ref-headings) " Linked References")]
+      (let [n-ref (count ref-headings)]
+        (if (> n-ref 0)
+          [:h2.font-bold.text-gray-400.mt-6 (let []
+                                              (str n-ref " Linked References"))]))
       (content/content encoded-page-name :org
                        {:hiccup ref-hiccup})])))
 

@@ -34,77 +34,90 @@
                                  (> (get-level node) level))))]
     nodes))
 
+(defn get-heading-body
+  [node]
+  (some->
+   (d/sel node [".heading-body"])
+   (array-seq)
+   (next)
+   (seq)))
+
 (defn collapse-non-heading!
   [id]
   (when-let [node (gdom/getElement id)]
-    (let [children (next (array-seq (d/children node)))]
+    (let [[self & children] (array-seq (d/children node))]
+      (when-let [heading-body (get-heading-body self)]
+        (doseq [node heading-body]
+          (d/hide! heading-body)))
       (doseq [node children]
         (d/hide! node)))))
 
 (defn expand-non-heading!
   [id]
   (when-let [node (gdom/getElement id)]
-    (let [children (next (array-seq (d/children node)))]
+    (let [[self & children] (array-seq (d/children node))]
+      (when-let [heading-body (get-heading-body self)]
+        (doseq [node heading-body]
+          (d/show! node)))
       (doseq [node children]
         (d/show! node)))))
-
-(defn conj-heading!
-  [heading-id]
-  (let [id (uuid (string/replace heading-id "ls-heading-parent-" ""))]
-    (state/add-collapsed-heading! id)))
-(defn disj-heading!
-  [heading-id]
-  (let [id (uuid (string/replace heading-id "ls-heading-parent-" ""))]
-    (state/remove-collapsed-heading! id)))
 
 (defn collapse!
   [headings-id heading-id]
   (let [all-headings (get-headings headings-id)]
     (collapse-non-heading! heading-id)
     (when-let [node (gdom/getElement heading-id)]
-      (let [children (get-heading-children all-headings node)]
-        (doseq [node children]
-          (conj-heading! (gobj/get node "id"))
-          (d/hide! node))))
-    (conj-heading! heading-id)))
+      (let [root-level (d/attr node "level")]
+        (let [children (get-heading-children all-headings node)]
+          (doseq [node children]
+            (let [child-level (d/attr node "level")]
+              (when (and root-level
+                         child-level
+                         (= 1 (- (util/parse-int child-level)
+                                 (util/parse-int root-level))))
+                (d/add-class! node "is-collapsed"))
+              (d/hide! node))))))))
 
 (defn expand!
   [headings-id heading-id]
   (let [all-headings (get-headings headings-id)]
+    (state/expand-heading! heading-id)
     (expand-non-heading! heading-id)
     (when-let [node (gdom/getElement heading-id)]
-      (let [children (get-heading-children all-headings node)]
-        (doseq [node children]
-          (disj-heading! (gobj/get node "id"))
-          (d/show! node))))
-    (disj-heading! heading-id)))
+      (d/remove-class! node "is-collapsed")
+      (let [root-level (d/attr node "level")]
+        (let [children (get-heading-children all-headings node)]
+          (doseq [node children]
+            (let [child-level (d/attr node "level")
+                  collapsed? (d/has-class? node "is-collapsed")
+                  next-child? (and collapsed?
+                                   root-level
+                                   child-level
+                                   (= 1 (- (util/parse-int child-level)
+                                           (util/parse-int root-level))))]
+              (when next-child?
+                (d/remove-class! node "is-collapsed"))
+              (when (or (not collapsed?)
+                        next-child?)
+                (d/show! node)))))))))
 
-(defn get-control-node
-  [heading]
-  (let [heading-id (string/replace (gobj/get heading "id") "ls-heading-parent-" "")
-        control-id (str "control-" heading-id)]
-    (gdom/getElement control-id)))
 
 ;; ;; Collapse acts like TOC
 (defn toggle-all!
   [id]
+  ;; default to level 3
   (let [all-headings (get-headings id)
         headings (next all-headings)]
     (when (seq headings)
       (let [toggle-state (:ui/toggle-state @state/state)]
-       (doseq [heading headings]
-         (when-let [element (get-control-node heading)]
-           (if toggle-state
-             ;; expand
-             (do
-               (d/remove-class! element "caret-right")
-               (d/add-class! element "caret-down")
-               (expand! id (gobj/get heading "id")))
-
-             (do
-               (d/remove-class! element "caret-down")
-               (d/add-class! element "caret-right")
-               (collapse! id (gobj/get heading "id"))))))
-       (when toggle-state
-         (state/clear-collapsed-headings!))
-       (state/ui-toggle-state!)))))
+        (doseq [heading headings]
+          (let [heading-id (gobj/get heading "id")
+                level (util/parse-int (d/attr heading "level"))]
+            (if toggle-state
+              (expand! id heading-id)
+              (when (= level 3)
+                (collapse! id heading-id)
+                (state/collapse-heading! heading-id)))))
+        (when toggle-state
+          (state/clear-collapsed-headings!))
+        (state/ui-toggle-state!)))))

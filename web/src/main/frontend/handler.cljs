@@ -43,6 +43,14 @@
   [repo-url path]
   (fs/read-file (git/get-repo-dir repo-url) path))
 
+(defn redirect!
+  "If `push` is truthy, previous page will be left in history."
+  [{:keys [to path-params query-params push]
+    :or {push true}}]
+  (if push
+    (rfe/push-state to path-params query-params)
+    (rfe/replace-state to path-params query-params)))
+
 (defn- hidden?
   [path patterns]
   (some (fn [pattern]
@@ -188,12 +196,11 @@
          :notification/show? true
          :notification/content content
          :notification/status status)
-  (when-not (= status :error)
-    (js/setTimeout #(swap! state/state assoc
-                           :notification/show? false
-                           :notification/content nil
-                           :notification/status nil)
-                   5000)))
+  (js/setTimeout #(swap! state/state assoc
+                         :notification/show? false
+                         :notification/content nil
+                         :notification/status nil)
+                 5000))
 
 (defn clear-storage
   []
@@ -231,16 +238,12 @@
                          (set-git-error! repo-url error)
                          (show-notification!
                           [:p.content
-                           "Merges with conflicts are not supported yet, please "
+                           "Failed to merge, please "
                            [:span.text-gray-700.font-bold
-                            "make sure saving all your changes elsewhere"]
-                           ". After that, click "
-                           [:a.font-bold {:href ""
-                                          ;; TODO: discard current changes then continue to pull instead of clone again
-                                          :on-click clear-storage}
-                            "Pull again"]
-                           " to pull the latest changes."]
-                          :error)))))))))
+                            "resolve any diffs first."]]
+                          :error)
+                         (redirect! {:to :diff})
+                         ))))))))
 
 (defn pull-current-repo
   []
@@ -305,13 +308,25 @@
           [:p.content
            "Failed to push, please "
            [:span.text-gray-700.font-bold
-            "make sure saving all your changes elsewhere"]
-           ". After that, click "
-           [:a.font-bold {:href ""
-                          :on-click clear-storage}
-            "Pull again"]
-           " to pull the latest changes."]
-          :error))))))
+            "resolve any diffs first."]]
+          :error)
+         (p/let [result (git/fetch repo-url (get-github-token))
+                 {:keys [fetchHead]} (bean/->clj result)
+                 _ (set-latest-commit! repo-url fetchHead)]
+           (redirect! {:to :diff})))))))
+
+(defn commit-and-force-push!
+  [commit-message pushing?]
+  (let [repo (frontend.state/get-current-repo)]
+    (p/let [changes (git/get-status-matrix repo)]
+      (let [changes (seq (flatten (concat (vals changes))))]
+        (p/let [commit-oid (if changes (git/commit repo commit-message))
+               _ (if changes (git/write-ref! repo commit-oid))
+               _ (git/push repo
+                           (get-github-token)
+                           true)]
+         (reset! pushing? false)
+         (redirect! {:to :home}))))))
 
 (defn re-render!
   []
@@ -494,11 +509,11 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url)
-  ;; (when-not config/dev?
-  ;;   (periodically-pull repo-url pull-now?)
-  ;;   (periodically-push-tasks repo-url))
+  ;; (periodically-pull repo-url pull-now?)
+  ;; (periodically-push-tasks repo-url)
+  (when-not config/dev?
+    (periodically-pull repo-url pull-now?)
+    (periodically-push-tasks repo-url))
   )
 
 (defn edit-journal!
@@ -736,14 +751,6 @@
   (db/remove-conn! url)
   (storage/remove (db/datascript-db url))
   (clone-and-pull url))
-
-(defn redirect!
-  "If `push` is truthy, previous page will be left in history."
-  [{:keys [to path-params query-params push]
-    :or {push true}}]
-  (if push
-    (rfe/push-state to path-params query-params)
-    (rfe/replace-state to path-params query-params)))
 
 (defn start!
   []

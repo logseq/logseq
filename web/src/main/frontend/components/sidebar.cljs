@@ -127,6 +127,9 @@
        cloning?
        [:div "Cloning ..."]
 
+       (seq latest-journals)
+       (journal/journals latest-journals)
+
        importing-to-db?
        [:div "Parsing files ..."]
 
@@ -137,10 +140,7 @@
        (widgets/add-repo)
 
        (nil? (:email me))
-       (settings/set-email)
-
-       (seq latest-journals)
-       (journal/journals latest-journals))]))
+       (settings/set-email))]))
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
