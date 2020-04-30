@@ -142,7 +142,7 @@
         repo
         (fn [commit]
           (let [local-oid (gobj/get commit "oid")
-                remote-oid (db/sub-key-value repo
+                remote-oid (db/get-key-value repo
                                              :git/latest-commit)]
             (p/let [result (git/get-local-diffs repo remote-oid local-oid)]
               (reset! diffs result)

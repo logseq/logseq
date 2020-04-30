@@ -110,15 +110,10 @@
   [repo-url value]
   (db/set-key-value repo-url :git/error (if value (str value))))
 
-(defn git-add-commit
-  [repo-url file message content]
-  (set-git-status! repo-url :commit)
-  (git/add-commit repo-url file message
-                  (fn []
-                    (set-git-status! repo-url :should-push))
-                  (fn [error]
-                    (set-git-status! repo-url :commit-failed)
-                    (set-git-error! repo-url error))))
+(defn git-add
+  [repo-url file]
+  (p/let [_ (git/add repo-url file)]
+    (set-git-status! repo-url :should-push)))
 
 ;; journals
 
@@ -147,8 +142,7 @@
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
-        (git-add-commit repo-url path "Create a month journal"
-                        default-content)))))
+        (git-add repo-url path)))))
 
 (defn create-config-file-if-not-exists
   [repo-url]
@@ -159,8 +153,7 @@
     (p/let [file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
-        (git-add-commit repo-url path "Create config file"
-                        default-content)))))
+        (git-add repo-url path)))))
 
 (defn load-files-contents!
   [repo-url files ok-handler]
@@ -313,29 +306,33 @@
   (when (and
          (not (:edit-input-id @state/state))
          (= :should-push (db/get-key-value repo-url :git/status)))
-    (set-git-status! repo-url :pushing)
-    (let [token (get-github-token)]
-      (util/p-handle
-       (git/push repo-url token)
-       (fn []
-         (prn "Push successfully!")
-         (set-git-status! repo-url nil)
-         (set-git-error! repo-url nil)
-         (set-latest-commit-if-exists! repo-url))
-       (fn [error]
-         (prn "Failed to push, error: " error)
-         (set-git-status! repo-url :push-failed)
-         (set-git-error! repo-url error)
-         (show-notification!
-          [:p.content
-           "Failed to push, please "
-           [:span.text-gray-700.font-bold
-            "resolve any diffs first."]]
-          :error)
-         (p/let [result (git/fetch repo-url (get-github-token))
-                 {:keys [fetchHead]} (bean/->clj result)
-                 _ (set-latest-commit! repo-url fetchHead)]
-           (redirect! {:to :diff})))))))
+    ;; auto commit if there are any un-committed changes
+    (p/let [changed-files (git/get-status-matrix (state/get-current-repo))
+            _commit-result (when (seq (flatten (vals changed-files)))
+                             (git/commit repo-url "Logseq auto save"))]
+      (set-git-status! repo-url :pushing)
+      (let [token (get-github-token)]
+        (util/p-handle
+         (git/push repo-url token)
+         (fn []
+           (prn "Push successfully!")
+           (set-git-status! repo-url nil)
+           (set-git-error! repo-url nil)
+           (set-latest-commit-if-exists! repo-url))
+         (fn [error]
+           (prn "Failed to push, error: " error)
+           (set-git-status! repo-url :push-failed)
+           (set-git-error! repo-url error)
+           (show-notification!
+            [:p.content
+             "Failed to push, please "
+             [:span.text-gray-700.font-bold
+              "resolve any diffs first."]]
+            :error)
+           (p/let [result (git/fetch repo-url (get-github-token))
+                   {:keys [fetchHead]} (bean/->clj result)
+                   _ (set-latest-commit! repo-url fetchHead)]
+             (redirect! {:to :diff}))))))))
 
 (defn commit-and-force-push!
   [commit-message pushing?]
@@ -444,23 +441,14 @@
         (string/trim (state/get-edit-content))))
 
 (defn alter-file
-  [repo-url path content {:keys [commit-message before? commit? reset?]
-                          :or {before? false
-                               commit? true
-                               reset? true}}]
-  (let [commit-message (or commit-message (str "Update " path))]
-    (if (and reset? before?)
-      (db/reset-file! repo-url path content))
-    (util/p-handle
-     (fs/write-file (git/get-repo-dir repo-url) path content)
-     (fn [_]
-       (if (and reset? (not before?))
-         (db/reset-file! repo-url path content))
-       (if commit?
-         (git-add-commit repo-url path commit-message content)
-         (do
-           (git/add repo-url path)
-           (set-git-status! repo-url :should-push)))))))
+  [repo-url path content {:keys [reset?]
+                          :or {reset? true}}]
+  (when reset?
+    (db/reset-file! repo-url path content))
+  (util/p-handle
+   (fs/write-file (git/get-repo-dir repo-url) path content)
+   (fn [_]
+     (git-add repo-url path))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -475,8 +463,7 @@
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first marker "DONE")))]
-        (alter-file repo-url file content'
-                    {:commit? false})))))
+        (alter-file repo-url file content' nil)))))
 
 (defn uncheck
   [heading]
@@ -491,8 +478,7 @@
             content' (str (utf8/substring encoded-content 0 pos)
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first "DONE" "TODO")))]
-        (alter-file repo-url file content'
-                    {:commit? false})))))
+        (alter-file repo-url file content' nil)))))
 
 (defn git-set-username-email!
   [{:keys [name email]}]
@@ -523,9 +509,11 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (when-not config/dev?
-    (periodically-pull repo-url pull-now?)
-    (periodically-push-tasks repo-url)))
+  ;; (when-not config/dev?
+  ;;   (periodically-pull repo-url pull-now?)
+  ;;   (periodically-push-tasks repo-url))
+  (periodically-pull repo-url pull-now?)
+  (periodically-push-tasks repo-url))
 
 (defn edit-journal!
   [journal]
@@ -706,31 +694,32 @@
                  (show-notification! "Email already exists!"
                                      :error)))))
 
+(defn get-new-content
+  [{:heading/keys [uuid content meta dummy?] :as heading} file-content value]
+  (let [new-content (str value "\n")
+        new-content (if dummy?
+                      (str "\n" new-content)
+                      new-content)
+        new-file-content (utf8/insert! file-content
+                                       (:pos meta)
+                                       (if (or dummy? (string/blank? content))
+                                         (:pos meta)
+                                         (+ (:pos meta) (utf8/length (utf8/encode content))))
+                                       new-content)]
+    (string/trim new-file-content)))
+
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file dummy?] :as heading} value opts]
+  [{:heading/keys [uuid content meta file dummy?] :as heading} value {:keys [new-content] :as opts}]
   (let [repo-url (state/get-current-repo)
         value (string/trim value)]
-    (if (not= (string/trim content)
-              value)
+    (when (not= (string/trim content) value)
       (let [file (db/entity (:db/id file))
             file-content (:file/content file)
-            file-path (:file/path file)
-            new-content (str value "\n")
-            new-content (if dummy?
-                          (str "\n" new-content)
-                          new-content)
-            new-file-content (utf8/insert! file-content
-                                           (:pos meta)
-                                           (if (or dummy? (string/blank? content))
-                                             (:pos meta)
-                                             (+ (:pos meta) (utf8/length (utf8/encode content))))
-                                           new-content)
-            new-file-content (string/trim new-file-content)]
-        (alter-file repo-url file-path new-file-content
-                    (merge
-                     {:before? true
-                      :commit? false}
-                     opts))))))
+            new-content (or
+                         new-content
+                         (get-new-content heading file-content value))
+            file-path (:file/path file)]
+        (alter-file repo-url file-path new-content opts)))))
 
 (defn delete-heading!
   [{:heading/keys [uuid meta content file] :as heading}]
@@ -749,7 +738,8 @@
                               (reset! last-start-pos new-end-pos)
                               {:heading/uuid uuid
                                :heading/meta new-meta}))
-                          after-headings)]
+                          after-headings)
+        new-content (utf8/insert! file-content (:pos meta) (:end-pos meta) "")]
     ;; update all headings meta after this deleted heading in the same file
     (db/transact!
       (vec
@@ -757,9 +747,10 @@
         [[:db.fn/retractEntity [:heading/uuid uuid]]]
         updated-headings
         [{:file/path file-path
-          :file/content (utf8/insert! file-content (:pos meta) (:end-pos meta) "")}])))
+          :file/content new-content}])))
     (save-heading-if-changed! heading ""
-                              {:reset? false})))
+                              {:new-content new-content
+                               :reset? false})))
 
 (defn clone-and-pull
   [repo-url]
@@ -807,11 +798,11 @@
                                                       nil
                                                       ;; indent spacing level
                                                       2)]
-                       (fs/write-file repo-dir file-path content)
-                       (db/reset-file! repo config/config-file content)
-                       (git-add-commit repo config/config-file
-                                       "Config changed"
-                                       content))))))))
+                       (p/let [content' (load-file repo file-path)]
+                         (when (not= content content')
+                           (fs/write-file repo-dir file-path content)
+                           (db/reset-file! repo config/config-file content)
+                           (git-add repo config/config-file))))))))))
 
 (defn edit-heading!
   [heading-id prev-pos]

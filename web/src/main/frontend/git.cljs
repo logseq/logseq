@@ -160,15 +160,18 @@
                      :ref "HEAD"}))]
      (let [matrix (bean/->clj matrix)]
        ;; added, modified, deleted
-       {:added (filter (fn [[_file head-status _workdir-status _stage-status]]
-                         (= head-status 0))
-                       matrix)
-        :modified (filter (fn [[_file _head-status workdir-status _stage-status]]
-                            (= workdir-status 2))
-                          matrix)
-        :deleted (filter (fn [[_file _head-status workdir-status _stage-status]]
-                           (= workdir-status 0))
-                         matrix)}))))
+       {:added (->> (filter (fn [[_file head-status _workdir-status _stage-status]]
+                              (= head-status 0))
+                            matrix)
+                    (map first))
+        :modified (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
+                                 (= workdir-status 2))
+                               matrix)
+                       (map first))
+        :deleted (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
+                                (= workdir-status 0))
+                              matrix)
+                      (map first))}))))
 
 (defn find-common-base
   ([repo-url remote-id local-id]
@@ -176,7 +179,7 @@
   ([repo-url remote-id local-id local-commits remote-commits]
    ;; FIXME: p/plet not working
    (p/let
-    [local-commit (read-commit repo-url local-id)]
+       [local-commit (read-commit repo-url local-id)]
      (p/let [remote-commit (read-commit repo-url remote-id)]
        (let [local-parent (first (get-in (bean/->clj local-commit) [:commit :parent]))
 

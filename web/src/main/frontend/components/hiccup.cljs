@@ -342,8 +342,7 @@
 
           (if edit?
             (editor/box content {:on-hide (fn [value]
-                                            (when (or (nil? state-edit-input-id)
-                                                      (= state-edit-input-id edit-input-id))
+                                            (when (= (:edit-input-id @state/state) edit-input-id)
                                               (swap! state/state assoc
                                                      :edit-input-id nil))
                                             (handler/save-heading-if-changed! heading value nil))
