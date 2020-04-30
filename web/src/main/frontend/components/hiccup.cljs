@@ -536,14 +536,14 @@
       [:div.mathblock
        (str "$$" s "$$")]
       ["Example" l]
-      [:pre
+      [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Src" options]
       (let [{:keys [language options lines]} options
             attr (if language
                    {:data-lang language
                     :class lines})]
-        [:pre
+        [:pre.pre-wrap-white-space
          [:code attr
           (join-lines lines)]])
       ["Quote" l]
