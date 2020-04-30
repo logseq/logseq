@@ -315,6 +315,12 @@
    #{"A" "BUTTON"}
    (gobj/get node "tagName")))
 
+(defn input?
+  [node]
+  (contains?
+   #{"INPUT"}
+   (gobj/get node "tagName")))
+
 (defn journal?
   [path]
   (string/starts-with? path "journals/"))

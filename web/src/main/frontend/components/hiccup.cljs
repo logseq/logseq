@@ -12,6 +12,7 @@
             [frontend.expand :as expand]
             [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
+            [frontend.ui :as ui]
             [frontend.handler :as handler]
             [goog.object :as gobj]))
 
@@ -278,7 +279,8 @@
         heading-id (str "ls-heading-parent-" uuid)
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
-        collapsed? (or toggle-collapsed? @collapsed-atom?)]
+        collapsed? (or toggle-collapsed? @collapsed-atom?)
+        agenda? (= (:id config) "agenda")]
     (let [edit-input-id (str "edit-box-" uuid)]
       (when-not lock?
         [:div.ls-heading-parent.flex-1 {:key (str uuid)
@@ -299,25 +301,26 @@
            :on-mouse-out (fn []
                            (when (has-children? heading-id level)
                              (reset! control-show? false)))}
-          [:a.heading-control.pt-1
-           {:id (str "control-" uuid)
-            :class "block no-underline text-gray-700 hover:text-gray-700 transition ease-in-out duration-150 mr-1"
-            :on-click (fn []
-                        (let [id (str "ls-heading-parent-" uuid)]
-                          (if collapsed?
-                            (expand/expand! (:id config) id)
-                            (expand/collapse! (:id config) id))
-                          (reset! collapsed-atom? (not collapsed?))))}
-           (cond
-             collapsed?
-             (svg/caret-right)
+          (when-not agenda?
+            [:a.heading-control.pt-1
+             {:id (str "control-" uuid)
+              :class "block no-underline text-gray-700 hover:text-gray-700 transition ease-in-out duration-150 mr-1"
+              :on-click (fn []
+                          (let [id (str "ls-heading-parent-" uuid)]
+                            (if collapsed?
+                              (expand/expand! (:id config) id)
+                              (expand/collapse! (:id config) id))
+                            (reset! collapsed-atom? (not collapsed?))))}
+             (cond
+               collapsed?
+               (svg/caret-right)
 
-             (and @control-show?
-                  (has-children? heading-id level))
-             (svg/caret-down)
+               (and @control-show?
+                    (has-children? heading-id level))
+               (svg/caret-down)
 
-             :else
-             nil)]
+               :else
+               nil)])
 
           (if @edit?
             (editor/box content {:on-hide (fn [value]
@@ -333,7 +336,8 @@
                         edit-input-id)
             [:div.flex-1.heading-body
              {:on-click (fn [e]
-                          (when-not (util/link? (gobj/get e "target"))
+                          (when-not (or (util/link? (gobj/get e "target"))
+                                        (util/input? (gobj/get e "target")))
                             (reset! edit? true)
                             (handler/reset-cursor-range! (gdom/getElement heading-id))
                             (swap! state/state assoc
@@ -348,10 +352,33 @@
                    (rum/with-key (heading-child block)
                      (cljs.core/random-uuid)))))])]]))))
 
+(rum/defc heading-checkbox
+  [heading class]
+  (case (:heading/marker heading)
+    (list "DOING" "IN-PROGRESS" "TODO" "WAIT")
+    (ui/checkbox {:class class
+                  :style {:margin-top -2}
+                  :on-change (fn [_e]
+                               ;; FIXME: Log timestamp
+                               (handler/check heading))})
+
+    "DONE"
+    (ui/checkbox {:checked true
+                  :class class
+                  :style {:margin-top -2}
+                  :on-change (fn [_e]
+                               ;; FIXME: Log timestamp
+                               (handler/uncheck heading))})
+
+    nil))
+
 (defn heading
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children]
            :as t}]
-  (let [marker (if marker
+  (let [agenda? (= (:id config) "agenda")
+        checkbox (heading-checkbox t
+                                   (str "mr-1 cursor" (when-not agenda? " ml-1")))
+        marker (if (contains? #{"DOING" "IN-PROGRESS" "WAIT"} marker)
                  [:span {:class (str "task-status " (string/lower-case marker))
                          :style {:margin-right 3.5}}
                   (string/upper-case marker)])
@@ -376,7 +403,8 @@
                               :uuid (str uuid)}
                              (remove-nils
                               (concat
-                               [level-str
+                               [(when-not agenda? level-str)
+                                checkbox
                                 marker
                                 priority]
                                (map-inline title)

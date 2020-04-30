@@ -37,16 +37,6 @@
          (parse-json config)
          (util/json->clj)))))
 
-(defn inline-list->html
-  [json]
-  (when (loaded?)
-    (.inlineListToHtmlStr js/window.MldocOrg json)))
-
-(defn json->html
-  [json]
-  (when (loaded?)
-    (.jsonToHtmlStr js/window.MldocOrg json default-config)))
-
 (defrecord OrgMode []
   protocol/Format
   (toHtml [this content config]
