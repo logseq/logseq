@@ -73,6 +73,8 @@
 
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
+   :page/created-at {}
+   :page/last-modified-at {}
    :page/journal?   {}
    :page/journal-day {}
 
@@ -90,15 +92,13 @@
    :heading/tags {:db/valueType   :db.type/ref
                   :db/cardinality :db.cardinality/many}
    :heading/meta {}
-   ;; :heading/parent {:db/valueType   :db.type/ref}
+
+   :heading/created-at {}
+   :heading/last-modified-at {}
+   :heading/parent {:db/valueType   :db.type/ref}
 
    ;; tag
-   :tag/name       {:db/unique :db.unique/identity}
-
-   ;; task
-   :task/scheduled {:db/index       true}
-   :task/deadline  {:db/index       true}
-   })
+   :tag/name       {:db/unique :db.unique/identity}})
 
 ;; transit serialization
 
@@ -140,7 +140,6 @@
    :db/ident key
    key value})
 
-;; TODO: added_at, started_at, schedule, deadline
 (def qualified-map
   {:file :heading/file
    :anchor :heading/anchor
@@ -367,36 +366,6 @@
         seq-flatten
         (pull-many '[*])
         sort-by-pos)))
-
-;; TODO: quite slow
-(defn get-heading-with-children
-  [heading-uuid]
-  (let [repo-url (state/get-current-repo)
-        heading (entity [:heading/uuid heading-uuid])
-        heading-level (:heading/level heading)
-        pred (fn [db uuid meta level child-meta child-level]
-               (or
-                (= uuid heading-uuid)
-                (< (:pos meta) (:pos child-meta))))]
-    (->> (d/q '[:find (pull ?child [*])
-                :in $ ?heading-uuid ?pred
-                :where
-                [?heading :heading/uuid ?heading-uuid]
-                [?heading :heading/file ?file]
-                [?child   :heading/file ?file]
-                [?child   :heading/uuid ?child-uuid]
-                [?heading :heading/level ?level]
-                [?heading :heading/meta ?meta]
-                [?child   :heading/meta ?child-meta]
-                [?child   :heading/level ?child-level]
-                [(?pred $ ?child-uuid ?meta ?level ?child-meta ?child-level)]]
-           (get-conn repo-url) heading-uuid pred)
-         seq-flatten
-         sort-by-pos
-         (take-while (fn [{:heading/keys [uuid level meta]}]
-                       (or
-                        (= uuid heading-uuid)
-                        (> level heading-level)))))))
 
 (defn mark-repo-as-cloned
   [repo-url]
@@ -674,7 +643,7 @@
                           :heading/marker nil}))]
       (vec (concat headings [dummy])))))
 
-;; TODO: Sorted by last-modified-time
+;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
   [page]
   (let [page-name (string/capitalize page)]
@@ -727,8 +696,6 @@
             (reset-conn! db-conn attached-db)))
         (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
       (posh/posh! db-conn)
-
       (listen-handler repo db-conn)
-
       (let [config-content (get-file-content url config/config-file)]
         (reset-config! url config-content)))))
