@@ -74,6 +74,14 @@
                 13 (on-enter e)
                 nil)))))
 
+(defn on-key-down
+  [state keycode-map]
+  (let [node (rum/dom-node state)]
+    (listen state js/window "keydown"
+            (fn [e]
+              (when-let [f (get keycode-map (.-keyCode e))]
+                (f state e))))))
+
 (defn event-mixin
   ([attach-listeners]
    (event-mixin attach-listeners identity))

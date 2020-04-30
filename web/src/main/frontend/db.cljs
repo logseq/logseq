@@ -1,5 +1,6 @@
 (ns frontend.db
   (:require [datascript.core :as d]
+            [posh.rum :as posh]
             [frontend.util :as util]
             [medley.core :as medley]
             [datascript.transit :as dt]
@@ -11,7 +12,8 @@
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
             [cljs-bean.core :as bean]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [rum.core :as rum]))
 
 ;; TODO: Create a database for each repo.
 ;; Multiple databases
@@ -87,6 +89,7 @@
    :heading/level {}
    :heading/tags {:db/valueType   :db.type/ref
                   :db/cardinality :db.cardinality/many}
+   :heading/meta {}
    ;; :heading/parent {:db/valueType   :db.type/ref}
 
    ;; tag
@@ -193,13 +196,13 @@
 
 (defn get-pages
   [repo]
-  (->> (d/q '[:find ?page-name
-              :where
-              [?page :page/name ?page-name]]
-         (get-conn repo))
+  (->> (posh/q '[:find ?page-name
+                 :where
+                 [?page :page/name ?page-name]]
+         (get-conn repo false))
+       (rum/react)
        (map first)
-       ;; distinct
-       ))
+       distinct))
 
 (defn get-files-headings
   [repo-url paths]
@@ -234,6 +237,20 @@
              [?heading :heading/file ?file]]
         (get-conn repo-url) path)
       seq-flatten))
+
+(defn get-file-after-headings
+  [repo-url file-id end-pos]
+  (when end-pos
+    (let [pred (fn [db meta]
+                 (>= (:pos meta) end-pos))]
+      (-> (d/q '[:find (pull ?heading [*])
+                 :in $ ?file-id ?pred
+                 :where
+                 [?heading :heading/file ?file-id]
+                 [?heading :heading/meta ?meta]
+                 [(?pred $ ?meta)]]
+            (get-conn repo-url) file-id pred)
+          seq-flatten))))
 
 (defn delete-file-headings!
   [repo-url path]
@@ -283,6 +300,15 @@
        (some-> (d/entity db key)
                key)))))
 
+(defn sub-key-value
+  ([key]
+   (sub-key-value (state/get-current-repo) key))
+  ([repo-url key]
+   (when-let [conn (get-conn repo-url false)]
+     (-> (posh/pull conn '[*] key)
+         (rum/react)
+         (get key)))))
+
 (defn debug!
   []
   (let [repos (->> (get-in @state/state [:me :repos])
@@ -315,18 +341,31 @@
         seq-flatten
         sort-by-pos)))
 
+(defn pull-many
+  [selector eids]
+  (d/pull-many (d/db (get-conn (state/get-current-repo) false)) selector eids))
+
+(defn posh-pull-many
+  [selector eids]
+  (posh/pull-many (get-conn (state/get-current-repo) false)
+                  selector
+                  eids))
+
 (defn get-page-headings
   ([page]
    (get-page-headings (state/get-current-repo)
                       page))
   ([repo-url page]
-   (->> (d/q '[:find (pull ?heading [*])
-               :in $ ?page
-               :where
-               [?p :page/name ?page]
-               [?heading :heading/page ?p]]
-          (get-conn repo-url) page)
+   (->> (posh/q '[:find ?heading
+                  ;; (pull ?heading [*])
+                  :in $ ?page
+                  :where
+                  [?p :page/name ?page]
+                  [?heading :heading/page ?p]]
+          (get-conn repo-url false) page)
+        rum/react
         seq-flatten
+        (pull-many '[*])
         sort-by-pos)))
 
 ;; TODO: quite slow
@@ -374,7 +413,7 @@
           [?repo :repo/url ?repo-url]
           [?repo :repo/cloned? ?cloned]]
      (get-conn repo-url) repo-url)
-   first))
+   ffirst))
 
 (defn get-page-name
   [file ast]
@@ -503,6 +542,7 @@
           (extract-headings-pages file content utf8-content))))
     contents)))
 
+;; TODO: compare headings
 (defn reset-file!
   [repo-url file content]
   (let [utf8-content (utf8/encode content)
@@ -539,24 +579,30 @@
 
 ;; marker should be one of: TODO, DOING, IN-PROGRESS
 ;; time duration
+;; TODO: posh doesn't support or query
 (defn get-agenda
   ([]
    (get-agenda :week))
   ([time]
+   ;; TODO:
    (let [duration (case time
                     :today []
                     :week  []
-                    :month [])]
-     (->
-      (d/q '[:find (pull ?h [*])
-             :where
-             (or [?h :heading/marker "TODO"]
-                 [?h :heading/marker "DOING"]
-                 [?h :heading/marker "IN-PROGRESS"]
-                 ;; [?h :heading/marker "DONE"]
-                 )]
-        (get-conn))
-      seq-flatten))))
+                    :month [])
+         pred (fn [db marker]
+                (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
+     (->>
+      (posh/q '[:find ?h
+                :in $ ?pred
+                :where
+                [?h :heading/marker ?marker]
+                [(?pred $ ?marker)]]
+        (get-conn (state/get-current-repo) false)
+        pred)
+      rum/react
+      seq-flatten
+      (posh-pull-many '[*])
+      rum/react))))
 
 (defn get-current-journal-path
   []
@@ -574,32 +620,33 @@
   ([n]
    (get-latest-journals (state/get-current-repo) n))
   ([repo-url n]
-   (let [date (js/Date.)
-         _ (.setDate date (- (.getDate date) (dec n)))
-         date->int (fn [date]
-                     (util/parse-int
-                      (string/replace (util/ymd date) "/" "")))
-         before-day (date->int date)
-         today (date->int (js/Date.))
-         pages (->>
-                (d/q '[:find ?page-name ?journal-day
-                       :in $ ?before-day ?today
-                       :where
-                       [?page :page/name ?page-name]
-                       [?page :page/journal? true]
-                       [?page :page/journal-day ?journal-day]
-                       [(<= ?before-day ?journal-day ?today)]
-                       ]
-                  (get-conn repo-url)
-                  before-day
-                  today)
-                (sort-by last)
-                (reverse)
-                (map first))]
-     (mapv
-      (fn [page]
-        [page (get-page-headings repo-url page)])
-      pages))))
+   (when-let [conn (get-conn repo-url false)]
+     (let [date (js/Date.)
+           _ (.setDate date (- (.getDate date) (dec n)))
+           date->int (fn [date]
+                       (util/parse-int
+                        (string/replace (util/ymd date) "/" "")))
+           before-day (date->int date)
+           today (date->int (js/Date.))
+           pages (->>
+                  (posh/q '[:find ?page-name ?journal-day
+                            :in $ ?before-day ?today
+                            :where
+                            [?page :page/name ?page-name]
+                            [?page :page/journal? true]
+                            [?page :page/journal-day ?journal-day]
+                            [(<= ?before-day ?journal-day ?today)]]
+                    conn
+                    before-day
+                    today)
+                  (rum/react)
+                  (sort-by last)
+                  (reverse)
+                  (map first))]
+       (mapv
+        (fn [page]
+          [page (get-page-headings repo-url page)])
+        pages)))))
 
 (defn me-tx
   [db {:keys [name email avatar repos]}]
@@ -664,7 +711,8 @@
         db-conn (d/create-conn schema)]
     (swap! conns assoc db-name db-conn)
     (listen-handler repo db-conn)
-    (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
+    (d/transact! db-conn [(me-tx (d/db db-conn) me)])
+    (posh/posh! db-conn)))
 
 (defn restore! [{:keys [repos] :as me} listen-handler]
   (doseq [{:keys [id url]} repos]
@@ -678,6 +726,8 @@
           (when (= (:schema stored-db) schema) ;; check for code update
             (reset-conn! db-conn attached-db)))
         (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+      (posh/posh! db-conn)
+
       (listen-handler repo db-conn)
 
       (let [config-content (get-file-content url config/config-file)]

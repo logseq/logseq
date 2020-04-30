@@ -233,7 +233,7 @@
   [repo-url token]
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
-           (not (:edit? @state/state))
+           (not (:edit-input-id @state/state))
            ;; (or (nil? status)
            ;;     (= status :pulling))
            )
@@ -309,8 +309,9 @@
 ;; TODO: update latest commit
 (defn push
   [repo-url]
+  ;; TODO: find un-committed changes, and create a commit
   (when (and
-         (not (:edit? @state/state))
+         (not (:edit-input-id @state/state))
          (= :should-push (db/get-key-value repo-url :git/status)))
     (set-git-status! repo-url :pushing)
     (let [token (get-github-token)]
@@ -349,18 +350,12 @@
           (reset! pushing? false)
           (redirect! {:to :home}))))))
 
-(defn re-render!
-  []
-  (when-let [comp (:root-component @state/state)]
-    (when (and (not (:edit? @state/state)))
-      (rum/request-render comp))))
-
 (defn db-listen-to-tx!
   [repo db-conn]
   (d/listen! db-conn :persistence
              (fn [tx-report]
                (when-let [db (:db-after tx-report)]
-                 (re-render!)
+                 ;; (re-render!)
                  (js/setTimeout (fn []
                                   (db/persist repo db)) 0)))))
 
@@ -439,7 +434,6 @@
 (defn clear-edit!
   []
   (swap! state/state assoc
-         :edit? false
          :edit-file nil
          :edit-journal nil
          :edit-content ""))
@@ -450,20 +444,23 @@
         (string/trim (state/get-edit-content))))
 
 (defn alter-file
-  [repo-url path content {:keys [commit-message before? commit?]
+  [repo-url path content {:keys [commit-message before? commit? reset?]
                           :or {before? false
-                               commit? true}}]
+                               commit? true
+                               reset? true}}]
   (let [commit-message (or commit-message (str "Update " path))]
-    (if before?
+    (if (and reset? before?)
       (db/reset-file! repo-url path content))
     (util/p-handle
      (fs/write-file (git/get-repo-dir repo-url) path content)
      (fn [_]
-       (if-not before?
+       (if (and reset? (not before?))
          (db/reset-file! repo-url path content))
        (if commit?
          (git-add-commit repo-url path commit-message content)
-         (git/add repo-url path))))))
+         (do
+           (git/add repo-url path)
+           (set-git-status! repo-url :should-push)))))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -479,7 +476,7 @@
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first marker "DONE")))]
         (alter-file repo-url file content'
-                    {:commit-message (str marker " marked as DONE")})))))
+                    {:commit? false})))))
 
 (defn uncheck
   [heading]
@@ -495,7 +492,7 @@
                           (-> (utf8/substring encoded-content pos)
                               (string/replace-first "DONE" "TODO")))]
         (alter-file repo-url file content'
-                    {:commit-message "DONE rollbacks to TODO."})))))
+                    {:commit? false})))))
 
 (defn git-set-username-email!
   [{:keys [name email]}]
@@ -515,10 +512,6 @@
   [k ref]
   (swap! state/state assoc :ref-components k ref))
 
-(defn set-root-component!
-  [comp]
-  (swap! state/state assoc :root-component comp))
-
 (defn periodically-push-tasks
   [repo-url]
   (let [token (get-github-token)
@@ -530,19 +523,18 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url))
+  (when-not config/dev?
+    (periodically-pull repo-url pull-now?)
+    (periodically-push-tasks repo-url)))
 
 (defn edit-journal!
   [journal]
   (swap! state/state assoc
-         :edit? true
          :edit-journal journal))
 
 (defn edit-file!
   [file]
   (swap! state/state assoc
-         :edit? true
          :edit-file file))
 
 (defn render-local-images!
@@ -661,12 +653,6 @@
   (when node
     (state/set-cursor-range! (util/caret-range node))))
 
-(defn reset-cursor-pos!
-  [id]
-  (when-let [node (gdom/getElement (str id))]
-    (let [pos (util/caret-pos node)]
-      (state/set-cursor-pos! pos))))
-
 (defn restore-cursor-pos!
   ([id markup]
    (restore-cursor-pos! id markup false))
@@ -721,7 +707,7 @@
                                      :error)))))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file dummy?] :as heading} value]
+  [{:heading/keys [uuid content meta file dummy?] :as heading} value opts]
   (let [repo-url (state/get-current-repo)
         value (string/trim value)]
     (if (not= (string/trim content)
@@ -741,8 +727,39 @@
                                            new-content)
             new-file-content (string/trim new-file-content)]
         (alter-file repo-url file-path new-file-content
-                    {:commit-message (str "Update " file-path)
-                     :before? true})))))
+                    (merge
+                     {:before? true
+                      :commit? false}
+                     opts))))))
+
+(defn delete-heading!
+  [{:heading/keys [uuid meta content file] :as heading}]
+  (let [file-path (:file/path (db/entity (:db/id file)))
+        file-content (:file/content (db/entity (:db/id file)))
+        after-headings (db/get-file-after-headings (state/get-current-repo) (:db/id file) (:end-pos meta))
+        last-start-pos (atom (:pos meta))
+        updated-headings (mapv
+                          (fn [{:heading/keys [uuid meta] :as heading}]
+                            (let [old-start-pos (:pos meta)
+                                  old-end-pos (:end-pos meta)
+                                  new-end-pos (if old-end-pos
+                                                (+ @last-start-pos (- old-end-pos old-start-pos)))
+                                  new-meta {:pos @last-start-pos
+                                            :end-pos new-end-pos}]
+                              (reset! last-start-pos new-end-pos)
+                              {:heading/uuid uuid
+                               :heading/meta new-meta}))
+                          after-headings)]
+    ;; update all headings meta after this deleted heading in the same file
+    (db/transact!
+      (vec
+       (concat
+        [[:db.fn/retractEntity [:heading/uuid uuid]]]
+        updated-headings
+        [{:file/path file-path
+          :file/content (utf8/insert! file-content (:pos meta) (:end-pos meta) "")}])))
+    (save-heading-if-changed! heading ""
+                              {:reset? false})))
 
 (defn clone-and-pull
   [repo-url]
@@ -777,24 +794,41 @@
 (defn watch-config!
   []
   (add-watch state/state
-            :config-changed
-            (fn [_k _r old-state new-state]
-              (let [repos (seq (keys (:config new-state)))]
-                (doseq [repo repos]
-                  (when (not= (get-in new-state [:config repo])
-                              (get-in old-state [:config repo]))
-                    ;; persistent to file
-                    (let [repo-dir (git/get-repo-dir repo)
-                          file-path (str "/" config/config-file)
-                          content (js/JSON.stringify (bean/->js (get-in new-state [:config repo]))
-                                                     nil
-                                                     ;; indent spacing level
-                                                     2)]
-                      (fs/write-file repo-dir file-path content)
-                      (db/reset-file! repo config/config-file content)
-                      (git-add-commit repo config/config-file
-                                      "Config changed"
-                                      content))))))))
+             :config-changed
+             (fn [_k _r old-state new-state]
+               (let [repos (seq (keys (:config new-state)))]
+                 (doseq [repo repos]
+                   (when (not= (get-in new-state [:config repo])
+                               (get-in old-state [:config repo]))
+                     ;; persistent to file
+                     (let [repo-dir (git/get-repo-dir repo)
+                           file-path (str "/" config/config-file)
+                           content (js/JSON.stringify (bean/->js (get-in new-state [:config repo]))
+                                                      nil
+                                                      ;; indent spacing level
+                                                      2)]
+                       (fs/write-file repo-dir file-path content)
+                       (db/reset-file! repo config/config-file content)
+                       (git-add-commit repo config/config-file
+                                       "Config changed"
+                                       content))))))))
+
+(defn edit-heading!
+  [heading-id prev-pos]
+  (let [heading (or
+                 (db/entity [:heading/uuid heading-id])
+                 ;; dummy?
+                 {:heading/uuid heading-id
+                  :heading/content "** "})]
+    (let [{:heading/keys [content]} heading
+          edit-input-id (str "edit-heading-" heading-id)
+          content-length (count content)
+          text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
+                       content
+                       (subs content 0 prev-pos))]
+      (state/set-cursor-range! text-range)
+      (swap! state/state assoc
+             :edit-input-id edit-input-id))))
 
 (defn start!
   []

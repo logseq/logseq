@@ -47,7 +47,7 @@
                       ;; t
                       (when (and
                              ;; not input
-                             (not (:edit? @state/state))
+                             (not (:edit-input-id @state/state))
                              (= 84 (.-keyCode e)))
                         (let [id (first (:rum/args state))]
                           (expand/toggle-all! id)))))))
@@ -70,13 +70,13 @@
                            content
                            on-click
                            on-hide]}]
-  (let [format (format/normalize format)]
+  (let [format (format/normalize format)
+        edit? (= (state/sub :edit-input-id) id)]
     (if (contains? config/hiccup-support-formats format)
       [:div
        {:id id}
        hiccup]
-      (let [edit? (state/sub :edit?)
-            loading (state/sub :format/loading)
+      (let [loading (state/sub :format/loading)
             edit-journal (state/sub :edit-journal)
             edit-file (state/sub :edit-file)]
         (if edit?
@@ -87,6 +87,7 @@
                 on-click (fn [e]
                            (when-not (util/link? (gobj/get e "target"))
                              (handler/reset-cursor-range! (gdom/getElement (str id)))
+                             (state/set-edit-input-id! id)
                              (when on-click
                                (on-click))))]
             (cond

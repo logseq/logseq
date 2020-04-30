@@ -7,7 +7,7 @@
             [frontend.components.hiccup :as hiccup]
             [frontend.db :as db]))
 
-(rum/defc agenda
+(rum/defc agenda < rum/reactive
   []
   (let [tasks (db/get-agenda)]
     (sidebar/sidebar

@@ -143,7 +143,7 @@
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
-        status (db/get-key-value :git/status)
+        status (db/sub-key-value :git/status)
         pulling? (= :pulling status)]
     [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden

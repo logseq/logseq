@@ -4,9 +4,6 @@
             [frontend.handler :as handler]))
 
 (rum/defc current-page < rum/reactive
-  {:did-mount (fn [state]
-                (handler/set-root-component! (:rum/react-component state))
-                state)}
   []
   (let [route-match (state/sub :route-match)]
     (if route-match

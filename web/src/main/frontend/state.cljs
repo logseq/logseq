@@ -10,9 +10,6 @@
             {:route-match nil
              :notification/show? false
              :notification/content nil
-             :root-component nil
-             :edit? false
-             :edit-input-id nil
              :repo/cloning? false
              :repo/loading-files? nil
              :repo/importing-to-db? nil
@@ -29,11 +26,12 @@
 
              :ui/toggle-state false
              :ui/collapsed-headings {}
+
+             :edit-input-id nil
              :edit-content ""
              :cursor-range nil
              :cursor-pos nil
 
-             ;; [owner repo-name commit path] -> content
              :github/contents {}
              :config {}
              }))
@@ -145,3 +143,7 @@
                        #(= (string/lower-case page) (string/lower-case %))
                        pages))
                      (vec (distinct (conj pages page)))))))
+
+(defn set-edit-input-id!
+  [id]
+  (set-state! :edit-input-id id))

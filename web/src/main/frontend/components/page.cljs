@@ -61,7 +61,7 @@
       (content/content encoded-page-name :org
                        {:hiccup ref-hiccup})])))
 
-(rum/defc all-pages
+(rum/defc all-pages < rum/reactive
   []
   (sidebar/sidebar
    [:div.flex-1
