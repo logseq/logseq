@@ -20,6 +20,10 @@
     {:name :repo-add
      :view repo/add-repo}]
 
+   ["/all-files"
+    {:name :all-files
+     :view file/files}]
+
    ["/file/:path"
     {:name :file
      :view file/file}]

@@ -352,6 +352,7 @@
              {:on-click (fn [e]
                           (when-not (or (util/link? (gobj/get e "target"))
                                         (util/input? (gobj/get e "target")))
+                            (util/stop e)
                             (handler/reset-cursor-range! (gdom/getElement heading-id))
                             (swap! state/state assoc
                                    :edit-input-id edit-input-id)))}

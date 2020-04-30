@@ -5,7 +5,6 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.components.sidebar :as sidebar]
             [frontend.components.hiccup :as hiccup]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
@@ -39,37 +38,35 @@
                              (some->> (state/sub [:config repo :starred])
                                       (map string/capitalize)))
                             page-name)]
-    (sidebar/sidebar
-     [:div.flex-1
-      [:div.flex.flex-row
-       [:h1.title
-        page-name]
-       [:a.ml-1.text-gray-500.hover:text-indigo-900
-        {:on-click (fn []
-                     (handler/star-page! page-name starred?))}
-        (if starred?
-          (svg/star-solid "stroke-current")
-          (svg/star-outline "stroke-current"))]]
+    [:div.flex-1
+     [:div.flex.flex-row
+      [:h1.title
+       page-name]
+      [:a.ml-1.text-gray-500.hover:text-indigo-900
+       {:on-click (fn []
+                    (handler/star-page! page-name starred?))}
+       (if starred?
+         (svg/star-solid "stroke-current")
+         (svg/star-outline "stroke-current"))]]
 
-      (content/content encoded-page-name :org
-                       {:hiccup hiccup})
+     (content/content encoded-page-name :org
+                      {:hiccup hiccup})
 
-      (let [n-ref (count ref-headings)]
-        (if (> n-ref 0)
-          [:h2.font-bold.text-gray-400.mt-6 (let []
-                                              (str n-ref " Linked References"))]))
-      (content/content encoded-page-name :org
-                       {:hiccup ref-hiccup})])))
+     (let [n-ref (count ref-headings)]
+       (if (> n-ref 0)
+         [:h2.font-bold.text-gray-400.mt-6 (let []
+                                             (str n-ref " Linked References"))]))
+     (content/content encoded-page-name :org
+                      {:hiccup ref-hiccup})]))
 
 (rum/defc all-pages < rum/reactive
   []
-  (sidebar/sidebar
-   [:div.flex-1
-    [:h1.title
-     "All Pages"]
-    (let [pages (db/get-pages (state/get-current-repo))]
-      (for [page pages]
-        (let [page-id (util/url-encode page)]
-          [:div {:key page-id}
-           [:a {:href (str "/page/" page-id)}
-            page]])))]))
+  [:div.flex-1
+   [:h1.title
+    "All Pages"]
+   (let [pages (db/get-pages (state/get-current-repo))]
+     (for [page pages]
+       (let [page-id (util/url-encode page)]
+         [:div {:key page-id}
+          [:a {:href (str "/page/" page-id)}
+           page]])))])

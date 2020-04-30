@@ -1,8 +1,7 @@
 {:paths ["src/main"]
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
-  rum {:git/url "https://github.com/tonsky/rum"
-       :sha "5d3c7b43db7746bf098658958acfc663e0232cad"}
+  rum {:mvn/version "0.12.0-SNAPSHOT"}
   posh {:git/url "https://github.com/tiensonqin/posh"
         :sha "c41039c65448856da0307abed7f722e8f6acbbd9"}
   datascript-transit          {:mvn/version "0.3.0"}

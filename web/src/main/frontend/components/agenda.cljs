@@ -10,13 +10,12 @@
 (rum/defc agenda < rum/reactive
   []
   (let [tasks (db/get-agenda)]
-    (sidebar/sidebar
-     [:div#agenda
-      [:h1.title "Agenda"]
-      (if (seq tasks)
-        [:div.ml-1
-         (let [tasks (block/sort-tasks tasks)
-               id "agenda"]
-           (content/content id :org
-                            {:hiccup (hiccup/->hiccup tasks {:id id})}))]
-        "Empty")])))
+    [:div#agenda
+     [:h1.title "Agenda"]
+     (if (seq tasks)
+       [:div.ml-1
+        (let [tasks (block/sort-tasks tasks)
+              id "agenda"]
+          (content/content id :org
+                           {:hiccup (hiccup/->hiccup tasks {:id id})}))]
+       "Empty")]))

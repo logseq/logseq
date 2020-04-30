@@ -4,4 +4,4 @@
 
 (rum/defc home
   []
-  (sidebar/sidebar (sidebar/main-content)))
+  (sidebar/main-content))

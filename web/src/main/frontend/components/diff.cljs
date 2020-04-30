@@ -5,7 +5,6 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.components.sidebar :as sidebar]
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [frontend.db :as db]
@@ -178,32 +177,31 @@
         repo (state/get-current-repo)
         contents (if remote-oid (state/sub [:github/contents repo remote-oid]))
         pushing? (rum/react *pushing?)]
-    (sidebar/sidebar
-     [:div#diffs {:style {:margin-bottom 200}}
-      [:h1.title "Diff"]
-      (cond
-        (false? pushing?)
-        [:div "No diffs"]
+    [:div#diffs {:style {:margin-bottom 200}}
+     [:h1.title "Diff"]
+     (cond
+       (false? pushing?)
+       [:div "No diffs"]
 
-        (seq diffs)
-        [:div#diffs-body
-         (for [{:keys [type path]} diffs]
-           (rum/with-key (file repo path contents remote-oid component)
-             path))
-         [:div
-          (ui/textarea
-           {:placeholder "Commit message (optional)"
-            :on-change (fn [e]
-                         (reset! commit-message (util/evalue e)))})
-          (if pushing?
-            [:span "Pushing ..."]
-            (ui/button "Commit and force pushing"
-              (fn []
-                (let [commit-message (if (string/blank? @commit-message)
-                                       "A force push"
-                                       @commit-message)]
-                  (reset! *pushing? true)
-                  (handler/commit-and-force-push! commit-message *pushing?)))))]]
+       (seq diffs)
+       [:div#diffs-body
+        (for [{:keys [type path]} diffs]
+          (rum/with-key (file repo path contents remote-oid component)
+            path))
+        [:div
+         (ui/textarea
+          {:placeholder "Commit message (optional)"
+           :on-change (fn [e]
+                        (reset! commit-message (util/evalue e)))})
+         (if pushing?
+           [:span "Pushing ..."]
+           (ui/button "Commit and force pushing"
+             (fn []
+               (let [commit-message (if (string/blank? @commit-message)
+                                      "A force push"
+                                      @commit-message)]
+                 (reset! *pushing? true)
+                 (handler/commit-and-force-push! commit-message *pushing?)))))]]
 
-        :else
-        [:div "No diffs"])])))
+       :else
+       [:div "No diffs"])]))

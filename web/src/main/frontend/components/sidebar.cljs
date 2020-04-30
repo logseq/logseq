@@ -80,13 +80,11 @@
                 :href (str "/page/" encoded-page)}
             page])))]))
 
-(rum/defc sidebar-nav < rum/reactive
-  []
-  (let [route-match (state/sub :route-match)
-        active? (fn [route] (= route (get-in route-match [:data :name])))
+(rum/defc sidebar-nav
+  [route-match]
+  (let [active? (fn [route] (= route (get-in route-match [:data :name])))
         page-active? (fn [page]
-                       (= page (get-in route-match [:parameters :path :name])))
-        ]
+                       (= page (get-in route-match [:parameters :path :name])))]
     [:nav.flex-1.px-2.py-4.bg-gray-800
      (nav-item "Journals" "/"
                "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
@@ -97,6 +95,9 @@
      (nav-item "All Pages" "/all-pages"
                "M6 2h9a1 1 0 0 1 .7.3l4 4a1 1 0 0 1 .3.7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.1.9-2 2-2zm9 2.41V7h2.59L15 4.41zM18 9h-3a2 2 0 0 1-2-2V4H6v16h12V9zm-2 7a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm0-4a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm-5-4a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1z"
                (active? :all-pages))
+     (nav-item "All Files" "/all-files"
+               "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
+               (active? :all-files))
      [:div {:style {:height 1
                     :background-color "rgb(57, 75, 89)"
                     :margin 12}}]
@@ -139,7 +140,7 @@
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
-  [state main-content]
+  [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
@@ -170,13 +171,13 @@
        [:div.flex-shrink-0.flex.items-center.h-16.px-4.bg-gray-900
         (logo-or-repos current-repo)]
        [:div.flex-1.h-0.overflow-y-auto
-        (sidebar-nav)]]]
+        (sidebar-nav route-match)]]]
      [:div.hidden.md:flex.md:flex-shrink-0
       [:div.flex.flex-col.w-64
        [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
         (logo-or-repos current-repo)]
        [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
-        (sidebar-nav)]]]
+        (sidebar-nav route-match)]]]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
       [:div.relative.z-10.flex-shrink-0.flex.h-16.bg-white.shadow
        [:button.px-4.border-r.border-gray-200.text-gray-500.focus:outline-none.focus:bg-gray-100.focus:text-gray-600.md:hidden

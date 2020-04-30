@@ -9,9 +9,6 @@
 
 (defn set-router!
   []
-  (when-let [fragment (util/get-fragment)]
-    (util/scroll-to-element fragment))
-
   (rfe/start!
    (rf/router routes/routes {})
    handler/set-route-match!

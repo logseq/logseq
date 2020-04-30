@@ -40,7 +40,7 @@
              ;; we have to make sure to check if the children is sequential
              ;; as a list can be returned, eg: from a (for)
              new-children (if (sequential? type#)
-                            (let [result (sablono.interpreter/interpret children)]
+                            (let [result (daiquiri.interpreter/interpret children)]
                               (if (sequential? result)
                                 result
                                 [result]))
@@ -49,7 +49,7 @@
              ;; a valid html element tag is used, using sablono
              vector->react-elems (fn [[key val]]
                                    (if (sequential? val)
-                                     [key (sablono.interpreter/interpret val)]
+                                     [key (daiquiri.interpreter/interpret val)]
                                      [key val]))
              new-options (into {} (map vector->react-elems opts))]
          ;; (.dir js/console new-children)

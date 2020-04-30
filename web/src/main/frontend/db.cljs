@@ -203,6 +203,17 @@
        (map first)
        distinct))
 
+(defn get-files
+  [repo]
+  (->> (posh/q '[:find ?file-path
+                 :where
+                 [?file :file/path ?file-path]]
+         (get-conn repo false))
+       (rum/react)
+       (map first)
+       (distinct)
+       (sort)))
+
 (defn get-files-headings
   [repo-url paths]
   (let [paths (set paths)
