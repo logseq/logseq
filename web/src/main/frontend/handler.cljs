@@ -14,6 +14,7 @@
             [promesa.core :as p]
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
+            [reitit.frontend.history :as rfh]
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -50,6 +51,11 @@
   (if push
     (rfe/push-state to path-params query-params)
     (rfe/replace-state to path-params query-params)))
+
+(defn redirect-with-fragment!
+  [path]
+  (.pushState js/window.history nil "" path)
+  (rfh/-on-navigate @rfe/history path))
 
 (defn- hidden?
   [path patterns]
@@ -668,7 +674,7 @@
    (when-let [node (gdom/getElement (str id))]
      (when-let [range (string/trim (state/get-cursor-range))]
        (let [pos (inc (diff/find-position markup range))
-             pos (if dummy? (inc pos) pos)]
+             pos (if dummy? (+ 3 pos) pos)]
          (util/set-caret-pos! node pos))))))
 
 (defn move-cursor-to-end [input]
@@ -694,7 +700,9 @@
 
 (defn clear-search!
   []
-  (swap! state/state assoc :search/result nil))
+  (swap! state/state assoc
+         :search/result nil
+         :search/q nil))
 
 (defn email? [v]
   (and v

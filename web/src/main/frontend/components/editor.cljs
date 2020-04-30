@@ -16,7 +16,6 @@
    (fn [state]
      (mixins/hide-when-esc-or-outside
       state
-      nil
       :show-fn (fn []
                  (:edit? @state/state))
       :on-hide (fn []

@@ -167,7 +167,11 @@
     (util/format "\\(%s\\)" s)
 
     ["Target" s]
-    [:a {:href (str "/page/" (util/url-encode s))} (str "<<" s ">>")]
+    [:span
+     [:span.text-gray-500 "<<"]
+     [:a {:href (str "/page/" (util/url-encode s))} s]
+     [:span.text-gray-500 ">>"]]
+
 
     ["Radio_Target" s]
     [:a {:href (str "/page/" (util/url-encode s))} (str "<<<" s ">>>")]
@@ -302,25 +306,37 @@
                            (when (has-children? heading-id level)
                              (reset! control-show? false)))}
           (when-not agenda?
-            [:a.heading-control.pt-1
-             {:id (str "control-" uuid)
-              :class "block no-underline text-gray-700 hover:text-gray-700 transition ease-in-out duration-150 mr-1"
-              :on-click (fn []
-                          (let [id (str "ls-heading-parent-" uuid)]
-                            (if collapsed?
-                              (expand/expand! (:id config) id)
-                              (expand/collapse! (:id config) id))
-                            (reset! collapsed-atom? (not collapsed?))))}
-             (cond
-               collapsed?
-               (svg/caret-right)
+            [:div.hd-control.flex.flex-row.items-center {:style {:margin-left (str (max 0 (- level 2)) "rem")
+                                                                 :height 24
+                                                                 :margin-right "0.3rem"}}
+             [:a.heading-control.pt-1
+              {:id (str "control-" uuid)
+               :style {:margin-top -4}
+               :class "block transition ease-in-out duration-150 mr-1"
+               :on-click (fn []
+                           (let [id (str "ls-heading-parent-" uuid)]
+                             (if collapsed?
+                               (expand/expand! (:id config) id)
+                               (expand/collapse! (:id config) id))
+                             (reset! collapsed-atom? (not collapsed?))))}
+              (cond
+                collapsed?
+                (svg/caret-right)
 
-               (and @control-show?
-                    (has-children? heading-id level))
-               (svg/caret-down)
+                (and @control-show?
+                     (has-children? heading-id level))
+                (svg/caret-down)
 
-               :else
-               nil)])
+                :else
+                nil)]
+             [:a.flex.align-items {:on-click (fn [])}
+              [:svg {:height 10
+                     :width 10
+                     :fill "currentColor"
+                     :display "inline-block"}
+               [:circle {:cx 5
+                         :cy 5
+                         :r 2}]]]])
 
           (if @edit?
             (editor/box content {:on-hide (fn [value]
@@ -347,10 +363,11 @@
 
              ;; non-heading children
              (when (seq children)
-               (for [child children]
-                 (let [block (block config child)]
-                   (rum/with-key (heading-child block)
-                     (cljs.core/random-uuid)))))])]]))))
+               [:div.heading-children {:class (if agenda? "ml-5")}
+                (for [child children]
+                  (let [block (block config child)]
+                    (rum/with-key (heading-child block)
+                      (cljs.core/random-uuid))))])])]]))))
 
 (rum/defc heading-checkbox
   [heading class]
@@ -377,7 +394,7 @@
            :as t}]
   (let [agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t
-                                   (str "mr-1 cursor" (when-not agenda? " ml-1")))
+                                   (str "mr-1 cursor"))
         marker (if (contains? #{"DOING" "IN-PROGRESS" "WAIT"} marker)
                  [:span {:class (str "task-status " (string/lower-case marker))
                          :style {:margin-right 3.5}}
@@ -403,7 +420,8 @@
                               :uuid (str uuid)}
                              (remove-nils
                               (concat
-                               [(when-not agenda? level-str)
+                               [
+                                ;; (when-not agenda? level-str)
                                 checkbox
                                 marker
                                 priority]

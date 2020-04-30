@@ -19,12 +19,14 @@
              :me nil
              :git/current-repo (storage/get :git/current-repo)
              :format/loading {}
-             :search/result nil
+
              :edit-journal nil
              :edit-file nil
              :journals-length 1
 
              :search/q nil
+             :search/result nil
+
              :ui/toggle-state false
              :ui/collapsed-headings {}
              :edit-content ""

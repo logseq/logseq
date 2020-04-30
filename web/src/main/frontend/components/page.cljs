@@ -65,7 +65,7 @@
   []
   (sidebar/sidebar
    [:div.flex-1
-    [:h1.mb-2.font-medium.text-3xl {:style {:color "#161E2E"}}
+    [:h1.title
      "All Pages"]
     (let [pages (db/get-pages (state/get-current-repo))]
       (for [page pages]

@@ -4,6 +4,7 @@
             [frontend.handler :as handler]
             [frontend.ui :as ui]
             [frontend.state :as state]
+            [frontend.mixins :as mixins]
             [clojure.string :as string]
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]))
@@ -32,8 +33,25 @@
      [:mark q]
      (when-not (string/blank? after)
        [:span after])]))
-
+;; TODO: support down/up keycode
 (rum/defc search < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide handler/clear-search!)
+     (mixins/on-enter state
+                      :on-enter (fn []
+                                  (when-let [first-match (first (:search/result @state/state))]
+                                    (handler/clear-search!)
+                                    (let [page (util/url-encode (:page/name (:heading/page first-match)))
+                                          uuid (:heading/uuid first-match)
+                                          path (str "/page/" page "#ls-heading-parent-" uuid)]
+                                      (handler/redirect-with-fragment! path))
+                                    ;; (handler/redirect! {:to :page
+                                    ;;                     :path-params {:name }
+                                    ;;                     :query-params {:id (str "#ls-heading-parent-" )}})
+                                    )))))
   []
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)

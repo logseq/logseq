@@ -62,7 +62,7 @@
 (defn icon
   [d]
   [:svg
-   {:fill "none", :viewbox "0 0 24 24", :height "24", :width "24"}
+   {:fill "none", :view-box "0 0 24 24", :height "24", :width "24"}
    [:path
     {:stroke-linejoin "round",
      :stroke-linecap "round",
@@ -73,7 +73,7 @@
 (rum/defc star-outline
   [class]
   [:svg
-   {:fill "none", :viewbox "0 0 24 24", :height "24", :width "24"
+   {:fill "none", :view-box "0 0 24 24", :height "24", :width "24"
     :class class}
    [:path
     {:stroke-linejoin "round",
@@ -86,7 +86,7 @@
 (rum/defc star-solid
   [class]
   [:svg
-   {:fill "none", :viewbox "0 0 20 20", :height "20", :width "20"
+   {:fill "none", :view-box "0 0 20 20", :height "20", :width "20"
     :class class}
    [:path
     {:fill "currentColor",

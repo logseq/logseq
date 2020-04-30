@@ -10,10 +10,11 @@
             [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [dommy.core :as d]
             [clojure.string :as string]
             [frontend.components.editor :as editor]))
 
-(defn- highlight!
+(defn- code-highlight!
   []
   (doseq [block (-> (js/document.querySelectorAll "pre code")
                     (array-seq))]
@@ -27,6 +28,14 @@
       (when-not (format/loaded? format)
         (handler/lazy-load format)))))
 
+(defn highlight-block-if-fragment
+  []
+  (when-let [fragment (util/get-fragment)]
+    (when-let [element (gdom/getElement fragment)]
+      (d/add-class! element "highlight-area")
+      ;; (js/setTimeout #(d/remove-class! element "highlight-area")
+      ;;                2000)
+      )))
 
 
 ;; TODO: lazy load highlight.js
@@ -46,11 +55,13 @@
                  (lazy-load-js state)
                  state)
    :did-mount (fn [state]
-                (highlight!)
+                (highlight-block-if-fragment)
+                (code-highlight!)
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
-                 (highlight!)
+                 (highlight-block-if-fragment)
+                 (code-highlight!)
                  (handler/render-local-images!)
                  (lazy-load-js state)
                  state)}

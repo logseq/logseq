@@ -49,12 +49,8 @@
 ;;      (dissoc state name))})
 
 (defn hide-when-esc-or-outside
-  [state show? & {:keys [on-hide node show-fn]}]
-  (let [node (or node (rum/dom-node state))
-        ;; show? (if (and show-fn (fn? show-fn))
-        ;;         (show-fn)
-        ;;         @show?)
-        ]
+  [state & {:keys [on-hide node show-fn]}]
+  (let [node (or node (rum/dom-node state))]
     (listen state js/window "click"
             (fn [e]
               ;; If the click target is outside of current node
@@ -66,6 +62,16 @@
               (case (.-keyCode e)
                 ;; Esc
                 27 (on-hide e)
+                nil)))))
+
+(defn on-enter
+  [state & {:keys [on-enter node]}]
+  (let [node (or node (rum/dom-node state))]
+    (listen state js/window "keydown"
+            (fn [e]
+              (case (.-keyCode e)
+                ;; Enter
+                13 (on-enter e)
                 nil)))))
 
 (defn event-mixin
@@ -81,7 +87,7 @@
                   state)
      :did-remount (fn [old-state new-state]
                     (detach old-state)
-                   (attach-listeners new-state)
+                    (attach-listeners new-state)
                     new-state)})))
 
 ;; TODO: is it possible that multiple nested components using the same key `:open?`?
@@ -92,7 +98,6 @@
      (fn [state]
        (let [open? (get state k)]
          (hide-when-esc-or-outside state
-                                   open?
                                    :on-hide (fn []
                                               (reset! open? false)))))
      (fn [state]
