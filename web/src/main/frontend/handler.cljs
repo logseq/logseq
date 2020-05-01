@@ -435,7 +435,8 @@
   (swap! state/state assoc
          :edit-file nil
          :edit-journal nil
-         :edit-content ""))
+         :edit-content ""
+         :edit-input-id nil))
 
 (defn file-changed?
   [content]
@@ -749,7 +750,7 @@
   [repo-url]
   (p/then (clone repo-url)
           (fn []
-            (git-set-username-email! (:me @state/state))
+            (git-set-username-email! repo-url (:me @state/state))
             (load-db-and-journals! repo-url nil true)
             (periodically-pull-and-push repo-url {:pull-now? false}))))
 
@@ -822,7 +823,7 @@
       (let [repo url]
         (if (db/cloned? repo)
           (do
-            (git-set-username-email! repo-url me)
+            (git-set-username-email! repo me)
             (periodically-pull-and-push repo {:pull-now? true}))
           (clone-and-pull repo))))
     (watch-config!)))

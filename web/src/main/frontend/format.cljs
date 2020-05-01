@@ -1,6 +1,6 @@
 (ns frontend.format
   (:require [frontend.format.org-mode :refer [->OrgMode] :as org]
-            [frontend.format.markdown :refer [->MdMode]]
+            [frontend.format.markdown :refer [->MdMode] :as markdown]
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
             [clojure.string :as string]))
@@ -35,15 +35,17 @@
 
 ;; html
 (defn get-default-config
-  []
-  ;; TODO
-  org/default-config)
+  [format]
+  (case format
+    :org org/default-config
+    :markdown markdown/default-config
+    nil))
 
 (defn to-html
   ([content format]
-   (to-html content format (get-default-config)))
+   (to-html content format (get-default-config format)))
   ([content format config]
-   (let [config (if config config (get-default-config))]
+   (let [config (if config config (get-default-config format))]
      (if (string/blank? content)
        ""
        (if-let [record (get-format-record format)]

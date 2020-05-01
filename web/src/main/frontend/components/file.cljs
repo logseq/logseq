@@ -31,7 +31,7 @@
           [:a {:href (str "/file/" file-id)}
            file]])))])
 
-(rum/defcs file
+(rum/defcs file < rum/reactive
   [state]
   (let [[encoded-path path] (get-path state)
         format (keyword (string/lower-case (last (string/split path #"\."))))]
@@ -47,10 +47,11 @@
         (content/content encoded-path format {:hiccup hiccup}))
 
       (and format (contains? (config/text-formats) format))
-      (let [content (db/get-file path)]
+      (let [content (db/sub-file path)]
         (content/content encoded-path format
                          {:content content
-                          :on-click (fn []
+                          :on-click (fn [e]
+                                      (util/stop e)
                                       (handler/edit-file!
                                        {:path encoded-path
                                         :content content}))

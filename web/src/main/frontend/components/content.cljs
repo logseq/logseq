@@ -89,7 +89,7 @@
                              (handler/reset-cursor-range! (gdom/getElement (str id)))
                              (state/set-edit-input-id! id)
                              (when on-click
-                               (on-click))))]
+                               (on-click e))))]
             (cond
               (and markup? loading?)
               [:div "loading ..."]
@@ -97,13 +97,15 @@
               markup?
               (let [html (format/to-html content format config)
                     html (if html html "<div></div>")]
-                [:div
+                [:div.content
                  {:id id
                   :on-click on-click
                   :dangerouslySetInnerHTML {:__html html}}])
 
               :else                       ; other text formats
-              [:div.pre-white-space
+              [:div.pre-white-space.content
                {:id id
                 :on-click on-click}
-               content])))))))
+               (if (string/blank? content)
+                 [:div.text-gray-500.cursor "Click to edit"]
+                 content)])))))))

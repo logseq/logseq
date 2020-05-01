@@ -1,21 +1,24 @@
 (ns frontend.format.markdown
   (:require [frontend.format.protocol :as protocol]
             [frontend.config :as config]
-            [frontend.loader :as loader]))
+            [frontend.loader :as loader]
+            [cljs-bean.core :as bean]))
 
 (defn loaded? []
   js/window.showdown)
 
-(defn to-html
-  [content config]
-  (when (loaded?)
-    (.makeHtml (js/window.showdown.Converter.) content)))
+(def default-config
+  {:simpleLineBreaks true
+   :tasklists true
+   :tables true
+   :strikethrough true
+   :simplifiedAutoLink true})
 
 (defrecord MdMode []
   protocol/Format
   (toHtml [this content config]
     (when (loaded?)
-      (.makeHtml (js/window.showdown.Converter.) content)))
+      (.makeHtml (js/window.showdown.Converter. (bean/->js (or config default-config))) content)))
   (loaded? [this]
     (some? (loaded?)))
   (lazyLoad [this ok-handler]

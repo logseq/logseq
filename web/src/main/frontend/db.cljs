@@ -32,8 +32,10 @@
 (defn get-conn
   ([]
    (get-conn (state/get-current-repo) true))
-  ([repo]
-   (get-conn repo true))
+  ([repo-or-deref?]
+   (if (boolean? repo-or-deref?)
+     (get-conn (state/get-current-repo) repo-or-deref?)
+     (get-conn repo-or-deref? true)))
   ([repo deref?]
    (let [repo (if repo repo (state/get-current-repo))]
      (when-let [conn (get @conns (datascript-db repo))]
@@ -121,6 +123,16 @@
   ([repo-url tx-data]
    (when-let [conn (get-conn repo-url false)]
      (posh/transact! conn tx-data))))
+
+(defn pull-many
+  [selector eids]
+  (d/pull-many (d/db (get-conn (state/get-current-repo) false)) selector eids))
+
+(defn posh-pull-many
+  [selector eids]
+  (posh/pull-many (get-conn (state/get-current-repo) false)
+                  selector
+                  eids))
 
 ;; (new TextEncoder().encode('foo')).length
 ;; (defn db-size
@@ -338,28 +350,22 @@
            headings))
 
 (defn get-file-by-concat-headings
-  ([path]
-   (get-file-by-concat-headings (state/get-current-repo)
-                                path))
-  ([repo-url path]
-   (->> (d/q '[:find (pull ?heading [*])
-               :in $ ?path
-               :where
-               [?file :file/path ?path]
-               [?heading :heading/file ?file]]
-          (get-conn repo-url) path)
+  ([file]
+   (get-file-by-concat-headings
+    (state/get-current-repo)
+    file))
+  ([repo-url file]
+   (->> (posh/q '[:find ?heading
+                  ;; (pull ?heading [*])
+                  :in $ ?file
+                  :where
+                  [?p :file/path ?file]
+                  [?heading :heading/file ?p]]
+          (get-conn repo-url false) file)
+        rum/react
         seq-flatten
+        (pull-many '[*])
         sort-by-pos)))
-
-(defn pull-many
-  [selector eids]
-  (d/pull-many (d/db (get-conn (state/get-current-repo) false)) selector eids))
-
-(defn posh-pull-many
-  [selector eids]
-  (posh/pull-many (get-conn (state/get-current-repo) false)
-                  selector
-                  eids))
 
 (defn get-page-headings
   ([page]
@@ -557,6 +563,19 @@
      path)
    ffirst))
 
+(defn sub-file
+  [path]
+  (->
+   (posh/q '[:find ?content
+             :in $ ?path
+             :where
+             [?file :file/path ?path]
+             [?file :file/content ?content]]
+     (get-conn false)
+     path)
+   (rum/react)
+   ffirst))
+
 ;; marker should be one of: TODO, DOING, IN-PROGRESS
 ;; time duration
 ;; TODO: posh doesn't support or query
@@ -604,11 +623,11 @@
   []
   (let [today (date->int (js/Date.))]
     (d/q '[:find (count ?page) .
-          :in $ ?today
-          :where
-          [?page :page/journal? true]
-          [?page :page/journal-day ?journal-day]
-          [(<= ?journal-day ?today)]]
+           :in $ ?today
+           :where
+           [?page :page/journal? true]
+           [?page :page/journal-day ?journal-day]
+           [(<= ?journal-day ?today)]]
       (get-conn (state/get-current-repo))
       today)))
 
