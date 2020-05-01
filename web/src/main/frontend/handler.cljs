@@ -561,19 +561,9 @@
 
 (defn load-more-journals!
   []
-  (swap! state/state update :journals-length inc)
-  (let [journals (:latest-journals @state/state)]
-    (when-let [title (first (last journals))]
-      (let [[m d y] (->>
-                     (-> (last (string/split title #", "))
-                         (string/split #"/"))
-                     (map util/parse-int))
-            new-date (js/Date. y (dec m) d)
-            _ (.setDate new-date (dec (.getDate new-date)))
-            next-day (util/journal-name new-date)
-            more-journals [(db/get-journal next-day)]
-            journals (concat journals more-journals)]
-        (set-state-kv! :latest-journals journals)))))
+  (let [current-length (:journals-length @state/state)]
+    (when (< current-length (db/get-journals-length))
+        (state/update-state! :journals-length inc))))
 
 (defn request-presigned-url
   [file filename mime-type url-handler]

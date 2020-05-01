@@ -595,6 +595,23 @@
   ([page-name]
    [page-name (get-page-headings page-name)]))
 
+(defn- date->int
+  [date]
+  (util/parse-int
+   (string/replace (util/ymd date) "/" "")))
+
+(defn get-journals-length
+  []
+  (let [today (date->int (js/Date.))]
+    (d/q '[:find (count ?page) .
+          :in $ ?today
+          :where
+          [?page :page/journal? true]
+          [?page :page/journal-day ?journal-day]
+          [(<= ?journal-day ?today)]]
+      (get-conn (state/get-current-repo))
+      today)))
+
 ;; cache this
 (defn get-latest-journals
   ([n]
@@ -603,9 +620,6 @@
    (when-let [conn (get-conn repo-url false)]
      (let [date (js/Date.)
            _ (.setDate date (- (.getDate date) (dec n)))
-           date->int (fn [date]
-                       (util/parse-int
-                        (string/replace (util/ymd date) "/" "")))
            before-day (date->int date)
            today (date->int (js/Date.))
            pages (->>

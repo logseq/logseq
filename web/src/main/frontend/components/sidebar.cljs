@@ -18,7 +18,7 @@
 (def inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
 
 (rum/defc logo-or-repos < rum/reactive
-  [current-repo]
+  [current-repo close-modal-fn]
   (if current-repo
     (let [repos (state/sub [:me :repos])
           repos (->> repos
@@ -44,7 +44,8 @@
            [:a.hover:text-gray-300.text-gray-500.font-bold {:href current-repo
                                                             :target "_blank"}
             (db/get-repo-path current-repo)])]
-        [:a.text-gray-500.font-bold.hover:text-gray-300 {:href "/repo/add"}
+        [:a.text-gray-500.font-bold.hover:text-gray-300 {:href "/repo/add"
+                                                         :on-click close-modal-fn}
          "+"]]])
 
     [:img.h-8.w-auto
@@ -52,22 +53,21 @@
       :src "/static/img/logo.png"}]))
 
 (defn nav-item
-  ([title href svg-d]
-   (nav-item title href svg-d false))
-  ([title href svg-d active?]
-   (let [a (if active? active-button inactive-button)]
-     [a {:href href}
-      [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-       {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-       [:path
-        {:d svg-d
-         :stroke-width "2",
-         :stroke-linejoin "round",
-         :stroke-linecap "round"}]]
-      title])))
+  [title href svg-d active? close-modal-fn]
+  (let [a (if active? active-button inactive-button)]
+    [a {:href href
+        :on-click close-modal-fn}
+     [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
+      {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+      [:path
+       {:d svg-d
+        :stroke-width "2",
+        :stroke-linejoin "round",
+        :stroke-linecap "round"}]]
+     title]))
 
 (rum/defc starred-pages < rum/reactive
-  [page-active?]
+  [page-active? close-modal-fn]
   (let [repo (state/get-current-repo)
         starred (state/sub [:config repo :starred])]
     [:div.cursor-pointer.my-1.flex.flex-col.ml-2
@@ -77,27 +77,32 @@
            [:a {:key encoded-page
                 :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
                 :style {:color (if (page-active? encoded-page) "#FFF")}
-                :href (str "/page/" encoded-page)}
+                :href (str "/page/" encoded-page)
+                :on-click close-modal-fn}
             page])))]))
 
 (rum/defc sidebar-nav
-  [route-match]
+  [route-match close-modal-fn]
   (let [active? (fn [route] (= route (get-in route-match [:data :name])))
         page-active? (fn [page]
                        (= page (get-in route-match [:parameters :path :name])))]
     [:nav.flex-1.px-2.py-4.bg-gray-800
      (nav-item "Journals" "/"
                "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
-               (active? :home))
+               (active? :home)
+               close-modal-fn)
      (nav-item "Agenda" "/agenda"
                "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-               (active? :agenda))
+               (active? :agenda)
+               close-modal-fn)
      (nav-item "All Pages" "/all-pages"
                "M6 2h9a1 1 0 0 1 .7.3l4 4a1 1 0 0 1 .3.7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.1.9-2 2-2zm9 2.41V7h2.59L15 4.41zM18 9h-3a2 2 0 0 1-2-2V4H6v16h12V9zm-2 7a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm0-4a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm-5-4a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1z"
-               (active? :all-pages))
+               (active? :all-pages)
+               close-modal-fn)
      (nav-item "All Files" "/all-files"
                "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
-               (active? :all-files))
+               (active? :all-files)
+               close-modal-fn)
      [:div {:style {:height 1
                     :background-color "rgb(57, 75, 89)"
                     :margin 12}}]
@@ -106,7 +111,7 @@
       (svg/star-solid (util/hiccup->class "mr-5.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150"))
       [:span.font-bold.text-gray-500
        "Starred"]]
-     (starred-pages page-active?)]))
+     (starred-pages page-active? close-modal-fn)]))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
@@ -169,15 +174,15 @@
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]])
        [:div.flex-shrink-0.flex.items-center.h-16.px-4.bg-gray-900
-        (logo-or-repos current-repo)]
+        (logo-or-repos current-repo close-fn)]
        [:div.flex-1.h-0.overflow-y-auto
-        (sidebar-nav route-match)]]]
+        (sidebar-nav route-match close-fn)]]]
      [:div.hidden.md:flex.md:flex-shrink-0
       [:div.flex.flex-col.w-64
        [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
         (logo-or-repos current-repo)]
        [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
-        (sidebar-nav route-match)]]]
+        (sidebar-nav route-match close-fn)]]]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
       [:div.relative.z-10.flex-shrink-0.flex.h-16.bg-white.shadow
        [:button.px-4.border-r.border-gray-200.text-gray-500.focus:outline-none.focus:bg-gray-100.focus:text-gray-600.md:hidden

@@ -11,7 +11,7 @@
             [frontend.components.reference :as reference]
             [frontend.utf8 :as utf8]))
 
-(rum/defc journal-cp < rum/reactive
+(rum/defc journal-cp
   [[title headings]]
   (let [headings (db/with-dummy-heading headings)
         ;; Don't edit the journal title
@@ -26,7 +26,7 @@
 
      (reference/references title)]))
 
-(rum/defc journals < rum/reactive
+(rum/defc journals
   [latest-journals]
   [:div#journals
    (ui/infinite-list

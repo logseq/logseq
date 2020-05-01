@@ -2,8 +2,8 @@
   (:require [clojure.set :as set]
             [frontend.state :as state]))
 
-(defonce hidden-file ".hidden")
 (defonce dev? ^boolean goog.DEBUG)
+
 (def website
   (if dev?
     "http://localhost:3000"
