@@ -85,6 +85,7 @@
 ;; TODO: no atom version
 (defn load-files
   [repo-url]
+  (state/set-cloning? false)
   (set-state-kv! :repo/loading-files? true)
   (let [files-atom (atom nil)]
     (-> (p/let [files (bean/->clj (git/list-files repo-url))]
@@ -165,7 +166,7 @@
        (zipmap files contents)))))
 
 (defn load-repo-to-db!
-  [repo-url files diffs first-clone?]
+  [repo-url diffs first-clone?]
   (set-state-kv! :repo/loading-files? false)
   (set-state-kv! :repo/importing-to-db? true)
   (let [load-contents (fn [files delete-files delete-headings]
@@ -178,7 +179,8 @@
                              (set-state-kv! :repo/importing-to-db? false)))))]
 
     (if first-clone?
-      (load-contents files nil nil)
+      (p/let [files (load-files repo-url)]
+        (load-contents files nil nil))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
@@ -199,8 +201,7 @@
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
-    (p/let [files (load-files repo-url)
-            _ (load-repo-to-db! repo-url files diffs first-clone?)]
+    (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
       (create-month-journal-if-not-exists repo-url)
       (create-config-file-if-not-exists repo-url))))
 
@@ -364,7 +365,6 @@
        (state/set-cloning? true)
        (git/clone repo-url token))
      (fn []
-       (state/set-cloning? false)
        (state/set-current-repo! repo-url)
        (db/start-db-conn! (:me @state/state)
                           repo-url
