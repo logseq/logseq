@@ -57,7 +57,7 @@
               (when-not (dom/contains node (.. e -target))
                 (on-hide state e))))
 
-    (listen state js/window "keydown"
+    (listen state node "keydown"
             (fn [e]
               (case (.-keyCode e)
                 ;; Esc
