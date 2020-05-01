@@ -288,13 +288,6 @@
        (p/catch (fn [error]
                   (prn "get latest commit failed: " error))))))
 
-(defn debug-latest-commits!
-  []
-  (get-latest-commit (state/get-current-repo)
-                     (fn [commits]
-                       (prn (mapv :oid (bean/->clj commits))))
-                     3))
-
 (defn set-latest-commit-if-exists! [repo-url]
   (get-latest-commit
    repo-url
@@ -310,32 +303,32 @@
          (not (:edit-input-id @state/state))
          (= :should-push (db/get-key-value repo-url :git/status)))
     ;; auto commit if there are any un-committed changes
-    (p/let [changed-files (git/get-status-matrix (state/get-current-repo))
-            _commit-result (when (seq (flatten (vals changed-files)))
-                             (git/commit repo-url "Logseq auto save"))]
-      (set-git-status! repo-url :pushing)
-      (let [token (get-github-token)]
-        (util/p-handle
-         (git/push repo-url token)
-         (fn []
-           (prn "Push successfully!")
-           (set-git-status! repo-url nil)
-           (set-git-error! repo-url nil)
-           (set-latest-commit-if-exists! repo-url))
-         (fn [error]
-           (prn "Failed to push, error: " error)
-           (set-git-status! repo-url :push-failed)
-           (set-git-error! repo-url error)
-           (show-notification!
-            [:p.content
-             "Failed to push, please "
-             [:span.text-gray-700.font-bold
-              "resolve any diffs first."]]
-            :error)
-           (p/let [result (git/fetch repo-url (get-github-token))
-                   {:keys [fetchHead]} (bean/->clj result)
-                   _ (set-latest-commit! repo-url fetchHead)]
-             (redirect! {:to :diff}))))))))
+    (p/let [changed-files (git/get-status-matrix repo-url)]
+      (when (seq (flatten (vals changed-files)))
+        (p/let [_commit-result (git/commit repo-url "Logseq auto save")]
+          (set-git-status! repo-url :pushing)
+          (let [token (get-github-token)]
+            (util/p-handle
+             (git/push repo-url token)
+             (fn []
+               (prn "Push successfully!")
+               (set-git-status! repo-url nil)
+               (set-git-error! repo-url nil)
+               (set-latest-commit-if-exists! repo-url))
+             (fn [error]
+               (prn "Failed to push, error: " error)
+               (set-git-status! repo-url :push-failed)
+               (set-git-error! repo-url error)
+               (show-notification!
+                [:p.content
+                 "Failed to push, please "
+                 [:span.text-gray-700.font-bold
+                  "resolve any diffs first."]]
+                :error)
+               (p/let [result (git/fetch repo-url (get-github-token))
+                       {:keys [fetchHead]} (bean/->clj result)
+                       _ (set-latest-commit! repo-url fetchHead)]
+                 (redirect! {:to :diff}))))))))))
 
 (defn commit-and-force-push!
   [commit-message pushing?]
@@ -827,3 +820,18 @@
             (periodically-pull-and-push repo {:pull-now? true}))
           (clone-and-pull repo))))
     (watch-config!)))
+
+(comment
+
+  (defn debug-latest-commits
+    []
+    (get-latest-commit (state/get-current-repo)
+                       (fn [commits]
+                         (prn (mapv :oid (bean/->clj commits))))
+                       3))
+
+  (defn debug-matrix
+    []
+    (p/let [changes (git/get-status-matrix (state/get-current-repo))]
+      (prn changes)))
+  )

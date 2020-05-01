@@ -37,9 +37,45 @@
       ;;                2000)
       )))
 
+(rum/defc non-hiccup-content < rum/reactive
+  [id content on-click on-hide config format]
+  (let [edit? (= (state/sub :edit-input-id) id)
+        loading (state/sub :format/loading)
+        edit-journal (state/sub :edit-journal)
+        edit-file (state/sub :edit-file)]
+    (if edit?
+      (editor/box content {:on-hide on-hide} id)
+      (let [format (format/normalize format)
+            loading? (get loading format)
+            markup? (contains? config/html-render-formats format)
+            on-click (fn [e]
+                       (when-not (util/link? (gobj/get e "target"))
+                         (handler/reset-cursor-range! (gdom/getElement (str id)))
+                         (state/set-edit-input-id! id)
+                         (when on-click
+                           (on-click e))))]
+        (cond
+          (and markup? loading?)
+          [:div "loading ..."]
+
+          markup?
+          (let [html (format/to-html content format config)
+                html (if html html "<div></div>")]
+            [:div.content
+             {:id id
+              :on-click on-click
+              :dangerouslySetInnerHTML {:__html html}}])
+
+          :else                       ; other text formats
+          [:div.pre-white-space.content
+           {:id id
+            :on-click on-click}
+           (if (string/blank? content)
+             [:div.text-gray-500.cursor "Click to edit"]
+             content)])))))
 
 ;; TODO: lazy load highlight.js
-(rum/defcs content < rum/reactive
+(rum/defcs content <
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "keyup"
@@ -70,42 +106,7 @@
                            content
                            on-click
                            on-hide]}]
-  (let [format (format/normalize format)
-        edit? (= (state/sub :edit-input-id) id)]
+  (let [format (format/normalize format)]
     (if (contains? config/hiccup-support-formats format)
-      [:div
-       {:id id}
-       hiccup]
-      (let [loading (state/sub :format/loading)
-            edit-journal (state/sub :edit-journal)
-            edit-file (state/sub :edit-file)]
-        (if edit?
-          (editor/box content {:on-hide on-hide} id)
-          (let [format (format/normalize format)
-                loading? (get loading format)
-                markup? (contains? config/html-render-formats format)
-                on-click (fn [e]
-                           (when-not (util/link? (gobj/get e "target"))
-                             (handler/reset-cursor-range! (gdom/getElement (str id)))
-                             (state/set-edit-input-id! id)
-                             (when on-click
-                               (on-click e))))]
-            (cond
-              (and markup? loading?)
-              [:div "loading ..."]
-
-              markup?
-              (let [html (format/to-html content format config)
-                    html (if html html "<div></div>")]
-                [:div.content
-                 {:id id
-                  :on-click on-click
-                  :dangerouslySetInnerHTML {:__html html}}])
-
-              :else                       ; other text formats
-              [:div.pre-white-space.content
-               {:id id
-                :on-click on-click}
-               (if (string/blank? content)
-                 [:div.text-gray-500.cursor "Click to edit"]
-                 content)])))))))
+      [:div {:id id} hiccup]
+      (non-hiccup-content id content on-click on-hide config format))))
