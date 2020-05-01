@@ -215,7 +215,7 @@
             :options {:href (str "/file/" (util/url-encode config/config-file))}}
            {:title "Sign out"
             :options {:on-click handler/sign-out!}}])]]]
-      [:main.flex-1.relative.z-0.overflow-y-auto.py-6.focus:outline-none
+      [:main.flex-1.relative.z-0.overflow-y-scroll.py-6.focus:outline-none
        {:tabIndex "0"}
        [:div.flex.justify-center
         [:div.flex-1.m-6 {:style {:position "relative"
