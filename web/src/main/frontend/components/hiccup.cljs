@@ -323,7 +323,6 @@
                        :height 24}
                :class "transition ease-in-out duration-150"
                :on-click (fn [e]
-                           (prn "clicked")
                            (util/stop e)
                            (let [id (str "ls-heading-parent-" uuid)]
                              (if collapsed?
