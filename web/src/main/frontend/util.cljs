@@ -7,8 +7,10 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             ["/frontend/caret_pos" :as caret-pos]
+            ["caret-pos" :as caret]
             [goog.string :as gstring]
-            [goog.string.format]))
+            [goog.string.format]
+            [dommy.core :as d]))
 
 (defn format
   [fmt & args]
@@ -258,15 +260,13 @@
 
 (def caret-range caret-pos/getCaretRange)
 
-(defn caret-pos
-  [input]
-  (-> (caret-pos/getCaretPos input)
-      (bean/->clj)
-      :end))
-
 (defn set-caret-pos!
   [input pos]
   (.setSelectionRange input pos pos))
+
+(defn get-caret-pos
+  [input]
+  (bean/->clj ((gobj/get caret "position") input)))
 
 (defn minimize-html
   [s]
@@ -351,3 +351,33 @@
 (defn get-git-owner-and-repo
   [repo-url]
   (take-last 2 (string/split repo-url #"/")))
+
+(defn get-textarea-height
+  [input]
+  (some-> input
+          (d/style)
+          (gobj/get "height")
+          (string/split #"\.")
+          first
+          (parse-int)))
+
+(defn get-textarea-line-height
+  [input]
+  (try
+    (some-> input
+           (d/style)
+           (gobj/get "lineHeight")
+           ;; TODO: is this cross-platform?
+           (string/replace "px" "")
+           (parse-int))
+    (catch js/Error _e
+      24)))
+
+(defn textarea-cursor-first-row?
+  [input line-height]
+  (< (:top (get-caret-pos input)) line-height))
+
+(defn textarea-cursor-end-row?
+  [input line-height]
+  (> (+ (:top (get-caret-pos input)) line-height)
+     (get-textarea-height input)))

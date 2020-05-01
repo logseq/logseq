@@ -25,11 +25,16 @@
      :value value
      :pos pos}))
 
+
 (defn on-up-down
   [state e up?]
   (let [{:keys [id dummy? on-hide value pos]} (get-state state)
-        heading? (string/starts-with? id "edit-heading-")]
-    (when heading?
+        heading? (string/starts-with? id "edit-heading-")
+        element (gdom/getElement id)
+        line-height (util/get-textarea-line-height element)]
+    (when (and heading?
+               (or (and up? (util/textarea-cursor-first-row? element line-height))
+                   (and (not up?) (util/textarea-cursor-end-row? element line-height))))
       (util/stop e)
       (let [f (if up? gdom/getPreviousElementSibling gdom/getNextElementSibling)
             heading-id (string/replace id "edit-heading-" "")
@@ -86,10 +91,7 @@
 
        ;; backspace
        8 (fn [state e] (on-backspace state e))
-       })
-
-
-     ))
+       })))
   {:init (fn [state _props]
            (let [[content {:keys [dummy?]}] (:rum/args state)]
              (state/set-edit-content!
