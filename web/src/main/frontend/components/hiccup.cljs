@@ -310,12 +310,16 @@
           (when-not agenda?
             [:div.hd-control.flex.flex-row.items-center {:style {:margin-left (str (max 0 (- level 2)) "rem")
                                                                  :height 24
-                                                                 :margin-right "0.3rem"}}
-             [:a.heading-control.pt-1
+                                                                 :margin-right "0.3rem"
+                                                                 }}
+             [:a.heading-control.flex.flex-row.items-center.justify-center
               {:id (str "control-" uuid)
-               :style {:margin-top -4}
-               :class "block transition ease-in-out duration-150 mr-1"
-               :on-click (fn []
+               :style {:width 14
+                       :height 24}
+               :class "transition ease-in-out duration-150"
+               :on-click (fn [e]
+                           (prn "clicked")
+                           (util/stop e)
                            (let [id (str "ls-heading-parent-" uuid)]
                              (if collapsed?
                                (expand/expand! (:id config) id)
@@ -330,8 +334,11 @@
                 (svg/caret-down)
 
                 :else
-                nil)]
-             [:a.flex.align-items {:on-click (fn [])}
+                [:span ""])]
+             [:a.flex.flex-row.items-center.justify-center
+              {:on-click (fn [])
+               :style {:width 14
+                       :height 24}}
               [:svg {:height 10
                      :width 10
                      :fill "currentColor"

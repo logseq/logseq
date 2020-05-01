@@ -78,6 +78,11 @@
   [:div {:dangerouslySetInnerHTML
          {:__html content}}])
 
+(defn span-raw-html
+  [content]
+  [:span {:dangerouslySetInnerHTML
+         {:__html content}}])
+
 (defn json->clj
   [json-string]
   (-> json-string
