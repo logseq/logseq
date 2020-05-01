@@ -9,11 +9,14 @@
    (vector? block)
    (= "Heading" (first block))))
 
-(defn target-block?
+(defn page-reference-block?
   [block]
   (and
    (vector? block)
-   (contains? #{"Target" "Radio_Target"} (first block))))
+   (= "Link" (first block))
+   (= "Search" (first (:url (second block))))
+   (not (contains? #{\# \*} (first (second (:url (second block))))))
+   ))
 
 (defn task-block?
   [block]
@@ -64,8 +67,9 @@
   (let [ref-pages (atom [])]
     (walk/postwalk
     (fn [form]
-      (when (target-block? form)
-        (swap! ref-pages conj (string/capitalize (last form))))
+      (when (page-reference-block? form)
+        (let [page (second (:url (second form)))]
+          (swap! ref-pages conj (string/capitalize page))))
       form)
     (concat title children))
     (assoc heading :ref-pages (vec @ref-pages))))

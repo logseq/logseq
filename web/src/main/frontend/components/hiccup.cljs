@@ -168,32 +168,37 @@
     (util/format "\\(%s\\)" s)
 
     ["Target" s]
-    [:span
-     [:span.text-gray-500 "<<"]
-     [:a {:href (str "/page/" (util/url-encode s))} s]
-     [:span.text-gray-500 ">>"]]
+    [:a {:id s} s]
 
 
     ["Radio_Target" s]
-    [:a {:href (str "/page/" (util/url-encode s))} (str "<<<" s ">>>")]
+    [:a {:id s} s]
+    ;; [:a {:href (str "/page/" (util/url-encode s))} (str "<<<" s ">>>")]
 
     ["Link" link]
     (let [{:keys [url label]} link]
-      (let [href (string-of-url url)
-            img-formats (set (map name (config/img-formats)))]
-        (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
-          (image-link url href label)
-          (let [[href label] (match url
-                               ["Search" s]
-                               [(str "#" (anchor-link s))
-                                s]
-                               :else
-                               [href
-                                (map-inline label)])]
+      (match url
+        ["Search" s]
+        (case (first s)
+          \#
+          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline label))
+          ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
+          \*
+          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline label))
+          ;; page reference
+          [:span.page-reference
+           [:span.text-gray-500 "[["]
+           [:a {:href (str "/page/" (util/url-encode s))} s]
+           [:span.text-gray-500 "]]"]])
+        :else
+        (let [href (string-of-url url)
+              img-formats (set (map name (config/img-formats)))]
+          (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
+            (image-link url href label)
             (->elem
              :a
              {:href href}
-             label)))))
+             (map-inline label))))))
 
     ["Verbatim" s]
     [:code s]
