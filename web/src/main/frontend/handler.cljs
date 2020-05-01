@@ -483,10 +483,10 @@
         (alter-file repo-url file content' nil)))))
 
 (defn git-set-username-email!
-  [{:keys [name email]}]
+  [repo-url {:keys [name email]}]
   (when (and name email)
     (git/set-username-email
-     (git/get-repo-dir (state/get-current-repo))
+     (git/get-repo-dir repo-url)
      name
      email)))
 
@@ -821,6 +821,8 @@
     (doseq [{:keys [id url]} repos]
       (let [repo url]
         (if (db/cloned? repo)
-          (periodically-pull-and-push repo {:pull-now? true})
+          (do
+            (git-set-username-email! repo-url me)
+            (periodically-pull-and-push repo {:pull-now? true}))
           (clone-and-pull repo))))
     (watch-config!)))

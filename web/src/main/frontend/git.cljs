@@ -21,12 +21,14 @@
 (defn set-username-email
   [dir username email]
   (util/p-handle (js/git.config (clj->js
-                                 {:dir dir
+                                 {:global true
+                                  :dir dir
                                   :path "user.name"
                                   :value username}))
                  (fn [result]
                    (js/git.config (clj->js
-                                   {:dir dir
+                                   {:global true
+                                    :dir dir
                                     :path "user.email"
                                     :value email})))
                  (fn [error]
