@@ -59,15 +59,19 @@
           [:div "loading ..."]
 
           markup?
-          (let [html (format/to-html content format config)
-                html (if html html "<div></div>")]
-            [:div.content
-             {:id id
-              :on-click on-click
-              :dangerouslySetInnerHTML {:__html html}}])
+          (let [html (format/to-html content format config)]
+            (if (string/blank? html)
+              [:div
+               {:id id
+                :on-click on-click                }
+               [:div.text-gray-500.cursor "Click to edit"]]
+              [:div
+               {:id id
+                :on-click on-click
+                :dangerouslySetInnerHTML {:__html html}}]))
 
           :else                       ; other text formats
-          [:div.pre-white-space.content
+          [:div
            {:id id
             :on-click on-click}
            (if (string/blank? content)
