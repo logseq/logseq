@@ -42,7 +42,12 @@
 
 (defn load-file
   [repo-url path]
-  (fs/read-file (git/get-repo-dir repo-url) path))
+  (->
+   (p/let [content (fs/read-file (git/get-repo-dir repo-url) path)]
+     content)
+   (p/catch
+       (fn [e]
+         (prn "load file failed, " e)))))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -87,17 +92,14 @@
   [repo-url]
   (state/set-cloning? false)
   (set-state-kv! :repo/loading-files? true)
-  (let [files-atom (atom nil)]
-    (-> (p/let [files (bean/->clj (git/list-files repo-url))]
-          (if (contains? (set files) config/config-file)
-            (p/let [config-content (load-file repo-url config/config-file)
-                    config (db/reset-config! repo-url config-content)]
-              (when-let [patterns (:hidden config)]
-                (reset! files-atom (remove (fn [path] (hidden? path patterns)) files))))
-            (reset! files-atom files)))
-        (p/finally
-          (fn []
-            @files-atom)))))
+  (p/let [files (bean/->clj (git/list-files repo-url))
+          config-content (load-file repo-url config/config-file)]
+    (if config-content
+      (let [config (db/reset-config! repo-url config-content)]
+        (if-let [patterns (seq (:hidden config))]
+          (remove (fn [path] (hidden? path patterns)) files)
+          files))
+      files)))
 
 (defn- set-latest-commit!
   [repo-url hash]
