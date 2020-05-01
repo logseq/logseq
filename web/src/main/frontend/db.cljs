@@ -120,7 +120,7 @@
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
    (when-let [conn (get-conn repo-url false)]
-     (d/transact! conn tx-data))))
+     (posh/transact! conn tx-data))))
 
 ;; (new TextEncoder().encode('foo')).length
 ;; (defn db-size
@@ -315,7 +315,7 @@
    (sub-key-value (state/get-current-repo) key))
   ([repo-url key]
    (when-let [conn (get-conn repo-url false)]
-     (-> (posh/pull conn '[*] key)
+     (-> (posh/pull conn '[*] [:db/ident key])
          (rum/react)
          (get key)))))
 

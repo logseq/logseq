@@ -49,6 +49,7 @@
   (let [{:keys [id dummy? value on-hide pos]} (get-state state)
         heading? (string/starts-with? id "edit-heading-")]
     (when (and heading? (= value ""))
+      (util/stop e)
       ;; delete heading, edit previous heading
       (let [heading-id (string/replace id "edit-heading-" "")
             heading (db/entity [:heading/uuid (uuid heading-id)])
@@ -59,7 +60,7 @@
             id (gobj/get sibling-heading "id")]
 
         (let [heading (db/entity [:heading/uuid (uuid heading-id)])]
-          (handler/delete-heading! heading))
+          (handler/delete-heading! heading dummy?))
 
         (when id
           (let [id (uuid (string/replace id "ls-heading-parent-" ""))]

@@ -563,7 +563,7 @@
   []
   (let [current-length (:journals-length @state/state)]
     (when (< current-length (db/get-journals-length))
-        (state/update-state! :journals-length inc))))
+      (state/update-state! :journals-length inc))))
 
 (defn request-presigned-url
   [file filename mime-type url-handler]
@@ -714,35 +714,36 @@
         (alter-file repo-url file-path new-content opts)))))
 
 (defn delete-heading!
-  [{:heading/keys [uuid meta content file] :as heading}]
-  (let [file-path (:file/path (db/entity (:db/id file)))
-        file-content (:file/content (db/entity (:db/id file)))
-        after-headings (db/get-file-after-headings (state/get-current-repo) (:db/id file) (:end-pos meta))
-        last-start-pos (atom (:pos meta))
-        updated-headings (mapv
-                          (fn [{:heading/keys [uuid meta] :as heading}]
-                            (let [old-start-pos (:pos meta)
-                                  old-end-pos (:end-pos meta)
-                                  new-end-pos (if old-end-pos
-                                                (+ @last-start-pos (- old-end-pos old-start-pos)))
-                                  new-meta {:pos @last-start-pos
-                                            :end-pos new-end-pos}]
-                              (reset! last-start-pos new-end-pos)
-                              {:heading/uuid uuid
-                               :heading/meta new-meta}))
-                          after-headings)
-        new-content (utf8/insert! file-content (:pos meta) (:end-pos meta) "")]
-    ;; update all headings meta after this deleted heading in the same file
-    (db/transact!
-      (vec
-       (concat
-        [[:db.fn/retractEntity [:heading/uuid uuid]]]
-        updated-headings
-        [{:file/path file-path
-          :file/content new-content}])))
-    (save-heading-if-changed! heading ""
-                              {:new-content new-content
-                               :reset? false})))
+  [{:heading/keys [uuid meta content file] :as heading} dummy?]
+  (when-not dummy?
+    (let [file-path (:file/path (db/entity (:db/id file)))
+          file-content (:file/content (db/entity (:db/id file)))
+          after-headings (db/get-file-after-headings (state/get-current-repo) (:db/id file) (:end-pos meta))
+          last-start-pos (atom (:pos meta))
+          updated-headings (mapv
+                            (fn [{:heading/keys [uuid meta] :as heading}]
+                              (let [old-start-pos (:pos meta)
+                                    old-end-pos (:end-pos meta)
+                                    new-end-pos (if old-end-pos
+                                                  (+ @last-start-pos (- old-end-pos old-start-pos)))
+                                    new-meta {:pos @last-start-pos
+                                              :end-pos new-end-pos}]
+                                (reset! last-start-pos new-end-pos)
+                                {:heading/uuid uuid
+                                 :heading/meta new-meta}))
+                            after-headings)
+          new-content (utf8/insert! file-content (:pos meta) (:end-pos meta) "")]
+      ;; update all headings meta after this deleted heading in the same file
+      (db/transact!
+        (vec
+         (concat
+          [[:db.fn/retractEntity [:heading/uuid uuid]]]
+          updated-headings
+          [{:file/path file-path
+            :file/content new-content}])))
+      (save-heading-if-changed! heading ""
+                                {:new-content new-content
+                                 :reset? false}))))
 
 (defn clone-and-pull
   [repo-url]
