@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
+            ["react-textarea-autosize" :as TextareaAutosize]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
@@ -11,26 +12,7 @@
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
-
-(defn- force-update-input
-  [comp opts]
-  (assoc (-> opts (dissoc :on-change))
-         :on-change (fn [e]
-                      (when-let [on-change (:on-change opts)]
-                        (on-change e))
-                      (.forceUpdate comp))))
-
-(defn- count-newlines
-  [s]
-  (count (re-seq #"\n" (or s ""))))
-
-(rum/defcc textarea
-  [comp opts]
-  (let [inc-rows (get opts :inc-rows 1)
-        rows (+ inc-rows (count-newlines (:value opts)))]
-    [:textarea
-     (-> (force-update-input comp opts)
-         (assoc :rows rows))]))
+(defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
