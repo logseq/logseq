@@ -420,20 +420,21 @@
                          [:span {:class name}
                           name]])
                       tags)))
-        element (keyword (str "h" level))
-        level-str [:a.control-level {:href (str "/page/" uuid)}
-                   (str (apply str (repeat level "*")) " ")]
-        heading-part (->elem element
-                             {:id anchor}
-                             (remove-nils
-                              (concat
-                               [
-                                ;; (when-not agenda? level-str)
-                                checkbox
-                                marker
-                                priority]
-                               (map-inline title)
-                               [tags])))]
+        heading-part (when level
+                       (let [element (keyword (str "h" level))
+                             level-str [:a.control-level {:href (str "/page/" uuid)}
+                                        (str (apply str (repeat level "*")) " ")]]
+                         (->elem element
+                                {:id anchor}
+                                (remove-nils
+                                 (concat
+                                  [
+                                   ;; (when-not agenda? level-str)
+                                   checkbox
+                                   marker
+                                   priority]
+                                  (map-inline title)
+                                  [tags])))))]
     (heading-cp t heading-part config)))
 
 (defn list-element

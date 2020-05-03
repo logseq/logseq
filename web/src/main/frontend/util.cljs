@@ -83,7 +83,7 @@
 (defn span-raw-html
   [content]
   [:span {:dangerouslySetInnerHTML
-         {:__html content}}])
+          {:__html content}}])
 
 (defn json->clj
   [json-string]
@@ -188,14 +188,6 @@
   (let [{:keys [year month]} (get-date)]
     (journals-path year month)))
 
-(defn today
-  []
-  (.toLocaleDateString (js/Date.) "default"
-                       (clj->js {:month "long"
-                                 :year "numeric"
-                                 :day "numeric"
-                                 :weekday "long"})))
-
 (defn zero-pad
   [n]
   (if (< n 10)
@@ -230,6 +222,26 @@
    (journal-name (js/Date.)))
   ([date]
    (str (get-weekday date) ", " (mdy date))))
+
+(defn today
+  []
+  (journal-name))
+
+(defn tomorrow
+  []
+  (let [d (js/Date.)
+        _ (.setDate d (inc (.getDate (js/Date.))))]
+    (journal-name d)))
+
+(defn get-current-time
+  []
+  (let [d (js/Date.)]
+    (.toLocaleTimeString
+     d
+     (gobj/get js/window.navigator "language")
+     (bean/->js {:hour "2-digit"
+                 :minute "2-digit"
+                 :hour12 false}))))
 
 (defn get-month-last-day
   []
@@ -365,11 +377,11 @@
   [input]
   (try
     (some-> input
-           (d/style)
-           (gobj/get "lineHeight")
-           ;; TODO: is this cross-platform?
-           (string/replace "px" "")
-           (parse-int))
+            (d/style)
+            (gobj/get "lineHeight")
+            ;; TODO: is this cross-platform?
+            (string/replace "px" "")
+            (parse-int))
     (catch js/Error _e
       24)))
 
