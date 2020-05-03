@@ -19,8 +19,9 @@
                    (update headings 0 assoc :heading/lock? true))
         encoded-page-name (util/url-encode (string/capitalize title))]
     [:div.flex-1
-     [:h1.title
-      title]
+     [:a.initial-color {:href (str "/page/" encoded-page-name)}
+      [:h1.title
+       title]]
      (content/content encoded-page-name :org
                       {:hiccup (hiccup/->hiccup headings {:id encoded-page-name})})
 

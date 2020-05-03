@@ -350,13 +350,27 @@
     [(first lines)]))
 
 (defn distinct-by
-  [k col]
+  [f col]
   (reduce
    (fn [acc x]
-     (let [v (get x k)]
-       (if (some #(= v (get % k)) acc)
-         acc
-         (vec (conj acc x)))))
+     (if (some #(= (f x) (f % )) acc)
+       acc
+       (vec (conj acc x))))
+   []
+   col))
+
+(defn distinct-by-last-wins
+  [f col]
+  (reduce
+   (fn [acc x]
+     (if (some #(= (f x) (f %)) acc)
+       (mapv
+        (fn [v]
+          (if (= (f x) (f v))
+            x
+            v))
+        acc)
+       (vec (conj acc x))))
    []
    col))
 

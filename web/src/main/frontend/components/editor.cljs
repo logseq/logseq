@@ -209,7 +209,9 @@
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)
         show-commands? (rum/react *show-commands)]
-    [:div.editor.flex-1 {:style {:position "relative"}}
+    [:div.editor {:style {:position "relative"
+                          :display "flex"
+                          :flex "1 1 0%"}}
      (ui/textarea
       {:id id
        :on-change (fn [e]
