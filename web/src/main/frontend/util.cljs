@@ -393,3 +393,13 @@
   [input line-height]
   (> (+ (:top (get-caret-pos input)) line-height)
      (get-textarea-height input)))
+
+(defn split-last [pattern s]
+  (when-let [last-index (string/last-index-of s pattern)]
+    [(subs s 0 last-index)
+     (subs s (+ last-index (count pattern)) (count s))]))
+
+(defn replace-last [pattern s new-value]
+  (when-let [last-index (string/last-index-of s pattern)]
+    (str (subs s 0 last-index)
+         new-value)))

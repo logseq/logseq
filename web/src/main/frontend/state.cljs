@@ -144,6 +144,10 @@
                        pages))
                      (vec (distinct (conj pages page)))))))
 
+(defn get-edit-input-id
+  []
+  (:edit-input-id @state))
+
 (defn set-edit-input-id!
   [id]
   (set-state! :edit-input-id id))

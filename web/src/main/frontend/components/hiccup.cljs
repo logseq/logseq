@@ -422,7 +422,7 @@
                       tags)))
         heading-part (when level
                        (let [element (keyword (str "h" level))
-                             level-str [:a.control-level {:href (str "/page/" uuid)}
+                             level-str [:a.initial-color {:href (str "/page/" uuid)}
                                         (str (apply str (repeat level "*")) " ")]]
                          (->elem element
                                 {:id anchor}

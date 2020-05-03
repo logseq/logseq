@@ -642,6 +642,31 @@
     (set! (.-selectionStart input) n)
     (set! (.-selectionEnd input) n)))
 
+(defn remove-slash!
+  []
+  (when-let [edit-content (state/get-edit-content)]
+    (when (= \/ (last edit-content))
+      (let [new-value (subs edit-content 0 (dec (count edit-content)))]
+       (state/set-edit-content! new-value)))))
+
+(defn append-edit-content!
+  [append-value]
+  (when-let [edit-content (state/get-edit-content)]
+    (let [new-value (str edit-content append-value)]
+      (state/set-edit-content! new-value)
+      (when-let [input-id (state/get-edit-input-id)]
+        (when-let [current-input (gdom/getElement input-id)]
+          (move-cursor-to-end current-input))))))
+
+(defn append-command!
+  [append-value]
+  (when-let [edit-content (state/get-edit-content)]
+    (let [new-value (util/replace-last "/" edit-content (str append-value))]
+      (state/set-edit-content! new-value)
+      (when-let [input-id (state/get-edit-input-id)]
+        (when-let [current-input (gdom/getElement input-id)]
+          (move-cursor-to-end current-input))))))
+
 (defn insert-image!
   [image-url]
   ;; (let [content (state/get-edit-content)
