@@ -82,7 +82,7 @@
               (let [key-code (.-keyCode e)]
                 (when-let [f (get keycode-map key-code)]
                   (f state e))
-                (all-handler e key-code))))))
+                (when all-handler (all-handler e key-code)))))))
 
 (defn on-key-down
   [state keycode-map all-handler]
@@ -92,7 +92,7 @@
               (let [key-code (.-keyCode e)]
                 (when-let [f (get keycode-map key-code)]
                   (f state e))
-                (all-handler e key-code))))))
+                (when all-handler (all-handler e key-code)))))))
 
 (defn event-mixin
   ([attach-listeners]

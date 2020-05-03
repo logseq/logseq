@@ -17,6 +17,8 @@
 (defonce *show-commands (atom false))
 (defonce *matched-commands (atom commands/commands-map))
 (defonce *slash-caret-pos (atom nil))
+(defonce *command-current-idx (atom 0))
+
 (defn- append-command!
   [id command-output]
   (handler/append-command! command-output)
@@ -25,10 +27,12 @@
 
 (rum/defc commands < rum/reactive
   {:will-mount (fn [state]
+                 (reset! *command-current-idx 0)
                  (reset! *matched-commands commands/commands-map)
                  state)}
   [id]
-  (let [{:keys [top left]} (rum/react *slash-caret-pos)]
+  (let [{:keys [top left]} (rum/react *slash-caret-pos)
+        command-current-idx (rum/react *command-current-idx)]
     [:div.absolute.rounded-md.shadow-lg
      {:style {:top (+ top 20)
               :left left
@@ -37,10 +41,10 @@
       (for [[idx [name handler]] (medley/indexed (rum/react *matched-commands))]
         (rum/with-key
           (ui/menu-link
-           {:style {:padding "6px"
-                    :background-color (if (zero? idx)
-                                        "rgb(213, 218, 223)"
-                                        "initial")}
+           {:style (merge
+                    {:padding "6px"}
+                    (when (= command-current-idx idx)
+                      {:background-color "rgb(213, 218, 223)"}))
             :class "initial-color"
             :tab-index 0
             :on-click (fn [e]
@@ -119,6 +123,16 @@
           (let [id (uuid (string/replace id "ls-heading-parent-" ""))]
             (handler/edit-heading! id :max)))))))
 
+(defn get-matched-commands
+  [input]
+  (let [edit-content (gobj/get input "value")
+        last-command (commands/get-command-input edit-content)]
+    (or
+     (and (= \/ (last edit-content))
+          commands/commands-map)
+     (and last-command
+          (commands/get-matched-commands last-command)))))
+
 (rum/defc box < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -135,48 +149,44 @@
         state
         {
          ;; up
-         38 (fn [state e] (on-up-down state e true))
+         38 (fn [state e]
+              (if (seq (get-matched-commands input))
+                (do
+                  (util/stop e)
+                  (when (>= @*command-current-idx 1)
+                   (swap! *command-current-idx dec)))
+                (on-up-down state e true)))
          ;; down
-         40 (fn [state e] (on-up-down state e false))
+         40 (fn [state e]
+              (if-let [matched (seq (get-matched-commands input))]
+                (do
+                  (util/stop e)
+                  (let [total (count matched)]
+                   (if (>= @*command-current-idx (dec total))
+                     (reset! *command-current-idx 0)
+                     (swap! *command-current-idx inc))))
+                (on-up-down state e false)))
 
          ;; backspace
-         8 (fn [state e] (on-backspace state e))}
-        (fn [e key-code]
-          (when (not= key-code 191)
-            (let [edit-content (gobj/get input "value")
-                  last-command (commands/get-command-input edit-content)
-                  matched-commands (or
-                                    (and (= \/ (last edit-content))
-                                         commands/commands-map)
-                                    (and last-command
-                                         (commands/get-matched-commands last-command)))]
-              (if (seq matched-commands)
-                (if (or (= key-code 9) (= key-code 13))      ;tab or enter
-                  (do
-                    (util/stop e)
-                    (append-command! input-id (last (first matched-commands))))
-                  (do
-                    (reset! *matched-commands matched-commands)
-                    (reset! *show-commands true)))
-                (reset! *show-commands false))))))
+         8 (fn [state e] (on-backspace state e))
+
+         ;; enter
+         13 (fn [state e]
+              (let [matched-commands (get-matched-commands input)]
+                (when (seq matched-commands)
+                  (util/stop e)
+                  (append-command! input-id (last (nth matched-commands @*command-current-idx))))))}
+        nil)
        (mixins/on-key-up
         state
-        {
-         ;; / commands
-         191 (fn [state e]
+        {191 (fn [state e]
                (reset! *show-commands true)
                (reset! *slash-caret-pos (util/get-caret-pos input)))}
         (fn [e key-code]
           (when (not= key-code 191)
-            (let [edit-content (gobj/get input "value")
-                  last-command (commands/get-command-input edit-content)
-                  matched-commands (or
-                                    (and (= \/ (last edit-content))
-                                         commands/commands-map)
-                                    (and last-command
-                                         (commands/get-matched-commands last-command)))]
+            (let [matched-commands (get-matched-commands input)]
               (if (seq matched-commands)
-                (if (or (= key-code 13))      ;tab or enter
+                (if (= key-code 9)      ;tab
                   (do
                     (util/stop e)
                     (append-command! input-id (last (first matched-commands))))
