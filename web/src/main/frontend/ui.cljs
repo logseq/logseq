@@ -182,7 +182,6 @@
   body)
 
 (rum/defcs auto-complete <
-  (rum/local nil ::matched)
   (rum/local 0 ::current-idx)
   (mixins/event-mixin
    (fn [state]
@@ -213,13 +212,13 @@
                 (util/stop e)
                 (on-chosen (nth matched @current-idx))))}
         nil)))
-  [state matched on-chosen div-option]
-  (when (seq matched)
-    (let [current-idx (get state ::current-idx)]
-     [:div.absolute.rounded-md.shadow-lg
-      div-option
-      [:div.py-1.rounded-md.bg-white.shadow-xs
-       (for [[idx item] (medley/indexed matched)]
+  [state matched on-chosen div-option & {:keys [empty-div]}]
+  (let [current-idx (get state ::current-idx)]
+    [:div.absolute.rounded-md.shadow-lg
+     div-option
+     [:div.py-1.rounded-md.bg-white.shadow-xs
+      (if (seq matched)
+        (for [[idx item] (medley/indexed matched)]
          (rum/with-key
            (menu-link
             {:style (merge
@@ -233,4 +232,6 @@
                          (let [option (nth matched @current-idx)]
                            (on-chosen option)))}
             item)
-           idx))]])))
+           idx))
+        (when empty-div
+          empty-div))]]))

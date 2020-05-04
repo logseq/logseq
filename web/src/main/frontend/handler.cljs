@@ -660,6 +660,13 @@
         (when-let [current-input (gdom/getElement input-id)]
           (util/move-cursor-to-end current-input))))))
 
+(defn editor-set-new-value!
+  [new-value]
+  (state/set-edit-content! new-value)
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (util/move-cursor-to-end current-input))))
+
 (defn insert-image!
   [image-url]
   ;; (let [content (state/get-edit-content)

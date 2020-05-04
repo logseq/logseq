@@ -55,10 +55,7 @@
       (util/cursor-move-back current-input n))))
 
 (defmethod handle-step :editor/search-page [[_]]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      ;; (util/cursor-move-back current-input n)
-      )))
+  (state/set-editor-show-page-search true))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))

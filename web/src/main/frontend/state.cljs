@@ -34,6 +34,8 @@
 
              :github/contents {}
              :config {}
+
+             :editor/show-page-search? false
              }))
 
 (defn sub
@@ -151,3 +153,10 @@
 (defn set-edit-input-id!
   [id]
   (set-state! :edit-input-id id))
+
+(defn set-editor-show-page-search
+  [value]
+  (set-state! :editor/show-page-search? value))
+(defn get-editor-show-page-search
+  []
+  (get @state :editor/show-page-search?))

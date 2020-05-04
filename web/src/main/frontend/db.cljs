@@ -211,7 +211,8 @@
                  :where
                  [?page :page/name ?page-name]]
          (get-conn repo false))
-       (rum/react)
+       ;; (rum/react)
+       deref
        (map first)
        distinct))
 

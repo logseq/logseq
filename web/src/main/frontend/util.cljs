@@ -7,7 +7,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             ["/frontend/caret_pos" :as caret-pos]
-            ["caret-pos" :as caret]
+            ["/frontend/caret_range" :as caret-range]
             [goog.string :as gstring]
             [goog.string.format]
             [dommy.core :as d]))
@@ -270,7 +270,7 @@
                                    (apply f args))
                                 threshold))))))
 
-(def caret-range caret-pos/getCaretRange)
+(def caret-range caret-range/getCaretRange)
 
 (defn set-caret-pos!
   [input pos]
@@ -278,7 +278,7 @@
 
 (defn get-caret-pos
   [input]
-  (bean/->clj ((gobj/get caret "position") input)))
+  (bean/->clj ((gobj/get caret-pos "position") input)))
 
 (defn minimize-html
   [s]

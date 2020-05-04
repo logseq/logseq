@@ -50,6 +50,34 @@
               :left left
               :width 400}})))
 
+(rum/defc page-search < rum/reactive
+  [id]
+  (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
+        current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
+        edit-content (state/sub :edit-content)
+        q (subs edit-content (inc pos) current-pos)
+        matched-pages (when-not (string/blank? q)
+                        (let [pages (db/get-pages (state/get-current-repo))]
+                          (filter
+                           (fn [page]
+                             (string/index-of
+                              (string/lower-case page)
+                              (string/lower-case q)))
+                           pages)))]
+    (ui/auto-complete
+     matched-pages
+     (fn [chosen]
+       (let [new-value (util/format "%s [[%s%s"
+                                    (subs edit-content 0 (dec (dec pos)))
+                                    chosen
+                                    (subs edit-content current-pos))]
+         (handler/editor-set-new-value! new-value))
+       (state/set-editor-show-page-search false))
+     {:style {:top (+ top 20)
+              :left left
+              :width 400}}
+     :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"])))
+
 (defn get-state
   [state]
   (let [[_ {:keys [on-hide dummy?]} id] (:rum/args state)
@@ -114,10 +142,19 @@
         last-command (commands/get-command-input edit-content)]
     (or
      (and (= \/ (last edit-content))
-          (= " " (nth edit-content (- (count edit-content) 2)))
+          (or
+           (and
+            (>= (count edit-content) 2)
+            (= " " (nth edit-content (- (count edit-content) 2))))
+           (= edit-content "/"))
           commands/commands-map)
      (and last-command
           (commands/get-matched-commands last-command)))))
+
+(defn in-auto-complete?
+  [input]
+  (or (seq (get-matched-commands input))
+      (state/get-editor-show-page-search)))
 
 (rum/defc box < rum/reactive
   (mixins/event-mixin
@@ -136,11 +173,11 @@
         {
          ;; up
          38 (fn [state e]
-              (when-not (seq (get-matched-commands input))
+              (when-not (in-auto-complete? input)
                 (on-up-down state e true)))
          ;; down
          40 (fn [state e]
-              (when-not (seq (get-matched-commands input))
+              (when-not (in-auto-complete? input)
                 (on-up-down state e false)))
 
          ;; backspace
@@ -178,7 +215,8 @@
   [content {:keys [on-hide dummy?]
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)
-        show-commands? (rum/react *show-commands)]
+        show-commands? (rum/react *show-commands)
+        show-page-search? (state/sub :editor/show-page-search?)]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}}
@@ -197,4 +235,11 @@
         {:class-names "fade"
          :timeout {:enter 500
                    :exit 300}}
-        (commands id)))]))
+        (commands id)))
+
+     (when show-page-search?
+       (ui/css-transition
+        {:class-names "fade"
+         :timeout {:enter 500
+                   :exit 300}}
+        (page-search id)))]))

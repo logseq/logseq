@@ -18,7 +18,6 @@
         "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ../resources/static/js/compiled; /usr/bin/rm -rf ../resources/static/js/cljs-runtime;"
     },
     "dependencies": {
-        "caret-pos": "^1.2.2",
         "diff": "^4.0.2",
         "react": "^16.12.0",
         "react-dom": "^16.12.0",
