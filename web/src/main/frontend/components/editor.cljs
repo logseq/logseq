@@ -33,50 +33,90 @@
     nil)
 
   (.focus (gdom/getElement id))
-  (reset! *show-commands false))
+  (reset! *show-commands false)
+  (reset! *matched-commands commands/commands-map))
 
 (rum/defc commands < rum/reactive
   {:will-mount (fn [state]
                  (reset! *matched-commands commands/commands-map)
                  state)}
   [id]
-  (let [{:keys [top left]} (rum/react *slash-caret-pos)
-        matched (rum/react *matched-commands)]
-    (ui/auto-complete
-     (map first matched)
-     (fn [chosen]
-       (append-command! id (get (into {} matched) chosen)))
-     {:style {:top (+ top 20)
-              :left left
-              :width 400}})))
+  (when (rum/react *show-commands)
+    (let [{:keys [top left]} (rum/react *slash-caret-pos)
+          matched (rum/react *matched-commands)]
+      (ui/auto-complete
+       (map first matched)
+       (fn [chosen]
+         (append-command! id (get (into {} matched) chosen)))
+       {:style {:top (+ top 20)
+                :left left
+                :width 400}}))))
 
 (rum/defc page-search < rum/reactive
   [id]
-  (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
-        current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
-        edit-content (state/sub :edit-content)
-        q (subs edit-content (inc pos) current-pos)
-        matched-pages (when-not (string/blank? q)
-                        (let [pages (db/get-pages (state/get-current-repo))]
-                          (filter
-                           (fn [page]
-                             (string/index-of
-                              (string/lower-case page)
-                              (string/lower-case q)))
-                           pages)))]
-    (ui/auto-complete
-     matched-pages
-     (fn [chosen]
-       (let [new-value (util/format "%s [[%s%s"
-                                    (subs edit-content 0 (dec (dec pos)))
-                                    chosen
-                                    (subs edit-content current-pos))]
-         (handler/editor-set-new-value! new-value))
-       (state/set-editor-show-page-search false))
-     {:style {:top (+ top 20)
-              :left left
-              :width 400}}
-     :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"])))
+  (when (state/sub :editor/show-page-search?)
+    (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
+          current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
+          edit-content (state/sub :edit-content)
+          q (subs edit-content (inc pos) current-pos)
+          matched-pages (when-not (string/blank? q)
+                          (let [pages (db/get-pages (state/get-current-repo))]
+                            (filter
+                             (fn [page]
+                               (string/index-of
+                                (string/lower-case page)
+                                (string/lower-case q)))
+                             pages)))]
+      (ui/auto-complete
+       matched-pages
+       (fn [chosen]
+         (let [new-value (util/format "%s [[%s%s"
+                                      (subs edit-content 0 (max 0 (dec (dec pos))))
+                                      chosen
+                                      (subs edit-content current-pos))]
+           (handler/editor-set-new-value! new-value))
+         (state/set-editor-show-page-search false))
+       {:style {:top (+ top 20)
+                :left left
+                :width 400}}
+       :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))
+
+;; TODO: add on-enter
+(rum/defcs input < rum/reactive
+  (rum/local {} ::input-value)
+  {:did-remount
+   (fn [old state]
+     (when-let [show-input (state/get-editor-show-input)]
+       (let [id (str "modal-input-"
+                     (name (:id (first show-input))))
+             first-input (gdom/getElement id)]
+         (.focus first-input)))
+     state)}
+  [state id on-submit]
+  (let [input-option (state/sub :editor/show-input)]
+    (when input-option
+      (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
+            input-value (get state ::input-value)]
+        [:div.absolute.rounded-md.shadow-lg
+         {:style {:top (+ top 20)
+                  :left left
+                  :width 400}}
+         (when (seq input-option)
+           [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#d3d3d3"}},
+            (for [{:keys [id] :as input-item} input-option]
+              [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-1
+               (merge
+                {:key (str "modal-input-" (name id))
+                 :id (str "modal-input-" (name id))
+                 :on-change (fn [e]
+                              (swap! input-value assoc id (util/evalue e)))
+                 :auto-complete "off"}
+                (dissoc input-item :id))])
+            (ui/button
+              "Submit"
+              (fn [e]
+                (util/stop e)
+                (on-submit @input-value pos)))])]))))
 
 (defn get-state
   [state]
@@ -145,7 +185,7 @@
           (or
            (and
             (>= (count edit-content) 2)
-            (= " " (nth edit-content (- (count edit-content) 2))))
+            (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
            (= edit-content "/"))
           commands/commands-map)
      (and last-command
@@ -155,6 +195,14 @@
   [input]
   (or (seq (get-matched-commands input))
       (state/get-editor-show-page-search)))
+
+(rum/defc transition-cp
+  [cp]
+  (ui/css-transition
+   {:class-names "fade"
+    :timeout {:enter 500
+              :exit 300}}
+   cp))
 
 (rum/defc box < rum/reactive
   (mixins/event-mixin
@@ -215,8 +263,7 @@
   [content {:keys [on-hide dummy?]
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)
-        show-commands? (rum/react *show-commands)
-        show-page-search? (state/sub :editor/show-page-search?)]
+        show-commands? (rum/react *show-commands)]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}}
@@ -230,16 +277,22 @@
                :border-radius 0
                :background "transparent"
                :padding 0}})
-     (when show-commands?
-       (ui/css-transition
-        {:class-names "fade"
-         :timeout {:enter 500
-                   :exit 300}}
-        (commands id)))
+     (transition-cp
+      (commands id))
 
-     (when show-page-search?
-       (ui/css-transition
-        {:class-names "fade"
-         :timeout {:enter 500
-                   :exit 300}}
-        (page-search id)))]))
+     (transition-cp
+      (page-search id))
+
+     (transition-cp
+      (input id
+             (fn [{:keys [link label]} pos]
+               (when-not (string/blank? link)
+                 (let [new-value (util/format "%s [[%s][%s]]%s"
+                                              (subs value 0 (max 0 (dec (dec pos))))
+                                              link
+                                              label
+                                              (subs value (+ pos 5)))]
+                   (when-let [editor (gdom/getElement id)]
+                     (.focus editor))
+                   (handler/editor-set-new-value! new-value)))
+               (state/set-editor-show-input nil))))]))

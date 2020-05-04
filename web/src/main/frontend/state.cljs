@@ -36,6 +36,8 @@
              :config {}
 
              :editor/show-page-search? false
+             ;; With label or other data
+             :editor/show-input nil
              }))
 
 (defn sub
@@ -160,3 +162,9 @@
 (defn get-editor-show-page-search
   []
   (get @state :editor/show-page-search?))
+(defn set-editor-show-input
+  [value]
+  (set-state! :editor/show-input value))
+(defn get-editor-show-input
+  []
+  (get @state :editor/show-input))

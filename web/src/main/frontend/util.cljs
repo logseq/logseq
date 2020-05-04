@@ -424,6 +424,11 @@
     (set! (.-selectionEnd input) n)))
 
 (defn cursor-move-back [input n]
-  (let [total (count (.-value input))]
-    (set! (.-selectionStart input) (- total 2))
-    (set! (.-selectionEnd input) (- total 2))))
+  (let [{:keys [pos]} (get-caret-pos input)]
+    (set! (.-selectionStart input) (- pos n))
+    (set! (.-selectionEnd input) (- pos n))))
+
+(defn cursor-move-forward [input n]
+  (let [{:keys [pos]} (get-caret-pos input)]
+    (set! (.-selectionStart input) (+ pos n))
+    (set! (.-selectionEnd input) (+ pos n))))

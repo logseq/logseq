@@ -20,8 +20,15 @@
      ["Page Reference" [[:editor/input "[[]]"]
                         [:editor/cursor-back 2]
                         [:editor/search-page]]]
-     ["Link" nil]
-     ["Upload a file" nil]]
+     ["Link" [[:editor/input "[[][]]"]
+              [:editor/cursor-back 4]
+              [:editor/show-input [{:id :link
+                                    :placeholder "Link"}
+                                   {:id :label
+                                    :placeholder "Label"}]]]]
+     ["Image Org Mode" nil]
+     ["Upload a file" nil]
+     ]
     ;; Allow user to modify or extend, should specify how to extend.
     (:config @state/state))
    (util/remove-nils)
@@ -56,6 +63,9 @@
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
+
+(defmethod handle-step :editor/show-input [[_ option]]
+  (state/set-editor-show-input option))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))
