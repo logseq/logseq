@@ -96,7 +96,6 @@
      (mixins/on-enter
       state
       :on-enter (fn [e]
-                  (util/stop e)
                   (when-let [input-value (get state ::input-value)]
                     (let [[id on-submit] (:rum/args state)
                           {:keys [pos]} @*slash-caret-pos]
