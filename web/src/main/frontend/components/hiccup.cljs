@@ -177,7 +177,6 @@
 
     ["Link" link]
     (let [{:keys [url label]} link]
-      (prn {:link link})
       (match url
         ["Search" s]
         (case (first s)
@@ -198,7 +197,8 @@
             (image-link url href label)
             (->elem
              :a
-             {:href href}
+             {:href href
+              :target "_blank"}
              (map-inline label))))))
 
     ["Verbatim" s]
