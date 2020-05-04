@@ -12,7 +12,8 @@
      [:div.w-full.max-w-xs.mx-auto
       [:div
        [:div
-        [:h2 "Import your notes:"]
+        [:h1.title.mb-1
+         "Import your notes"]
         [:p.text-sm.text-gray-500.pl-1 "You can import your notes from a repo on Github."]
         [:div.mt-2.mb-2.relative.rounded-md.shadow-sm
          [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
