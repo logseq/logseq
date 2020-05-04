@@ -229,7 +229,7 @@
   [repo-url token]
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
-           (not (:edit-input-id @state/state))
+           (not (state/get-edit-input-id))
            ;; (or (nil? status)
            ;;     (= status :pulling))
            )
@@ -300,7 +300,7 @@
   [repo-url]
   ;; TODO: find un-committed changes, and create a commit
   (when (and
-         (not (:edit-input-id @state/state))
+         (not (state/get-edit-input-id))
          (= :should-push (db/get-key-value repo-url :git/status)))
     ;; auto commit if there are any un-committed changes
     (p/let [changed-files (git/get-status-matrix repo-url)]
@@ -422,11 +422,6 @@
       (notify-fn)
       (js/setInterval notify-fn (* 1000 60)))))
 
-(defn clear-edit!
-  []
-  (swap! state/state assoc
-         :edit-input-id nil))
-
 (defn file-changed?
   [content]
   (not= (string/trim content)
@@ -440,8 +435,7 @@
   (util/p-handle
    (fs/write-file (git/get-repo-dir repo-url) path content)
    (fn [_]
-     (git-add repo-url path)))
-  (clear-edit!))
+     (git-add repo-url path))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -817,9 +811,7 @@
                        content
                        (subs content 0 prev-pos))]
       (state/set-cursor-range! text-range)
-      (swap! state/state assoc
-             :edit-input-id edit-input-id)
-      (state/set-editor-editing-heading heading-id))))
+      (state/set-edit-input-id! edit-input-id))))
 
 (defn start!
   []

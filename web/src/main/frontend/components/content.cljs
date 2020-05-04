@@ -39,7 +39,7 @@
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
-  (let [edit? (= (state/sub :edit-input-id) id)
+  (let [edit? (= (state/sub-edit-input-id) id)
         loading (state/sub :format/loading)]
     (if edit?
       (editor/box content {:on-hide on-hide} id)
@@ -48,6 +48,7 @@
             markup? (contains? config/html-render-formats format)
             on-click (fn [e]
                        (when-not (util/link? (gobj/get e "target"))
+                         (util/stop e)
                          (handler/reset-cursor-range! (gdom/getElement (str id)))
                          (state/set-edit-input-id! id)
                          (when on-click
@@ -59,17 +60,17 @@
           markup?
           (let [html (format/to-html content format config)]
             (if (string/blank? html)
-              [:div
+              [:div.cursor
                {:id id
-                :on-click on-click                }
+                :on-click on-click}
                [:div.text-gray-500.cursor "Click to edit"]]
-              [:div
+              [:div.cursor
                {:id id
                 :on-click on-click
                 :dangerouslySetInnerHTML {:__html html}}]))
 
           :else                       ; other text formats
-          [:div
+          [:div.cursor
            {:id id
             :on-click on-click}
            (if (string/blank? content)
@@ -85,7 +86,7 @@
                       ;; t
                       (when (and
                              ;; not input
-                             (not (:edit-input-id @state/state))
+                             (not (state/get-edit-input-id))
                              (= 84 (.-keyCode e)))
                         (let [id (first (:rum/args state))]
                           (expand/toggle-all! id)))))))

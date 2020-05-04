@@ -228,7 +228,8 @@
         :on-hide (fn []
                    (let [{:keys [value on-hide]} (get-state state)]
                      (on-hide value)
-                     (state/set-editor-show-input nil))))
+                     (state/set-editor-show-input nil)
+                     (state/set-edit-input-id! nil))))
        (mixins/on-key-down
         state
         {
@@ -272,10 +273,7 @@
    :did-mount (fn [state]
                 (let [[content opts id] (:rum/args state)]
                   (handler/restore-cursor-pos! id content (:dummy? opts)))
-                state)
-   :will-unmount (fn [state]
-                   (handler/clear-edit!)
-                   state)}
+                state)}
   [content {:keys [on-hide dummy? node]
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)

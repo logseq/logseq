@@ -32,8 +32,7 @@
              :editor/show-page-search? false
              ;; With label or other data
              :editor/show-input nil
-             :editor/heading-editing? nil
-             :edit-input-id nil
+             :editor/editing? nil
              :edit-content ""
              :cursor-range nil
              :cursor-pos nil
@@ -148,14 +147,6 @@
                        pages))
                      (vec (distinct (conj pages page)))))))
 
-(defn get-edit-input-id
-  []
-  (:edit-input-id @state))
-
-(defn set-edit-input-id!
-  [id]
-  (set-state! :edit-input-id id))
-
 (defn set-editor-show-page-search
   [value]
   (set-state! :editor/show-page-search? value))
@@ -169,8 +160,16 @@
   []
   (get @state :editor/show-input))
 
-(defn set-editor-editing-heading
-  [heading-id]
-  (swap! state update :editor/heading-editing?
+(defn set-edit-input-id!
+  [input-id]
+  (swap! state update :editor/editing?
          (fn [m]
-           (and heading-id {heading-id true}))))
+           (and input-id {input-id true}))))
+
+(defn get-edit-input-id
+  []
+  (ffirst (:editor/editing? @state)))
+
+(defn sub-edit-input-id
+  []
+  (ffirst (rum/react (rum/cursor state :editor/editing?))))
