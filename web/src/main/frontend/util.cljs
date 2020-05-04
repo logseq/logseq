@@ -417,3 +417,13 @@
   (when-let [last-index (string/last-index-of s pattern)]
     (str (subs s 0 last-index)
          new-value)))
+
+(defn move-cursor-to-end [input]
+  (let [n (count (.-value input))]
+    (set! (.-selectionStart input) n)
+    (set! (.-selectionEnd input) n)))
+
+(defn cursor-move-back [input n]
+  (let [total (count (.-value input))]
+    (set! (.-selectionStart input) (- total 2))
+    (set! (.-selectionEnd input) (- total 2))))

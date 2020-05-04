@@ -505,11 +505,9 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  ;; (when-not config/dev?
-  ;;   (periodically-pull repo-url pull-now?)
-  ;;   (periodically-push-tasks repo-url))
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url))
+  (when-not config/dev?
+    (periodically-pull repo-url pull-now?)
+    (periodically-push-tasks repo-url)))
 
 (defn edit-journal!
   [journal]
@@ -637,11 +635,6 @@
              pos (if dummy? (+ 3 pos) pos)]
          (util/set-caret-pos! node pos))))))
 
-(defn move-cursor-to-end [input]
-  (let [n (count (.-value input))]
-    (set! (.-selectionStart input) n)
-    (set! (.-selectionEnd input) n)))
-
 (defn remove-slash!
   []
   (when-let [edit-content (state/get-edit-content)]
@@ -656,7 +649,7 @@
       (state/set-edit-content! new-value)
       (when-let [input-id (state/get-edit-input-id)]
         (when-let [current-input (gdom/getElement input-id)]
-          (move-cursor-to-end current-input))))))
+          (util/move-cursor-to-end current-input))))))
 
 (defn append-command!
   [append-value]
@@ -665,7 +658,7 @@
       (state/set-edit-content! new-value)
       (when-let [input-id (state/get-edit-input-id)]
         (when-let [current-input (gdom/getElement input-id)]
-          (move-cursor-to-end current-input))))))
+          (util/move-cursor-to-end current-input))))))
 
 (defn insert-image!
   [image-url]
@@ -676,7 +669,7 @@
   ;;       ]
   ;;   (state/set-edit-content! new-content)
   ;;   (set! (.-value node) new-content)
-  ;;   (move-cursor-to-end node))
+  ;;   (util/move-cursor-to-end node))
   )
 
 (defn search

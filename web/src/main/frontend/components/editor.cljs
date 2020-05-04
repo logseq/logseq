@@ -15,55 +15,40 @@
             [medley.core :as medley]))
 
 (defonce *show-commands (atom false))
-(defonce *matched-commands (atom commands/commands-map))
+(def *matched-commands (atom nil))
 (defonce *slash-caret-pos (atom nil))
-(defonce *command-current-idx (atom 0))
 
 (defn- append-command!
   [id command-output]
-  (handler/append-command! command-output)
+  (cond
+    ;; replace string
+    (string? command-output)
+    (handler/append-command! command-output)
+
+    ;; steps
+    (vector? command-output)
+    (commands/handle-steps command-output)
+
+    :else
+    nil)
+
   (.focus (gdom/getElement id))
   (reset! *show-commands false))
 
 (rum/defc commands < rum/reactive
   {:will-mount (fn [state]
-                 (reset! *command-current-idx 0)
                  (reset! *matched-commands commands/commands-map)
                  state)}
   [id]
   (let [{:keys [top left]} (rum/react *slash-caret-pos)
-        command-current-idx (rum/react *command-current-idx)]
-    [:div.absolute.rounded-md.shadow-lg
+        matched (rum/react *matched-commands)]
+    (ui/auto-complete
+     (map first matched)
+     (fn [chosen]
+       (append-command! id (get (into {} matched) chosen)))
      {:style {:top (+ top 20)
               :left left
-              :width 400}}
-     [:div.py-1.rounded-md.bg-white.shadow-xs
-      (for [[idx [name handler]] (medley/indexed (rum/react *matched-commands))]
-        (rum/with-key
-          (ui/menu-link
-           {:style (merge
-                    {:padding "6px"}
-                    (when (= command-current-idx idx)
-                      {:background-color "rgb(213, 218, 223)"}))
-            :class "initial-color"
-            :tab-index 0
-            :on-click (fn [e]
-                        (util/stop e)
-                        (cond
-                          ;; replace string
-                          (string? handler)
-                          (handler/append-command! handler)
-
-                          ;; steps
-                          (vector? handler)
-                          nil
-
-                          :else
-                          nil)
-                        (.focus (gdom/getElement id))
-                        (reset! *show-commands false))}
-           name)
-          name))]]))
+              :width 400}})))
 
 (defn get-state
   [state]
@@ -129,6 +114,7 @@
         last-command (commands/get-command-input edit-content)]
     (or
      (and (= \/ (last edit-content))
+          (= " " (nth edit-content (- (count edit-content) 2)))
           commands/commands-map)
      (and last-command
           (commands/get-matched-commands last-command)))))
@@ -150,38 +136,22 @@
         {
          ;; up
          38 (fn [state e]
-              (if (seq (get-matched-commands input))
-                (do
-                  (util/stop e)
-                  (when (>= @*command-current-idx 1)
-                   (swap! *command-current-idx dec)))
+              (when-not (seq (get-matched-commands input))
                 (on-up-down state e true)))
          ;; down
          40 (fn [state e]
-              (if-let [matched (seq (get-matched-commands input))]
-                (do
-                  (util/stop e)
-                  (let [total (count matched)]
-                   (if (>= @*command-current-idx (dec total))
-                     (reset! *command-current-idx 0)
-                     (swap! *command-current-idx inc))))
+              (when-not (seq (get-matched-commands input))
                 (on-up-down state e false)))
 
          ;; backspace
-         8 (fn [state e] (on-backspace state e))
-
-         ;; enter
-         13 (fn [state e]
-              (let [matched-commands (get-matched-commands input)]
-                (when (seq matched-commands)
-                  (util/stop e)
-                  (append-command! input-id (last (nth matched-commands @*command-current-idx))))))}
+         8 (fn [state e] (on-backspace state e))}
         nil)
        (mixins/on-key-up
         state
         {191 (fn [state e]
-               (reset! *show-commands true)
-               (reset! *slash-caret-pos (util/get-caret-pos input)))}
+               (when-let [matched-commands (seq (get-matched-commands input))]
+                 (reset! *show-commands true)
+                 (reset! *slash-caret-pos (util/get-caret-pos input))))}
         (fn [e key-code]
           (when (not= key-code 191)
             (let [matched-commands (get-matched-commands input)]
