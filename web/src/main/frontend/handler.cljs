@@ -818,7 +818,8 @@
                        (subs content 0 prev-pos))]
       (state/set-cursor-range! text-range)
       (swap! state/state assoc
-             :edit-input-id edit-input-id))))
+             :edit-input-id edit-input-id)
+      (state/set-editor-editing-heading heading-id))))
 
 (defn start!
   []
