@@ -432,3 +432,7 @@
   (let [{:keys [pos]} (get-caret-pos input)]
     (set! (.-selectionStart input) (+ pos n))
     (set! (.-selectionEnd input) (+ pos n))))
+
+(defn move-cursor-to [input n]
+  (set! (.-selectionStart input) n)
+  (set! (.-selectionEnd input) n))

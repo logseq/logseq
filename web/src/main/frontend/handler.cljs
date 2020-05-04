@@ -559,7 +559,6 @@
                                              (fn [{:keys [signed-url]}]
                                                (if signed-url
                                                  (do
-                                                   (prn "Get a singed url: " signed-url)
                                                    (url-handler signed-url))
                                                  (prn "Something error, can't get a valid signed url.")))
                                              (fn [error]
@@ -621,7 +620,7 @@
   (when-let [edit-content (state/get-edit-content)]
     (when (= \/ (last edit-content))
       (let [new-value (subs edit-content 0 (dec (count edit-content)))]
-       (state/set-edit-content! new-value)))))
+        (state/set-edit-content! new-value)))))
 
 (defn append-edit-content!
   [append-value]
@@ -632,14 +631,21 @@
         (when-let [current-input (gdom/getElement input-id)]
           (util/move-cursor-to-end current-input))))))
 
-(defn append-command!
-  [append-value]
+(defn insert-command!
+  [id value current-slash-pos]
   (when-let [edit-content (state/get-edit-content)]
-    (let [new-value (util/replace-last "/" edit-content (str append-value))]
+    (let [input (gdom/getElement id)
+          current-pos (:pos (util/get-caret-pos input))
+          prefix (util/replace-last "/"
+                                    (subs edit-content 0 current-pos)
+                                    (str value))
+          new-value (str
+                     prefix
+                     (subs edit-content current-pos))]
       (state/set-edit-content! new-value)
       (when-let [input-id (state/get-edit-input-id)]
         (when-let [current-input (gdom/getElement input-id)]
-          (util/move-cursor-to-end current-input))))))
+          (util/move-cursor-to input (count prefix)))))))
 
 (defn editor-set-new-value!
   [new-value]
@@ -647,18 +653,6 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (util/move-cursor-to-end current-input))))
-
-(defn insert-image!
-  [image-url]
-  ;; (let [content (state/get-edit-content)
-  ;;       image (str "<img src=\"" image-url "\" />")
-  ;;       new-content (str content "\n" "#+BEGIN_EXPORT html\n" image "\n#+END_EXPORT\n")
-  ;;       ;; node @state/edit-node
-  ;;       ]
-  ;;   (state/set-edit-content! new-content)
-  ;;   (set! (.-value node) new-content)
-  ;;   (util/move-cursor-to-end node))
-  )
 
 (defn search
   [q]

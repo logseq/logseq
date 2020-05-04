@@ -18,12 +18,12 @@
 (def *matched-commands (atom nil))
 (defonce *slash-caret-pos (atom nil))
 
-(defn- append-command!
+(defn- insert-command!
   [id command-output]
   (cond
     ;; replace string
     (string? command-output)
-    (handler/append-command! command-output)
+    (handler/insert-command! id command-output (:pos @*slash-caret-pos))
 
     ;; steps
     (vector? command-output)
@@ -47,7 +47,7 @@
       (ui/auto-complete
        (map first matched)
        (fn [chosen]
-         (append-command! id (get (into {} matched) chosen)))
+         (insert-command! id (get (into {} matched) chosen)))
        {:style {:top (+ top 20)
                 :left left
                 :width 400}}))))
@@ -193,14 +193,17 @@
 (defn get-matched-commands
   [input]
   (let [edit-content (gobj/get input "value")
-        last-command (commands/get-command-input edit-content)]
+        pos (:pos (util/get-caret-pos input))
+        last-command (subs edit-content
+                           (:pos @*slash-caret-pos)
+                           pos)]
     (or
-     (and (= \/ (last edit-content))
-          (or
-           (and
-            (>= (count edit-content) 2)
-            (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
-           (= edit-content "/"))
+     (and (= \/ (nth edit-content (dec pos)))
+          ;; (or
+          ;;  (and
+          ;;   (>= (count edit-content) 2)
+          ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
+          ;;  (= edit-content "/"))
           commands/commands-map)
      (and last-command
           (commands/get-matched-commands last-command)))))
@@ -247,18 +250,19 @@
         nil)
        (mixins/on-key-up
         state
+        ;; /
         {191 (fn [state e]
                (when-let [matched-commands (seq (get-matched-commands input))]
                  (reset! *show-commands true)
                  (reset! *slash-caret-pos (util/get-caret-pos input))))}
         (fn [e key-code]
-          (when (not= key-code 191)
+          (when (not= key-code 191)     ; not /
             (let [matched-commands (get-matched-commands input)]
               (if (seq matched-commands)
                 (if (= key-code 9)      ;tab
                   (do
                     (util/stop e)
-                    (append-command! input-id (last (first matched-commands))))
+                    (insert-command! input-id (last (first matched-commands))))
                   (do
                     (reset! *matched-commands matched-commands)
                     (reset! *show-commands true)))
@@ -310,4 +314,29 @@
                    (when-let [editor (gdom/getElement id)]
                      (.focus editor))
                    (handler/editor-set-new-value! new-value)))
-               (state/set-editor-show-input nil))))]))
+               (state/set-editor-show-input nil))))
+
+     [:input
+      {:id "upload-file"
+       :type "file"
+       :on-change (fn [e]
+                    (let [files (.-files (.-target e))]
+                      (image/upload
+                       files
+                       (fn [file file-name file-type]
+                         (handler/request-presigned-url
+                          file file-name file-type
+                          (fn [signed-url]
+                            ;; insert into the text
+                            (let [pos (:pos @*slash-caret-pos)
+                                  current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
+                                  new-value (string/trimr
+                                             (util/format "%s [[%s][%s]] %s"
+                                                          (subs value 0 (max 0 (dec (dec pos))))
+                                                          signed-url
+                                                          file-name
+                                                          (subs value current-pos)))]
+                              (when-let [editor (gdom/getElement id)]
+                                (.focus editor))
+                              (handler/editor-set-new-value! new-value))))))))
+       :hidden true}]]))

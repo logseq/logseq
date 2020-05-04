@@ -29,7 +29,9 @@
      ["Link" link-steps]
      ;; same as link
      ["Image Link" link-steps]
-     ["Upload a file" nil]
+     ["Upload an image" [[:editor/click-hidden-file-input :id]]]
+     ;; TODO:
+     ;; ["Upload a file" nil]
      ]
     ;; Allow user to modify or extend, should specify how to extend.
     (:config @state/state))
@@ -68,6 +70,10 @@
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input option))
+
+(defmethod handle-step :editor/click-hidden-file-input [[_ input-id]]
+  (when-let [input-file (gdom/getElement "upload-file")]
+    (.click input-file)))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))
