@@ -39,7 +39,8 @@
    (fn [state]
      (mixins/hide-when-esc-or-outside
       state
-      :on-hide handler/clear-search!)
+      :on-hide (fn []
+                 (handler/clear-search!)))
      (mixins/on-enter state
                       :on-enter (fn []
                                   (when-let [first-match (first (:search/result @state/state))]

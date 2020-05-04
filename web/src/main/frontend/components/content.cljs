@@ -40,9 +40,7 @@
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
   (let [edit? (= (state/sub :edit-input-id) id)
-        loading (state/sub :format/loading)
-        edit-journal (state/sub :edit-journal)
-        edit-file (state/sub :edit-file)]
+        loading (state/sub :format/loading)]
     (if edit?
       (editor/box content {:on-hide on-hide} id)
       (let [format (format/normalize format)

@@ -50,15 +50,9 @@
       (let [content (db/sub-file path)]
         (content/content encoded-path format
                          {:content content
-                          :on-click (fn [e]
-                                      (util/stop e)
-                                      (handler/edit-file!
-                                       {:path encoded-path
-                                        :content content}))
                           :on-hide (fn []
                                      (when (handler/file-changed? content)
-                                       (handler/alter-file (state/get-current-repo) path (state/get-edit-content) nil))
-                                     (handler/clear-edit!))}))
+                                       (handler/alter-file (state/get-current-repo) path (state/get-edit-content) nil)))}))
 
       :else
       [:div "Format ." (name format) " is not supported."])))

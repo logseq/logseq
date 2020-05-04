@@ -91,7 +91,7 @@
        ;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)]
-              (when @input-value
+              (when (seq @input-value)
                 (util/stop e)
                 (let [[id on-submit] (:rum/args state)
                       {:keys [pos]} @*slash-caret-pos]
@@ -272,12 +272,14 @@
    :did-mount (fn [state]
                 (let [[content opts id] (:rum/args state)]
                   (handler/restore-cursor-pos! id content (:dummy? opts)))
-                state)}
-  [content {:keys [on-hide dummy?]
+                state)
+   :will-unmount (fn [state]
+                   (handler/clear-edit!)
+                   state)}
+  [content {:keys [on-hide dummy? node]
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)
         show-commands? (rum/react *show-commands)]
-    (prn "re-render editor")
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}}

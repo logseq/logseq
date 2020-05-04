@@ -281,18 +281,16 @@
        (> child-level level)))))
 
 (rum/defcs heading-cp < rum/reactive
-  (rum/local false ::edit?)
   (rum/local false ::control-show?)
   (rum/local false ::collapsed?)
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
   (let [control-show? (get state ::control-show?)
-        edit? (get state ::edit?)
+        edit? (state/sub [:editor/heading-editing? uuid])
         heading-id (str "ls-heading-parent-" uuid)
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
         collapsed? (or toggle-collapsed? @collapsed-atom?)
         agenda? (= (:id config) "agenda")]
-    (prn "Re-rendered heading")
     (let [edit-input-id (str "edit-heading-" uuid)]
       (when-not lock?
         [:div.ls-heading-parent.flex-1 {:key (str uuid)
@@ -353,12 +351,9 @@
                          :cy 5
                          :r 2}]]]])
 
-          (if @edit?
+          (if edit?
             (editor/box content {:on-hide (fn [value]
-                                            (prn "on-hide")
-                                            (reset! edit? false)
                                             (when (= (:edit-input-id @state/state) edit-input-id)
-                                              (prn "same")
                                               (swap! state/state assoc
                                                      :edit-input-id nil))
                                             (handler/save-heading-if-changed! heading value nil))
@@ -369,11 +364,12 @@
                           (when-not (or (util/link? (gobj/get e "target"))
                                         (util/input? (gobj/get e "target")))
                             (util/stop e)
-                            (reset! edit? true)
+
                             (handler/reset-cursor-range! (gdom/getElement heading-id))
                             (swap! state/state assoc
-                                   :edit-input-id edit-input-id)
-                            (prn "on-click")))}
+                                   :edit-input-id edit-input-id
+                                   :edit-content content)
+                            (state/set-editor-editing-heading uuid)))}
              heading-part
 
              ;; non-heading children
@@ -614,10 +610,7 @@
 (defn ->hiccup
   [headings config]
   (let [headings (map-indexed (fn [idx heading] ["Heading" (assoc heading :heading/idx idx)]) headings)
-        blocks (blocks config headings)
-        blocks (if (seq blocks)
-                 blocks
-                 [[:div.text-gray-500.cursor "Click to edit"]])]
+        blocks (blocks config headings)]
     (->elem
      :div.content
      blocks)))

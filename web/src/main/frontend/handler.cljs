@@ -348,7 +348,6 @@
   (d/listen! db-conn :persistence
              (fn [tx-report]
                (when-let [db (:db-after tx-report)]
-                 ;; (re-render!)
                  (js/setTimeout (fn []
                                   (db/persist repo db)) 0)))))
 
@@ -426,8 +425,7 @@
 (defn clear-edit!
   []
   (swap! state/state assoc
-         :edit-file nil
-         :edit-journal nil
+         :edit-heading nil
          :edit-content ""
          :edit-input-id nil))
 
@@ -444,7 +442,8 @@
   (util/p-handle
    (fs/write-file (git/get-repo-dir repo-url) path content)
    (fn [_]
-     (git-add repo-url path))))
+     (git-add repo-url path)))
+  (clear-edit!))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -508,16 +507,6 @@
   (when-not config/dev?
     (periodically-pull repo-url pull-now?)
     (periodically-push-tasks repo-url)))
-
-(defn edit-journal!
-  [journal]
-  (swap! state/state assoc
-         :edit-journal journal))
-
-(defn edit-file!
-  [file]
-  (swap! state/state assoc
-         :edit-file file))
 
 (defn render-local-images!
   []

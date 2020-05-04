@@ -17,8 +17,6 @@
              :git/current-repo (storage/get :git/current-repo)
              :format/loading {}
 
-             :edit-journal nil
-             :edit-file nil
              :journals-length 1
 
              :search/q nil
@@ -27,10 +25,6 @@
              :ui/toggle-state false
              :ui/collapsed-headings {}
 
-             :edit-input-id nil
-             :edit-content ""
-             :cursor-range nil
-             :cursor-pos nil
 
              :github/contents {}
              :config {}
@@ -38,6 +32,12 @@
              :editor/show-page-search? false
              ;; With label or other data
              :editor/show-input nil
+             :editor/heading-editing? nil
+             :edit-input-id nil
+             :edit-content ""
+             :cursor-range nil
+             :cursor-pos nil
+
              }))
 
 (defn sub
@@ -168,3 +168,9 @@
 (defn get-editor-show-input
   []
   (get @state :editor/show-input))
+
+(defn set-editor-editing-heading
+  [heading-id]
+  (swap! state update :editor/heading-editing?
+         (fn [m]
+           (and heading-id {heading-id true}))))

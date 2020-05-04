@@ -1,6 +1,7 @@
 (ns frontend.mixins
   (:require [rum.core :as rum]
-            [goog.dom :as dom])
+            [goog.dom :as dom]
+            [goog.object :as gobj])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -54,7 +55,6 @@
     (listen state js/window "click"
             (fn [e]
               ;; If the click target is outside of current node
-              (prn "clicked")
               (when-not (dom/contains node (.. e -target))
                 (on-hide state e))))
 
@@ -118,9 +118,10 @@
     (event-mixin
      (fn [state]
        (let [open? (get state k)]
-         (hide-when-esc-or-outside state
-                                   :on-hide (fn []
-                                              (reset! open? false)))))
+         (when @open?
+           (hide-when-esc-or-outside state
+                                    :on-hide (fn []
+                                               (reset! open? false))))))
      (fn [state]
        (let [open? (atom false)
              component (:rum/react-component state)]
