@@ -425,8 +425,6 @@
 (defn clear-edit!
   []
   (swap! state/state assoc
-         :edit-heading nil
-         :edit-content ""
          :edit-input-id nil))
 
 (defn file-changed?
