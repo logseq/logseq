@@ -90,13 +90,14 @@
       {
        ;; enter
        13 (fn [state e]
-            (when-let [input-value (get state ::input-value)]
-              (util/stop e)
-              (let [[id on-submit] (:rum/args state)
-                    {:keys [pos]} @*slash-caret-pos]
-                (on-submit @input-value pos)
-                (.focus (gdom/getElement id)))
-              (reset! input-value nil)))}
+            (let [input-value (get state ::input-value)]
+              (when @input-value
+                (util/stop e)
+                (let [[id on-submit] (:rum/args state)
+                      {:keys [pos]} @*slash-caret-pos]
+                  (on-submit @input-value pos)
+                  (.focus (gdom/getElement id)))
+                (reset! input-value nil))))}
       nil)))
   {:did-remount
    (fn [old state]
@@ -276,6 +277,7 @@
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)
         show-commands? (rum/react *show-commands)]
+    (prn "re-render editor")
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}}

@@ -281,18 +281,19 @@
        (> child-level level)))))
 
 (rum/defcs heading-cp < rum/reactive
+  (rum/local false ::edit?)
   (rum/local false ::control-show?)
   (rum/local false ::collapsed?)
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
   (let [control-show? (get state ::control-show?)
+        edit? (get state ::edit?)
         heading-id (str "ls-heading-parent-" uuid)
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
         collapsed? (or toggle-collapsed? @collapsed-atom?)
-        agenda? (= (:id config) "agenda")
-        state-edit-input-id (state/sub :edit-input-id)]
-    (let [edit-input-id (str "edit-heading-" uuid)
-          edit? (= state-edit-input-id edit-input-id)]
+        agenda? (= (:id config) "agenda")]
+    (prn "Re-rendered heading")
+    (let [edit-input-id (str "edit-heading-" uuid)]
       (when-not lock?
         [:div.ls-heading-parent.flex-1 {:key (str uuid)
                                         :id heading-id
@@ -352,9 +353,12 @@
                          :cy 5
                          :r 2}]]]])
 
-          (if edit?
+          (if @edit?
             (editor/box content {:on-hide (fn [value]
+                                            (prn "on-hide")
+                                            (reset! edit? false)
                                             (when (= (:edit-input-id @state/state) edit-input-id)
+                                              (prn "same")
                                               (swap! state/state assoc
                                                      :edit-input-id nil))
                                             (handler/save-heading-if-changed! heading value nil))
@@ -365,9 +369,11 @@
                           (when-not (or (util/link? (gobj/get e "target"))
                                         (util/input? (gobj/get e "target")))
                             (util/stop e)
+                            (reset! edit? true)
                             (handler/reset-cursor-range! (gdom/getElement heading-id))
                             (swap! state/state assoc
-                                   :edit-input-id edit-input-id)))}
+                                   :edit-input-id edit-input-id)
+                            (prn "on-click")))}
              heading-part
 
              ;; non-heading children
@@ -426,16 +432,16 @@
                              level-str [:a.initial-color {:href (str "/page/" uuid)}
                                         (str (apply str (repeat level "*")) " ")]]
                          (->elem element
-                                {:id anchor}
-                                (remove-nils
-                                 (concat
-                                  [
-                                   ;; (when-not agenda? level-str)
-                                   checkbox
-                                   marker
-                                   priority]
-                                  (map-inline title)
-                                  [tags])))))]
+                                 {:id anchor}
+                                 (remove-nils
+                                  (concat
+                                   [
+                                    ;; (when-not agenda? level-str)
+                                    checkbox
+                                    marker
+                                    priority]
+                                   (map-inline title)
+                                   [tags])))))]
     (heading-cp t heading-part config)))
 
 (defn list-element
@@ -607,10 +613,14 @@
 ;; TODO: handle case of no headings
 (defn ->hiccup
   [headings config]
-  (let [headings (map-indexed (fn [idx heading] ["Heading" (assoc heading :heading/idx idx)]) headings)]
+  (let [headings (map-indexed (fn [idx heading] ["Heading" (assoc heading :heading/idx idx)]) headings)
+        blocks (blocks config headings)
+        blocks (if (seq blocks)
+                 blocks
+                 [[:div.text-gray-500.cursor "Click to edit"]])]
     (->elem
      :div.content
-     (blocks config headings))))
+     blocks)))
 
 (comment
   ;; timestamps

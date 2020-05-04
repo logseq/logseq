@@ -54,6 +54,7 @@
     (listen state js/window "click"
             (fn [e]
               ;; If the click target is outside of current node
+              (prn "clicked")
               (when-not (dom/contains node (.. e -target))
                 (on-hide state e))))
 
