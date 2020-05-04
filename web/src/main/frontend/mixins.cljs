@@ -49,7 +49,7 @@
 ;;      (dissoc state name))})
 
 (defn hide-when-esc-or-outside
-  [state & {:keys [on-hide node show-fn]}]
+  [state & {:keys [on-hide node]}]
   (let [node (or node (rum/dom-node state))]
     (listen state js/window "click"
             (fn [e]
@@ -61,7 +61,7 @@
             (fn [e]
               (case (.-keyCode e)
                 ;; Esc
-                27 (on-hide e)
+                27 (on-hide state e)
                 nil)))))
 
 (defn on-enter

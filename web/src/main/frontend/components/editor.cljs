@@ -83,6 +83,21 @@
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-key-down
+      state
+      {
+       ;; enter
+       13 (fn [state e]
+            (when-let [input-value (get state ::input-value)]
+              (util/stop e)
+              (let [[id on-submit] (:rum/args state)
+                    {:keys [pos]} @*slash-caret-pos]
+                (on-submit @input-value pos)
+                (.focus (gdom/getElement id)))
+              (reset! input-value nil)))}
+      nil)))
   {:did-remount
    (fn [old state]
      (when-let [show-input (state/get-editor-show-input)]
@@ -91,42 +106,30 @@
              first-input (gdom/getElement id)]
          (.focus first-input)))
      state)}
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/on-enter
-      state
-      :on-enter (fn [e]
-                  (when-let [input-value (get state ::input-value)]
-                    (let [[id on-submit] (:rum/args state)
-                          {:keys [pos]} @*slash-caret-pos]
-                      (on-submit @input-value pos)
-                      (.focus (gdom/getElement id))))))))
   [state id on-submit]
-  (let [input-option (state/sub :editor/show-input)]
-    (when input-option
-      (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
-            input-value (get state ::input-value)]
-        [:div.absolute.rounded-md.shadow-lg
-         {:style {:top (+ top 20)
-                  :left left
-                  :width 400}}
-         (when (seq input-option)
-           [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#d3d3d3"}},
-            (for [{:keys [id] :as input-item} input-option]
-              [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-1
-               (merge
-                {:key (str "modal-input-" (name id))
-                 :id (str "modal-input-" (name id))
-                 :on-change (fn [e]
-                              (swap! input-value assoc id (util/evalue e)))
-                 :auto-complete "off"}
-                (dissoc input-item :id))])
-            (ui/button
-              "Submit"
-              (fn [e]
-                (util/stop e)
-                (prn "on submit from submit button")
-                (on-submit @input-value pos)))])]))))
+  (when-let [input-option (state/sub :editor/show-input)]
+    (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
+          input-value (get state ::input-value)]
+      [:div.absolute.rounded-md.shadow-lg
+       {:style {:top (+ top 20)
+                :left left
+                :width 400}}
+       (when (seq input-option)
+         [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#d3d3d3"}},
+          (for [{:keys [id] :as input-item} input-option]
+            [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-1
+             (merge
+              {:key (str "modal-input-" (name id))
+               :id (str "modal-input-" (name id))
+               :on-change (fn [e]
+                            (swap! input-value assoc id (util/evalue e)))
+               :auto-complete "off"}
+              (dissoc input-item :id))])
+          (ui/button
+            "Submit"
+            (fn [e]
+              (util/stop e)
+              (on-submit @input-value pos)))])])))
 
 (defn get-state
   [state]
@@ -221,11 +224,10 @@
            input (gdom/getElement input-id)]
        (mixins/hide-when-esc-or-outside
         state
-        :show-fn (fn []
-                   (some? (:edit-input-id @state/state)))
         :on-hide (fn []
                    (let [{:keys [value on-hide]} (get-state state)]
-                     (on-hide value))))
+                     (on-hide value)
+                     (state/set-editor-show-input nil))))
        (mixins/on-key-down
         state
         {
