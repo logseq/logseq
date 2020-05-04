@@ -67,7 +67,7 @@
 ;; TODO: image link to another link
 (defn image-link [url href label]
   [:img {:src href
-         :title label}])
+         :title (second (first label))}])
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
@@ -177,6 +177,7 @@
 
     ["Link" link]
     (let [{:keys [url label]} link]
+      (prn {:link link})
       (match url
         ["Search" s]
         (case (first s)

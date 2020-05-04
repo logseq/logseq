@@ -224,6 +224,7 @@
        {:tabIndex "0"}
        [:div.flex.justify-center
         [:div.flex-1.m-6 {:style {:position "relative"
-                                  :max-width 800}}
+                                  :max-width 800
+                                  :margin-bottom 500}}
          main-content]]]
       (ui/notification)]]))

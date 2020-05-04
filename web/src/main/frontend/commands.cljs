@@ -8,6 +8,12 @@
   [page]
   (util/format "[[%s]]" page))
 
+(def link-steps [[:editor/input "[[][]]"]
+                 [:editor/cursor-back 4]
+                 [:editor/show-input [{:id :link
+                                       :placeholder "Link"}
+                                      {:id :label
+                                       :placeholder "Label"}]]])
 ;; Credits to roamresearch.com
 (def commands-map
   (->>
@@ -20,13 +26,9 @@
      ["Page Reference" [[:editor/input "[[]]"]
                         [:editor/cursor-back 2]
                         [:editor/search-page]]]
-     ["Link" [[:editor/input "[[][]]"]
-              [:editor/cursor-back 4]
-              [:editor/show-input [{:id :link
-                                    :placeholder "Link"}
-                                   {:id :label
-                                    :placeholder "Label"}]]]]
-     ["Image Org Mode" nil]
+     ["Link" link-steps]
+     ;; same as link
+     ["Image Link" link-steps]
      ["Upload a file" nil]
      ]
     ;; Allow user to modify or extend, should specify how to extend.

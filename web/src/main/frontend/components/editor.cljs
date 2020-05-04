@@ -81,7 +81,6 @@
                 :width 400}}
        :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))
 
-;; TODO: add on-enter
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   {:did-remount
@@ -92,6 +91,17 @@
              first-input (gdom/getElement id)]
          (.focus first-input)))
      state)}
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-enter
+      state
+      :on-enter (fn [e]
+                  (util/stop e)
+                  (when-let [input-value (get state ::input-value)]
+                    (let [[id on-submit] (:rum/args state)
+                          {:keys [pos]} @*slash-caret-pos]
+                      (on-submit @input-value pos)
+                      (.focus (gdom/getElement id))))))))
   [state id on-submit]
   (let [input-option (state/sub :editor/show-input)]
     (when input-option
@@ -116,6 +126,7 @@
               "Submit"
               (fn [e]
                 (util/stop e)
+                (prn "on submit from submit button")
                 (on-submit @input-value pos)))])]))))
 
 (defn get-state
@@ -286,11 +297,12 @@
      (transition-cp
       (input id
              (fn [{:keys [link label]} pos]
-               (when-not (string/blank? link)
+               (when-not (and (string/blank? link)
+                              (string/blank? label))
                  (let [new-value (util/format "%s [[%s][%s]]%s"
                                               (subs value 0 (max 0 (dec (dec pos))))
-                                              link
-                                              label
+                                              (or link "")
+                                              (or label "")
                                               (subs value (+ pos 5)))]
                    (when-let [editor (gdom/getElement id)]
                      (.focus editor))
