@@ -70,6 +70,7 @@
       (ui/auto-complete
        matched-pages
        (fn [chosen]
+         ;; TODO: replace with handler/insert-command!
          (let [new-value (util/format "%s [[%s%s"
                                       (subs edit-content 0 (max 0 (dec (dec pos))))
                                       chosen
@@ -328,6 +329,7 @@
                           file file-name file-type
                           (fn [signed-url]
                             ;; insert into the text
+                            ;; TODO: replace with handler/insert-command!
                             (let [pos (:pos @*slash-caret-pos)
                                   current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
                                   new-value (string/trimr
