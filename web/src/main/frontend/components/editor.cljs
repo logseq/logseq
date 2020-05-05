@@ -196,16 +196,17 @@
         last-command (subs edit-content
                            (:pos @*slash-caret-pos)
                            pos)]
-    (or
-     (and (= \/ (nth edit-content (dec pos)))
-          ;; (or
-          ;;  (and
-          ;;   (>= (count edit-content) 2)
-          ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
-          ;;  (= edit-content "/"))
-          commands/commands-map)
-     (and last-command
-          (commands/get-matched-commands last-command)))))
+    (when (> pos 0)
+      (or
+      (and (= \/ (nth edit-content (dec pos)))
+           ;; (or
+           ;;  (and
+           ;;   (>= (count edit-content) 2)
+           ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
+           ;;  (= edit-content "/"))
+           commands/commands-map)
+      (and last-command
+           (commands/get-matched-commands last-command))))))
 
 (defn in-auto-complete?
   [input]
@@ -248,9 +249,9 @@
          8 (fn [state e]
              (let [node (gdom/getElement input-id)
                    current-pos (:pos (util/get-caret-pos node))
-                   value (gobj/get node "value")
-                   current-char (nth value (dec current-pos))]
-               (when (= current-char "/")
+                   value (gobj/get node "value")]
+               (when (and (> current-pos 1)
+                          (= (nth value (dec current-pos)) "/"))
                  (reset! *slash-caret-pos nil))
                (on-backspace state e)))}
         nil)
@@ -334,17 +335,12 @@
                          (handler/request-presigned-url
                           file file-name file-type
                           (fn [signed-url]
-                            ;; insert into the text
-                            ;; TODO: replace with commands/insert!
-                            (let [pos (:pos @*slash-caret-pos)
-                                  current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
-                                  new-value (string/trimr
-                                             (util/format "%s [[%s][%s]] %s"
-                                                          (subs value 0 (max 0 (dec (dec pos))))
-                                                          signed-url
-                                                          file-name
-                                                          (subs value current-pos)))]
-                              (when-let [editor (gdom/getElement id)]
-                                (.focus editor))
-                              (handler/editor-set-new-value! new-value))))))))
+                            (commands/insert! id
+                                              (util/format "[[%s][%s]]"
+                                                           signed-url
+                                                           file-name)
+                                              *slash-caret-pos
+                                              :last-pattern "[["
+                                              :postfix-fn (fn [s]
+                                                            (util/replace-first "][]]" s "")))))))))
        :hidden true}]]))
