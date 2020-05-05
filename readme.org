@@ -5,13 +5,6 @@
    https://logseq.com
 
 ** Setup
-*** Create a github basic token
-    1. Go to github.com Settings / Developer settings / Personal access tokens
-    2. Click the button *Generate new token*
-    3. Input =logseq= or anything in the *Note*
-    4. Select the =repo= checkbox under *Select scopes*
-    5. Click the *Generate token* button
-*** Go to the demo or your now.sh instance
 
 
 ** File directory example
