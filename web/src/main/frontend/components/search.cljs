@@ -24,8 +24,8 @@
         [before after] (string/split content (re-find (re-pattern (str "(?i)" q))
                                                       content))
         [before after] (if (>= n 64)
-                         [(if before (apply str (take-last 16 before)))
-                          (if after (apply str (take 16 after)))]
+                         [(if before (apply str (take-last 48 before)))
+                          (if after (apply str (take 48 after)))]
                          [before after])]
     [:p
      (when-not (string/blank? before)
@@ -48,11 +48,7 @@
                                     (let [page (util/url-encode (:page/name (:heading/page first-match)))
                                           uuid (:heading/uuid first-match)
                                           path (str "/page/" page "#ls-heading-parent-" uuid)]
-                                      (handler/redirect-with-fragment! path))
-                                    ;; (handler/redirect! {:to :page
-                                    ;;                     :path-params {:name }
-                                    ;;                     :query-params {:id (str "#ls-heading-parent-" )}})
-                                    )))))
+                                      (handler/redirect-with-fragment! path)))))))
   []
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
@@ -72,7 +68,7 @@
        [:input#search_field.block.w-full.h-full.pl-8.pr-3.py-2.rounded-md.text-gray-900.placeholder-gray-500.focus:outline-none.focus:placeholder-gray-400.sm:text-sm
         {:placeholder "Search"
          :auto-complete "off"
-         :default-value ""
+         :value search-q
          :on-change (fn [e]
                       (let [value (util/evalue e)]
                         (if (string/blank? value)

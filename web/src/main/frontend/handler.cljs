@@ -646,7 +646,7 @@
   []
   (swap! state/state assoc
          :search/result nil
-         :search/q nil))
+         :search/q ""))
 
 (defn email? [v]
   (and v

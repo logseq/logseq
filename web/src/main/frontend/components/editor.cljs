@@ -80,6 +80,35 @@
                 :width 400}}
        :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))
 
+;; (rum/defc date-picker < rum/reactive
+;;   [id]
+;;   (ui/date-picker {:selected (js/Date.)
+;;                    :on-change (fn [date]
+;;                                 (prn "chosen date")
+;;                                 ;; (commands/insert! id (str "[[" chosen)
+;;                                 ;;                   *slash-caret-pos
+;;                                 ;;                   :last-pattern "[[")
+;;                                 ;; (commands/handle-step [:editor/cursor-forward 2])
+;;                                 ;; (state/set-editor-show-date-picker false)
+;;                                 )})
+;;   ;; (when (state/sub :editor/show-date-picker?)
+;;   ;;   (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
+;;   ;;         today (js/Date.)]
+;;   ;;     [:div.absolute
+;;   ;;      {:style {:top (+ top 20)
+;;   ;;               :left left
+;;   ;;               :width 400}}
+;;   ;;      (ui/date-picker {:selected today
+;;   ;;                       :on-change (fn [date]
+;;   ;;                                    (prn "chosen date")
+;;   ;;                                    ;; (commands/insert! id (str "[[" chosen)
+;;   ;;                                    ;;                   *slash-caret-pos
+;;   ;;                                    ;;                   :last-pattern "[[")
+;;   ;;                                    ;; (commands/handle-step [:editor/cursor-forward 2])
+;;   ;;                                    ;; (state/set-editor-show-date-picker false)
+;;   ;;                                    )})]      ))
+;;   )
+
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   (mixins/event-mixin
@@ -211,7 +240,8 @@
 (defn in-auto-complete?
   [input]
   (or (seq (get-matched-commands input))
-      (state/get-editor-show-page-search)))
+      (state/get-editor-show-page-search)
+      (state/get-editor-show-date-picker)))
 
 (rum/defc transition-cp
   [cp]
@@ -307,6 +337,8 @@
 
      (transition-cp
       (page-search id))
+
+     ;; (transition-cp (date-picker id))
 
      (transition-cp
       (input id

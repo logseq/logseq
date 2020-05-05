@@ -19,7 +19,7 @@
 
              :journals-length 1
 
-             :search/q nil
+             :search/q ""
              :search/result nil
 
              :ui/toggle-state false
@@ -30,6 +30,7 @@
              :config {}
 
              :editor/show-page-search? false
+             :editor/show-date-picker? false
              ;; With label or other data
              :editor/show-input nil
              :editor/editing? nil
@@ -153,6 +154,12 @@
 (defn get-editor-show-page-search
   []
   (get @state :editor/show-page-search?))
+(defn set-editor-show-date-picker
+  [value]
+  (set-state! :editor/show-date-picker? value))
+(defn get-editor-show-date-picker
+  []
+  (get @state :editor/show-date-picker?))
 (defn set-editor-show-input
   [value]
   (set-state! :editor/show-input value))

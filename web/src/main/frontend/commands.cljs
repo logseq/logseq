@@ -44,7 +44,7 @@
      ["Yesterday" (->page-reference (util/tomorrow))]
      ["Today" (->page-reference (util/today))]
      ["Current Time" (util/get-current-time)]
-     ["Date Picker" [[:date/pick]]]
+     ["Date Picker" [[:editor/show-date-picker]]]
      ["Page Reference" [[:editor/input "[[]]"]
                         [:editor/cursor-back 2]
                         [:editor/search-page]]]
@@ -96,6 +96,9 @@
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input option))
+
+(defmethod handle-step :editor/show-date-picker [[_]]
+  (state/set-editor-show-date-picker true))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
