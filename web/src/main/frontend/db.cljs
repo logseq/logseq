@@ -15,6 +15,10 @@
             [frontend.config :as config]
             [rum.core :as rum]))
 
+;; only for debugging
+;; (def react deref)
+(def react rum/react)
+
 ;; TODO: Create a database for each repo.
 ;; Multiple databases
 (defn get-repo-path
@@ -211,7 +215,7 @@
                  :where
                  [?page :page/name ?page-name]]
          (get-conn repo false))
-       (rum/react)
+       (react)
        (map first)
        distinct))
 
@@ -221,7 +225,7 @@
                  :where
                  [?file :file/path ?file-path]]
          (get-conn repo false))
-       (rum/react)
+       (react)
        (map first)
        (distinct)
        (sort)))
@@ -328,7 +332,7 @@
   ([repo-url key]
    (when-let [conn (get-conn repo-url false)]
      (-> (posh/pull conn '[*] [:db/ident key])
-         (rum/react)
+         (react)
          (get key)))))
 
 (defn debug!
@@ -362,7 +366,7 @@
                   [?p :file/path ?file]
                   [?heading :heading/file ?p]]
           (get-conn repo-url false) file)
-        rum/react
+        react
         seq-flatten
         (pull-many '[*])
         sort-by-pos)))
@@ -379,7 +383,7 @@
                   [?p :page/name ?page]
                   [?heading :heading/page ?p]]
           (get-conn repo-url false) page)
-        rum/react
+        react
         seq-flatten
         (pull-many '[*])
         sort-by-pos)))
@@ -573,7 +577,7 @@
              [?file :file/content ?content]]
      (get-conn false)
      path)
-   (rum/react)
+   (react)
    ffirst))
 
 ;; marker should be one of: TODO, DOING, IN-PROGRESS
@@ -598,10 +602,10 @@
                 [(?pred $ ?marker)]]
         (get-conn (state/get-current-repo) false)
         pred)
-      rum/react
+      react
       seq-flatten
       (posh-pull-many '[*])
-      rum/react))))
+      react))))
 
 (defn get-current-journal-path
   []
@@ -652,7 +656,7 @@
                     conn
                     before-day
                     today)
-                  (rum/react)
+                  (react)
                   (sort-by last)
                   (reverse)
                   (map first))]

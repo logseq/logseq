@@ -229,8 +229,7 @@
              :tab-index 0
              :on-click (fn [e]
                          (util/stop e)
-                         (let [option (nth matched @current-idx)]
-                           (on-chosen option)))}
+                         (on-chosen item))}
             item)
            idx))
         (when empty-div
