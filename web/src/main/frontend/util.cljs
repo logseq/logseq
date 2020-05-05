@@ -413,6 +413,11 @@
     [(subs s 0 last-index)
      (subs s (+ last-index (count pattern)) (count s))]))
 
+;; Add documentation
+(defn replace-first [pattern s new-value]
+  (when-let [first-index (string/index-of s pattern)]
+    (str new-value (subs s (+ first-index (count pattern))))))
+
 (defn replace-last [pattern s new-value]
   (when-let [last-index (string/last-index-of s pattern)]
     (str (subs s 0 last-index)

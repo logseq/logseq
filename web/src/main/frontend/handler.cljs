@@ -631,22 +631,6 @@
         (when-let [current-input (gdom/getElement input-id)]
           (util/move-cursor-to-end current-input))))))
 
-(defn insert-command!
-  [id value current-slash-pos]
-  (when-let [edit-content (state/get-edit-content)]
-    (let [input (gdom/getElement id)
-          current-pos (:pos (util/get-caret-pos input))
-          prefix (util/replace-last "/"
-                                    (subs edit-content 0 current-pos)
-                                    (str value))
-          new-value (str
-                     prefix
-                     (subs edit-content current-pos))]
-      (state/set-edit-content! new-value)
-      (when-let [input-id (state/get-edit-input-id)]
-        (when-let [current-input (gdom/getElement input-id)]
-          (util/move-cursor-to input (count prefix)))))))
-
 (defn editor-set-new-value!
   [new-value]
   (state/set-edit-content! new-value)

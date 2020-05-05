@@ -23,7 +23,7 @@
   (cond
     ;; replace string
     (string? command-output)
-    (handler/insert-command! id command-output (:pos @*slash-caret-pos))
+    (commands/insert! id command-output *slash-caret-pos)
 
     ;; steps
     (vector? command-output)
@@ -70,12 +70,10 @@
       (ui/auto-complete
        matched-pages
        (fn [chosen]
-         ;; TODO: replace with handler/insert-command!
-         (let [new-value (util/format "%s [[%s%s"
-                                      (subs edit-content 0 (max 0 (dec (dec pos))))
-                                      chosen
-                                      (subs edit-content current-pos))]
-           (handler/editor-set-new-value! new-value))
+         (commands/insert! id (str "[[" chosen)
+                           *slash-caret-pos
+                           :last-pattern "[[")
+         (commands/handle-step [:editor/cursor-forward 2])
          (state/set-editor-show-page-search false))
        {:style {:top (+ top 20)
                 :left left
@@ -247,7 +245,14 @@
                 (on-up-down state e false)))
 
          ;; backspace
-         8 (fn [state e] (on-backspace state e))}
+         8 (fn [state e]
+             (let [node (gdom/getElement input-id)
+                   current-pos (:pos (util/get-caret-pos node))
+                   value (gobj/get node "value")
+                   current-char (nth value (dec current-pos))]
+               (when (= current-char "/")
+                 (reset! *slash-caret-pos nil))
+               (on-backspace state e)))}
         nil)
        (mixins/on-key-up
         state
@@ -307,14 +312,15 @@
              (fn [{:keys [link label]} pos]
                (when-not (and (string/blank? link)
                               (string/blank? label))
-                 (let [new-value (util/format "%s [[%s][%s]]%s"
-                                              (subs value 0 (max 0 (dec (dec pos))))
-                                              (or link "")
-                                              (or label "")
-                                              (subs value (+ pos 5)))]
-                   (when-let [editor (gdom/getElement id)]
-                     (.focus editor))
-                   (handler/editor-set-new-value! new-value)))
+                 (commands/insert! id
+                                   (util/format "[[%s][%s]]"
+                                                (or link "")
+                                                (or label ""))
+                                   *slash-caret-pos
+                                   :last-pattern "[["
+                                   :postfix-fn (fn [s]
+                                                 (util/replace-first "][]]" s ""))
+                                   ))
                (state/set-editor-show-input nil))))
 
      [:input
@@ -329,7 +335,7 @@
                           file file-name file-type
                           (fn [signed-url]
                             ;; insert into the text
-                            ;; TODO: replace with handler/insert-command!
+                            ;; TODO: replace with commands/insert!
                             (let [pos (:pos @*slash-caret-pos)
                                   current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
                                   new-value (string/trimr
