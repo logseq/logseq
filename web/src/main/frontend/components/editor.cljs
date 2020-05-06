@@ -79,18 +79,18 @@
   (when (state/sub :editor/show-date-picker?)
     (ui/datepicker
      (t/today)
-     :on-change
-     (fn [e date]
-       (util/stop e)
-       (let [journal (util/journal-name (tc/to-date date))]
-         ;; similar to page reference
-         (commands/insert! id (str "[[" journal)
-                           *slash-caret-pos
-                           *show-commands
-                           *matched-commands
-                           :last-pattern "[["
-                           :forward-pos 2)
-         (state/set-editor-show-date-picker false))))))
+     {:on-change
+      (fn [e date]
+        (util/stop e)
+        (let [journal (util/journal-name (tc/to-date date))]
+          ;; similar to page reference
+          (commands/insert! id (str "[[" journal)
+                            *slash-caret-pos
+                            *show-commands
+                            *matched-commands
+                            :last-pattern "[["
+                            :forward-pos 2)
+          (state/set-editor-show-date-picker false)))})))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -256,6 +256,8 @@
                    (let [{:keys [value on-hide]} (get-state state)]
                      (on-hide value)
                      (state/set-editor-show-input nil)
+                     (state/set-editor-show-date-picker false)
+                     (state/set-editor-show-page-search false)
                      (state/set-edit-input-id! nil)
                      (reset! *slash-caret-pos nil)
                      (reset! *show-commands false)

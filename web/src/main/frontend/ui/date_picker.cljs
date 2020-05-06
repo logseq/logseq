@@ -1,10 +1,12 @@
 (ns frontend.ui.date-picker
   (:require
    [rum.core :as rum]
-   [cljs-time.core       :refer [now today minus plus months days year month day day-of-week first-day-of-the-month before? after?]]
+   [cljs-time.core       :refer [now today minus plus months days weeks year month day day-of-week first-day-of-the-month before? after?]]
    [cljs-time.predicates :refer [sunday?]]
    [cljs-time.format     :refer [parse unparse formatters formatter]]
-   [frontend.util          :refer [deref-or-value now->utc]]))
+   [frontend.util          :refer [deref-or-value now->utc]]
+   [frontend.mixins :as mixins]
+   [frontend.util :as util]))
 
 ;; Adapted from re-com date-picker
 
@@ -31,6 +33,8 @@
 (defn- inc-month [date] (plus date (months 1)))
 
 (defn- inc-date [date n] (plus date (days n)))
+
+(defn- inc-week [date n] (plus date (weeks n)))
 
 (defn previous
   "If date fails pred, subtract period until true, otherwise answer date"
@@ -174,12 +178,39 @@
     (merge attributes {:selectable-fn selectable-fn})))
 
 (rum/defc date-picker < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-key-down
+      state
+      {
+       ;; enter, current day
+       13 (fn [state e]
+            (when-let [on-change (:on-change (last (:rum/args state)))]
+              (on-change e @*internal-model)))
+
+       ;; left, previous day
+       37 (fn [state e]
+            (swap! *internal-model inc-date -1))
+
+       ;; right, next day
+       39 (fn [state e]
+            (swap! *internal-model inc-date 1))
+
+       ;; up, one week ago
+       38 (fn [state e]
+            (swap! *internal-model inc-week -1))
+       ;; down, next week
+       40 (fn [state e]
+            (swap! *internal-model inc-week 1))}
+      (fn [e key-code]
+        (when (contains? #{13 37 38 39 40} key-code)
+          (util/stop e))))))
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
            state)}
-  [model & {:keys [on-change disabled? start-of-week class style attr]
-            :or   {start-of-week 6} ;; Default to Sunday
-            :as   args}]
+  [model {:keys [on-change disabled? start-of-week class style attr]
+          :or   {start-of-week 6} ;; Default to Sunday
+          :as   args}]
   (let [internal-model (rum/react *internal-model)
         display-month (first-day-of-the-month (or internal-model (now->utc)))
         props-with-defaults (merge args {:start-of-week start-of-week})
