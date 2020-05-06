@@ -114,7 +114,7 @@
        (let [id (str "modal-input-"
                      (name (:id (first show-input))))
              first-input (gdom/getElement id)]
-         (.focus first-input)))
+         (when first-input (.focus first-input))))
      state)}
   [state id on-submit]
   (when-let [input-option (state/sub :editor/show-input)]
@@ -250,7 +250,10 @@
                    (let [{:keys [value on-hide]} (get-state state)]
                      (on-hide value)
                      (state/set-editor-show-input nil)
-                     (state/set-edit-input-id! nil))))
+                     (state/set-edit-input-id! nil)
+                     (reset! *slash-caret-pos nil)
+                     (reset! *show-commands false)
+                     (reset! *matched-commands commands/commands-map))))
        (mixins/on-key-down
         state
         {
