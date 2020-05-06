@@ -212,7 +212,7 @@
                 (util/stop e)
                 (on-chosen (nth matched @current-idx))))}
         nil)))
-  [state matched on-chosen & {:keys [empty-div]}]
+  [state matched on-chosen & {:keys [empty-div on-click]}]
   (let [current-idx (get state ::current-idx)]
     [:div.py-1.rounded-md.bg-white.shadow-xs
      (if (seq matched)
@@ -227,7 +227,9 @@
              :tab-index 0
              :on-click (fn [e]
                          (util/stop e)
-                         (on-chosen item))}
+                         (on-chosen item)
+                         (when on-click
+                           (on-click e)))}
             item)
            idx))
        (when empty-div

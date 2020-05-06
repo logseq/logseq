@@ -17,7 +17,7 @@
             [cljs-time.coerce :as tc]))
 
 (defonce *show-commands (atom false))
-(def *matched-commands (atom nil))
+(defonce *matched-commands (atom nil))
 (defonce *slash-caret-pos (atom nil))
 
 (defn- insert-command!
@@ -36,7 +36,7 @@
 
 (rum/defc commands < rum/reactive
   {:will-mount (fn [state]
-                 (reset! *matched-commands commands/commands-map)
+                 (reset! *matched-commands (commands/commands-map))
                  state)}
   [id]
   (when (rum/react *show-commands)
@@ -50,7 +50,8 @@
   [id]
   (when (state/sub :editor/show-page-search?)
     (let [{:keys [pos]} (rum/react *slash-caret-pos)
-          current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
+          input (gdom/getElement id)
+          current-pos (:pos (util/get-caret-pos input))
           edit-content (state/sub :edit-content)
           q (subs edit-content (inc pos) current-pos)
           matched-pages (when-not (string/blank? q)
@@ -63,32 +64,33 @@
                              pages)))]
       (ui/auto-complete
        matched-pages
-       (fn [chosen]
+       (fn [chosen click?]
          (commands/insert! id (str "[[" chosen)
                            *slash-caret-pos
                            *show-commands
                            *matched-commands
-                           :last-pattern "[[")
-         (commands/handle-step [:editor/cursor-forward 2])
+                           :last-pattern "[["
+                           :forward-pos 2)
          (state/set-editor-show-page-search false))
        :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))
 
 (rum/defc date-picker < rum/reactive
   [id]
   (when (state/sub :editor/show-date-picker?)
-    (let [today (js/Date.)]
-      (ui/datepicker (t/today)
-                     :on-change
-                     (fn [e date]
-                       (util/stop e)
-                       (let [journal (util/journal-name (tc/to-date date))]
-                         (commands/insert! id (str "[[" journal)
-                                           *slash-caret-pos
-                                           *show-commands
-                                           *matched-commands
-                                           :last-pattern "[[")
-                         (commands/handle-step [:editor/cursor-forward 2])
-                         (state/set-editor-show-date-picker false)))))))
+    (ui/datepicker
+     (t/today)
+     :on-change
+     (fn [e date]
+       (util/stop e)
+       (let [journal (util/journal-name (tc/to-date date))]
+         ;; similar to page reference
+         (commands/insert! id (str "[[" journal)
+                           *slash-caret-pos
+                           *show-commands
+                           *matched-commands
+                           :last-pattern "[["
+                           :forward-pos 2)
+         (state/set-editor-show-date-picker false))))))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -101,20 +103,23 @@
        13 (fn [state e]
             (let [input-value (get state ::input-value)]
               (when (seq @input-value)
+                ;; no new line input
                 (util/stop e)
-                (let [[id on-submit] (:rum/args state)
+                (let [[_id on-submit] (:rum/args state)
                       {:keys [pos]} @*slash-caret-pos]
-                  (on-submit @input-value pos)
-                  (.focus (gdom/getElement id)))
+                  (on-submit @input-value pos))
                 (reset! input-value nil))))}
       nil)))
-  {:did-remount
-   (fn [old state]
+  {:did-update
+   (fn [state]
      (when-let [show-input (state/get-editor-show-input)]
        (let [id (str "modal-input-"
                      (name (:id (first show-input))))
              first-input (gdom/getElement id)]
-         (when first-input (.focus first-input))))
+         (when (and first-input
+                    (not (d/has-class? first-input "focused")))
+           (.focus first-input)
+           (d/add-class! first-input "focused"))))
      state)}
   [state id on-submit]
   (when-let [input-option (state/sub :editor/show-input)]
@@ -127,6 +132,7 @@
             (merge
              {:key (str "modal-input-" (name id))
               :id (str "modal-input-" (name id))
+              :value (get @input-value id "")
               :on-change (fn [e]
                            (swap! input-value assoc id (util/evalue e)))
               :auto-complete "off"}
@@ -210,7 +216,7 @@
             ;;   (>= (count edit-content) 2)
             ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
             ;;  (= edit-content "/"))
-            commands/commands-map)
+            (commands/commands-map))
        (and last-command
             (commands/get-matched-commands last-command))))))
 
@@ -253,7 +259,7 @@
                      (state/set-edit-input-id! nil)
                      (reset! *slash-caret-pos nil)
                      (reset! *show-commands false)
-                     (reset! *matched-commands commands/commands-map))))
+                     (reset! *matched-commands (commands/commands-map)))))
        (mixins/on-key-down
         state
         {
@@ -273,9 +279,12 @@
                    value (gobj/get node "value")]
                (when (and (> current-pos 1)
                           (= (nth value (dec current-pos)) "/"))
-                 (reset! *slash-caret-pos nil))
+                 (reset! *slash-caret-pos nil)
+                 (reset! *show-commands false))
                (on-backspace state e)))}
-        nil)
+        (fn [e key-code]
+          (swap! state/state assoc
+                 :editor/last-saved-cursor nil)))
        (mixins/on-key-up
         state
         ;; /
@@ -300,16 +309,25 @@
              (state/set-edit-content!
               (if dummy?
                 (string/triml content)
-                (string/trim content))))
+                (string/trim content)))
+             (swap! state/state assoc
+                    :editor/last-saved-cursor nil))
            state)
    :did-mount (fn [state]
                 (let [[content opts id] (:rum/args state)]
                   (handler/restore-cursor-pos! id content (:dummy? opts)))
-                state)}
+                state)
+   :did-update (fn [state]
+                 (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+                   (let [[_content _opts id] (:rum/args state)
+                         input (gdom/getElement id)]
+                     (when input
+                       (.focus input)
+                       (util/move-cursor-to input saved-cursor))))
+                 state)}
   [content {:keys [on-hide dummy? node]
             :or {dummy? false}} id]
-  (let [value (state/sub :edit-content)
-        show-commands? (rum/react *show-commands)]
+  (let [value (state/sub :edit-content)]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}}
@@ -349,8 +367,7 @@
                                    *matched-commands
                                    :last-pattern "[["
                                    :postfix-fn (fn [s]
-                                                 (util/replace-first "][]]" s ""))
-                                   ))
+                                                 (util/replace-first "][]]" s ""))))
                (state/set-editor-show-input nil)))
       true)
 
@@ -371,8 +388,5 @@
                                                            file-name)
                                               *slash-caret-pos
                                               *show-commands
-                                              *matched-commands
-                                              :last-pattern "[["
-                                              :postfix-fn (fn [s]
-                                                            (util/replace-first "][]]" s "")))))))))
+                                              *matched-commands)))))))
        :hidden true}]]))

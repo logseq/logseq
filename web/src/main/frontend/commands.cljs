@@ -15,13 +15,14 @@
                                       {:id :label
                                        :placeholder "Label"}]]])
 ;; Credits to roamresearch.com
-(def commands-map
+(defn commands-map
+  []
   (->>
    (concat
     [["TODO" "TODO"]
      ["DOING" "DOING"]
      ["Tomorrow" (->page-reference (util/tomorrow))]
-     ["Yesterday" (->page-reference (util/tomorrow))]
+     ["Yesterday" (->page-reference (util/yesterday))]
      ["Today" (->page-reference (util/today))]
      ["Current Time" (util/get-current-time)]
      ["Date Picker" [[:editor/input "[[]]"]
@@ -38,38 +39,42 @@
      ;; ["Upload a file" nil]
      ]
     ;; Allow user to modify or extend, should specify how to extend.
-    (get-in @state/state [:config :commands]))
+    (get-in @state/state [:config (state/get-current-repo) :commands]))
    (util/remove-nils)
    (util/distinct-by-last-wins first)))
 
 (defn insert!
-  [id value *slash-caret-pos *show-commands *matched-commands
-   & {:keys [last-pattern postfix-fn]
+  [id value
+   *slash-caret-pos
+   *show-commands
+   *matched-commands
+   & {:keys [last-pattern postfix-fn forward-pos]
       :or {last-pattern "/"}}]
-  (when-let [edit-content (state/get-edit-content)]
-    (let [input (gdom/getElement id)
-          current-pos (:pos (util/get-caret-pos input))
-          prefix (subs edit-content 0 current-pos)
-          prefix (util/replace-last last-pattern prefix value)
-          postfix (subs edit-content current-pos)
-          postfix (if postfix-fn (postfix-fn postfix) postfix)
-          new-value (str prefix postfix)]
-      (state/set-edit-content! new-value)
-      (.focus (gdom/getElement id))
-      (when *slash-caret-pos
-        (reset! *slash-caret-pos nil))
-      (when *show-commands
-        (reset! *show-commands false))
-      (when *matched-commands
-        (reset! *matched-commands commands-map))
-      (util/move-cursor-to input (count prefix)))))
+  (let [edit-content (state/get-edit-content)
+        input (gdom/getElement id)
+        current-pos (:pos (util/get-caret-pos input))
+
+        prefix (subs edit-content 0 current-pos)
+        prefix (util/replace-last last-pattern prefix value)
+        postfix (subs edit-content current-pos)
+        postfix (if postfix-fn (postfix-fn postfix) postfix)
+        new-value (str prefix postfix)]
+    (when *slash-caret-pos
+      (reset! *slash-caret-pos nil))
+    (when *show-commands
+      (reset! *show-commands nil))
+    (when *matched-commands
+      (reset! *matched-commands (commands-map)))
+    (swap! state/state assoc
+           :edit-content new-value
+           :editor/last-saved-cursor (+ (count prefix) (or forward-pos 0)))))
 
 (defn get-matched-commands
   [text]
   (filter
    (fn [[command _]]
      (string/index-of (string/lower-case command) (string/lower-case text)))
-   commands-map))
+   (commands-map)))
 
 (defn get-command-input
   [edit-content]

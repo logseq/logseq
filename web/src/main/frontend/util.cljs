@@ -233,6 +233,12 @@
         _ (.setDate d (inc (.getDate (js/Date.))))]
     (journal-name d)))
 
+(defn yesterday
+  []
+  (let [d (js/Date.)
+        _ (.setDate d (dec (.getDate (js/Date.))))]
+    (journal-name d)))
+
 (defn get-current-time
   []
   (let [d (js/Date.)]

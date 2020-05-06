@@ -34,6 +34,7 @@
              ;; With label or other data
              :editor/show-input nil
              :editor/editing? nil
+             :editor/last-saved-cursor nil
              :edit-content ""
              :cursor-range nil
              :cursor-pos nil

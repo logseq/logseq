@@ -8,6 +8,8 @@
 
 ;; Adapted from re-com date-picker
 
+;; TODO: add left, right, up, down, enter bindings
+
 ;; Loosely based on ideas: https://github.com/dangrossman/bootstrap-daterangepicker
 
 ;; --- cljs-time facades ------------------------------------------------------
