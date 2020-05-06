@@ -16,9 +16,8 @@
    {:use-fragment false}))
 
 (defn start []
-  (rum/mount
-   (page/current-page)
-   (.getElementById js/document "root"))
+  (when-let [node (.getElementById js/document "root")]
+    (rum/mount (page/current-page) node))
   (set-router!))
 
 (defn ^:export init []
