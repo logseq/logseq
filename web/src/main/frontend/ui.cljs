@@ -9,7 +9,8 @@
             [clojure.string :as string]
             [goog.object :as gobj]
             [goog.dom :as gdom]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.ui.date-picker]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -211,13 +212,11 @@
                 (util/stop e)
                 (on-chosen (nth matched @current-idx))))}
         nil)))
-  [state matched on-chosen div-option & {:keys [empty-div]}]
+  [state matched on-chosen & {:keys [empty-div]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.absolute.rounded-md.shadow-lg
-     div-option
-     [:div.py-1.rounded-md.bg-white.shadow-xs
-      (if (seq matched)
-        (for [[idx item] (medley/indexed matched)]
+    [:div.py-1.rounded-md.bg-white.shadow-xs
+     (if (seq matched)
+       (for [[idx item] (medley/indexed matched)]
          (rum/with-key
            (menu-link
             {:style (merge
@@ -231,5 +230,7 @@
                          (on-chosen item))}
             item)
            idx))
-        (when empty-div
-          empty-div))]]))
+       (when empty-div
+         empty-div))]))
+
+(def datepicker frontend.ui.date-picker/date-picker)

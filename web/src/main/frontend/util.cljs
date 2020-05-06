@@ -423,11 +423,6 @@
     (str (subs s 0 last-index)
          new-value)))
 
-(defn move-cursor-to-end [input]
-  (let [n (count (.-value input))]
-    (set! (.-selectionStart input) n)
-    (set! (.-selectionEnd input) n)))
-
 (defn cursor-move-back [input n]
   (let [{:keys [pos]} (get-caret-pos input)]
     (set! (.-selectionStart input) (- pos n))
@@ -441,3 +436,25 @@
 (defn move-cursor-to [input n]
   (set! (.-selectionStart input) n)
   (set! (.-selectionEnd input) n))
+
+;; copied from re_com
+(defn deref-or-value
+  "Takes a value or an atom
+  If it's a value, returns it
+  If it's a Reagent object that supports IDeref, returns the value inside it by derefing
+  "
+  [val-or-atom]
+  (if (satisfies? IDeref val-or-atom)
+    @val-or-atom
+    val-or-atom))
+
+;; copied from re_com
+(defn now->utc
+  "Return a goog.date.UtcDateTime based on local date/time."
+  []
+  (let [local-date-time (js/goog.date.DateTime.)]
+    (js/goog.date.UtcDateTime.
+     (.getYear local-date-time)
+     (.getMonth local-date-time)
+     (.getDate local-date-time)
+     0 0 0 0)))

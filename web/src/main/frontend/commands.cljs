@@ -4,26 +4,6 @@
             [clojure.string :as string]
             [goog.dom :as gdom]))
 
-(defn insert!
-  [id value *slash-caret-pos & {:keys [last-pattern postfix-fn]
-                                :or {last-pattern "/"
-                                     }}]
-  (when-let [edit-content (state/get-edit-content)]
-    (let [input (gdom/getElement id)
-          current-pos (:pos (util/get-caret-pos input))
-          prefix (subs edit-content 0 current-pos)
-          prefix (util/replace-last last-pattern prefix value)
-          postfix (subs edit-content current-pos)
-          postfix (if postfix-fn (postfix-fn postfix) postfix)
-          new-value (str prefix postfix)]
-      (state/set-edit-content! new-value)
-      (when-let [input-id (state/get-edit-input-id)]
-        (when-let [current-input (gdom/getElement input-id)]
-          (util/move-cursor-to input (count prefix))))
-      ))
-  (when *slash-caret-pos
-    (reset! *slash-caret-pos nil)))
-
 (defn ->page-reference
   [page]
   (util/format "[[%s]]" page))
@@ -44,7 +24,9 @@
      ["Yesterday" (->page-reference (util/tomorrow))]
      ["Today" (->page-reference (util/today))]
      ["Current Time" (util/get-current-time)]
-     ["Date Picker" [[:editor/show-date-picker]]]
+     ["Date Picker" [[:editor/input "[[]]"]
+                     [:editor/cursor-back 2]
+                     [:editor/show-date-picker]]]
      ["Page Reference" [[:editor/input "[[]]"]
                         [:editor/cursor-back 2]
                         [:editor/search-page]]]
@@ -59,6 +41,28 @@
     (get-in @state/state [:config :commands]))
    (util/remove-nils)
    (util/distinct-by-last-wins first)))
+
+(defn insert!
+  [id value *slash-caret-pos *show-commands *matched-commands
+   & {:keys [last-pattern postfix-fn]
+      :or {last-pattern "/"}}]
+  (when-let [edit-content (state/get-edit-content)]
+    (let [input (gdom/getElement id)
+          current-pos (:pos (util/get-caret-pos input))
+          prefix (subs edit-content 0 current-pos)
+          prefix (util/replace-last last-pattern prefix value)
+          postfix (subs edit-content current-pos)
+          postfix (if postfix-fn (postfix-fn postfix) postfix)
+          new-value (str prefix postfix)]
+      (state/set-edit-content! new-value)
+      (.focus (gdom/getElement id))
+      (when *slash-caret-pos
+        (reset! *slash-caret-pos nil))
+      (when *show-commands
+        (reset! *show-commands false))
+      (when *matched-commands
+        (reset! *matched-commands commands-map))
+      (util/move-cursor-to input (count prefix)))))
 
 (defn get-matched-commands
   [text]
@@ -79,7 +83,7 @@
 
 (defmethod handle-step :editor/input [[_ value]]
   (when-let [input-id (state/get-edit-input-id)]
-    (insert! input-id value nil)))
+    (insert! input-id value nil nil nil)))
 
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -108,6 +112,8 @@
   (prn "No handler for step: " type))
 
 (defn handle-steps
-  [vector]
+  [vector *show-commands *matched-commands]
+  (reset! *show-commands nil)
+  (reset! *matched-commands nil)
   (doseq [step vector]
     (handle-step step)))

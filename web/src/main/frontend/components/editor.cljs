@@ -12,7 +12,9 @@
             [goog.dom :as gdom]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (defonce *show-commands (atom false))
 (def *matched-commands (atom nil))
@@ -23,18 +25,14 @@
   (cond
     ;; replace string
     (string? command-output)
-    (commands/insert! id command-output *slash-caret-pos)
+    (commands/insert! id command-output *slash-caret-pos *show-commands *matched-commands)
 
     ;; steps
     (vector? command-output)
-    (commands/handle-steps command-output)
+    (commands/handle-steps command-output *show-commands *matched-commands)
 
     :else
-    nil)
-
-  (.focus (gdom/getElement id))
-  (reset! *show-commands false)
-  (reset! *matched-commands commands/commands-map))
+    nil))
 
 (rum/defc commands < rum/reactive
   {:will-mount (fn [state]
@@ -42,20 +40,16 @@
                  state)}
   [id]
   (when (rum/react *show-commands)
-    (let [{:keys [top left]} (rum/react *slash-caret-pos)
-          matched (rum/react *matched-commands)]
+    (let [matched (rum/react *matched-commands)]
       (ui/auto-complete
        (map first matched)
        (fn [chosen]
-         (insert-command! id (get (into {} matched) chosen)))
-       {:style {:top (+ top 20)
-                :left left
-                :width 400}}))))
+         (insert-command! id (get (into {} matched) chosen)))))))
 
 (rum/defc page-search < rum/reactive
   [id]
   (when (state/sub :editor/show-page-search?)
-    (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
+    (let [{:keys [pos]} (rum/react *slash-caret-pos)
           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))
           edit-content (state/sub :edit-content)
           q (subs edit-content (inc pos) current-pos)
@@ -72,42 +66,29 @@
        (fn [chosen]
          (commands/insert! id (str "[[" chosen)
                            *slash-caret-pos
+                           *show-commands
+                           *matched-commands
                            :last-pattern "[[")
          (commands/handle-step [:editor/cursor-forward 2])
          (state/set-editor-show-page-search false))
-       {:style {:top (+ top 20)
-                :left left
-                :width 400}}
        :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))
 
-;; (rum/defc date-picker < rum/reactive
-;;   [id]
-;;   (ui/date-picker {:selected (js/Date.)
-;;                    :on-change (fn [date]
-;;                                 (prn "chosen date")
-;;                                 ;; (commands/insert! id (str "[[" chosen)
-;;                                 ;;                   *slash-caret-pos
-;;                                 ;;                   :last-pattern "[[")
-;;                                 ;; (commands/handle-step [:editor/cursor-forward 2])
-;;                                 ;; (state/set-editor-show-date-picker false)
-;;                                 )})
-;;   ;; (when (state/sub :editor/show-date-picker?)
-;;   ;;   (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
-;;   ;;         today (js/Date.)]
-;;   ;;     [:div.absolute
-;;   ;;      {:style {:top (+ top 20)
-;;   ;;               :left left
-;;   ;;               :width 400}}
-;;   ;;      (ui/date-picker {:selected today
-;;   ;;                       :on-change (fn [date]
-;;   ;;                                    (prn "chosen date")
-;;   ;;                                    ;; (commands/insert! id (str "[[" chosen)
-;;   ;;                                    ;;                   *slash-caret-pos
-;;   ;;                                    ;;                   :last-pattern "[[")
-;;   ;;                                    ;; (commands/handle-step [:editor/cursor-forward 2])
-;;   ;;                                    ;; (state/set-editor-show-date-picker false)
-;;   ;;                                    )})]      ))
-;;   )
+(rum/defc date-picker < rum/reactive
+  [id]
+  (when (state/sub :editor/show-date-picker?)
+    (let [today (js/Date.)]
+      (ui/datepicker (t/today)
+                     :on-change
+                     (fn [e date]
+                       (util/stop e)
+                       (let [journal (util/journal-name (tc/to-date date))]
+                         (commands/insert! id (str "[[" journal)
+                                           *slash-caret-pos
+                                           *show-commands
+                                           *matched-commands
+                                           :last-pattern "[[")
+                         (commands/handle-step [:editor/cursor-forward 2])
+                         (state/set-editor-show-date-picker false)))))))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -137,28 +118,24 @@
      state)}
   [state id on-submit]
   (when-let [input-option (state/sub :editor/show-input)]
-    (let [{:keys [top left pos]} (rum/react *slash-caret-pos)
+    (let [{:keys [pos]} (rum/react *slash-caret-pos)
           input-value (get state ::input-value)]
-      [:div.absolute.rounded-md.shadow-lg
-       {:style {:top (+ top 20)
-                :left left
-                :width 400}}
-       (when (seq input-option)
-         [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#d3d3d3"}},
-          (for [{:keys [id] :as input-item} input-option]
-            [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-1
-             (merge
-              {:key (str "modal-input-" (name id))
-               :id (str "modal-input-" (name id))
-               :on-change (fn [e]
-                            (swap! input-value assoc id (util/evalue e)))
-               :auto-complete "off"}
-              (dissoc input-item :id))])
-          (ui/button
-            "Submit"
-            (fn [e]
-              (util/stop e)
-              (on-submit @input-value pos)))])])))
+      (when (seq input-option)
+        [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#d3d3d3"}},
+         (for [{:keys [id] :as input-item} input-option]
+           [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-1
+            (merge
+             {:key (str "modal-input-" (name id))
+              :id (str "modal-input-" (name id))
+              :on-change (fn [e]
+                           (swap! input-value assoc id (util/evalue e)))
+              :auto-complete "off"}
+             (dissoc input-item :id))])
+         (ui/button
+           "Submit"
+           (fn [e]
+             (util/stop e)
+             (on-submit @input-value pos)))]))))
 
 (defn get-state
   [state]
@@ -227,15 +204,15 @@
                            pos)]
     (when (> pos 0)
       (or
-      (and (= \/ (nth edit-content (dec pos)))
-           ;; (or
-           ;;  (and
-           ;;   (>= (count edit-content) 2)
-           ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
-           ;;  (= edit-content "/"))
-           commands/commands-map)
-      (and last-command
-           (commands/get-matched-commands last-command))))))
+       (and (= \/ (nth edit-content (dec pos)))
+            ;; (or
+            ;;  (and
+            ;;   (>= (count edit-content) 2)
+            ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
+            ;;  (= edit-content "/"))
+            commands/commands-map)
+       (and last-command
+            (commands/get-matched-commands last-command))))))
 
 (defn in-auto-complete?
   [input]
@@ -243,13 +220,24 @@
       (state/get-editor-show-page-search)
       (state/get-editor-show-date-picker)))
 
+(rum/defc absolute-modal < rum/reactive
+  [cp set-default-width?]
+  (let [{:keys [top left pos]} (rum/react *slash-caret-pos)]
+    [:div.absolute.rounded-md.shadow-lg
+     {:style (merge
+              {:top (+ top 20)
+               :left left}
+              (if set-default-width?
+                {:width 400}))}
+     cp]))
+
 (rum/defc transition-cp
-  [cp]
+  [cp set-default-width?]
   (ui/css-transition
    {:class-names "fade"
     :timeout {:enter 500
               :exit 300}}
-   cp))
+   (absolute-modal cp set-default-width?)))
 
 (rum/defc box < rum/reactive
   (mixins/event-mixin
@@ -333,12 +321,16 @@
                :background "transparent"
                :padding 0}})
      (transition-cp
-      (commands id))
+      (commands id)
+      true)
 
      (transition-cp
-      (page-search id))
+      (page-search id)
+      true)
 
-     ;; (transition-cp (date-picker id))
+     (transition-cp
+      (date-picker id)
+      false)
 
      (transition-cp
       (input id
@@ -350,11 +342,14 @@
                                                 (or link "")
                                                 (or label ""))
                                    *slash-caret-pos
+                                   *show-commands
+                                   *matched-commands
                                    :last-pattern "[["
                                    :postfix-fn (fn [s]
                                                  (util/replace-first "][]]" s ""))
                                    ))
-               (state/set-editor-show-input nil))))
+               (state/set-editor-show-input nil)))
+      true)
 
      [:input
       {:id "upload-file"
@@ -372,6 +367,8 @@
                                                            signed-url
                                                            file-name)
                                               *slash-caret-pos
+                                              *show-commands
+                                              *matched-commands
                                               :last-pattern "[["
                                               :postfix-fn (fn [s]
                                                             (util/replace-first "][]]" s "")))))))))
