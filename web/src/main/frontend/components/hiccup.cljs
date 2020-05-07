@@ -66,8 +66,11 @@
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [url href label]
-  [:img {:src href
-         :title (second (first label))}])
+  [:img.rounded-sm.shadow-xs.mb-2.mt-2
+   {:class "object-contain object-left-top"
+    :style {:max-height "24rem"}
+    :src href
+    :title (second (first label))}])
 
 (defn repetition-to-string
   [[[kind] [duration] n]]

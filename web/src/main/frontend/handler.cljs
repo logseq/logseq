@@ -545,8 +545,8 @@
 (defn request-presigned-url
   [file filename mime-type url-handler]
   (cond
-    (> (gobj/get file "size") (* 5 1024 1024))
-    (show-notification! [:p "Sorry, we don't support any file that's larger than 5MB."] :error)
+    (> (gobj/get file "size") (* 20 1024 1024))
+    (show-notification! [:p "Sorry, we don't support any file that's larger than 20MB."] :error)
 
     :else
     (util/post (str config/api "presigned_url")
