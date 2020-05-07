@@ -143,6 +143,30 @@
        (nil? (:email me))
        (settings/set-email))]))
 
+(rum/defc custom-context-menu-content
+  []
+  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute.hidden
+   [:div.py-1.rounded-md.bg-white.shadow-xs
+    (ui/menu-link
+     {:key "cut"
+      :on-click (fn []
+                  (prn "cut"))}
+     "Cut")
+    (ui/menu-link
+     {:key "copy"
+      :on-click (fn []
+                  (prn "copy"))}
+     "Copy")]])
+
+;; TODO: content could be changed
+(rum/defc custom-context-menu
+  []
+  (ui/css-transition
+   {:class-names "fade"
+    :timeout {:enter 500
+              :exit 300}}
+   (custom-context-menu-content)))
+
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
   [state route-match main-content]
@@ -220,11 +244,12 @@
             :options {:href (str "/file/" (util/url-encode config/config-file))}}
            {:title "Sign out"
             :options {:on-click handler/sign-out!}}])]]]
-      [:main.flex-1.relative.z-0.overflow-y-scroll.py-6.focus:outline-none
+      [:main#main.flex-1.relative.z-0.overflow-y-scroll.py-6.focus:outline-none
        {:tabIndex "0"}
        [:div.flex.justify-center
         [:div.flex-1.m-6 {:style {:position "relative"
                                   :max-width 800
                                   :margin-bottom 500}}
          main-content]]]
-      (ui/notification)]]))
+      (ui/notification)
+      (custom-context-menu)]]))

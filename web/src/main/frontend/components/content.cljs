@@ -37,6 +37,57 @@
       ;;                2000)
       )))
 
+(rum/defc hiccup-content <
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/listen state js/window "mouseup"
+                    (fn [e]
+                      (when-let [headings (seq (util/get-selected-nodes "ls-heading-parent"))]
+                        (let [headings (remove #(d/has-class? % "dummy") headings)]
+                          (doseq [heading headings]
+                            (d/add-class! heading "selected noselect"))
+                          ;; TODO: We delay this so the following "click" event won't clear the selections.
+                          ;; Needs more thinking.
+                          (js/setTimeout #(state/set-selection-headings! headings)
+                                         200)))))
+
+     (mixins/listen state js/window "click"
+                    (fn [e]
+                      ;; hide context menu
+                      (let [context-menu (d/by-id "custom-context-menu")]
+                        (when-not (d/has-class? context-menu "hidden")
+                          (d/add-class! context-menu "hidden"))
+                        ;; enable scroll
+                        (let [main (d/by-id "main")]
+                          (d/remove-class! main "overflow-hidden")
+                          (d/add-class! main "overflow-y-scroll")))
+
+                      (when (state/in-selection-mode?)
+                        (doseq [heading (state/get-selection-headings)]
+                          (d/remove-class! heading "selected")
+                          (d/remove-class! heading "noselect"))
+                        (state/clear-selection!))))
+
+     (mixins/listen state js/window "contextmenu"
+                    (fn [e]
+                      (when (state/in-selection-mode?)
+                        (util/stop e)
+                        (let [client-x (gobj/get e "clientX")
+                              client-y (gobj/get e "clientY")
+                              context-menu (d/by-id "custom-context-menu")]
+                          (when context-menu
+                            (let [main (d/by-id "main")]
+                              ;; disable scroll
+                              (d/remove-class! main "overflow-y-scroll")
+                              (d/add-class! main "overflow-hidden"))
+                            (d/remove-class! context-menu
+                                             "hidden")
+                            (d/set-style! context-menu
+                                          :left (str client-x "px")
+                                          :top (str client-y "px")))))))))
+  [id hiccup]
+  [:div {:id id} hiccup])
+
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
   (let [edit? (= (state/sub-edit-input-id) id)
@@ -111,5 +162,5 @@
                            on-hide]}]
   (let [format (format/normalize format)]
     (if (contains? config/hiccup-support-formats format)
-      [:div {:id id} hiccup]
+      (hiccup-content id hiccup)
       (non-hiccup-content id content on-click on-hide config format))))

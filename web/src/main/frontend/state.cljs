@@ -40,6 +40,8 @@
              :cursor-range nil
              :cursor-pos nil
 
+             :selection/mode false
+             :selection/headings nil
              }))
 
 (defn sub
@@ -186,3 +188,24 @@
 (defn sub-edit-input-id
   []
   (ffirst (rum/react (rum/cursor state :editor/editing?))))
+
+(defn set-selection-headings!
+  [headings]
+  (when (seq headings)
+    (swap! state assoc
+          :selection/mode true
+          :selection/headings headings)))
+
+(defn clear-selection!
+  []
+  (swap! state assoc
+         :selection/mode false
+         :selection/headings nil))
+
+(defn get-selection-headings
+  []
+  (:selection/headings @state))
+
+(defn in-selection-mode?
+  []
+  (:selection/mode @state))

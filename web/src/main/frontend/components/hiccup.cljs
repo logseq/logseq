@@ -299,7 +299,8 @@
       [:div.ls-heading-parent.flex-1 {:key (str uuid)
                                       :id heading-id
                                       :level level
-                                      :idx idx}
+                                      :idx idx
+                                      :class (if dummy? "dummy")}
        (if show-page?
          (let [page (db/entity (:db/id page))]
            [:h2

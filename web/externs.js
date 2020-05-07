@@ -6,3 +6,6 @@ dummy.populateStat = function() {};
 dummy.populateHash = function() {};
 dummy.oid = function() {};
 dummy.fullpath = function() {};
+dummy.getRangeAt = function() {};
+dummy.getElementsByClassName = function() {};
+dummy.containsNode = function() {};
