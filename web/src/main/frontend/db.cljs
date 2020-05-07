@@ -411,7 +411,7 @@
 
 (defn extract-pages-and-headings
   [file content utf8-content journal? pages-fn]
-  (let [ast (org/->edn content org/config-with-line-break)
+  (let [ast (org/->edn content nil)
         headings (block/extract-headings ast (utf8/length utf8-content))
         pages (pages-fn headings ast)
         ref-pages (atom #{})

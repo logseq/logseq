@@ -9,12 +9,6 @@
   (js/JSON.stringify
    #js {:toc false
         :heading_number false
-        :keep_line_break false}))
-
-(def config-with-line-break
-  (js/JSON.stringify
-   #js {:toc false
-        :heading_number false
         :keep_line_break true}))
 
 (defn loaded? []
@@ -25,7 +19,7 @@
    (parse-json content default-config))
   ([content config]
    (when (loaded?)
-     (.parseJson js/window.MldocOrg content config))))
+     (.parseJson js/window.MldocOrg content (or config default-config)))))
 
 (defn ->edn
   ([content]
@@ -34,7 +28,7 @@
    (if (string/blank? content)
      {}
      (-> content
-         (parse-json config)
+         (parse-json (or config default-config))
          (util/json->clj)))))
 
 (defrecord OrgMode []
