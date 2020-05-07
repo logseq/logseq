@@ -203,22 +203,25 @@
 
 (defn get-matched-commands
   [input]
-  (let [edit-content (gobj/get input "value")
-        pos (:pos (util/get-caret-pos input))
-        last-command (subs edit-content
-                           (:pos @*slash-caret-pos)
-                           pos)]
-    (when (> pos 0)
-      (or
-       (and (= \/ (nth edit-content (dec pos)))
-            ;; (or
-            ;;  (and
-            ;;   (>= (count edit-content) 2)
-            ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
-            ;;  (= edit-content "/"))
-            (commands/commands-map))
-       (and last-command
-            (commands/get-matched-commands last-command))))))
+  (try
+    (let [edit-content (gobj/get input "value")
+         pos (:pos (util/get-caret-pos input))
+         last-command (subs edit-content
+                            (:pos @*slash-caret-pos)
+                            pos)]
+     (when (> pos 0)
+       (or
+        (and (= \/ (nth edit-content (dec pos)))
+             ;; (or
+             ;;  (and
+             ;;   (>= (count edit-content) 2)
+             ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
+             ;;  (= edit-content "/"))
+             (commands/commands-map))
+        (and last-command
+             (commands/get-matched-commands last-command)))))
+    (catch js/Error e
+      nil)))
 
 (defn in-auto-complete?
   [input]
@@ -273,7 +276,6 @@
          40 (fn [state e]
               (when-not (in-auto-complete? input)
                 (on-up-down state e false)))
-
          ;; backspace
          8 (fn [state e]
              (let [node (gdom/getElement input-id)
@@ -282,18 +284,21 @@
                (when (and (> current-pos 1)
                           (= (nth value (dec current-pos)) "/"))
                  (reset! *slash-caret-pos nil)
-                 (reset! *show-commands false))
-               (on-backspace state e)))}
+                 (reset! *show-commands false))))
+}
         (fn [e key-code]
           (swap! state/state assoc
                  :editor/last-saved-cursor nil)))
        (mixins/on-key-up
         state
-        ;; /
-        {191 (fn [state e]
+        {
+         ;; /
+         191 (fn [state e]
                (when-let [matched-commands (seq (get-matched-commands input))]
                  (reset! *show-commands true)
-                 (reset! *slash-caret-pos (util/get-caret-pos input))))}
+                 (reset! *slash-caret-pos (util/get-caret-pos input))))
+         ;; backspace
+         8 on-backspace}
         (fn [e key-code]
           (when (not= key-code 191)     ; not /
             (let [matched-commands (get-matched-commands input)]

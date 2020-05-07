@@ -497,9 +497,12 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
+  ;; (periodically-pull repo-url pull-now?)
+  ;; (periodically-push-tasks repo-url)
   (when-not config/dev?
     (periodically-pull repo-url pull-now?)
-    (periodically-push-tasks repo-url)))
+    (periodically-push-tasks repo-url))
+  )
 
 (defn render-local-images!
   []
@@ -649,32 +652,25 @@
                  (show-notification! "Email already exists!"
                                      :error)))))
 
-(defn get-new-content
-  [{:heading/keys [uuid content meta dummy?] :as heading} file-content value]
-  (let [new-content (str value "\n")
-        new-content (if dummy?
-                      (str "\n" new-content)
-                      new-content)
-        new-file-content (utf8/insert! file-content
-                                       (:pos meta)
-                                       (if (or dummy? (string/blank? content))
-                                         (:pos meta)
-                                         (+ (:pos meta) (utf8/length (utf8/encode content))))
-                                       new-content)]
-    (string/trim new-file-content)))
 
-;; (defn save-heading-if-changed!
-;;   [{:heading/keys [uuid content meta file dummy?] :as heading} value {:keys [new-content] :as opts}]
-;;   (let [repo-url (state/get-current-repo)
-;;         value (string/trim value)]
-;;     (when (not= (string/trim content) value)
-;;       (let [file (db/entity (:db/id file))
-;;             file-content (:file/content file)
-;;             new-content (or
-;;                          new-content
-;;                          (get-new-content heading file-content value))
-;;             file-path (:file/path file)]
-;;         (alter-file repo-url file-path new-content opts)))))
+(defn new-file-content
+  [{:heading/keys [content meta dummy?] :as heading} file-content value]
+  (let [utf8-content (utf8/encode file-content)
+        prefix (utf8/substring utf8-content 0 (:pos meta))
+        postfix (let [end-pos (if dummy?
+                                (:pos meta)
+                                (:end-pos meta))]
+                  (utf8/substring utf8-content end-pos))
+        value (str
+               (if (= "\n" (last prefix))
+                 ""
+                 "\n")
+               value
+               (if (= "\n" (first postfix))
+                 ""
+                 "\n"))]
+    [(str prefix value postfix)
+     value]))
 
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file dummy?] :as heading} value]
@@ -686,7 +682,7 @@
             file-content (:file/content file)
             file-path (:file/path file)
             format (format/get-format file-path)
-            new-content (get-new-content heading file-content value)
+            [new-content value] (new-file-content heading file-content value)
             {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
             after-headings (db/get-file-after-headings repo file-id end-pos)
             last-start-pos (atom end-pos)
@@ -734,8 +730,7 @@
                                 {:heading/uuid uuid
                                  :heading/meta new-meta}))
                             after-headings)
-          new-content (utf8/insert! file-content (:pos meta) (:end-pos meta) "")]
-      ;; update all headings meta after this deleted heading in the same file
+          new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
       (db/transact!
         (concat
          [[:db.fn/retractEntity [:heading/uuid uuid]]]
@@ -745,7 +740,8 @@
       (alter-file repo
                   file-path
                   new-content
-                  {:reset? false}))))
+                  {:reset? false})
+      )))
 
 (defn clone-and-pull
   [repo-url]
@@ -841,4 +837,14 @@
     []
     (p/let [changes (git/get-status-matrix (state/get-current-repo))]
       (prn changes)))
+
+  (defn debug-file-and-headings
+    [path]
+    (p/let [content (load-file (state/get-current-repo)
+                               path)]
+      (let [db-content (db/get-file path)
+            headings (db/get-file-by-concat-headings path)]
+        (prn {:content content
+              :utf8-length (utf8/length (utf8/encode content))
+              :headings headings}))))
   )

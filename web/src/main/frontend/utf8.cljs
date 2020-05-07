@@ -11,18 +11,22 @@
   [s]
   (.encode encoder s))
 
+(defn decode
+  [arr]
+  (.decode decoder arr))
+
 (defn substring
   ([arr start]
-   (->> (.subarray arr start)
-        (.decode decoder)))
+   (decode (.subarray arr start)))
   ([arr start end]
-   (->> (.subarray arr start end)
-        (.decode decoder))))
+   (decode (.subarray arr start end))))
 
 (defn length
   [arr]
   (gobj/get arr "length"))
 
+;; start-pos inclusive
+;; end-pos exclusive
 (defn insert!
   [s start-pos end-pos content]
   (let [arr (encode s)
@@ -30,3 +34,7 @@
     (str (substring arr 0 start-pos)
          content
          (substring arr end-pos))))
+
+(defn delete!
+  [s start-pos end-pos]
+  (insert! s start-pos end-pos ""))

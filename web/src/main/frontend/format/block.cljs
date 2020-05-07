@@ -150,40 +150,41 @@
 
 (defn parse-heading
   [{:heading/keys [uuid content meta file page] :as heading} format]
-  (let [ast (format/to-edn content format nil)
-        start-pos (:pos meta)
-        encoded-content (utf8/encode content)
-        content-length (utf8/length encoded-content)
-        headings (extract-headings ast content-length)
-        headings (safe-headings headings)
-        ref-pages-atom (atom [])
-        headings (doall
-                  (map-indexed
-                   (fn [idx {:heading/keys [ref-pages meta] :as heading}]
-                     (let [heading (merge
-                                    heading
-                                    {:heading/file file
-                                     :heading/page page
-                                     :heading/content (utf8/substring encoded-content
-                                                                      (:pos meta)
-                                                                      (:end-pos meta))}
-                                    (when (zero? idx)
-                                      {:heading/uuid uuid})
-                                    (when (seq ref-pages)
-                                      {:heading/ref-pages
-                                       (mapv
-                                        (fn [page]
-                                          (let [page-name (string/capitalize page)
-                                                page {:page/name page-name}]
-                                            (swap! ref-pages-atom conj page)
-                                            page))
-                                        ref-pages)}))]
-                       (-> heading
-                           (assoc-in [:heading/meta :pos] (+ (:pos meta) start-pos))
-                           (assoc-in [:heading/meta :end-pos] (+ (:end-pos meta) start-pos)))))
-                   headings))
-        pages (vec (distinct @ref-pages-atom))]
-    {:headings headings
-     :pages pages
-     :start-pos start-pos
-     :end-pos (+ start-pos content-length)}))
+  (when-not (string/blank? content)
+    (let [ast (format/to-edn content format nil)
+          start-pos (:pos meta)
+          encoded-content (utf8/encode content)
+          content-length (utf8/length encoded-content)
+          headings (extract-headings ast content-length)
+          headings (safe-headings headings)
+          ref-pages-atom (atom [])
+          headings (doall
+                    (map-indexed
+                     (fn [idx {:heading/keys [ref-pages meta] :as heading}]
+                       (let [heading (merge
+                                      heading
+                                      {:heading/file file
+                                       :heading/page page
+                                       :heading/content (utf8/substring encoded-content
+                                                                        (:pos meta)
+                                                                        (:end-pos meta))}
+                                      (when (zero? idx)
+                                        {:heading/uuid uuid})
+                                      (when (seq ref-pages)
+                                        {:heading/ref-pages
+                                         (mapv
+                                          (fn [page]
+                                            (let [page-name (string/capitalize page)
+                                                  page {:page/name page-name}]
+                                              (swap! ref-pages-atom conj page)
+                                              page))
+                                          ref-pages)}))]
+                         (-> heading
+                             (assoc-in [:heading/meta :pos] (+ (:pos meta) start-pos))
+                             (assoc-in [:heading/meta :end-pos] (+ (:end-pos meta) start-pos)))))
+                     headings))
+          pages (vec (distinct @ref-pages-atom))]
+      {:headings headings
+       :pages pages
+       :start-pos start-pos
+       :end-pos (+ start-pos content-length)})))
