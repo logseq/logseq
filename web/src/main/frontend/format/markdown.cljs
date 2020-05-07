@@ -14,8 +14,14 @@
    :strikethrough true
    :simplifiedAutoLink true})
 
+(defn ->edn
+  [content config]
+  nil)
+
 (defrecord MdMode []
   protocol/Format
+  (toEdn [this content config]
+    (->edn content config))
   (toHtml [this content config]
     (when (loaded?)
       (.makeHtml (js/window.showdown.Converter. (bean/->js (or config default-config))) content)))

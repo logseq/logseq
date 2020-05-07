@@ -27,9 +27,9 @@
    (when (loaded?)
      (.parseJson js/window.MldocOrg content config))))
 
-(defn ->clj
+(defn ->edn
   ([content]
-   (->clj content default-config))
+   (->edn content default-config))
   ([content config]
    (if (string/blank? content)
      {}
@@ -39,6 +39,8 @@
 
 (defrecord OrgMode []
   protocol/Format
+  (toEdn [this content config]
+    (->edn content config))
   (toHtml [this content config]
     (.parseHtml js/window.MldocOrg content config))
   (loaded? [this]

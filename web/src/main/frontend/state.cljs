@@ -36,6 +36,7 @@
              :editor/editing? nil
              :editor/last-saved-cursor nil
              :edit-content ""
+             :edit-heading nil
              :cursor-range nil
              :cursor-pos nil
 
@@ -86,6 +87,10 @@
 (defn ui-toggle-state!
   []
   (update-state! :ui/toggle-state not))
+
+(defn get-edit-heading
+  []
+  (:edit-heading @state))
 
 (defn get-edit-content
   []

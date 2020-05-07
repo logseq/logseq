@@ -26,7 +26,8 @@
             [clojure.set :as set]
             [cljs-bean.core :as bean]
             [frontend.format :as format]
-            [frontend.format.protocol :as protocol])
+            [frontend.format.protocol :as protocol]
+            [frontend.format.block :as block])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -662,25 +663,64 @@
                                        new-content)]
     (string/trim new-file-content)))
 
+;; (defn save-heading-if-changed!
+;;   [{:heading/keys [uuid content meta file dummy?] :as heading} value {:keys [new-content] :as opts}]
+;;   (let [repo-url (state/get-current-repo)
+;;         value (string/trim value)]
+;;     (when (not= (string/trim content) value)
+;;       (let [file (db/entity (:db/id file))
+;;             file-content (:file/content file)
+;;             new-content (or
+;;                          new-content
+;;                          (get-new-content heading file-content value))
+;;             file-path (:file/path file)]
+;;         (alter-file repo-url file-path new-content opts)))))
+
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file dummy?] :as heading} value {:keys [new-content] :as opts}]
-  (let [repo-url (state/get-current-repo)
+  [{:heading/keys [uuid content meta file dummy?] :as heading} value]
+  (let [repo (state/get-current-repo)
         value (string/trim value)]
-    (when (not= (string/trim content) value)
-      (let [file (db/entity (:db/id file))
+    (when (not= (string/trim content) value) ; heading content changed
+      (let [file-id (:db/id file)
+            file (db/entity file-id)
             file-content (:file/content file)
-            new-content (or
-                         new-content
-                         (get-new-content heading file-content value))
-            file-path (:file/path file)]
-        (alter-file repo-url file-path new-content opts)))))
+            file-path (:file/path file)
+            format (format/get-format file-path)
+            new-content (get-new-content heading file-content value)
+            {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+            after-headings (db/get-file-after-headings repo file-id end-pos)
+            last-start-pos (atom end-pos)
+            after-headings (mapv
+                            (fn [{:heading/keys [uuid meta] :as heading}]
+                              (let [old-start-pos (:pos meta)
+                                    old-end-pos (:end-pos meta)
+                                    new-end-pos (if old-end-pos
+                                                  (+ @last-start-pos (- old-end-pos old-start-pos)))
+                                    new-meta {:pos @last-start-pos
+                                              :end-pos new-end-pos}]
+                                (reset! last-start-pos new-end-pos)
+                                {:heading/uuid uuid
+                                 :heading/meta new-meta}))
+                            after-headings)]
+        (db/transact!
+          (concat
+           pages
+           headings
+           after-headings
+           [{:file/path file-path
+             :file/content new-content}]))
+        (alter-file repo
+                    file-path
+                    new-content
+                    {:reset? false})))))
 
 (defn delete-heading!
   [{:heading/keys [uuid meta content file] :as heading} dummy?]
   (when-not dummy?
-    (let [file-path (:file/path (db/entity (:db/id file)))
+    (let [repo (state/get-current-repo)
+          file-path (:file/path (db/entity (:db/id file)))
           file-content (:file/content (db/entity (:db/id file)))
-          after-headings (db/get-file-after-headings (state/get-current-repo) (:db/id file) (:end-pos meta))
+          after-headings (db/get-file-after-headings repo (:db/id file) (:end-pos meta))
           last-start-pos (atom (:pos meta))
           updated-headings (mapv
                             (fn [{:heading/keys [uuid meta] :as heading}]
@@ -697,15 +737,15 @@
           new-content (utf8/insert! file-content (:pos meta) (:end-pos meta) "")]
       ;; update all headings meta after this deleted heading in the same file
       (db/transact!
-        (vec
-         (concat
-          [[:db.fn/retractEntity [:heading/uuid uuid]]]
-          updated-headings
-          [{:file/path file-path
-            :file/content new-content}])))
-      (save-heading-if-changed! heading ""
-                                {:new-content new-content
-                                 :reset? false}))))
+        (concat
+         [[:db.fn/retractEntity [:heading/uuid uuid]]]
+         updated-headings
+         [{:file/path file-path
+           :file/content new-content}]))
+      (alter-file repo
+                  file-path
+                  new-content
+                  {:reset? false}))))
 
 (defn clone-and-pull
   [repo-url]

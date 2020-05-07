@@ -11,8 +11,14 @@
   (when (loaded?)
     (.makeHtml (js/window.showdown.Converter.) content)))
 
+(defn ->edn
+  [content config]
+  nil)
+
 (defrecord AdocMode []
   protocol/Format
+  (toEdn [this content config]
+    (->edn content config))
   (toHtml [this content config]
     (when (loaded?)
       (let [config {:attributes {:showTitle false

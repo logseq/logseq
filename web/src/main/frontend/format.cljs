@@ -9,11 +9,6 @@
 (defonce markdown-record (->MdMode))
 (defonce adoc-record (->AdocMode))
 
-(defn get-format
-  [file]
-  (when file
-    (keyword (string/lower-case (last (string/split file #"\."))))))
-
 (defn normalize
   [format]
   (case (keyword format)
@@ -21,6 +16,11 @@
     :asciidoc :adoc
     ;; default
     (keyword format)))
+
+(defn get-format
+  [file]
+  (when file
+    (normalize (keyword (string/lower-case (last (string/split file #"\.")))))))
 
 (defn get-format-record
   [format]
@@ -51,6 +51,13 @@
        (if-let [record (get-format-record format)]
          (protocol/toHtml record content config)
          content)))))
+
+(defn to-edn
+  [content format config]
+  (let [config (or config (get-default-config format))]
+    (if-let [record (get-format-record format)]
+      (protocol/toEdn record content config)
+      nil)))
 
 (defn loaded?
   [format]

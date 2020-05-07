@@ -1,7 +1,12 @@
-(ns frontend.format.org.block
+(ns frontend.format.block
   (:require [frontend.util :as util]
             [clojure.walk :as walk]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.format :as format]
+            [frontend.utf8 :as utf8]
+            [medley.core :as medley]
+            [datascript.core :as d]
+            [clojure.set :as set]))
 
 (defn heading-block?
   [block]
@@ -66,13 +71,25 @@
   [{:keys [title children] :as heading}]
   (let [ref-pages (atom [])]
     (walk/postwalk
-    (fn [form]
-      (when (page-reference-block? form)
-        (let [page (second (:url (second form)))]
-          (swap! ref-pages conj (string/capitalize page))))
-      form)
-    (concat title children))
+     (fn [form]
+       (when (page-reference-block? form)
+         (let [page (second (:url (second form)))]
+           (swap! ref-pages conj (string/capitalize page))))
+       form)
+     (concat title children))
     (assoc heading :ref-pages (vec @ref-pages))))
+
+(defn safe-headings
+  [headings]
+  (mapv (fn [heading]
+          (let [heading (util/remove-nils heading)
+                heading (if (:heading/uuid heading)
+                          heading
+                          (assoc heading :heading/uuid (d/squuid)))]
+            (medley/map-keys
+             (fn [k] (keyword "heading" k))
+             heading)))
+        headings))
 
 ;; TODO create a dummy heading if no headings exists
 (defn extract-headings
@@ -130,3 +147,43 @@
                 :else
                 (> m1 m2))))
           headings)))
+
+(defn parse-heading
+  [{:heading/keys [uuid content meta file page] :as heading} format]
+  (let [ast (format/to-edn content format nil)
+        start-pos (:pos meta)
+        encoded-content (utf8/encode content)
+        content-length (utf8/length encoded-content)
+        headings (extract-headings ast content-length)
+        headings (safe-headings headings)
+        ref-pages-atom (atom [])
+        headings (doall
+                  (map-indexed
+                   (fn [idx {:heading/keys [ref-pages meta] :as heading}]
+                     (let [heading (merge
+                                    heading
+                                    {:heading/file file
+                                     :heading/page page
+                                     :heading/content (utf8/substring encoded-content
+                                                                      (:pos meta)
+                                                                      (:end-pos meta))}
+                                    (when (zero? idx)
+                                      {:heading/uuid uuid})
+                                    (when (seq ref-pages)
+                                      {:heading/ref-pages
+                                       (mapv
+                                        (fn [page]
+                                          (let [page-name (string/capitalize page)
+                                                page {:page/name page-name}]
+                                            (swap! ref-pages-atom conj page)
+                                            page))
+                                        ref-pages)}))]
+                       (-> heading
+                           (assoc-in [:heading/meta :pos] (+ (:pos meta) start-pos))
+                           (assoc-in [:heading/meta :end-pos] (+ (:end-pos meta) start-pos)))))
+                   headings))
+        pages (vec (distinct @ref-pages-atom))]
+    {:headings headings
+     :pages pages
+     :start-pos start-pos
+     :end-pos (+ start-pos content-length)}))

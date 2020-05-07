@@ -1,6 +1,6 @@
 (ns frontend.components.agenda
   (:require [rum.core :as rum]
-            [frontend.format.org.block :as block]
+            [frontend.format.block :as block]
             [clojure.string :as string]
             [frontend.components.sidebar :as sidebar]
             [frontend.components.content :as content]

@@ -353,7 +353,7 @@
 
         (if edit?
           (editor/box content {:on-hide (fn [value]
-                                          (handler/save-heading-if-changed! heading value nil))
+                                          (handler/save-heading-if-changed! heading value))
                                :dummy? dummy?}
                       edit-input-id)
           [:div.flex-1.heading-body
@@ -361,10 +361,15 @@
                         (when-not (or (util/link? (gobj/get e "target"))
                                       (util/input? (gobj/get e "target")))
                           (util/stop e)
-
+                          (when-let [current-edit-input-id (state/get-edit-input-id)]
+                            (when (and (not= current-edit-input-id edit-input-id)
+                                       (state/get-edit-content))
+                              (handler/save-heading-if-changed! (state/get-edit-heading)
+                                                                (state/get-edit-content))))
                           (handler/reset-cursor-range! (gdom/getElement heading-id))
                           (swap! state/state assoc
-                                 :edit-content content)
+                                 :edit-content content
+                                 :edit-heading heading)
                           (state/set-edit-input-id! edit-input-id)))}
            heading-part
 

@@ -176,7 +176,7 @@
             (on-hide value)
             ;; FIXME: refactor later
             ;; (let [heading (db/entity [:heading/uuid (uuid heading-id)])]
-            ;;   (handler/save-heading-if-changed! heading value nil))
+            ;;   (handler/save-heading-if-changed! heading value))
             (handler/edit-heading! id pos)))))))
 
 (defn on-backspace

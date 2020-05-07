@@ -6,7 +6,7 @@
             [datascript.transit :as dt]
             [frontend.format :as format]
             [frontend.format.org-mode :as org]
-            [frontend.format.org.block :as block]
+            [frontend.format.block :as block]
             [frontend.state :as state]
             [clojure.string :as string]
             [clojure.set :as set]
@@ -125,14 +125,12 @@
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
-   (when-let [conn (get-conn repo-url false)]
-     (posh/transact! conn tx-data))))
+   (let [tx-data (remove nil? tx-data)]
+     (when (seq tx-data)
+       (when-let [conn (get-conn repo-url false)]
+         (posh/transact! conn (vec tx-data)))))))
 
 (defn pull-many
-  [selector eids]
-  (d/pull-many (d/db (get-conn (state/get-current-repo) false)) selector eids))
-
-(defn posh-pull-many
   [selector eids]
   (posh/pull-many (get-conn (state/get-current-repo) false)
                   selector
@@ -155,33 +153,6 @@
   {:db/id -1
    :db/ident key
    key value})
-
-(def qualified-map
-  {:file :heading/file
-   :anchor :heading/anchor
-   :title :heading/title
-   :marker :heading/marker
-   :priority :heading/priority
-   :level :heading/level
-   :timestamps :heading/timestamps
-   :children :heading/children
-   :tags :heading/tags
-   :meta :heading/meta
-   :content :heading/content
-   :page :heading/page
-   :ref-pages :heading/ref-pages
-   ;; :parent :heading/parent
-   })
-
-(defn- safe-headings
-  [headings]
-  (mapv (fn [heading]
-          (let [heading (-> (util/remove-nils heading)
-                            (assoc :heading/uuid (d/squuid)))]
-            (medley/map-keys
-             (fn [k] (get qualified-map k k))
-             heading)))
-        headings))
 
 ;; queries
 
@@ -369,6 +340,7 @@
         react
         seq-flatten
         (pull-many '[*])
+        react
         sort-by-pos)))
 
 (defn get-page-headings
@@ -386,6 +358,7 @@
         react
         seq-flatten
         (pull-many '[*])
+        react
         sort-by-pos)))
 
 (defn mark-repo-as-cloned
@@ -438,7 +411,7 @@
 
 (defn extract-pages-and-headings
   [file content utf8-content journal? pages-fn]
-  (let [ast (org/->clj content org/config-with-line-break)
+  (let [ast (org/->edn content org/config-with-line-break)
         headings (block/extract-headings ast (utf8/length utf8-content))
         pages (pages-fn headings ast)
         ref-pages (atom #{})
@@ -460,7 +433,7 @@
                                                               heading-ref-pages)))))
                         headings)))
                   pages)
-        headings (safe-headings headings)
+        headings (block/safe-headings headings)
         pages (map
                 (fn [page]
                   {:page/name (if page
@@ -604,7 +577,7 @@
         pred)
       react
       seq-flatten
-      (posh-pull-many '[*])
+      (pull-many '[*])
       react))))
 
 (defn get-current-journal-path
