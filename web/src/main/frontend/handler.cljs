@@ -683,8 +683,8 @@
             file-path (:file/path file)
             format (format/get-format file-path)
             [new-content value] (new-file-content heading file-content value)
+            after-headings (db/get-file-after-headings repo file-id (get meta :end-pos))
             {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-            after-headings (db/get-file-after-headings repo file-id end-pos)
             last-start-pos (atom end-pos)
             after-headings (mapv
                             (fn [{:heading/keys [uuid meta] :as heading}]
@@ -838,13 +838,15 @@
     (p/let [changes (git/get-status-matrix (state/get-current-repo))]
       (prn changes)))
 
-  (defn debug-file-and-headings
-    [path]
-    (p/let [content (load-file (state/get-current-repo)
-                               path)]
-      (let [db-content (db/get-file path)
-            headings (db/get-file-by-concat-headings path)]
-        (prn {:content content
-              :utf8-length (utf8/length (utf8/encode content))
-              :headings headings}))))
+  ;; (defn debug-file-and-headings
+  ;;   [path]
+  ;;   (p/let [content (load-file (state/get-current-repo)
+  ;;                              path)]
+  ;;     (let [db-content (db/get-file path)
+  ;;           headings (db/get-file-by-concat-headings-debug-version path)]
+  ;;       (prn {:content content
+  ;;             :utf8-length (utf8/length (utf8/encode content))
+  ;;             :headings headings}))))
+
+  ;; (debug-file-and-headings "readme.org")
   )

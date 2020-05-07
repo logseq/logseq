@@ -343,6 +343,21 @@
         react
         sort-by-pos)))
 
+;; (defn get-file-by-concat-headings-debug-version
+;;   ([file]
+;;    (get-file-by-concat-headings-debug-version
+;;     (state/get-current-repo)
+;;     file))
+;;   ([repo-url file]
+;;    (->> (d/q '[:find (pull ?heading [*])
+;;                :in $ ?file
+;;                :where
+;;                [?p :file/path ?file]
+;;                [?heading :heading/file ?p]]
+;;           (get-conn) file)
+;;         seq-flatten
+;;         sort-by-pos)))
+
 (defn get-page-headings
   ([page]
    (get-page-headings (state/get-current-repo)
