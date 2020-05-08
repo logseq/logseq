@@ -14,7 +14,8 @@
             [frontend.commands :as commands]
             [medley.core :as medley]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [cljs-drag-n-drop.core :as dnd]))
 
 (defonce *show-commands (atom false))
 (defonce *matched-commands (atom nil))
@@ -205,21 +206,21 @@
   [input]
   (try
     (let [edit-content (gobj/get input "value")
-         pos (:pos (util/get-caret-pos input))
-         last-command (subs edit-content
-                            (:pos @*slash-caret-pos)
-                            pos)]
-     (when (> pos 0)
-       (or
-        (and (= \/ (nth edit-content (dec pos)))
-             ;; (or
-             ;;  (and
-             ;;   (>= (count edit-content) 2)
-             ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
-             ;;  (= edit-content "/"))
-             (commands/commands-map))
-        (and last-command
-             (commands/get-matched-commands last-command)))))
+          pos (:pos (util/get-caret-pos input))
+          last-command (subs edit-content
+                             (:pos @*slash-caret-pos)
+                             pos)]
+      (when (> pos 0)
+        (or
+         (and (= \/ (nth edit-content (dec pos)))
+              ;; (or
+              ;;  (and
+              ;;   (>= (count edit-content) 2)
+              ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
+              ;;  (= edit-content "/"))
+              (commands/commands-map))
+         (and last-command
+              (commands/get-matched-commands last-command)))))
     (catch js/Error e
       nil)))
 
@@ -285,7 +286,7 @@
                           (= (nth value (dec current-pos)) "/"))
                  (reset! *slash-caret-pos nil)
                  (reset! *show-commands false))))
-}
+         }
         (fn [e key-code]
           (swap! state/state assoc
                  :editor/last-saved-cursor nil)))
@@ -324,6 +325,24 @@
                 (let [[content opts id] (:rum/args state)]
                   (handler/restore-cursor-pos! id content (:dummy? opts)))
                 state)
+   :after-render (fn [state]
+                   (let [[content opts id] (:rum/args state)]
+                     (when-let [input (gdom/getElement id)]
+                       (dnd/subscribe!
+                        input
+                        :upload-images
+                        {:drop (fn [e files]
+                                 (js/console.dir files)
+                                 (handler/upload-image
+                                  id files *slash-caret-pos *show-commands *matched-commands true))})))
+                   state)
+   :will-unmount (fn [state]
+                   (let [[content opts id] (:rum/args state)]
+                     (when-let [input (gdom/getElement id)]
+                       (dnd/unsubscribe!
+                        input
+                        :upload-images)))
+                   state)
    :did-update (fn [state]
                  (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
                    (let [[_content _opts id] (:rum/args state)
@@ -383,17 +402,6 @@
        :type "file"
        :on-change (fn [e]
                     (let [files (.-files (.-target e))]
-                      (image/upload
-                       files
-                       (fn [file file-name file-type]
-                         (handler/request-presigned-url
-                          file file-name file-type
-                          (fn [signed-url]
-                            (commands/insert! id
-                                              (util/format "[[%s][%s]]"
-                                                           signed-url
-                                                           file-name)
-                                              *slash-caret-pos
-                                              *show-commands
-                                              *matched-commands)))))))
+                      (handler/upload-image
+                       id files *slash-caret-pos *show-commands *matched-commands false)))
        :hidden true}]]))

@@ -26,28 +26,23 @@
                      (remove #(= (:url %) current-repo))
                      (util/distinct-by :url))]
       [:div.flex-1
-       [:div.flex.justify-between
-        [:div.flex
-         (if (>= (count repos) 1)
-           (ui/dropdown-with-links
-            (fn [{:keys [toggle-fn]}]
-              [:a.hover:text-gray-300.text-gray-500.font-bold {:on-click toggle-fn}
-               [:span (db/get-repo-path current-repo)]
-               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-            (mapv
-             (fn [{:keys [id url]}]
-               {:title (db/get-repo-path url)
-                :options {:on-click (fn []
-                                      (state/set-current-repo! url))}})
-             repos)
-            (util/hiccup->class
-             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg"))
-           [:a.hover:text-gray-300.text-gray-500.font-bold {:href current-repo
-                                                            :target "_blank"}
-            (db/get-repo-path current-repo)])]
-        [:a.text-gray-500.font-bold.hover:text-gray-300 {:href "/repo/add"
-                                                         :on-click close-modal-fn}
-         "+"]]])
+       (if (>= (count repos) 1)
+         (ui/dropdown-with-links
+          (fn [{:keys [toggle-fn]}]
+            [:a.hover:text-gray-300.text-gray-500.font-bold {:on-click toggle-fn}
+             [:span (db/get-repo-path current-repo)]
+             [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+          (mapv
+           (fn [{:keys [id url]}]
+             {:title (db/get-repo-path url)
+              :options {:on-click (fn []
+                                    (state/set-current-repo! url))}})
+           repos)
+          (util/hiccup->class
+           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg"))
+         [:a.hover:text-gray-300.text-gray-500.font-bold {:href current-repo
+                                                          :target "_blank"}
+          (db/get-repo-path current-repo)])])
 
     [:img.h-8.w-auto
      {:alt "Logseq",
@@ -251,8 +246,10 @@
              {:on-click toggle-fn}
              [:img.h-8.w-8.rounded-full
               {:src (:avatar me)}]])
-          [{:title "Your Repos"
+          [{:title "Your repos"
             :options {:href "/repos"}}
+           {:title "Add another repo"
+            :options {:href "/repo/add"}}
            {:title "Settings"
             :options {:href (str "/file/" (util/url-encode config/config-file))}}
            {:title "Sign out"

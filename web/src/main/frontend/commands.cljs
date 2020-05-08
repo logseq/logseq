@@ -55,7 +55,9 @@
         current-pos (:pos (util/get-caret-pos input))
 
         prefix (subs edit-content 0 current-pos)
-        prefix (util/replace-last last-pattern prefix value)
+        prefix (if (string/blank? last-pattern)
+                 (str prefix " " value)
+                 (util/replace-last last-pattern prefix value))
         postfix (subs edit-content current-pos)
         postfix (if postfix-fn (postfix-fn postfix) postfix)
         new-value (str prefix postfix)]

@@ -27,7 +27,8 @@
             [cljs-bean.core :as bean]
             [frontend.format :as format]
             [frontend.format.protocol :as protocol]
-            [frontend.format.block :as block])
+            [frontend.format.block :as block]
+            [frontend.commands :as commands])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -857,6 +858,23 @@
             (periodically-pull-and-push repo {:pull-now? true}))
           (clone-and-pull repo))))
     (watch-config!)))
+
+(defn upload-image
+  [id files *slash-caret-pos *show-commands *matched-commands drop?]
+  (image/upload
+   files
+   (fn [file file-name file-type]
+     (request-presigned-url
+      file file-name file-type
+      (fn [signed-url]
+        (commands/insert! id
+                          (util/format "[[%s][%s]]"
+                                       signed-url
+                                       file-name)
+                          *slash-caret-pos
+                          *show-commands
+                          *matched-commands
+                          :last-pattern (if drop? "" "/")))))))
 
 (comment
 
