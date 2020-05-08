@@ -189,9 +189,7 @@
 
     (if first-clone?
       (p/let [files (load-files repo-url)]
-        (prn {:files files})
-        ;; (load-contents files nil nil)
-        )
+        (load-contents files nil nil))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
