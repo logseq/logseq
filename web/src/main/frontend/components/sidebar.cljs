@@ -52,10 +52,9 @@
          [:a.hover:text-gray-300.text-gray-400.font-bold
           {:href current-repo
            :target "_blank"}
-          (db/get-repo-path current-repo)])
-       ])
+          (db/get-repo-name current-repo)])])
 
-    [:img.h-6.w-auto
+    [:img.h-8.w-auto
      {:alt "Logseq",
       :src "/static/img/logo.png"}]))
 
@@ -202,9 +201,7 @@
         current-repo (state/sub :git/current-repo)
         status (db/sub-key-value :git/status)
         pulling? (= :pulling status)
-        header-class (if config/mobile?
-                       "h-16"
-                       "h-10")]
+        header-class "h-16"]
     [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300

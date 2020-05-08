@@ -39,7 +39,7 @@
                                 (set))]
     (set/union
      config-formats
-     #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c}
+     #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html}
      )))
 
 (defn img-formats
@@ -54,6 +54,11 @@
 (defonce html-render-formats
   #{:org :md :markdown
     :adoc :asciidoc})
+
+(defn supported-formats
+  []
+  (set/union (text-formats)
+             (img-formats)))
 
 (defonce hiccup-support-formats
   #{:org})

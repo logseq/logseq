@@ -89,19 +89,24 @@
   [files]
   (keep-formats files config/html-render-formats))
 
+(defn- only-supported-formats
+  [files]
+  (keep-formats files (config/supported-formats)))
+
 ;; TODO: no atom version
 (defn load-files
   [repo-url]
   (state/set-cloning? false)
   (set-state-kv! :repo/loading-files? true)
   (p/let [files (bean/->clj (git/list-files repo-url))
-          config-content (load-file repo-url config/config-file)]
-    (if config-content
-      (let [config (db/reset-config! repo-url config-content)]
-        (if-let [patterns (seq (:hidden config))]
-          (remove (fn [path] (hidden? path patterns)) files)
-          files))
-      files)))
+          config-content (load-file repo-url config/config-file)
+          files (if config-content
+                  (let [config (db/reset-config! repo-url config-content)]
+                    (if-let [patterns (seq (:hidden config))]
+                      (remove (fn [path] (hidden? path patterns)) files)
+                      files))
+                  files)]
+    (only-supported-formats files)))
 
 (defn- set-latest-commit!
   [repo-url hash]
@@ -184,7 +189,9 @@
 
     (if first-clone?
       (p/let [files (load-files repo-url)]
-        (load-contents files nil nil))
+        (prn {:files files})
+        ;; (load-contents files nil nil)
+        )
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
