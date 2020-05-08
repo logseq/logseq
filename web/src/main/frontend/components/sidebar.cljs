@@ -188,7 +188,9 @@
 (rum/defc left-sidebar < rum/reactive
   [current-repo route-match close-fn]
   [:div#left-sidebar.flex.flex-col.w-64.sidebar.enter
-   [:div.flex.items-center.flex-shrink-0.px-4.h-16.sm:h-10
+   [:div.flex.items-center.flex-shrink-0.px-4.h-16 {:class (if current-repo
+                                                             "sm:h-10"
+                                                             "sm:h-16")}
     (logo-or-repos current-repo)]
    [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
     (sidebar-nav route-match close-fn)]])
