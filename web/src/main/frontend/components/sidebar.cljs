@@ -23,7 +23,7 @@
                      (remove #(= (:url %) current-repo))
                      (util/distinct-by :url))]
       [:div.flex.flex-row.align-center
-       [:a.mr-3.hover:text-gray-300.text-gray-400
+       [:a.mr-4.hover:text-gray-300.text-gray-400
         {:style {:margin-top 3}
          :on-click (fn []
                      (d/add-class! (d/by-id "menu")
