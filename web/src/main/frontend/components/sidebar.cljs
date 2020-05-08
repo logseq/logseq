@@ -186,9 +186,9 @@
      (custom-context-menu-content))))
 
 (rum/defc left-sidebar < rum/reactive
-  [header-class current-repo route-match close-fn]
+  [current-repo route-match close-fn]
   [:div#left-sidebar.flex.flex-col.w-64.sidebar.enter
-   [:div.flex.items-center.flex-shrink-0.px-4 {:class header-class}
+   [:div.flex.items-center.flex-shrink-0.px-4.h-16.sm:h-10
     (logo-or-repos current-repo)]
    [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
     (sidebar-nav route-match close-fn)]])
@@ -200,8 +200,7 @@
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         status (db/sub-key-value :git/status)
-        pulling? (= :pulling status)
-        header-class "h-16"]
+        pulling? (= :pulling status)]
     [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
@@ -225,16 +224,14 @@
               :stroke-width "2",
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]])
-       [:div.flex-shrink-0.flex.items-center.px-4 {:class header-class
-                                                   :style {:background-color "#202225"}}
+       [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#202225"}}
         (logo-or-repos current-repo close-fn)]
        [:div.flex-1.h-0.overflow-y-auto
         (sidebar-nav route-match close-fn)]]]
      [:div.hidden.md:flex.md:flex-shrink-0
-      (left-sidebar header-class current-repo route-match close-fn)]
+      (left-sidebar current-repo route-match close-fn)]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-      [:div.relative.z-10.flex-shrink-0.flex.bg-white.sm:bg-transparent.shadow.sm:shadow-none
-       {:class header-class}
+      [:div.relative.z-10.flex-shrink-0.flex.bg-white.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10
        [:button.px-4.border-r.border-gray-200.text-gray-400.focus:outline-none.focus:bg-gray-100.focus:text-gray-400.md:hidden
         {:on-click open-fn}
         [:svg.h-6.w-6
