@@ -235,7 +235,8 @@
      [:div.hidden.md:flex.md:flex-shrink-0
       (left-sidebar header-class current-repo route-match close-fn)]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-      [:div.relative.z-10.flex-shrink-0.flex.bg-white.shadow {:class header-class}
+      [:div.relative.z-10.flex-shrink-0.flex.bg-white.sm:bg-transparent.shadow.sm:shadow-none
+       {:class header-class}
        [:button.px-4.border-r.border-gray-200.text-gray-400.focus:outline-none.focus:bg-gray-100.focus:text-gray-400.md:hidden
         {:on-click open-fn}
         [:svg.h-6.w-6
