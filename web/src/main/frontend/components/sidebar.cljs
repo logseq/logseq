@@ -13,10 +13,7 @@
             [frontend.state :as state]
             [frontend.handler :as handler]
             [frontend.config :as config]
-            [daiquiri.core]))
-
-(def active-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
-(def inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
+            [dommy.core :as d]))
 
 (rum/defc logo-or-repos < rum/reactive
   [current-repo close-modal-fn]
@@ -25,56 +22,69 @@
           repos (->> repos
                      (remove #(= (:url %) current-repo))
                      (util/distinct-by :url))]
-      [:div.flex-1
+      [:div.flex.flex-row.align-center
+       [:a.mr-4.hover:text-gray-300.text-gray-400
+        {:style {:margin-top 3}
+         :on-click (fn []
+                     (d/add-class! (d/by-id "menu")
+                                   "md:block")
+                     (d/remove-class! (d/by-id "left-sidebar")
+                                      "enter")
+                     (d/remove-class! (d/by-id "search")
+                                      "sidebar-open")
+                     (d/remove-class! (d/by-id "main")
+                                      "sidebar-open"))}
+        (svg/menu "currentColor")]
        (if (>= (count repos) 1)
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
-            [:a.hover:text-gray-300.text-gray-500.font-bold {:on-click toggle-fn}
-             [:span (db/get-repo-path current-repo)]
+            [:a.hover:text-gray-300.text-gray-400 {:on-click toggle-fn}
+             [:span (db/get-repo-name current-repo)]
              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
           (mapv
            (fn [{:keys [id url]}]
-             {:title (db/get-repo-path url)
+             {:title (db/get-repo-name url)
               :options {:on-click (fn []
                                     (state/set-current-repo! url))}})
            repos)
           (util/hiccup->class
            "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg"))
-         [:a.hover:text-gray-300.text-gray-500.font-bold {:href current-repo
-                                                          :target "_blank"}
-          (db/get-repo-path current-repo)])])
+         [:a.hover:text-gray-300.text-gray-400 {:href current-repo
+                                                :target "_blank"}
+          (db/get-repo-path current-repo)])
+       ])
 
-    [:img.h-8.w-auto
+    [:img.h-6.w-auto
      {:alt "Logseq",
       :src "/static/img/logo.png"}]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
-  (let [a (if active? active-button inactive-button)]
-    [a {:href href
-        :on-click close-modal-fn}
-     [:svg.mr-4.h-6.w-6.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150
-      {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-      [:path
-       {:d svg-d
-        :stroke-width "2",
-        :stroke-linejoin "round",
-        :stroke-linecap "round"}]]
-     title]))
+  [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.text-gray-400.hover:text-gray-300.hover:bg-black.transition.ease-in-out.duration-150
+   {:href href
+    :on-click close-modal-fn}
+   [:svg.mr-4.h-5.w-5.text-gray-400.group-hover:text-gray-400.group-focus:text-gray-400.transition.ease-in-out.duration-150
+    {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+    [:path
+     {:d svg-d
+      :stroke-width "2",
+      :stroke-linejoin "round",
+      :stroke-linecap "round"}]]
+   title])
 
 (rum/defc starred-pages < rum/reactive
   [page-active? close-modal-fn]
   (let [repo (state/get-current-repo)
         starred (state/sub [:config repo :starred])]
-    [:div.cursor-pointer.my-1.flex.flex-col.ml-2
+    [:div.cursor-pointer.flex.flex-col.overflow-hidden
      (if (seq starred)
        (for [page starred]
          (let [encoded-page (util/url-encode page)]
-           [:a {:key encoded-page
-                :class (util/hiccup->class "mt-1.group.flex.items-center.px-2.py-1.text-base.leading-6.font-medium.rounded-md.text-gray-500.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150")
-                :style {:color (if (page-active? encoded-page) "#FFF")}
-                :href (str "/page/" encoded-page)
-                :on-click close-modal-fn}
+           [:a.mt-1.group.flex.items-center.pl-5.py-2.text-base.leading-6.hover:text-gray-300.hover:bg-black.transition.ease-in-out.duration-150
+            {:key encoded-page
+             :class (if (page-active? encoded-page) "text-gray-300" "text-gray-400")
+             :href (str "/page/" encoded-page)
+             :on-click close-modal-fn}
             page])))]))
 
 (rum/defc sidebar-nav
@@ -82,7 +92,7 @@
   (let [active? (fn [route] (= route (get-in route-match [:data :name])))
         page-active? (fn [page]
                        (= page (get-in route-match [:parameters :path :name])))]
-    [:nav.flex-1.px-2.py-4.bg-gray-800
+    [:nav.flex-1
      (nav-item "Journals" "/"
                "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
                (active? :home)
@@ -99,13 +109,13 @@
                "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
                (active? :all-files)
                close-modal-fn)
-     [:div {:style {:height 1
-                    :background-color "rgb(57, 75, 89)"
-                    :margin 12}}]
+     [:div.pl-4.pr-4 {:style {:height 1
+                              :background-color "rgb(57, 75, 89)"
+                              :margin 12}}]
      ;; shortcuts
-     [:div.flex {:class "mt-1 flex items-center px-2 py-2 text-base leading-6 rounded-md text-gray-200 transition ease-in-out duration-150"}
-      (svg/star-solid (util/hiccup->class "mr-5.text-gray-400.group-hover:text-gray-300.group-focus:text-gray-300.transition.ease-in-out.duration-150"))
-      [:span.font-bold.text-gray-500
+     [:div.flex {:class "mt-1 flex items-center px-4 pt-1 text-base leading-6 rounded-md text-gray-200 transition ease-in-out duration-150"}
+      (svg/star-solid (util/hiccup->class "mr-4.text-gray-500 transition.ease-in-out.duration-150"))
+      [:span.font-bold.text-gray-400
        "Starred"]]
      (starred-pages page-active? close-modal-fn)]))
 
@@ -175,6 +185,14 @@
                 :exit 300}}
      (custom-context-menu-content))))
 
+(rum/defc left-sidebar < rum/reactive
+  [header-class current-repo route-match close-fn]
+  [:div#left-sidebar.flex.flex-col.w-64.sidebar.enter
+   [:div.flex.items-center.flex-shrink-0.px-4 {:class header-class}
+    (logo-or-repos current-repo)]
+   [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
+    (sidebar-nav route-match close-fn)]])
+
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
   [state route-match main-content]
@@ -182,7 +200,10 @@
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         status (db/sub-key-value :git/status)
-        pulling? (= :pulling status)]
+        pulling? (= :pulling status)
+        header-class (if config/mobile?
+                       "h-16"
+                       "h-10")]
     [:div.h-screen.flex.overflow-hidden.bg-gray-100
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
@@ -190,10 +211,11 @@
                  "opacity-75 pointer-events-auto"
                  "opacity-0 pointer-events-none")
         :on-click close-fn}]
-      [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.bg-gray-800.transform.ease-in-out.duration-300
+      [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
        {:class (if @open?
                  "translate-x-0"
-                 "-translate-x-full")}
+                 "-translate-x-full")
+        :style {:background-color "#202225"}}
        (if @open?
          [:div.absolute.top-0.right-0.-mr-14.p-1
           [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
@@ -205,19 +227,16 @@
               :stroke-width "2",
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]])
-       [:div.flex-shrink-0.flex.items-center.h-16.px-4.bg-gray-900
+       [:div.flex-shrink-0.flex.items-center.px-4 {:class header-class
+                                                   :style {:background-color "#202225"}}
         (logo-or-repos current-repo close-fn)]
        [:div.flex-1.h-0.overflow-y-auto
         (sidebar-nav route-match close-fn)]]]
      [:div.hidden.md:flex.md:flex-shrink-0
-      [:div.flex.flex-col.w-64
-       [:div.flex.items-center.h-16.flex-shrink-0.px-4.bg-gray-900
-        (logo-or-repos current-repo)]
-       [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
-        (sidebar-nav route-match close-fn)]]]
+      (left-sidebar header-class current-repo route-match close-fn)]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-      [:div.relative.z-10.flex-shrink-0.flex.h-16.bg-white.shadow
-       [:button.px-4.border-r.border-gray-200.text-gray-500.focus:outline-none.focus:bg-gray-100.focus:text-gray-600.md:hidden
+      [:div.relative.z-10.flex-shrink-0.flex.bg-white.shadow {:class header-class}
+       [:button.px-4.border-r.border-gray-200.text-gray-400.focus:outline-none.focus:bg-gray-100.focus:text-gray-400.md:hidden
         {:on-click open-fn}
         [:svg.h-6.w-6
          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
@@ -230,7 +249,7 @@
         (search/search)
         [:div.ml-4.flex.items-center.md:ml-6
          [:div {:class (if pulling? "loader")}
-          [:button.p-1.m-2.text-gray-400.rounded-full.hover:bg-gray-100.hover:text-gray-500.focus:outline-none.focus:shadow-outline.focus:text-gray-500
+          [:button.p-1.m-2.text-gray-400.rounded-full.hover:bg-gray-100.focus:outline-none.focus:shadow-outline.focus:text-gray-400
            {:on-click handler/pull-current-repo}
            [:svg.h-6.w-6
             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
@@ -244,7 +263,7 @@
           (fn [{:keys [toggle-fn]}]
             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
              {:on-click toggle-fn}
-             [:img.h-8.w-8.rounded-full
+             [:img.h-7.w-7.rounded-full
               {:src (:avatar me)}]])
           [{:title "Your repos"
             :options {:href "/repos"}}
@@ -254,12 +273,27 @@
             :options {:href (str "/file/" (util/url-encode config/config-file))}}
            {:title "Sign out"
             :options {:on-click handler/sign-out!}}])]]]
-      [:main#main.flex-1.relative.z-0.overflow-y-scroll.py-6.focus:outline-none
+      [:main#main.flex-1.relative.z-0.overflow-y-scroll.py-6.focus:outline-none.sidebar-open
        {:tabIndex "0"}
        [:div.flex.justify-center
         [:div.flex-1.m-6 {:style {:position "relative"
-                                  :max-width 800
+                                  :max-width 700
                                   :margin-bottom 500}}
          main-content]]]
+      [:a#menu.mr-4.hover:text-gray-700.text-gray-500.absolute.hidden
+       {:style {:position "absolute"
+                :top 10
+                :left 16
+                :z-index 111}
+        :on-click (fn []
+                    (d/remove-class! (d/by-id "menu")
+                                     "md:block")
+                    (d/add-class! (d/by-id "left-sidebar")
+                                  "enter")
+                    (d/add-class! (d/by-id "search")
+                                  "sidebar-open")
+                    (d/add-class! (d/by-id "main")
+                                  "sidebar-open"))}
+       (svg/menu "currentColor")]
       (ui/notification)
       (custom-context-menu)]]))

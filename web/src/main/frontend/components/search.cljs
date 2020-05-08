@@ -5,6 +5,7 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
+            [frontend.config :as config]
             [clojure.string :as string]
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]))
@@ -53,11 +54,11 @@
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
         show-result? (boolean (seq search-result))]
-    [:div.flex-1.flex
+    [:div#search.flex-1.flex.ml-0.md:ml-10.sidebar-open
      [:div.w-full.flex.md:ml-0
       [:label.sr-only {:for "search_field"} "Search"]
       [:div.relative.w-full.text-gray-400.focus-within:text-gray-600
-       [:div.absolute.inset-y-0.left-0.flex.items-center.pointer-events-none
+       [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
         [:svg.h-5.w-5
          {:viewBox "0 0 20 20", :fill "currentColor"}
          [:path
@@ -65,8 +66,9 @@
            "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z",
            :clip-rule "evenodd",
            :fill-rule "evenodd"}]]]
-       [:input#search_field.block.w-full.h-full.pl-8.pr-3.py-2.rounded-md.text-gray-900.placeholder-gray-500.focus:outline-none.focus:placeholder-gray-400.sm:text-sm
-        {:placeholder "Search"
+       [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.text-gray-900.placeholder-gray-500.focus:outline-none.focus:placeholder-gray-400.sm:text-sm
+        {:style {:padding-left "2rem"}
+         :placeholder "Search"
          :auto-complete "off"
          :value search-q
          :on-change (fn [e]

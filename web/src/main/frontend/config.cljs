@@ -59,3 +59,6 @@
   #{:org})
 
 (defonce config-file "logseq.json")
+
+(def mobile?
+  (re-find #"Mobi" js/navigator.userAgent))

@@ -42,12 +42,13 @@
      [:div.flex.flex-row
       [:h1.title
        page-name]
-      [:a.ml-1.text-gray-500.hover:text-indigo-900
-       {:on-click (fn []
+      [:a.ml-1.text-gray-500.hover:text-indigo-500
+       {:class (if starred? "text-indigo-500")
+        :on-click (fn []
                     (handler/star-page! page-name starred?))}
        (if starred?
          (svg/star-solid "stroke-current")
-         (svg/star-outline "stroke-current"))]]
+         (svg/star-outline "stroke-current h-5 w-5"))]]
 
      (content/content encoded-page-name :org
                       {:hiccup hiccup})

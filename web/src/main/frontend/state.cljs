@@ -25,7 +25,6 @@
              :ui/toggle-state false
              :ui/collapsed-headings {}
 
-
              :github/contents {}
              :config {}
 

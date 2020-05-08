@@ -8,7 +8,7 @@
 (rum/defcs add-repo < (rum/local "" ::repo-url)
   [state]
   (let [repo-url (get state ::repo-url)]
-    [:div.p-8.flex.items-center.justify-center.bg-white
+    [:div.p-8.flex.items-center.justify-center
      [:div.w-full.max-w-xs.mx-auto
       [:div
        [:div

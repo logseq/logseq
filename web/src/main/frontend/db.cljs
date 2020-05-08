@@ -26,6 +26,10 @@
   (->> (take-last 2 (string/split url #"/"))
        (string/join "/")))
 
+(defn get-repo-name
+  [url]
+  (last (string/split url #"/")))
+
 (defn datascript-db
   [repo]
   (str "logseq-db/" (get-repo-path repo)))
