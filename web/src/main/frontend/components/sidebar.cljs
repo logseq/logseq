@@ -23,7 +23,7 @@
                      (remove #(= (:url %) current-repo))
                      (util/distinct-by :url))]
       [:div.flex.flex-row.align-center
-       [:a.mr-4.hover:text-gray-300.text-gray-400
+       [:a.mr-3.hover:text-gray-300.text-gray-400
         {:style {:margin-top 3}
          :on-click (fn []
                      (d/add-class! (d/by-id "menu")
@@ -38,7 +38,7 @@
        (if (>= (count repos) 1)
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
-            [:a.hover:text-gray-300.text-gray-400 {:on-click toggle-fn}
+            [:a.hover:text-gray-300.text-gray-400.font-bold {:on-click toggle-fn}
              [:span (db/get-repo-name current-repo)]
              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
           (mapv
@@ -49,8 +49,9 @@
            repos)
           (util/hiccup->class
            "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg"))
-         [:a.hover:text-gray-300.text-gray-400 {:href current-repo
-                                                :target "_blank"}
+         [:a.hover:text-gray-300.text-gray-400.font-bold
+          {:href current-repo
+           :target "_blank"}
           (db/get-repo-path current-repo)])
        ])
 
@@ -115,7 +116,7 @@
      ;; shortcuts
      [:div.flex {:class "mt-1 flex items-center px-4 pt-1 text-base leading-6 rounded-md text-gray-200 transition ease-in-out duration-150"}
       (svg/star-solid (util/hiccup->class "mr-4.text-gray-500 transition.ease-in-out.duration-150"))
-      [:span.font-bold.text-gray-400
+      [:span.font-bold.text-gray-500
        "Starred"]]
      (starred-pages page-active? close-modal-fn)]))
 
