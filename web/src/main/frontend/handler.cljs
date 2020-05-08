@@ -93,6 +93,10 @@
   [files]
   (keep-formats files (config/supported-formats)))
 
+(defn- only-parsed-formats
+  [files]
+  (keep-formats files config/hiccup-support-formats))
+
 ;; TODO: no atom version
 (defn load-files
   [repo-url]
@@ -183,7 +187,14 @@
                          repo-url
                          files
                          (fn [contents]
-                           (let [headings-pages (db/extract-all-headings-pages contents)]
+                           (let [parsed-files (filter
+                                               (fn [[file _]]
+                                                 (let [format (format/get-format file)]
+                                                   (contains? config/hiccup-support-formats format)))
+                                               contents)
+                                 headings-pages (if (seq parsed-files)
+                                                  (db/extract-all-headings-pages parsed-files)
+                                                  [])]
                              (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
                              (set-state-kv! :repo/importing-to-db? false)))))]
 

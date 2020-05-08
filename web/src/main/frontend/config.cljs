@@ -39,9 +39,7 @@
                                 (set))]
     (set/union
      config-formats
-     #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc
-       ;; :html
-       }
+     #{:json :org :md :xml :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :clj :ml :rb :ex :erl :java :php :c}
      )))
 
 (defn img-formats
