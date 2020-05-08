@@ -1,7 +1,8 @@
 (ns frontend.mixins
   (:require [rum.core :as rum]
             [goog.dom :as dom]
-            [goog.object :as gobj])
+            [goog.object :as gobj]
+            [frontend.keyboard :as keyboard])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -142,3 +143,23 @@
   {:will-mount (fn [state]
                  (handler (:rum/args state))
                  state)})
+
+(defn keyboard-mixin
+  "Triggers f when key is pressed while the component is mounted.
+   if target is a function it will be called AFTER the component mounted
+   with state and should return a dom node that is the target of the listener.
+   If no target is given it is defaulted to js/window (global handler)
+   Ex:
+     (keyboard-mixin \"esc\" #(browse-to :home/home))"
+  ([key f] (keyboard-mixin key f js/window))
+  ([key f target]
+   (let [target-fn (if (fn? target) target (fn [_] target))]
+     {:did-mount
+      (fn [state]
+        ;; (prn "add shortcut: " key)
+        (assoc state ::keyboard-listener
+               (keyboard/install-shortcut! key f false (target-fn state))))
+      :will-unmount
+      (fn [state]
+        ((::keyboard-listener state))
+        state)})))

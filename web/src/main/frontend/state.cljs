@@ -42,6 +42,7 @@
 
              :selection/mode false
              :selection/headings nil
+             :custom-context-menu/show? false
              }))
 
 (defn sub
@@ -209,3 +210,11 @@
 (defn in-selection-mode?
   []
   (:selection/mode @state))
+
+(defn show-custom-context-menu!
+  []
+  (swap! state assoc :custom-context-menu/show? true))
+
+(defn hide-custom-context-menu!
+  []
+  (swap! state assoc :custom-context-menu/show? false))

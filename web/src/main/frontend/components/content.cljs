@@ -54,34 +54,28 @@
      (mixins/listen state js/window "click"
                     (fn [e]
                       ;; hide context menu
-                      (let [context-menu (d/by-id "custom-context-menu")]
-                        (when-not (d/has-class? context-menu "hidden")
-                          (d/add-class! context-menu "hidden"))
-                        ;; enable scroll
-                        (let [main (d/by-id "main")]
-                          (d/remove-class! main "overflow-hidden")
-                          (d/add-class! main "overflow-y-scroll")))
+                      (state/hide-custom-context-menu!)
 
-                      (when (state/in-selection-mode?)
-                        (doseq [heading (state/get-selection-headings)]
-                          (d/remove-class! heading "selected")
-                          (d/remove-class! heading "noselect"))
-                        (state/clear-selection!))))
+                      ;; enable scroll
+                      (let [main (d/by-id "main")]
+                        (d/remove-class! main "overflow-hidden")
+                        (d/add-class! main "overflow-y-scroll"))
+
+                      (handler/clear-selection!)))
 
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (when (state/in-selection-mode?)
                         (util/stop e)
                         (let [client-x (gobj/get e "clientX")
-                              client-y (gobj/get e "clientY")
-                              context-menu (d/by-id "custom-context-menu")]
-                          (when context-menu
-                            (let [main (d/by-id "main")]
-                              ;; disable scroll
-                              (d/remove-class! main "overflow-y-scroll")
-                              (d/add-class! main "overflow-hidden"))
-                            (d/remove-class! context-menu
-                                             "hidden")
+                              client-y (gobj/get e "clientY")]
+                          (let [main (d/by-id "main")]
+                            ;; disable scroll
+                            (d/remove-class! main "overflow-y-scroll")
+                            (d/add-class! main "overflow-hidden"))
+
+                          (state/show-custom-context-menu!)
+                          (when-let [context-menu (d/by-id "custom-context-menu")]
                             (d/set-style! context-menu
                                           :left (str client-x "px")
                                           :top (str client-y "px")))))))))

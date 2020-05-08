@@ -471,16 +471,31 @@
   [class-name]
   (try
     (when (gobj/get js/window "getSelection")
-     (let [selection (js/window.getSelection)
-           range (.getRangeAt selection 0)
-           container (gobj/get range "commonAncestorContainer")]
-       (let [container-nodes (array-seq (.getElementsByClassName container class-name))]
-         (filter
-          (fn [node]
-            (.containsNode selection node true))
-          container-nodes))))
+      (let [selection (js/window.getSelection)
+            range (.getRangeAt selection 0)
+            container (gobj/get range "commonAncestorContainer")]
+        (let [container-nodes (array-seq (.getElementsByClassName container class-name))]
+          (filter
+           (fn [node]
+             (.containsNode selection node true))
+           container-nodes))))
     (catch js/Error _e
       nil)))
 
-(comment
-  (get-selected-nodes "ls-heading-parent"))
+(defn get-heading-id
+  [id]
+  (try
+    (uuid (string/replace id "ls-heading-parent-" ""))
+    (catch js/Error e
+      (prn "get-heading-id failed, error: " e))))
+
+(defn copy-to-clipboard! [s]
+  (let [el (js/document.createElement "textarea")]
+    (set! (.-value el) s)
+    (.setAttribute el "readonly" "")
+    (set! (-> el .-style .-position) "absolute")
+    (set! (-> el .-style .-left) "-9999px")
+    (js/document.body.appendChild el)
+    (.select el)
+    (js/document.execCommand "copy")
+    (js/document.body.removeChild el)))

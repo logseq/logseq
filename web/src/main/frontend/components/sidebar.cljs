@@ -12,7 +12,8 @@
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.handler :as handler]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [daiquiri.core]))
 
 (def active-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-white.bg-gray-900.focus:outline-none.focus:bg-gray-700.transition.ease-in-out.duration-150)
 (def inactive-button :a.mt-1.group.flex.items-center.px-2.py-2.text-base.leading-6.font-medium.rounded-md.text-gray-300.hover:text-white.hover:bg-gray-700.focus:outline-none.focus:text-white.focus:bg-gray-700.transition.ease-in-out.duration-150)
@@ -145,27 +146,39 @@
 
 (rum/defc custom-context-menu-content
   []
-  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute.hidden
+  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute
    [:div.py-1.rounded-md.bg-white.shadow-xs
     (ui/menu-link
      {:key "cut"
-      :on-click (fn []
-                  (prn "cut"))}
+      :on-click handler/cut-selection-headings}
      "Cut")
     (ui/menu-link
      {:key "copy"
-      :on-click (fn []
-                  (prn "copy"))}
+      :on-click handler/copy-selection-headings}
      "Copy")]])
 
 ;; TODO: content could be changed
-(rum/defc custom-context-menu
+;; Also, keyboard bindings should only be activated after
+;; headings were already selected.
+(defn cut-headings-and-clear-selections!
   []
-  (ui/css-transition
-   {:class-names "fade"
-    :timeout {:enter 500
-              :exit 300}}
-   (custom-context-menu-content)))
+  (handler/cut-selection-headings)
+  (handler/clear-selection!))
+(rum/defc custom-context-menu < rum/reactive
+  (mixins/keyboard-mixin "ctrl+c"
+                         (fn []
+                           (handler/copy-selection-headings)
+                           (handler/clear-selection!)))
+  (mixins/keyboard-mixin "ctrl+x" cut-headings-and-clear-selections!)
+  (mixins/keyboard-mixin "backspace" cut-headings-and-clear-selections!)
+  (mixins/keyboard-mixin "delete" handler/cut-selection-headings)
+  []
+  (when (state/sub :custom-context-menu/show?)
+    (ui/css-transition
+     {:class-names "fade"
+      :timeout {:enter 500
+                :exit 300}}
+     (custom-context-menu-content))))
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive

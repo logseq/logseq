@@ -672,32 +672,36 @@
     [(str prefix value postfix)
      value]))
 
+(defn rebuild-after-headings
+  [repo file before-end-pos new-end-pos]
+  (let [file-id (:db/id file)
+        after-headings (db/get-file-after-headings repo file-id before-end-pos)
+        last-start-pos (atom new-end-pos)]
+    (mapv
+     (fn [{:heading/keys [uuid meta] :as heading}]
+       (let [old-start-pos (:pos meta)
+             old-end-pos (:end-pos meta)
+             new-end-pos (if old-end-pos
+                           (+ @last-start-pos (- old-end-pos old-start-pos)))
+             new-meta {:pos @last-start-pos
+                       :end-pos new-end-pos}]
+         (reset! last-start-pos new-end-pos)
+         {:heading/uuid uuid
+          :heading/meta new-meta}))
+     after-headings)))
+
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file dummy?] :as heading} value]
   (let [repo (state/get-current-repo)
         value (string/trim value)]
     (when (not= (string/trim content) value) ; heading content changed
-      (let [file-id (:db/id file)
-            file (db/entity file-id)
+      (let [file (db/entity (:db/id file))
             file-content (:file/content file)
             file-path (:file/path file)
             format (format/get-format file-path)
             [new-content value] (new-file-content heading file-content value)
-            after-headings (db/get-file-after-headings repo file-id (get meta :end-pos))
             {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-            last-start-pos (atom end-pos)
-            after-headings (mapv
-                            (fn [{:heading/keys [uuid meta] :as heading}]
-                              (let [old-start-pos (:pos meta)
-                                    old-end-pos (:end-pos meta)
-                                    new-end-pos (if old-end-pos
-                                                  (+ @last-start-pos (- old-end-pos old-start-pos)))
-                                    new-meta {:pos @last-start-pos
-                                              :end-pos new-end-pos}]
-                                (reset! last-start-pos new-end-pos)
-                                {:heading/uuid uuid
-                                 :heading/meta new-meta}))
-                            after-headings)]
+            after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
         (db/transact!
           (concat
            pages
@@ -705,10 +709,7 @@
            after-headings
            [{:file/path file-path
              :file/content new-content}]))
-        (alter-file repo
-                    file-path
-                    new-content
-                    {:reset? false})))))
+        (alter-file repo file-path new-content {:reset? false})))))
 
 (defn delete-heading!
   [{:heading/keys [uuid meta content file] :as heading} dummy?]
@@ -716,32 +717,39 @@
     (let [repo (state/get-current-repo)
           file-path (:file/path (db/entity (:db/id file)))
           file-content (:file/content (db/entity (:db/id file)))
-          after-headings (db/get-file-after-headings repo (:db/id file) (:end-pos meta))
-          last-start-pos (atom (:pos meta))
-          updated-headings (mapv
-                            (fn [{:heading/keys [uuid meta] :as heading}]
-                              (let [old-start-pos (:pos meta)
-                                    old-end-pos (:end-pos meta)
-                                    new-end-pos (if old-end-pos
-                                                  (+ @last-start-pos (- old-end-pos old-start-pos)))
-                                    new-meta {:pos @last-start-pos
-                                              :end-pos new-end-pos}]
-                                (reset! last-start-pos new-end-pos)
-                                {:heading/uuid uuid
-                                 :heading/meta new-meta}))
-                            after-headings)
+          after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
           new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
       (db/transact!
         (concat
          [[:db.fn/retractEntity [:heading/uuid uuid]]]
-         updated-headings
+         after-headings
          [{:file/path file-path
            :file/content new-content}]))
-      (alter-file repo
-                  file-path
-                  new-content
-                  {:reset? false})
-      )))
+      (alter-file repo file-path new-content {:reset? false}))))
+
+(defn delete-headings!
+  [heading-uuids]
+  (when (seq heading-uuids)
+    (let [repo (state/get-current-repo)
+          first-heading (db/entity [:heading/uuid (first heading-uuids)])
+          last-heading (db/entity [:heading/uuid (last heading-uuids)])
+          file (db/entity (:db/id (:heading/file first-heading)))
+          file-path (:file/path file)
+          file-content (:file/content file)
+          start-pos (:pos (:heading/meta first-heading))
+          end-pos (:end-pos (:heading/meta last-heading))
+          after-headings (rebuild-after-headings repo file end-pos start-pos)
+          new-content (utf8/delete! file-content start-pos end-pos)]
+      (db/transact!
+        (concat
+         (mapv
+          (fn [uuid]
+            [:db.fn/retractEntity [:heading/uuid uuid]])
+          heading-uuids)
+         after-headings
+         [{:file/path file-path
+           :file/content new-content}]))
+      (alter-file repo file-path new-content {:reset? false}))))
 
 (defn clone-and-pull
   [repo-url]
@@ -811,6 +819,32 @@
       (state/set-cursor-range! text-range)
       (state/set-edit-input-id! edit-input-id))))
 
+;; headings
+
+(defn clear-selection!
+  []
+  (when (state/in-selection-mode?)
+    (doseq [heading (state/get-selection-headings)]
+      (dom/remove-class! heading "selected")
+      (dom/remove-class! heading "noselect"))
+    (state/clear-selection!)))
+
+(defn copy-selection-headings
+  []
+  (when-let [headings (seq (get @state/state :selection/headings))]
+    (let [ids (map #(util/get-heading-id (gobj/get % "id")) headings)
+          content (some->> (db/get-headings-contents ids)
+                           (map :heading/content)
+                           (string/join ""))]
+      (when-not (string/blank? content)
+        (util/copy-to-clipboard! content)))))
+
+(defn cut-selection-headings
+  []
+  (when-let [headings (seq (get @state/state :selection/headings))]
+    (let [ids (map #(util/get-heading-id (gobj/get % "id")) headings)]
+      (delete-headings! ids))))
+
 (defn start!
   []
   (let [{:keys [repos] :as me} (set-me-if-exists!)]
@@ -838,15 +872,15 @@
     (p/let [changes (git/get-status-matrix (state/get-current-repo))]
       (prn changes)))
 
-  ;; (defn debug-file-and-headings
-  ;;   [path]
-  ;;   (p/let [content (load-file (state/get-current-repo)
-  ;;                              path)]
-  ;;     (let [db-content (db/get-file path)
-  ;;           headings (db/get-file-by-concat-headings-debug-version path)]
-  ;;       (prn {:content content
-  ;;             :utf8-length (utf8/length (utf8/encode content))
-  ;;             :headings headings}))))
+  (defn debug-file-and-headings
+    [path]
+    (p/let [content (load-file (state/get-current-repo)
+                               path)]
+      (let [db-content (db/get-file path)
+            headings (db/get-file-by-concat-headings-debug-version path)]
+        (prn {:content content
+              :utf8-length (utf8/length (utf8/encode content))
+              :headings headings}))))
 
   ;; (debug-file-and-headings "readme.org")
   )
