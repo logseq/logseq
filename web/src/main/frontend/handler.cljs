@@ -49,7 +49,8 @@
      content)
    (p/catch
        (fn [e]
-         (prn "load file failed, " e)))))
+         ;; (prn "load file failed, " e)
+         ))))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -381,7 +382,6 @@
        (db/start-db-conn! (:me @state/state)
                           repo-url
                           db-listen-to-tx!)
-       (db/mark-repo-as-cloned repo-url)
        (set-latest-commit-if-exists! repo-url)
        (util/post (str config/api "repos")
                   {:url repo-url}
@@ -868,11 +868,14 @@
     (db/restore! me db-listen-to-tx!)
     (doseq [{:keys [id url]} repos]
       (let [repo url]
-        (if (db/cloned? repo)
-          (do
-            (git-set-username-email! repo me)
-            (periodically-pull-and-push repo {:pull-now? true}))
-          (clone-and-pull repo))))
+        (p/let [config-exists? (fs/file-exists?
+                                (git/get-repo-dir url)
+                                ".git/config")]
+          (if config-exists?
+            (do
+              (git-set-username-email! repo me)
+              (periodically-pull-and-push repo {:pull-now? true}))
+            (clone-and-pull repo)))))
     (watch-config!)))
 
 (defn upload-image

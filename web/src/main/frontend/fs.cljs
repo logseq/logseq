@@ -43,6 +43,13 @@
       (write-file dir path initial-content)
       false))))
 
+(defn file-exists?
+  [dir path]
+  (util/p-handle
+   (stat dir path)
+   (fn [_stat] true)
+   (fn [_e] false)))
+
 (comment
   (def dir "/notes")
   )
