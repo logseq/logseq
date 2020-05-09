@@ -180,13 +180,13 @@
 
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]
-  (set-state-kv! :repo/loading-files? false)
-  (set-state-kv! :repo/importing-to-db? true)
   (let [load-contents (fn [files delete-files delete-headings]
                         (load-files-contents!
                          repo-url
                          files
                          (fn [contents]
+                           (set-state-kv! :repo/loading-files? false)
+                           (set-state-kv! :repo/importing-to-db? true)
                            (let [parsed-files (filter
                                                (fn [[file _]]
                                                  (let [format (format/get-format file)]
