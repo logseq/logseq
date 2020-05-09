@@ -163,7 +163,8 @@
                      (fn [idx {:heading/keys [ref-pages meta] :as heading}]
                        (let [heading (merge
                                       heading
-                                      {:heading/file file
+                                      {:heading/meta meta
+                                       :heading/file file
                                        :heading/page page
                                        :heading/content (utf8/substring encoded-content
                                                                         (:pos meta)
