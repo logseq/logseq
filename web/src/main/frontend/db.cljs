@@ -687,14 +687,18 @@
 (defn get-page-referenced-headings
   [page]
   (let [page-name (string/capitalize page)]
-    (-> (d/q '[:find (pull ?heading [*])
-               :in $ ?page-name
-               :where
-               [?page :page/name ?page-name]
-               [?heading :heading/ref-pages ?page]]
-          (get-conn)
-          page-name)
-        seq-flatten)))
+    (->> (posh/q '[:find ?heading
+                   ;; (pull ?heading [*])
+                   :in $ ?page-name
+                   :where
+                   [?page :page/name ?page-name]
+                   [?heading :heading/ref-pages ?page]]
+           (get-conn (state/get-current-repo) false)
+           page-name)
+         react
+         seq-flatten
+         (pull-many '[*])
+         react)))
 
 (defn get-all-headings
   []
