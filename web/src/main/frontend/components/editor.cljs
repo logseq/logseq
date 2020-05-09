@@ -20,6 +20,7 @@
 (defonce *show-commands (atom false))
 (defonce *matched-commands (atom nil))
 (defonce *slash-caret-pos (atom nil))
+(defonce *should-delete? (atom false))
 
 (defn- insert-command!
   [id command-output]
@@ -183,23 +184,28 @@
 (defn on-backspace
   [state e]
   (let [{:keys [id dummy? value on-hide pos]} (get-state state)
+        edit-content (state/get-edit-content)
         heading? (string/starts-with? id "edit-heading-")]
     (when (and heading? (= value ""))
-      (util/stop e)
-      ;; delete heading, edit previous heading
-      (let [heading-id (string/replace id "edit-heading-" "")
-            heading (db/entity [:heading/uuid (uuid heading-id)])
-            heading-parent (str "ls-heading-parent-" heading-id)
-            heading-parent (gdom/getElement heading-parent)
-            current-idx (util/parse-int (gobj/get heading-parent "idx"))
-            sibling-heading (gdom/getPreviousElementSibling heading-parent)
-            id (gobj/get sibling-heading "id")]
-        (let [heading (db/entity [:heading/uuid (uuid heading-id)])]
-          (handler/delete-heading! heading dummy?))
+      (if @*should-delete?
+        (do
+          (reset! *should-delete? false)
+          (util/stop e)
+          ;; delete heading, edit previous heading
+          (let [heading-id (string/replace id "edit-heading-" "")
+                heading (db/entity [:heading/uuid (uuid heading-id)])
+                heading-parent (str "ls-heading-parent-" heading-id)
+                heading-parent (gdom/getElement heading-parent)
+                current-idx (util/parse-int (gobj/get heading-parent "idx"))
+                sibling-heading (gdom/getPreviousElementSibling heading-parent)
+                id (gobj/get sibling-heading "id")]
+            (let [heading (db/entity [:heading/uuid (uuid heading-id)])]
+              (handler/delete-heading! heading dummy?))
 
-        (when id
-          (let [id (uuid (string/replace id "ls-heading-parent-" ""))]
-            (handler/edit-heading! id :max)))))))
+            (when id
+              (let [id (uuid (string/replace id "ls-heading-parent-" ""))]
+                (handler/edit-heading! id :max)))))
+        (reset! *should-delete? true)))))
 
 (defn get-matched-commands
   [input]
@@ -313,6 +319,7 @@
                 (reset! *show-commands false)))))))))
   {:init (fn [state _props]
            (let [[content {:keys [dummy?]}] (:rum/args state)]
+             (reset! *should-delete? false)
              (state/set-edit-content!
               (if dummy?
                 (string/triml content)

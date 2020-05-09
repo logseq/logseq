@@ -289,9 +289,9 @@
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
   (let [control-show? (get state ::control-show?)
         ref? (boolean (:ref? config))
-        edit-input-id (str "edit-heading-" (if ref? (:id config)) "-" uuid)
+        edit-input-id (str "edit-heading-" (if ref? ((:id config))) uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
-        heading-id (str "ls-heading-parent-" (if ref? (:id config)) "-" uuid)
+        heading-id (str "ls-heading-parent-" (if ref? (:id config)) uuid)
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
         collapsed? (or toggle-collapsed? @collapsed-atom?)
