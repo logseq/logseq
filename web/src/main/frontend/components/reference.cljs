@@ -13,7 +13,7 @@
             [frontend.config :as config]
             [frontend.db :as db]))
 
-(rum/defc references
+(rum/defc references < rum/reactive
   [page-name]
   (let [page-name (string/capitalize page-name)
         encoded-page-name (util/url-encode page-name)

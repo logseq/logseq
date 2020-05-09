@@ -136,9 +136,10 @@
 
 (defn pull-many
   [selector eids]
-  (posh/pull-many (get-conn (state/get-current-repo) false)
-                  selector
-                  eids))
+  (when-let [conn (get-conn (state/get-current-repo) false)]
+    (posh/pull-many conn
+                    selector
+                    eids)))
 
 ;; (new TextEncoder().encode('foo')).length
 ;; (defn db-size
@@ -686,19 +687,20 @@
 ;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
   [page]
-  (let [page-name (string/capitalize page)]
-    (->> (posh/q '[:find ?heading
-                   ;; (pull ?heading [*])
-                   :in $ ?page-name
-                   :where
-                   [?page :page/name ?page-name]
-                   [?heading :heading/ref-pages ?page]]
-           (get-conn (state/get-current-repo) false)
-           page-name)
-         react
-         seq-flatten
-         (pull-many '[*])
-         react)))
+  (when-let [current-repo (state/get-current-repo)]
+    (let [page-name (string/capitalize page)]
+      (->> (posh/q '[:find ?heading
+                     ;; (pull ?heading [*])
+                     :in $ ?page-name
+                     :where
+                     [?page :page/name ?page-name]
+                     [?heading :heading/ref-pages ?page]]
+             (get-conn current-repo false)
+             page-name)
+           react
+           seq-flatten
+           (pull-many '[*])
+           react))))
 
 (defn get-all-headings
   []
