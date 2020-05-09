@@ -19,7 +19,8 @@
         encoded-page-name (util/url-encode page-name)
         ref-headings (db/get-page-referenced-headings page-name)
         ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
-        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name})]
+        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
+                                                  :ref? true})]
     [:div.page-references
      (let [n-ref (count ref-headings)]
        (if (> n-ref 0)

@@ -288,102 +288,104 @@
   (rum/local false ::collapsed?)
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
   (let [control-show? (get state ::control-show?)
-        edit-input-id (str "edit-heading-" uuid)
+        ref? (boolean (:ref? config))
+        edit-input-id (str "edit-heading-" (if ref? (:id config)) "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
-        heading-id (str "ls-heading-parent-" uuid)
+        heading-id (str "ls-heading-parent-" (if ref? (:id config)) "-" uuid)
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
         collapsed? (or toggle-collapsed? @collapsed-atom?)
         agenda? (= (:id config) "agenda")]
-    (when-not lock?
-      [:div.ls-heading-parent.flex-1 {:key (str uuid)
-                                      :id heading-id
-                                      :level level
-                                      :idx idx
-                                      :class (if dummy? "dummy")}
-       (if show-page?
-         (let [page (db/entity (:db/id page))]
-           [:h2
-            [:a {:href (str "/page/" (util/url-encode (:page/name page)))}
-             (:page/name page)]]))
-
-       ;; control
-       [:div.flex.flex-row
-        {:style {:cursor "pointer"}
-         :on-mouse-over (fn []
+    [:<>
+     (if show-page?
+       (let [page (db/entity (:db/id page))]
+         [:a.page-ref {:href (str "/page/" (util/url-encode (:page/name page)))}
+          (:page/name page)]))
+     (when-not lock?
+       [:div.ls-heading-parent.flex-1
+        {:key (str uuid)
+         :id heading-id
+         :level level
+         :idx idx
+         :class (if dummy? "dummy")}
+        ;; control
+        [:div.flex.flex-row
+         {:style {:cursor "pointer"}
+          :on-mouse-over (fn []
+                           (when (has-children? heading-id level)
+                             (reset! control-show? true)))
+          :on-mouse-out (fn []
                           (when (has-children? heading-id level)
-                            (reset! control-show? true)))
-         :on-mouse-out (fn []
-                         (when (has-children? heading-id level)
-                           (reset! control-show? false)))}
-        (when-not agenda?
-          [:div.hd-control.flex.flex-row.items-center {:style {:margin-left (str (max 0 (- level 2)) "rem")
-                                                               :height 24
-                                                               :margin-right "0.3rem"
-                                                               }}
-           [:a.heading-control.flex.flex-row.items-center.justify-center
-            {:id (str "control-" uuid)
-             :style {:width 14
-                     :height 24}
-             :class "transition ease-in-out duration-150"
-             :on-click (fn [e]
-                         (util/stop e)
-                         (let [id (str "ls-heading-parent-" uuid)]
-                           (if collapsed?
-                             (expand/expand! (:id config) id)
-                             (expand/collapse! (:id config) id))
-                           (reset! collapsed-atom? (not collapsed?))))}
-            (cond
-              collapsed?
-              (svg/caret-right)
-
-              (and @control-show?
-                   (has-children? heading-id level))
-              (svg/caret-down)
-
-              :else
-              [:span ""])]
-           [:a.flex.flex-row.items-center.justify-center
-            {:on-click (fn [])
-             :style {:width 14
-                     :height 24}}
-            [:svg {:height 10
-                   :width 10
-                   :fill "currentColor"
-                   :display "inline-block"}
-             [:circle {:cx 5
-                       :cy 5
-                       :r 2}]]]])
-
-        (if edit?
-          (editor/box content {:on-hide (fn [value]
-                                          (handler/save-heading-if-changed! heading value))
-                               :dummy? dummy?}
-                      edit-input-id)
-          [:div.flex-1.heading-body
-           {:on-click (fn [e]
-                        (when-not (or (util/link? (gobj/get e "target"))
-                                      (util/input? (gobj/get e "target")))
+                            (reset! control-show? false)))}
+         (when-not agenda?
+           [:div.hd-control.flex.flex-row.items-center {:style {:margin-left (str (max 0 (- level 2)) "rem")
+                                                                :height 24
+                                                                :margin-right "0.3rem"
+                                                                }}
+            [:a.heading-control.flex.flex-row.items-center.justify-center
+             {:id (str "control-" uuid)
+              :style {:width 14
+                      :height 24}
+              :class "transition ease-in-out duration-150"
+              :on-click (fn [e]
                           (util/stop e)
-                          (when-let [current-edit-input-id (state/get-edit-input-id)]
-                            (when (and (not= current-edit-input-id edit-input-id)
-                                       (state/get-edit-content))
-                              (handler/save-heading-if-changed! (state/get-edit-heading)
-                                                                (state/get-edit-content))))
-                          (handler/reset-cursor-range! (gdom/getElement heading-id))
-                          (swap! state/state assoc
-                                 :edit-content content
-                                 :edit-heading heading)
-                          (state/set-edit-input-id! edit-input-id)))}
-           heading-part
+                          (let [id (str "ls-heading-parent-" uuid)]
+                            (if collapsed?
+                              (expand/expand! (:id config) id)
+                              (expand/collapse! (:id config) id))
+                            (reset! collapsed-atom? (not collapsed?))))}
+             (cond
+               collapsed?
+               (svg/caret-right)
 
-           ;; non-heading children
-           (when (seq children)
-             [:div.heading-children {:class (if agenda? "ml-5")}
-              (for [child children]
-                (let [block (block config child)]
-                  (rum/with-key (heading-child block)
-                    (cljs.core/random-uuid))))])])]])))
+               (and @control-show?
+                    (has-children? heading-id level))
+               (svg/caret-down)
+
+               :else
+               [:span ""])]
+            [:a.flex.flex-row.items-center.justify-center
+             {:on-click (fn [])
+              :style {:width 14
+                      :height 24}}
+             [:svg {:height 10
+                    :width 10
+                    :fill "currentColor"
+                    :display "inline-block"}
+              [:circle {:cx 5
+                        :cy 5
+                        :r 2}]]]])
+
+         (if edit?
+           (editor/box content {:on-hide (fn [value]
+                                           (handler/save-heading-if-changed! heading value))
+                                :dummy? dummy?}
+                       edit-input-id)
+           [:div.flex-1.heading-body
+            {:on-click (fn [e]
+                         (when-not (or (util/link? (gobj/get e "target"))
+                                       (util/input? (gobj/get e "target")))
+                           (util/stop e)
+                           (when-let [current-edit-input-id (state/get-edit-input-id)]
+                             (when (and (not= current-edit-input-id edit-input-id)
+                                        (state/get-edit-content))
+                               (handler/save-heading-if-changed! (state/get-edit-heading)
+                                                                 (state/get-edit-content))))
+                           (handler/reset-cursor-range! (gdom/getElement heading-id))
+                           (swap! state/state assoc
+                                  :edit-content content
+                                  :edit-heading heading)
+                           (state/set-edit-input-id! edit-input-id)
+                           ))}
+            heading-part
+
+            ;; non-heading children
+            (when (seq children)
+              [:div.heading-children {:class (if agenda? "ml-5")}
+               (for [child children]
+                 (let [block (block config child)]
+                   (rum/with-key (heading-child block)
+                     (cljs.core/random-uuid))))])])]])]))
 
 (rum/defc heading-checkbox
   [heading class]

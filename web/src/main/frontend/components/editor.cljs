@@ -194,7 +194,6 @@
             current-idx (util/parse-int (gobj/get heading-parent "idx"))
             sibling-heading (gdom/getPreviousElementSibling heading-parent)
             id (gobj/get sibling-heading "id")]
-
         (let [heading (db/entity [:heading/uuid (uuid heading-id)])]
           (handler/delete-heading! heading dummy?))
 

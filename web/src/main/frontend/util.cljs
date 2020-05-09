@@ -7,7 +7,6 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             ["/frontend/caret_pos" :as caret-pos]
-            ["/frontend/caret_range" :as caret-range]
             [goog.string :as gstring]
             [goog.string.format]
             [dommy.core :as d]))
@@ -276,7 +275,31 @@
                                    (apply f args))
                                 threshold))))))
 
-(def caret-range caret-range/getCaretRange)
+;; Caret
+(defn caret-range [node]
+  (let [doc (or (gobj/get node "ownerDocument")
+                (gobj/get node "document"))
+        win (or (gobj/get doc "defaultView")
+                (gobj/get doc "parentWindow"))
+        selection (.getSelection win)]
+    (if selection
+      (let [range-count (gobj/get selection "rangeCount")]
+        (when (> range-count 0)
+         (let [range (-> (.getSelection win)
+                         (.getRangeAt 0))
+               pre-caret-range (.cloneRange range)]
+           (.selectNodeContents pre-caret-range node)
+           (.setEnd pre-caret-range
+                    (gobj/get range "endContainer")
+                    (gobj/get range "endOffset"))
+           (.toString pre-caret-range))))
+      (when-let [selection (gobj/get doc "selection")]
+        (when (not= "Control" (gobj/get selection "type"))
+          (let [text-range (.createRange selection)
+                pre-caret-text-range (.createTextRange (gobj/get doc "body"))]
+            (.moveToElementText pre-caret-text-range node)
+            (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
+            (gobj/get pre-caret-text-range "text")))))))
 
 (defn set-caret-pos!
   [input pos]
