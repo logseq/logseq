@@ -115,7 +115,7 @@
                 :dangerouslySetInnerHTML {:__html html}}]))
 
           :else                       ; other text formats
-          [:div.cursor.pre-line-white-space
+          [:pre.cursor
            {:id id
             :on-click on-click}
            (if (string/blank? content)
