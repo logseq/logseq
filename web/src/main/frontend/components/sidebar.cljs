@@ -22,9 +22,10 @@
           repos (->> repos
                      (remove #(= (:url %) current-repo))
                      (util/distinct-by :url))]
-      [:div.flex.flex-row.align-center
-       [:a.mr-4.hover:text-gray-300.text-gray-400
-        {:style {:margin-top 3}
+      [:div.flex.flex-row.align-center.whitespace-no-wrap
+       [:a.hover:text-gray-300.text-gray-400
+        {:style {:margin-top 3
+                 :margin-right 13}
          :on-click (fn []
                      (d/add-class! (d/by-id "menu")
                                    "md:block")
@@ -39,7 +40,7 @@
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
             [:a.hover:text-gray-300.text-gray-400.font-bold {:on-click toggle-fn}
-             [:span (db/get-repo-name current-repo)]
+             [:span (util/take-at-most (db/get-repo-name current-repo) 20)]
              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
           (mapv
            (fn [{:keys [id url]}]
@@ -48,11 +49,11 @@
                                     (state/set-current-repo! url))}})
            repos)
           (util/hiccup->class
-           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg"))
+           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
          [:a.hover:text-gray-300.text-gray-400.font-bold
           {:href current-repo
            :target "_blank"}
-          (db/get-repo-name current-repo)])])
+          (util/take-at-most (db/get-repo-name current-repo) 18)])])
 
     [:img.h-8.w-auto
      {:alt "Logseq",

@@ -522,3 +522,9 @@
     (.select el)
     (js/document.execCommand "copy")
     (js/document.body.removeChild el)))
+
+(defn take-at-most
+  [s n]
+  (if (<= (count s) n)
+    s
+    (subs s 0 n)))

@@ -119,10 +119,9 @@
     (event-mixin
      (fn [state]
        (let [open? (get state k)]
-         (when @open?
-           (hide-when-esc-or-outside state
-                                    :on-hide (fn []
-                                               (reset! open? false))))))
+         (hide-when-esc-or-outside
+          state
+          :on-hide (fn [] (reset! open? false)))))
      (fn [state]
        (let [open? (atom false)
              component (:rum/react-component state)]
