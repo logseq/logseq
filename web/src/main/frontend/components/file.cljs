@@ -24,12 +24,13 @@
   [:div.flex-1
    [:h1.title
     "All files"]
-   (let [files (db/get-files (state/get-current-repo))]
-     (for [file files]
-       (let [file-id (util/url-encode file)]
-         [:div {:key file-id}
-          [:a {:href (str "/file/" file-id)}
-           file]])))])
+   (when-let [current-repo (state/sub :git/current-repo)]
+     (let [files (db/get-files current-repo)]
+       (for [file files]
+         (let [file-id (util/url-encode file)]
+           [:div {:key file-id}
+            [:a {:href (str "/file/" file-id)}
+             file]]))))])
 
 (rum/defcs file < rum/reactive
   [state]

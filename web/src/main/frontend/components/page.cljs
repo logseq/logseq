@@ -72,9 +72,10 @@
   [:div.flex-1
    [:h1.title
     "All Pages"]
-   (let [pages (db/get-pages (state/get-current-repo))]
-     (for [page pages]
-       (let [page-id (util/url-encode page)]
-         [:div {:key page-id}
-          [:a {:href (str "/page/" page-id)}
-           page]])))])
+   (when-let [current-repo (state/sub :git/current-repo)]
+     (let [pages (db/get-pages current-repo)]
+      (for [page pages]
+        (let [page-id (util/url-encode page)]
+          [:div {:key page-id}
+           [:a {:href (str "/page/" page-id)}
+            page]]))))])

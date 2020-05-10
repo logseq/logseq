@@ -560,9 +560,9 @@
 ;; time duration
 ;; TODO: posh doesn't support or query
 (defn get-agenda
-  ([]
-   (get-agenda :week))
-  ([time]
+  ([repo]
+   (get-agenda (state/get-current-repo) :week))
+  ([repo time]
    ;; TODO:
    (let [duration (case time
                     :today []
@@ -576,7 +576,7 @@
                 :where
                 [?h :heading/marker ?marker]
                 [(?pred $ ?marker)]]
-        (get-conn (state/get-current-repo) false)
+        (get-conn repo false)
         pred)
       react
       seq-flatten
