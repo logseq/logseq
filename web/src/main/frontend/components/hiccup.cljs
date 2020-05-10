@@ -274,8 +274,8 @@
   (or
    ;; non heading children
    (when-let [node (gdom/getElement heading-id)]
-     (> (count (expand/get-heading-body node))
-        1))
+     (>= (count (expand/get-non-heading-children node))
+         1))
 
    ;; other headings children
    (when-let [next-heading (gobj/get (gdom/getElement heading-id)
@@ -383,7 +383,7 @@
 
             ;; non-heading children
             (when (seq children)
-              [:div.heading-children {:class (if agenda? "ml-5")}
+              [:div.non-heading-children {:class (if agenda? "ml-5")}
                (for [child children]
                  (let [block (block config child)]
                    (rum/with-key (heading-child block)
@@ -416,9 +416,9 @@
         checkbox (heading-checkbox t
                                    (str "mr-1 cursor"))
         marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT"} marker)
-                 [:span {:class (str "task-status " (string/lower-case marker))
-                         :style {:margin-right 3.5}}
-                  (string/upper-case marker)])
+                    [:span {:class (str "task-status " (string/lower-case marker))
+                            :style {:margin-right 3.5}}
+                     (string/upper-case marker)])
         priority (if priority
                    [:span {:class "priority"
                            :style {:margin-right 3.5}}

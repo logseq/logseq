@@ -204,11 +204,10 @@
                    (and (not up?) (util/textarea-cursor-end-row? element line-height))))
       (util/stop e)
       (let [f (if up? gdom/getPreviousElementSibling gdom/getNextElementSibling)
-            sibling-heading (f (gdom/getElement heading-parent-id))
-            _ (js/console.dir sibling-heading)
-            heading-id (d/attr sibling-heading "headingid")]
-        (when heading-id
-          (handler/edit-heading! (uuid heading-id) pos))))))
+            sibling-heading (f (gdom/getElement heading-parent-id))]
+        (when sibling-heading
+          (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+            (handler/edit-heading! (uuid sibling-heading-id) pos)))))))
 
 (defn on-backspace
   [state e]
@@ -222,11 +221,11 @@
           ;; delete heading, edit previous heading
           (let [heading (db/entity [:heading/uuid heading-id])
                 heading-parent (gdom/getElement heading-parent-id)
-                sibling-heading (gdom/getPreviousElementSibling heading-parent)
-                sibling-heading-id (d/attr sibling-heading "headingid")]
+                sibling-heading (gdom/getPreviousElementSibling heading-parent)]
             (handler/delete-heading! heading dummy?)
-            (when sibling-heading-id
-              (handler/edit-heading! (uuid sibling-heading-id) :max))))
+            (when sibling-heading
+              (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+                (handler/edit-heading! (uuid sibling-heading-id) :max)))))
         (reset! *should-delete? true)))))
 
 (defn get-matched-commands
