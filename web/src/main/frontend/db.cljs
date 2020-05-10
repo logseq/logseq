@@ -239,6 +239,12 @@
         (get-conn repo-url) path)
       seq-flatten))
 
+(defn sort-by-pos
+  [headings]
+  (sort-by (fn [heading]
+             (get-in heading [:heading/meta :pos]))
+           headings))
+
 (defn get-file-after-headings
   [repo-url file-id end-pos]
   (when end-pos
@@ -251,7 +257,8 @@
                  [?heading :heading/meta ?meta]
                  [(?pred $ ?meta)]]
             (get-conn repo-url) file-id pred)
-          seq-flatten))))
+          seq-flatten
+          sort-by-pos))))
 
 (defn delete-file-headings!
   [repo-url path]
@@ -321,12 +328,6 @@
              :git/latest-commit (get-key-value repo :git/latest-commit)
              :git/error (get-key-value repo :git/error)})
           repos)))
-
-(defn sort-by-pos
-  [headings]
-  (sort-by (fn [heading]
-             (get-in heading [:heading/meta :pos]))
-           headings))
 
 (defn get-file-by-concat-headings
   ([file]

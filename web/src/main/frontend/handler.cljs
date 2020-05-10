@@ -722,6 +722,7 @@
         (db/transact!
           (concat
            pages
+           [[:db.fn/retractEntity [:heading/uuid uuid]]]
            headings
            after-headings
            [{:file/path file-path
