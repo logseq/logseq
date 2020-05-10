@@ -4,32 +4,42 @@
             [clojure.string :as string]
             [goog.dom :as gdom]))
 
+(defonce *show-commands (atom false))
+(defonce *slash-caret-pos (atom nil))
+
 (defn ->page-reference
   [page]
   (util/format "[[%s]]" page))
 
-(def link-steps [[:editor/input "[[][]]"]
-                 [:editor/cursor-back 4]
+(def link-steps [[:editor/input "/link"]
                  [:editor/show-input [{:id :link
                                        :placeholder "Link"}
                                       {:id :label
                                        :placeholder "Label"}]]])
+
+(defn ->marker
+  [marker]
+  [[:editor/clear-current-slash]
+   [:editor/set-marker marker]
+   [:editor/move-cursor-to-end]])
+
 ;; Credits to roamresearch.com
 (defn commands-map
   []
   (->>
    (concat
-    [["TODO" "TODO"]
-     ["DOING" "DOING"]
+    [["TODO" (->marker "TODO")]
+     ["DOING" (->marker "DOING")]
+     ["DONE" (->marker "DONE")]
+     ["WAIT" (->marker "WAIT")]
+     ["CANCELED" (->marker "CANCELED")]
      ["Tomorrow" (->page-reference (util/tomorrow))]
      ["Yesterday" (->page-reference (util/yesterday))]
      ["Today" (->page-reference (util/today))]
      ["Current Time" (util/get-current-time)]
-     ["Date Picker" [[:editor/input "[[]]"]
-                     [:editor/cursor-back 2]
-                     [:editor/show-date-picker]]]
-     ["Page Reference" [[:editor/input "[[]]"]
-                        [:editor/cursor-back 2]
+     ["Date Picker" [[:editor/show-date-picker]]]
+     ["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
+                        ;; [:editor/clear-current-slash]
                         [:editor/search-page]]]
      ["Link" link-steps]
      ;; same as link
@@ -43,33 +53,42 @@
    (util/remove-nils)
    (util/distinct-by-last-wins first)))
 
+(defonce *matched-commands (atom (commands-map)))
+
+(defn restore-state
+  [restore-slash-caret-pos?]
+  (when restore-slash-caret-pos?
+    (reset! *slash-caret-pos nil))
+  (reset! *show-commands false)
+  (reset! *matched-commands (commands-map)))
+
 (defn insert!
   [id value
-   *slash-caret-pos
-   *show-commands
-   *matched-commands
-   & {:keys [last-pattern postfix-fn forward-pos]
-      :or {last-pattern "/"}}]
+   {:keys [last-pattern postfix-fn backward-pos forward-pos]
+    :or {last-pattern "/"}}]
   (let [edit-content (state/get-edit-content)
         input (gdom/getElement id)
         current-pos (:pos (util/get-caret-pos input))
 
         prefix (subs edit-content 0 current-pos)
         prefix (if (string/blank? last-pattern)
-                 (str prefix " " value)
+                 (str (string/trimr prefix) " " (string/triml value))
                  (util/replace-last last-pattern prefix value))
         postfix (subs edit-content current-pos)
         postfix (if postfix-fn (postfix-fn postfix) postfix)
-        new-value (str prefix postfix)]
-    (when *slash-caret-pos
-      (reset! *slash-caret-pos nil))
-    (when *show-commands
-      (reset! *show-commands nil))
-    (when *matched-commands
-      (reset! *matched-commands (commands-map)))
+        new-value (str (string/trimr prefix)
+                       " "
+                       (string/triml postfix))
+        new-pos (- (+ (count prefix)
+                      (or forward-pos 0))
+                   (or backward-pos 0))]
     (swap! state/state assoc
            :edit-content new-value
-           :editor/last-saved-cursor (+ (count prefix) (or forward-pos 0)))))
+           :editor/last-saved-cursor new-pos)
+    (util/move-cursor-to input
+                         (if (or backward-pos forward-pos)
+                           new-pos
+                           (+ new-pos 1)))))
 
 (defn get-matched-commands
   [text]
@@ -88,9 +107,9 @@
 
 (defmulti handle-step first)
 
-(defmethod handle-step :editor/input [[_ value]]
+(defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
-    (insert! input-id value nil nil nil)))
+    (insert! input-id value option)))
 
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -101,6 +120,38 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (util/cursor-move-forward current-input n))))
+
+(defmethod handle-step :editor/move-cursor-to-end [[_]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (util/move-cursor-to-end current-input))))
+
+(defmethod handle-step :editor/clear-current-slash [[_]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [edit-content (state/get-edit-content)
+            current-pos (:pos (util/get-caret-pos current-input))
+            prefix (subs edit-content 0 current-pos)
+            prefix (util/replace-last "/" prefix "")
+            new-value (str prefix
+                           (subs edit-content current-pos))]
+        (swap! state/state assoc
+               :edit-content new-value
+               :editor/last-saved-cursor (count prefix))))))
+
+(def marker-pattern
+  #"(TODO|DOING|DONE|WAIT|CANCELED|STARTED|IN-PROGRESS)?\s?")
+
+(defmethod handle-step :editor/set-marker [[_ marker]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [edit-content (state/get-edit-content)
+            pos (count (re-find #"\*+\s" edit-content))
+            new-value (str (subs edit-content 0 pos)
+                           (string/replace-first (subs edit-content pos)
+                                                 marker-pattern
+                                                 (str marker " ")))]
+        (state/set-edit-content! new-value)))))
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
@@ -119,8 +170,6 @@
   (prn "No handler for step: " type))
 
 (defn handle-steps
-  [vector *show-commands *matched-commands]
-  (reset! *show-commands nil)
-  (reset! *matched-commands nil)
+  [vector]
   (doseq [step vector]
     (handle-step step)))

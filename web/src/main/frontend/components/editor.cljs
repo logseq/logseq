@@ -11,70 +11,107 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [clojure.string :as string]
-            [frontend.commands :as commands]
+            [frontend.commands :as commands
+             :refer [*show-commands
+                     *matched-commands
+                     *slash-caret-pos]]
             [medley.core :as medley]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-drag-n-drop.core :as dnd]))
 
-(defonce *show-commands (atom false))
-(defonce *matched-commands (atom nil))
-(defonce *slash-caret-pos (atom nil))
 (defonce *should-delete? (atom false))
+;; FIXME: should support multiple images concurrently uploading
+(defonce *image-uploading? (atom false))
+(defonce *image-uploading-process (atom 0))
 
 (defn- insert-command!
-  [id command-output]
+  [id command-output {:keys [restore?]
+                      :or {restore? true}
+                      :as option}]
   (cond
     ;; replace string
     (string? command-output)
-    (commands/insert! id command-output *slash-caret-pos *show-commands *matched-commands)
+    (commands/insert! id command-output option)
 
     ;; steps
     (vector? command-output)
-    (commands/handle-steps command-output *show-commands *matched-commands)
+    (commands/handle-steps command-output)
 
     :else
-    nil))
+    nil)
+
+  (when restore?
+    (commands/restore-state restore?)))
+
+(defn- upload-image
+  [id files uploading? drop?]
+  (image/upload
+   files
+   (fn [file file-name file-type]
+     (handler/request-presigned-url
+      file file-name file-type
+      uploading?
+      (fn [signed-url]
+        (insert-command! id
+                         (util/format "[[%s][%s]]"
+                                      signed-url
+                                      file-name)
+                         {:last-pattern (if drop? "" "/")})
+        (reset! *image-uploading-process 0))
+      (fn [e]
+        (let [process (* (/ (gobj/get e "loaded")
+                            (gobj/get e "total"))
+                         100)]
+          (reset! *image-uploading-process process)))))))
 
 (rum/defc commands < rum/reactive
-  {:will-mount (fn [state]
-                 (reset! *matched-commands (commands/commands-map))
-                 state)}
   [id]
-  (when (rum/react *show-commands)
+  (when (and (rum/react *show-commands)
+             (not (state/sub :editor/show-page-search?))
+             (not (state/sub :editor/show-input))
+             (not (state/sub :editor/show-date-picker?)))
     (let [matched (rum/react *matched-commands)]
       (ui/auto-complete
        (map first matched)
        (fn [chosen]
-         (insert-command! id (get (into {} matched) chosen)))))))
+         (let [restore-slash? (not (contains? #{"Page Reference"
+                                                "Link"
+                                                "Image Link"
+                                                "Date Picker"} chosen))]
+           (insert-command! id (get (into {} matched) chosen)
+                            {:restore? restore-slash?})))))))
+
+(defn get-matched-pages
+  [q]
+  (let [pages (db/get-pages (state/get-current-repo))]
+    (filter
+     (fn [page]
+       (string/index-of
+        (string/lower-case page)
+        (string/lower-case q)))
+     pages)))
 
 (rum/defc page-search < rum/reactive
   [id]
   (when (state/sub :editor/show-page-search?)
-    (let [{:keys [pos]} (rum/react *slash-caret-pos)
-          input (gdom/getElement id)
-          current-pos (:pos (util/get-caret-pos input))
-          edit-content (state/sub :edit-content)
-          q (subs edit-content (inc pos) current-pos)
-          matched-pages (when-not (string/blank? q)
-                          (let [pages (db/get-pages (state/get-current-repo))]
-                            (filter
-                             (fn [page]
-                               (string/index-of
-                                (string/lower-case page)
-                                (string/lower-case q)))
-                             pages)))]
-      (ui/auto-complete
-       matched-pages
-       (fn [chosen click?]
-         (commands/insert! id (str "[[" chosen)
-                           *slash-caret-pos
-                           *show-commands
-                           *matched-commands
-                           :last-pattern "[["
-                           :forward-pos 2)
-         (state/set-editor-show-page-search false))
-       :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))
+    (let [pos (:editor/last-saved-cursor @state/state)
+          input (gdom/getElement id)]
+      (when input
+        (let [current-pos (:pos (util/get-caret-pos input))
+              edit-content (state/sub :edit-content)
+              q (subs edit-content pos current-pos)
+              matched-pages (when-not (string/blank? q)
+                              (get-matched-pages q))]
+          (ui/auto-complete
+           matched-pages
+           (fn [chosen click?]
+             (insert-command! id
+                              (util/format "[[%s]]" chosen)
+                              {:last-pattern (str "[[" q)
+                               :postfix-fn (fn [s] (util/replace-first "]]" s ""))})
+             (state/set-editor-show-page-search false))
+           :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))))
 
 (rum/defc date-picker < rum/reactive
   [id]
@@ -86,12 +123,9 @@
         (util/stop e)
         (let [journal (util/journal-name (tc/to-date date))]
           ;; similar to page reference
-          (commands/insert! id (str "[[" journal)
-                            *slash-caret-pos
-                            *show-commands
-                            *matched-commands
-                            :last-pattern "[["
-                            :forward-pos 2)
+          (insert-command! id
+                           (util/format "[[%s]]" journal)
+                           nil)
           (state/set-editor-show-date-picker false)))})))
 
 (rum/defcs input < rum/reactive
@@ -228,7 +262,7 @@
   (let [{:keys [top left pos]} (rum/react *slash-caret-pos)]
     [:div.absolute.rounded-md.shadow-lg
      {:style (merge
-              {:top (+ top 20)
+              {:top (+ top 24)
                :left left}
               (if set-default-width?
                 {:width 400}))}
@@ -241,6 +275,24 @@
     :timeout {:enter 500
               :exit 300}}
    (absolute-modal cp set-default-width?)))
+
+(rum/defc image-uploader < rum/reactive
+  [id]
+  [:<>
+   [:input
+    {:id "upload-file"
+     :type "file"
+     :on-change (fn [e]
+                  (let [files (.-files (.-target e))]
+                    (upload-image id files *image-uploading? false)))
+     :hidden true}]
+   (when-let [uploading? (rum/react *image-uploading?)]
+     (let [processing (rum/react *image-uploading-process)]
+       (transition-cp
+        [:div.flex.flex-row.align-center
+         [:span.lds-dual-ring.mr-2]
+         [:span {:style {:margin-top 2}}
+          (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
 
 (rum/defc box < rum/reactive
   (mixins/event-mixin
@@ -281,8 +333,9 @@
                  (reset! *show-commands false))))
          }
         (fn [e key-code]
-          (swap! state/state assoc
-                 :editor/last-saved-cursor nil)))
+          ;; (swap! state/state assoc
+          ;;        :editor/last-saved-cursor nil)
+          ))
        (mixins/on-key-up
         state
         {
@@ -297,13 +350,18 @@
           (when (not= key-code 191)     ; not /
             (let [matched-commands (get-matched-commands input)]
               (if (seq matched-commands)
-                (if (= key-code 9)      ;tab
-                  (do
-                    (util/stop e)
-                    (insert-command! input-id (last (first matched-commands))))
-                  (do
-                    (reset! *matched-commands matched-commands)
-                    (reset! *show-commands true)))
+                (do
+                  (cond
+                    (= key-code 9)      ;tab
+                    (do
+                      (util/stop e)
+                      (insert-command! input-id (last (first matched-commands)) nil))
+
+                    :else
+                    (do
+                      (reset! *matched-commands matched-commands)
+                      (reset! *show-commands true))
+                    ))
                 (reset! *show-commands false)))))))))
   {:init (fn [state _props]
            (let [[content {:keys [dummy?]}] (:rum/args state)]
@@ -311,9 +369,7 @@
              (state/set-edit-content!
               (if dummy?
                 (string/triml content)
-                (string/trim content)))
-             (swap! state/state assoc
-                    :editor/last-saved-cursor nil))
+                (string/trim content))))
            state)
    :did-mount (fn [state]
                 (let [[content opts id] (:rum/args state)]
@@ -325,10 +381,7 @@
                        (dnd/subscribe!
                         input
                         :upload-images
-                        {:drop (fn [e files]
-                                 (js/console.dir files)
-                                 (handler/upload-image
-                                  id files *slash-caret-pos *show-commands *matched-commands true))})))
+                        {:drop (fn [e files] (upload-image id files *image-uploading? true))})))
                    state)
    :will-unmount (fn [state]
                    (let [[content opts id] (:rum/args state)]
@@ -336,15 +389,7 @@
                        (dnd/unsubscribe!
                         input
                         :upload-images)))
-                   state)
-   :did-update (fn [state]
-                 (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-                   (let [[_content _opts id] (:rum/args state)
-                         input (gdom/getElement id)]
-                     (when input
-                       (.focus input)
-                       (util/move-cursor-to input saved-cursor))))
-                 state)}
+                   state)}
   [content {:keys [on-hide dummy? node]
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)]
@@ -376,26 +421,19 @@
      (transition-cp
       (input id
              (fn [{:keys [link label]} pos]
-               (when-not (and (string/blank? link)
-                              (string/blank? label))
-                 (commands/insert! id
-                                   (util/format "[[%s][%s]]"
-                                                (or link "")
-                                                (or label ""))
-                                   *slash-caret-pos
-                                   *show-commands
-                                   *matched-commands
-                                   :last-pattern "[["
-                                   :postfix-fn (fn [s]
-                                                 (util/replace-first "][]]" s ""))))
-               (state/set-editor-show-input nil)))
+               (if (and (string/blank? link)
+                        (string/blank? label))
+                 nil
+                 (insert-command! id
+                                  (util/format "[[%s][%s]]"
+                                               (or link "")
+                                               (or label ""))
+                                  {:last-pattern "/link"}))
+               (state/set-editor-show-input nil)
+               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+                 (when-let [input (gdom/getElement id)]
+                   (.focus input)
+                   (util/move-cursor-to input saved-cursor)))))
       true)
 
-     [:input
-      {:id "upload-file"
-       :type "file"
-       :on-change (fn [e]
-                    (let [files (.-files (.-target e))]
-                      (handler/upload-image
-                       id files *slash-caret-pos *show-commands *matched-commands false)))
-       :hidden true}]]))
+     (image-uploader id)]))

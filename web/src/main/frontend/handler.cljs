@@ -560,38 +560,48 @@
       (state/update-state! :journals-length inc))))
 
 (defn request-presigned-url
-  [file filename mime-type url-handler]
+  [file filename mime-type uploading? url-handler on-processing]
   (cond
-    (> (gobj/get file "size") (* 20 1024 1024))
-    (show-notification! [:p "Sorry, we don't support any file that's larger than 20MB."] :error)
+    (> (gobj/get file "size") (* 12 1024 1024))
+    (show-notification! [:p "Sorry, we don't support any file that's larger than 12MB."] :error)
 
     :else
-    (util/post (str config/api "presigned_url")
-               {:filename filename
-                :mime-type mime-type}
-               (fn [{:keys [presigned-url s3-object-key] :as resp}]
-                 (if presigned-url
-                   (util/upload presigned-url
-                                file
-                                (fn [_result]
-                                  ;; request cdn signed url
-                                  (util/post (str config/api "signed_url")
-                                             {:s3-object-key s3-object-key}
-                                             (fn [{:keys [signed-url]}]
-                                               (if signed-url
-                                                 (do
-                                                   (url-handler signed-url))
-                                                 (prn "Something error, can't get a valid signed url.")))
-                                             (fn [error]
-                                               (prn "Something error, can't get a valid signed url."))))
-                                (fn [error]
-                                  (prn "upload failed.")
-                                  (js/console.dir error)))
-                   ;; TODO: notification, or re-try
-                   (prn "failed to get any presigned url, resp: " resp)))
-               (fn [_error]
-                 ;; (prn "Get token failed, error: " error)
-                 ))))
+    (do
+      (reset! uploading? true)
+      ;; start uploading?
+      (util/post (str config/api "presigned_url")
+                {:filename filename
+                 :mime-type mime-type}
+                (fn [{:keys [presigned-url s3-object-key] :as resp}]
+                  (if presigned-url
+                    (util/upload presigned-url
+                                 file
+                                 (fn [_result]
+                                   ;; request cdn signed url
+                                   (util/post (str config/api "signed_url")
+                                              {:s3-object-key s3-object-key}
+                                              (fn [{:keys [signed-url]}]
+                                                (reset! uploading? false)
+                                                (if signed-url
+                                                  (do
+                                                    (url-handler signed-url))
+                                                  (prn "Something error, can't get a valid signed url.")))
+                                              (fn [error]
+                                                (reset! uploading? false)
+                                                (prn "Something error, can't get a valid signed url."))))
+                                 (fn [error]
+                                   (reset! uploading? false)
+                                   (prn "upload failed.")
+                                   (js/console.dir error))
+                                 (fn [e]
+                                   (on-processing e)))
+                    ;; TODO: notification, or re-try
+                    (do
+                      (reset! uploading? false)
+                      (prn "failed to get any presigned url, resp: " resp))))
+                (fn [_error]
+                  ;; (prn "Get token failed, error: " error)
+                  (reset! uploading? false))))))
 
 (defn set-me-if-exists!
   []
@@ -878,23 +888,6 @@
               (periodically-pull-and-push repo {:pull-now? true}))
             (clone-and-pull repo)))))
     (watch-config!)))
-
-(defn upload-image
-  [id files *slash-caret-pos *show-commands *matched-commands drop?]
-  (image/upload
-   files
-   (fn [file file-name file-type]
-     (request-presigned-url
-      file file-name file-type
-      (fn [signed-url]
-        (commands/insert! id
-                          (util/format "[[%s][%s]]"
-                                       signed-url
-                                       file-name)
-                          *slash-caret-pos
-                          *show-commands
-                          *matched-commands
-                          :last-pattern (if drop? "" "/")))))))
 
 (comment
 

@@ -415,7 +415,7 @@
   (let [agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t
                                    (str "mr-1 cursor"))
-        marker (if (contains? #{"DOING" "IN-PROGRESS" "WAIT"} marker)
+        marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT"} marker)
                  [:span {:class (str "task-status " (string/lower-case marker))
                          :style {:margin-right 3.5}}
                   (string/upper-case marker)])
@@ -433,17 +433,18 @@
                           name]])
                       tags)))
         heading-part (when level
-                       (let [element (keyword (str "h" level))
-                             level-str [:a.initial-color {:href (str "/page/" uuid)}
-                                        (str (apply str (repeat level "*")) " ")]]
+                       (let [element (if (<= level 6)
+                                       (keyword (str "h" level))
+                                       :div)]
                          (->elem element
-                                 {:id anchor}
+                                 (merge
+                                  {:id anchor}
+                                  (when marker
+                                    {:class (string/lower-case marker)}))
                                  (remove-nils
                                   (concat
-                                   [
-                                    ;; (when-not agenda? level-str)
-                                    checkbox
-                                    marker
+                                   [checkbox
+                                    marker-cp
                                     priority]
                                    (map-inline title)
                                    [tags])))))]

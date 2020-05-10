@@ -142,12 +142,17 @@
                     (on-failed resp))))))))
 
 (defn upload
-  [url file on-ok on-failed]
-  (-> (js/fetch url (clj->js {:method "put"
-                              :body file}))
-      (.then #(if (.-ok %)
-                (on-ok %)
-                (on-failed %)))))
+  [url file on-ok on-failed on-progress]
+  (let [xhr (js/XMLHttpRequest.)]
+    (.open xhr "put" url)
+    (gobj/set xhr "onload" on-ok)
+    (gobj/set xhr "onerror" on-failed)
+    (when (and (gobj/get xhr "upload")
+               on-progress)
+      (gobj/set (gobj/get xhr "upload")
+                "onprogress"
+                on-progress))
+    (.send xhr file)))
 
 (defn post
   [url body on-ok on-failed]
@@ -449,8 +454,9 @@
 
 (defn replace-last [pattern s new-value]
   (when-let [last-index (string/last-index-of s pattern)]
-    (str (subs s 0 last-index)
-         new-value)))
+    (str (string/trimr (subs s 0 last-index))
+         " "
+         (string/triml new-value))))
 
 (defn cursor-move-back [input n]
   (let [{:keys [pos]} (get-caret-pos input)]
@@ -465,6 +471,11 @@
 (defn move-cursor-to [input n]
   (set! (.-selectionStart input) n)
   (set! (.-selectionEnd input) n))
+
+(defn move-cursor-to-end
+  [input]
+  (let [pos (count (gobj/get input "value"))]
+    (move-cursor-to input pos)))
 
 ;; copied from re_com
 (defn deref-or-value
