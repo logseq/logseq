@@ -120,6 +120,13 @@
        "Starred"]]
      (starred-pages page-active? close-modal-fn)]))
 
+(rum/defc loading
+  [content]
+  [:div.flex.flex-row.align-center
+   [:span.lds-dual-ring.mr-2]
+   [:span {:style {:margin-top 2}}
+    content]])
+
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   []
@@ -133,22 +140,23 @@
     [:div.max-w-7xl.mx-auto
      (cond
        cloning?
-       [:div "Cloning ..."]
+       (loading "Cloning ")
 
        (seq latest-journals)
        (journal/journals latest-journals)
 
        importing-to-db?
-       [:div "Parsing files ..."]
+       (loading "Parsing files")
 
        loading-files?
-       [:div "Loading files ..."]
+       (loading "Loading files")
 
        (empty? (:repos me))
        (widgets/add-repo)
 
        (nil? (:email me))
-       (settings/set-email))]))
+       (settings/set-email))
+     ]))
 
 (rum/defc custom-context-menu-content
   []
