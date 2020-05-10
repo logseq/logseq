@@ -25,13 +25,20 @@
   [state]
   (let [encoded-page-name (get-page-name state)
         page-name (string/capitalize (util/url-decode encoded-page-name))
-        page-headings (-> (db/get-page-headings page-name)
-                          (db/with-dummy-heading))
-        hiccup (hiccup/->hiccup page-headings {:id encoded-page-name})
+        journal? (db/journal-page? page-name)
+        page-headings (db/get-page-headings page-name)
+        page-headings (if journal?
+                        (update (vec page-headings) 0 assoc :heading/lock? true)
+                        page-headings)
+        page-headings (db/with-dummy-heading page-headings)
+        start-level (if journal? 2 1)
+        hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
+                                               :start-level start-level})
 
         ref-headings (db/get-page-referenced-headings page-name)
         ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
-        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name})
+        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
+                                                  :start-level start-level})
         page-name (string/capitalize page-name)
         repo (state/get-current-repo)
         starred? (contains? (set

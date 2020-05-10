@@ -13,17 +13,20 @@
 
 (rum/defc journal-cp
   [[title headings]]
-  (let [headings (db/with-dummy-heading headings)
-        ;; Don't edit the journal title
-        headings (if (seq headings)
-                   (update headings 0 assoc :heading/lock? true))
+  (let [;; Don't edit the journal title
+        headings (when (seq headings)
+                   (update (vec headings) 0 assoc :heading/lock? true))
+        headings (db/with-dummy-heading headings)
+
         encoded-page-name (util/url-encode (string/capitalize title))]
     [:div.flex-1
      [:a.initial-color {:href (str "/page/" encoded-page-name)}
       [:h1.title
        title]]
      (content/content encoded-page-name :org
-                      {:hiccup (hiccup/->hiccup headings {:id encoded-page-name})})
+                      {:hiccup (hiccup/->hiccup headings
+                                                {:id encoded-page-name
+                                                 :start-level 2})})
 
      (reference/references title)]))
 

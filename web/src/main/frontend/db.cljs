@@ -664,7 +664,8 @@
                                          :end-pos nil}
                           :heading/children nil
                           :heading/dummy? true
-                          :heading/marker nil}))]
+                          :heading/marker nil
+                          :heading/lock? false}))]
       (vec (concat headings [dummy])))))
 
 ;; TODO: sorted by last-modified-at
@@ -702,6 +703,10 @@
     ;; (prn {:db db})
     (d/pull-many (d/db conn) '[:heading/content]
                  (mapv (fn [id] [:heading/uuid id]) heading-uuids))))
+
+(defn journal-page?
+  [page-name]
+  (:page/journal? (entity [:page/name page-name])))
 
 (defn reset-config!
   [repo-url content]

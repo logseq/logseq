@@ -295,7 +295,8 @@
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
         collapsed? (or toggle-collapsed? @collapsed-atom?)
-        agenda? (= (:id config) "agenda")]
+        agenda? (= (:id config) "agenda")
+        start-level (or (:start-level config) 1)]
     [:<>
      (if show-page?
        (let [page (db/entity (:db/id page))]
@@ -318,10 +319,9 @@
                           (when (has-children? heading-id level)
                             (reset! control-show? false)))}
          (when-not agenda?
-           [:div.hd-control.flex.flex-row.items-center {:style {:margin-left (str (max 0 (- level 2)) "rem")
+           [:div.hd-control.flex.flex-row.items-center {:style {:margin-left (str (max 0 (- level start-level)) "rem")
                                                                 :height 24
-                                                                :margin-right "0.3rem"
-                                                                }}
+                                                                :margin-right "0.3rem"}}
             [:a.heading-control.flex.flex-row.items-center.justify-center
              {:id (str "control-" uuid)
               :style {:width 14
