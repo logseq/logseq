@@ -147,64 +147,52 @@
 
 (defn get-state
   [state]
-  (let [[_ {:keys [on-hide dummy?]} id] (:rum/args state)
+  (let [[_ {:keys [on-hide heading-id heading-parent-id dummy?]} id] (:rum/args state)
         node (gdom/getElement id)
         value (gobj/get node "value")
         pos (gobj/get node "selectionStart")]
     {:on-hide on-hide
      :dummy? dummy?
      :id id
+     :heading-id heading-id
+     :heading-parent-id heading-parent-id
      :node node
      :value value
      :pos pos}))
 
 (defn on-up-down
   [state e up?]
-  (let [{:keys [id dummy? on-hide value pos]} (get-state state)
-        heading? (string/starts-with? id "edit-heading-")
+  (let [{:keys [id heading-id heading-parent-id dummy? on-hide value pos]} (get-state state)
         element (gdom/getElement id)
         line-height (util/get-textarea-line-height element)]
-    (when (and heading?
+    (when (and heading-id
                (or (and up? (util/textarea-cursor-first-row? element line-height))
                    (and (not up?) (util/textarea-cursor-end-row? element line-height))))
       (util/stop e)
       (let [f (if up? gdom/getPreviousElementSibling gdom/getNextElementSibling)
-            heading-id (string/replace id "edit-heading-" "")
-            heading-parent (str "ls-heading-parent-" heading-id)
-            sibling-heading (f (gdom/getElement heading-parent))
-            id (gobj/get sibling-heading "id")]
-        (when id
-          (let [id (uuid (string/replace id "ls-heading-parent-" ""))]
-            (on-hide value)
-            ;; FIXME: refactor later
-            ;; (let [heading (db/entity [:heading/uuid (uuid heading-id)])]
-            ;;   (handler/save-heading-if-changed! heading value))
-            (handler/edit-heading! id pos)))))))
+            sibling-heading (f (gdom/getElement heading-parent-id))
+            _ (js/console.dir sibling-heading)
+            heading-id (d/attr sibling-heading "headingid")]
+        (when heading-id
+          (handler/edit-heading! (uuid heading-id) pos))))))
 
 (defn on-backspace
   [state e]
-  (let [{:keys [id dummy? value on-hide pos]} (get-state state)
-        edit-content (state/get-edit-content)
-        heading? (string/starts-with? id "edit-heading-")]
-    (when (and heading? (= value ""))
+  (let [{:keys [id heading-id heading-parent-id dummy? value on-hide pos]} (get-state state)
+        edit-content (state/get-edit-content)]
+    (when (and heading-id (= value ""))
       (if @*should-delete?
         (do
           (reset! *should-delete? false)
           (util/stop e)
           ;; delete heading, edit previous heading
-          (let [heading-id (string/replace id "edit-heading-" "")
-                heading (db/entity [:heading/uuid (uuid heading-id)])
-                heading-parent (str "ls-heading-parent-" heading-id)
-                heading-parent (gdom/getElement heading-parent)
-                current-idx (util/parse-int (gobj/get heading-parent "idx"))
+          (let [heading (db/entity [:heading/uuid heading-id])
+                heading-parent (gdom/getElement heading-parent-id)
                 sibling-heading (gdom/getPreviousElementSibling heading-parent)
-                id (gobj/get sibling-heading "id")]
-            (let [heading (db/entity [:heading/uuid (uuid heading-id)])]
-              (handler/delete-heading! heading dummy?))
-
-            (when id
-              (let [id (uuid (string/replace id "ls-heading-parent-" ""))]
-                (handler/edit-heading! id :max)))))
+                sibling-heading-id (d/attr sibling-heading "headingid")]
+            (handler/delete-heading! heading dummy?)
+            (when sibling-heading-id
+              (handler/edit-heading! (uuid sibling-heading-id) :max))))
         (reset! *should-delete? true)))))
 
 (defn get-matched-commands

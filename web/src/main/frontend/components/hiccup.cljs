@@ -305,8 +305,8 @@
        [:div.ls-heading-parent.flex-1
         {:key (str uuid)
          :id heading-id
+         :headingid (str uuid)
          :level level
-         :idx idx
          :class (if dummy? "dummy")}
         ;; control
         [:div.flex.flex-row
@@ -359,6 +359,8 @@
          (if edit?
            (editor/box content {:on-hide (fn [value]
                                            (handler/save-heading-if-changed! heading value))
+                                :heading-id uuid
+                                :heading-parent-id heading-id
                                 :dummy? dummy?}
                        edit-input-id)
            [:div.flex-1.heading-body
