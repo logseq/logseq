@@ -9,7 +9,6 @@
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
-            [frontend.format.org-mode :as org]
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]

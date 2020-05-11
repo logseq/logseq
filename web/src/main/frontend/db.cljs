@@ -5,7 +5,7 @@
             [medley.core :as medley]
             [datascript.transit :as dt]
             [frontend.format :as format]
-            [frontend.format.org-mode :as org]
+            [frontend.format.org-md :as org-md]
             [frontend.format.block :as block]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -414,7 +414,11 @@
 
 (defn extract-pages-and-headings
   [file content utf8-content journal? pages-fn]
-  (let [ast (org/->edn content nil)
+
+  (let [format (format/get-format file)
+        _ (prn "file: " file ", format: " format)
+        ast (org-md/->edn content
+                          (org-md/default-config format))
         headings (block/extract-headings ast (utf8/length utf8-content))
         pages (pages-fn headings ast)
         ref-pages (atom #{})
@@ -656,7 +660,7 @@
                        (let [uuid (d/squuid)]
                          {:heading/uuid uuid
                           :heading/title ""
-                          :heading/content "** "
+                          :heading/content config/default-empty-heading
                           :heading/level 2
                           :heading/priority nil
                           :heading/anchor (str uuid)

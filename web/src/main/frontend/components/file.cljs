@@ -7,7 +7,6 @@
             [frontend.db :as db]
             [frontend.components.hiccup :as hiccup]
             [frontend.ui :as ui]
-            [frontend.format.org-mode :as org]
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]))
@@ -35,7 +34,7 @@
 (rum/defcs file < rum/reactive
   [state]
   (let [[encoded-path path] (get-path state)
-        format (keyword (string/lower-case (last (string/split path #"\."))))]
+        format (format/get-format path)]
     (cond
       ;; image type
       (and format (contains? (config/img-formats) format))

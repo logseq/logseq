@@ -61,9 +61,13 @@
              (img-formats)))
 
 (defonce hiccup-support-formats
-  #{:org})
+  #{:org :markdown})
 
 (defonce config-file "logseq.json")
 
 (def mobile?
   (re-find #"Mobi" js/navigator.userAgent))
+
+;; Format
+(defonce default-empty-heading
+  "** ")

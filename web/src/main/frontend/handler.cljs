@@ -837,7 +837,7 @@
                  (db/entity [:heading/uuid heading-id])
                  ;; dummy?
                  {:heading/uuid heading-id
-                  :heading/content "** "})]
+                  :heading/content config/default-empty-heading})]
     (let [{:heading/keys [content]} heading
           edit-input-id (str "edit-heading-" heading-id)
           content-length (count content)

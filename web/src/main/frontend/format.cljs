@@ -1,12 +1,10 @@
 (ns frontend.format
-  (:require [frontend.format.org-mode :refer [->OrgMode] :as org]
-            [frontend.format.markdown :refer [->MdMode] :as markdown]
+  (:require [frontend.format.org-md :refer [->OrgMdMode] :as org-md]
             [frontend.format.adoc :refer [->AdocMode]]
             [frontend.format.protocol :as protocol]
             [clojure.string :as string]))
 
-(defonce org-record (->OrgMode))
-(defonce markdown-record (->MdMode))
+(defonce org-md-record (->OrgMdMode))
 (defonce adoc-record (->AdocMode))
 
 (defn normalize
@@ -26,9 +24,9 @@
   [format]
   (case (normalize format)
     :org
-    org-record
+    org-md-record
     :markdown
-    markdown-record
+    org-md-record
     :adoc
     adoc-record
     nil))
@@ -36,10 +34,7 @@
 ;; html
 (defn get-default-config
   [format]
-  (case format
-    :org org/default-config
-    :markdown markdown/default-config
-    nil))
+  (org-md/default-config format))
 
 (defn to-html
   ([content format]

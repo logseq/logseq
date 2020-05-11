@@ -7,7 +7,6 @@
             [frontend.db :as db]
             [frontend.components.hiccup :as hiccup]
             [frontend.ui :as ui]
-            [frontend.format.org-mode :as org]
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]
