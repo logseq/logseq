@@ -292,7 +292,7 @@
          main-content]]]
       [:a#menu.mr-4.hover:text-gray-700.text-gray-500.absolute.hidden
        {:style {:position "absolute"
-                :top 10
+                :top 6
                 :left 16
                 :z-index 111}
         :on-click (fn []
