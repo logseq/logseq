@@ -179,6 +179,12 @@
     [:a {:id s} s]
     ;; [:a {:href (str "/page/" (util/url-encode s))} (str "<<<" s ">>>")]
 
+    ["Email" address]
+    (let [{:keys [local_part domain]} address
+          address (str local_part "@" domain)]
+      [:a {:href (str "mainto:" address)}
+       address])
+
     ["Link" link]
     (let [{:keys [url label]} link]
       (match url
