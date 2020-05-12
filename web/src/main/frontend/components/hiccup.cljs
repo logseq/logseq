@@ -157,8 +157,9 @@
     (let [elem (case kind
                  "Bold" :b
                  "Italic" :i
-                 "Underline" :u
-                 "Strike_through" :del)]
+                 "Underline" :ins
+                 "Strike_through" :del
+                 "Highlight" :mark)]
       (->elem elem (map-inline data)))
     ["Entity" e]
     [:span {:dangerouslySetInnerHTML
@@ -286,7 +287,7 @@
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::control-show?)
   (rum/local false ::collapsed?)
-  [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page] :as heading} heading-part config]
+  [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
   (let [control-show? (get state ::control-show?)
         ref? (boolean (:ref? config))
         edit-input-id (str "edit-heading-" (if ref? (:id config)) uuid)
@@ -361,6 +362,7 @@
                                            (handler/save-heading-if-changed! heading value))
                                 :heading-id uuid
                                 :heading-parent-id heading-id
+                                :format format
                                 :dummy? dummy?}
                        edit-input-id)
            [:div.flex-1.heading-body
@@ -410,7 +412,7 @@
     nil))
 
 (defn heading
-  [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children]
+  [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children format]
            :as t}]
   (let [agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t

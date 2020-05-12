@@ -136,9 +136,13 @@
         me (state/sub :me)
         journals-length (state/sub :journals-length)
         current-repo (state/sub :git/current-repo)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
+        preferred-format (state/sub [:me :preferred_format])]
     [:div.max-w-7xl.mx-auto
      (cond
+       (not preferred-format)
+       (widgets/choose-preferred-format)
+
        cloning?
        (loading "Cloning ")
 

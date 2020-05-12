@@ -6,11 +6,6 @@
 (defn loaded? []
   js/window.Asciidoctor)
 
-(defn to-html
-  [content config]
-  (when (loaded?)
-    (.makeHtml (js/window.showdown.Converter.) content)))
-
 (defn ->edn
   [content config]
   nil)

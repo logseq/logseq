@@ -69,5 +69,10 @@
   (re-find #"Mobi" js/navigator.userAgent))
 
 ;; Format
-(defonce default-empty-heading
-  "** ")
+(defn default-empty-heading
+  [format]
+  (case format
+    :org
+    "** "
+    :markdown
+    "## "))

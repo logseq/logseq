@@ -41,6 +41,4 @@
   (loaded? [this]
     (some? (loaded?)))
   (lazyLoad [this ok-handler]
-    (loader/load
-     (config/asset-uri "/static/js/mldoc_org.min.js")
-     ok-handler)))
+    true))

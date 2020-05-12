@@ -142,11 +142,14 @@
 (def marker-pattern
   #"(TODO|DOING|DONE|WAIT|CANCELED|STARTED|IN-PROGRESS)?\s?")
 
-(defmethod handle-step :editor/set-marker [[_ marker]]
+(defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (state/get-edit-content)
-            pos (count (re-find #"\*+\s" edit-content))
+            re-pattern (if (= :org format)
+                         #"\*+\s"
+                         #"#+\s")
+            pos (count (re-find re-pattern edit-content))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
                                                  marker-pattern
@@ -170,6 +173,6 @@
   (prn "No handler for step: " type))
 
 (defn handle-steps
-  [vector]
+  [vector format]
   (doseq [step vector]
-    (handle-step step)))
+    (handle-step step format)))

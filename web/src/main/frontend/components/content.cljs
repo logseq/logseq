@@ -22,11 +22,11 @@
 
 (defn lazy-load-js
   [state]
-  (let [format (nth (:rum/args state) 1)
-        loader? (contains? config/html-render-formats format)]
-    (when loader?
-      (when-not (format/loaded? format)
-        (handler/lazy-load format)))))
+  (when-let [format (:format (last (:rum/args state)))]
+    (let [loader? (contains? config/html-render-formats format)]
+      (when loader?
+        (when-not (format/loaded? format)
+          (handler/lazy-load format))))))
 
 (defn highlight-block-if-fragment
   []
@@ -87,7 +87,8 @@
   (let [edit? (= (state/sub-edit-input-id) id)
         loading (state/sub :format/loading)]
     (if edit?
-      (editor/box content {:on-hide on-hide} id)
+      (editor/box content {:on-hide on-hide
+                           :format format} id)
       (let [format (format/normalize format)
             loading? (get loading format)
             markup? (contains? config/html-render-formats format)
@@ -149,12 +150,13 @@
                  (handler/render-local-images!)
                  (lazy-load-js state)
                  state)}
-  [state id format {:keys [config
-                           hiccup
-                           content
-                           on-click
-                           on-hide]}]
-  (let [format (format/normalize format)]
-    (if (contains? config/hiccup-support-formats format)
-      (hiccup-content id hiccup)
+  [state id {:keys [format
+                    config
+                    hiccup
+                    content
+                    on-click
+                    on-hide]}]
+  (if hiccup
+    (hiccup-content id hiccup)
+    (let [format (format/normalize format)]
       (non-hiccup-content id content on-click on-hide config format))))

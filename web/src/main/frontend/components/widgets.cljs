@@ -5,6 +5,25 @@
             [clojure.string :as string]
             [frontend.ui :as ui]))
 
+(rum/defcs choose-preferred-format
+  []
+  [:div
+   [:h1.title {:style {:margin-bottom "0.25rem"}}
+    "What's your preferred mode?"]
+   [:span.text-gray-500.text-sm.ml-1
+    "It'll be used for new pages."]
+
+   [:div.mt-4.ml-1
+    (ui/button
+      "Markdown"
+      #(handler/set-preferred-format! :markdown))
+
+    [:span.ml-2.mr-2 "-OR-"]
+
+    (ui/button
+      "Org Mode"
+      #(handler/set-preferred-format! :org))]])
+
 (rum/defcs add-repo < (rum/local "" ::repo-url)
   [state]
   (let [repo-url (get state ::repo-url)]

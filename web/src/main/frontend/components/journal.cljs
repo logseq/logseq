@@ -12,18 +12,18 @@
             [frontend.utf8 :as utf8]))
 
 (rum/defc journal-cp
-  [[title headings]]
+  [[title headings format]]
   (let [;; Don't edit the journal title
         headings (when (seq headings)
                    (update (vec headings) 0 assoc :heading/lock? true))
-        headings (db/with-dummy-heading headings)
+        headings (db/with-dummy-heading headings format)
 
         encoded-page-name (util/url-encode (string/capitalize title))]
     [:div.flex-1
      [:a.initial-color {:href (str "/page/" encoded-page-name)}
       [:h1.title
        title]]
-     (content/content encoded-page-name :org
+     (content/content encoded-page-name
                       {:hiccup (hiccup/->hiccup headings
                                                 {:id encoded-page-name
                                                  :start-level 2})})
@@ -34,8 +34,8 @@
   [latest-journals]
   [:div#journals
    (ui/infinite-list
-    (for [[journal-name body] latest-journals]
+    (for [[journal-name body format] latest-journals]
       [:div.journal.content {:key journal-name}
-       (journal-cp [journal-name body])])
+       (journal-cp [journal-name body format])])
     {:on-load (fn []
                 (handler/load-more-journals!))})])

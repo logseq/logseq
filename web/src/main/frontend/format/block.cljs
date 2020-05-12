@@ -165,6 +165,7 @@
                                       heading
                                       {:heading/meta meta
                                        :heading/file file
+                                       :heading/format format
                                        :heading/page page
                                        :heading/content (utf8/substring encoded-content
                                                                         (:pos meta)

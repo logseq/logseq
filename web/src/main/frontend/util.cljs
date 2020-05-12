@@ -183,14 +183,14 @@
     :weekday (get-weekday date)}))
 
 (defn journals-path
-  [year month]
+  [year month preferred-format]
   (let [month (if (< month 10) (str "0" month) month)]
-    (str "journals/" year "_" month ".org")))
+    (str "journals/" year "_" month "." (string/lower-case (name preferred-format)))))
 
 (defn current-journal-path
-  []
+  [preferred-format]
   (let [{:keys [year month]} (get-date)]
-    (journals-path year month)))
+    (journals-path year month preferred-format)))
 
 (defn zero-pad
   [n]

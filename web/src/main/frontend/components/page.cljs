@@ -24,12 +24,13 @@
   [state]
   (let [encoded-page-name (get-page-name state)
         page-name (string/capitalize (util/url-decode encoded-page-name))
+        format (db/get-page-format page-name)
         journal? (db/journal-page? page-name)
         page-headings (db/get-page-headings page-name)
         page-headings (if journal?
                         (update (vec page-headings) 0 assoc :heading/lock? true)
                         page-headings)
-        page-headings (db/with-dummy-heading page-headings)
+        page-headings (db/with-dummy-heading page-headings format)
         start-level (if journal? 2 1)
         hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
                                                :start-level start-level})
@@ -56,14 +57,14 @@
          (svg/star-solid "stroke-current")
          (svg/star-outline "stroke-current h-5 w-5"))]]
 
-     (content/content encoded-page-name :org
+     (content/content encoded-page-name
                       {:hiccup hiccup})
 
      (let [n-ref (count ref-headings)]
        (if (> n-ref 0)
          [:h2.font-bold.text-gray-400.mt-6 (let []
                                              (str n-ref " Linked References"))]))
-     (content/content encoded-page-name :org
+     (content/content encoded-page-name
                       {:hiccup ref-hiccup})]))
 
 (rum/defc all-pages < rum/reactive

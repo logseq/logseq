@@ -149,7 +149,7 @@
 (defn create-month-journal-if-not-exists
   [repo-url]
   (let [repo-dir (git/get-repo-dir repo-url)
-        path (util/current-journal-path)
+        path (util/current-journal-path (state/get-preferred-format))
         file-path (str "/" path)
         default-content (default-month-journal-content)]
     (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
@@ -837,7 +837,7 @@
                  (db/entity [:heading/uuid heading-id])
                  ;; dummy?
                  {:heading/uuid heading-id
-                  :heading/content config/default-empty-heading})]
+                  :heading/content (config/default-empty-heading (state/get-preferred-format))})]
     (let [{:heading/keys [content]} heading
           edit-input-id (str "edit-heading-" heading-id)
           content-length (count content)
@@ -872,6 +872,15 @@
   (when-let [headings (seq (get @state/state :selection/headings))]
     (let [ids (map #(util/get-heading-id (gobj/get % "id")) headings)]
       (delete-headings! ids))))
+
+(defn set-preferred-format!
+  [format]
+  (when format
+    (state/set-preferred-format! format)
+    (util/post (str config/api "set_preferred_format")
+               {:preferred_format (name format)}
+               (fn [])
+               (fn [_e]))))
 
 (defn start!
   []

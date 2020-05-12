@@ -90,6 +90,7 @@
    ;; heading
    :heading/uuid   {:db/unique      :db.unique/identity}
    :heading/file   {:db/valueType   :db.type/ref}
+   :heading/format {}
    :heading/page   {:db/valueType   :db.type/ref}
    :heading/ref-pages {:db/valueType   :db.type/ref
                        :db/cardinality :db.cardinality/many}
@@ -363,6 +364,12 @@
         seq-flatten
         sort-by-pos)))
 
+(defn get-page-format
+  [page-name]
+  (when-let [file (:page/file (entity [:page/name page-name]))]
+    (when-let [path (:file/path (entity (:db/id file)))]
+      (format/get-format path))))
+
 (defn get-page-headings
   ([page]
    (get-page-headings (state/get-current-repo)
@@ -416,7 +423,6 @@
   [file content utf8-content journal? pages-fn]
 
   (let [format (format/get-format file)
-        _ (prn "file: " file ", format: " format)
         ast (org-md/->edn content
                           (org-md/default-config format))
         headings (block/extract-headings ast (utf8/length utf8-content))
@@ -433,6 +439,7 @@
                                    (dissoc :ref-pages)
                                    (assoc :heading/content (get-heading-content utf8-content heading)
                                           :heading/file [:file/path file]
+                                          :heading/format (format/get-format file)
                                           :heading/page [:page/name (string/capitalize page)]
                                           :heading/ref-pages (mapv
                                                               (fn [page]
@@ -515,12 +522,16 @@
 ;; TODO: compare headings
 (defn reset-file!
   [repo-url file content]
-  (let [utf8-content (utf8/encode content)
+  (let [format (format/get-format file)
+        utf8-content (utf8/encode content)
         file-content [{:file/path file
                        :file/content content}]
-        delete-headings (delete-file-headings! repo-url file)
-        headings-pages (extract-headings-pages file content utf8-content)]
-    (transact! repo-url (concat file-content delete-headings headings-pages))))
+        tx (if (contains? config/hiccup-support-formats format)
+             (let [delete-headings (delete-file-headings! repo-url file)
+                   headings-pages (extract-headings-pages file content utf8-content)]
+               (concat file-content delete-headings headings-pages))
+             file-content)]
+    (transact! repo-url tx)))
 
 (defn get-file-content
   ([path]
@@ -590,7 +601,7 @@
 (defn get-current-journal-path
   []
   (let [{:keys [year month]} (util/get-date)]
-    (util/journals-path year month)))
+    (util/journals-path year month (state/get-preferred-format))))
 
 (defn get-journal
   ([]
@@ -642,7 +653,9 @@
                   (map first))]
        (mapv
         (fn [page]
-          [page (get-page-headings repo-url page)])
+          [page
+           (get-page-headings repo-url page)
+           (get-page-format page)])
         pages)))))
 
 (defn me-tx
@@ -652,7 +665,7 @@
                      :me/avatar avatar}))
 
 (defn with-dummy-heading
-  [headings]
+  [headings format]
   (when (seq headings)
     (let [last-heading (last headings)
           end-pos (get-in last-heading [:heading/meta :end-pos])
@@ -660,7 +673,7 @@
                        (let [uuid (d/squuid)]
                          {:heading/uuid uuid
                           :heading/title ""
-                          :heading/content config/default-empty-heading
+                          :heading/content (config/default-empty-heading format)
                           :heading/level 2
                           :heading/priority nil
                           :heading/anchor (str uuid)

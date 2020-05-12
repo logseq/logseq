@@ -26,9 +26,9 @@
 (defonce *image-uploading-process (atom 0))
 
 (defn- insert-command!
-  [id command-output {:keys [restore?]
-                      :or {restore? true}
-                      :as option}]
+  [id command-output format {:keys [restore?]
+                             :or {restore? true}
+                             :as option}]
   (cond
     ;; replace string
     (string? command-output)
@@ -36,7 +36,7 @@
 
     ;; steps
     (vector? command-output)
-    (commands/handle-steps command-output)
+    (commands/handle-steps command-output format)
 
     :else
     nil)
@@ -45,7 +45,7 @@
     (commands/restore-state restore?)))
 
 (defn- upload-image
-  [id files uploading? drop?]
+  [id files format uploading? drop?]
   (image/upload
    files
    (fn [file file-name file-type]
@@ -57,6 +57,7 @@
                          (util/format "[[%s][%s]]"
                                       signed-url
                                       file-name)
+                         format
                          {:last-pattern (if drop? "" "/")})
         (reset! *image-uploading-process 0))
       (fn [e]
@@ -66,7 +67,7 @@
           (reset! *image-uploading-process process)))))))
 
 (rum/defc commands < rum/reactive
-  [id]
+  [id format]
   (when (and (rum/react *show-commands)
              (not (state/sub :editor/show-page-search?))
              (not (state/sub :editor/show-input))
@@ -80,6 +81,7 @@
                                                 "Image Link"
                                                 "Date Picker"} chosen))]
            (insert-command! id (get (into {} matched) chosen)
+                            format
                             {:restore? restore-slash?})))))))
 
 (defn get-matched-pages
@@ -93,7 +95,7 @@
      pages)))
 
 (rum/defc page-search < rum/reactive
-  [id]
+  [id format]
   (when (state/sub :editor/show-page-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
           input (gdom/getElement id)]
@@ -108,13 +110,14 @@
            (fn [chosen click?]
              (insert-command! id
                               (util/format "[[%s]]" chosen)
+                              format
                               {:last-pattern (str "[[" q)
                                :postfix-fn (fn [s] (util/replace-first "]]" s ""))})
              (state/set-editor-show-page-search false))
            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))))
 
 (rum/defc date-picker < rum/reactive
-  [id]
+  [id format]
   (when (state/sub :editor/show-date-picker?)
     (ui/datepicker
      (t/today)
@@ -125,6 +128,7 @@
           ;; similar to page reference
           (insert-command! id
                            (util/format "[[%s]]" journal)
+                           format
                            nil)
           (state/set-editor-show-date-picker false)))})))
 
@@ -181,12 +185,13 @@
 
 (defn get-state
   [state]
-  (let [[_ {:keys [on-hide heading-id heading-parent-id dummy?]} id] (:rum/args state)
+  (let [[_ {:keys [on-hide heading-id heading-parent-id dummy? format]} id] (:rum/args state)
         node (gdom/getElement id)
         value (gobj/get node "value")
         pos (gobj/get node "selectionStart")]
     {:on-hide on-hide
      :dummy? dummy?
+     :format format
      :id id
      :heading-id heading-id
      :heading-parent-id heading-parent-id
@@ -276,14 +281,14 @@
    (absolute-modal cp set-default-width?)))
 
 (rum/defc image-uploader < rum/reactive
-  [id]
+  [id format]
   [:<>
    [:input
     {:id "upload-file"
      :type "file"
      :on-change (fn [e]
                   (let [files (.-files (.-target e))]
-                    (upload-image id files *image-uploading? false)))
+                    (upload-image id files format *image-uploading? false)))
      :hidden true}]
    (when-let [uploading? (rum/react *image-uploading?)]
      (let [processing (rum/react *image-uploading-process)]
@@ -346,22 +351,26 @@
          ;; backspace
          8 on-backspace}
         (fn [e key-code]
-          (when (not= key-code 191)     ; not /
-            (let [matched-commands (get-matched-commands input)]
-              (if (seq matched-commands)
-                (do
-                  (cond
-                    (= key-code 9)      ;tab
-                    (do
-                      (util/stop e)
-                      (insert-command! input-id (last (first matched-commands)) nil))
+          (let [format (:format (get-state state))]
+            (when (not= key-code 191)     ; not /
+             (let [matched-commands (get-matched-commands input)]
+               (if (seq matched-commands)
+                 (do
+                   (cond
+                     (= key-code 9)      ;tab
+                     (do
+                       (util/stop e)
+                       (insert-command! input-id
+                                        (last (first matched-commands))
+                                        format
+                                        nil))
 
-                    :else
-                    (do
-                      (reset! *matched-commands matched-commands)
-                      (reset! *show-commands true))
-                    ))
-                (reset! *show-commands false)))))))))
+                     :else
+                     (do
+                       (reset! *matched-commands matched-commands)
+                       (reset! *show-commands true))
+                     ))
+                 (reset! *show-commands false))))))))))
   {:init (fn [state _props]
            (let [[content {:keys [dummy?]}] (:rum/args state)]
              (reset! *should-delete? false)
@@ -380,7 +389,7 @@
                        (dnd/subscribe!
                         input
                         :upload-images
-                        {:drop (fn [e files] (upload-image id files *image-uploading? true))})))
+                        {:drop (fn [e files] (upload-image id files (:format opts) *image-uploading? true))})))
                    state)
    :will-unmount (fn [state]
                    (let [[content opts id] (:rum/args state)]
@@ -389,7 +398,7 @@
                         input
                         :upload-images)))
                    state)}
-  [content {:keys [on-hide dummy? node]
+  [content {:keys [on-hide dummy? node format]
             :or {dummy? false}} id]
   (let [value (state/sub :edit-content)]
     [:div.editor {:style {:position "relative"
@@ -406,15 +415,15 @@
                :background "transparent"
                :padding 0}})
      (transition-cp
-      (commands id)
+      (commands id format)
       true)
 
      (transition-cp
-      (page-search id)
+      (page-search id format)
       true)
 
      (transition-cp
-      (date-picker id)
+      (date-picker id format)
       false)
 
      (transition-cp
@@ -427,6 +436,7 @@
                                   (util/format "[[%s][%s]]"
                                                (or link "")
                                                (or label ""))
+                                  format
                                   {:last-pattern "/link"}))
                (state/set-editor-show-input nil)
                (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
@@ -435,4 +445,5 @@
                    (util/move-cursor-to input saved-cursor)))))
       true)
 
-     (image-uploader id)]))
+     (when format
+       (image-uploader id format))]))

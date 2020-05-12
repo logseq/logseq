@@ -42,14 +42,15 @@
 
       (and format (contains? config/hiccup-support-formats format))
       (let [headings (db/get-file-by-concat-headings path)
-            headings (db/with-dummy-heading headings)
+            headings (db/with-dummy-heading headings format)
             hiccup (hiccup/->hiccup headings {:id encoded-path})]
-        (content/content encoded-path format {:hiccup hiccup}))
+        (content/content encoded-path {:hiccup hiccup}))
 
       (and format (contains? (config/text-formats) format))
       (let [content (db/sub-file path)]
-        (content/content encoded-path format
+        (content/content encoded-path
                          {:content content
+                          :format format
                           :on-hide (fn []
                                      (when (handler/file-changed? content)
                                        (handler/alter-file (state/get-current-repo) path (state/get-edit-content) nil)))}))

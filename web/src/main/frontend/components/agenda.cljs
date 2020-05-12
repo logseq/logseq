@@ -16,6 +16,6 @@
        [:div.ml-1
         (let [tasks (block/sort-tasks tasks)
               id "agenda"]
-          (content/content id :org
+          (content/content id
                            {:hiccup (hiccup/->hiccup tasks {:id id})}))]
        "Empty"))])

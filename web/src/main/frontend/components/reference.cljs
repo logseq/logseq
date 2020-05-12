@@ -26,5 +26,5 @@
        (if (> n-ref 0)
          [:h2.font-bold.text-gray-400.mt-6 (let []
                                              (str n-ref " Linked References"))]))
-     (content/content encoded-page-name :org
+     (content/content encoded-page-name
                       {:hiccup ref-hiccup})]))

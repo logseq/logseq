@@ -27,7 +27,6 @@
 
              :github/contents {}
              :config {}
-
              :editor/show-page-search? false
              :editor/show-date-picker? false
              ;; With label or other data
@@ -66,6 +65,11 @@
   []
   (:git/current-repo @state))
 
+(defn get-preferred-format
+  []
+  (keyword
+   (get-in @state [:me :preferred_format] "markdown")))
+
 (defn get-repos
   []
   (get-in @state [:me :repos]))
@@ -74,6 +78,10 @@
   [repo]
   (swap! state assoc :git/current-repo repo)
   (storage/set :git/current-repo repo))
+
+(defn set-preferred-format!
+  [format]
+  (swap! state assoc-in [:me :preferred_format] (name format)))
 
 (defn delete-repo!
   [repo]
