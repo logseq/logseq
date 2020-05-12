@@ -24,8 +24,7 @@
                      (util/distinct-by :url))]
       [:div.flex.flex-row.align-center.whitespace-no-wrap
        [:a.hover:text-gray-300.text-gray-400
-        {:style {:margin-top 3
-                 :margin-right 13}
+        {:style {:margin-right 13}
          :on-click (fn []
                      (d/add-class! (d/by-id "menu")
                                    "md:block")
