@@ -284,12 +284,53 @@
      (when-let [child-level (d/attr next-heading "level")]
        (> child-level level)))))
 
+(defonce *control-show? (atom {}))
+
+(rum/defc heading-control < rum/reactive
+  [config uuid heading-id level start-level collapsed? collapsed-atom?]
+  (let [control-show (rum/react (rum/cursor *control-show? heading-id))]
+    [:div.hd-control.flex.flex-row.items-center
+    {:style {:margin-left (str (max 0 (- level start-level)) "rem")
+             :height 24
+             :margin-right "0.3rem"}}
+    [:a.heading-control.flex.flex-row.items-center.justify-center
+     {:id (str "control-" uuid)
+      :style {:width 14
+              :height 24}
+      :class "transition ease-in-out duration-150"
+      :on-click (fn [e]
+                  (util/stop e)
+                  (let [id (str "ls-heading-parent-" uuid)]
+                    (if collapsed?
+                      (expand/expand! (:id config) id)
+                      (expand/collapse! (:id config) id))
+                    (reset! collapsed-atom? (not collapsed?))))}
+     (cond
+       collapsed?
+       (svg/caret-right)
+
+       (and control-show
+            (has-children? heading-id level))
+       (svg/caret-down)
+
+       :else
+       [:span ""])]
+    [:a.flex.flex-row.items-center.justify-center
+     {:on-click (fn [])
+      :style {:width 14
+              :height 24}}
+     [:svg {:height 10
+            :width 10
+            :fill "currentColor"
+            :display "inline-block"}
+      [:circle {:cx 5
+                :cy 5
+                :r 2}]]]]))
+
 (rum/defcs heading-cp < rum/reactive
-  (rum/local false ::control-show?)
   (rum/local false ::collapsed?)
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
-  (let [control-show? (get state ::control-show?)
-        ref? (boolean (:ref? config))
+  (let [ref? (boolean (:ref? config))
         edit-input-id (str "edit-heading-" (if ref? (:id config)) uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
         heading-id (str "ls-heading-parent-" (if ref? (:id config)) uuid)
@@ -315,47 +356,14 @@
          {:style {:cursor "pointer"}
           :on-mouse-over (fn []
                            (when (has-children? heading-id level)
-                             (reset! control-show? true)))
+                             (swap! *control-show?
+                                    assoc heading-id true)))
           :on-mouse-out (fn []
                           (when (has-children? heading-id level)
-                            (reset! control-show? false)))}
+                            (swap! *control-show?
+                                   assoc heading-id false)))}
          (when-not agenda?
-           [:div.hd-control.flex.flex-row.items-center {:style {:margin-left (str (max 0 (- level start-level)) "rem")
-                                                                :height 24
-                                                                :margin-right "0.3rem"}}
-            [:a.heading-control.flex.flex-row.items-center.justify-center
-             {:id (str "control-" uuid)
-              :style {:width 14
-                      :height 24}
-              :class "transition ease-in-out duration-150"
-              :on-click (fn [e]
-                          (util/stop e)
-                          (let [id (str "ls-heading-parent-" uuid)]
-                            (if collapsed?
-                              (expand/expand! (:id config) id)
-                              (expand/collapse! (:id config) id))
-                            (reset! collapsed-atom? (not collapsed?))))}
-             (cond
-               collapsed?
-               (svg/caret-right)
-
-               (and @control-show?
-                    (has-children? heading-id level))
-               (svg/caret-down)
-
-               :else
-               [:span ""])]
-            [:a.flex.flex-row.items-center.justify-center
-             {:on-click (fn [])
-              :style {:width 14
-                      :height 24}}
-             [:svg {:height 10
-                    :width 10
-                    :fill "currentColor"
-                    :display "inline-block"}
-              [:circle {:cx 5
-                        :cy 5
-                        :r 2}]]]])
+           (heading-control config uuid heading-id level start-level collapsed? collapsed-atom?))
 
          (if edit?
            (editor/box content {:on-hide (fn [value]
