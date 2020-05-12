@@ -455,36 +455,6 @@
    (fn [_]
      (git-add repo-url path))))
 
-;; TODO: utf8 encode performance
-(defn check
-  [heading]
-  (let [repo-url (state/get-current-repo)
-        {:heading/keys [file marker meta uuid]} heading
-        pos (:pos meta)
-        file (db/entity (:db/id file))
-        file (:file/path file)]
-    (when-let [content (db/get-file-content repo-url file)]
-      (let [encoded-content (utf8/encode content)
-            content' (str (utf8/substring encoded-content 0 pos)
-                          (-> (utf8/substring encoded-content pos)
-                              (string/replace-first marker "DONE")))]
-        (alter-file repo-url file content' nil)))))
-
-(defn uncheck
-  [heading]
-  (let [repo-url (state/get-current-repo)
-        {:heading/keys [file marker meta]} heading
-        pos (:pos meta)
-        file (db/entity (:db/id file))
-        file (:file/path file)
-        token (get-github-token)]
-    (when-let [content (db/get-file-content repo-url file)]
-      (let [encoded-content (utf8/encode content)
-            content' (str (utf8/substring encoded-content 0 pos)
-                          (-> (utf8/substring encoded-content pos)
-                              (string/replace-first "DONE" "TODO")))]
-        (alter-file repo-url file content' nil)))))
-
 (defn git-set-username-email!
   [repo-url {:keys [name email]}]
   (when (and name email)
@@ -738,6 +708,17 @@
            [{:file/path file-path
              :file/content new-content}]))
         (alter-file repo file-path new-content {:reset? false})))))
+
+;; TODO: utf8 encode performance
+(defn check
+  [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
+  (let [new-content (string/replace-first content marker "DONE")]
+    (save-heading-if-changed! heading new-content)))
+
+(defn uncheck
+  [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
+  (let [new-content (string/replace-first content "DONE" "TODO")]
+    (save-heading-if-changed! heading new-content)))
 
 (defn delete-heading!
   [{:heading/keys [uuid meta content file] :as heading} dummy?]
