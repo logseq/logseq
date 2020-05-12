@@ -186,7 +186,7 @@
        address])
 
     ["Link" link]
-    (let [{:keys [url label]} link]
+    (let [{:keys [url label title]} link]
       (match url
         ["Search" s]
         (case (first s)
@@ -207,8 +207,11 @@
             (image-link url href label)
             (->elem
              :a
-             {:href href
-              :target "_blank"}
+             (cond->
+               {:href href
+                :target "_blank"}
+               title
+               (assoc :title title))
              (map-inline label))))))
 
     ["Verbatim" s]
