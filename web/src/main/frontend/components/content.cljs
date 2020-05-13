@@ -37,7 +37,26 @@
       ;;                2000)
       )))
 
-(rum/defc hiccup-content <
+;; TODO: content could be changed
+;; Also, keyboard bindings should only be activated after
+;; headings were already selected.
+(defn- cut-headings-and-clear-selections!
+  []
+  (handler/cut-selection-headings)
+  (handler/clear-selection!))
+
+(rum/defc hidden-selection < rum/reactive
+  (mixins/keyboard-mixin "ctrl+c"
+                         (fn []
+                           (handler/copy-selection-headings)
+                           (handler/clear-selection!)))
+  (mixins/keyboard-mixin "ctrl+x" cut-headings-and-clear-selections!)
+  (mixins/keyboard-mixin "backspace" cut-headings-and-clear-selections!)
+  (mixins/keyboard-mixin "delete" cut-headings-and-clear-selections!)
+  []
+  [:div#selection.hidden])
+
+(rum/defc hiccup-content < rum/reactive
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "mouseup"
@@ -80,7 +99,11 @@
                                           :left (str client-x "px")
                                           :top (str client-y "px")))))))))
   [id hiccup]
-  [:div {:id id} hiccup])
+  (let [in-selection-mode? (state/sub :selection/mode)]
+    [:div {:id id}
+     hiccup
+     (when in-selection-mode?
+       (hidden-selection))]))
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]

@@ -13,7 +13,8 @@
             [frontend.state :as state]
             [frontend.handler :as handler]
             [frontend.config :as config]
-            [dommy.core :as d]))
+            [dommy.core :as d]
+            [clojure.string :as string]))
 
 (rum/defc logo-or-repos < rum/reactive
   [current-repo close-modal-fn]
@@ -24,7 +25,8 @@
                      (util/distinct-by :url))]
       [:div.flex.flex-row.align-center.whitespace-no-wrap
        [:a.hover:text-gray-300.text-gray-400
-        {:style {:margin-right 13}
+        {:style {:margin-right 17
+                 :margin-top -1}
          :on-click (fn []
                      (d/add-class! (d/by-id "menu")
                                    "md:block")
@@ -39,7 +41,7 @@
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
             [:a.hover:text-gray-300.text-gray-400.font-bold {:on-click toggle-fn}
-             [:span (util/take-at-most (db/get-repo-name current-repo) 20)]
+             [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
           (mapv
            (fn [{:keys [id url]}]
@@ -52,7 +54,7 @@
          [:a.hover:text-gray-300.text-gray-400.font-bold
           {:href current-repo
            :target "_blank"}
-          (util/take-at-most (db/get-repo-name current-repo) 18)])])
+          (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))])])
 
     [:img.h-8.w-auto
      {:alt "Logseq",
@@ -174,21 +176,7 @@
       :on-click handler/copy-selection-headings}
      "Copy")]])
 
-;; TODO: content could be changed
-;; Also, keyboard bindings should only be activated after
-;; headings were already selected.
-(defn cut-headings-and-clear-selections!
-  []
-  (handler/cut-selection-headings)
-  (handler/clear-selection!))
 (rum/defc custom-context-menu < rum/reactive
-  (mixins/keyboard-mixin "ctrl+c"
-                         (fn []
-                           (handler/copy-selection-headings)
-                           (handler/clear-selection!)))
-  (mixins/keyboard-mixin "ctrl+x" cut-headings-and-clear-selections!)
-  (mixins/keyboard-mixin "backspace" cut-headings-and-clear-selections!)
-  (mixins/keyboard-mixin "delete" handler/cut-selection-headings)
   []
   (when (state/sub :custom-context-menu/show?)
     (ui/css-transition
