@@ -69,10 +69,21 @@
   (re-find #"Mobi" js/navigator.userAgent))
 
 ;; Format
-(defn default-empty-heading
+
+(defn get-heading-pattern
   [format]
   (case format
     :org
-    "** "
+    "*"
     :markdown
-    "## "))
+    "#"
+
+    ""))
+
+(defn default-empty-heading
+  ([format]
+   (default-empty-heading format 2))
+  ([format n]
+   (let [heading-pattern (get-heading-pattern format)]
+     (str (apply str (repeat n heading-pattern))
+          " "))))

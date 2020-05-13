@@ -7,6 +7,7 @@
             [frontend.image :as image]
             [frontend.ui :as ui]
             [frontend.db :as db]
+            [frontend.config :as config]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -24,6 +25,7 @@
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
+(defonce *new-inserted-heading (atom nil))
 
 (defn- insert-command!
   [id command-output format {:keys [restore?]
@@ -217,6 +219,12 @@
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
             (handler/edit-heading! (uuid sibling-heading-id) pos)))))))
 
+(defn get-previous-heading-level
+  [current-id]
+  (when-let [input (gdom/getElement current-id)]
+    (when-let [prev-heading (gdom/getPreviousElementSibling input)]
+      (d/attr prev-heading "level"))))
+
 (defn on-backspace
   [state e]
   (let [{:keys [id heading-id heading-parent-id dummy? value on-hide pos]} (get-state state)
@@ -302,11 +310,11 @@
           (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
 
 (defn- clear-when-saved!
-  [input-id]
+  []
   (state/set-editor-show-input nil)
   (state/set-editor-show-date-picker false)
   (state/set-editor-show-page-search false)
-  (state/set-edit-input-id! input-id)
+  (state/set-edit-input-id! nil)
   (reset! *slash-caret-pos nil)
   (reset! *show-commands false)
   (reset! *matched-commands (commands/commands-map)))
@@ -315,10 +323,30 @@
   [state]
   (let [{:keys [heading value]} (get-state state)]
     ;; save the current heading and insert a new heading
-    (let [new-heading (handler/insert-new-heading! heading value)
+    (let [[new-heading new-heading-content] (handler/insert-new-heading! heading value)
           id (:heading/uuid new-heading)]
-      (clear-when-saved! (str "edit-input-" id))
+      (reset! *new-inserted-heading id)
+      (clear-when-saved!)
       (handler/edit-heading! id :max))))
+
+(defn- adjust-heading-level!
+  [state]
+  (let [{:keys [heading heading-parent-id value]} (get-state state)
+        level (:heading/level heading)
+        format (:heading/format heading)
+        heading-pattern (config/get-heading-pattern format)
+        previous-level (or (get-previous-heading-level heading-parent-id) 1)
+        add? (or (<= level 2)
+                 ;; equal to the last heading
+                 (<= level previous-level))
+        remove? (and (> level previous-level)
+                     (> level 2))
+        new-value (cond
+                    add? (str heading-pattern value)
+                    remove? (subs value 1)
+                    :else value)]
+    (handler/save-heading-if-changed! heading new-value)
+    (state/set-edit-content! new-value)))
 
 (rum/defc box < rum/reactive
   ;; TODO: Overwritten by user's configuration
@@ -333,7 +361,7 @@
         (fn [state]
           (let [{:keys [on-hide value]} (get-state state)]
             (on-hide value)
-            (clear-when-saved! nil))))
+            (clear-when-saved!))))
        (mixins/on-key-down
         state
         {
@@ -354,6 +382,9 @@
                           (= (nth value (dec current-pos)) "/"))
                  (reset! *slash-caret-pos nil)
                  (reset! *show-commands false))))
+         9 (fn [state e]
+             (util/stop e)
+             (adjust-heading-level! state))
          }
         (fn [e key-code]
           ;; (swap! state/state assoc
@@ -391,24 +422,34 @@
                       ))
                   (reset! *show-commands false))))))))))
   {:init (fn [state _props]
-           (let [[content {:keys [dummy?]}] (:rum/args state)]
+           (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)
+                 new? (and @*new-inserted-heading
+                           (= @*new-inserted-heading (:heading/uuid heading)))]
              (reset! *should-delete? false)
              (state/set-edit-content!
-              (if dummy?
-                (string/triml content)
-                (string/trim content))))
+              (cond new?
+                    (str (string/trim content) " ")
+
+                    dummy?
+                    (string/triml content)
+
+                    :else
+                    (string/trim content))))
            state)
    :did-mount (fn [state]
                 (let [[content opts id] (:rum/args state)]
                   (handler/restore-cursor-pos! id content (:dummy? opts)))
                 state)
    :after-render (fn [state]
-                   (let [[content opts id] (:rum/args state)]
+                   (let [[content {:keys [heading format]} id] (:rum/args state)]
                      (when-let [input (gdom/getElement id)]
                        (dnd/subscribe!
                         input
                         :upload-images
-                        {:drop (fn [e files] (upload-image id files (:format opts) *image-uploading? true))})))
+                        {:drop (fn [e files] (upload-image id files format *image-uploading? true))})
+                       (when (and @*new-inserted-heading
+                                 (= @*new-inserted-heading (:heading/uuid heading)))
+                         (util/move-cursor-to-end input))))
                    state)
    :will-unmount (fn [state]
                    (let [[content opts id] (:rum/args state)]

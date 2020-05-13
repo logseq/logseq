@@ -721,11 +721,11 @@
         (alter-file repo file-path new-content {:reset? false})))))
 
 (defn insert-new-heading!
-  [{:heading/keys [uuid content meta file dummy?] :as heading} value]
+  [{:heading/keys [uuid content meta file dummy? level] :as heading} value]
   (let [repo (state/get-current-repo)
         value (string/trim value)
         format (:heading/format heading)
-        new-heading-content (config/default-empty-heading format)]
+        new-heading-content (config/default-empty-heading format level)]
     (let [file (db/entity (:db/id file))
           file-content (:file/content file)
           file-path (:file/path file)
@@ -743,7 +743,7 @@
          [{:file/path file-path
            :file/content new-content}]))
       (alter-file repo file-path new-content {:reset? false})
-      last-heading)))
+      [last-heading new-heading-content])))
 
 ;; TODO: utf8 encode performance
 (defn check
