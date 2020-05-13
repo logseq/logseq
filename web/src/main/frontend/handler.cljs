@@ -720,6 +720,31 @@
              :file/content new-content}]))
         (alter-file repo file-path new-content {:reset? false})))))
 
+(defn insert-new-heading!
+  [{:heading/keys [uuid content meta file dummy?] :as heading} value]
+  (let [repo (state/get-current-repo)
+        value (string/trim value)
+        format (:heading/format heading)
+        new-heading-content (config/default-empty-heading format)]
+    (let [file (db/entity (:db/id file))
+          file-content (:file/content file)
+          file-path (:file/path file)
+          value (str value "\n" new-heading-content "\n")
+          [new-content value] (new-file-content heading file-content value)
+          {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+          last-heading (last headings)
+          after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+      (db/transact!
+        (concat
+         pages
+         [[:db.fn/retractEntity [:heading/uuid uuid]]]
+         headings
+         after-headings
+         [{:file/path file-path
+           :file/content new-content}]))
+      (alter-file repo file-path new-content {:reset? false})
+      last-heading)))
+
 ;; TODO: utf8 encode performance
 (defn check
   [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
@@ -838,8 +863,6 @@
                        (subs content 0 prev-pos))]
       (state/set-cursor-range! text-range)
       (state/set-edit-input-id! edit-input-id))))
-
-;; headings
 
 (defn clear-selection!
   []

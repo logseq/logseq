@@ -41,13 +41,13 @@
 ;; Also, keyboard bindings should only be activated after
 ;; headings were already selected.
 (defn- cut-headings-and-clear-selections!
-  []
+  [_]
   (handler/cut-selection-headings)
   (handler/clear-selection!))
 
 (rum/defc hidden-selection < rum/reactive
   (mixins/keyboard-mixin "ctrl+c"
-                         (fn []
+                         (fn [_]
                            (handler/copy-selection-headings)
                            (handler/clear-selection!)))
   (mixins/keyboard-mixin "ctrl+x" cut-headings-and-clear-selections!)

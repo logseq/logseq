@@ -382,6 +382,7 @@
          (if edit?
            (editor/box content {:on-hide (fn [value]
                                            (handler/save-heading-if-changed! heading value))
+                                :heading heading
                                 :heading-id uuid
                                 :heading-parent-id heading-id
                                 :format format

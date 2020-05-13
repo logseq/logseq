@@ -184,9 +184,10 @@
              (util/stop e)
              (on-submit @input-value pos)))]))))
 
+;; TODO: refactor
 (defn get-state
   [state]
-  (let [[_ {:keys [on-hide heading-id heading-parent-id dummy? format]} id] (:rum/args state)
+  (let [[_ {:keys [on-hide heading heading-id heading-parent-id dummy? format]} id] (:rum/args state)
         node (gdom/getElement id)
         value (gobj/get node "value")
         pos (gobj/get node "selectionStart")]
@@ -194,6 +195,7 @@
      :dummy? dummy?
      :format format
      :id id
+     :heading heading
      :heading-id heading-id
      :heading-parent-id heading-parent-id
      :node node
@@ -299,23 +301,39 @@
          [:span {:style {:margin-top 2}}
           (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
 
+(defn- clear-when-saved!
+  [input-id]
+  (state/set-editor-show-input nil)
+  (state/set-editor-show-date-picker false)
+  (state/set-editor-show-page-search false)
+  (state/set-edit-input-id! input-id)
+  (reset! *slash-caret-pos nil)
+  (reset! *show-commands false)
+  (reset! *matched-commands (commands/commands-map)))
+
+(defn- insert-new-heading!
+  [state]
+  (let [{:keys [heading value]} (get-state state)]
+    ;; save the current heading and insert a new heading
+    (let [new-heading (handler/insert-new-heading! heading value)
+          id (:heading/uuid new-heading)]
+      (clear-when-saved! (str "edit-input-" id))
+      (handler/edit-heading! id :max))))
+
 (rum/defc box < rum/reactive
+  ;; TODO: Overwritten by user's configuration
+  (mixins/keyboard-mixin "alt+enter" insert-new-heading!)
   (mixins/event-mixin
    (fn [state]
      (let [input-id (last (:rum/args state))
            input (gdom/getElement input-id)]
        (mixins/hide-when-esc-or-outside
         state
-        :on-hide (fn []
-                   (let [{:keys [value on-hide]} (get-state state)]
-                     (on-hide value)
-                     (state/set-editor-show-input nil)
-                     (state/set-editor-show-date-picker false)
-                     (state/set-editor-show-page-search false)
-                     (state/set-edit-input-id! nil)
-                     (reset! *slash-caret-pos nil)
-                     (reset! *show-commands false)
-                     (reset! *matched-commands (commands/commands-map)))))
+        :on-hide
+        (fn [state]
+          (let [{:keys [on-hide value]} (get-state state)]
+            (on-hide value)
+            (clear-when-saved! nil))))
        (mixins/on-key-down
         state
         {
@@ -354,24 +372,24 @@
         (fn [e key-code]
           (let [format (:format (get-state state))]
             (when (not= key-code 191)     ; not /
-             (let [matched-commands (get-matched-commands input)]
-               (if (seq matched-commands)
-                 (do
-                   (cond
-                     (= key-code 9)      ;tab
-                     (do
-                       (util/stop e)
-                       (insert-command! input-id
-                                        (last (first matched-commands))
-                                        format
-                                        nil))
+              (let [matched-commands (get-matched-commands input)]
+                (if (seq matched-commands)
+                  (do
+                    (cond
+                      (= key-code 9)      ;tab
+                      (do
+                        (util/stop e)
+                        (insert-command! input-id
+                                         (last (first matched-commands))
+                                         format
+                                         nil))
 
-                     :else
-                     (do
-                       (reset! *matched-commands matched-commands)
-                       (reset! *show-commands true))
-                     ))
-                 (reset! *show-commands false))))))))))
+                      :else
+                      (do
+                        (reset! *matched-commands matched-commands)
+                        (reset! *show-commands true))
+                      ))
+                  (reset! *show-commands false))))))))))
   {:init (fn [state _props]
            (let [[content {:keys [dummy?]}] (:rum/args state)]
              (reset! *should-delete? false)
