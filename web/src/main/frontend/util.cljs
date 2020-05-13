@@ -290,14 +290,14 @@
     (if selection
       (let [range-count (gobj/get selection "rangeCount")]
         (when (> range-count 0)
-         (let [range (-> (.getSelection win)
-                         (.getRangeAt 0))
-               pre-caret-range (.cloneRange range)]
-           (.selectNodeContents pre-caret-range node)
-           (.setEnd pre-caret-range
-                    (gobj/get range "endContainer")
-                    (gobj/get range "endOffset"))
-           (.toString pre-caret-range))))
+          (let [range (-> (.getSelection win)
+                          (.getRangeAt 0))
+                pre-caret-range (.cloneRange range)]
+            (.selectNodeContents pre-caret-range node)
+            (.setEnd pre-caret-range
+                     (gobj/get range "endContainer")
+                     (gobj/get range "endOffset"))
+            (.toString pre-caret-range))))
       (when-let [selection (gobj/get doc "selection")]
         (when (not= "Control" (gobj/get selection "type"))
           (let [text-range (.createRange selection)
@@ -447,6 +447,24 @@
     [(subs s 0 last-index)
      (subs s (+ last-index (count pattern)) (count s))]))
 
+(defn trimr-without-newlines
+  [s]
+  (.replace s #"[ \t\r]+$" ""))
+
+(defn triml-without-newlines
+  [s]
+  (.replace s #"^[ \t\r]+" ""))
+
+(defn concat-without-spaces
+  [left right]
+  (when (and (string? left)
+             (string? right))
+    (let [left (trimr-without-newlines left)
+          newline? (= \n (last left))]
+      (str left
+           (when-not newline? " ")
+           (triml-without-newlines right)))))
+
 ;; Add documentation
 (defn replace-first [pattern s new-value]
   (when-let [first-index (string/index-of s pattern)]
@@ -454,9 +472,17 @@
 
 (defn replace-last [pattern s new-value]
   (when-let [last-index (string/last-index-of s pattern)]
-    (str (string/trimr (subs s 0 last-index))
-         " "
-         (string/triml new-value))))
+    (concat-without-spaces
+     (subs s 0 last-index)
+     new-value)))
+
+;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
+(defn re-pos [re s]
+  (let [re (js/RegExp. (.-source re) "g")]
+    (loop [res []]
+      (if-let [m (.exec re s)]
+        (recur (conj res [(.-index m) (first m)]))
+        res))))
 
 (defn cursor-move-back [input n]
   (let [{:keys [pos]} (get-caret-pos input)]

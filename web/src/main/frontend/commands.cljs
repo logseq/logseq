@@ -72,13 +72,11 @@
 
         prefix (subs edit-content 0 current-pos)
         prefix (if (string/blank? last-pattern)
-                 (str (string/trimr prefix) " " (string/triml value))
+                 (util/concat-without-spaces prefix value)
                  (util/replace-last last-pattern prefix value))
         postfix (subs edit-content current-pos)
         postfix (if postfix-fn (postfix-fn postfix) postfix)
-        new-value (str (string/trimr prefix)
-                       " "
-                       (string/triml postfix))
+        new-value (util/concat-without-spaces prefix postfix)
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
@@ -146,10 +144,15 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (state/get-edit-content)
-            re-pattern (if (= :org format)
-                         #"\*+\s"
-                         #"#+\s")
-            pos (count (re-find re-pattern edit-content))
+            slash-pos (:pos @*slash-caret-pos)
+            [re-pattern new-line-re-pattern] (if (= :org format)
+                                               [#"\*+\s" #"\n\*+\s"]
+                                               [#"#+\s" #"\n#+\s"])
+            pos (let [prefix (subs edit-content 0 (dec slash-pos))]
+                  (if-let [matches (seq (util/re-pos new-line-re-pattern prefix))]
+                   (let [[start-pos content] (last matches)]
+                     (+ start-pos (count content)))
+                   (count (re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
                                                  marker-pattern

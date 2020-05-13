@@ -15,7 +15,8 @@
             [frontend.ui :as ui]
             [frontend.handler :as handler]
             [goog.object :as gobj]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [cljs.reader :as reader]))
 
 ;; TODO:
 ;; add `key`
@@ -226,6 +227,10 @@
     ["Export_Snippet" "html" s]
     [:span {:dangerouslySetInnerHTML
             {:__html s}}]
+
+    ;; String to hiccup
+    ["Export_Snippet" "hiccup" s]
+    (reader/read-string s)
 
     ["Break_Line"]
     [:br]
@@ -598,6 +603,9 @@
       ["Export" "html" options content]
       [:div {:dangerouslySetInnerHTML
              {:__html content}}]
+      ["Export" "hiccup" options content]
+      (reader/read-string content)
+
       ["Custom" name options l]
       (->elem
        :div
