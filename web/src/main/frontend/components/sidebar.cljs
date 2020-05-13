@@ -132,6 +132,7 @@
 (rum/defc main-content < rum/reactive
   []
   (let [cloning? (state/sub :repo/cloning?)
+        git-ask-private-grant? (state/sub :git/ask-for-private-repo-grant)
         importing-to-db? (state/sub :repo/importing-to-db?)
         loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)
@@ -143,6 +144,9 @@
      (cond
        (not preferred-format)
        (widgets/choose-preferred-format)
+
+       git-ask-private-grant?
+       (widgets/add-repo)
 
        cloning?
        (loading "Cloning ")

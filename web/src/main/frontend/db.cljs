@@ -421,55 +421,59 @@
 
 (defn extract-pages-and-headings
   [file content utf8-content journal? pages-fn]
-
-  (let [format (format/get-format file)
-        ast (org-md/->edn content
-                          (org-md/default-config format))
-        headings (block/extract-headings ast (utf8/length utf8-content))
-        pages (pages-fn headings ast)
-        ref-pages (atom #{})
-        headings (mapcat
-                  (fn [[page headings]]
-                    (if page
-                      (map (fn [heading]
-                             (let [heading-ref-pages (seq (:ref-pages heading))]
-                               (when heading-ref-pages
-                                 (swap! ref-pages set/union (set heading-ref-pages)))
-                               (-> heading
-                                   (dissoc :ref-pages)
-                                   (assoc :heading/content (get-heading-content utf8-content heading)
-                                          :heading/file [:file/path file]
-                                          :heading/format (format/get-format file)
-                                          :heading/page [:page/name (string/capitalize page)]
-                                          :heading/ref-pages (mapv
-                                                              (fn [page]
-                                                                {:page/name (string/capitalize page)})
-                                                              heading-ref-pages)))))
-                        headings)))
-                  pages)
-        headings (block/safe-headings headings)
-        pages (map
-                (fn [page]
-                  {:page/name (if page
-                                (string/capitalize page)
-                                (string/capitalize (first (string/split #"\." file))))
-                   :page/file [:file/path file]
-                   :page/journal? journal?
-                   :page/journal-day (if journal?
-                                       (journal-page-name->int page)
-                                       0)})
-                (map first pages))
-        pages (concat
-               pages
-               (map
+  (println "Parsing file: " file)
+  (try
+    (let [format (format/get-format file)
+         ast (org-md/->edn content
+                           (org-md/default-config format))
+         headings (block/extract-headings ast (utf8/length utf8-content))
+         pages (pages-fn headings ast)
+         ref-pages (atom #{})
+         headings (mapcat
+                   (fn [[page headings]]
+                     (if page
+                       (map (fn [heading]
+                              (let [heading-ref-pages (seq (:ref-pages heading))]
+                                (when heading-ref-pages
+                                  (swap! ref-pages set/union (set heading-ref-pages)))
+                                (-> heading
+                                    (dissoc :ref-pages)
+                                    (assoc :heading/content (get-heading-content utf8-content heading)
+                                           :heading/file [:file/path file]
+                                           :heading/format (format/get-format file)
+                                           :heading/page [:page/name (string/capitalize page)]
+                                           :heading/ref-pages (mapv
+                                                               (fn [page]
+                                                                 {:page/name (string/capitalize page)})
+                                                               heading-ref-pages)))))
+                         headings)))
+                   pages)
+         headings (block/safe-headings headings)
+         pages (map
                  (fn [page]
-                   {:page/name (string/capitalize page)})
-                 @ref-pages))]
-    (vec
-     (->> (concat
-           pages
-           headings)
-          (remove nil?)))))
+                   {:page/name (if page
+                                 (string/capitalize page)
+                                 (string/capitalize (first (string/split #"\." file))))
+                    :page/file [:file/path file]
+                    :page/journal? journal?
+                    :page/journal-day (if journal?
+                                        (journal-page-name->int page)
+                                        0)})
+                 (map first pages))
+         pages (concat
+                pages
+                (map
+                  (fn [page]
+                    {:page/name (string/capitalize page)})
+                  @ref-pages))]
+     (vec
+      (->> (concat
+            pages
+            headings)
+           (remove nil?))))
+    (catch js/Error e
+      (prn "Parsing error: " e)
+      [])))
 
 ;; check journal formats and report errors
 (defn extract-headings-pages

@@ -179,6 +179,7 @@
              (dissoc input-item :id))])
          (ui/button
            "Submit"
+           :on-click
            (fn [e]
              (util/stop e)
              (on-submit @input-value pos)))]))))

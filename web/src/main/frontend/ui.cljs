@@ -69,13 +69,15 @@
     modal-class)))
 
 (rum/defc button
-  [text on-click & {:keys [background]}]
+  [text & {:keys [background on-click href]
+           :as option}]
   (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
         class (if background (string/replace class "indigo" background) class)]
     [:button
-     {:type "button"
-      :class (util/hiccup->class class)
-      :on-click on-click}
+     (merge
+      {:type "button"
+       :class (util/hiccup->class class)}
+      (dissoc option :background))
      text]))
 
 (rum/defc notification-content
@@ -186,32 +188,32 @@
   (mixins/event-mixin
    (fn [state]
      (mixins/on-key-down
-        state
-        {
-         ;; up
-         38 (fn [_ e]
-              (let [current-idx (get state ::current-idx)]
-                (util/stop e)
-                (when (>= @current-idx 1)
-                  (swap! current-idx dec))))
-         ;; down
-         40 (fn [state e]
-              (let [current-idx (get state ::current-idx)
-                    matched (first (:rum/args state))]
-                (util/stop e)
-                (let [total (count matched)]
-                  (if (>= @current-idx (dec total))
-                    (reset! current-idx 0)
-                    (swap! current-idx inc)))))
+      state
+      {
+       ;; up
+       38 (fn [_ e]
+            (let [current-idx (get state ::current-idx)]
+              (util/stop e)
+              (when (>= @current-idx 1)
+                (swap! current-idx dec))))
+       ;; down
+       40 (fn [state e]
+            (let [current-idx (get state ::current-idx)
+                  matched (first (:rum/args state))]
+              (util/stop e)
+              (let [total (count matched)]
+                (if (>= @current-idx (dec total))
+                  (reset! current-idx 0)
+                  (swap! current-idx inc)))))
 
-         ;; enter
-         13 (fn [state e]
-              (let [current-idx (get state ::current-idx)
-                    matched (first (:rum/args state))
-                    on-chosen (nth (:rum/args state) 1)]
-                (util/stop e)
-                (on-chosen (nth matched @current-idx))))}
-        nil)))
+       ;; enter
+       13 (fn [state e]
+            (let [current-idx (get state ::current-idx)
+                  matched (first (:rum/args state))
+                  on-chosen (nth (:rum/args state) 1)]
+              (util/stop e)
+              (on-chosen (nth matched @current-idx))))}
+      nil)))
   [state matched on-chosen & {:keys [empty-div on-click]}]
   (let [current-idx (get state ::current-idx)]
     [:div.py-1.rounded-md.bg-white.shadow-xs

@@ -93,6 +93,7 @@
             edit?
             [:div.mt-2
              (ui/button "Save"
+               :on-click
                (fn []
                  (reset! *edit? false)
                  (let [new-content @*edit-content]
@@ -105,6 +106,7 @@
             diff?
             [:div.mt-2
              (ui/button "Use remote"
+               :on-click
                (fn []
                  ;; overwrite the file
                  (handler/alter-file repo path content
@@ -115,6 +117,7 @@
              [:span.pl-2.pr-2 "or"]
 
              (ui/button "Keep local"
+               :on-click
                (fn []
                  ;; overwrite the file
                  (swap! state/state
@@ -125,6 +128,7 @@
              [:span.pl-2.pr-2 "or"]
 
              (ui/button "Edit"
+               :on-click
                (fn []
                  (reset! *edit? true)))]
 
@@ -196,6 +200,7 @@
          (if pushing?
            [:span "Pushing ..."]
            (ui/button "Commit and force pushing"
+             :on-click
              (fn []
                (let [commit-message (if (string/blank? @commit-message)
                                       "A force push"

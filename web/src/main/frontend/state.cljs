@@ -14,7 +14,9 @@
              :repo/loading-files? nil
              :repo/importing-to-db? nil
              :me nil
+             :git/clone-repo (or (storage/get :git/clone-repo) "")
              :git/current-repo (storage/get :git/current-repo)
+             :git/ask-for-private-repo-grant false
              :format/loading {}
 
              :journals-length 1
@@ -41,6 +43,7 @@
              :selection/mode false
              :selection/headings nil
              :custom-context-menu/show? false
+
              }))
 
 (defn sub
@@ -225,3 +228,12 @@
 (defn hide-custom-context-menu!
   []
   (swap! state assoc :custom-context-menu/show? false))
+
+(defn set-git-ask-for-private-repo-grant!
+  [value]
+  (swap! state assoc :git/ask-for-private-repo-grant value))
+
+(defn set-git-clone-repo!
+  [repo]
+  (set-state! :git/clone-repo repo)
+  (storage/set :git/clone-repo repo))

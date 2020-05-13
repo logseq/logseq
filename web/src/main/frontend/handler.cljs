@@ -134,7 +134,7 @@
 
 ;; org-journal format, something like `* Tuesday, 06/04/13`
 (defn default-month-journal-content
-  []
+  [format]
   (let [{:keys [year month day]} (util/get-date)
         last-day (util/get-month-last-day)
         month-pad (if (< month 10) (str "0" month) month)]
@@ -142,16 +142,19 @@
            (fn [day]
              (let [day-pad (if (< day 10) (str "0" day) day)
                    weekday (util/get-weekday (js/Date. year (dec month) day))]
-               (str "* " weekday ", " month-pad "/" day-pad "/" year "\n")))
+               (str (if (= format :org)
+                      "* "
+                      "# ") weekday ", " month-pad "/" day-pad "/" year "\n")))
            (range 1 (inc last-day)))
          (apply str))))
 
 (defn create-month-journal-if-not-exists
   [repo-url]
   (let [repo-dir (git/get-repo-dir repo-url)
-        path (util/current-journal-path (state/get-preferred-format))
+        format (state/get-preferred-format)
+        path (util/current-journal-path format)
         file-path (str "/" path)
-        default-content (default-month-journal-content)]
+        default-content (default-month-journal-content format)]
     (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
                   (p/catch (fn [_e])))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
@@ -378,6 +381,7 @@
        (state/set-cloning? true)
        (git/clone repo-url token))
      (fn []
+       (state/set-git-clone-repo! "")
        (state/set-current-repo! repo-url)
        (db/start-db-conn! (:me @state/state)
                           repo-url
@@ -393,10 +397,17 @@
                   (fn [error]
                     (prn "Something wrong!"))))
      (fn [e]
+       (prn "Clone failed, reason: " e)
        (state/set-cloning? false)
        (set-git-status! repo-url :clone-failed)
        (set-git-error! repo-url e)
-       (prn "Clone failed, reason: " e)))))
+       (js/console.dir e)
+       (prn "status code: " (some-> (gobj/get e "data")
+                                    (gobj/get "statusCode")))
+       (let [status-code (some-> (gobj/get e "data")
+                                 (gobj/get "statusCode"))]
+         (when (contains? #{401 404} status-code)
+           (state/set-git-ask-for-private-repo-grant! true)))))))
 
 (defn new-notification
   [text]

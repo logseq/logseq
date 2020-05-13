@@ -21,5 +21,6 @@
                        (reset! email (util/evalue e)))}]]]]
      (ui/button
        "Submit"
+       :on-click
        (fn []
          (handler/set-email! @email)))]]))
