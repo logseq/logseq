@@ -898,9 +898,9 @@
   (p/let [key (encrypt/generate-key)
           encrypted (encrypt/encrypt key token)
           base64-key (encrypt/base64-key key)]
-    (state/set-encrypt-key! base64-key)
+    (state/set-encrypt-token! encrypted)
     (util/post (str config/api "encrypted_token")
-               {:token encrypted}
+               {:object-key base64-key}
                (fn []
                  ;; refresh the browser
                  (set! (.-href js/window.location) "/"))
@@ -912,8 +912,8 @@
     (db/restore! me db-listen-to-tx!)
     (when me
       (set-state-kv! :me me)
-      (when-let [encrypted-token (:access-token me)]
-        (when-let [base64-key (state/get-encrypt-key)]
+      (when-let [base64-key (:access-token me)]
+        (when-let [encrypted-token (state/get-encrypt-token)]
           (p/let [token (encrypt/decrypt base64-key encrypted-token)]
             ;; FIXME: Sometimes it has spaces in the front
             (let [token (string/trim token)]

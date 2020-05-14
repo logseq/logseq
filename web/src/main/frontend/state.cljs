@@ -43,8 +43,8 @@
              :selection/headings nil
              :custom-context-menu/show? false
 
-             ;; base64 representation of the key
-             :encrypt/key (storage/get :encrypt/key)
+             ;; encrypted github token
+             :encrypt/token (storage/get :encrypt/token)
              }))
 
 (defn sub
@@ -243,12 +243,12 @@
   [token]
   (swap! state assoc-in [:me :access-token] token))
 
-(defn get-encrypt-key
+(defn get-encrypt-token
   []
-  (:encrypt/key @state))
+  (:encrypt/token @state))
 
-(defn set-encrypt-key!
-  [key]
-  (when key
-    (set-state! :encrypt/key key)
-    (storage/set :encrypt/key key)))
+(defn set-encrypt-token!
+  [encrypted]
+  (when encrypted
+    (set-state! :encrypt/token encrypted)
+    (storage/set :encrypt/token encrypted)))
