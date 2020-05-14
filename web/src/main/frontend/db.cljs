@@ -69,6 +69,7 @@
 
    ;; repo
    :repo/url        {:db/unique :db.unique/identity}
+   :repo/cloned?    {}
    :git/latest-commit {}
    :git/status {}
    ;; last error, better we should record all the errors
@@ -728,6 +729,23 @@
 (defn journal-page?
   [page-name]
   (:page/journal? (entity [:page/name page-name])))
+
+(defn mark-repo-as-cloned
+  [repo-url]
+  (transact!
+    [{:repo/url repo-url
+      :repo/cloned? true}]))
+
+(defn cloned?
+  [repo-url]
+  (->
+   (d/q '[:find ?cloned
+          :in $ ?repo-url
+          :where
+          [?repo :repo/url ?repo-url]
+          [?repo :repo/cloned? ?cloned]]
+     (get-conn repo-url) repo-url)
+   ffirst))
 
 (defn reset-config!
   [repo-url content]

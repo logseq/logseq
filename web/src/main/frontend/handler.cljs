@@ -395,6 +395,7 @@
        (db/start-db-conn! (:me @state/state)
                           repo-url
                           db-listen-to-tx!)
+       (db/mark-repo-as-cloned repo-url)
        (set-latest-commit-if-exists! repo-url))
      (fn [e]
        (prn "Clone failed, reason: " e)
@@ -906,7 +907,8 @@
         (p/let [config-exists? (fs/file-exists?
                                 (git/get-repo-dir url)
                                 ".git/config")]
-          (if config-exists?
+          (if (and config-exists?
+                   (db/cloned? repo))
             (do
               (git-set-username-email! repo me)
               (periodically-pull-and-push repo {:pull-now? true}))
