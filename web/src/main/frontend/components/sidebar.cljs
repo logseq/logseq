@@ -145,6 +145,9 @@
        (not preferred-format)
        (widgets/choose-preferred-format)
 
+       (and me (nil? (:email me)))
+       (settings/set-email)
+
        git-ask-private-grant?
        (widgets/add-repo)
 
@@ -161,10 +164,7 @@
        (loading "Loading files")
 
        (empty? (:repos me))
-       (widgets/add-repo)
-
-       (nil? (:email me))
-       (settings/set-email))
+       (widgets/add-repo))
      ]))
 
 (rum/defc custom-context-menu-content
