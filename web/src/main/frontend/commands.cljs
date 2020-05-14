@@ -51,7 +51,7 @@
      ]
     ;; Allow user to modify or extend, should specify how to extend.
     (get-in @state/state [:config (state/get-current-repo) :commands]))
-   (util/remove-nils)
+   (remove nil?)
    (util/distinct-by-last-wins first)))
 
 (defonce *matched-commands (atom (commands-map)))

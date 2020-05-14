@@ -269,16 +269,22 @@
           (fn [{:keys [toggle-fn]}]
             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
              {:on-click toggle-fn}
-             [:img.h-7.w-7.rounded-full
-              {:src (:avatar me)}]])
-          [{:title "Your repos"
-            :options {:href "/repos"}}
-           {:title "Add another repo"
-            :options {:href "/repo/add"}}
-           {:title "Settings"
-            :options {:href (str "/file/" (util/url-encode config/config-file))}}
-           {:title "Sign out"
-            :options {:on-click handler/sign-out!}}])]]]
+             (if-let [avatar (:avatar me)]
+               [:img.h-7.w-7.rounded-full
+                {:src avatar}]
+               [:div.h-7.w-7.rounded-full.bg-white])])
+          (->>
+           [(when (:email me)
+              {:title "Your repos"
+               :options {:href "/repos"}})
+            {:title "Add another repo"
+             :options {:href "/repo/add"}}
+            {:title "Settings"
+             :options {:href (str "/file/" (util/url-encode config/config-file))}}
+            (when (:email me)
+              {:title "Sign out"
+               :options {:on-click handler/sign-out!}})]
+           (remove nil?)))]]]
       [:main#main.flex-1.relative.z-0.overflow-y-scroll.py-6.focus:outline-none.sidebar-open
        {:tabIndex "0"}
        [:div.flex.justify-center
