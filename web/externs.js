@@ -1,5 +1,5 @@
 var git = {};
-git.walkBeta1 = function() {};
+git.walk = function() {};
 git.TREE = function() {};
 var dummy = {};
 dummy.populateStat = function() {};

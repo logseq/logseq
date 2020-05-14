@@ -23,7 +23,7 @@
 ;; only support Github now
 (defn auth
   [token]
-  {:onAuth (fn []
+  {:onAuth (fn [_url]
              (clj->js
               {:username token
                :password "x-oauth-basic"}))})
