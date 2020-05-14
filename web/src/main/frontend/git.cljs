@@ -15,8 +15,8 @@
 ;; only support Github now
 (defn auth
   [token]
-  {:username token
-   :password "x-oauth-basic"})
+  {:username (get-in @state/state [:me :name])
+   :token token})
 
 (defn set-username-email
   [dir username email]

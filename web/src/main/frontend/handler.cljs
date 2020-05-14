@@ -28,7 +28,8 @@
             [frontend.format :as format]
             [frontend.format.protocol :as protocol]
             [frontend.format.block :as block]
-            [frontend.commands :as commands])
+            [frontend.commands :as commands]
+            [frontend.encrypt :as encrypt])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -396,7 +397,8 @@
        (let [status-code (some-> (gobj/get e "data")
                                  (gobj/get "statusCode"))]
          (when (contains? #{401 404} status-code)
-           (state/set-git-ask-for-private-repo-grant! true)))))))
+           ;; TODO: notification
+           ))))))
 
 (defn new-notification
   [text]
@@ -573,12 +575,6 @@
                    ;; (prn "Get token failed, error: " error)
                    (reset! uploading? false))))))
 
-(defn set-me-if-exists!
-  []
-  (when js/window.user
-    (when-let [me (bean/->clj js/window.user)]
-      (set-state-kv! :me me)
-      me)))
 
 (defn sign-out!
   [e]
@@ -896,23 +892,43 @@
                  (fn [])
                  (fn [_e])))))
 
+(defn set-github-token!
+  [token]
+  (state/set-github-token! token)
+  (p/let [key (encrypt/generate-key)
+          encrypted (encrypt/encrypt key token)
+          base64-key (encrypt/base64-key key)]
+    (state/set-encrypt-key! base64-key)
+    (util/post (str config/api "encrypted_token")
+               {:token encrypted}
+               (fn []
+                 ;; refresh the browser
+                 (set! (.-href js/window.location) "/"))
+               (fn [_e]))))
+
 (defn start!
   []
-  (let [{:keys [repos] :as me} (set-me-if-exists!)]
+  (let [me (and js/window.user (bean/->clj js/window.user))]
     (db/restore! me db-listen-to-tx!)
     (when me
-      (doseq [{:keys [id url]} repos]
-       (let [repo url]
-         (p/let [config-exists? (fs/file-exists?
-                                 (git/get-repo-dir url)
-                                 ".git/config")]
-           (if (and config-exists?
-                    (db/cloned? repo))
-             (do
-               (git-set-username-email! repo me)
-               (periodically-pull-and-push repo {:pull-now? true}))
-             (clone-and-pull repo)))))
-      (watch-config!))))
+      (set-state-kv! :me me)
+      (when-let [encrypted-token (:access-token me)]
+        (when-let [base64-key (state/get-encrypt-key)]
+          (p/let [token (encrypt/decrypt base64-key encrypted-token)]
+            ;; FIXME: Sometimes it has spaces in the front
+            (let [token (string/trim token)]
+              (state/set-github-token! token)
+              (doseq [{:keys [id url]} (:repos me)]
+                (let [repo url]
+                  (p/let [config-exists? (fs/file-exists?
+                                          (git/get-repo-dir url)
+                                          ".git/config")]
+                    (if (and config-exists?
+                             (db/cloned? repo))
+                      (do
+                        (git-set-username-email! repo me)
+                        (periodically-pull-and-push repo {:pull-now? true}))
+                      (clone-and-pull repo))))))))))))
 
 (defn run-demo!
   []

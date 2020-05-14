@@ -132,7 +132,6 @@
 (rum/defc main-content < rum/reactive
   []
   (let [cloning? (state/sub :repo/cloning?)
-        git-ask-private-grant? (state/sub :git/ask-for-private-repo-grant)
         importing-to-db? (state/sub :repo/importing-to-db?)
         loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)
@@ -140,17 +139,19 @@
         current-repo (state/sub :git/current-repo)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
-        login? (:email me)]
+        logged? (:email me)
+        github-token (state/sub [:me :access-token])]
     [:div.max-w-7xl.mx-auto
      (cond
        (not preferred-format)
        (widgets/choose-preferred-format)
 
-       (and login? (nil? (:email me)))
+       (and logged? (nil? (:email me)))
        (settings/set-email)
 
-       (and login? git-ask-private-grant?)
-       (widgets/add-repo)
+       ;; personal token
+       (and logged? (nil? github-token))
+       (widgets/set-personal-access-token)
 
        cloning?
        (loading "Cloning ")

@@ -27,10 +27,37 @@
       :on-click
       #(handler/set-preferred-format! :org))]])
 
+(rum/defcs set-personal-access-token <
+  (rum/local "" ::token)
+  [state]
+  (when (state/logged?)
+    (let [access-token (get state ::token)]
+      [:div.p-8.flex.items-center.justify-center
+       [:div.w-full.mx-auto
+        [:div
+         [:div
+          [:h1.title.mb-1
+           "Set your Github personal access token"]
+          [:div.pl-1
+           [:p.text-sm.text-gray-500
+            "Git clone and push require the token to work."
+            [:br]
+            "The token will be encrypted and only stored in the browser cookie."]
+           [:div.mt-2.mb-2.relative.rounded-md.shadow-sm.max-w-xs
+            [:div.font-bold.text-gray-600.mb-1 "Personal access token:"]
+            [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
+             {:on-change (fn [e]
+                           (reset! access-token (util/evalue e)))}]]
+           (ui/button
+             "Submit"
+             :on-click
+             (fn []
+               (when-not (string/blank? access-token)
+                 (handler/set-github-token! @access-token))))]]]]])))
+
 (rum/defc add-repo < rum/reactive
   []
-  (let [access-token (state/sub [:me :access-token])
-        repo-url (state/sub :git/clone-repo)]
+  (let [repo-url (state/sub :git/clone-repo)]
     [:div.p-8.flex.items-center.justify-center
      [:div.w-full.mx-auto
       [:div
@@ -45,16 +72,7 @@
            :placeholder "https://github.com/username/repo"
            :value repo-url
            :on-change (fn [e]
-                        (state/set-git-clone-repo! (util/evalue e)))}]]
-
-        [:div.mt-2.mb-2.relative.rounded-md.shadow-sm.max-w-xs
-         [:div.font-bold.text-gray-600.mb-1 "Personal access token (optional):"]
-         [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
-          {:value access-token
-           :on-change (fn [e]
-                        (let [value (util/evalue e)]
-                          (when-not (string/blank? value)
-                            (state/set-github-token! value))))}]]]]
+                        (state/set-git-clone-repo! (util/evalue e)))}]]]]
 
       (ui/button
         "Clone"
