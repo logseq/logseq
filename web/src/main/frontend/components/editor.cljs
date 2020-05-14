@@ -61,6 +61,7 @@
                                       file-name)
                          format
                          {:last-pattern (if drop? "" "/")})
+
         (reset! *image-uploading-process 0))
       (fn [e]
         (let [process (* (/ (gobj/get e "loaded")
@@ -303,11 +304,11 @@
      :hidden true}]
    (when-let [uploading? (rum/react *image-uploading?)]
      (let [processing (rum/react *image-uploading-process)]
-       (transition-cp
-        [:div.flex.flex-row.align-center
-         [:span.lds-dual-ring.mr-2]
-         [:span {:style {:margin-top 2}}
-          (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
+      (transition-cp
+       [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-white.pl-1.pr-1
+        [:span.lds-dual-ring.mr-2]
+        [:span {:style {:margin-top 2}}
+         (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
 
 (defn- clear-when-saved!
   []
@@ -437,20 +438,18 @@
                     (string/trim content))))
            state)
    :did-mount (fn [state]
-                (let [[content opts id] (:rum/args state)]
-                  (handler/restore-cursor-pos! id content (:dummy? opts)))
+                (let [[content {:keys [heading format dummy?]} id] (:rum/args state)]
+                  (handler/restore-cursor-pos! id content dummy?)
+                  (when-let [input (gdom/getElement id)]
+                    (dnd/subscribe!
+                     input
+                     :upload-images
+                     {:drop (fn [e files]
+                              (upload-image id files format *image-uploading? true))})
+                    (when (and @*new-inserted-heading
+                              (= @*new-inserted-heading (:heading/uuid heading)))
+                      (util/move-cursor-to-end input))))
                 state)
-   :after-render (fn [state]
-                   (let [[content {:keys [heading format]} id] (:rum/args state)]
-                     (when-let [input (gdom/getElement id)]
-                       (dnd/subscribe!
-                        input
-                        :upload-images
-                        {:drop (fn [e files] (upload-image id files format *image-uploading? true))})
-                       (when (and @*new-inserted-heading
-                                 (= @*new-inserted-heading (:heading/uuid heading)))
-                         (util/move-cursor-to-end input))))
-                   state)
    :will-unmount (fn [state]
                    (let [[content opts id] (:rum/args state)]
                      (when-let [input (gdom/getElement id)]

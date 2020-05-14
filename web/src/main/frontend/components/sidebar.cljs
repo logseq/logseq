@@ -250,17 +250,21 @@
        [:div.flex-1.px-4.flex.justify-between
         (search/search)
         [:div.ml-4.flex.items-center.md:ml-6
+         [:a {:title "Draw with Excalidraw"
+              :href "/draw"}
+          (svg/excalidraw-logo)]
          [:div {:class (if pulling? "loader")}
-          [:button.p-1.m-2.text-gray-400.rounded-full.hover:bg-gray-100.focus:outline-none.focus:shadow-outline.focus:text-gray-400
-           {:on-click handler/pull-current-repo}
-           [:svg.h-6.w-6
-            {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-            [:path
-             {:d
-              "M6 18.7V21a1 1 0 0 1-2 0v-5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2H7.1A7 7 0 0 0 19 12a1 1 0 1 1 2 0 9 9 0 0 1-15 6.7zM18 5.3V3a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1h-5a1 1 0 0 1 0-2h2.9A7 7 0 0 0 5 12a1 1 0 1 1-2 0 9 9 0 0 1 15-6.7z"
-              :stroke-width "1",
-              :stroke-linejoin "round",
-              :stroke-linecap "round"}]]]]
+          [:a {:title "Git pull"}
+           [:button.p-1.m-2.text-gray-400.rounded-full.hover:bg-gray-100.focus:outline-none.focus:shadow-outline.focus:text-gray-400
+            {:on-click handler/pull-current-repo}
+            [:svg.h-6.w-6
+             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+             [:path
+              {:d
+               "M6 18.7V21a1 1 0 0 1-2 0v-5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2H7.1A7 7 0 0 0 19 12a1 1 0 1 1 2 0 9 9 0 0 1-15 6.7zM18 5.3V3a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1h-5a1 1 0 0 1 0-2h2.9A7 7 0 0 0 5 12a1 1 0 1 1-2 0 9 9 0 0 1 15-6.7z"
+               :stroke-width "1",
+               :stroke-linejoin "round",
+               :stroke-linecap "round"}]]]]]
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline

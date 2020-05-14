@@ -5,6 +5,7 @@
             [frontend.components.file :as file]
             [frontend.components.page :as page]
             [frontend.components.diff :as diff]
+            [frontend.components.draw :as draw]
             [frontend.components.agenda :as agenda]))
 
 (def routes
@@ -42,4 +43,8 @@
 
    ["/diff"
     {:name :diff
-     :view diff/diff}]])
+     :view diff/diff}]
+
+   ["/draw"
+    {:name :draw
+     :view draw/draw}]])
