@@ -402,9 +402,6 @@
        (state/set-cloning? false)
        (set-git-status! repo-url :clone-failed)
        (set-git-error! repo-url e)
-       (js/console.dir e)
-       (prn "status code: " (some-> (gobj/get e "data")
-                                    (gobj/get "statusCode")))
        (let [status-code (some-> (gobj/get e "data")
                                  (gobj/get "statusCode"))]
          (when (contains? #{401 404} status-code)
@@ -907,6 +904,8 @@
         (p/let [config-exists? (fs/file-exists?
                                 (git/get-repo-dir url)
                                 ".git/config")]
+          (prn {:config-exists? config-exists?
+                :cloned? (db/cloned? repo)})
           (if (and config-exists?
                    (db/cloned? repo))
             (do

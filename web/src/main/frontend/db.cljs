@@ -319,18 +319,6 @@
          (react)
          (get key)))))
 
-(defn debug!
-  []
-  (let [repos (->> (get-in @state/state [:me :repos])
-                   (map :url))]
-    (mapv (fn [repo]
-            {:repo/current (state/get-current-repo)
-             :repo repo
-             :git/status (get-key-value repo :git/status)
-             :git/latest-commit (get-key-value repo :git/latest-commit)
-             :git/error (get-key-value repo :git/error)})
-          repos)))
-
 (defn get-file-by-concat-headings
   ([file]
    (get-file-by-concat-headings
@@ -348,21 +336,6 @@
         seq-flatten
         (pull-many '[*])
         react
-        sort-by-pos)))
-
-(defn get-file-by-concat-headings-debug-version
-  ([file]
-   (get-file-by-concat-headings-debug-version
-    (state/get-current-repo)
-    file))
-  ([repo-url file]
-   (->> (d/q '[:find (pull ?heading [*])
-               :in $ ?file
-               :where
-               [?p :file/path ?file]
-               [?heading :heading/file ?p]]
-          (get-conn) file)
-        seq-flatten
         sort-by-pos)))
 
 (defn get-page-format
@@ -780,3 +753,20 @@
       (listen-handler repo db-conn)
       (let [config-content (get-file-content url config/config-file)]
         (reset-config! url config-content)))))
+
+(comment
+  (defn debug!
+    []
+    (let [repos (->> (get-in @state/state [:me :repos])
+                     (map :url))]
+      (mapv (fn [repo]
+              {:repo/current (state/get-current-repo)
+               :repo repo
+               :git/cloned? (cloned? repo)
+               :git/status (get-key-value repo :git/status)
+               :git/latest-commit (get-key-value repo :git/latest-commit)
+               :git/error (get-key-value repo :git/error)})
+            repos)))
+
+
+  )
