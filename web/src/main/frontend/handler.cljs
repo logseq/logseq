@@ -900,18 +900,19 @@
   []
   (let [{:keys [repos] :as me} (set-me-if-exists!)]
     (db/restore! me db-listen-to-tx!)
-    (doseq [{:keys [id url]} repos]
-      (let [repo url]
-        (p/let [config-exists? (fs/file-exists?
-                                (git/get-repo-dir url)
-                                ".git/config")]
-          (if (and config-exists?
-                   (db/cloned? repo))
-            (do
-              (git-set-username-email! repo me)
-              (periodically-pull-and-push repo {:pull-now? true}))
-            (clone-and-pull repo)))))
-    (watch-config!)))
+    (when me
+      (doseq [{:keys [id url]} repos]
+       (let [repo url]
+         (p/let [config-exists? (fs/file-exists?
+                                 (git/get-repo-dir url)
+                                 ".git/config")]
+           (if (and config-exists?
+                    (db/cloned? repo))
+             (do
+               (git-set-username-email! repo me)
+               (periodically-pull-and-push repo {:pull-now? true}))
+             (clone-and-pull repo)))))
+      (watch-config!))))
 
 (defn run-demo!
   []

@@ -237,3 +237,7 @@
   [repo]
   (set-state! :git/clone-repo repo)
   (storage/set :git/clone-repo repo))
+
+(defn logged?
+  []
+  (get-in @state [:me :email]))
