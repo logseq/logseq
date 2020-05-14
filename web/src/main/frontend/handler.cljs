@@ -904,8 +904,6 @@
         (p/let [config-exists? (fs/file-exists?
                                 (git/get-repo-dir url)
                                 ".git/config")]
-          (prn {:config-exists? config-exists?
-                :cloned? (db/cloned? repo)})
           (if (and config-exists?
                    (db/cloned? repo))
             (do
