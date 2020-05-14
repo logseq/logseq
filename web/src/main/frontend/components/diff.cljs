@@ -140,7 +140,7 @@
 (rum/defcc diff < rum/reactive
   {:will-mount
    (fn [state]
-     (let [repo (state/get-current-repo)]
+     (when-let [repo (state/get-current-repo)]
        (handler/get-latest-commit
         repo
         (fn [commit]

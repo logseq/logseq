@@ -3,6 +3,7 @@
             [promesa.core :as p]))
 
 (set! (.-fs js/window) (js/LightningFS. "logseq"))
+(js/git.plugins.set "fs" js/window.fs)
 (set! (.-pfs js/window) js/window.fs.promises)
 
 (defn mkdir

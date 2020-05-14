@@ -12,43 +12,33 @@
 ;; TODO: move to a js worker
 
 (defonce default-branch "master")
-
-(defn with-fs-http
-  [m]
-  (clojure.core/merge
-   m
-   {:fs js/window.fs
-    :http js/window.GitHttp}))
-
 ;; only support Github now
 (defn auth
   [token]
-  {:onAuth (fn [_url]
-             (clj->js
-              {:username token
-               :password "x-oauth-basic"}))})
+  {:username token
+   :password "x-oauth-basic"})
 
 (defn set-username-email
   [dir username email]
-  (p/let [_ (js/git.setConfig
-             (clj->js
-              (with-fs-http
-                {:dir dir
-                 :path "user.name"
-                 :value username})))]
-    (js/git.setConfig
-     (clj->js
-      (with-fs-http
-        {:dir dir
-         :path "user.email"
-         :value email})))))
+  (util/p-handle (js/git.config (clj->js
+                                 {:global true
+                                  :dir dir
+                                  :path "user.name"
+                                  :value username}))
+                 (fn [result]
+                   (js/git.config (clj->js
+                                   {:global true
+                                    :dir dir
+                                    :path "user.email"
+                                    :value email})))
+                 (fn [error]
+                   (prn "error:" error))))
 
 (defn with-auth
   [token m]
   (clj->js
-   (clojure.core/merge
-    m
-    (auth token))))
+   (clojure.core/merge (auth token)
+                       m)))
 
 (defn get-repo-dir
   [repo-url]
@@ -56,102 +46,87 @@
 
 (defn clone
   [repo-url token]
-  (let [m (with-fs-http
-            {:dir (get-repo-dir repo-url)
-             :url repo-url
-             :corsProxy "https://cors.isomorphic-git.org"
-             :ref default-branch
-             :singleBranch true
-             :username (get-in @state/state [:me :name] "logseq-demo")
-             :depth 1})]
-    (js/git.clone (if token
-                    (with-auth token m)
-                    (clj->js m)))))
+  (js/git.clone (with-auth token
+                  {:dir (get-repo-dir repo-url)
+                   :url repo-url
+                   :corsProxy "https://cors.isomorphic-git.org"
+                   :singleBranch true
+                   :depth 1})))
 
 (defn list-files
   [repo-url]
   (js/git.listFiles (clj->js
-                     (with-fs-http
-                       {:dir (get-repo-dir repo-url)
-                        :ref "HEAD"}))))
+                     {:dir (get-repo-dir repo-url)
+                      :ref "HEAD"})))
 
 (defn fetch
   [repo-url token]
   (js/git.fetch (with-auth token
-                  (with-fs-http
-                    {:dir (get-repo-dir repo-url)
-                     :ref default-branch
-                     :singleBranch true
-                     :depth 100
-                     :tags false}))))
+                  {:dir (get-repo-dir repo-url)
+                   :ref default-branch
+                   :singleBranch true
+                   :depth 100
+                   :tags false})))
 
 (defn merge
   [repo-url]
   (js/git.merge (clj->js
-                 (with-fs-http
-                   {:dir (get-repo-dir repo-url)
-                    :ours default-branch
-                    :theirs (str "remotes/origin/" default-branch)
-                    :fastForwardOnly true}))))
+                 {:dir (get-repo-dir repo-url)
+                  :ours default-branch
+                  :theirs (str "remotes/origin/" default-branch)
+                  :fastForwardOnly true})))
 
 (defn checkout
   [repo-url]
   (js/git.checkout (clj->js
-                    (with-fs-http
-                      {:dir (get-repo-dir repo-url)
-                       :ref default-branch}))))
+                    {:dir (get-repo-dir repo-url)
+                     :ref default-branch})))
 
 (defn log
   [repo-url token depth]
   (js/git.log (with-auth token
-                (with-fs-http
-                  {:dir (get-repo-dir repo-url)
-                   :ref default-branch
-                   :depth depth
-                   :singleBranch true}))))
+                {:dir (get-repo-dir repo-url)
+                 :ref default-branch
+                 :depth depth
+                 :singleBranch true})))
 
 (defn pull
   [repo-url token]
   (js/git.pull (with-auth token
-                 (with-fs-http
-                   {:dir (get-repo-dir repo-url)
-                    :ref default-branch
-                    :singleBranch true
-                    :fast true}))))
+                 {:dir (get-repo-dir repo-url)
+                  :ref default-branch
+                  :singleBranch true
+                  :fast true})))
 (defn add
   [repo-url file]
   (js/git.add (clj->js
-               (with-fs-http
-                 {:dir (get-repo-dir repo-url)
-                  :filepath file}))))
+               {:dir (get-repo-dir repo-url)
+                :filepath file})))
 
 (defn commit
   [repo-url message]
   (let [{:keys [name email]} (:me @state/state)]
     (js/git.commit (clj->js
-                    (with-fs-http
-                      {:dir (get-repo-dir repo-url)
-                       :message message
-                       :author {:name name
-                                :email email}})))))
+                    {:dir (get-repo-dir repo-url)
+                     :message message
+                     :author {:name name
+                              :email email}}))))
 
 (defn read-commit
   [repo-url oid]
   (js/git.readCommit (clj->js
-                      (with-fs-http
-                        {:dir (get-repo-dir repo-url)
-                         :oid oid}))))
+                      {:dir (get-repo-dir repo-url)
+                       :oid oid})))
 
 (defn push
   ([repo-url token]
    (push repo-url token false))
   ([repo-url token force?]
    (js/git.push (with-auth token
-                  (with-fs-http
-                    {:dir (get-repo-dir repo-url)
-                     :remote "origin"
-                     :ref default-branch
-                     :force force?})))))
+                  {:dir (get-repo-dir repo-url)
+                   :remote "origin"
+                   :ref default-branch
+                   :force force?}))))
 
 (defn add-commit
   [repo-url file message commit-ok-handler commit-error-handler]
@@ -183,9 +158,8 @@
   ([repo-url branch]
    (p/let [matrix (js/git.statusMatrix
                    (clj->js
-                    (with-fs-http
-                      {:dir (get-repo-dir repo-url)
-                       :ref "HEAD"})))]
+                    {:dir (get-repo-dir repo-url)
+                     :ref "HEAD"}))]
      (let [matrix (bean/->clj matrix)]
        ;; added, modified, deleted
        {:added (->> (filter (fn [[_file head-status _workdir-status _stage-status]]
@@ -227,11 +201,10 @@
 (defn read-blob
   [repo-url oid path]
   (js/git.readBlob (clj->js
-                    (with-fs-http
-                      {:dir (get-repo-dir repo-url)
-                       :gitdir (str (get-repo-dir repo-url) ".git")
-                       :oid oid
-                       :path path}))))
+                    {:dir (get-repo-dir repo-url)
+                     :gitdir (str (get-repo-dir repo-url) ".git")
+                     :oid oid
+                     :path path})))
 
 ;; * await git.writeRef({
 ;;                       *   fs,
@@ -242,8 +215,7 @@
 (defn write-ref!
   [repo-url oid]
   (js/git.writeRef (clj->js
-                    (with-fs-http
-                      {:dir (get-repo-dir repo-url)
-                       :ref (str "refs/heads/" default-branch)
-                       :value oid
-                       :force true}))))
+                    {:dir (get-repo-dir repo-url)
+                     :ref (str "refs/heads/" default-branch)
+                     :value oid
+                     :force true})))

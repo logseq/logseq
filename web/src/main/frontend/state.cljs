@@ -241,3 +241,7 @@
 (defn logged?
   []
   (get-in @state [:me :email]))
+
+(defn set-github-token!
+  [token]
+  (swap! state assoc-in [:me :access-token] token))
