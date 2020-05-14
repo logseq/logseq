@@ -12,9 +12,10 @@
      [:div.w-full.mx-auto
       [:div
        [:div
-        [:h2 "Your email:" ]
+        [:h1.title.mb-1
+         "Your email"]
         [:span.text-gray-500.text-sm.pl-1 "(Git commit requires)"]
-        [:div.mt-2.mb-2.relative.rounded-md.shadow-sm
+        [:div.mt-2.mb-2.relative.rounded-md.shadow-sm.max-w-xs
          [:input#.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
           {:autoFocus true
            :on-change (fn [e]
