@@ -23,8 +23,10 @@
 ;; only support Github now
 (defn auth
   [token]
-  {:username token
-   :password "x-oauth-basic"})
+  {:onAuth (fn []
+             (clj->js
+              {:username token
+               :password "x-oauth-basic"}))})
 
 (defn set-username-email
   [dir username email]
@@ -44,8 +46,9 @@
 (defn with-auth
   [token m]
   (clj->js
-   (clojure.core/merge (auth token)
-                       m)))
+   (clojure.core/merge
+    m
+    (auth token))))
 
 (defn get-repo-dir
   [repo-url]
@@ -60,7 +63,7 @@
              :ref default-branch
              :singleBranch true
              :username (get-in @state/state [:me :name] "logseq-demo")
-             :depth 2})]
+             :depth 1})]
     (js/git.clone (if token
                     (with-auth token m)
                     (clj->js m)))))
