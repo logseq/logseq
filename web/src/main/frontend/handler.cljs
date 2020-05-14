@@ -375,6 +375,15 @@
 
 (defn clone
   [repo-url]
+  (util/post (str config/api "repos")
+             {:url repo-url}
+             (fn [result]
+               (swap! state/state
+                      update-in [:me :repos]
+                      (fn [repos]
+                        (util/distinct-by :url (conj repos result)))))
+             (fn [error]
+               (prn "Something wrong!")))
   (let [token (get-github-token)]
     (util/p-handle
      (do
@@ -386,16 +395,7 @@
        (db/start-db-conn! (:me @state/state)
                           repo-url
                           db-listen-to-tx!)
-       (set-latest-commit-if-exists! repo-url)
-       (util/post (str config/api "repos")
-                  {:url repo-url}
-                  (fn [result]
-                    (swap! state/state
-                           update-in [:me :repos]
-                           (fn [repos]
-                             (util/distinct-by :url (conj repos result)))))
-                  (fn [error]
-                    (prn "Something wrong!"))))
+       (set-latest-commit-if-exists! repo-url))
      (fn [e]
        (prn "Clone failed, reason: " e)
        (state/set-cloning? false)

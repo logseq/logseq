@@ -70,6 +70,5 @@
              [:a.underline {:title "Which has a HttpOnly flag"}
               "browser cookie"]
              "."]
-            [:a {:href "/auth/github_ask_repo_permission"
-                 :target "_blank"}
+            [:a {:href "/auth/github_ask_repo_permission"}
              (ui/button "Grant us your private repo permission")]]]]])]]))
