@@ -375,15 +375,6 @@
 
 (defn clone
   [repo-url]
-  (util/post (str config/api "repos")
-             {:url repo-url}
-             (fn [result]
-               (swap! state/state
-                      update-in [:me :repos]
-                      (fn [repos]
-                        (util/distinct-by :url (conj repos result)))))
-             (fn [error]
-               (prn "Something wrong!")))
   (let [token (get-github-token)]
     (util/p-handle
      (do
@@ -549,38 +540,38 @@
       (reset! uploading? true)
       ;; start uploading?
       (util/post (str config/api "presigned_url")
-                {:filename filename
-                 :mime-type mime-type}
-                (fn [{:keys [presigned-url s3-object-key] :as resp}]
-                  (if presigned-url
-                    (util/upload presigned-url
-                                 file
-                                 (fn [_result]
-                                   ;; request cdn signed url
-                                   (util/post (str config/api "signed_url")
-                                              {:s3-object-key s3-object-key}
-                                              (fn [{:keys [signed-url]}]
-                                                (reset! uploading? false)
-                                                (if signed-url
-                                                  (do
-                                                    (url-handler signed-url))
-                                                  (prn "Something error, can't get a valid signed url.")))
-                                              (fn [error]
-                                                (reset! uploading? false)
-                                                (prn "Something error, can't get a valid signed url."))))
-                                 (fn [error]
-                                   (reset! uploading? false)
-                                   (prn "upload failed.")
-                                   (js/console.dir error))
-                                 (fn [e]
-                                   (on-processing e)))
-                    ;; TODO: notification, or re-try
-                    (do
-                      (reset! uploading? false)
-                      (prn "failed to get any presigned url, resp: " resp))))
-                (fn [_error]
-                  ;; (prn "Get token failed, error: " error)
-                  (reset! uploading? false))))))
+                 {:filename filename
+                  :mime-type mime-type}
+                 (fn [{:keys [presigned-url s3-object-key] :as resp}]
+                   (if presigned-url
+                     (util/upload presigned-url
+                                  file
+                                  (fn [_result]
+                                    ;; request cdn signed url
+                                    (util/post (str config/api "signed_url")
+                                               {:s3-object-key s3-object-key}
+                                               (fn [{:keys [signed-url]}]
+                                                 (reset! uploading? false)
+                                                 (if signed-url
+                                                   (do
+                                                     (url-handler signed-url))
+                                                   (prn "Something error, can't get a valid signed url.")))
+                                               (fn [error]
+                                                 (reset! uploading? false)
+                                                 (prn "Something error, can't get a valid signed url."))))
+                                  (fn [error]
+                                    (reset! uploading? false)
+                                    (prn "upload failed.")
+                                    (js/console.dir error))
+                                  (fn [e]
+                                    (on-processing e)))
+                     ;; TODO: notification, or re-try
+                     (do
+                       (reset! uploading? false)
+                       (prn "failed to get any presigned url, resp: " resp))))
+                 (fn [_error]
+                   ;; (prn "Get token failed, error: " error)
+                   (reset! uploading? false))))))
 
 (defn set-me-if-exists!
   []
@@ -796,6 +787,15 @@
 
 (defn clone-and-pull
   [repo-url]
+  (util/post (str config/api "repos")
+             {:url repo-url}
+             (fn [result]
+               (swap! state/state
+                      update-in [:me :repos]
+                      (fn [repos]
+                        (util/distinct-by :url (conj repos result)))))
+             (fn [error]
+               (prn "Something wrong!")))
   (p/then (clone repo-url)
           (fn []
             (git-set-username-email! repo-url (:me @state/state))
@@ -890,10 +890,11 @@
   [format]
   (when format
     (state/set-preferred-format! format)
-    (util/post (str config/api "set_preferred_format")
-               {:preferred_format (name format)}
-               (fn [])
-               (fn [_e]))))
+    (when (:email (:me @state/state))
+      (util/post (str config/api "set_preferred_format")
+                 {:preferred_format (name format)}
+                 (fn [])
+                 (fn [_e])))))
 
 (defn start!
   []
@@ -911,6 +912,13 @@
               (periodically-pull-and-push repo {:pull-now? true}))
             (clone-and-pull repo)))))
     (watch-config!)))
+
+(defn run-demo!
+  []
+  (redirect! {:to :home})
+  (let [test-repo "https://github.com/logseq/docs"]
+    (p/let [_ (clone test-repo)]
+      (load-db-and-journals! test-repo nil true))))
 
 (comment
 

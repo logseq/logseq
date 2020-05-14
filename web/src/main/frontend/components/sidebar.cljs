@@ -139,16 +139,17 @@
         journals-length (state/sub :journals-length)
         current-repo (state/sub :git/current-repo)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
-        preferred-format (state/sub [:me :preferred_format])]
+        preferred-format (state/sub [:me :preferred_format])
+        login? (:email me)]
     [:div.max-w-7xl.mx-auto
      (cond
        (not preferred-format)
        (widgets/choose-preferred-format)
 
-       (and me (nil? (:email me)))
+       (and login? (nil? (:email me)))
        (settings/set-email)
 
-       git-ask-private-grant?
+       (and login? git-ask-private-grant?)
        (widgets/add-repo)
 
        cloning?
@@ -164,8 +165,7 @@
        (loading "Loading files")
 
        (empty? (:repos me))
-       (widgets/add-repo))
-     ]))
+       (widgets/add-repo))]))
 
 (rum/defc custom-context-menu-content
   []

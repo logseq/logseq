@@ -557,24 +557,25 @@
    (get-agenda (state/get-current-repo) :week))
   ([repo time]
    ;; TODO:
-   (let [duration (case time
-                    :today []
-                    :week  []
-                    :month [])
-         pred (fn [db marker]
-                (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
-     (->>
-      (posh/q '[:find ?h
-                :in $ ?pred
-                :where
-                [?h :heading/marker ?marker]
-                [(?pred $ ?marker)]]
-        (get-conn repo false)
-        pred)
-      react
-      seq-flatten
-      (pull-many '[*])
-      react))))
+   (when-let [conn (get-conn repo false)]
+     (let [duration (case time
+                     :today []
+                     :week  []
+                     :month [])
+          pred (fn [db marker]
+                 (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
+      (->>
+       (posh/q '[:find ?h
+                 :in $ ?pred
+                 :where
+                 [?h :heading/marker ?marker]
+                 [(?pred $ ?marker)]]
+         conn
+         pred)
+       react
+       seq-flatten
+       (pull-many '[*])
+       react)))))
 
 (defn get-current-journal-path
   []
