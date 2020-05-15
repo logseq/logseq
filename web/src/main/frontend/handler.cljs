@@ -685,8 +685,9 @@
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file dummy?] :as heading} value]
   (let [repo (state/get-current-repo)
-        value (string/trim value)]
-    (when (not= (string/trim content) value) ; heading content changed
+        ;; value (string/trim value)
+        ]
+    (when (not= (string/trim content) (string/trim value)) ; heading content changed
       (let [file (db/entity (:db/id file))
             file-content (:file/content file)
             file-path (:file/path file)
@@ -950,7 +951,7 @@
     (p/let [changes (git/get-status-matrix (state/get-current-repo))]
       (prn changes)))
 
-  (defn debug-file-and-headings
+  (defn debug-file
     [path]
     (p/let [content (load-file (state/get-current-repo)
                                path)]

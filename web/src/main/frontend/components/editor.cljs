@@ -389,7 +389,6 @@
                  (reset! *slash-caret-pos nil)
                  (reset! *show-commands false))))
          9 (fn [state e]
-             (prn "adjust heading level")
              (util/stop e)
              (adjust-heading-level! state))
          }
@@ -416,7 +415,6 @@
                     (cond
                       (= key-code 9)      ;tab
                       (do
-                        (prn "tab pressed")
                         (util/stop e)
                         (insert-command! input-id
                                          (last (first matched-commands))
