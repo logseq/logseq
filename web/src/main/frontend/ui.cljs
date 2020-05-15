@@ -208,13 +208,16 @@
 
        ;; enter
        13 (fn [state e]
-            (let [current-idx (get state ::current-idx)
-                  matched (first (:rum/args state))
-                  on-chosen (nth (:rum/args state) 1)]
-              (util/stop e)
-              (on-chosen (nth matched @current-idx))))}
+            (util/stop e)
+            (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)]
+              (if on-enter
+                (on-enter state)
+                (let [current-idx (get state ::current-idx)]
+                  (on-chosen (nth matched @current-idx))))))}
       nil)))
-  [state matched on-chosen & {:keys [empty-div on-click]}]
+  [state matched {:keys [on-chosen
+                         on-enter
+                         empty-div]}]
   (let [current-idx (get state ::current-idx)]
     [:div.py-1.rounded-md.bg-white.shadow-xs
      (if (seq matched)
@@ -229,9 +232,7 @@
              :tab-index 0
              :on-click (fn [e]
                          (util/stop e)
-                         (on-chosen item)
-                         (when on-click
-                           (on-click e)))}
+                         (on-chosen item))}
             item)
            idx))
        (when empty-div

@@ -1,4 +1,4 @@
-(ns frontend.format.org-md
+(ns frontend.format.mldoc
   (:require [frontend.format.protocol :as protocol]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -17,12 +17,12 @@
              :format format)))))
 
 (defn loaded? []
-  js/window.MldocOrg)
+  js/window.Mldoc)
 
 (defn parse-json
   [content config]
   (when (loaded?)
-    (.parseJson js/window.MldocOrg content (or config default-config))))
+    (.parseJson js/window.Mldoc content (or config default-config))))
 
 (defn ->edn
   [content config]
@@ -32,12 +32,12 @@
         (parse-json config)
         (util/json->clj))))
 
-(defrecord OrgMdMode []
+(defrecord MldocMode []
   protocol/Format
   (toEdn [this content config]
     (->edn content config))
   (toHtml [this content config]
-    (.parseHtml js/window.MldocOrg content config))
+    (.parseHtml js/window.Mldoc content config))
   (loaded? [this]
     (some? (loaded?)))
   (lazyLoad [this ok-handler]

@@ -27,7 +27,7 @@
 
 (defn anchor-link
   [s]
-  (.anchorLink js/window.MldocOrg s))
+  (.anchorLink js/window.Mldoc s))
 
 (defn vec-cat
   [& args]
@@ -658,7 +658,7 @@
   ;; [2020-02-10 Mon 13:22]
   ;; repetition
   (def r1 "<2005-10-01 Sat +1m>")
-  ;; TODO: mldoc_org add supports
+  ;; TODO: mldoc add supports
   (def r2 "<2005-10-01 Sat +1m -3d>")
 
   (def l

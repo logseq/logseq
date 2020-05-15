@@ -5,7 +5,7 @@
             [medley.core :as medley]
             [datascript.transit :as dt]
             [frontend.format :as format]
-            [frontend.format.org-md :as org-md]
+            [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -398,8 +398,8 @@
   (println "Parsing file: " file)
   (try
     (let [format (format/get-format file)
-         ast (org-md/->edn content
-                           (org-md/default-config format))
+         ast (mldoc/->edn content
+                           (mldoc/default-config format))
          headings (block/extract-headings ast (utf8/length utf8-content))
          pages (pages-fn headings ast)
          ref-pages (atom #{})
@@ -767,7 +767,4 @@
                :git/status (get-key-value repo :git/status)
                :git/latest-commit (get-key-value repo :git/latest-commit)
                :git/error (get-key-value repo :git/error)})
-            repos)))
-
-
-  )
+            repos))))

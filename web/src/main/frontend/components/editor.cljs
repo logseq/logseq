@@ -78,14 +78,14 @@
     (let [matched (rum/react *matched-commands)]
       (ui/auto-complete
        (map first matched)
-       (fn [chosen]
-         (let [restore-slash? (not (contains? #{"Page Reference"
-                                                "Link"
-                                                "Image Link"
-                                                "Date Picker"} chosen))]
-           (insert-command! id (get (into {} matched) chosen)
-                            format
-                            {:restore? restore-slash?})))))))
+       {:on-chosen (fn [chosen]
+                     (let [restore-slash? (not (contains? #{"Page Reference"
+                                                            "Link"
+                                                            "Image Link"
+                                                            "Date Picker"} chosen))]
+                       (insert-command! id (get (into {} matched) chosen)
+                                        format
+                                        {:restore? restore-slash?})))}))))
 
 (defn get-matched-pages
   [q]
@@ -107,17 +107,22 @@
               edit-content (state/sub :edit-content)
               q (subs edit-content pos current-pos)
               matched-pages (when-not (string/blank? q)
-                              (get-matched-pages q))]
+                              (get-matched-pages q))
+              chosen-handler (fn [chosen _click?]
+                               (insert-command! id
+                                                (util/format "[[%s]]" chosen)
+                                                format
+                                                {:last-pattern (str "[[" q)
+                                                 :postfix-fn (fn [s] (util/replace-first "]]" s ""))})
+                               (state/set-editor-show-page-search false))
+              non-exist-page-handler (fn [_state]
+                                       (state/set-editor-show-page-search false)
+                                       (util/cursor-move-forward input 2))]
           (ui/auto-complete
            matched-pages
-           (fn [chosen click?]
-             (insert-command! id
-                              (util/format "[[%s]]" chosen)
-                              format
-                              {:last-pattern (str "[[" q)
-                               :postfix-fn (fn [s] (util/replace-first "]]" s ""))})
-             (state/set-editor-show-page-search false))
-           :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]))))))
+           {:on-chosen chosen-handler
+            :on-enter non-exist-page-handler
+            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]}))))))
 
 (rum/defc date-picker < rum/reactive
   [id format]
@@ -389,8 +394,9 @@
                  (reset! *slash-caret-pos nil)
                  (reset! *show-commands false))))
          9 (fn [state e]
-             (util/stop e)
-             (adjust-heading-level! state))
+             (when-not (state/get-editor-show-input)
+               (util/stop e)
+               (adjust-heading-level! state)))
          }
         (fn [e key-code]
           ;; (swap! state/state assoc
