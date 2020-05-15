@@ -42,7 +42,9 @@
            [:p.text-sm.text-gray-500
             "Git clone and push require the token to work."
             [:br]
-            "The token will be encrypted and only stored in the browser cookie."]
+            "The token will be encrypted and then only stored in the browser localstorage."
+            [:br]
+            "The server will not try to store or read your token."]
            [:div.mt-2.mb-2.relative.rounded-md.shadow-sm.max-w-xs
             [:div.font-bold.text-gray-600.mb-1 "Personal access token:"]
             [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5

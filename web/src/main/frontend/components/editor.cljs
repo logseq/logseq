@@ -220,12 +220,6 @@
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
             (handler/edit-heading! (uuid sibling-heading-id) pos)))))))
 
-(defn get-previous-heading-level
-  [current-id]
-  (when-let [input (gdom/getElement current-id)]
-    (when-let [prev-heading (gdom/getPreviousElementSibling input)]
-      (d/attr prev-heading "level"))))
-
 (defn on-backspace
   [state e]
   (let [{:keys [id heading-id heading-parent-id dummy? value on-hide pos]} (get-state state)
@@ -304,11 +298,11 @@
      :hidden true}]
    (when-let [uploading? (rum/react *image-uploading?)]
      (let [processing (rum/react *image-uploading-process)]
-      (transition-cp
-       [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-white.pl-1.pr-1
-        [:span.lds-dual-ring.mr-2]
-        [:span {:style {:margin-top 2}}
-         (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
+       (transition-cp
+        [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-white.pl-1.pr-1
+         [:span.lds-dual-ring.mr-2]
+         [:span {:style {:margin-top 2}}
+          (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
 
 (defn- clear-when-saved!
   []
@@ -330,16 +324,27 @@
       (clear-when-saved!)
       (handler/edit-heading! id :max))))
 
+(defn get-previous-heading-level
+  [current-id]
+  (when-let [input (gdom/getElement current-id)]
+    (when-let [prev-heading (gdom/getPreviousElementSibling input)]
+      (util/parse-int (d/attr prev-heading "level")))))
+
+(defn get-current-heading-level
+  [heading-pattern]
+  (when-let [input (state/get-edit-content)]
+    (let [[prefix & _] (string/split input " ")]
+      (and (= prefix (apply str (repeat (count prefix) heading-pattern)))
+           (count prefix)))))
+
 (defn- adjust-heading-level!
   [state]
   (let [{:keys [heading heading-parent-id value]} (get-state state)
-        level (:heading/level heading)
         format (:heading/format heading)
         heading-pattern (config/get-heading-pattern format)
+        level (get-current-heading-level heading-pattern)
         previous-level (or (get-previous-heading-level heading-parent-id) 1)
-        add? (or (<= level 2)
-                 ;; equal to the last heading
-                 (<= level previous-level))
+        add? (= level previous-level)
         remove? (and (> level previous-level)
                      (> level 2))
         new-value (cond
@@ -384,6 +389,7 @@
                  (reset! *slash-caret-pos nil)
                  (reset! *show-commands false))))
          9 (fn [state e]
+             (prn "adjust heading level")
              (util/stop e)
              (adjust-heading-level! state))
          }
@@ -405,11 +411,12 @@
           (let [format (:format (get-state state))]
             (when (not= key-code 191)     ; not /
               (let [matched-commands (get-matched-commands input)]
-                (if (seq matched-commands)
+                (when (seq matched-commands)
                   (do
                     (cond
                       (= key-code 9)      ;tab
                       (do
+                        (prn "tab pressed")
                         (util/stop e)
                         (insert-command! input-id
                                          (last (first matched-commands))
@@ -447,7 +454,7 @@
                      {:drop (fn [e files]
                               (upload-image id files format *image-uploading? true))})
                     (when (and @*new-inserted-heading
-                              (= @*new-inserted-heading (:heading/uuid heading)))
+                               (= @*new-inserted-heading (:heading/uuid heading)))
                       (util/move-cursor-to-end input))))
                 state)
    :will-unmount (fn [state]

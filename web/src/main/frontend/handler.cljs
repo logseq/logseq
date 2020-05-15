@@ -954,11 +954,9 @@
     [path]
     (p/let [content (load-file (state/get-current-repo)
                                path)]
-      (let [db-content (db/get-file path)
-            headings (db/get-file-by-concat-headings-debug-version path)]
+      (let [db-content (db/get-file path)]
         (prn {:content content
-              :utf8-length (utf8/length (utf8/encode content))
-              :headings headings}))))
+              :utf8-length (utf8/length (utf8/encode content))}))))
 
   ;; (debug-file-and-headings "readme.org")
   )
