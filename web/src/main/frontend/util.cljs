@@ -451,6 +451,12 @@
   [s]
   (.replace s #"[ \t\r]+$" ""))
 
+(defn trim-only-newlines
+  [s]
+  (-> s
+      (.replace #"[\n]+$" "")
+      (.replace #"^[\n]+" "")))
+
 (defn triml-without-newlines
   [s]
   (.replace s #"^[ \t\r]+" ""))

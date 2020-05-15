@@ -685,8 +685,7 @@
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file dummy?] :as heading} value]
   (let [repo (state/get-current-repo)
-        ;; value (string/trim value)
-        ]
+        value (util/trimr-only-newlines value)]
     (when (not= (string/trim content) (string/trim value)) ; heading content changed
       (let [file (db/entity (:db/id file))
             file-content (:file/content file)
