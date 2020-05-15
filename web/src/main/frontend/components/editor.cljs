@@ -410,7 +410,7 @@
           (let [format (:format (get-state state))]
             (when (not= key-code 191)     ; not /
               (let [matched-commands (get-matched-commands input)]
-                (when (seq matched-commands)
+                (if (seq matched-commands)
                   (do
                     (cond
                       (= key-code 9)      ;tab
