@@ -129,17 +129,17 @@
           markup?
           (let [html (format/to-html content format config)]
             (if (string/blank? html)
-              [:div.cursor
+              [:div.cursor.content
                {:id id
                 :on-click on-click}
                [:div.text-gray-500.cursor "Click to edit"]]
-              [:div.cursor
+              [:div.cursor.content
                {:id id
                 :on-click on-click
                 :dangerouslySetInnerHTML {:__html html}}]))
 
           :else                       ; other text formats
-          [:pre.cursor
+          [:pre.cursor.content
            {:id id
             :on-click on-click}
            (if (string/blank? content)
