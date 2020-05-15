@@ -25,14 +25,13 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
 
-  (handler/start!)
+  (handler/start! start)
 
   ;; popup to notify user, could be toggled in settings
   ;; (handler/request-notifications-if-not-asked)
 
   ;; (handler/run-notify-worker!)
-
-  (start))
+  )
 
 (defn stop []
   ;; stop is called before any code is reloaded

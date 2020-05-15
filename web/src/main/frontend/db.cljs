@@ -13,12 +13,30 @@
             [frontend.utf8 :as utf8]
             [cljs-bean.core :as bean]
             [frontend.config :as config]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [goog.object :as gobj]
+            ["localforage" :as localforage]
+            [promesa.core :as p]))
+
+;; offline db
+(def store-name "dbs")
+(.config localforage
+         (bean/->js
+          {:name "logseq-datascript"
+           :version 1.0
+           :storeName store-name}))
+
+(defonce localforage-instance (.createInstance localforage store-name))
 
 ;; only for debugging
 ;; (def react deref)
 (def react rum/react)
 
+(defonce idx-db (atom nil))
+(defonce idx-db-name "logseq")
+(defonce idx-datascript-table-name "datascript-dbs")
+
+;; datascript dbs
 ;; TODO: Create a database for each repo.
 ;; Multiple databases
 (defn get-repo-path
@@ -121,7 +139,9 @@
 
 ;; persisting DB between page reloads
 (defn persist [repo db]
-  (js/localStorage.setItem (datascript-db repo) (db->string db)))
+  (.setItem localforage-instance
+            (datascript-db repo)
+            (db->string db)))
 
 (defn reset-conn! [conn db]
   (reset! conn db))
@@ -141,13 +161,6 @@
     (posh/pull-many conn
                     selector
                     eids)))
-
-;; (new TextEncoder().encode('foo')).length
-;; (defn db-size
-;;   [repo]
-;;   (when-let [store (js/localStorage.getItem (datascript-db repo))]
-;;     (let [bytes (.-length (.encode (js/TextEncoder.) store))]
-;;       (/ bytes 1000))))
 
 (defn entity
   [id-or-lookup-ref]
@@ -398,53 +411,53 @@
   (println "Parsing file: " file)
   (try
     (let [format (format/get-format file)
-         ast (mldoc/->edn content
+          ast (mldoc/->edn content
                            (mldoc/default-config format))
-         headings (block/extract-headings ast (utf8/length utf8-content))
-         pages (pages-fn headings ast)
-         ref-pages (atom #{})
-         headings (mapcat
-                   (fn [[page headings]]
-                     (if page
-                       (map (fn [heading]
-                              (let [heading-ref-pages (seq (:ref-pages heading))]
-                                (when heading-ref-pages
-                                  (swap! ref-pages set/union (set heading-ref-pages)))
-                                (-> heading
-                                    (dissoc :ref-pages)
-                                    (assoc :heading/content (get-heading-content utf8-content heading)
-                                           :heading/file [:file/path file]
-                                           :heading/format (format/get-format file)
-                                           :heading/page [:page/name (string/capitalize page)]
-                                           :heading/ref-pages (mapv
-                                                               (fn [page]
-                                                                 {:page/name (string/capitalize page)})
-                                                               heading-ref-pages)))))
-                         headings)))
-                   pages)
-         headings (block/safe-headings headings)
-         pages (map
-                 (fn [page]
-                   {:page/name (if page
-                                 (string/capitalize page)
-                                 (string/capitalize (first (string/split #"\." file))))
-                    :page/file [:file/path file]
-                    :page/journal? journal?
-                    :page/journal-day (if journal?
-                                        (journal-page-name->int page)
-                                        0)})
-                 (map first pages))
-         pages (concat
-                pages
-                (map
+          headings (block/extract-headings ast (utf8/length utf8-content))
+          pages (pages-fn headings ast)
+          ref-pages (atom #{})
+          headings (mapcat
+                    (fn [[page headings]]
+                      (if page
+                        (map (fn [heading]
+                               (let [heading-ref-pages (seq (:ref-pages heading))]
+                                 (when heading-ref-pages
+                                   (swap! ref-pages set/union (set heading-ref-pages)))
+                                 (-> heading
+                                     (dissoc :ref-pages)
+                                     (assoc :heading/content (get-heading-content utf8-content heading)
+                                            :heading/file [:file/path file]
+                                            :heading/format (format/get-format file)
+                                            :heading/page [:page/name (string/capitalize page)]
+                                            :heading/ref-pages (mapv
+                                                                (fn [page]
+                                                                  {:page/name (string/capitalize page)})
+                                                                heading-ref-pages)))))
+                          headings)))
+                    pages)
+          headings (block/safe-headings headings)
+          pages (map
                   (fn [page]
-                    {:page/name (string/capitalize page)})
-                  @ref-pages))]
-     (vec
-      (->> (concat
-            pages
-            headings)
-           (remove nil?))))
+                    {:page/name (if page
+                                  (string/capitalize page)
+                                  (string/capitalize (first (string/split #"\." file))))
+                     :page/file [:file/path file]
+                     :page/journal? journal?
+                     :page/journal-day (if journal?
+                                         (journal-page-name->int page)
+                                         0)})
+                  (map first pages))
+          pages (concat
+                 pages
+                 (map
+                   (fn [page]
+                     {:page/name (string/capitalize page)})
+                   @ref-pages))]
+      (vec
+       (->> (concat
+             pages
+             headings)
+            (remove nil?))))
     (catch js/Error e
       (prn "Parsing error: " e)
       [])))
@@ -559,23 +572,23 @@
    ;; TODO:
    (when-let [conn (get-conn repo false)]
      (let [duration (case time
-                     :today []
-                     :week  []
-                     :month [])
-          pred (fn [db marker]
-                 (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
-      (->>
-       (posh/q '[:find ?h
-                 :in $ ?pred
-                 :where
-                 [?h :heading/marker ?marker]
-                 [(?pred $ ?marker)]]
-         conn
-         pred)
-       react
-       seq-flatten
-       (pull-many '[*])
-       react)))))
+                      :today []
+                      :week  []
+                      :month [])
+           pred (fn [db marker]
+                  (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
+       (->>
+        (posh/q '[:find ?h
+                  :in $ ?pred
+                  :where
+                  [?h :heading/marker ?marker]
+                  [(?pred $ ?marker)]]
+          conn
+          pred)
+        react
+        seq-flatten
+        (pull-many '[*])
+        react)))))
 
 (defn get-current-journal-path
   []
@@ -696,7 +709,6 @@
 (defn get-headings-contents
   [heading-uuids]
   (let [conn (get-conn (state/get-current-repo) false)]
-    ;; (prn {:db db})
     (d/pull-many (d/db conn) '[:heading/content]
                  (mapv (fn [id] [:heading/uuid id]) heading-uuids))))
 
@@ -738,22 +750,25 @@
     (d/transact! db-conn [(me-tx (d/db db-conn) me)])
     (posh/posh! db-conn)))
 
-(defn restore! [{:keys [repos] :as me} listen-handler]
-  (doseq [{:keys [id url]} repos]
-    (let [repo url
-          db-name (datascript-db repo)
-          db-conn (d/create-conn schema)]
-      (swap! conns assoc db-name db-conn)
-      (if-let [stored (js/localStorage.getItem db-name)]
-        (let [stored-db (string->db stored)
-              attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-          (when (= (:schema stored-db) schema) ;; check for code update
-            (reset-conn! db-conn attached-db)))
-        (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-      (posh/posh! db-conn)
-      (listen-handler repo db-conn)
-      (let [config-content (get-file-content url config/config-file)]
-        (reset-config! url config-content)))))
+(defn restore! [{:keys [repos] :as me} listen-handler render-fn]
+  (-> (p/all
+    (for [{:keys [id url]} repos]
+      (let [repo url
+            db-name (datascript-db repo)
+            db-conn (d/create-conn schema)]
+        (swap! conns assoc db-name db-conn)
+        (p/let [stored (.getItem localforage-instance db-name)]
+          (if stored
+            (let [stored-db (string->db stored)
+                  attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+              (when (= (:schema stored-db) schema) ;; check for code update
+                (reset-conn! db-conn attached-db)))
+            (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+          (posh/posh! db-conn)
+          (listen-handler repo db-conn)
+          (let [config-content (get-file-content url config/config-file)]
+            (reset-config! url config-content))))))
+      (p/then render-fn)))
 
 (comment
   (defn debug!

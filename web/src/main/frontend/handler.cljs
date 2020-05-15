@@ -906,9 +906,10 @@
                (fn [_e]))))
 
 (defn start!
-  []
+  [render]
   (let [me (and js/window.user (bean/->clj js/window.user))]
-    (db/restore! me db-listen-to-tx!)
+    ;; async
+    (db/restore! me db-listen-to-tx! render)
     (when me
       (set-state-kv! :me me)
       (when-let [base64-key (:encrypt_object_key me)]
