@@ -140,7 +140,7 @@
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:email me)
-        github-token (state/sub [:me :access-token])]
+        token (state/sub :encrypt/token)]
     [:div.max-w-7xl.mx-auto
      (cond
        (not preferred-format)
@@ -150,7 +150,7 @@
        (settings/set-email)
 
        ;; personal token
-       (and logged? (nil? github-token))
+       (and logged? (nil? token))
        (widgets/set-personal-access-token)
 
        cloning?

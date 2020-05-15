@@ -243,7 +243,7 @@
   [token]
   (swap! state assoc-in [:me :access-token] token))
 
-(defn get-encrypt-token
+(defn get-encrypted-token
   []
   (:encrypt/token @state))
 

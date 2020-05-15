@@ -486,12 +486,9 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url)
-  ;; (when-not config/dev?
-  ;;   (periodically-pull repo-url pull-now?)
-  ;;   (periodically-push-tasks repo-url))
-  )
+  (when-not config/dev?
+    (periodically-pull repo-url pull-now?)
+    (periodically-push-tasks repo-url)))
 
 (defn render-local-images!
   []
@@ -579,7 +576,9 @@
 (defn sign-out!
   [e]
   (p/let [_idb-clear (js/window.pfs._idb.wipe)]
-    (js/localStorage.clear)
+    (storage/remove :git/current-repo)
+    (storage/remove :git/clone-repo)
+    ;; remember not to remove the encrypted token
     (set! (.-href js/window.location) "/logout")))
 
 (defn set-format-js-loading!
@@ -899,7 +898,7 @@
           encrypted (encrypt/encrypt key token)
           base64-key (encrypt/base64-key key)]
     (state/set-encrypt-token! encrypted)
-    (util/post (str config/api "encrypted_token")
+    (util/post (str config/api "encrypt_object_key")
                {:object-key base64-key}
                (fn []
                  ;; refresh the browser
@@ -912,8 +911,8 @@
     (db/restore! me db-listen-to-tx!)
     (when me
       (set-state-kv! :me me)
-      (when-let [base64-key (:access-token me)]
-        (when-let [encrypted-token (state/get-encrypt-token)]
+      (when-let [base64-key (:encrypt_object_key me)]
+        (when-let [encrypted-token (state/get-encrypted-token)]
           (p/let [token (encrypt/decrypt base64-key encrypted-token)]
             ;; FIXME: Sometimes it has spaces in the front
             (let [token (string/trim token)]
