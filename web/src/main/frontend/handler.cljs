@@ -930,12 +930,16 @@
                         (periodically-pull-and-push repo {:pull-now? true}))
                       (clone-and-pull repo))))))))))))
 
-(defn run-demo!
+(defn load-docs!
   []
   (redirect! {:to :home})
-  (let [test-repo "https://github.com/logseq/docs"]
-    (p/let [_ (clone test-repo)]
-      (load-db-and-journals! test-repo nil true))))
+  ;; TODO: Allow user to overwrite this repo
+  (let [docs-repo "https://github.com/logseq/docs"]
+    (if (db/cloned? docs-repo)
+      ;; switch to docs repo
+      (state/set-current-repo! docs-repo)
+      (p/let [_ (clone docs-repo)]
+        (load-db-and-journals! docs-repo nil true)))))
 
 (comment
 

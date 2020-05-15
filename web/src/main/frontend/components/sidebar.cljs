@@ -16,49 +16,37 @@
             [dommy.core :as d]
             [clojure.string :as string]))
 
-(rum/defc logo-or-repos < rum/reactive
+(rum/defc logo
+  []
+  [:div#logo.p-4
+   [:a.opacity-50.hover:opacity-100 {:href "/docs"}
+    [:img.h-6.w-auto
+     {:alt "Logseq",
+      :src "/static/img/logo.png"}]]])
+
+(rum/defc repos < rum/reactive
   [current-repo close-modal-fn]
   (if current-repo
-    (let [repos (state/sub [:me :repos])
-          repos (->> repos
-                     (remove #(= (:url %) current-repo))
-                     (util/distinct-by :url))]
-      [:div.flex.flex-row.align-center.whitespace-no-wrap
-       [:a.hover:text-gray-300.text-gray-400
-        {:style {:margin-right 13
-                 :margin-top -1}
-         :on-click (fn []
-                     (d/add-class! (d/by-id "menu")
-                                   "md:block")
-                     (d/remove-class! (d/by-id "left-sidebar")
-                                      "enter")
-                     (d/remove-class! (d/by-id "search")
-                                      "sidebar-open")
-                     (d/remove-class! (d/by-id "main")
-                                      "sidebar-open"))}
-        (svg/menu "currentColor")]
-       (if (>= (count repos) 1)
-         (ui/dropdown-with-links
-          (fn [{:keys [toggle-fn]}]
-            [:a.hover:text-gray-300.text-gray-400.font-bold {:on-click toggle-fn}
-             [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
-             [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-          (mapv
-           (fn [{:keys [id url]}]
-             {:title (db/get-repo-name url)
-              :options {:on-click (fn []
-                                    (state/set-current-repo! url))}})
-           repos)
-          (util/hiccup->class
-           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
-         [:a.hover:text-gray-300.text-gray-400.font-bold
-          {:href current-repo
-           :target "_blank"}
-          (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))])])
-
-    [:img.h-8.w-auto
-     {:alt "Logseq",
-      :src "/static/img/logo.png"}]))
+    (let [repos (state/sub [:me :repos])]
+      (if (>= (count repos) 1)
+       (ui/dropdown-with-links
+        (fn [{:keys [toggle-fn]}]
+          [:a.hover:text-gray-300.text-gray-400.font-bold {:on-click toggle-fn}
+           [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
+           [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+        (mapv
+         (fn [{:keys [id url]}]
+           {:title (db/get-repo-name url)
+            :options {:on-click (fn []
+                                  (state/set-current-repo! url))}})
+         repos)
+        (util/hiccup->class
+         "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
+       [:a.hover:text-gray-300.text-gray-400.font-bold
+        {:href current-repo
+         :target "_blank"}
+        (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))])))
+  )
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -193,12 +181,28 @@
 (rum/defc left-sidebar < rum/reactive
   [current-repo route-match close-fn]
   [:div#left-sidebar.flex.flex-col.w-64.sidebar.enter
-   [:div.flex.items-center.flex-shrink-0.px-4.h-16 {:class (if current-repo
-                                                             "sm:h-10"
-                                                             "sm:h-16")}
-    (logo-or-repos current-repo)]
+   [:div.flex.items-center.flex-shrink-0.px-4.h-10
+    [:div.flex.flex-row.align-center.whitespace-no-wrap
+     [:a.hover:text-gray-300.text-gray-400
+      {:style {:margin-right 13
+               :margin-top -1}
+       :on-click (fn []
+                   (d/add-class! (d/by-id "menu")
+                                 "md:block")
+                   (d/remove-class! (d/by-id "left-sidebar")
+                                    "enter")
+                   (d/remove-class! (d/by-id "search")
+                                    "sidebar-open")
+                   (d/remove-class! (d/by-id "main")
+                                    "sidebar-open"))}
+      (svg/menu "currentColor")]
+     (repos current-repo close-fn)
+     ]]
+
    [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
-    (sidebar-nav route-match close-fn)]])
+    (sidebar-nav route-match close-fn)]
+
+   (logo)])
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
@@ -232,7 +236,7 @@
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]])
        [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#202225"}}
-        (logo-or-repos current-repo close-fn)]
+        (repos current-repo close-fn)]
        [:div.flex-1.h-0.overflow-y-auto
         (sidebar-nav route-match close-fn)]]]
      [:div.hidden.md:flex.md:flex-shrink-0

@@ -1,12 +1,17 @@
-(ns frontend.components.demo
+(ns frontend.components.docs
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.ui :as ui]
+            [frontend.state :as state]
             [frontend.components.widgets :as widgets]))
 
-(rum/defc demo
+(rum/defc docs <
+  {:will-mount (fn [state]
+                 (if (state/logged?)
+                   (handler/load-docs!))
+                 state)}
   []
-  [:div#demo
+  [:div#docs
    [:h1.title {:style {:margin-bottom "0.25rem"}}
     "What's your preferred mode?"]
    [:span.text-gray-500.text-sm.ml-1
@@ -18,7 +23,7 @@
       :on-click
       (fn []
         (handler/set-preferred-format! :markdown)
-        (handler/run-demo!)))
+        (handler/load-docs!)))
 
     [:span.ml-2.mr-2 "-OR-"]
 
@@ -27,4 +32,4 @@
       :on-click
       (fn []
         (handler/set-preferred-format! :org)
-        (handler/run-demo!)))]])
+        (handler/load-docs!)))]])
