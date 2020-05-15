@@ -1,6 +1,7 @@
 var git = {};
 git.walk = function() {};
 git.TREE = function() {};
+git.log = function() {};
 var dummy = {};
 dummy.populateStat = function() {};
 dummy.populateHash = function() {};

@@ -627,12 +627,14 @@
       (let [id (util/url-encode name)]
         [:div.footdef
          [:div.footpara
-          (block config ["Paragraph" definition])]
-         [:sup
-          [:a {:id (str "fn." id)
-               :class "footnum"
-               :href (str "#fnr." id)}
-           (str name "↩︎")]]])
+          (conj
+           (block config ["Paragraph" definition])
+           [:a.ml-1 {:id (str "fn." id)
+                     :style {:font-size 14}
+                     :class "footnum"
+                     :href (str "#fnr." id)}
+            [:sup (str name "↩︎")]])]
+         ])
 
       :else
       "")

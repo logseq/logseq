@@ -39,14 +39,15 @@
            {:title (db/get-repo-name url)
             :options {:on-click (fn []
                                   (state/set-current-repo! url))}})
-         repos)
+         (remove (fn [repo]
+                   (= current-repo (:url repo)))
+                 repos))
         (util/hiccup->class
          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
        [:a.hover:text-gray-300.text-gray-400.font-bold
         {:href current-repo
          :target "_blank"}
-        (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))])))
-  )
+        (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]))))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
