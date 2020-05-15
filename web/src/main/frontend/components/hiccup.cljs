@@ -426,7 +426,7 @@
 
     "DONE"
     (ui/checkbox {:checked true
-                  :class class
+                  :class (str class " checked")
                   :style {:margin-top -2}
                   :on-change (fn [_e]
                                ;; FIXME: Log timestamp
