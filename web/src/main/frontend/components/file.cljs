@@ -34,7 +34,16 @@
 (rum/defcs file < rum/reactive
   [state]
   (let [[encoded-path path] (get-path state)
-        format (format/get-format path)]
+        format (format/get-format path)
+        save-file-handler (fn [content]
+                            (fn [_]
+                              (when (handler/file-changed? content)
+                                (handler/alter-file (state/get-current-repo) path (state/get-edit-content) nil))))
+        edit-raw-handler (fn []
+                           (let [content (db/sub-file path)]
+                             (content/content encoded-path {:content content
+                                                            :format format
+                                                            :on-hide (save-file-handler content)})))]
     (cond
       ;; image type
       (and format (contains? (config/img-formats) format))
@@ -42,18 +51,15 @@
 
       (and format (contains? config/hiccup-support-formats format))
       (let [headings (db/get-file-by-concat-headings path)
+            empty-headings? (empty? headings)
             headings (db/with-dummy-heading headings format)
             hiccup (hiccup/->hiccup headings {:id encoded-path})]
-        (content/content encoded-path {:hiccup hiccup}))
+        (if empty-headings?
+          (edit-raw-handler)
+          (content/content encoded-path {:hiccup hiccup})))
 
       (and format (contains? (config/text-formats) format))
-      (let [content (db/sub-file path)]
-        (content/content encoded-path
-                         {:content content
-                          :format format
-                          :on-hide (fn []
-                                     (when (handler/file-changed? content)
-                                       (handler/alter-file (state/get-current-repo) path (state/get-edit-content) nil)))}))
+      (edit-raw-handler)
 
       :else
       [:div "Format ." (name format) " is not supported."])))
