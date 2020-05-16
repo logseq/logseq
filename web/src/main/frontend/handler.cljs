@@ -780,6 +780,11 @@
            :file/content new-content}]))
       (alter-file repo file-path new-content {:reset? false}))))
 
+;; TODO:
+(defn set-heading-properity!
+  [heading key value]
+  )
+
 (defn clone-and-pull
   [repo-url]
   (util/post (str config/api "repos")

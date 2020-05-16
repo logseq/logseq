@@ -26,11 +26,14 @@
 
 (defn ->edn
   [content config]
-  (if (string/blank? content)
-    {}
-    (-> content
-        (parse-json config)
-        (util/json->clj))))
+  (try
+    (if (string/blank? content)
+     {}
+     (-> content
+         (parse-json config)
+         (util/json->clj)))
+    (catch js/Error _e
+      [])))
 
 (defrecord MldocMode []
   protocol/Format

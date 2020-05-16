@@ -571,3 +571,8 @@
   (if (<= (count s) n)
     s
     (subs s 0 n)))
+
+(defonce uuid-pattern #"^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$")
+(defn uuid-string?
+  [s]
+  (re-find uuid-pattern s))

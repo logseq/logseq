@@ -174,6 +174,12 @@
 (defn get-editor-show-page-search
   []
   (get @state :editor/show-page-search?))
+(defn set-editor-show-block-search
+  [value]
+  (set-state! :editor/show-block-search? value))
+(defn get-editor-show-block-search
+  []
+  (get @state :editor/show-block-search?))
 (defn set-editor-show-date-picker
   [value]
   (set-state! :editor/show-date-picker? value))

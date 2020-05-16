@@ -48,6 +48,12 @@
    (vector? block)
    (= "Timestamp" (first block))))
 
+(defn- properties-block?
+  [block]
+  (and
+   (vector? block)
+   (= "Property_Drawer" (first block))))
+
 (defn- paragraph-timestamp-block?
   [block]
   (and (paragraph-block? block)

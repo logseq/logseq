@@ -19,7 +19,8 @@
             [medley.core :as medley]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [cljs-drag-n-drop.core :as dnd]))
+            [cljs-drag-n-drop.core :as dnd]
+            [frontend.search :as search]))
 
 (defonce *should-delete? (atom false))
 ;; FIXME: should support multiple images concurrently uploading
@@ -105,7 +106,9 @@
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
               edit-content (state/sub :edit-content)
-              q (subs edit-content pos current-pos)
+              q (when (> (count edit-content)
+                         (+ current-pos))
+                  (subs edit-content pos current-pos))
               matched-pages (when-not (string/blank? q)
                               (get-matched-pages q))
               chosen-handler (fn [chosen _click?]
@@ -123,6 +126,42 @@
            {:on-chosen chosen-handler
             :on-enter non-exist-page-handler
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]}))))))
+
+(defn get-matched-blocks
+  [q]
+  (search/search q 5))
+
+(rum/defc block-search < rum/reactive
+  [id format]
+  (when (state/sub :editor/show-block-search?)
+    (let [pos (:editor/last-saved-cursor @state/state)
+          input (gdom/getElement id)]
+      (when input
+        (let [current-pos (:pos (util/get-caret-pos input))
+              edit-content (state/sub :edit-content)
+              q (when (> (count edit-content)
+                         (+ current-pos))
+                  (subs edit-content pos current-pos))
+              matched-blocks (when-not (string/blank? q)
+                               (get-matched-blocks q))
+              chosen-handler (fn [chosen _click?]
+                               (let [uuid (str (:heading/uuid chosen))]
+                                 (insert-command! id
+                                                  (util/format "((%s))" uuid)
+                                                  format
+                                                  {:last-pattern (str "((" q)
+                                                   :postfix-fn (fn [s] (util/replace-first "))" s ""))}))
+                               (state/set-editor-show-block-search false))
+              non-exist-block-handler (fn [_state]
+                                        (state/set-editor-show-block-search false)
+                                        (util/cursor-move-forward input 2))]
+          (ui/auto-complete
+           matched-blocks
+           {:on-chosen chosen-handler
+            :on-enter non-exist-block-handler
+            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+            :item-render (fn [{:heading/keys [content]}]
+                           (subs content 0 64))}))))))
 
 (rum/defc date-picker < rum/reactive
   [id format]
@@ -270,6 +309,7 @@
   [input]
   (or (seq (get-matched-commands input))
       (state/get-editor-show-page-search)
+      (state/get-editor-show-block-search)
       (state/get-editor-show-date-picker)))
 
 (rum/defc absolute-modal < rum/reactive
@@ -314,6 +354,7 @@
   (state/set-editor-show-input nil)
   (state/set-editor-show-date-picker false)
   (state/set-editor-show-page-search false)
+  (state/set-editor-show-block-search false)
   (state/set-edit-input-id! nil)
   (reset! *slash-caret-pos nil)
   (reset! *show-commands false)
@@ -490,6 +531,10 @@
 
      (transition-cp
       (page-search id format)
+      true)
+
+     (transition-cp
+      (block-search id format)
       true)
 
      (transition-cp

@@ -39,8 +39,9 @@
      ["Current Time" (util/get-current-time)]
      ["Date Picker" [[:editor/show-date-picker]]]
      ["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
-                        ;; [:editor/clear-current-slash]
                         [:editor/search-page]]]
+     ["Block Reference" [[:editor/input "(())" {:backward-pos 2}]
+                         [:editor/search-block]]]
      ["Link" link-steps]
      ;; same as link
      ["Image Link" link-steps]
@@ -162,6 +163,9 @@
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
+
+(defmethod handle-step :editor/search-block [[_]]
+  (state/set-editor-show-block-search true))
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input option))

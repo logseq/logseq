@@ -110,9 +110,14 @@
    :heading/uuid   {:db/unique      :db.unique/identity}
    :heading/file   {:db/valueType   :db.type/ref}
    :heading/format {}
+   ;; belongs to which page
    :heading/page   {:db/valueType   :db.type/ref}
+   ;; referenced pages
    :heading/ref-pages {:db/valueType   :db.type/ref
                        :db/cardinality :db.cardinality/many}
+   ;; referenced headings
+   :heading/ref-headings {:db/valueType   :db.type/ref
+                          :db/cardinality :db.cardinality/many}
    :heading/content {}
    :heading/anchor {}
    :heading/marker {}
@@ -121,6 +126,7 @@
    :heading/tags {:db/valueType   :db.type/ref
                   :db/cardinality :db.cardinality/many}
    :heading/meta {}
+   :heading/properties {}
 
    :heading/created-at {}
    :heading/last-modified-at {}
@@ -301,6 +307,10 @@
            [?h :heading/tags ?tags]
            [(?pred $ ?tags)]]
       (get-conn repo) pred)))
+
+(defn get-heading-by-uuid
+  [uuid]
+  (entity [:heading/uuid uuid]))
 
 (defn remove-key
   [repo-url key]
@@ -694,6 +704,21 @@
            seq-flatten
            (pull-many '[*])
            react))))
+
+(defn get-heading-referenced-headings
+  [heading-uuid]
+  (when-let [current-repo (state/get-current-repo)]
+    (->> (posh/q '[:find ?ref-heading
+                   :in $ ?page-name
+                   :where
+                   [?heading :heading/uuid ?heading-uuid]
+                   [?heading :heading/ref-headings ?ref-heading]]
+           (get-conn current-repo false)
+           heading-uuid)
+         react
+         seq-flatten
+         (pull-many '[*])
+         react)))
 
 (defn get-all-headings
   []

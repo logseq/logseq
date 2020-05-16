@@ -143,17 +143,18 @@
    (timestamp stop "Stop")])
 
 (declare map-inline)
+(declare block)
 (defn inline
-  [item]
+  [config item]
   (match item
     ["Plain" s]
     s
     ["Spaces" s]
     s
     ["Superscript" l]
-    (->elem :sup (map-inline l))
+    (->elem :sup (map-inline config l))
     ["Subscript" l]
-    (->elem :sub (map-inline l))
+    (->elem :sub (map-inline config l))
     ["Emphasis" [[kind] data] ]
     (let [elem (case kind
                  "Bold" :b
@@ -161,7 +162,7 @@
                  "Underline" :ins
                  "Strike_through" :del
                  "Highlight" :mark)]
-      (->elem elem (map-inline data)))
+      (->elem elem (map-inline config data)))
     ["Entity" e]
     [:span {:dangerouslySetInnerHTML
             {:__html (:html e)}}]
@@ -186,16 +187,24 @@
       [:a {:href (str "mainto:" address)}
        address])
 
+    ["Block_reference" id]
+    ;; get heading content
+    (when-not (string/blank? id)
+      (when (util/uuid-string? id)
+        (when-let [heading (db/get-heading-by-uuid (uuid id))]
+          [:a {:href (str "/page/" id)}
+           (->elem :span.block-ref
+                   (map-inline config (:heading/title heading)))])))
     ["Link" link]
     (let [{:keys [url label title]} link]
       (match url
         ["Search" s]
         (case (first s)
           \#
-          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline label))
+          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
           \*
-          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline label))
+          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
           ;; page reference
           [:span.page-reference
            [:span.text-gray-500 "[["]
@@ -209,11 +218,11 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
-             (map-inline label))))))
+             (map-inline config label))))))
 
     ["Verbatim" s]
     [:code s]
@@ -304,42 +313,42 @@
   [config uuid heading-id level start-level collapsed? collapsed-atom?]
   (let [control-show (rum/react (rum/cursor *control-show? heading-id))]
     [:div.hd-control.flex.flex-row.items-center
-    {:style {:margin-left (str (max 0 (- level start-level)) "rem")
-             :height 24
-             :margin-right "0.3rem"}}
-    [:a.heading-control.flex.flex-row.items-center.justify-center
-     {:id (str "control-" uuid)
-      :style {:width 14
-              :height 24}
-      :class "transition ease-in-out duration-150"
-      :on-click (fn [e]
-                  (util/stop e)
-                  (let [id (str "ls-heading-parent-" uuid)]
-                    (if collapsed?
-                      (expand/expand! (:id config) id)
-                      (expand/collapse! (:id config) id))
-                    (reset! collapsed-atom? (not collapsed?))))}
-     (cond
-       collapsed?
-       (svg/caret-right)
+     {:style {:margin-left (str (max 0 (- level start-level)) "rem")
+              :height 24
+              :margin-right "0.3rem"}}
+     [:a.heading-control.flex.flex-row.items-center.justify-center
+      {:id (str "control-" uuid)
+       :style {:width 14
+               :height 24}
+       :class "transition ease-in-out duration-150"
+       :on-click (fn [e]
+                   (util/stop e)
+                   (let [id (str "ls-heading-parent-" uuid)]
+                     (if collapsed?
+                       (expand/expand! (:id config) id)
+                       (expand/collapse! (:id config) id))
+                     (reset! collapsed-atom? (not collapsed?))))}
+      (cond
+        collapsed?
+        (svg/caret-right)
 
-       (and control-show
-            (has-children? heading-id level))
-       (svg/caret-down)
+        (and control-show
+             (has-children? heading-id level))
+        (svg/caret-down)
 
-       :else
-       [:span ""])]
-    [:a.flex.flex-row.items-center.justify-center
-     {:on-click (fn [])
-      :style {:width 14
-              :height 24}}
-     [:svg {:height 10
-            :width 10
-            :fill "currentColor"
-            :display "inline-block"}
-      [:circle {:cx 5
-                :cy 5
-                :r 2}]]]]))
+        :else
+        [:span ""])]
+     [:a.flex.flex-row.items-center.justify-center
+      {:on-click (fn [])
+       :style {:width 14
+               :height 24}}
+      [:svg {:height 10
+             :width 10
+             :fill "currentColor"
+             :display "inline-block"}
+       [:circle {:cx 5
+                 :cy 5
+                 :r 2}]]]]))
 
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::collapsed?)
@@ -471,7 +480,7 @@
                                    [checkbox
                                     marker-cp
                                     priority]
-                                   (map-inline title)
+                                   (map-inline config title)
                                    [tags])))))]
     (heading-cp t heading-part config)))
 
@@ -497,7 +506,7 @@
                   (match content
                     [["Paragraph" i] & rest]
                     (vec-cat
-                     (map-inline i)
+                     (map-inline config i)
                      (blocks config rest))
                     :else
                     (blocks config content)))
@@ -525,7 +534,7 @@
         [items])))))
 
 (defn table
-  [{:keys [header groups col_groups]}]
+  [config {:keys [header groups col_groups]}]
   (let [tr (fn [elm cols]
              (->elem
               :tr
@@ -534,7 +543,7 @@
                        elm
                        {:scope "col"
                         :class "org-left"}
-                       (map-inline col)))
+                       (map-inline config col)))
                     cols)))
         tb-col-groups (try
                         (mapv (fn [number]
@@ -564,15 +573,15 @@
       (cons head groups)))))
 
 (defn map-inline
-  [col]
-  (map inline col))
+  [config col]
+  (map #(inline config %) col))
 
 (defn block
   [config item]
   (try
     (match item
       ["Paragraph" l]
-      (->elem :p (map-inline l))
+      (->elem :p (map-inline config l))
       ["Horizontal_Rule"]
       [:hr]
       ["Heading" h]
@@ -582,7 +591,7 @@
        (list-element l)
        (map #(list-item config %) l))
       ["Table" t]
-      (table t)
+      (table config t)
       ["Math" s]
       [:div.mathblock
        (str "$$" s "$$")]
@@ -614,7 +623,7 @@
        (blocks config l))
       ["Latex_Fragment" l]
       [:p.latex-fragment
-       (inline ["Latex_Fragment" l])]
+       (inline config ["Latex_Fragment" l])]
       ["Latex_Environment" name option content]
       (let [content (util/format "\n\begin{%s} {%s}\n%s\n\\end{%s}"
                                  name
