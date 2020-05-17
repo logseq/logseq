@@ -192,9 +192,13 @@
     (when-not (string/blank? id)
       (when (util/uuid-string? id)
         (when-let [heading (db/get-heading-by-uuid (uuid id))]
-          [:a {:href (str "/page/" id)}
-           (->elem :span.block-ref
-                   (map-inline config (:heading/title heading)))])))
+          [:span
+           [:span "(("]
+           [:a {:href (str "/page/" id)}
+            (->elem :span.block-ref
+                    (map-inline config (:heading/title heading)))]
+           [:span "))"]])))
+
     ["Link" link]
     (let [{:keys [url label title]} link]
       (match url
@@ -218,8 +222,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -310,7 +314,7 @@
 (defonce *control-show? (atom {}))
 
 (rum/defc heading-control < rum/reactive
-  [config uuid heading-id level start-level collapsed? collapsed-atom?]
+  [config uuid heading-id level start-level collapsed? collapsed-atom? dummy?]
   (let [control-show (rum/react (rum/cursor *control-show? heading-id))]
     [:div.hd-control.flex.flex-row.items-center
      {:style {:margin-left (str (max 0 (- level start-level)) "rem")
@@ -339,9 +343,11 @@
         :else
         [:span ""])]
      [:a.flex.flex-row.items-center.justify-center
-      {:on-click (fn [])
-       :style {:width 14
-               :height 24}}
+      (cond->
+        {:style {:width 14
+                 :height 24}}
+        (not dummy?)
+        (assoc :href (str "/page/" uuid)))
       [:svg {:height 10
              :width 10
              :fill "currentColor"
@@ -386,7 +392,7 @@
                             (swap! *control-show?
                                    assoc heading-id false)))}
          (when-not agenda?
-           (heading-control config uuid heading-id level start-level collapsed? collapsed-atom?))
+           (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? dummy?))
 
          (if edit?
            (editor/box content {:on-hide (fn [value]

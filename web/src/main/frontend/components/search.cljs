@@ -8,7 +8,8 @@
             [frontend.config :as config]
             [clojure.string :as string]
             [goog.crypt.base64 :as b64]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [goog.dom :as gdom]))
 
 (rum/defc dropdown-content-wrapper [state content]
   [:div.origin-top-left.absolute.left-0.mt-0.rounded-md.shadow-lg
@@ -43,6 +44,7 @@
       :on-hide (fn []
                  (handler/clear-search!)))
      (mixins/on-enter state
+                      :node (gdom/getElement "search_field")
                       :on-enter (fn []
                                   (when-let [first-match (first (:search/result @state/state))]
                                     (handler/clear-search!)

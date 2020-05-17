@@ -161,6 +161,24 @@
        (when-let [conn (get-conn repo-url false)]
          (posh/transact! conn (vec tx-data)))))))
 
+(defn d-pull
+  ([eid]
+   (d-pull '[*] eid))
+  ([selector eid]
+   (when-let [conn (get-conn)]
+     (d/pull conn
+             selector
+             eid))))
+
+(defn pull
+  ([eid]
+   (pull '[*] eid))
+  ([selector eid]
+   (when-let [conn (get-conn (state/get-current-repo) false)]
+     (posh/pull conn
+                selector
+                eid))))
+
 (defn pull-many
   [selector eids]
   (when-let [conn (get-conn (state/get-current-repo) false)]
@@ -469,8 +487,7 @@
              headings)
             (remove nil?))))
     (catch js/Error e
-      (prn "Parsing error: " e)
-      [])))
+      (prn "Parsing error: " e))))
 
 ;; check journal formats and report errors
 (defn extract-headings-pages
@@ -777,22 +794,22 @@
 
 (defn restore! [{:keys [repos] :as me} listen-handler render-fn]
   (-> (p/all
-    (for [{:keys [id url]} repos]
-      (let [repo url
-            db-name (datascript-db repo)
-            db-conn (d/create-conn schema)]
-        (swap! conns assoc db-name db-conn)
-        (p/let [stored (.getItem localforage-instance db-name)]
-          (if stored
-            (let [stored-db (string->db stored)
-                  attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-              (when (= (:schema stored-db) schema) ;; check for code update
-                (reset-conn! db-conn attached-db)))
-            (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-          (posh/posh! db-conn)
-          (listen-handler repo db-conn)
-          (let [config-content (get-file-content url config/config-file)]
-            (reset-config! url config-content))))))
+       (for [{:keys [id url]} repos]
+         (let [repo url
+               db-name (datascript-db repo)
+               db-conn (d/create-conn schema)]
+           (swap! conns assoc db-name db-conn)
+           (p/let [stored (.getItem localforage-instance db-name)]
+             (if stored
+               (let [stored-db (string->db stored)
+                     attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                 (when (= (:schema stored-db) schema) ;; check for code update
+                   (reset-conn! db-conn attached-db)))
+               (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+             (posh/posh! db-conn)
+             (listen-handler repo db-conn)
+             (let [config-content (get-file-content url config/config-file)]
+               (reset-config! url config-content))))))
       (p/then render-fn)))
 
 (comment

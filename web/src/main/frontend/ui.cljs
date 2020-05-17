@@ -211,8 +211,10 @@
             (util/stop e)
             (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)]
               (let [current-idx (get state ::current-idx)]
-                (if current-idx
-                  (on-chosen (nth matched @current-idx))
+                (if (and (seq matched)
+                         (> (count matched)
+                            @current-idx))
+                  (on-chosen (nth matched @current-idx) false)
                   (and on-enter (on-enter state))))))}
       nil)))
   [state matched {:keys [on-chosen

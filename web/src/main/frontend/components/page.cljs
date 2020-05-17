@@ -19,6 +19,16 @@
   (let [route-match (first (:rum/args state))]
     (get-in route-match [:parameters :path :name])))
 
+(defn- get-headings
+  [page-name journal? heading?]
+  (if heading?
+    (rum/react (db/pull-many '[*] [[:heading/uuid (uuid page-name)]]))
+    (let [page-headings (db/get-page-headings page-name)
+          page-headings (if journal?
+                          (update (vec page-headings) 0 assoc :heading/lock? true)
+                          page-headings)]
+      page-headings)))
+
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
   [state]
@@ -26,20 +36,26 @@
         page-name (string/capitalize (util/url-decode encoded-page-name))
         format (db/get-page-format page-name)
         journal? (db/journal-page? page-name)
-        page-headings (db/get-page-headings page-name)
-        page-headings (if journal?
-                        (update (vec page-headings) 0 assoc :heading/lock? true)
-                        page-headings)
-        page-headings (db/with-dummy-heading page-headings format)
+        heading? (util/uuid-string? page-name)
+        heading-id (and heading? (uuid page-name))
+        page-headings (get-headings page-name journal? heading?)
+        page-headings (if heading?
+                        page-headings
+                        (db/with-dummy-heading page-headings format))
         start-level (if journal? 2 1)
         hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
                                                :start-level start-level})
 
-        ref-headings (db/get-page-referenced-headings page-name)
+        ref-headings (if heading-id
+                       (db/get-heading-referenced-headings heading-id)
+                       (db/get-page-referenced-headings page-name))
         ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
         ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
                                                   :start-level start-level})
         page-name (string/capitalize page-name)
+        page-name (if heading?
+                    (:page/name (db/entity (:db/id (:heading/page (first page-headings)))))
+                    page-name)
         repo (state/get-current-repo)
         starred? (contains? (set
                              (some->> (state/sub [:config repo :starred])
@@ -74,8 +90,8 @@
     "All Pages"]
    (when-let [current-repo (state/sub :git/current-repo)]
      (let [pages (db/get-pages current-repo)]
-      (for [page pages]
-        (let [page-id (util/url-encode page)]
-          [:div {:key page-id}
-           [:a {:href (str "/page/" page-id)}
-            page]]))))])
+       (for [page pages]
+         (let [page-id (util/url-encode page)]
+           [:div {:key page-id}
+            [:a {:href (str "/page/" page-id)}
+             page]]))))])

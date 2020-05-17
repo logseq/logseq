@@ -780,10 +780,44 @@
            :file/content new-content}]))
       (alter-file repo file-path new-content {:reset? false}))))
 
-;; TODO:
-(defn set-heading-properity!
-  [heading key value]
-  )
+(defn set-heading-property!
+  [heading-id key value]
+  (let [heading-id (if (string? heading-id) (uuid heading-id) heading-id)
+        key (string/upper-case (name key))
+        value (name value)]
+    (when-let [heading (db/d-pull [:heading/uuid heading-id])]
+      (let [{:heading/keys [file page content properties meta]} heading
+            {:keys [properties start-pos end-pos]} properties
+            new-content (if (and start-pos
+                                 end-pos
+                                 (> end-pos start-pos))
+                          (let [encoded (utf8/encode content)
+                                properties (utf8/substring encoded start-pos end-pos)
+                                properties (let [lines (string/split-lines properties)
+                                                 property-check? #(re-find (re-pattern
+                                                                            (util/format ":%s:" key))
+                                                                           %)]
+                                             (if (some property-check? lines)
+                                               (str
+                                                (->> (map (fn [line]
+                                                            (if (property-check? line)
+                                                              (util/format "   :%s: %s" key value)
+                                                              line)) lines)
+                                                     (string/join "\n"))
+                                                "\n")
+                                               (str properties
+                                                    (util/format "\n   :%s: %s\n" key value))))
+                                prefix (utf8/substring encoded 0 start-pos)
+                                postfix (when (> (:end-pos meta) end-pos)
+                                          (utf8/substring encoded end-pos (:end-pos meta)))]
+                            (str prefix properties postfix))
+                          (let [properties (util/format
+                                            "\n   :PROPERTIES:\n   :%s: %s\n   :END:\n"
+                                            key value)]
+                            (let [[heading-line & others] (string/split-lines content)]
+                              (str heading-line properties
+                                   (string/join "\n" others)))))]
+        (save-heading-if-changed! heading new-content)))))
 
 (defn clone-and-pull
   [repo-url]

@@ -54,6 +54,12 @@
    (vector? block)
    (= "Property_Drawer" (first block))))
 
+(defn extract-properties
+  [[_ properties start-pos end-pos]]
+  {:properties (into {} properties)
+   :start-pos start-pos
+   :end-pos end-pos})
+
 (defn- paragraph-timestamp-block?
   [block]
   (and (paragraph-block? block)
@@ -88,10 +94,14 @@
 (defn safe-headings
   [headings]
   (mapv (fn [heading]
-          (let [heading (util/remove-nils heading)
-                heading (if (:heading/uuid heading)
-                          heading
-                          (assoc heading :heading/uuid (d/squuid)))]
+          (let [id (or (when-let [custom-id (get-in heading [:properties :properties "CUSTOM_ID"])]
+                         (when (util/uuid-string? custom-id)
+                           (uuid custom-id)))
+                       ;; editing old headings
+                       (:heading/uuid heading)
+                       (d/squuid))
+                heading (util/remove-nils heading)
+                heading (assoc heading :heading/uuid id)]
             (medley/map-keys
              (fn [k] (keyword "heading" k))
              heading)))
@@ -104,6 +114,7 @@
          heading-children []
          blocks (reverse blocks)
          timestamps {}
+         properties {}
          last-pos last-pos]
     (if (seq blocks)
       (let [block (first blocks)
@@ -112,21 +123,26 @@
           (paragraph-timestamp-block? block)
           (let [timestamp (extract-timestamp block)
                 timestamps' (conj timestamps timestamp)]
-            (recur headings heading-children (rest blocks) timestamps' last-pos))
+            (recur headings heading-children (rest blocks) timestamps' properties last-pos))
+
+          (properties-block? block)
+          (let [properties (extract-properties block)]
+            (recur headings heading-children (rest blocks) timestamps properties last-pos))
 
           (heading-block? block)
           (let [heading (-> (assoc (second block)
                                    :children (reverse heading-children)
-                                   :timestamps timestamps)
+                                   :timestamps timestamps
+                                   :properties properties)
                             (assoc-in [:meta :end-pos] last-pos)
                             (update :tags ->tags))
                 heading (with-refs heading)
                 last-pos' (get-in heading [:meta :pos])]
-            (recur (conj headings heading) [] (rest blocks) {} last-pos'))
+            (recur (conj headings heading) [] (rest blocks) {} properties last-pos'))
 
           :else
           (let [heading-children' (conj heading-children block)]
-            (recur headings heading-children' (rest blocks) timestamps last-pos))))
+            (recur headings heading-children' (rest blocks) timestamps properties last-pos))))
       (reverse headings))))
 
 ;; marker: DOING | IN-PROGRESS > TODO > WAITING | WAIT > DONE > CANCELED | CANCELLED
@@ -176,7 +192,10 @@
                                        :heading/content (utf8/substring encoded-content
                                                                         (:pos meta)
                                                                         (:end-pos meta))}
-                                      (when (zero? idx)
+                                      ;; Preserve the original heading id
+                                      (when (and (zero? idx)
+                                                 ;; not custom-id
+                                                 (not (get-in heading [:heading/properties "CUSTOM_ID"])))
                                         {:heading/uuid uuid})
                                       (when (seq ref-pages)
                                         {:heading/ref-pages

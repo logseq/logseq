@@ -112,12 +112,12 @@
               matched-pages (when-not (string/blank? q)
                               (get-matched-pages q))
               chosen-handler (fn [chosen _click?]
+                               (state/set-editor-show-page-search false)
                                (insert-command! id
                                                 (util/format "[[%s]]" chosen)
                                                 format
                                                 {:last-pattern (str "[[" q)
-                                                 :postfix-fn (fn [s] (util/replace-first "]]" s ""))})
-                               (state/set-editor-show-page-search false))
+                                                 :postfix-fn (fn [s] (util/replace-first "]]" s ""))}))
               non-exist-page-handler (fn [_state]
                                        (state/set-editor-show-page-search false)
                                        (util/cursor-move-forward input 2))]
@@ -145,13 +145,17 @@
               matched-blocks (when-not (string/blank? q)
                                (get-matched-blocks q))
               chosen-handler (fn [chosen _click?]
-                               (let [uuid (str (:heading/uuid chosen))]
+                               (state/set-editor-show-block-search false)
+                               (let [uuid-string (str (:heading/uuid chosen))]
                                  (insert-command! id
-                                                  (util/format "((%s))" uuid)
+                                                  (util/format "((%s))" uuid-string)
                                                   format
                                                   {:last-pattern (str "((" q)
-                                                   :postfix-fn (fn [s] (util/replace-first "))" s ""))}))
-                               (state/set-editor-show-block-search false))
+                                                   :postfix-fn (fn [s] (util/replace-first "))" s ""))})
+                                 ;; Save it so it'll be remembered when next time it got parsing
+                                 (handler/set-heading-property! (:heading/uuid chosen)
+                                                                "CUSTOM_ID"
+                                                                uuid-string)))
               non-exist-block-handler (fn [_state]
                                         (state/set-editor-show-block-search false)
                                         (util/cursor-move-forward input 2))]

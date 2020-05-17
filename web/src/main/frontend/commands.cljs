@@ -67,7 +67,8 @@
 (defn insert!
   [id value
    {:keys [last-pattern postfix-fn backward-pos forward-pos]
-    :or {last-pattern "/"}}]
+    :or {last-pattern "/"}
+    :as option}]
   (let [edit-content (state/get-edit-content)
         input (gdom/getElement id)
         current-pos (:pos (util/get-caret-pos input))

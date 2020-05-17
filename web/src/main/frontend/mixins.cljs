@@ -69,7 +69,7 @@
 (defn on-enter
   [state & {:keys [on-enter node]}]
   (let [node (or node (rum/dom-node state))]
-    (listen state js/window "keydown"
+    (listen state node "keyup"
             (fn [e]
               (case (.-keyCode e)
                 ;; Enter
