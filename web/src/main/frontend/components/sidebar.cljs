@@ -31,7 +31,7 @@
       (if (>= (count repos) 1)
        (ui/dropdown-with-links
         (fn [{:keys [toggle-fn]}]
-          [:a.hover:text-gray-100.text-gray-500.font-bold {:on-click toggle-fn}
+          [:a.hover:text-gray-200.text-gray-500.font-bold {:on-click toggle-fn}
            [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
            [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
         (mapv
@@ -184,7 +184,7 @@
   [:div#left-sidebar.flex.flex-col.w-64.sidebar.enter
    [:div.flex.items-center.flex-shrink-0.px-4.h-10
     [:div.flex.flex-row.align-center.whitespace-no-wrap
-     [:a.hover:text-gray-300.text-gray-400
+     [:a.hover:text-gray-200.text-gray-500
       {:style {:margin-right 13
                :margin-top -1}
        :on-click (fn []
