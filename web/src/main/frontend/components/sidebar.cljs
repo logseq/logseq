@@ -31,7 +31,7 @@
       (if (>= (count repos) 1)
        (ui/dropdown-with-links
         (fn [{:keys [toggle-fn]}]
-          [:a.hover:text-gray-300.text-gray-400.font-bold {:on-click toggle-fn}
+          [:a.hover:text-gray-100.text-gray-500.font-bold {:on-click toggle-fn}
            [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
            [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
         (mapv
@@ -51,10 +51,10 @@
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
-  [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.text-gray-400.hover:text-gray-300.hover:bg-black.transition.ease-in-out.duration-150
+  [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.text-gray-500.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
    {:href href
     :on-click close-modal-fn}
-   [:svg.mr-4.h-5.w-5.text-gray-400.group-hover:text-gray-400.group-focus:text-gray-400.transition.ease-in-out.duration-150
+   [:svg.mr-4.h-5.w-5.text-gray-500.group-hover:text-gray-200.group-focus:text-gray-200.transition.ease-in-out.duration-150
     {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
     [:path
      {:d svg-d
@@ -71,9 +71,9 @@
      (if (seq starred)
        (for [page starred]
          (let [encoded-page (util/url-encode page)]
-           [:a.mt-1.group.flex.items-center.pl-5.py-2.text-base.leading-6.hover:text-gray-300.hover:bg-black.transition.ease-in-out.duration-150
+           [:a.mt-1.group.flex.items-center.pl-5.py-2.text-base.leading-6.hover:text-gray-200.transition.ease-in-out.duration-150.star-page
             {:key encoded-page
-             :class (if (page-active? encoded-page) "text-gray-300" "text-gray-400")
+             :class (if (page-active? encoded-page) "text-gray-200" "text-gray-500")
              :href (str "/page/" encoded-page)
              :on-click close-modal-fn}
             page])))]))
@@ -224,7 +224,7 @@
        {:class (if @open?
                  "translate-x-0"
                  "-translate-x-full")
-        :style {:background-color "#202225"}}
+        :style {:background-color "#002b36"}}
        (if @open?
          [:div.absolute.top-0.right-0.-mr-14.p-1
           [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
@@ -236,7 +236,7 @@
               :stroke-width "2",
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]])
-       [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#202225"}}
+       [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
         (repos current-repo close-fn)]
        [:div.flex-1.h-0.overflow-y-auto
         (sidebar-nav route-match close-fn)]]]
