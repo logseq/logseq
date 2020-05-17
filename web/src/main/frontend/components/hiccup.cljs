@@ -193,11 +193,11 @@
       (when (util/uuid-string? id)
         (when-let [heading (db/get-heading-by-uuid (uuid id))]
           [:span
-           [:span "(("]
+           [:span.text-gray-500 "(("]
            [:a {:href (str "/page/" id)}
             (->elem :span.block-ref
                     (map-inline config (:heading/title heading)))]
-           [:span "))"]])))
+           [:span.text-gray-500 "))"]])))
 
     ["Link" link]
     (let [{:keys [url label title]} link]
