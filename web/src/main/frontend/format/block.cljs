@@ -138,7 +138,7 @@
                             (update :tags ->tags))
                 heading (with-refs heading)
                 last-pos' (get-in heading [:meta :pos])]
-            (recur (conj headings heading) [] (rest blocks) {} properties last-pos'))
+            (recur (conj headings heading) [] (rest blocks) {} {} last-pos'))
 
           :else
           (let [heading-children' (conj heading-children block)]
