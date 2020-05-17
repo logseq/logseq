@@ -42,7 +42,7 @@
 
 (rum/defc menu-link
   [options child]
-  [:a.block.px-4.py-2.text-sm.text-gray-700.hover:bg-gray-100.transition.ease-in-out.duration-150.cursor
+  [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link
    options
    child])
 
@@ -53,7 +53,7 @@
    (dropdown
     content-fn
     (fn [{:keys [close-fn] :as state}]
-      [:div.py-1.rounded-md.bg-white.shadow-xs
+      [:div.py-1.rounded-md.shadow-xs.bg-base-3
        (for [{:keys [options title]} links]
          (let [new-options
                (assoc options
@@ -103,7 +103,7 @@
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z",
                 :fill-rule "evenodd"}]]])]
       [:div.fixed.inset-0.flex.items-end.justify-center.px-4.py-6.pointer-events-none.sm:p-6.sm:items-start.sm:justify-end {:style {:top "3.2em"}}
-       [:div.max-w-sm.w-full.bg-white.shadow-lg.rounded-lg.pointer-events-auto
+       [:div.max-w-sm.w-full.bg-base-3.shadow-lg.rounded-lg.pointer-events-auto
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
                   "entered" "transition ease-out duration-300 transform translate-y-0 opacity-100 sm:translate-x-0"
@@ -222,7 +222,7 @@
                          empty-div
                          item-render]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.bg-white.shadow-xs
+    [:div.py-1.rounded-md.shadow-xs.bg-base-3
      (if (seq matched)
        (for [[idx item] (medley/indexed matched)]
          (rum/with-key
@@ -230,7 +230,7 @@
             {:style (merge
                      {:padding "6px"}
                      (when (= @current-idx idx)
-                       {:background-color "rgb(213, 218, 223)"}))
+                       {:background-color "#eee8d5"}))
              :class "initial-color"
              :tab-index 0
              :on-click (fn [e]

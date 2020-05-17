@@ -160,7 +160,7 @@
 (rum/defc custom-context-menu-content
   []
   [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute
-   [:div.py-1.rounded-md.bg-white.shadow-xs
+   [:div.py-1.rounded-md.bg-base-3.shadow-xs
     (ui/menu-link
      {:key "cut"
       :on-click handler/cut-selection-headings}
@@ -213,7 +213,7 @@
         current-repo (state/sub :git/current-repo)
         status (db/sub-key-value :git/status)
         pulling? (= :pulling status)]
-    [:div.h-screen.flex.overflow-hidden.bg-gray-100
+    [:div.h-screen.flex.overflow-hidden.bg-base-3
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
        {:class (if @open?
@@ -243,7 +243,7 @@
      [:div.hidden.md:flex.md:flex-shrink-0
       (left-sidebar current-repo route-match close-fn)]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-      [:div.relative.z-10.flex-shrink-0.flex.bg-white.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10
+      [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10
        [:button.px-4.border-r.border-gray-200.text-gray-400.focus:outline-none.focus:bg-gray-100.focus:text-gray-400.md:hidden
         {:on-click open-fn}
         [:svg.h-6.w-6
@@ -278,7 +278,7 @@
              (if-let [avatar (:avatar me)]
                [:img.h-7.w-7.rounded-full
                 {:src avatar}]
-               [:div.h-7.w-7.rounded-full.bg-white])])
+               [:div.h-7.w-7.rounded-full.bg-base-3])])
           (->>
            [(when (:email me)
               {:title "Your repos"

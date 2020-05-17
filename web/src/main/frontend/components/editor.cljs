@@ -217,7 +217,7 @@
     (let [{:keys [pos]} (rum/react *slash-caret-pos)
           input-value (get state ::input-value)]
       (when (seq input-option)
-        [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#d3d3d3"}},
+        [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#eee8d5"}},
          (for [{:keys [id] :as input-item} input-option]
            [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-1
             (merge
@@ -322,7 +322,8 @@
     [:div.absolute.rounded-md.shadow-lg
      {:style (merge
               {:top (+ top 24)
-               :left left}
+               :left left
+               :max-height 600}
               (if set-default-width?
                 {:width 400}))}
      cp]))
@@ -348,7 +349,7 @@
    (when-let [uploading? (rum/react *image-uploading?)]
      (let [processing (rum/react *image-uploading-process)]
        (transition-cp
-        [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-white.pl-1.pr-1
+        [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-3.pl-1.pr-1
          [:span.lds-dual-ring.mr-2]
          [:span {:style {:margin-top 2}}
           (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
