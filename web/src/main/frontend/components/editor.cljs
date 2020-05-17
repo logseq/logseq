@@ -388,25 +388,37 @@
            (count prefix)))))
 
 (defn- adjust-heading-level!
-  [state]
+  [state direction]
   (let [{:keys [heading heading-parent-id value]} (get-state state)
         format (:heading/format heading)
         heading-pattern (config/get-heading-pattern format)
         level (get-current-heading-level heading-pattern)
         previous-level (or (get-previous-heading-level heading-parent-id) 1)
-        add? (= level previous-level)
-        remove? (and (> level previous-level)
-                     (> level 2))
+        [add? remove?] (case direction
+                         :left [false true]
+                         :right [true false]
+                         [(<= level previous-level)
+                          (and (> level previous-level)
+                               (> level 2))])
         new-value (cond
                     add? (str heading-pattern value)
-                    remove? (subs value 1)
+                    remove? (if (> level 2)
+                              (subs value 1)
+                              value)
                     :else value)]
     (handler/save-heading-if-changed! heading new-value)
     (state/set-edit-content! new-value)))
 
+(defn- get-input
+  [state]
+  (when-let [input-id (last (:rum/args state))]
+    (gdom/getElement input-id)))
+
 (rum/defc box < rum/reactive
   ;; TODO: Overwritten by user's configuration
-  (mixins/keyboard-mixin "alt+enter" insert-new-heading!)
+  (mixins/keyboard-mixin "alt+enter" insert-new-heading! get-input)
+  (mixins/keyboard-mixin "alt+shift+left" #(adjust-heading-level! % :left) get-input)
+  (mixins/keyboard-mixin "alt+shift+right" #(adjust-heading-level! % :right) get-input)
   (mixins/event-mixin
    (fn [state]
      (let [input-id (last (:rum/args state))
@@ -438,10 +450,11 @@
                           (= (nth value (dec current-pos)) "/"))
                  (reset! *slash-caret-pos nil)
                  (reset! *show-commands false))))
+         ;; tab
          9 (fn [state e]
              (when-not (state/get-editor-show-input)
                (util/stop e)
-               (adjust-heading-level! state)))
+               (adjust-heading-level! state nil)))
          }
         (fn [e key-code]
           ;; (swap! state/state assoc

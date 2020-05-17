@@ -155,9 +155,11 @@
    (let [target-fn (if (fn? target) target (fn [_] target))]
      {:did-mount
       (fn [state]
-        ;; (prn "add shortcut: " key)
         (assoc state ::keyboard-listener
-               (keyboard/install-shortcut! key (fn [] (f state)) false (target-fn state))))
+               (keyboard/install-shortcut! key
+                                           (fn [] (f state))
+                                           false
+                                           (target-fn state))))
       :will-unmount
       (fn [state]
         ((::keyboard-listener state))

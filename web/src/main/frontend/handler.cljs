@@ -573,9 +573,11 @@
                    (reset! uploading? false))))))
 
 
+;; clear localforage
 (defn sign-out!
   [e]
-  (p/let [_idb-clear (js/window.pfs._idb.wipe)]
+  (p/let [_idb-clear (js/window.pfs._idb.wipe)
+          _ (db/clear-store!)]
     (storage/remove :git/current-repo)
     (storage/remove :git/clone-repo)
     ;; remember not to remove the encrypted token
