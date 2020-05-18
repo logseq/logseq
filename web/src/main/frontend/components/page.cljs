@@ -12,7 +12,8 @@
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [goog.object :as gobj]))
 
 (defn- get-page-name
   [state]
@@ -31,7 +32,7 @@
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
-  [state]
+  [state option]
   (let [encoded-page-name (get-page-name state)
         page-name (string/capitalize (util/url-decode encoded-page-name))
         format (db/get-page-format page-name)
@@ -46,13 +47,6 @@
         hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
                                                :start-level start-level})
 
-        ref-headings (if heading-id
-                       (db/get-heading-referenced-headings heading-id)
-                       (db/get-page-referenced-headings page-name))
-        ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
-        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
-                                                  :start-level start-level})
-        page-name (string/capitalize page-name)
         page-name (if heading?
                     (:page/name (db/entity (:db/id (:heading/page (first page-headings)))))
                     page-name)
@@ -60,28 +54,30 @@
         starred? (contains? (set
                              (some->> (state/sub [:config repo :starred])
                                       (map string/capitalize)))
-                            page-name)]
+                            page-name)
+        sidebar? (:sidebar? option)]
     [:div.flex-1
-     [:div.flex.flex-row
-      [:h1.title
-       page-name]
-      [:a.ml-1.text-gray-500.hover:text-gray-700
-       {:class (if starred? "text-gray-800")
-        :on-click (fn []
-                    (handler/star-page! page-name starred?))}
-       (if starred?
-         (svg/star-solid "stroke-current")
-         (svg/star-outline "stroke-current h-5 w-5"))]]
+     (when-not sidebar?
+       [:div.flex.flex-row
+        [:a {:on-click (fn [e]
+                         (util/stop e)
+                         (when (gobj/get e "shiftKey")
+                           (state/sidebar-add-block! :page {:name page-name})
+                           (handler/show-right-sidebar)))}
+         [:h1.title
+          page-name]]
+        [:a.ml-1.text-gray-500.hover:text-gray-700
+         {:class (if starred? "text-gray-800")
+          :on-click (fn []
+                      (handler/star-page! page-name starred?))}
+         (if starred?
+           (svg/star-solid "stroke-current")
+           (svg/star-outline "stroke-current h-5 w-5"))]])
 
      (content/content encoded-page-name
                       {:hiccup hiccup})
 
-     (let [n-ref (count ref-headings)]
-       (if (> n-ref 0)
-         [:h2.font-bold.text-gray-400.mt-6 (let []
-                                             (str n-ref " Linked References"))]))
-     (content/content encoded-page-name
-                      {:hiccup ref-hiccup})]))
+     (reference/references page-name)]))
 
 (rum/defc all-pages < rum/reactive
   []

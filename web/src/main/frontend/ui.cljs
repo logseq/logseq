@@ -154,7 +154,7 @@
 ;; scroll
 (defn main-node
   []
-  (first (array-seq (js/document.querySelectorAll "main"))))
+  (gdom/getElement "main-content"))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))

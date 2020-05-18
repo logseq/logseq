@@ -14,9 +14,13 @@
 
 (rum/defc references < rum/reactive
   [page-name]
-  (let [page-name (string/capitalize page-name)
+  (let [heading? (util/uuid-string? page-name)
+        heading-id (and heading? (uuid page-name))
+        page-name (string/capitalize page-name)
         encoded-page-name (util/url-encode page-name)
-        ref-headings (db/get-page-referenced-headings page-name)
+        ref-headings (if heading-id
+                       (db/get-heading-referenced-headings heading-id)
+                       (db/get-page-referenced-headings page-name))
         ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
         ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
                                                   :start-level 2

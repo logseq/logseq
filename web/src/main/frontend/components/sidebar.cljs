@@ -8,6 +8,7 @@
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
+            [frontend.components.right-sidebar :as right-sidebar]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -29,25 +30,25 @@
   (if current-repo
     (let [repos (state/sub [:me :repos])]
       (if (> (count repos) 1)
-       (ui/dropdown-with-links
-        (fn [{:keys [toggle-fn]}]
-          [:a.hover:text-gray-200.text-gray-500.font-bold {:on-click toggle-fn}
-           [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
-           [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-        (mapv
-         (fn [{:keys [id url]}]
-           {:title (db/get-repo-name url)
-            :options {:on-click (fn []
-                                  (state/set-current-repo! url))}})
-         (remove (fn [repo]
-                   (= current-repo (:url repo)))
-                 repos))
-        (util/hiccup->class
-         "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
-       [:a.hover:text-gray-300.text-gray-400.font-bold
-        {:href current-repo
-         :target "_blank"}
-        (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]))))
+        (ui/dropdown-with-links
+         (fn [{:keys [toggle-fn]}]
+           [:a.hover:text-gray-200.text-gray-500.font-bold {:on-click toggle-fn}
+            [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
+            [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+         (mapv
+          (fn [{:keys [id url]}]
+            {:title (db/get-repo-name url)
+             :options {:on-click (fn []
+                                   (state/set-current-repo! url))}})
+          (remove (fn [repo]
+                    (= current-repo (:url repo)))
+                  repos))
+         (util/hiccup->class
+          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
+        [:a.hover:text-gray-300.text-gray-400.font-bold
+         {:href current-repo
+          :target "_blank"}
+         (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]))))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -187,15 +188,7 @@
      [:a.hover:text-gray-200.text-gray-500
       {:style {:margin-right 13
                :margin-top -1}
-       :on-click (fn []
-                   (d/add-class! (d/by-id "menu")
-                                 "md:block")
-                   (d/remove-class! (d/by-id "left-sidebar")
-                                    "enter")
-                   (d/remove-class! (d/by-id "search")
-                                    "sidebar-open")
-                   (d/remove-class! (d/by-id "main")
-                                    "sidebar-open"))}
+       :on-click handler/hide-left-sidebar}
       (svg/menu "currentColor")]
      (repos current-repo close-fn)
      ]]
@@ -212,7 +205,8 @@
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         status (db/sub-key-value :git/status)
-        pulling? (= :pulling status)]
+        pulling? (= :pulling status)
+        right-sidebar? false]
     [:div.h-screen.flex.overflow-hidden.bg-base-3
      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
@@ -291,28 +285,38 @@
             (when (:email me)
               {:title "Sign out"
                :options {:on-click handler/sign-out!}})]
-           (remove nil?)))]]]
-      [:main#main.flex-1.relative.z-0.overflow-y-scroll.py-6.focus:outline-none.sidebar-open
-       {:tabIndex "0"}
-       [:div.flex.justify-center
-        [:div.flex-1.m-6 {:style {:position "relative"
-                                  :max-width 700
-                                  :margin-bottom 500}}
-         main-content]]]
+           (remove nil?)))
+
+         [:a.hover:text-gray-900.text-gray-500.ml-3
+          {:on-click (fn []
+                       (let [sidebar (d/by-id "right-sidebar")]
+                         (if (d/has-class? sidebar "enter")
+                           (handler/hide-right-sidebar)
+                           (handler/show-right-sidebar))))}
+          (svg/menu)]]]]
+      [:main#main.flex-1.relative.z-0.py-6.focus:outline-none.sidebar-open.overflow-hidden
+       {:tabIndex "0"
+        :style {:width "100%"
+                :height "100%"}}
+       [:div#main-content
+        {:style {:width "100%"
+                 :height "100%"
+                 :overflow-y "scroll"
+                 :padding-right 17
+                 :box-sizing "content-box"}}
+        [:div.flex.justify-center
+         [:div.flex-1.m-6#main-content-container
+          {:style {:position "relative"
+                   :max-width 700
+                   :margin-bottom 200}}
+          main-content]]]
+       (right-sidebar/sidebar)]
       [:a#menu.mr-4.hover:text-gray-700.text-gray-500.absolute.hidden
        {:style {:position "absolute"
                 :top 6
                 :left 16
                 :z-index 111}
-        :on-click (fn []
-                    (d/remove-class! (d/by-id "menu")
-                                     "md:block")
-                    (d/add-class! (d/by-id "left-sidebar")
-                                  "enter")
-                    (d/add-class! (d/by-id "search")
-                                  "sidebar-open")
-                    (d/add-class! (d/by-id "main")
-                                  "sidebar-open"))}
+        :on-click handler/show-left-sidebar}
        (svg/menu "currentColor")]
       (ui/notification)
       (custom-context-menu)]]))

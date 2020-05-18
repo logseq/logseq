@@ -76,9 +76,10 @@
                       (state/hide-custom-context-menu!)
 
                       ;; enable scroll
-                      (let [main (d/by-id "main")]
+                      (let [main (d/by-id "main-content")]
                         (d/remove-class! main "overflow-hidden")
-                        (d/add-class! main "overflow-y-scroll"))
+                        (d/add-class! main "overflow-y-auto")
+                        )
 
                       (handler/clear-selection!)))
 
@@ -88,9 +89,9 @@
                         (util/stop e)
                         (let [client-x (gobj/get e "clientX")
                               client-y (gobj/get e "clientY")]
-                          (let [main (d/by-id "main")]
+                          (let [main (d/by-id "main-content")]
                             ;; disable scroll
-                            (d/remove-class! main "overflow-y-scroll")
+                            (d/remove-class! main "overflow-y-auto")
                             (d/add-class! main "overflow-hidden"))
 
                           (state/show-custom-context-menu!)

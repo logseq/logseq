@@ -990,6 +990,44 @@
       (p/let [_ (clone docs-repo)]
         (load-db-and-journals! docs-repo nil true)))))
 
+;; sidebars
+(defn hide-left-sidebar
+  []
+  (dom/add-class! (dom/by-id "menu")
+                "md:block")
+  (dom/remove-class! (dom/by-id "left-sidebar")
+                   "enter")
+  (dom/remove-class! (dom/by-id "search")
+                   "sidebar-open")
+  (dom/remove-class! (dom/by-id "main")
+                   "sidebar-open"))
+
+(defn show-left-sidebar
+  []
+  (dom/remove-class! (dom/by-id "menu")
+                   "md:block")
+  (dom/add-class! (dom/by-id "left-sidebar")
+                "enter")
+  (dom/add-class! (dom/by-id "search")
+                "sidebar-open")
+  (dom/add-class! (dom/by-id "main")
+                  "sidebar-open"))
+
+(defn hide-right-sidebar
+  []
+  (let [sidebar (dom/by-id "right-sidebar")]
+    (dom/remove-class! (dom/by-id "main-content-container")
+                     "right-sidebar-open")
+    (dom/remove-class! sidebar "enter")))
+
+(defn show-right-sidebar
+  []
+  (let [sidebar (dom/by-id "right-sidebar")]
+    (hide-left-sidebar)
+    (dom/add-class! sidebar "enter")
+    (dom/add-class! (dom/by-id "main-content-container")
+                    "right-sidebar-open")))
+
 (comment
 
   (defn debug-latest-commits

@@ -2,7 +2,8 @@
   (:require [frontend.storage :as storage]
             [rum.core :as rum]
             [frontend.util :as util]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [medley.core :as medley]))
 
 ;; TODO: move git/latest-commit, git/status, git/error to corresponding datascript
 ;; dbs.
@@ -45,6 +46,9 @@
 
              ;; encrypted github token
              :encrypt/token (storage/get :encrypt/token)
+
+             ;; pages or headings in the right sidebar
+             :sidebar/blocks '()
              }))
 
 (defn sub
@@ -258,3 +262,16 @@
   (when encrypted
     (set-state! :encrypt/token encrypted)
     (storage/set :encrypt/token encrypted)))
+
+(defn sidebar-add-block!
+  [block-type block-data]
+  (update-state! :sidebar/blocks #(cons [block-type block-data] %)))
+(defn sidebar-remove-block!
+  [idx]
+  (update-state! :sidebar/blocks #(util/drop-nth idx %)))
+(defn sidebar-clear!
+  []
+  (set-state! :sidebar/blocks '()))
+(defn get-sidebar-blocks
+  []
+  (:sidebar/blocks @state))

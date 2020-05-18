@@ -3,13 +3,15 @@
             [frontend.util :as util]
             [frontend.handler :as handler]
             [frontend.db :as db]
+            [frontend.state :as state]
             [clojure.string :as string]
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.components.hiccup :as hiccup]
             [frontend.components.reference :as reference]
-            [frontend.utf8 :as utf8]))
+            [frontend.utf8 :as utf8]
+            [goog.object :as gobj]))
 
 (rum/defc journal-cp
   [[title headings format]]
@@ -20,7 +22,12 @@
 
         encoded-page-name (util/url-encode (string/capitalize title))]
     [:div.flex-1
-     [:a.initial-color {:href (str "/page/" encoded-page-name)}
+     [:a.initial-color {:href (str "/page/" encoded-page-name)
+                        :on-click (fn [e]
+                                    (util/stop e)
+                                    (when (gobj/get e "shiftKey")
+                                      (state/sidebar-add-block! :page {:name title})
+                                      (handler/show-right-sidebar)))}
       [:h1.title
        title]]
      (content/content encoded-page-name

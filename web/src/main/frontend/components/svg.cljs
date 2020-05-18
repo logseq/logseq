@@ -29,6 +29,42 @@
     {:d "M7.5 8l-5 5L1 11.5 4.75 8 1 4.5 2.5 3l5 5z",
      :fill-rule "evenodd"}]])
 
+(rum/defc big-arrow-right
+  []
+  [:svg
+   {:fill "none", :view-box "0 0 24 24", :height "24", :width "24"}
+   [:path
+    {:stroke-linejoin "round",
+     :stroke-linecap "round",
+     :stroke-width "2",
+     :stroke "currentColor",
+     :d "M14 5L21 12M21 12L14 19M21 12L3 12"}]])
+
+(rum/defc big-arrow-left
+  []
+  [:svg
+   {:fill "none", :view-box "0 0 24 24", :height "24", :width "24"}
+   [:path
+    {:stroke-linejoin "round",
+     :stroke-linecap "round",
+     :stroke-width "2",
+     :stroke "currentColor",
+     :d "M10 19L3 12M3 12L10 5M3 12L21 12"}]])
+
+(defn- hero-icon
+  [d]
+  [:svg
+   {:fill "none", :view-box "0 0 24 24", :height "24", :width "24"}
+   [:path
+    {:stroke-linejoin "round"
+     :stroke-linecap "round"
+     :stroke-width "2"
+     :stroke "currentColor"
+     :d d}]])
+
+(def close (hero-icon "M6 18L18 6M6 6L18 18"))
+(def plus (hero-icon "M12 4v16m8-8H4"))
+
 (rum/defc caret-down
   []
   [:svg

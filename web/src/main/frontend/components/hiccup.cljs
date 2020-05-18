@@ -176,10 +176,8 @@
     ["Target" s]
     [:a {:id s} s]
 
-
     ["Radio_Target" s]
     [:a {:id s} s]
-    ;; [:a {:href (str "/page/" (util/url-encode s))} (str "<<<" s ">>>")]
 
     ["Email" address]
     (let [{:keys [local_part domain]} address
@@ -194,7 +192,13 @@
         (when-let [heading (db/get-heading-by-uuid (uuid id))]
           [:span
            [:span.text-gray-500 "(("]
-           [:a {:href (str "/page/" id)}
+           [:a {:href (str "/page/" id)
+                :on-click (fn [e]
+                            (util/stop e)
+                            (when (gobj/get e "shiftKey")
+                              (state/sidebar-add-block! :heading-ref {:heading (:heading config)
+                                                                      :ref-heading heading})
+                              (handler/show-right-sidebar)))}
             (->elem :span.block-ref
                     (map-inline config (:heading/title heading)))]
            [:span.text-gray-500 "))"]])))
@@ -212,7 +216,14 @@
           ;; page reference
           [:span.page-reference
            [:span.text-gray-500 "[["]
-           [:a {:href (str "/page/" (util/url-encode s))} s]
+           [:a {:href (str "/page/" (util/url-encode s))
+                :on-click (fn [e]
+                            (util/stop e)
+                            (when (gobj/get e "shiftKey")
+                              (state/sidebar-add-block! :page-ref
+                                                        {:heading (:heading config)
+                                                         :ref-page s})
+                              (handler/show-right-sidebar)))} s]
            [:span.text-gray-500 "]]"]])
         :else
         (let [href (string-of-url url)
@@ -222,8 +233,8 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -344,10 +355,15 @@
         [:span ""])]
      [:a.flex.flex-row.items-center.justify-center
       (cond->
-        {:style {:width 14
-                 :height 24}}
+          {:style {:width 14
+                   :height 24}}
         (not dummy?)
-        (assoc :href (str "/page/" uuid)))
+        (assoc :href (str "/page/" uuid)
+               :on-click (fn [e]
+                           (util/stop e)
+                           (when (gobj/get e "shiftKey")
+                             (state/sidebar-add-block! :heading (:heading config))
+                             (handler/show-right-sidebar)))))
       [:svg {:height 10
              :width 10
              :fill "currentColor"
@@ -359,7 +375,8 @@
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::collapsed?)
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
-  (let [ref? (boolean (:ref? config))
+  (let [config (assoc config :heading heading)
+        ref? (boolean (:ref? config))
         edit-input-id (str "edit-heading-" (if ref? (:id config)) uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
         heading-id (str "ls-heading-parent-" (if ref? (:id config)) uuid)
@@ -417,8 +434,7 @@
                            (swap! state/state assoc
                                   :edit-content content
                                   :edit-heading heading)
-                           (state/set-edit-input-id! edit-input-id)
-                           ))}
+                           (state/set-edit-input-id! edit-input-id)))}
             heading-part
 
             ;; non-heading children
@@ -452,7 +468,8 @@
 (defn heading
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children format]
            :as t}]
-  (let [agenda? (= (:id config) "agenda")
+  (let [config (assoc config :heading t)
+        agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t
                                    (str "mr-1 cursor"))
         marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT"} marker)
