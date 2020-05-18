@@ -9,7 +9,8 @@
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.components.content :as content]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.utf8 :as utf8]))
 
 (defn- get-path
   [state]
@@ -56,7 +57,22 @@
             hiccup (hiccup/->hiccup headings {:id encoded-path})]
         (if empty-headings?
           (edit-raw-handler)
-          (content/content encoded-path {:hiccup hiccup})))
+          [:div
+           (let [heading-start-pos (get-in (first headings) [:heading/meta :pos])]
+             (when-not (zero? heading-start-pos)
+               (let [content (db/sub-file path)
+                     encoded-content (utf8/encode content)
+                     content-before-heading (utf8/substring encoded-content 0 heading-start-pos)]
+                 [:div..before-heading.ml-4
+                  (content/content encoded-path {:content content-before-heading
+                                                 :format format
+                                                 :on-hide (fn [value]
+                                                            (let [new-content (str (string/trim value)
+                                                                                   "\n"
+                                                                                   (utf8/substring encoded-content heading-start-pos))]
+                                                              (when (handler/file-changed? new-content)
+                                                                (handler/alter-file (state/get-current-repo) path new-content nil))))})])))
+           (content/content encoded-path {:hiccup hiccup})]))
 
       (and format (contains? (config/text-formats) format))
       (edit-raw-handler)
