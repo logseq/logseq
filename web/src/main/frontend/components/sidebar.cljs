@@ -28,7 +28,7 @@
   [current-repo close-modal-fn]
   (if current-repo
     (let [repos (state/sub [:me :repos])]
-      (if (>= (count repos) 1)
+      (if (> (count repos) 1)
        (ui/dropdown-with-links
         (fn [{:keys [toggle-fn]}]
           [:a.hover:text-gray-200.text-gray-500.font-bold {:on-click toggle-fn}
@@ -244,7 +244,7 @@
       (left-sidebar current-repo route-match close-fn)]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
       [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10
-       [:button.px-4.border-r.border-gray-200.text-gray-400.focus:outline-none.focus:bg-gray-100.focus:text-gray-400.md:hidden
+       [:button.px-4.text-gray-400.focus:outline-none.focus:text-gray-400.md:hidden.menu
         {:on-click open-fn}
         [:svg.h-6.w-6
          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
@@ -258,10 +258,11 @@
         [:div.ml-4.flex.items-center.md:ml-6
          [:a {:title "Draw with Excalidraw"
               :href "/draw"}
-          (svg/excalidraw-logo)]
+          [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
+           (svg/excalidraw-logo)]]
          [:div {:class (if pulling? "loader")}
           [:a {:title "Git pull"}
-           [:button.p-1.m-2.text-gray-400.rounded-full.hover:bg-gray-100.focus:outline-none.focus:shadow-outline.focus:text-gray-400
+           [:button.p-1.m-2.text-gray-400.rounded-full.focus:outline-none.focus:shadow-outline.focus:text-gray-700.pull
             {:on-click handler/pull-current-repo}
             [:svg.h-6.w-6
              {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}

@@ -217,9 +217,10 @@
     (let [{:keys [pos]} (rum/react *slash-caret-pos)
           input-value (get state ::input-value)]
       (when (seq input-option)
-        [:div.p-2.mt-2.mb-2.rounded-md.shadow-sm {:style {:background "#eee8d5"}},
+        [:div.p-2.mt-2.rounded-md.shadow-sm
+         {:style {:background "#eee8d5"}}
          (for [{:keys [id] :as input-item} input-option]
-           [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-1
+           [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-2
             (merge
              {:key (str "modal-input-" (name id))
               :id (str "modal-input-" (name id))
