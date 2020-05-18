@@ -26,7 +26,13 @@
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
-(defonce *new-inserted-heading (atom nil))
+
+(defn- with-levels
+  [text format level]
+  (let [pattern (config/get-heading-pattern format)]
+    (str (apply str (repeat level pattern))
+         " "
+         (string/triml text))))
 
 (defn- insert-command!
   [id command-output format {:keys [restore?]
@@ -73,6 +79,7 @@
 (rum/defc commands < rum/reactive
   [id format]
   (when (and (rum/react *show-commands)
+             @*slash-caret-pos
              (not (state/sub :editor/show-page-search?))
              (not (state/sub :editor/show-input))
              (not (state/sub :editor/show-date-picker?)))
@@ -256,7 +263,7 @@
 
 (defn on-up-down
   [state e up?]
-  (let [{:keys [id heading-id heading-parent-id dummy? on-hide value pos]} (get-state state)
+  (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format]} (get-state state)
         element (gdom/getElement id)
         line-height (util/get-textarea-line-height element)]
     (when (and heading-id
@@ -267,11 +274,11 @@
             sibling-heading (f (gdom/getElement heading-parent-id))]
         (when sibling-heading
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-            (handler/edit-heading! (uuid sibling-heading-id) pos)))))))
+            (handler/edit-heading! (uuid sibling-heading-id) pos format)))))))
 
 (defn on-backspace
   [state e]
-  (let [{:keys [id heading-id heading-parent-id dummy? value on-hide pos]} (get-state state)
+  (let [{:keys [id heading-id heading-parent-id dummy? value  pos format]} (get-state state)
         edit-content (state/get-edit-content)]
     (when (and heading-id (= value ""))
       (if @*should-delete?
@@ -285,7 +292,7 @@
             (handler/delete-heading! heading dummy?)
             (when sibling-heading
               (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-                (handler/edit-heading! (uuid sibling-heading-id) :max)))))
+                (handler/edit-heading! (uuid sibling-heading-id) :max format)))))
         (reset! *should-delete? true)))))
 
 (defn get-matched-commands
@@ -368,13 +375,13 @@
 
 (defn- insert-new-heading!
   [state]
-  (let [{:keys [heading value]} (get-state state)]
+  (let [{:keys [heading value format]} (get-state state)]
     ;; save the current heading and insert a new heading
-    (let [[new-heading new-heading-content] (handler/insert-new-heading! heading value)
+    (let [value (with-levels value format (:heading/level heading))
+          [new-heading _new-heading-content] (handler/insert-new-heading! heading value)
           id (:heading/uuid new-heading)]
-      (reset! *new-inserted-heading id)
       (clear-when-saved!)
-      (handler/edit-heading! id :max))))
+      (handler/edit-heading! id :max format))))
 
 (defn get-previous-heading-level
   [current-id]
@@ -382,19 +389,12 @@
     (when-let [prev-heading (gdom/getPreviousElementSibling input)]
       (util/parse-int (d/attr prev-heading "level")))))
 
-(defn get-current-heading-level
-  [heading-pattern]
-  (when-let [input (state/get-edit-content)]
-    (let [[prefix & _] (string/split input " ")]
-      (and (= prefix (apply str (repeat (count prefix) heading-pattern)))
-           (count prefix)))))
-
 (defn- adjust-heading-level!
   [state direction]
   (let [{:keys [heading heading-parent-id value]} (get-state state)
         format (:heading/format heading)
         heading-pattern (config/get-heading-pattern format)
-        level (get-current-heading-level heading-pattern)
+        level (:heading/level heading)
         previous-level (or (get-previous-heading-level heading-parent-id) 1)
         [add? remove?] (case direction
                          :left [false true]
@@ -402,14 +402,14 @@
                          [(<= level previous-level)
                           (and (> level previous-level)
                                (> level 2))])
-        new-value (cond
-                    add? (str heading-pattern value)
-                    remove? (if (> level 2)
-                              (subs value 1)
-                              value)
-                    :else value)]
-    (handler/save-heading-if-changed! heading new-value)
-    (state/set-edit-content! new-value)))
+        final-level (cond
+                      add? (inc level)
+                      remove? (if (> level 2)
+                                (dec level)
+                                level)
+                      :else level)
+        new-value (with-levels value format final-level)]
+    (handler/save-heading-if-changed! heading new-value)))
 
 (defn- get-input
   [state]
@@ -425,13 +425,17 @@
    (fn [state]
      (let [input-id (last (:rum/args state))
            input (gdom/getElement input-id)]
-       (mixins/hide-when-esc-or-outside
-        state
-        :on-hide
-        (fn [state]
-          (let [{:keys [on-hide value]} (get-state state)]
-            (on-hide value)
-            (clear-when-saved!))))
+       (let [{:keys [format heading]} (get-state state)]
+         (mixins/hide-when-esc-or-outside
+          state
+          :on-hide
+          (fn [state]
+            (let [{:keys [on-hide format value heading]} (get-state state)]
+              (let [value (if heading
+                            (with-levels value format (:heading/level heading))
+                            value)]
+                (on-hide value))
+              (clear-when-saved!)))))
        (mixins/on-key-down
         state
         {
@@ -468,8 +472,8 @@
          ;; /
          191 (fn [state e]
                (when-let [matched-commands (seq (get-matched-commands input))]
-                 (reset! *show-commands true)
-                 (reset! *slash-caret-pos (util/get-caret-pos input))))
+                 (reset! *slash-caret-pos (util/get-caret-pos input))
+                 (reset! *show-commands true)))
          ;; backspace
          8 on-backspace}
         (fn [e key-code]
@@ -494,32 +498,21 @@
                       ))
                   (reset! *show-commands false))))))))))
   {:init (fn [state _props]
-           (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)
-                 new? (and @*new-inserted-heading
-                           (= @*new-inserted-heading (:heading/uuid heading)))]
+           (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)]
              (reset! *should-delete? false)
              (state/set-edit-content!
-              (cond new?
-                    (str (string/trim content) " ")
-
-                    dummy?
-                    (string/triml content)
-
-                    :else
-                    (string/trim content))))
+              (string/trim content)))
            state)
    :did-mount (fn [state]
-                (let [[content {:keys [heading format dummy?]} id] (:rum/args state)]
-                  (handler/restore-cursor-pos! id content dummy?)
+                (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)]
+                  (let [content (handler/remove-level-spaces content format)]
+                    (handler/restore-cursor-pos! id content dummy?))
                   (when-let [input (gdom/getElement id)]
                     (dnd/subscribe!
                      input
                      :upload-images
                      {:drop (fn [e files]
-                              (upload-image id files format *image-uploading? true))})
-                    (when (and @*new-inserted-heading
-                               (= @*new-inserted-heading (:heading/uuid heading)))
-                      (util/move-cursor-to-end input))))
+                              (upload-image id files format *image-uploading? true))})))
                 state)
    :will-unmount (fn [state]
                    (let [[content opts id] (:rum/args state)]
@@ -528,17 +521,21 @@
                         input
                         :upload-images)))
                    state)}
-  [content {:keys [on-hide dummy? node format]
+  [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}} id]
-  (let [value (state/sub :edit-content)]
+  (let [value (state/sub :edit-content)
+        value (if heading
+                (handler/remove-level-spaces value format)
+                value)]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}}
      (ui/textarea
       {:id id
        :on-change (fn [e]
-                    (state/set-edit-content! (util/evalue e)))
-       :value value
+                    (let [value (util/evalue e)]
+                      (state/set-edit-content! value)))
+       :value (or value "")
        :auto-focus true
        :style {:border "none"
                :border-radius 0

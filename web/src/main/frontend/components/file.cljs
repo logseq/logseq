@@ -63,15 +63,16 @@
                (let [content (db/sub-file path)
                      encoded-content (utf8/encode content)
                      content-before-heading (utf8/substring encoded-content 0 heading-start-pos)]
-                 [:div..before-heading.ml-4
-                  (content/content encoded-path {:content content-before-heading
-                                                 :format format
-                                                 :on-hide (fn [value]
-                                                            (let [new-content (str (string/trim value)
-                                                                                   "\n"
-                                                                                   (utf8/substring encoded-content heading-start-pos))]
-                                                              (when (handler/file-changed? new-content)
-                                                                (handler/alter-file (state/get-current-repo) path new-content nil))))})])))
+                 (when-not (string/blank? (string/trim content-before-heading))
+                   [:div..before-heading.ml-4
+                    (content/content encoded-path {:content content-before-heading
+                                                   :format format
+                                                   :on-hide (fn [value]
+                                                              (let [new-content (str (string/trim value)
+                                                                                     "\n"
+                                                                                     (utf8/substring encoded-content heading-start-pos))]
+                                                                (when (handler/file-changed? new-content)
+                                                                  (handler/alter-file (state/get-current-repo) path new-content nil))))})]))))
            (content/content encoded-path {:hiccup hiccup})]))
 
       (and format (contains? (config/text-formats) format))

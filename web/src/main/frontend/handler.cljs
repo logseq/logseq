@@ -609,8 +609,7 @@
   ([id markup dummy?]
    (when-let [node (gdom/getElement (str id))]
      (when-let [range (string/trim (state/get-cursor-range))]
-       (let [pos (inc (diff/find-position markup range))
-             pos (if dummy? (+ 3 pos) pos)]
+       (let [pos (inc (diff/find-position markup range))]
          (util/set-caret-pos! node pos))))))
 
 (defn remove-slash!
@@ -882,14 +881,23 @@
                            (db/reset-file! repo config/config-file content)
                            (git-add repo config/config-file))))))))))
 
+(defn remove-level-spaces
+  [text format]
+  (if-not (string/blank? text)
+    (let [pattern (util/format
+                   "^[%s]+\\s?"
+                   (config/get-heading-pattern format))]
+      (string/replace-first text (re-pattern pattern) ""))))
+
 (defn edit-heading!
-  [heading-id prev-pos]
+  [heading-id prev-pos format]
   (let [heading (or
                  (db/entity [:heading/uuid heading-id])
                  ;; dummy?
                  {:heading/uuid heading-id
-                  :heading/content (config/default-empty-heading (state/get-preferred-format))})]
+                  :heading/content ""})]
     (let [{:heading/keys [content]} heading
+          content (remove-level-spaces content format)
           edit-input-id (str "edit-heading-" heading-id)
           content-length (count content)
           text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
