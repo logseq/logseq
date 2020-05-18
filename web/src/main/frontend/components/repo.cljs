@@ -23,8 +23,10 @@
                :href url}
            (db/get-repo-path url)]
           [:div.controls
-           [:a.control {:on-click (fn []
-                                    (handler/rebuild-index! repo))}
+           [:a.control {:title "Clone again and rebuild the db"
+                        :on-click (fn []
+                                    (handler/rebuild-index! repo)
+                                    (handler/redirect! {:to :home}))}
             "Rebuild index"]
            [:a.text-gray-400.ml-4 {:on-click (fn []
                                                (handler/remove-repo! repo))}

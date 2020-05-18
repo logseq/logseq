@@ -28,6 +28,15 @@
 
 (defonce localforage-instance (.createInstance localforage store-name))
 
+(defn get-repo-path
+  [url]
+  (->> (take-last 2 (string/split url #"/"))
+       (string/join "/")))
+
+(defn datascript-db
+  [repo]
+  (str "logseq-db/" (get-repo-path repo)))
+
 (defn clear-store!
   []
   (p/let [_ (.clear localforage)
@@ -35,25 +44,17 @@
     (doseq [db dbs]
       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
 
+(defn remove-db!
+  [repo]
+  (.removeItem localforage-instance (datascript-db repo)))
+
 ;; only for debugging
 ;; (def react deref)
 (def react rum/react)
 
-;; datascript dbs
-;; TODO: Create a database for each repo.
-;; Multiple databases
-(defn get-repo-path
-  [url]
-  (->> (take-last 2 (string/split url #"/"))
-       (string/join "/")))
-
 (defn get-repo-name
   [url]
   (last (string/split url #"/")))
-
-(defn datascript-db
-  [repo]
-  (str "logseq-db/" (get-repo-path repo)))
 
 (defonce conns
   (atom {}))

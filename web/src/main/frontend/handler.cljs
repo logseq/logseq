@@ -242,12 +242,6 @@
                          :notification/status nil)
                  5000))
 
-(defn clear-storage
-  []
-  (p/let [_idb-clear (js/window.pfs._idb.wipe)]
-    (js/localStorage.clear)
-    (set! (.-href js/window.location) "/")))
-
 (defn pull
   [repo-url token]
   (let [status (db/get-key-value repo-url :git/status)]
@@ -846,9 +840,9 @@
   (util/delete (str config/api "repos/" id)
                (fn []
                  (db/remove-conn! url)
-                 (storage/remove (db/datascript-db url))
+                 (db/remove-db! (db/datascript-db url))
+                 (fs/rmdir (git/get-repo-dir url))
                  (state/delete-repo! repo)
-                 ;; TODO: clear indexdb
                  )
                (fn [error]
                  (prn "Delete repo failed, error: " error))))
@@ -856,8 +850,12 @@
 (defn rebuild-index!
   [{:keys [id url] :as repo}]
   (db/remove-conn! url)
-  (storage/remove (db/datascript-db url))
-  (clone-and-pull url))
+  (-> (p/let [_ (db/remove-db! (db/datascript-db url))]
+        (fs/rmdir (git/get-repo-dir url)))
+      (p/catch (fn [error]
+                 (prn "Delete repo failed, error: " error)))
+      (p/finally (fn []
+                   (clone-and-pull url)))))
 
 (defn watch-config!
   []
@@ -1035,7 +1033,7 @@
     (get-latest-commit (state/get-current-repo)
                        (fn [commits]
                          (prn (mapv :oid (bean/->clj commits))))
-                       3))
+                       10))
 
   (defn debug-matrix
     []

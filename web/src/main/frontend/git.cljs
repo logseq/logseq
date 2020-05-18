@@ -42,7 +42,9 @@
 
 (defn get-repo-dir
   [repo-url]
-  (str "/" (last (string/split repo-url #"/"))))
+  (str "/"
+       (->> (take-last 2 (string/split repo-url #"/"))
+            (string/join "_"))))
 
 (defn clone
   [repo-url token]
