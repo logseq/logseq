@@ -39,13 +39,15 @@
         journal? (db/journal-page? page-name)
         heading? (util/uuid-string? page-name)
         heading-id (and heading? (uuid page-name))
+        sidebar? (:sidebar? option)
         page-headings (get-headings page-name journal? heading?)
         page-headings (if heading?
                         page-headings
                         (db/with-dummy-heading page-headings format))
         start-level (if journal? 2 1)
         hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
-                                               :start-level start-level})
+                                               :start-level start-level
+                                               :sidebar? sidebar? })
 
         page-name (if heading?
                     (:page/name (db/entity (:db/id (:heading/page (first page-headings)))))
@@ -54,15 +56,18 @@
         starred? (contains? (set
                              (some->> (state/sub [:config repo :starred])
                                       (map string/capitalize)))
-                            page-name)
-        sidebar? (:sidebar? option)]
+                            page-name)]
     [:div.flex-1
      (when-not sidebar?
        [:div.flex.flex-row
         [:a {:on-click (fn [e]
                          (util/stop e)
                          (when (gobj/get e "shiftKey")
-                           (state/sidebar-add-block! :page {:name page-name})
+                           (when-let [page (db/d-pull [:page/name page-name])]
+                             (state/sidebar-add-block!
+                              (:db/id page)
+                              :page
+                              {:page page}))
                            (handler/show-right-sidebar)))}
          [:h1.title
           page-name]]
@@ -75,9 +80,11 @@
            (svg/star-outline "stroke-current h-5 w-5"))]])
 
      (content/content encoded-page-name
-                      {:hiccup hiccup})
+                      {:hiccup hiccup
+                       :sidebar? sidebar?})
 
-     (reference/references page-name)]))
+     (when-not sidebar?
+       (reference/references page-name))]))
 
 (rum/defc all-pages < rum/reactive
   []

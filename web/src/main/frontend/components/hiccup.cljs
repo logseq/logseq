@@ -196,8 +196,11 @@
                 :on-click (fn [e]
                             (util/stop e)
                             (when (gobj/get e "shiftKey")
-                              (state/sidebar-add-block! :heading-ref {:heading (:heading config)
-                                                                      :ref-heading heading})
+                              (state/sidebar-add-block!
+                               (:db/id heading)
+                               :heading-ref
+                               {:heading (:heading config)
+                                :ref-heading heading})
                               (handler/show-right-sidebar)))}
             (->elem :span.block-ref
                     (map-inline config (:heading/title heading)))]
@@ -220,9 +223,12 @@
                 :on-click (fn [e]
                             (util/stop e)
                             (when (gobj/get e "shiftKey")
-                              (state/sidebar-add-block! :page-ref
-                                                        {:heading (:heading config)
-                                                         :ref-page s})
+                              (when-let [page (db/entity [:page/name s])]
+                                (state/sidebar-add-block!
+                                 (get-in config [:heading :db/id])
+                                 :page-ref
+                                 {:heading (:heading config)
+                                  :ref-page page}))
                               (handler/show-right-sidebar)))} s]
            [:span.text-gray-500 "]]"]])
         :else
@@ -362,7 +368,10 @@
                :on-click (fn [e]
                            (util/stop e)
                            (when (gobj/get e "shiftKey")
-                             (state/sidebar-add-block! :heading (:heading config))
+                             (state/sidebar-add-block!
+                              (get-in config [:heading :db/id])
+                              :heading
+                              (:heading config))
                              (handler/show-right-sidebar)))))
       [:svg {:height 10
              :width 10
@@ -372,14 +381,23 @@
                  :cy 5
                  :r 2}]]]]))
 
+(defn- build-id
+  [config ref? sidebar?]
+  (cond
+    ref? (str (:id config) "-")
+    sidebar? (str "sidebar-" (:id config) "-")
+    :else nil))
+
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::collapsed?)
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
   (let [config (assoc config :heading heading)
         ref? (boolean (:ref? config))
-        edit-input-id (str "edit-heading-" (if ref? (:id config)) uuid)
+        sidebar? (boolean (:sidebar? config))
+        unique-dom-id (build-id config ref? sidebar?)
+        edit-input-id (str "edit-heading-" unique-dom-id uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
-        heading-id (str "ls-heading-parent-" (if ref? (:id config)) uuid)
+        heading-id (str "ls-heading-parent-" unique-dom-id uuid)
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
         collapsed? (or toggle-collapsed? @collapsed-atom?)

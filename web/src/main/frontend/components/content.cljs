@@ -99,7 +99,7 @@
                             (d/set-style! context-menu
                                           :left (str client-x "px")
                                           :top (str client-y "px")))))))))
-  [id hiccup]
+  [id {:keys [hiccup] :as option}]
   (let [in-selection-mode? (state/sub :selection/mode)]
     [:div {:id id}
      hiccup
@@ -179,8 +179,9 @@
                     hiccup
                     content
                     on-click
-                    on-hide]}]
+                    on-hide]
+             :as option}]
   (if hiccup
-    (hiccup-content id hiccup)
+    (hiccup-content id option)
     (let [format (format/normalize format)]
       (non-hiccup-content id content on-click on-hide config format))))

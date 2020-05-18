@@ -26,6 +26,7 @@
 
              :ui/toggle-state false
              :ui/collapsed-headings {}
+             :ui/sidebar-collapsed-blocks {}
 
              :github/contents {}
              :config {}
@@ -215,8 +216,8 @@
   [headings]
   (when (seq headings)
     (swap! state assoc
-          :selection/mode true
-          :selection/headings headings)))
+           :selection/mode true
+           :selection/headings headings)))
 
 (defn clear-selection!
   []
@@ -264,8 +265,11 @@
     (storage/set :encrypt/token encrypted)))
 
 (defn sidebar-add-block!
-  [block-type block-data]
-  (update-state! :sidebar/blocks #(cons [block-type block-data] %)))
+  [db-id block-type block-data]
+  (when db-id
+    (update-state! :sidebar/blocks (fn [blocks]
+                                     (->> (remove #(= (first %) db-id) blocks)
+                                          (cons [db-id block-type block-data]))))))
 (defn sidebar-remove-block!
   [idx]
   (update-state! :sidebar/blocks #(util/drop-nth idx %)))
@@ -275,3 +279,8 @@
 (defn get-sidebar-blocks
   []
   (:sidebar/blocks @state))
+
+(defn sidebar-block-toggle-collapse!
+  [db-id]
+  (when db-id
+    (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))

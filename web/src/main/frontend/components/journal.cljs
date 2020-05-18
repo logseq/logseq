@@ -26,7 +26,12 @@
                         :on-click (fn [e]
                                     (util/stop e)
                                     (when (gobj/get e "shiftKey")
-                                      (state/sidebar-add-block! :page {:name title})
+                                      (when-let [page (db/d-pull [:page/name title])]
+                                        (state/sidebar-add-block!
+                                         (:db/id page)
+                                         :page
+                                         {:page page
+                                          :journal? true}))
                                       (handler/show-right-sidebar)))}
       [:h1.title
        title]]
