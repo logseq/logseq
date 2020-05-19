@@ -53,7 +53,6 @@
 (defn hide-when-esc-or-outside
   [state & {:keys [on-hide node]}]
   (let [node (or node (rum/dom-node state))]
-    (js/console.dir node)
     (listen state js/window "click"
             (fn [e]
               ;; If the click target is outside of current node
@@ -151,17 +150,21 @@
    If no target is given it is defaulted to js/window (global handler)
    Ex:
      (keyboard-mixin \"esc\" #(browse-to :home/home))"
-  ([key f] (keyboard-mixin key f js/window))
-  ([key f target]
+  ([key f] (keyboard-mixin key f (fn [_] true) js/window))
+  ([key f enable-f] (keyboard-mixin key f enable-f js/window))
+  ([key f enable-f target]
    (let [target-fn (if (fn? target) target (fn [_] target))]
      {:did-mount
       (fn [state]
-        (assoc state ::keyboard-listener
-               (keyboard/install-shortcut! key
-                                           (fn [] (f state))
-                                           false
-                                           (target-fn state))))
+        (if (enable-f state)
+          (assoc state ::keyboard-listener
+                (keyboard/install-shortcut! key
+                                            (fn [] (f state))
+                                            false
+                                            (target-fn state)))
+          state))
       :will-unmount
       (fn [state]
-        ((::keyboard-listener state))
+        (when (enable-f state)
+          ((::keyboard-listener state)))
         state)})))

@@ -174,6 +174,13 @@
              selector
              eid))))
 
+(defn d-pull-many
+  ([eids]
+   (d-pull-many '[*] eids))
+  ([selector eids]
+   (when-let [conn (get-conn)]
+     (d/pull-many conn selector eids))))
+
 (defn pull
   ([eid]
    (pull '[*] eid))
@@ -333,6 +340,10 @@
 (defn get-heading-by-uuid
   [uuid]
   (entity [:heading/uuid uuid]))
+
+(defn sub-heading
+  [uuid]
+  (rum/react (pull [:heading/uuid uuid])))
 
 (defn remove-key
   [repo-url key]

@@ -38,8 +38,8 @@
         format (format/get-format path)
         save-file-handler (fn [content]
                             (fn [_]
-                              (when (handler/file-changed? content)
-                                (handler/alter-file (state/get-current-repo) path (state/get-edit-content) nil))))
+                              (when (handler/file-changed? encoded-path content)
+                                (handler/alter-file (state/get-current-repo) path (state/get-edit-content encoded-path) nil))))
         edit-raw-handler (fn []
                            (let [content (db/sub-file path)]
                              (content/content encoded-path {:content content
@@ -71,7 +71,7 @@
                                                               (let [new-content (str (string/trim value)
                                                                                      "\n"
                                                                                      (utf8/substring encoded-content heading-start-pos))]
-                                                                (when (handler/file-changed? new-content)
+                                                                (when (handler/file-changed? encoded-path new-content)
                                                                   (handler/alter-file (state/get-current-repo) path new-content nil))))})]))))
            (content/content encoded-path {:hiccup hiccup})]))
 

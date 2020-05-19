@@ -111,8 +111,9 @@
   (let [edit? (= (state/sub-edit-input-id) id)
         loading (state/sub :format/loading)]
     (if edit?
-      (editor/box content {:on-hide on-hide
-                           :format format} id)
+      (editor/box (string/trim content)
+                  {:on-hide on-hide
+                   :format format} id)
       (let [format (format/normalize format)
             loading? (get loading format)
             markup? (contains? config/html-render-formats format)

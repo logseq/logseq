@@ -69,7 +69,7 @@
    {:keys [last-pattern postfix-fn backward-pos forward-pos]
     :or {last-pattern "/"}
     :as option}]
-  (let [edit-content (state/get-edit-content)
+  (let [edit-content (state/get-edit-content id)
         input (gdom/getElement id)
         current-pos (:pos (util/get-caret-pos input))
 
@@ -83,9 +83,7 @@
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (swap! state/state assoc
-           :edit-content new-value
-           :editor/last-saved-cursor new-pos)
+    (state/set-heading-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input
                          (if (or backward-pos forward-pos)
                            new-pos
@@ -130,15 +128,15 @@
 (defmethod handle-step :editor/clear-current-slash [[_]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (state/get-edit-content)
+      (let [edit-content (state/get-edit-content input-id)
             current-pos (:pos (util/get-caret-pos current-input))
             prefix (subs edit-content 0 current-pos)
             prefix (util/replace-last "/" prefix "")
             new-value (str prefix
                            (subs edit-content current-pos))]
-        (swap! state/state assoc
-               :edit-content new-value
-               :editor/last-saved-cursor (count prefix))))))
+        (state/set-heading-content-and-last-pos! input-id
+                                                 new-value
+                                                 (count prefix))))))
 
 (def marker-pattern
   #"(TODO|DOING|DONE|WAIT|CANCELED|STARTED|IN-PROGRESS)?\s?")
@@ -146,7 +144,7 @@
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (state/get-edit-content)
+      (let [edit-content (state/get-edit-content input-id)
             slash-pos (:pos @*slash-caret-pos)
             [re-pattern new-line-re-pattern] (if (= :org format)
                                                [#"\*+\s" #"\n\*+\s"]
@@ -160,7 +158,7 @@
                            (string/replace-first (subs edit-content pos)
                                                  marker-pattern
                                                  (str marker " ")))]
-        (state/set-edit-content! new-value)))))
+        (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))

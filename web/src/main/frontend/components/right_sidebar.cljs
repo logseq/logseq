@@ -6,14 +6,17 @@
             [frontend.components.hiccup :as hiccup]
             [frontend.handler :as handler]
             [frontend.state :as state]
+            [frontend.db :as db]
             [medley.core :as medley]))
 
-(defn- heading-cp
+(rum/defc heading-cp < rum/reactive
   [heading]
-  (hiccup/heading {:id (:heading/uuid heading)
-                   :sidebar? true}
-                  (assoc heading
-                         :heading/show-page? true)))
+  (let [id (:heading/uuid heading)
+        heading (db/sub-heading id)]
+    (hiccup/heading {:id id
+                     :sidebar? true}
+                    (assoc heading
+                           :heading/show-page? true))))
 
 (defn build-sidebar-item
   [db-id block-type block-data]

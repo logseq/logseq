@@ -34,10 +34,10 @@
              :editor/show-date-picker? false
              ;; With label or other data
              :editor/show-input nil
-             :editor/editing? nil
              :editor/last-saved-cursor nil
-             :edit-content ""
-             :edit-heading nil
+             :editor/editing? nil
+             :editor/content {}
+             :editor/heading nil
              :cursor-range nil
              :cursor-pos nil
 
@@ -112,15 +112,14 @@
   (:edit-heading @state))
 
 (defn get-edit-content
-  []
-  (:edit-content @state))
-(defn set-edit-content!
-  [value]
-  (set-state! :edit-content value))
+  [input-id]
+  (get-in @state [:editor/content input-id]))
 
-(defn clear-edit-content!
-  []
-  (set-edit-content! ""))
+(defn set-edit-content!
+  [input-id value]
+  (when input-id
+    (update-state! :editor/content (fn [m]
+                                     (assoc m input-id value)))))
 
 (defn get-cursor-range
   []
@@ -288,3 +287,20 @@
 (defn set-edit-heading!
   [heading]
   (set-state! :edit-heading heading))
+
+(defn set-editing!
+  [edit-input-id content heading]
+  (when edit-input-id
+    (reset! state
+            (-> @state
+                (assoc-in [:editor/content edit-input-id] content)
+                (assoc :edit-heading heading
+                       :editor/editing? {edit-input-id true})))))
+
+(defn set-heading-content-and-last-pos!
+  [edit-input-id content new-pos]
+  (when edit-input-id
+    (reset! state
+            (-> @state
+                (assoc-in [:editor/content edit-input-id] content)
+                (assoc    :editor/last-saved-cursor new-pos)))))

@@ -437,9 +437,9 @@
       (js/setInterval notify-fn (* 1000 60)))))
 
 (defn file-changed?
-  [content]
+  [input-id content]
   (not= (string/trim content)
-        (string/trim (state/get-edit-content))))
+        (string/trim (state/get-edit-content input-id))))
 
 (defn alter-file
   [repo-url path content {:keys [reset?]
@@ -606,13 +606,6 @@
        (let [pos (inc (diff/find-position markup range))]
          (util/set-caret-pos! node pos))))))
 
-(defn remove-slash!
-  []
-  (when-let [edit-content (state/get-edit-content)]
-    (when (= \/ (last edit-content))
-      (let [new-value (subs edit-content 0 (dec (count edit-content)))]
-        (state/set-edit-content! new-value)))))
-
 (defn search
   [q]
   (swap! state/state assoc :search/result (search/search q)))
@@ -652,10 +645,7 @@
                (if (= "\n" (last prefix))
                  ""
                  "\n")
-               value
-               (if (= "\n" (first postfix))
-                 ""
-                 "\n"))]
+               value)]
     [(str prefix value postfix)
      value]))
 
@@ -707,9 +697,10 @@
     (let [file (db/entity (:db/id file))
           file-content (:file/content file)
           file-path (:file/path file)
-          value (str value "\n" new-heading-content "\n")
+          value (str value "\n" new-heading-content)
           [new-content value] (new-file-content heading file-content value)
           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+          first-heading (first headings)
           last-heading (last headings)
           after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
       (db/transact!
@@ -721,7 +712,7 @@
          [{:file/path file-path
            :file/content new-content}]))
       (alter-file repo file-path new-content {:reset? false})
-      [last-heading new-heading-content])))
+      [first-heading last-heading new-heading-content])))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -901,8 +892,7 @@
                        content
                        (subs content 0 prev-pos))]
       (state/set-cursor-range! text-range)
-      (state/set-edit-input-id! edit-input-id)
-      (state/set-edit-heading! heading))))
+      (state/set-editing! edit-input-id content heading))))
 
 (defn clear-selection!
   []
