@@ -645,7 +645,10 @@
                (if (= "\n" (last prefix))
                  ""
                  "\n")
-               value)]
+               value
+               (if (= "\n" (first postfix))
+                 ""
+                 "\n"))]
     [(str prefix value postfix)
      value]))
 
@@ -697,7 +700,7 @@
     (let [file (db/entity (:db/id file))
           file-content (:file/content file)
           file-path (:file/path file)
-          value (str value "\n" new-heading-content)
+          value (str value "\n" new-heading-content "\n")
           [new-content value] (new-file-content heading file-content value)
           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
           first-heading (first headings)
