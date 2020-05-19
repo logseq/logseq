@@ -27,13 +27,6 @@
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
 
-(defn- with-levels
-  [text format level]
-  (let [pattern (config/get-heading-pattern format)]
-    (str (apply str (repeat level pattern))
-         " "
-         (string/triml text))))
-
 (defn- insert-command!
   [id command-output format {:keys [restore?]
                              :or {restore? true}
@@ -75,6 +68,13 @@
                             (gobj/get e "total"))
                          100)]
           (reset! *image-uploading-process process)))))))
+
+(defn with-levels
+  [text format level]
+  (let [pattern (config/get-heading-pattern format)]
+    (str (apply str (repeat level pattern))
+         " "
+         (string/triml text))))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -527,54 +527,18 @@
         value (if heading
                 (handler/remove-level-spaces value format)
                 value)]
-    [:div.editor {:style {:position "relative"
-                          :display "flex"
-                          :flex "1 1 0%"}}
-     (ui/textarea
-      {:id id
-       :on-change (fn [e]
-                    (let [value (util/evalue e)]
-                      (state/set-edit-content! value)))
-       :value (or value "")
-       :auto-focus true
-       :style {:border "none"
-               :border-radius 0
-               :background "transparent"
-               :padding 0}})
-     (transition-cp
-      (commands id format)
-      true)
-
-     (transition-cp
-      (page-search id format)
-      true)
-
-     (transition-cp
-      (block-search id format)
-      true)
-
-     (transition-cp
-      (date-picker id format)
-      false)
-
-     (transition-cp
-      (input id
-             (fn [{:keys [link label]} pos]
-               (if (and (string/blank? link)
-                        (string/blank? label))
-                 nil
-                 (insert-command! id
-                                  (util/format "[[%s][%s]]"
-                                               (or link "")
-                                               (or label ""))
-                                  format
-                                  {:last-pattern "/link"}))
-               (state/set-editor-show-input nil)
-               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-                 (when-let [input (gdom/getElement id)]
-                   (.focus input)
-                   (util/move-cursor-to input saved-cursor)))))
-      true)
-
-     (when format
-       (image-uploader id format))]))
+    (ui/textarea
+     {:id id
+      :on-change (fn [e]
+                   (let [value (util/evalue e)]
+                     (state/set-edit-content! value)))
+      :value (or value "")
+      :auto-focus true
+      :class "editor"
+      :style {:border "none"
+              :border-radius 0
+              :background "transparent"
+              :padding 0
+              :position "relative"
+              :display "flex"
+              :flex "1 1 0%"}})))

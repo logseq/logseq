@@ -53,6 +53,7 @@
 (defn hide-when-esc-or-outside
   [state & {:keys [on-hide node]}]
   (let [node (or node (rum/dom-node state))]
+    (js/console.dir node)
     (listen state js/window "click"
             (fn [e]
               ;; If the click target is outside of current node

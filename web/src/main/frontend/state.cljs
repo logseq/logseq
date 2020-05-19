@@ -284,3 +284,7 @@
   [db-id]
   (when db-id
     (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))
+
+(defn set-edit-heading!
+  [heading]
+  (set-state! :edit-heading heading))

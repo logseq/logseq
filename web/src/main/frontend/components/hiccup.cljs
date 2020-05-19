@@ -431,6 +431,9 @@
 
          (if edit?
            (editor/box content {:on-hide (fn [value]
+                                           (prn "on-hide"
+                                                {:heading heading
+                                                 :value value})
                                            (handler/save-heading-if-changed! heading value))
                                 :heading heading
                                 :heading-id uuid
@@ -446,11 +449,17 @@
                            (when-let [current-edit-input-id (state/get-edit-input-id)]
                              (when (and (not= current-edit-input-id edit-input-id)
                                         (state/get-edit-content))
-                               (handler/save-heading-if-changed! (state/get-edit-heading)
-                                                                 (state/get-edit-content))))
+                               (prn "new editing heading")
+                               (let [edit-heading (state/get-edit-heading)
+                                     new-value (let [format (:heading/format edit-heading)]
+                                                 (editor/with-levels
+                                                  (handler/remove-level-spaces (state/get-edit-content) format)
+                                                  format
+                                                  (:heading/level edit-heading)))]
+                                 (handler/save-heading-if-changed! edit-heading new-value))))
                            (handler/reset-cursor-range! (gdom/getElement heading-id))
                            (swap! state/state assoc
-                                  :edit-content content
+                                  :edit-content (handler/remove-level-spaces content format)
                                   :edit-heading heading)
                            (state/set-edit-input-id! edit-input-id)))}
             heading-part

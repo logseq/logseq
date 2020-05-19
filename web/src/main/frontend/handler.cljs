@@ -678,9 +678,8 @@
      after-headings)))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file dummy?] :as heading} value]
-  (let [repo (state/get-current-repo)
-        value (string/trim value)]
+  [{:heading/keys [uuid content meta file dummy? format] :as heading} value]
+  (let [repo (state/get-current-repo)]
     (when (not= (string/trim content) value) ; heading content changed
       (let [file (db/entity (:db/id file))
             file-content (:file/content file)
@@ -890,7 +889,7 @@
 (defn edit-heading!
   [heading-id prev-pos format]
   (let [heading (or
-                 (db/entity [:heading/uuid heading-id])
+                 (db/d-pull [:heading/uuid heading-id])
                  ;; dummy?
                  {:heading/uuid heading-id
                   :heading/content ""})]
@@ -902,7 +901,8 @@
                        content
                        (subs content 0 prev-pos))]
       (state/set-cursor-range! text-range)
-      (state/set-edit-input-id! edit-input-id))))
+      (state/set-edit-input-id! edit-input-id)
+      (state/set-edit-heading! heading))))
 
 (defn clear-selection!
   []
