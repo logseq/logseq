@@ -49,8 +49,8 @@
   (.removeItem localforage-instance (datascript-db repo)))
 
 ;; only for debugging
-(def react deref)
-;; (def react rum/react)
+;; (def react deref)
+(def react rum/react)
 
 (defn get-repo-name
   [url]
@@ -251,14 +251,15 @@
 
 (defn get-page-alias
   [repo page-name]
-  (-> (d/q '[:find ?alias-name
+  (-> (posh/q '[:find ?alias-name
              :in $ ?page-name
              :where
              [?page :page/name ?page-name]
              [?page :page/alias ?alias]
              [?alias :page/name ?alias-name]]
-        (get-conn)
+        (get-conn repo false)
         page-name)
+      (react)
       seq-flatten
       distinct))
 

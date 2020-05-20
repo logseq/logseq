@@ -83,7 +83,6 @@
      (when repo
        (let [alias (db/get-page-alias repo page-name)]
          (when (seq alias)
-           (prn alias)
            [:div.alias.ml-1.mb-1.content
             [:span.font-bold.mr-1 "Page aliases: "]
             (for [item alias]
