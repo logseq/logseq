@@ -947,24 +947,52 @@
         repo (state/get-current-repo)
         ref-pages (get-page-referenced-pages repo page)
         mentioned-pages (get-pages-that-mentioned-page repo page)
+        edges (concat
+               (map (fn [[p aliases]]
+                      [page p]) ref-pages)
+               (map (fn [[p aliases]]
+                      [p page]) mentioned-pages))
+        other-pages (->> (concat (map first ref-pages)
+                                (map first mentioned-pages))
+                         (remove nil?)
+                         (set))
+        other-pages-edges (mapcat
+                           (fn [page]
+                             (let [ref-pages (-> (map first (get-page-referenced-pages repo page))
+                                                 (set)
+                                                 (set/intersection other-pages))
+                                   mentioned-pages (-> (map first (get-pages-that-mentioned-page repo page))
+                                                       (set)
+                                                       (set/intersection other-pages))]
+                               (concat
+                                (map (fn [p] [page p]) ref-pages)
+                                (map (fn [p] [p page]) mentioned-pages))))
+                           other-pages)
+        edges (->> (concat edges other-pages-edges)
+                   (remove nil?)
+                   (distinct)
+                   (map (fn [[from to]]
+                          {:from from
+                           :to to})))
+        get-connections (fn [page]
+                          (count (filter (fn [{:keys [from to]}]
+                                           (or (= from page)
+                                               (= to page)))
+                                         edges)))
         nodes (->> (concat
                     [page]
                     (map first ref-pages)
                     (map first mentioned-pages))
                    (remove nil?)
                    (distinct)
-                   (mapv (fn [page]
-                           {:id page
-                            :label (util/capitalize-all page)})))
-        edges (->> (concat
-                    (map (fn [[p aliases]]
-                           {:from page
-                            :to p}) ref-pages)
-                    (map (fn [[p aliases]]
-                           {:from p
-                            :to page}) mentioned-pages))
-                   (remove nil?)
-                   (distinct))]
+                   (mapv (fn [p]
+                           (prn p " connections: " (get-connections p))
+                           (cond->
+                               {:id p
+                                :label (util/capitalize-all p)
+                                :value (get-connections p)}
+                             (= p page)
+                             (assoc :color "#5850ec")))))]
     {:nodes nodes
      :edges edges}))
 

@@ -593,6 +593,8 @@
 (defn react
   "Works in conjunction with [[reactive]] mixin. Use this function instead of `deref` inside render, and your component will subscribe to changes happening to the derefed atom."
   [ref]
-  (prn {:ref ref})
-  (vswap! rum.core/*reactions* conj ref)
+  (when rum.core/*reactions*
+    (vswap! rum.core/*reactions* conj ref))
   @ref)
+
+;; (def react rum.core/react)

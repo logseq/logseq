@@ -9,7 +9,8 @@
             [frontend.db :as db]
             [frontend.util :as util]
             [medley.core :as medley]
-            [frontend.graph.vis :as vis]))
+            [frontend.graph.vis :as vis]
+            [clojure.string :as string]))
 
 (rum/defc heading-cp < rum/reactive
   [heading]
@@ -68,36 +69,47 @@
         [:div {:class (if collapse? "hidden" "initial")}
          component]])]))
 
+(defn- get-page
+  [match]
+  (let [route-name (get-in match [:data :name])
+        page (case route-name
+               :page
+               (get-in match [:path-params :name])
+
+               :file
+               (get-in match [:path-params :path])
+
+               (util/journal-name))]
+    (if page
+      (util/url-decode (string/lower-case page)))))
+
+(defonce fake-db-id "graph-db-id")
+(defn render-graph
+  [state]
+  (let [match (:route-match @state/state)
+        collapse? (get-in @state/state [:ui/sidebar-collapsed-blocks fake-db-id])]
+    (when-not collapse?
+      (when-let [page (get-page match)]
+        (let [graph (db/build-page-graph page)]
+          (vis/new-network "page-graph" graph))))
+    state))
+
 (rum/defc graph < rum/reactive
-  [page]
-  (let [fake-db-id "graph-db-id"
-        collapse? (state/sub [:ui/sidebar-collapsed-blocks fake-db-id])]
-    [:div.sidebar-item.flex.flex-col
+  {:did-mount render-graph
+   :did-remount render-graph}
+  []
+  (let [match (state/sub :route-match)]
+    [:div.sidebar-item.flex-col.flex-1
      [:div.flex.flex-row
-      [:a.hover:text-gray-900.text-gray-500.flex.items-center.pl-pr-1
-       {:on-click #(state/sidebar-block-toggle-collapse! fake-db-id)}
-       (if collapse?
-         (svg/caret-right)
-         (svg/caret-down))]
       [:div.ml-2.font-bold "Graph"]]
-     [:div#page-graph {:class (if collapse? "hidden" "initial")}]]))
+     [:div#page-graph]]))
 
 (rum/defcs sidebar < rum/reactive
-  (rum/local false ::graph-rendered?)
   [state]
-  (let [graph-rendered? (get state ::graph-rendered?)
-        blocks (state/sub :sidebar/blocks)
-        match (state/sub :route-match)
-        route-name (get-in match [:data :name])
-        page? (= :page route-name)
-        page (get-in match [:path-params :name])]
-    (when (and page? )
-      (let [graph (db/build-page-graph page)]
-        (vis/new-network "page-graph" graph)))
-    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto.content
-     (when page?
-       (graph page))
+  (let [blocks (state/sub :sidebar/blocks)]
+    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto.content {:style {:padding-bottom 300}}
      (for [[idx [db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item idx db-id block-type block-data)
-         (str "sidebar-block-" idx)))]))
+         (str "sidebar-block-" idx)))
+     (graph)]))
