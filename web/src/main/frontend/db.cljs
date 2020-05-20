@@ -239,24 +239,25 @@
 
 (defn get-pages
   [repo]
-  (->> (posh/q '[:find ?page-name
-                 :where
-                 [?page :page/name ?page-name]]
-         (get-conn repo false))
-       (react)
-       (map first)
-       distinct))
+  (when-let [conn (get-conn repo false)]
+    (->> (posh/q '[:find ?page-name
+                  :where
+                  [?page :page/name ?page-name]]
+           conn)
+        (react)
+        (map first)
+        distinct)))
 
 (defn get-page-alias
   [repo page-name]
-  (when repo
+  (when-let [conn (and repo (get-conn repo false))]
     (some->> (posh/q '[:find ?alias-name
                        :in $ ?page-name
                        :where
                        [?page :page/name ?page-name]
                        [?page :page/alias ?alias]
                        [?alias :page/name ?alias-name]]
-               (get-conn repo false)
+               conn
                page-name)
              (react)
              seq-flatten
@@ -798,7 +799,7 @@
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
   [repo page]
-  (when repo
+  (when-let [conn (and repo (get-conn repo false))]
     (let [pred (page-pred repo page)
           ref-pages (->> (posh/q '[:find ?ref-page-name
                                    :in $ ?pred
@@ -808,7 +809,7 @@
                                    [?heading :heading/ref-pages ?ref-page]
                                    [?ref-page :page/name ?ref-page-name]
                                    [(?pred $ ?page)]]
-                           (get-conn repo false)
+                           conn
                            pred)
                          react
                          seq-flatten)]
@@ -817,7 +818,7 @@
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page]
-  (when repo
+  (when-let [conn (and repo (get-conn repo false))]
     (let [pred (page-pred repo page)
           mentioned-pages (->> (posh/q '[:find ?mentioned-page-name
                                          :in $ ?pred ?page-name
@@ -826,9 +827,8 @@
                                          [?p :page/name ?page]
                                          [(?pred $ ?page)]
                                          [?heading :heading/page ?mentioned-page]
-                                         [?mentioned-page :page/name ?mentioned-page-name]
-                                         ]
-                                 (get-conn repo false)
+                                         [?mentioned-page :page/name ?mentioned-page-name]]
+                                 conn
                                  pred
                                  page)
                                react
@@ -838,21 +838,22 @@
 ;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
   [page]
-  (when-let [current-repo (state/get-current-repo)]
-    (let [pred (page-pred current-repo page)]
-      (->> (posh/q '[:find ?heading
-                     ;; (pull ?heading [*])
-                     :in $ ?pred
-                     :where
-                     [?ref-page :page/name ?page]
-                     [?heading :heading/ref-pages ?ref-page]
-                     [(?pred $ ?page)]]
-             (get-conn current-repo false)
-             pred)
-           react
-           seq-flatten
-           (pull-many '[*])
-           react))))
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (get-conn repo false)]
+      (let [pred (page-pred repo page)]
+        (->> (posh/q '[:find ?heading
+                       ;; (pull ?heading [*])
+                       :in $ ?pred
+                       :where
+                       [?ref-page :page/name ?page]
+                       [?heading :heading/ref-pages ?ref-page]
+                       [(?pred $ ?page)]]
+               conn
+               pred)
+             react
+             seq-flatten
+             (pull-many '[*])
+             react)))))
 
 (defn get-heading-referenced-headings
   [heading-uuid]
