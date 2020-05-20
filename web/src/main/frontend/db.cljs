@@ -249,18 +249,19 @@
 
 (defn get-page-alias
   [repo page-name]
-  (some->> (posh/q '[:find ?alias-name
-                     :in $ ?page-name
-                     :where
-                     [?page :page/name ?page-name]
-                     [?page :page/alias ?alias]
-                     [?alias :page/name ?alias-name]]
-             (get-conn repo false)
-             page-name)
-           (react)
-           seq-flatten
-           distinct
-           remove-journal-files))
+  (when repo
+    (some->> (posh/q '[:find ?alias-name
+                       :in $ ?page-name
+                       :where
+                       [?page :page/name ?page-name]
+                       [?page :page/alias ?alias]
+                       [?alias :page/name ?alias-name]]
+               (get-conn repo false)
+               page-name)
+             (react)
+             seq-flatten
+             distinct
+             remove-journal-files)))
 
 (defn get-files
   [repo]
@@ -797,40 +798,42 @@
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
   [repo page]
-  (let [pred (page-pred repo page)
-        ref-pages (->> (posh/q '[:find ?ref-page-name
-                                 :in $ ?pred
-                                 :where
-                                 [?p :page/name ?page]
-                                 [?heading :heading/page ?p]
-                                 [?heading :heading/ref-pages ?ref-page]
-                                 [?ref-page :page/name ?ref-page-name]
-                                 [(?pred $ ?page)]]
-                         (get-conn repo false)
-                         pred)
-                       react
-                       seq-flatten)]
-    (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages)))
+  (when repo
+    (let [pred (page-pred repo page)
+          ref-pages (->> (posh/q '[:find ?ref-page-name
+                                   :in $ ?pred
+                                   :where
+                                   [?p :page/name ?page]
+                                   [?heading :heading/page ?p]
+                                   [?heading :heading/ref-pages ?ref-page]
+                                   [?ref-page :page/name ?ref-page-name]
+                                   [(?pred $ ?page)]]
+                           (get-conn repo false)
+                           pred)
+                         react
+                         seq-flatten)]
+      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page]
-  (let [pred (page-pred repo page)
-        mentioned-pages (->> (posh/q '[:find ?mentioned-page-name
-                                       :in $ ?pred ?page-name
-                                       :where
-                                       [?heading :heading/ref-pages ?p]
-                                       [?p :page/name ?page]
-                                       [(?pred $ ?page)]
-                                       [?heading :heading/page ?mentioned-page]
-                                       [?mentioned-page :page/name ?mentioned-page-name]
-                                       ]
-                               (get-conn repo false)
-                               pred
-                               page)
-                             react
-                             seq-flatten)]
-    (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages)))
+  (when repo
+    (let [pred (page-pred repo page)
+          mentioned-pages (->> (posh/q '[:find ?mentioned-page-name
+                                         :in $ ?pred ?page-name
+                                         :where
+                                         [?heading :heading/ref-pages ?p]
+                                         [?p :page/name ?page]
+                                         [(?pred $ ?page)]
+                                         [?heading :heading/page ?mentioned-page]
+                                         [?mentioned-page :page/name ?mentioned-page-name]
+                                         ]
+                                 (get-conn repo false)
+                                 pred
+                                 page)
+                               react
+                               seq-flatten)]
+      (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
 ;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
@@ -943,57 +946,57 @@
 
 (defn build-page-graph
   [page]
-  (let [page (string/lower-case page)
-        repo (state/get-current-repo)
-        ref-pages (get-page-referenced-pages repo page)
-        mentioned-pages (get-pages-that-mentioned-page repo page)
-        edges (concat
-               (map (fn [[p aliases]]
-                      [page p]) ref-pages)
-               (map (fn [[p aliases]]
-                      [p page]) mentioned-pages))
-        other-pages (->> (concat (map first ref-pages)
-                                (map first mentioned-pages))
-                         (remove nil?)
-                         (set))
-        other-pages-edges (mapcat
-                           (fn [page]
-                             (let [ref-pages (-> (map first (get-page-referenced-pages repo page))
-                                                 (set)
-                                                 (set/intersection other-pages))
-                                   mentioned-pages (-> (map first (get-pages-that-mentioned-page repo page))
-                                                       (set)
-                                                       (set/intersection other-pages))]
-                               (concat
-                                (map (fn [p] [page p]) ref-pages)
-                                (map (fn [p] [p page]) mentioned-pages))))
-                           other-pages)
-        edges (->> (concat edges other-pages-edges)
-                   (remove nil?)
-                   (distinct)
-                   (map (fn [[from to]]
-                          {:from from
-                           :to to})))
-        get-connections (fn [page]
-                          (count (filter (fn [{:keys [from to]}]
-                                           (or (= from page)
-                                               (= to page)))
-                                         edges)))
-        nodes (->> (concat
-                    [page]
-                    (map first ref-pages)
-                    (map first mentioned-pages))
-                   (remove nil?)
-                   (distinct)
-                   (mapv (fn [p]
-                           (cond->
-                               {:id p
-                                :label (util/capitalize-all p)
-                                :value (get-connections p)}
-                             (= p page)
-                             (assoc :color "#5850ec")))))]
-    {:nodes nodes
-     :edges edges}))
+  (when-let [repo (state/get-current-repo)]
+    (let [page (string/lower-case page)
+          ref-pages (get-page-referenced-pages repo page)
+          mentioned-pages (get-pages-that-mentioned-page repo page)
+          edges (concat
+                 (map (fn [[p aliases]]
+                        [page p]) ref-pages)
+                 (map (fn [[p aliases]]
+                        [p page]) mentioned-pages))
+          other-pages (->> (concat (map first ref-pages)
+                                   (map first mentioned-pages))
+                           (remove nil?)
+                           (set))
+          other-pages-edges (mapcat
+                             (fn [page]
+                               (let [ref-pages (-> (map first (get-page-referenced-pages repo page))
+                                                   (set)
+                                                   (set/intersection other-pages))
+                                     mentioned-pages (-> (map first (get-pages-that-mentioned-page repo page))
+                                                         (set)
+                                                         (set/intersection other-pages))]
+                                 (concat
+                                  (map (fn [p] [page p]) ref-pages)
+                                  (map (fn [p] [p page]) mentioned-pages))))
+                             other-pages)
+          edges (->> (concat edges other-pages-edges)
+                     (remove nil?)
+                     (distinct)
+                     (map (fn [[from to]]
+                            {:from from
+                             :to to})))
+          get-connections (fn [page]
+                            (count (filter (fn [{:keys [from to]}]
+                                             (or (= from page)
+                                                 (= to page)))
+                                           edges)))
+          nodes (->> (concat
+                      [page]
+                      (map first ref-pages)
+                      (map first mentioned-pages))
+                     (remove nil?)
+                     (distinct)
+                     (mapv (fn [p]
+                             (cond->
+                                 {:id p
+                                  :label (util/capitalize-all p)
+                                  :value (get-connections p)}
+                               (= p page)
+                               (assoc :color "#5850ec")))))]
+      {:nodes nodes
+       :edges edges})))
 
 (comment
   (defn debug!
