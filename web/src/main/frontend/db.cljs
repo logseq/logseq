@@ -986,7 +986,6 @@
                    (remove nil?)
                    (distinct)
                    (mapv (fn [p]
-                           (prn p " connections: " (get-connections p))
                            (cond->
                                {:id p
                                 :label (util/capitalize-all p)
