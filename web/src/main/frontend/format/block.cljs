@@ -14,14 +14,20 @@
    (vector? block)
    (= "Heading" (first block))))
 
-(defn page-reference-block?
+(defn get-page-reference
   [block]
-  (and
-   (vector? block)
-   (= "Link" (first block))
-   (= "Search" (first (:url (second block))))
-   (not (contains? #{\# \*} (first (second (:url (second block))))))
-   ))
+  (when (and (vector? block) (= "Link" (first block)))
+    (let [typ (first (:url (second block)))]
+      (or
+       (and
+        (= typ "Search")
+        (not (contains? #{\# \*} (first (second (:url (second block))))))
+        (second (:url (second block))))
+
+       (and
+        (= typ "Complex")
+        (= (:protocol (second (:url (second block)))) "file")
+        (:link (second (:url (second block)))))))))
 
 (defn task-block?
   [block]
@@ -76,7 +82,7 @@
   [tags]
   (mapv (fn [tag]
           {:db/id tag
-           :tag/name tag})
+           :tag/name (string/lower-case tag)})
         tags))
 
 (defn with-refs
@@ -84,9 +90,8 @@
   (let [ref-pages (atom [])]
     (walk/postwalk
      (fn [form]
-       (when (page-reference-block? form)
-         (let [page (second (:url (second form)))]
-           (swap! ref-pages conj (string/capitalize page))))
+       (when-let [page (get-page-reference form)]
+         (swap! ref-pages conj (string/lower-case page)))
        form)
      (concat title children))
     (assoc heading :ref-pages (vec @ref-pages))))
@@ -201,7 +206,7 @@
                                         {:heading/ref-pages
                                          (mapv
                                           (fn [page]
-                                            (let [page-name (string/capitalize page)
+                                            (let [page-name (string/lower-case page)
                                                   page {:page/name page-name}]
                                               (swap! ref-pages-atom conj page)
                                               page))

@@ -20,7 +20,7 @@
                    (update (vec headings) 0 assoc :heading/lock? true))
         headings (db/with-dummy-heading headings format)
 
-        encoded-page-name (util/url-encode (string/capitalize title))]
+        encoded-page-name (util/url-encode (string/lower-case title))]
     [:div.flex-1
      [:a.initial-color {:href (str "/page/" encoded-page-name)
                         :on-click (fn [e]
@@ -34,7 +34,7 @@
                                           :journal? true}))
                                       (handler/show-right-sidebar)))}
       [:h1.title
-       title]]
+       (util/capitalize-all title)]]
      (content/content encoded-page-name
                       {:hiccup (hiccup/->hiccup headings
                                                 {:id encoded-page-name

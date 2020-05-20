@@ -49,8 +49,8 @@
   (.removeItem localforage-instance (datascript-db repo)))
 
 ;; only for debugging
-;; (def react deref)
-(def react rum/react)
+(def react deref)
+;; (def react rum/react)
 
 (defn get-repo-name
   [url]
@@ -105,6 +105,11 @@
 
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
+   :page/directives {}
+   :page/alias      {:db/valueType   :db.type/ref
+                     :db/cardinality :db.cardinality/many}
+   :page/tags       {:db/valueType   :db.type/ref
+                     :db/cardinality :db.cardinality/many}
    :page/created-at {}
    :page/last-modified-at {}
    :page/journal?   {}
@@ -243,6 +248,19 @@
        (react)
        (map first)
        distinct))
+
+(defn get-page-alias
+  [repo page-name]
+  (-> (d/q '[:find ?alias-name
+             :in $ ?page-name
+             :where
+             [?page :page/name ?page-name]
+             [?page :page/alias ?alias]
+             [?alias :page/name ?alias-name]]
+        (get-conn)
+        page-name)
+      seq-flatten
+      distinct))
 
 (defn get-files
   [repo]
@@ -405,26 +423,41 @@
    (get-page-headings (state/get-current-repo)
                       page))
   ([repo-url page]
-   (->> (posh/q '[:find ?heading
-                  ;; (pull ?heading [*])
-                  :in $ ?page
-                  :where
-                  [?p :page/name ?page]
-                  [?heading :heading/page ?p]]
-          (get-conn repo-url false) page)
-        react
-        seq-flatten
-        (pull-many '[*])
-        react
-        sort-by-pos)))
+   (let [page-name (string/lower-case page)
+         alias (get-page-alias repo-url page)
+         pages (set (conj alias page))
+         pred (fn [db page-name]
+                (contains? pages page-name))]
+     (->> (posh/q '[:find ?heading
+                    ;; (pull ?heading [*])
+                    :in $ ?pred
+                    :where
+                    [?p :page/name ?page]
+                    [?heading :heading/page ?p]
+                    [(?pred $ ?page)]]
+            (get-conn repo-url false) pred)
+          react
+          seq-flatten
+          (pull-many '[*])
+          react
+          sort-by-pos))))
 
 (defn get-page-name
   [file ast]
-  (when-let [heading (first (filter block/heading-block? ast))]
-    (when-let [title (:title (second heading))]
-      ;; FIXME:
-      (str title)
-      (first (string/split file #"\.")))))
+  ;; headline
+  (let [first-heading (first (filter block/heading-block? ast))
+        other-name (cond
+                     (and (= "Directives" (ffirst ast))
+                          (not (string/blank? (:title (last (first ast))))))
+                     (:title (last (first ast)))
+
+                     first-heading
+                     ;; FIXME:
+                     (str (last (first (:title (second first-heading)))))
+
+                     :else
+                     nil)]
+    (string/lower-case (or other-name file))))
 
 (defn valid-journal-title?
   [title]
@@ -450,13 +483,10 @@
     (util/parse-int (str y m d))))
 
 (defn extract-pages-and-headings
-  [file content utf8-content journal? pages-fn]
+  [format ast directives file content utf8-content journal? pages-fn]
   (println "Parsing file: " file)
   (try
-    (let [format (format/get-format file)
-          ast (mldoc/->edn content
-                           (mldoc/default-config format))
-          headings (block/extract-headings ast (utf8/length utf8-content))
+    (let [headings (block/extract-headings ast (utf8/length utf8-content))
           pages (pages-fn headings ast)
           ref-pages (atom #{})
           headings (mapcat
@@ -470,31 +500,62 @@
                                      (dissoc :ref-pages)
                                      (assoc :heading/content (get-heading-content utf8-content heading)
                                             :heading/file [:file/path file]
-                                            :heading/format (format/get-format file)
-                                            :heading/page [:page/name (string/capitalize page)]
+                                            :heading/format format
+                                            :heading/page [:page/name (string/lower-case page)]
                                             :heading/ref-pages (mapv
                                                                 (fn [page]
-                                                                  {:page/name (string/capitalize page)})
+                                                                  {:page/name (string/lower-case page)})
                                                                 heading-ref-pages)))))
                           headings)))
                     pages)
           headings (block/safe-headings headings)
           pages (map
                   (fn [page]
-                    {:page/name (if page
-                                  (string/capitalize page)
-                                  (string/capitalize (first (string/split #"\." file))))
-                     :page/file [:file/path file]
-                     :page/journal? journal?
-                     :page/journal-day (if journal?
-                                         (journal-page-name->int page)
-                                         0)})
+                    (let [page-file? (= page (string/lower-case file))
+                          other-alias (and (:alias directives)
+                                           (seq (remove #(= page %)
+                                                        (:alias directives))))
+                          other-alias (distinct
+                                       (if page-file?
+                                         other-alias
+                                         (conj other-alias (string/lower-case file))))]
+                      (cond->
+                          {:page/name page
+                           :page/file [:file/path file]
+                           :page/journal? journal?
+                           :page/journal-day (if journal?
+                                               (journal-page-name->int page)
+                                               0)}
+                        (seq directives)
+                        (assoc :page/directives directives)
+
+                        other-alias
+                        (assoc :page/alias
+                               (map
+                                 (fn [alias]
+                                   (let [alias (string/lower-case alias)]
+                                     {:page/name alias
+                                      :page/alias (map
+                                                    (fn [alias]
+                                                      {:page/name alias})
+                                                    (conj
+                                                     (remove #{alias} other-alias)
+                                                     page))}))
+                                 other-alias))
+
+                        (:tags directives)
+                        (assoc :page/tags
+                               (map
+                                 (fn [tag]
+                                   {:tag/name (string/lower-case tag)})
+                                 (:tags directives)))))
+                    )
                   (map first pages))
           pages (concat
                  pages
                  (map
                    (fn [page]
-                     {:page/name (string/capitalize page)})
+                     {:page/name (string/lower-case page)})
                    @ref-pages))]
       (vec
        (->> (concat
@@ -509,9 +570,18 @@
   [file content utf8-content]
   (if (string/blank? content)
     []
-    (let [journal? (string/starts-with? file "journals/")]
+    (let [journal? (string/starts-with? file "journals/")
+          format (format/get-format file)
+          ast (mldoc/->edn content
+                           (mldoc/default-config format))
+          directives (let [directives (and (seq ast)
+                                           (= "Directives" (ffirst ast))
+                                           (last (first ast)))]
+                       (if (and directives (seq directives))
+                         directives))]
       (if journal?
         (extract-pages-and-headings
+         format ast directives
          file content utf8-content true
          (fn [headings _ast]
            (loop [pages {}
@@ -522,7 +592,8 @@
                  (if (and (= level 1)
                           (when-let [title (last (first title))]
                             (valid-journal-title? title)))
-                   (let [page-name (last (first title))
+                   (let [page-name (let [title (last (first title))]
+                                     (and title (string/lower-case title)))
                          new-pages (assoc pages page-name [heading])]
                      (recur new-pages page-name tl))
                    (let [new-pages (update pages last-page-name (fn [headings]
@@ -530,6 +601,7 @@
                      (recur new-pages last-page-name tl))))
                pages))))
         (extract-pages-and-headings
+         format ast directives
          file content utf8-content false
          (fn [headings ast]
            [[(get-page-name file ast) headings]]))))))
@@ -723,15 +795,20 @@
 (defn get-page-referenced-headings
   [page]
   (when-let [current-repo (state/get-current-repo)]
-    (let [page-name (string/capitalize page)]
+    (let [page-name (string/lower-case page)
+          alias (get-page-alias current-repo page)
+          pages (set (conj alias page))
+          pred (fn [db page-name]
+                 (contains? pages page-name))]
       (->> (posh/q '[:find ?heading
                      ;; (pull ?heading [*])
-                     :in $ ?page-name
+                     :in $ ?pred
                      :where
-                     [?page :page/name ?page-name]
-                     [?heading :heading/ref-pages ?page]]
+                     [?ref-page :page/name ?page]
+                     [?heading :heading/ref-pages ?ref-page]
+                     [(?pred $ ?page)]]
              (get-conn current-repo false)
-             page-name)
+             pred)
            react
            seq-flatten
            (pull-many '[*])

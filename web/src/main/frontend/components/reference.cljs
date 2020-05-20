@@ -16,7 +16,7 @@
   [page-name]
   (let [heading? (util/uuid-string? page-name)
         heading-id (and heading? (uuid page-name))
-        page-name (string/capitalize page-name)
+        page-name (string/lower-case page-name)
         encoded-page-name (util/url-encode page-name)
         ref-headings (if heading-id
                        (db/get-heading-referenced-headings heading-id)

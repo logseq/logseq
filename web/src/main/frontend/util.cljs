@@ -579,3 +579,12 @@
 
 (defn drop-nth [n coll]
   (keep-indexed #(if (not= %1 n) %2) coll))
+
+(defn capitalize-all [s]
+  (some->> (string/split s #" ")
+           (map string/capitalize)
+           (string/join " ")))
+
+(defn file-page?
+  [page-name]
+  (re-find #"\." page-name))

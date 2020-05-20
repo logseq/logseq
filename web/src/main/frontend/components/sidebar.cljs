@@ -77,7 +77,7 @@
              :class (if (page-active? encoded-page) "text-gray-200" "text-gray-500")
              :href (str "/page/" encoded-page)
              :on-click close-modal-fn}
-            page])))]))
+            (util/capitalize-all page)])))]))
 
 (rum/defc sidebar-nav
   [route-match close-modal-fn]

@@ -34,7 +34,7 @@
 (rum/defcs page < rum/reactive
   [state option]
   (let [encoded-page-name (get-page-name state)
-        page-name (string/capitalize (util/url-decode encoded-page-name))
+        page-name (string/lower-case (util/url-decode encoded-page-name))
         format (db/get-page-format page-name)
         journal? (db/journal-page? page-name)
         heading? (util/uuid-string? page-name)
@@ -55,7 +55,7 @@
         repo (state/get-current-repo)
         starred? (contains? (set
                              (some->> (state/sub [:config repo :starred])
-                                      (map string/capitalize)))
+                                      (map string/lower-case)))
                             page-name)]
     [:div.flex-1
      (when-not sidebar?
@@ -70,7 +70,8 @@
                               {:page page}))
                            (handler/show-right-sidebar)))}
          [:h1.title
-          page-name]]
+          (util/capitalize-all page-name)]]
+
         [:a.ml-1.text-gray-500.hover:text-gray-700
          {:class (if starred? "text-gray-800")
           :on-click (fn []
@@ -78,6 +79,16 @@
          (if starred?
            (svg/star-solid "stroke-current")
            (svg/star-outline "stroke-current h-5 w-5"))]])
+
+     (when repo
+       (let [alias (db/get-page-alias repo page-name)]
+         (when (seq alias)
+           (prn alias)
+           [:div.alias.ml-1.mb-1.content
+            [:span.font-bold.mr-1 "Page aliases: "]
+            (for [item alias]
+              [:a {:href (str "/page/" (util/url-encode item))}
+               [:span.mr-1 (util/capitalize-all item)]])])))
 
      (content/content encoded-page-name
                       {:hiccup hiccup
@@ -88,13 +99,16 @@
 
 (rum/defc all-pages < rum/reactive
   []
-  [:div.flex-1
-   [:h1.title
-    "All Pages"]
-   (when-let [current-repo (state/sub :git/current-repo)]
-     (let [pages (db/get-pages current-repo)]
-       (for [page pages]
-         (let [page-id (util/url-encode page)]
-           [:div {:key page-id}
-            [:a {:href (str "/page/" page-id)}
-             page]]))))])
+  (let [current-repo (state/sub :git/current-repo)]
+    [:div.flex-1
+     [:h1.title
+      "All Pages"]
+     (when current-repo
+       (let [pages (->> (db/get-pages current-repo)
+                        (remove util/file-page?)
+                        sort)]
+         (for [page pages]
+           (let [page-id (util/url-encode page)]
+             [:div {:key page-id}
+              [:a {:href (str "/page/" page-id)}
+               (util/capitalize-all page)]]))))]))

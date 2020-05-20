@@ -62,9 +62,9 @@
              (when-not (zero? heading-start-pos)
                (let [content (db/sub-file path)
                      encoded-content (utf8/encode content)
-                     content-before-heading (utf8/substring encoded-content 0 heading-start-pos)]
-                 (when-not (string/blank? (string/trim content-before-heading))
-                   [:div..before-heading.ml-4
+                     content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
+                 (when-not (string/blank? content-before-heading)
+                   [:div.before-heading.ml-4
                     (content/content encoded-path {:content content-before-heading
                                                    :format format
                                                    :on-hide (fn [value]

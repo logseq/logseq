@@ -231,11 +231,27 @@
                                   :ref-page page}))
                               (handler/show-right-sidebar)))} s]
            [:span.text-gray-500 "]]"]])
+
         :else
         (let [href (string-of-url url)
+              protocol (and (= "Complex" (first url))
+                            (:protocol (second url)))
               img-formats (set (map name (config/img-formats)))]
-          (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
+          (cond
+            (= protocol "file")
+            (->elem
+             :a
+             (cond->
+                 {:href href}
+               title
+               (assoc :title title))
+             (map-inline config label))
+
+            ;; image
+            (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
             (image-link url href label)
+
+            :else
             (->elem
              :a
              (cond->
@@ -407,7 +423,7 @@
      (if show-page?
        (let [page (db/entity (:db/id page))]
          [:a.page-ref {:href (str "/page/" (util/url-encode (:page/name page)))}
-          (:page/name page)]))
+          (util/capitalize-all (:page/name page))]))
      (when-not lock?
        [:div.ls-heading-parent.flex-1
         {:key (str uuid)

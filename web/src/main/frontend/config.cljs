@@ -52,9 +52,8 @@
      config-formats
      #{:gif :svg :jpeg :ico :png :jpg :bmp})))
 
-(defonce html-render-formats
-  #{:org :md :markdown
-    :adoc :asciidoc})
+(def html-render-formats
+  #{:adoc :asciidoc})
 
 (defn supported-formats
   []
