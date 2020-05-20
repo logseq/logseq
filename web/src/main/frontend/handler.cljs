@@ -954,21 +954,26 @@
       (set-state-kv! :me me)
       (when-let [base64-key (:encrypt_object_key me)]
         (when-let [encrypted-token (state/get-encrypted-token)]
-          (p/let [token (encrypt/decrypt base64-key encrypted-token)]
-            ;; FIXME: Sometimes it has spaces in the front
-            (let [token (string/trim token)]
-              (state/set-github-token! token)
-              (doseq [{:keys [id url]} (:repos me)]
-                (let [repo url]
-                  (p/let [config-exists? (fs/file-exists?
-                                          (git/get-repo-dir url)
-                                          ".git/config")]
-                    (if (and config-exists?
-                             (db/cloned? repo))
-                      (do
-                        (git-set-username-email! repo me)
-                        (periodically-pull-and-push repo {:pull-now? true}))
-                      (clone-and-pull repo))))))))))))
+          (->
+           (p/let [token (encrypt/decrypt base64-key encrypted-token)]
+             ;; FIXME: Sometimes it has spaces in the front
+             (let [token (string/trim token)]
+               (state/set-github-token! token)
+               (doseq [{:keys [id url]} (:repos me)]
+                 (let [repo url]
+                   (p/let [config-exists? (fs/file-exists?
+                                           (git/get-repo-dir url)
+                                           ".git/config")]
+                     (if (and config-exists?
+                              (db/cloned? repo))
+                       (do
+                         (git-set-username-email! repo me)
+                         (periodically-pull-and-push repo {:pull-now? true}))
+                       (clone-and-pull repo)))))))
+           (p/catch
+               (fn [error]
+                 (println "Token decrypted failed: ")
+                 (js/console.dir error)))))))))
 
 (defn load-docs!
   []
@@ -985,22 +990,22 @@
 (defn hide-left-sidebar
   []
   (dom/add-class! (dom/by-id "menu")
-                "md:block")
+                  "md:block")
   (dom/remove-class! (dom/by-id "left-sidebar")
-                   "enter")
+                     "enter")
   (dom/remove-class! (dom/by-id "search")
-                   "sidebar-open")
+                     "sidebar-open")
   (dom/remove-class! (dom/by-id "main")
-                   "sidebar-open"))
+                     "sidebar-open"))
 
 (defn show-left-sidebar
   []
   (dom/remove-class! (dom/by-id "menu")
-                   "md:block")
+                     "md:block")
   (dom/add-class! (dom/by-id "left-sidebar")
-                "enter")
+                  "enter")
   (dom/add-class! (dom/by-id "search")
-                "sidebar-open")
+                  "sidebar-open")
   (dom/add-class! (dom/by-id "main")
                   "sidebar-open"))
 
@@ -1008,7 +1013,7 @@
   []
   (let [sidebar (dom/by-id "right-sidebar")]
     (dom/remove-class! (dom/by-id "main-content-container")
-                     "right-sidebar-open")
+                       "right-sidebar-open")
     (dom/remove-class! sidebar "enter")))
 
 (defn show-right-sidebar

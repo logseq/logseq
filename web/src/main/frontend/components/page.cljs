@@ -23,7 +23,7 @@
 (defn- get-headings
   [page-name journal? heading?]
   (if heading?
-    (rum/react (db/pull-many '[*] [[:heading/uuid (uuid page-name)]]))
+    (util/react (db/pull-many '[*] [[:heading/uuid (uuid page-name)]]))
     (let [page-headings (db/get-page-headings page-name)
           page-headings (if journal?
                           (update (vec page-headings) 0 assoc :heading/lock? true)
@@ -80,7 +80,7 @@
            (svg/star-solid "stroke-current")
            (svg/star-outline "stroke-current h-5 w-5"))]])
 
-     (when repo
+     (when (and repo (not journal?))
        (let [alias (db/get-page-alias repo page-name)]
          (when (seq alias)
            [:div.alias.ml-1.mb-1.content

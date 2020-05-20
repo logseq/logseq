@@ -348,7 +348,7 @@
 
 (rum/defc heading-control < rum/reactive
   [config uuid heading-id level start-level collapsed? collapsed-atom? dummy?]
-  (let [control-show (rum/react (rum/cursor *control-show? heading-id))]
+  (let [control-show (util/react (rum/cursor *control-show? heading-id))]
     [:div.hd-control.flex.flex-row.items-center
      {:style {:margin-left (str (max 0 (- level start-level)) "rem")
               :height 24

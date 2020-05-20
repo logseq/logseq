@@ -48,9 +48,7 @@
   [repo]
   (.removeItem localforage-instance (datascript-db repo)))
 
-;; only for debugging
-;; (def react deref)
-(def react rum/react)
+(def react util/react)
 
 (defn get-repo-name
   [url]
@@ -251,17 +249,18 @@
 
 (defn get-page-alias
   [repo page-name]
-  (-> (posh/q '[:find ?alias-name
-             :in $ ?page-name
-             :where
-             [?page :page/name ?page-name]
-             [?page :page/alias ?alias]
-             [?alias :page/name ?alias-name]]
-        (get-conn repo false)
-        page-name)
-      (react)
-      seq-flatten
-      distinct))
+  (some->> (posh/q '[:find ?alias-name
+                     :in $ ?page-name
+                     :where
+                     [?page :page/name ?page-name]
+                     [?page :page/alias ?alias]
+                     [?alias :page/name ?alias-name]]
+             (get-conn repo false)
+             page-name)
+           (react)
+           seq-flatten
+           distinct
+           remove-journal-files))
 
 (defn get-files
   [repo]
@@ -362,7 +361,7 @@
 
 (defn sub-heading
   [uuid]
-  (rum/react (pull [:heading/uuid uuid])))
+  (util/react (pull [:heading/uuid uuid])))
 
 (defn remove-key
   [repo-url key]
@@ -419,16 +418,19 @@
     (when-let [path (:file/path (entity (:db/id file)))]
       (format/get-format path))))
 
+(defn page-pred
+  [repo page]
+  (let [alias (get-page-alias repo page)
+        pages (set (conj alias page))]
+    (fn [db page-name]
+      (contains? pages page-name))))
+
 (defn get-page-headings
   ([page]
    (get-page-headings (state/get-current-repo)
                       page))
   ([repo-url page]
-   (let [page-name (string/lower-case page)
-         alias (get-page-alias repo-url page)
-         pages (set (conj alias page))
-         pred (fn [db page-name]
-                (contains? pages page-name))]
+   (let [pred (page-pred repo-url page)]
      (->> (posh/q '[:find ?heading
                     ;; (pull ?heading [*])
                     :in $ ?pred
@@ -792,15 +794,49 @@
                           :heading/lock? false}))]
       (vec (concat headings [dummy])))))
 
+;; get pages that this page referenced
+(defn get-page-referenced-pages
+  [repo page]
+  (let [pred (page-pred repo page)
+        ref-pages (->> (posh/q '[:find ?ref-page-name
+                                 :in $ ?pred
+                                 :where
+                                 [?p :page/name ?page]
+                                 [?heading :heading/page ?p]
+                                 [?heading :heading/ref-pages ?ref-page]
+                                 [?ref-page :page/name ?ref-page-name]
+                                 [(?pred $ ?page)]]
+                         (get-conn repo false)
+                         pred)
+                       react
+                       seq-flatten)]
+    (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages)))
+
+;; get pages who mentioned this page
+(defn get-pages-that-mentioned-page
+  [repo page]
+  (let [pred (page-pred repo page)
+        mentioned-pages (->> (posh/q '[:find ?mentioned-page-name
+                                       :in $ ?pred ?page-name
+                                       :where
+                                       [?heading :heading/ref-pages ?p]
+                                       [?p :page/name ?page]
+                                       [(?pred $ ?page)]
+                                       [?heading :heading/page ?mentioned-page]
+                                       [?mentioned-page :page/name ?mentioned-page-name]
+                                       ]
+                               (get-conn repo false)
+                               pred
+                               page)
+                             react
+                             seq-flatten)]
+    (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages)))
+
 ;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
   [page]
   (when-let [current-repo (state/get-current-repo)]
-    (let [page-name (string/lower-case page)
-          alias (get-page-alias current-repo page)
-          pages (set (conj alias page))
-          pred (fn [db page-name]
-                 (contains? pages page-name))]
+    (let [pred (page-pred current-repo page)]
       (->> (posh/q '[:find ?heading
                      ;; (pull ?heading [*])
                      :in $ ?pred
@@ -905,6 +941,33 @@
                (reset-config! url config-content))))))
       (p/then render-fn)))
 
+(defn build-page-graph
+  [page]
+  (let [page (string/lower-case page)
+        repo (state/get-current-repo)
+        ref-pages (get-page-referenced-pages repo page)
+        mentioned-pages (get-pages-that-mentioned-page repo page)
+        nodes (->> (concat
+                    [page]
+                    (map first ref-pages)
+                    (map first mentioned-pages))
+                   (remove nil?)
+                   (distinct)
+                   (mapv (fn [page]
+                           {:id page
+                            :label (util/capitalize-all page)})))
+        edges (->> (concat
+                    (map (fn [[p aliases]]
+                           {:from page
+                            :to p}) ref-pages)
+                    (map (fn [[p aliases]]
+                           {:from p
+                            :to page}) mentioned-pages))
+                   (remove nil?)
+                   (distinct))]
+    {:nodes nodes
+     :edges edges}))
+
 (comment
   (defn debug!
     []
@@ -917,4 +980,9 @@
                :git/status (get-key-value repo :git/status)
                :git/latest-commit (get-key-value repo :git/latest-commit)
                :git/error (get-key-value repo :git/error)})
-            repos))))
+            repos)))
+
+  (def react deref)
+
+  (def react rum/react)
+  )

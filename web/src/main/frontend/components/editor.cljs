@@ -85,12 +85,12 @@
 
 (rum/defc commands < rum/reactive
   [id format]
-  (when (and (rum/react *show-commands)
+  (when (and (util/react *show-commands)
              @*slash-caret-pos
              (not (state/sub :editor/show-page-search?))
              (not (state/sub :editor/show-input))
              (not (state/sub :editor/show-date-picker?)))
-    (let [matched (rum/react *matched-commands)]
+    (let [matched (util/react *matched-commands)]
       (ui/auto-complete
        (map first matched)
        {:on-chosen (fn [chosen]
@@ -228,7 +228,7 @@
      state)}
   [state id on-submit]
   (when-let [input-option (state/sub :editor/show-input)]
-    (let [{:keys [pos]} (rum/react *slash-caret-pos)
+    (let [{:keys [pos]} (util/react *slash-caret-pos)
           input-value (get state ::input-value)]
       (when (seq input-option)
         [:div.p-2.mt-2.rounded-md.shadow-sm
@@ -333,7 +333,7 @@
 
 (rum/defc absolute-modal < rum/reactive
   [cp set-default-width?]
-  (let [{:keys [top left pos]} (rum/react *slash-caret-pos)]
+  (let [{:keys [top left pos]} (util/react *slash-caret-pos)]
     [:div.absolute.rounded-md.shadow-lg
      {:style (merge
               {:top (+ top 24)
@@ -361,8 +361,8 @@
                   (let [files (.-files (.-target e))]
                     (upload-image id files format *image-uploading? false)))
      :hidden true}]
-   (when-let [uploading? (rum/react *image-uploading?)]
-     (let [processing (rum/react *image-uploading-process)]
+   (when-let [uploading? (util/react *image-uploading?)]
+     (let [processing (util/react *image-uploading-process)]
        (transition-cp
         [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-3.pl-1.pr-1
          [:span.lds-dual-ring.mr-2]

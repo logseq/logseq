@@ -51,8 +51,8 @@
 
 (rum/defc file < rum/reactive
   [repo path contents remote-oid component]
-  (let [{:keys [collapse? resolved?]} (rum/react (rum/cursor diff-state path))
-        edit? (rum/react *edit?)]
+  (let [{:keys [collapse? resolved?]} (util/react (rum/cursor diff-state path))
+        edit? (util/react *edit?)]
     [:div.mb-3 {:style {:border "1px solid #ddd"
                         :border-radius 3}}
      [:div.flex.flex-row.items-center.justify-between
@@ -176,11 +176,11 @@
      (reset! *edit-content "")
      state)}
   [component]
-  (let [diffs (rum/react diffs)
-        remote-oid (rum/react remote-hash-id)
+  (let [diffs (util/react diffs)
+        remote-oid (util/react remote-hash-id)
         repo (state/get-current-repo)
         contents (if remote-oid (state/sub [:github/contents repo remote-oid]))
-        pushing? (rum/react *pushing?)]
+        pushing? (util/react *pushing?)]
     [:div#diffs {:style {:margin-bottom 200}}
      [:h1.title "Diff"]
      (cond

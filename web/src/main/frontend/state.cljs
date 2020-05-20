@@ -55,8 +55,8 @@
 (defn sub
   [ks]
   (if (coll? ks)
-    (rum/react (rum/cursor-in state ks))
-    (rum/react (rum/cursor state ks))))
+    (util/react (rum/cursor-in state ks))
+    (util/react (rum/cursor state ks))))
 
 (defn set-state!
   [path value]
@@ -209,7 +209,7 @@
 
 (defn sub-edit-input-id
   []
-  (ffirst (rum/react (rum/cursor state :editor/editing?))))
+  (ffirst (util/react (rum/cursor state :editor/editing?))))
 
 (defn set-selection-headings!
   [headings]

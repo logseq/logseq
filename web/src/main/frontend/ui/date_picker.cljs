@@ -211,7 +211,7 @@
   [model {:keys [on-change disabled? start-of-week class style attr]
           :or   {start-of-week 6} ;; Default to Sunday
           :as   args}]
-  (let [internal-model (rum/react *internal-model)
+  (let [internal-model (util/react *internal-model)
         display-month (first-day-of-the-month (or internal-model (now->utc)))
         props-with-defaults (merge args {:start-of-week start-of-week})
         configuration       (configure props-with-defaults)]

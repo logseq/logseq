@@ -588,3 +588,11 @@
 (defn file-page?
   [page-name]
   (re-find #"\." page-name))
+
+;; Remove rum *reactions* assert
+(defn react
+  "Works in conjunction with [[reactive]] mixin. Use this function instead of `deref` inside render, and your component will subscribe to changes happening to the derefed atom."
+  [ref]
+  (prn {:ref ref})
+  (vswap! rum.core/*reactions* conj ref)
+  @ref)

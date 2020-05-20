@@ -7,7 +7,9 @@
             [frontend.handler :as handler]
             [frontend.state :as state]
             [frontend.db :as db]
-            [medley.core :as medley]))
+            [frontend.util :as util]
+            [medley.core :as medley]
+            [frontend.graph.vis :as vis]))
 
 (rum/defc heading-cp < rum/reactive
   [heading]
@@ -66,10 +68,35 @@
         [:div {:class (if collapse? "hidden" "initial")}
          component]])]))
 
-(rum/defc sidebar < rum/reactive
-  []
-  (let [blocks (state/sub :sidebar/blocks)]
-    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto.content {:style {:padding-bottom 300}}
+(rum/defc graph < rum/reactive
+  [page]
+  (let [fake-db-id "graph-db-id"
+        collapse? (state/sub [:ui/sidebar-collapsed-blocks fake-db-id])]
+    [:div.sidebar-item.flex.flex-col
+     [:div.flex.flex-row
+      [:a.hover:text-gray-900.text-gray-500.flex.items-center.pl-pr-1
+       {:on-click #(state/sidebar-block-toggle-collapse! fake-db-id)}
+       (if collapse?
+         (svg/caret-right)
+         (svg/caret-down))]
+      [:div.ml-2.font-bold "Graph"]]
+     [:div#page-graph {:class (if collapse? "hidden" "initial")}]]))
+
+(rum/defcs sidebar < rum/reactive
+  (rum/local false ::graph-rendered?)
+  [state]
+  (let [graph-rendered? (get state ::graph-rendered?)
+        blocks (state/sub :sidebar/blocks)
+        match (state/sub :route-match)
+        route-name (get-in match [:data :name])
+        page? (= :page route-name)
+        page (get-in match [:path-params :name])]
+    (when (and page? )
+      (let [graph (db/build-page-graph page)]
+        (vis/new-network "page-graph" graph)))
+    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto.content
+     (when page?
+       (graph page))
      (for [[idx [db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item idx db-id block-type block-data)
