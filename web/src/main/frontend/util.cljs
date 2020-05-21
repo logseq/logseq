@@ -9,7 +9,9 @@
             ["/frontend/caret_pos" :as caret-pos]
             [goog.string :as gstring]
             [goog.string.format]
-            [dommy.core :as d]))
+            [dommy.core :as d]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (defn format
   [fmt & args]
@@ -599,4 +601,6 @@
     (vswap! rum.core/*reactions* conj ref))
   @ref)
 
-;; (def react rum.core/react)
+(defn time-ms
+  []
+  (tc/to-long (cljs-time.core/now)))

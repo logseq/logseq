@@ -96,29 +96,37 @@
    :git/error {}
 
    ;; file
-   :file/path       {:db/unique :db.unique/identity}
+   :file/path       {:db/unique :db.unique/identity
+                     :db/index       true}
    :file/content    {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
-   :page/name       {:db/unique      :db.unique/identity}
-   :page/file       {:db/valueType   :db.type/ref}
+   :page/name       {:db/unique      :db.unique/identity
+                     :db/index       true}
+   :page/file       {:db/valueType   :db.type/ref
+                     :db/index       true}
    :page/directives {}
    :page/alias      {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
+                     :db/cardinality :db.cardinality/many
+                     :db/index       true}
    :page/tags       {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
+                     :db/cardinality :db.cardinality/many
+                     :db/index       true}
    :page/created-at {}
    :page/last-modified-at {}
    :page/journal?   {}
    :page/journal-day {}
 
    ;; heading
-   :heading/uuid   {:db/unique      :db.unique/identity}
-   :heading/file   {:db/valueType   :db.type/ref}
+   :heading/uuid   {:db/unique      :db.unique/identity
+                    :db/index       true}
+   :heading/file   {:db/valueType   :db.type/ref
+                    :db/index       true}
    :heading/format {}
    ;; belongs to which page
-   :heading/page   {:db/valueType   :db.type/ref}
+   :heading/page   {:db/valueType   :db.type/ref
+                    :db/index       true}
    ;; referenced pages
    :heading/ref-pages {:db/valueType   :db.type/ref
                        :db/cardinality :db.cardinality/many}
@@ -131,7 +139,8 @@
    :heading/priority {}
    :heading/level {}
    :heading/tags {:db/valueType   :db.type/ref
-                  :db/cardinality :db.cardinality/many}
+                  :db/cardinality :db.cardinality/many
+                  :db/index       true}
    :heading/meta {}
    :heading/properties {}
 
@@ -140,7 +149,8 @@
    :heading/parent {:db/valueType   :db.type/ref}
 
    ;; tag
-   :tag/name       {:db/unique :db.unique/identity}})
+   :tag/name       {:db/unique :db.unique/identity
+                    :db/index       true}})
 
 ;; transit serialization
 
@@ -241,12 +251,12 @@
   [repo]
   (when-let [conn (get-conn repo false)]
     (->> (posh/q '[:find ?page-name
-                  :where
-                  [?page :page/name ?page-name]]
+                   :where
+                   [?page :page/name ?page-name]]
            conn)
-        (react)
-        (map first)
-        distinct)))
+         (react)
+         (map first)
+         distinct)))
 
 (defn get-page-alias
   [repo page-name]
