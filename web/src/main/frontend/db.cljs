@@ -274,6 +274,21 @@
              distinct
              remove-journal-files)))
 
+(defn d-get-page-alias
+  [repo page-name]
+  (when-let [conn (and repo (get-conn repo true))]
+    (some->> (d/q '[:find ?alias-name
+                    :in $ ?page-name
+                    :where
+                    [?page :page/name ?page-name]
+                    [?page :page/alias ?alias]
+                    [?alias :page/name ?alias-name]]
+               conn
+               page-name)
+             seq-flatten
+             distinct
+             remove-journal-files)))
+
 (defn get-files
   [repo]
   (->> (posh/q '[:find ?file-path
@@ -430,27 +445,32 @@
     (when-let [path (:file/path (entity (:db/id file)))]
       (format/get-format path))))
 
-(defn page-pred
-  [repo page]
-  (let [alias (get-page-alias repo page)
-        pages (set (conj alias page))]
-    (fn [db page-name]
-      (contains? pages page-name))))
+;; TODO: pass a pred in causes the editing very slow
+;; (defn page-pred
+;;   [repo page]
+;;   (let [alias (d-get-page-alias repo page)
+;;         pages (set (conj alias page))]
+;;     (fn [db page-name]
+;;       (contains? pages page-name))))
+
+(defn page-alias-set
+  [repo-url page]
+  (let [aliases (d-get-page-alias repo-url page)]
+    (set (conj aliases page))))
 
 (defn get-page-headings
   ([page]
    (get-page-headings (state/get-current-repo)
                       page))
   ([repo-url page]
-   (let [pred (page-pred repo-url page)]
+   (let [pages (page-alias-set repo-url page)]
      (->> (posh/q '[:find ?heading
-                    ;; (pull ?heading [*])
-                    :in $ ?pred
+                    :in $ ?pages
                     :where
                     [?p :page/name ?page]
                     [?heading :heading/page ?p]
-                    [(?pred $ ?page)]]
-            (get-conn repo-url false) pred)
+                    [(contains? ?pages ?page)]]
+            (get-conn repo-url false) pages)
           react
           seq-flatten
           (pull-many '[*])
@@ -813,7 +833,7 @@
 (defn get-page-referenced-pages
   [repo page]
   (when-let [conn (and repo (get-conn repo false))]
-    (let [pred (page-pred repo page)
+    (let [pages (page-alias-set repo page)
           ref-pages (->> (posh/q '[:find ?ref-page-name
                                    :in $ ?pred
                                    :where
@@ -821,48 +841,50 @@
                                    [?heading :heading/page ?p]
                                    [?heading :heading/ref-pages ?ref-page]
                                    [?ref-page :page/name ?ref-page-name]
-                                   [(?pred $ ?page)]]
+                                   [(contains? ?pages ?page)]]
                            conn
-                           pred)
+                           pages)
                          react
                          seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
+      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages)))
+  )
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page]
   (when-let [conn (and repo (get-conn repo false))]
-    (let [pred (page-pred repo page)
+    (let [pages (page-alias-set repo page)
           mentioned-pages (->> (posh/q '[:find ?mentioned-page-name
                                          :in $ ?pred ?page-name
                                          :where
                                          [?heading :heading/ref-pages ?p]
                                          [?p :page/name ?page]
-                                         [(?pred $ ?page)]
+                                         [(contains? ?pages ?page)]
                                          [?heading :heading/page ?mentioned-page]
                                          [?mentioned-page :page/name ?mentioned-page-name]]
                                  conn
-                                 pred
+                                 pages
                                  page)
                                react
                                seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
+      (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages)))
+  )
 
 ;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
   [page]
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (get-conn repo false)]
-      (let [pred (page-pred repo page)]
+      (let [pages (page-alias-set repo page)]
         (->> (posh/q '[:find ?heading
                        ;; (pull ?heading [*])
                        :in $ ?pred
                        :where
                        [?ref-page :page/name ?page]
                        [?heading :heading/ref-pages ?ref-page]
-                       [(?pred $ ?page)]]
+                       [(contains? ?pages ?page)]]
                conn
-               pred)
+               pages)
              react
              seq-flatten
              (pull-many '[*])
