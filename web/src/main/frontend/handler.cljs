@@ -1044,8 +1044,8 @@
                        (clone-and-pull repo)))))))
            (p/catch
                (fn [error]
-                 (println "Token decrypted failed: ")
-                 (js/console.dir error)))))))))
+                 (println "Token decrypted failed")
+                 (state/set-encrypt-token! nil)))))))))
 
 (defn load-docs!
   []

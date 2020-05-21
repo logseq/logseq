@@ -56,7 +56,8 @@
                            (let [file-id (:db/id (:page/file page))
                                  content (:file/content (db/entity file-id))]
                              {:pos (utf8/length (utf8/encode content))
-                              :end-pos nil})}))
+                              :end-pos nil})})
+                        journal?)
         start-level (if journal? 2 1)
         hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
                                                :start-level start-level
@@ -66,7 +67,7 @@
                              (some->> (state/sub [:config repo :starred])
                                       (map string/lower-case)))
                             page-name)]
-    [:div.flex-1
+    [:div.flex-1.page
      (when-not sidebar?
        [:div.flex.flex-row
         [:a {:on-click (fn [e]

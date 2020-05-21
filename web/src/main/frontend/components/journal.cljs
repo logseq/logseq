@@ -18,7 +18,7 @@
   (let [;; Don't edit the journal title
         headings (when (seq headings)
                    (update (vec headings) 0 assoc :heading/lock? true))
-        headings (db/with-dummy-heading headings format)
+        headings (db/with-dummy-heading headings format nil true)
 
         encoded-page-name (util/url-encode (string/lower-case title))]
     [:div.flex-1

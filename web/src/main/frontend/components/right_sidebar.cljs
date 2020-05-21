@@ -59,7 +59,8 @@
            (if collapse?
              (svg/caret-right)
              (svg/caret-down))]
-          [:div.ml-1 {:style {:font-size "1.5rem"}} title]]
+          [:div.ml-1 {:style {:font-size "1.2rem"}}
+           (util/capitalize-all title)]]
          [:a.close.hover:text-gray-900.text-gray-500.flex.items-center
           {:on-click (fn []
                        (state/sidebar-remove-block! idx))}

@@ -807,27 +807,33 @@
 
 (defn with-dummy-heading
   ([headings format]
-   (with-dummy-heading headings format {}))
-  ([headings format default-option]
-   (let [last-heading (last headings)
-         end-pos (get-in last-heading [:heading/meta :end-pos] 0)
-         dummy (merge last-heading
-                      (let [uuid (d/squuid)]
-                        {:heading/uuid uuid
-                         :heading/title ""
-                         :heading/content (config/default-empty-heading format)
-                         :heading/format format
-                         :heading/level 2
-                         :heading/priority nil
-                         :heading/anchor (str uuid)
-                         :heading/meta {:pos end-pos
-                                        :end-pos nil}
-                         :heading/children nil
-                         :heading/dummy? true
-                         :heading/marker nil
-                         :heading/lock? false})
-                      default-option)]
-     (vec (concat headings [dummy])))))
+   (with-dummy-heading headings format {} false))
+  ([headings format default-option journal?]
+   (cond
+     (or (and (not journal?) (seq headings))
+         (and journal? (> (count headings) 1)))
+     headings
+
+     :else
+     (let [last-heading (last headings)
+           end-pos (get-in last-heading [:heading/meta :end-pos] 0)
+           dummy (merge last-heading
+                        (let [uuid (d/squuid)]
+                          {:heading/uuid uuid
+                           :heading/title ""
+                           :heading/content (config/default-empty-heading format)
+                           :heading/format format
+                           :heading/level 2
+                           :heading/priority nil
+                           :heading/anchor (str uuid)
+                           :heading/meta {:pos end-pos
+                                          :end-pos nil}
+                           :heading/children nil
+                           :heading/dummy? true
+                           :heading/marker nil
+                           :heading/lock? false})
+                        default-option)]
+       (vec (concat headings [dummy]))))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
