@@ -283,9 +283,11 @@
               {:title "Settings"
                :options {:href (str "/file/" (util/url-encode config/config-file))}}
               {:title "Bug report"
-               :options {:href "https://github.com/logseq/issues/issues/new"}}
+               :options {:href "https://github.com/logseq/issues/issues/new"
+                         :target "_blank"}}
               {:title "Feature request"
-               :options {:href "https://github.com/logseq/issues/issues/new"}}
+               :options {:href "https://github.com/logseq/issues/issues/new"
+                         :target "_blank"}}
               (when logged?
                 {:title "Sign out"
                  :options {:on-click handler/sign-out!}})]
