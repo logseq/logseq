@@ -835,7 +835,7 @@
   (when-let [conn (and repo (get-conn repo false))]
     (let [pages (page-alias-set repo page)
           ref-pages (->> (posh/q '[:find ?ref-page-name
-                                   :in $ ?pred
+                                   :in $ ?pages
                                    :where
                                    [?p :page/name ?page]
                                    [?heading :heading/page ?p]
@@ -878,7 +878,7 @@
       (let [pages (page-alias-set repo page)]
         (->> (posh/q '[:find ?heading
                        ;; (pull ?heading [*])
-                       :in $ ?pred
+                       :in $ ?pages
                        :where
                        [?ref-page :page/name ?page]
                        [?heading :heading/ref-pages ?ref-page]
