@@ -13,7 +13,10 @@
             [frontend.components.content :as content]
             [frontend.config :as config]
             [frontend.db :as db]
-            [goog.object :as gobj]))
+            [frontend.mixins :as mixins]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [frontend.utf8 :as utf8]))
 
 (defn- get-page-name
   [state]
@@ -40,18 +43,24 @@
         heading? (util/uuid-string? page-name)
         heading-id (and heading? (uuid page-name))
         sidebar? (:sidebar? option)
-        page-headings (get-headings page-name journal? heading?)
-        page-headings (if heading?
-                        page-headings
-                        (db/with-dummy-heading page-headings format))
+        raw-page-headings (get-headings page-name journal? heading?)
+        page-name (if heading?
+                    (:page/name (db/entity (:db/id (:heading/page (first raw-page-headings)))))
+                    page-name)
+        page (db/entity [:page/name page-name])
+        page-headings (db/with-dummy-heading raw-page-headings format
+                        (if (empty? raw-page-headings)
+                          {:heading/page {:db/id (:db/id page)}
+                           :heading/file {:db/id (:db/id (:page/file page))}
+                           :heading/meta
+                           (let [file-id (:db/id (:page/file page))
+                                 content (:file/content (db/entity file-id))]
+                             {:pos (utf8/length (utf8/encode content))
+                              :end-pos nil})}))
         start-level (if journal? 2 1)
         hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
                                                :start-level start-level
                                                :sidebar? sidebar? })
-
-        page-name (if heading?
-                    (:page/name (db/entity (:db/id (:heading/page (first page-headings)))))
-                    page-name)
         repo (state/get-current-repo)
         starred? (contains? (set
                              (some->> (state/sub [:config repo :starred])
@@ -89,10 +98,36 @@
               [:a {:href (str "/page/" (util/url-encode item))}
                [:span.mr-1 (util/capitalize-all item)]])])))
 
+     ;; content before headings, maybe directives or summary it can be anything
+     (when (and (not journal?) (not heading?))
+       (let [path (let [file-id (:db/id (:page/file page))]
+                    (:file/path (db/entity file-id)))
+             encoded-path (util/url-encode path)
+             heading-start-pos (get-in (first raw-page-headings) [:heading/meta :pos])]
+         (when (or (not (zero? heading-start-pos))
+                   (seq (:page/directives page)))
+           (let [content (db/sub-file path)
+                 encoded-content (utf8/encode content)
+                 content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
+             [:div.before-heading.ml-4
+              (content/content
+               encoded-path
+               {:content content-before-heading
+                :format format
+                :on-hide (fn [value]
+                           (let [new-content (str (string/trim value)
+                                                  "\n"
+                                                  (when heading-start-pos
+                                                    (utf8/substring encoded-content heading-start-pos)))]
+                             (when (not= (string/trim new-content)
+                                         (string/trim content))
+                               (handler/alter-file (state/get-current-repo) path new-content nil))))})]))))
+     ;; headings
      (content/content encoded-page-name
                       {:hiccup hiccup
                        :sidebar? sidebar?})
 
+     ;; referenced headings
      (when-not sidebar?
        (reference/references page-name))]))
 
@@ -111,3 +146,26 @@
              [:div {:key page-id}
               [:a {:href (str "/page/" page-id)}
                (util/capitalize-all page)]]))))]))
+
+(rum/defcs new < rum/reactive
+  (rum/local "" ::title)
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-enter state
+                      :node (gdom/getElement "page-title")
+                      :on-enter (fn []
+                                  (let [title @(get state ::title)]
+                                    (when-not (string/blank? title)
+                                      (handler/create-new-page! title)))))))
+  [state]
+  (let [title (get state ::title)]
+    [:div#page-new
+     [:div.mt-10.text-gray-700.mb-2 {:style {:font-size "1.5rem"}}
+      "What's your new page title?"]
+     [:input#page-title.focus:outline-none.ml-1.text-gray-900
+      {:style {:border "none"
+               :font-size "1.8rem"}
+       :auto-focus true
+       :auto-complete "off"
+       :on-change (fn [e]
+                    (reset! title (util/evalue e)))}]]))

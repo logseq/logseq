@@ -612,16 +612,17 @@
                         :tbody
                         (mapv #(tr :td %) group)))
                      groups)]
-    (->elem
-     :table
-     {:border 2
-      :cell-spacing 0
-      :cell-padding 6
-      :rules "groups"
-      :frame "hsides"}
-     (vec-cat
-      tb-col-groups
-      (cons head groups)))))
+    [:div.table-wrapper
+     (->elem
+      :table
+      {:border 2
+       :cell-spacing 0
+       :cell-padding 6
+       :rules "groups"
+       :frame "hsides"}
+      (vec-cat
+       tb-col-groups
+       (cons head groups)))]))
 
 (defn map-inline
   [config col]

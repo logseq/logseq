@@ -30,6 +30,10 @@
     {:name :file
      :view file/file}]
 
+   ["/new-page"
+    {:name :new-page
+     :view page/new}]
+
    ["/page/:name"
     {:name :page
      :view page/page}]

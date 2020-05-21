@@ -42,7 +42,7 @@
 
 (rum/defc menu-link
   [options child]
-  [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link
+  [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link.overflow-hidden
    options
    child])
 
@@ -220,18 +220,17 @@
   [state matched {:keys [on-chosen
                          on-enter
                          empty-div
-                         item-render]}]
+                         item-render
+                         class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-3
+    [:div.py-1.rounded-md.shadow-xs.bg-base-3 {:class class}
      (if (seq matched)
        (for [[idx item] (medley/indexed matched)]
          (rum/with-key
            (menu-link
-            {:style (merge
-                     {:padding "6px"}
-                     (when (= @current-idx idx)
-                       {:background-color "#eee8d5"}))
-             :class "initial-color"
+            {:style {:padding "6px"}
+             :class (when (= @current-idx idx)
+                      "bg-base-2")
              :tab-index 0
              :on-click (fn [e]
                          (util/stop e)

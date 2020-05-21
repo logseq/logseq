@@ -466,9 +466,11 @@
   (when (and (string? left)
              (string? right))
     (let [left (trimr-without-newlines left)
-          newline? (= \n (last left))]
+          not-space? (or
+                      (string/blank? left)
+                      (= "\n" (last left)))]
       (str left
-           (when-not newline? " ")
+           (when-not not-space? " ")
            (triml-without-newlines right)))))
 
 ;; Add documentation

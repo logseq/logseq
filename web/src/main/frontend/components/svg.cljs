@@ -171,7 +171,7 @@
 (rum/defc logo
   []
   [:svg
-   {:fill "none", :viewbox "0 0 24 24", :height "24", :width "24"}
+   {:fill "none", :view-box "0 0 24 24", :height "24", :width "24"}
    [:path
     {:fill "currentColor",
      :d

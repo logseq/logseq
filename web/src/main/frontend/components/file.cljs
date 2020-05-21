@@ -45,38 +45,16 @@
                              (content/content encoded-path {:content content
                                                             :format format
                                                             :on-hide (save-file-handler content)})))]
-    (cond
-      ;; image type
-      (and format (contains? (config/img-formats) format))
-      [:img {:src path}]
+    [:div#file
+     [:h1.title
+      path]
+     (cond
+       ;; image type
+       (and format (contains? (config/img-formats) format))
+       [:img {:src path}]
 
-      (and format (contains? config/hiccup-support-formats format))
-      (let [headings (db/get-file-by-concat-headings path)
-            empty-headings? (empty? headings)
-            headings (db/with-dummy-heading headings format)
-            hiccup (hiccup/->hiccup headings {:id encoded-path})]
-        (if empty-headings?
-          (edit-raw-handler)
-          [:div
-           (let [heading-start-pos (get-in (first headings) [:heading/meta :pos])]
-             (when-not (zero? heading-start-pos)
-               (let [content (db/sub-file path)
-                     encoded-content (utf8/encode content)
-                     content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
-                 (when-not (string/blank? content-before-heading)
-                   [:div.before-heading.ml-4
-                    (content/content encoded-path {:content content-before-heading
-                                                   :format format
-                                                   :on-hide (fn [value]
-                                                              (let [new-content (str (string/trim value)
-                                                                                     "\n"
-                                                                                     (utf8/substring encoded-content heading-start-pos))]
-                                                                (when (handler/file-changed? encoded-path new-content)
-                                                                  (handler/alter-file (state/get-current-repo) path new-content nil))))})]))))
-           (content/content encoded-path {:hiccup hiccup})]))
+       (and format (contains? (config/text-formats) format))
+       (edit-raw-handler)
 
-      (and format (contains? (config/text-formats) format))
-      (edit-raw-handler)
-
-      :else
-      [:div "Format ." (name format) " is not supported."])))
+       :else
+       [:div "Format ." (name format) " is not supported."])]))

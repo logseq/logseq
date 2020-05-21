@@ -19,7 +19,9 @@
   ([arr start]
    (decode (.subarray arr start)))
   ([arr start end]
-   (decode (.subarray arr start end))))
+   (if end
+     (decode (.subarray arr start end))
+     (decode (.subarray arr start)))))
 
 (defn length
   [arr]

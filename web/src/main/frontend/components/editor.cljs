@@ -100,7 +100,8 @@
                                                             "Date Picker"} chosen))]
                        (insert-command! id (get (into {} matched) chosen)
                                         format
-                                        {:restore? restore-slash?})))}))))
+                                        {:restore? restore-slash?})))
+        :class "black"}))))
 
 (defn get-matched-pages
   [q]
@@ -139,7 +140,8 @@
            matched-pages
            {:on-chosen chosen-handler
             :on-enter non-exist-page-handler
-            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]}))))))
+            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
+            :class "black"}))))))
 
 (defn get-matched-blocks
   [q]
@@ -179,7 +181,8 @@
             :on-enter non-exist-block-handler
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
             :item-render (fn [{:heading/keys [content]}]
-                           (subs content 0 64))}))))))
+                           (subs content 0 64))
+            :class "black"}))))))
 
 (rum/defc date-picker < rum/reactive
   [id format]
@@ -231,8 +234,7 @@
     (let [{:keys [pos]} (util/react *slash-caret-pos)
           input-value (get state ::input-value)]
       (when (seq input-option)
-        [:div.p-2.mt-2.rounded-md.shadow-sm
-         {:style {:background "#eee8d5"}}
+        [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
          (for [{:keys [id] :as input-item} input-option]
            [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-2
             (merge
@@ -566,7 +568,8 @@
                 value)]
     [:div.editor {:style {:position "relative"
                           :display "flex"
-                          :flex "1 1 0%"}}
+                          :flex "1 1 0%"}
+                  :class (if heading "heading-editor" "non-heading-editor")}
      (ui/textarea
       {:id id
        :on-change (fn [e]
@@ -574,11 +577,7 @@
                       (state/set-edit-content! id value)
                       (reset! *should-delete? false)))
        :value (or value "")
-       :auto-focus true
-       :style {:border "none"
-               :border-radius 0
-               :background "transparent"
-               :padding 0}})
+       :auto-focus true})
      (transition-cp
       (commands id format)
       true)

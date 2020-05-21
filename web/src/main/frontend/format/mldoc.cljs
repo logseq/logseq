@@ -9,7 +9,7 @@
 
 (defn default-config
   [format]
-  (let [format (string/capitalize (name format))]
+  (let [format (string/capitalize (name (or format :markdown)))]
     (js/JSON.stringify
      (bean/->js
       (assoc {:toc false

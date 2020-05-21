@@ -776,25 +776,28 @@
                      :me/avatar avatar}))
 
 (defn with-dummy-heading
-  [headings format]
-  (when (seq headings)
-    (let [last-heading (last headings)
-          end-pos (get-in last-heading [:heading/meta :end-pos])
-          dummy (merge last-heading
-                       (let [uuid (d/squuid)]
-                         {:heading/uuid uuid
-                          :heading/title ""
-                          :heading/content (config/default-empty-heading format)
-                          :heading/level 2
-                          :heading/priority nil
-                          :heading/anchor (str uuid)
-                          :heading/meta {:pos end-pos
-                                         :end-pos nil}
-                          :heading/children nil
-                          :heading/dummy? true
-                          :heading/marker nil
-                          :heading/lock? false}))]
-      (vec (concat headings [dummy])))))
+  ([headings format]
+   (with-dummy-heading headings format {}))
+  ([headings format default-option]
+   (let [last-heading (last headings)
+         end-pos (get-in last-heading [:heading/meta :end-pos] 0)
+         dummy (merge last-heading
+                      (let [uuid (d/squuid)]
+                        {:heading/uuid uuid
+                         :heading/title ""
+                         :heading/content (config/default-empty-heading format)
+                         :heading/format format
+                         :heading/level 2
+                         :heading/priority nil
+                         :heading/anchor (str uuid)
+                         :heading/meta {:pos end-pos
+                                        :end-pos nil}
+                         :heading/children nil
+                         :heading/dummy? true
+                         :heading/marker nil
+                         :heading/lock? false})
+                      default-option)]
+     (vec (concat headings [dummy])))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages

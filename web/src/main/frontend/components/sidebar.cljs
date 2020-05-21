@@ -53,8 +53,9 @@
                     repos))
            (util/hiccup->class
             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
-          [:a.hover:text-gray-300.text-gray-400.font-bold
-           {:href current-repo
+          [:a
+           {:class (util/hiccup->class class)
+            :href current-repo
             :target "_blank"}
            (get-repo-name-f current-repo)])))))
 
@@ -196,9 +197,11 @@
         current-repo (state/sub :git/current-repo)
         status (db/sub-key-value :git/status)
         pulling? (= :pulling status)
-        right-sidebar? false]
-    [:div.h-screen.flex.overflow-hidden.bg-base-3
-     [:div.md:hidden
+        right-sidebar? false
+        white? true]
+    [:div {:class (if white? "white-theme" "dark-theme")}
+     [:div.h-screen.flex.overflow-hidden.bg-base-3
+      [:div.md:hidden
       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
        {:class (if @open?
                  "opacity-75 pointer-events-auto"
@@ -267,7 +270,7 @@
             (->>
              [(when logged?
                 {:title "New page"
-                 :options {:href "/page/new"}})
+                 :options {:href "/new-page"}})
               (when logged?
                 {:title "Your repos"
                  :options {:href "/repos"}})
@@ -295,7 +298,7 @@
                            (handler/hide-right-sidebar)
                            (handler/show-right-sidebar))))}
           (svg/menu)]]]]
-      [:main#main.flex-1.relative.z-0.py-6.focus:outline-none.overflow-hidden
+      [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-hidden
        {:tabIndex "0"
         :style {:width "100%"
                 :height "100%"}}
@@ -312,7 +315,7 @@
                    :margin-bottom 200}}
           main-content]]]
        (right-sidebar/sidebar)]
-      [:a.opacity-50.hover:opacity-100.absolute.hidden.md:block
+      [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
        {:href "/"
         :style {:position "absolute"
                 :top 6
@@ -320,4 +323,4 @@
                 :z-index 111}                                                }
        (svg/logo)]
       (ui/notification)
-      (custom-context-menu)]]))
+      (custom-context-menu)]]]))

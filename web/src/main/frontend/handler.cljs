@@ -1023,6 +1023,41 @@
     (dom/add-class! (dom/by-id "main-content-container")
                     "right-sidebar-open")))
 
+(defn- default-content-with-title
+  [format title]
+  (case format
+    "org"
+    (util/format "#+TITLE: %s\n#+TAGS:\n" title)
+    "markdown"
+    (util/format "---\ntitle: Blogging Like a Hacker\ntags:\n---\n")
+    ""))
+
+(defn create-new-page!
+  [title]
+  (let [format (name (state/get-preferred-format))
+        page (util/url-encode title)
+        path (str (-> title
+                      (string/lower-case)
+                      (string/replace #"\s+" "_")
+                      (util/url-encode)) "." format)
+        file-path (str "/" path)
+        repo (state/get-current-repo)
+        dir (git/get-repo-dir repo)]
+    (p/let [exists? (fs/file-exists? dir file-path)]
+      (if exists?
+        (show-notification!
+         [:p.content
+          "File already exists!"]
+         :error)
+        ;; create the file
+        (let [content (default-content-with-title format (util/capitalize-all title))]
+          (p/let [_ (fs/create-if-not-exists dir file-path content)]
+            (db/reset-file! repo path content)
+            (git-add repo path)
+            (redirect! {:to :page
+                        :path-params {:name page}}))
+          )))))
+
 (comment
 
   (defn debug-latest-commits
