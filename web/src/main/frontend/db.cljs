@@ -855,7 +855,7 @@
   (when-let [conn (and repo (get-conn repo false))]
     (let [pages (page-alias-set repo page)
           mentioned-pages (->> (posh/q '[:find ?mentioned-page-name
-                                         :in $ ?pred ?page-name
+                                         :in $ ?pages ?page-name
                                          :where
                                          [?heading :heading/ref-pages ?p]
                                          [?p :page/name ?page]
