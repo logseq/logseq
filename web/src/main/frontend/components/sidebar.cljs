@@ -26,29 +26,37 @@
       :src "/static/img/logo.png"}]]])
 
 (rum/defc repos < rum/reactive
-  [current-repo close-modal-fn]
-  (if current-repo
-    (let [repos (state/sub [:me :repos])]
-      (if (> (count repos) 1)
-        (ui/dropdown-with-links
-         (fn [{:keys [toggle-fn]}]
-           [:a.hover:text-gray-200.text-gray-500.font-bold {:on-click toggle-fn}
-            [:span (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]
-            [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-         (mapv
-          (fn [{:keys [id url]}]
-            {:title (db/get-repo-name url)
-             :options {:on-click (fn []
-                                   (state/set-current-repo! url))}})
-          (remove (fn [repo]
-                    (= current-repo (:url repo)))
-                  repos))
-         (util/hiccup->class
-          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
-        [:a.hover:text-gray-300.text-gray-400.font-bold
-         {:href current-repo
-          :target "_blank"}
-         (string/capitalize (util/take-at-most (db/get-repo-name current-repo) 20))]))))
+  [current-repo head?]
+  (let [class (if head?
+                "hover:text-gray-900.text-gray-500"
+                "hover:text-gray-200.text-gray-500.font-bold")
+        get-repo-name-f (fn [repo]
+                          (if head?
+                            (db/get-repo-path repo)
+                            (util/take-at-most (db/get-repo-name repo) 20)))]
+    (if current-repo
+      (let [repos (state/sub [:me :repos])]
+        (if (> (count repos) 1)
+          (ui/dropdown-with-links
+           (fn [{:keys [toggle-fn]}]
+             [:a#repo-switch {:on-click toggle-fn
+                              :class (util/hiccup->class class)}
+              [:span (get-repo-name-f current-repo)]
+              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+           (mapv
+            (fn [{:keys [id url]}]
+              {:title (get-repo-name-f url)
+               :options {:on-click (fn []
+                                     (state/set-current-repo! url))}})
+            (remove (fn [repo]
+                      (= current-repo (:url repo)))
+                    repos))
+           (util/hiccup->class
+            "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
+          [:a.hover:text-gray-300.text-gray-400.font-bold
+           {:href current-repo
+            :target "_blank"}
+           (get-repo-name-f current-repo)])))))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -180,24 +188,6 @@
                 :exit 300}}
      (custom-context-menu-content))))
 
-(rum/defc left-sidebar < rum/reactive
-  [current-repo route-match close-fn]
-  [:div#left-sidebar.flex.flex-col.w-64.sidebar.enter
-   [:div.flex.items-center.flex-shrink-0.px-4.h-10
-    [:div.flex.flex-row.align-center.whitespace-no-wrap
-     [:a.hover:text-gray-200.text-gray-500
-      {:style {:margin-right 13
-               :margin-top -1}
-       :on-click handler/hide-left-sidebar}
-      (svg/menu "currentColor")]
-     (repos current-repo close-fn)
-     ]]
-
-   [:div.h-0.flex-1.flex.flex-col.overflow-y-auto
-    (sidebar-nav route-match close-fn)]
-
-   (logo)])
-
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
   [state route-match main-content]
@@ -231,13 +221,11 @@
               :stroke-linejoin "round",
               :stroke-linecap "round"}]]]])
        [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
-        (repos current-repo close-fn)]
+        (repos current-repo false)]
        [:div.flex-1.h-0.overflow-y-auto
         (sidebar-nav route-match close-fn)]]]
-     [:div.hidden.md:flex.md:flex-shrink-0
-      (left-sidebar current-repo route-match close-fn)]
      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-      [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10
+      [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10#head
        [:button.px-4.text-gray-400.focus:outline-none.focus:text-gray-400.md:hidden.menu
         {:on-click open-fn}
         [:svg.h-6.w-6
@@ -250,22 +238,23 @@
        [:div.flex-1.px-4.flex.justify-between
         (search/search)
         [:div.ml-4.flex.items-center.md:ml-6
-         [:a {:title "Draw with Excalidraw"
-              :href "/draw"}
+         (repos current-repo true)
+         [:a.ml-1 {:title "Draw with Excalidraw"
+                   :href "/draw"}
           [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
            (svg/excalidraw-logo)]]
-         [:div {:class (if pulling? "loader")}
-          [:a {:title "Git pull"}
-           [:button.p-1.m-2.text-gray-400.rounded-full.focus:outline-none.focus:shadow-outline.focus:text-gray-700.pull
-            {:on-click handler/pull-current-repo}
-            [:svg.h-6.w-6
-             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-             [:path
-              {:d
-               "M6 18.7V21a1 1 0 0 1-2 0v-5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2H7.1A7 7 0 0 0 19 12a1 1 0 1 1 2 0 9 9 0 0 1-15 6.7zM18 5.3V3a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1h-5a1 1 0 0 1 0-2h2.9A7 7 0 0 0 5 12a1 1 0 1 1-2 0 9 9 0 0 1 15-6.7z"
-               :stroke-width "1",
-               :stroke-linejoin "round",
-               :stroke-linecap "round"}]]]]]
+         ;; [:div {:class (if pulling? "loader")}
+         ;;  [:a {:title "Git pull"}
+         ;;   [:button.p-1.m-2.text-gray-400.rounded-full.focus:outline-none.focus:shadow-outline.focus:text-gray-700.pull
+         ;;    {:on-click handler/pull-current-repo}
+         ;;    [:svg.h-6.w-6
+         ;;     {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+         ;;     [:path
+         ;;      {:d
+         ;;       "M6 18.7V21a1 1 0 0 1-2 0v-5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2H7.1A7 7 0 0 0 19 12a1 1 0 1 1 2 0 9 9 0 0 1-15 6.7zM18 5.3V3a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1h-5a1 1 0 0 1 0-2h2.9A7 7 0 0 0 5 12a1 1 0 1 1-2 0 9 9 0 0 1 15-6.7z"
+         ;;       :stroke-width "1",
+         ;;       :stroke-linejoin "round",
+         ;;       :stroke-linecap "round"}]]]]]
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
@@ -274,18 +263,30 @@
                [:img.h-7.w-7.rounded-full
                 {:src avatar}]
                [:div.h-7.w-7.rounded-full.bg-base-3])])
-          (->>
-           [(when (:email me)
-              {:title "Your repos"
-               :options {:href "/repos"}})
-            {:title "Add another repo"
-             :options {:href "/repo/add"}}
-            {:title "Settings"
-             :options {:href (str "/file/" (util/url-encode config/config-file))}}
-            (when (:email me)
-              {:title "Sign out"
-               :options {:on-click handler/sign-out!}})]
-           (remove nil?)))
+          (let [logged? (:email me)]
+            (->>
+             [(when logged?
+                {:title "New page"
+                 :options {:href "/page/new"}})
+              (when logged?
+                {:title "Your repos"
+                 :options {:href "/repos"}})
+              (when logged?
+                {:title "Your pages"
+                 :options {:href "/all-pages"}})
+              (when logged?
+                {:title "Your files"
+                 :options {:href "/all-files"}})
+              {:title "Settings"
+               :options {:href (str "/file/" (util/url-encode config/config-file))}}
+              {:title "Bug report"
+               :options {:href "https://github.com/logseq/issues/issues/new"}}
+              {:title "Feature request"
+               :options {:href "https://github.com/logseq/issues/issues/new"}}
+              (when logged?
+                {:title "Sign out"
+                 :options {:on-click handler/sign-out!}})]
+             (remove nil?))))
 
          [:a.hover:text-gray-900.text-gray-500.ml-3
           {:on-click (fn []
@@ -294,7 +295,7 @@
                            (handler/hide-right-sidebar)
                            (handler/show-right-sidebar))))}
           (svg/menu)]]]]
-      [:main#main.flex-1.relative.z-0.py-6.focus:outline-none.sidebar-open.overflow-hidden
+      [:main#main.flex-1.relative.z-0.py-6.focus:outline-none.overflow-hidden
        {:tabIndex "0"
         :style {:width "100%"
                 :height "100%"}}
@@ -311,12 +312,12 @@
                    :margin-bottom 200}}
           main-content]]]
        (right-sidebar/sidebar)]
-      [:a#menu.mr-4.hover:text-gray-700.text-gray-500.absolute.hidden
-       {:style {:position "absolute"
+      [:a.opacity-50.hover:opacity-100.absolute.hidden.md:block
+       {:href "/"
+        :style {:position "absolute"
                 :top 6
                 :left 16
-                :z-index 111}
-        :on-click handler/show-left-sidebar}
-       (svg/menu "currentColor")]
+                :z-index 111}                                                }
+       (svg/logo)]
       (ui/notification)
       (custom-context-menu)]]))

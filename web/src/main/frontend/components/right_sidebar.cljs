@@ -49,7 +49,7 @@
 (rum/defc sidebar-item < rum/reactive
   [idx db-id block-type block-data]
   (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-    [:div.sidebar-item
+    [:div.sidebar-item.content
      (let [[title component] (build-sidebar-item db-id block-type block-data)]
        [:div.flex.flex-col
         [:div.flex.flex-row.justify-between
@@ -62,9 +62,7 @@
           [:div.ml-1 {:style {:font-size "1.5rem"}} title]]
          [:a.close.hover:text-gray-900.text-gray-500.flex.items-center
           {:on-click (fn []
-                       (state/sidebar-remove-block! idx)
-                       (when (empty? (state/get-sidebar-blocks))
-                         (handler/hide-right-sidebar)))}
+                       (state/sidebar-remove-block! idx))}
           svg/close]]
         [:div {:class (if collapse? "hidden" "initial")}
          component]])]))
@@ -106,10 +104,22 @@
 
 (rum/defcs sidebar < rum/reactive
   [state]
-  (let [blocks (state/sub :sidebar/blocks)]
-    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto.content {:style {:padding-bottom 300}}
+  (let [blocks (state/sub :sidebar/blocks)
+        repo (state/sub :git/current-repo)
+        starred (state/sub [:config repo :starred])]
+    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto {:style {:padding-bottom 300}}
      (for [[idx [db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item idx db-id block-type block-data)
          (str "sidebar-block-" idx)))
-     (graph)]))
+     (graph)
+     (when (and repo (seq starred))
+       [:div.sidebar-item.flex-col.flex-1.content
+        [:div.flex.flex-row
+         [:div.ml-2.font-bold "Starred pages"]]
+        (for [page starred]
+          (let [encoded-page (util/url-encode page)]
+            [:a.mt-1.flex.items-center.pl-2.py-2.text-base.leading-6
+             {:key encoded-page
+              :href (str "/page/" encoded-page)}
+             (util/capitalize-all page)]))])]))

@@ -1,6 +1,7 @@
 (ns frontend.components.repo
   (:require [rum.core :as rum]
             [frontend.components.widgets :as widgets]
+            [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.handler :as handler]
@@ -17,18 +18,27 @@
     (if (seq repos)
       [:div#repos
        [:h1.title "Your Repos: "]
-       (for [{:keys [id url] :as repo} repos]
-         [:div.flex.justify-between.mb-1 {:key id}
-          [:a {:target "_blank"
-               :href url}
-           (db/get-repo-path url)]
-          [:div.controls
-           [:a.control {:title "Clone again and rebuild the db"
-                        :on-click (fn []
-                                    (handler/rebuild-index! repo)
-                                    (handler/redirect! {:to :home}))}
-            "Rebuild index"]
-           [:a.text-gray-400.ml-4 {:on-click (fn []
-                                               (handler/remove-repo! repo))}
-            "Remove"]]])]
+
+       [:div.pl-1.content
+        [:a {:href "/repo/add"}
+         "Add another repo"]
+        ;; (ui/button
+        ;;   :href "/repo/add")
+
+        [:hr]
+
+        (for [{:keys [id url] :as repo} repos]
+          [:div.flex.justify-between.mb-1 {:key id}
+           [:a {:target "_blank"
+                :href url}
+            (db/get-repo-path url)]
+           [:div.controls
+            [:a.control {:title "Clone again and rebuild the db"
+                         :on-click (fn []
+                                     (handler/rebuild-index! repo)
+                                     (handler/redirect! {:to :home}))}
+             "Rebuild index"]
+            [:a.text-gray-400.ml-4 {:on-click (fn []
+                                                (handler/remove-repo! repo))}
+             "Remove"]]])]]
       (widgets/add-repo))))
