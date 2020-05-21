@@ -99,7 +99,7 @@
                [:span.mr-1 (util/capitalize-all item)]])])))
 
      ;; content before headings, maybe directives or summary it can be anything
-     (when (and (not journal?) (not heading?))
+     (when (and (not journal?) (not heading?) (:page/file page))
        (let [path (let [file-id (:db/id (:page/file page))]
                     (:file/path (db/entity file-id)))
              encoded-path (util/url-encode path)

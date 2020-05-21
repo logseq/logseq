@@ -670,26 +670,98 @@
           :heading/meta new-meta}))
      after-headings)))
 
+(defn- default-content-with-title
+  [format title]
+  (case format
+    "org"
+    (util/format "#+TITLE: %s\n#+TAGS:\n" title)
+    "markdown"
+    (util/format "---\ntitle: Blogging Like a Hacker\ntags:\n---\n")
+    ""))
+
+(defn create-new-page!
+  [title]
+  (let [format (name (state/get-preferred-format))
+        page (util/url-encode title)
+        path (str (-> title
+                      (string/lower-case)
+                      (string/replace #"\s+" "_")
+                      (util/url-encode)) "." format)
+        file-path (str "/" path)
+        repo (state/get-current-repo)
+        dir (git/get-repo-dir repo)]
+    (p/let [exists? (fs/file-exists? dir file-path)]
+      (if exists?
+        (show-notification!
+         [:p.content
+          "File already exists!"]
+         :error)
+        ;; create the file
+        (let [content (default-content-with-title format (util/capitalize-all title))]
+          (p/let [_ (fs/create-if-not-exists dir file-path content)]
+            (db/reset-file! repo path content)
+            (git-add repo path)
+            (redirect! {:to :page
+                        :path-params {:name page}})))))))
+
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file dummy? format] :as heading} value]
-  (let [repo (state/get-current-repo)]
+  [{:heading/keys [uuid content meta file page dummy? format] :as heading} value]
+  (let [repo (state/get-current-repo)
+        format (or format (state/get-preferred-format))]
     (when (not= (string/trim content) value) ; heading content changed
       (let [file (db/entity (:db/id file))
-            file-content (:file/content file)
-            file-path (:file/path file)
-            format (format/get-format file-path)
-            [new-content value] (new-file-content heading file-content value)
-            {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-            after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-        (db/transact!
-          (concat
-           pages
-           [[:db.fn/retractEntity [:heading/uuid uuid]]]
-           headings
-           after-headings
-           [{:file/path file-path
-             :file/content new-content}]))
-        (alter-file repo file-path new-content {:reset? false})))))
+            page (db/entity (:db/id page))
+            save-heading (fn [file {:heading/keys [uuid content meta page dummy? format] :as heading}]
+                           (let [file-content (:file/content file)
+                                 file-path (:file/path file)
+                                 format (format/get-format file-path)
+                                 [new-content value] (new-file-content heading file-content value)
+                                 {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+                                 after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+                             (db/transact!
+                               (concat
+                                pages
+                                [[:db.fn/retractEntity [:heading/uuid uuid]]]
+                                headings
+                                after-headings
+                                [{:file/path file-path
+                                  :file/content new-content}]))
+                             (alter-file repo file-path new-content {:reset? false})))]
+        (cond
+          ;; Page was referenced but no related file
+          (and page (not file))
+          (let [format (name format)
+                path (str (-> (:page/name page)
+                              (string/replace #"\s+" "_")
+                              (util/url-encode)) "." format)
+                file-path (str "/" path)
+                dir (git/get-repo-dir repo)]
+            (p/let [exists? (fs/file-exists? dir file-path)]
+              (if exists?
+                (show-notification!
+                 [:p.content
+                  "File already exists!"]
+                 :error)
+                ;; create the file
+                (let [content (default-content-with-title format (util/capitalize-all (:page/name page)))]
+                  (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                    (db/reset-file! repo path content)
+                    (git-add repo path)
+                    ;; save heading
+                    (let [file (db/entity [:file/path path])
+                          heading (assoc heading
+                                         :heading/page {:db/id (:db/id page)}
+                                         :heading/file {:db/id (:db/id file)}
+                                         :heading/meta
+                                         (let [content (:file/content file)]
+                                           {:pos (utf8/length (utf8/encode content))
+                                            :end-pos nil}))]
+                      (save-heading file heading)))))))
+          (and file page)
+          (save-heading file heading)
+
+          :else
+          nil)))))
 
 (defn insert-new-heading!
   [{:heading/keys [uuid content meta file dummy? level] :as heading} value]
@@ -1022,41 +1094,6 @@
     (dom/add-class! sidebar "enter")
     (dom/add-class! (dom/by-id "main-content-container")
                     "right-sidebar-open")))
-
-(defn- default-content-with-title
-  [format title]
-  (case format
-    "org"
-    (util/format "#+TITLE: %s\n#+TAGS:\n" title)
-    "markdown"
-    (util/format "---\ntitle: Blogging Like a Hacker\ntags:\n---\n")
-    ""))
-
-(defn create-new-page!
-  [title]
-  (let [format (name (state/get-preferred-format))
-        page (util/url-encode title)
-        path (str (-> title
-                      (string/lower-case)
-                      (string/replace #"\s+" "_")
-                      (util/url-encode)) "." format)
-        file-path (str "/" path)
-        repo (state/get-current-repo)
-        dir (git/get-repo-dir repo)]
-    (p/let [exists? (fs/file-exists? dir file-path)]
-      (if exists?
-        (show-notification!
-         [:p.content
-          "File already exists!"]
-         :error)
-        ;; create the file
-        (let [content (default-content-with-title format (util/capitalize-all title))]
-          (p/let [_ (fs/create-if-not-exists dir file-path content)]
-            (db/reset-file! repo path content)
-            (git-add repo path)
-            (redirect! {:to :page
-                        :path-params {:name page}}))
-          )))))
 
 (comment
 

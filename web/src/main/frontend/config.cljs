@@ -72,13 +72,14 @@
 
 (defn get-heading-pattern
   [format]
-  (case format
-    :org
-    "*"
-    :markdown
-    "#"
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "*"
+      :markdown
+      "#"
 
-    ""))
+      "")))
 
 (defn default-empty-heading
   ([format]
