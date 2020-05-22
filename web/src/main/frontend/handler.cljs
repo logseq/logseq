@@ -1088,15 +1088,11 @@
   (let [sidebar (dom/by-id "right-sidebar")]
     (dom/remove-class! (dom/by-id "main-content-container")
                        "right-sidebar-open")
-    (dom/remove-class! sidebar "enter")
-    (dom/remove-class! (dom/by-id "main") "overflow-hidden")
-    (dom/add-class! (dom/by-id "main") "overflow-y-auto")))
+    (dom/remove-class! sidebar "enter")))
 
 (defn show-right-sidebar
   []
   (let [sidebar (dom/by-id "right-sidebar")]
-    (dom/remove-class! (dom/by-id "main") "overflow-y-auto")
-    (dom/add-class! (dom/by-id "main") "overflow-hidden")
     (dom/add-class! sidebar "enter")
     (dom/add-class! (dom/by-id "main-content-container")
                     "right-sidebar-open")))
