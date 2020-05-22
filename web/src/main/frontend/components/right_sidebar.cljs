@@ -105,7 +105,6 @@
       [:div.ml-2.font-bold "Dark theme"]
       [:div.px-1
        (ui/toggle dark? (fn []
-                          (prn "hi")
                           (state/set-theme! (if dark? "white" "dark"))))]]
      [:div#page-graph]]))
 

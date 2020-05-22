@@ -195,7 +195,6 @@
         right-sidebar? false
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))]
-    (prn {:theme theme})
     [:div {:class (if white? "white-theme" "dark-theme")}
      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden
@@ -285,6 +284,8 @@
               {:title "Feature request"
                :options {:href "https://github.com/logseq/issues/issues/new"
                          :target "_blank"}}
+              {:title "Logseq documentation"
+               :options {:href "/docs"}}
               (when logged?
                 {:title "Sign out"
                  :options {:on-click handler/sign-out!}})]
