@@ -73,7 +73,7 @@
           {:__html "&#10003;"}}])]
 
      (if-let [content (get contents path)]
-       (let [local-content (db/get-file path)
+       (let [local-content (state/get-file path)
              local-content local-content
              diff (medley/indexed (diff/diff local-content content))
              diff? (some (fn [[_idx {:keys [added removed]}]]

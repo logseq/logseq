@@ -40,16 +40,10 @@
    (clojure.core/merge (auth token)
                        m)))
 
-(defn get-repo-dir
-  [repo-url]
-  (str "/"
-       (->> (take-last 2 (string/split repo-url #"/"))
-            (string/join "_"))))
-
 (defn clone
   [repo-url token]
   (js/git.clone (with-auth token
-                  {:dir (get-repo-dir repo-url)
+                  {:dir (util/get-repo-dir repo-url)
                    :url repo-url
                    :corsProxy "https://cors.isomorphic-git.org"
                    :singleBranch true
@@ -58,13 +52,13 @@
 (defn list-files
   [repo-url]
   (js/git.listFiles (clj->js
-                     {:dir (get-repo-dir repo-url)
+                     {:dir (util/get-repo-dir repo-url)
                       :ref "HEAD"})))
 
 (defn fetch
   [repo-url token]
   (js/git.fetch (with-auth token
-                  {:dir (get-repo-dir repo-url)
+                  {:dir (util/get-repo-dir repo-url)
                    :ref default-branch
                    :singleBranch true
                    :depth 100
@@ -73,7 +67,7 @@
 (defn merge
   [repo-url]
   (js/git.merge (clj->js
-                 {:dir (get-repo-dir repo-url)
+                 {:dir (util/get-repo-dir repo-url)
                   :ours default-branch
                   :theirs (str "remotes/origin/" default-branch)
                   :fastForwardOnly true})))
@@ -81,13 +75,13 @@
 (defn checkout
   [repo-url]
   (js/git.checkout (clj->js
-                    {:dir (get-repo-dir repo-url)
+                    {:dir (util/get-repo-dir repo-url)
                      :ref default-branch})))
 
 (defn log
   [repo-url token depth]
   (js/git.log (with-auth token
-                {:dir (get-repo-dir repo-url)
+                {:dir (util/get-repo-dir repo-url)
                  :ref default-branch
                  :depth depth
                  :singleBranch true})))
@@ -95,21 +89,21 @@
 (defn pull
   [repo-url token]
   (js/git.pull (with-auth token
-                 {:dir (get-repo-dir repo-url)
+                 {:dir (util/get-repo-dir repo-url)
                   :ref default-branch
                   :singleBranch true
                   :fast true})))
 (defn add
   [repo-url file]
   (js/git.add (clj->js
-               {:dir (get-repo-dir repo-url)
+               {:dir (util/get-repo-dir repo-url)
                 :filepath file})))
 
 (defn commit
   [repo-url message]
   (let [{:keys [name email]} (:me @state/state)]
     (js/git.commit (clj->js
-                    {:dir (get-repo-dir repo-url)
+                    {:dir (util/get-repo-dir repo-url)
                      :message message
                      :author {:name name
                               :email email}}))))
@@ -117,7 +111,7 @@
 (defn read-commit
   [repo-url oid]
   (js/git.readCommit (clj->js
-                      {:dir (get-repo-dir repo-url)
+                      {:dir (util/get-repo-dir repo-url)
                        :oid oid})))
 
 (defn push
@@ -125,7 +119,7 @@
    (push repo-url token false))
   ([repo-url token force?]
    (js/git.push (with-auth token
-                  {:dir (get-repo-dir repo-url)
+                  {:dir (util/get-repo-dir repo-url)
                    :remote "origin"
                    :ref default-branch
                    :force force?}))))
@@ -144,7 +138,7 @@
 
 (defn get-diffs
   [repo-url hash-1 hash-2]
-  (let [dir (get-repo-dir repo-url)]
+  (let [dir (util/get-repo-dir repo-url)]
     (p/let [diffs (git-ext/getFileStateChanges hash-1 hash-2 dir)
             diffs (cljs-bean.core/->clj diffs)
             diffs (remove #(= (:type %) "equal") diffs)
@@ -160,7 +154,7 @@
   ([repo-url branch]
    (p/let [matrix (js/git.statusMatrix
                    (clj->js
-                    {:dir (get-repo-dir repo-url)
+                    {:dir (util/get-repo-dir repo-url)
                      :ref "HEAD"}))]
      (let [matrix (bean/->clj matrix)]
        ;; added, modified, deleted
@@ -203,8 +197,8 @@
 (defn read-blob
   [repo-url oid path]
   (js/git.readBlob (clj->js
-                    {:dir (get-repo-dir repo-url)
-                     :gitdir (str (get-repo-dir repo-url) ".git")
+                    {:dir (util/get-repo-dir repo-url)
+                     :gitdir (str (util/get-repo-dir repo-url) ".git")
                      :oid oid
                      :path path})))
 
@@ -217,7 +211,7 @@
 (defn write-ref!
   [repo-url oid]
   (js/git.writeRef (clj->js
-                    {:dir (get-repo-dir repo-url)
+                    {:dir (util/get-repo-dir repo-url)
                      :ref (str "refs/heads/" default-branch)
                      :value oid
                      :force true})))

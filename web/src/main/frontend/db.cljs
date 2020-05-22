@@ -98,7 +98,6 @@
    ;; file
    :file/path       {:db/unique :db.unique/identity
                      :db/index       true}
-   :file/content    {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
@@ -362,12 +361,12 @@
 
 (defn reset-contents-and-headings!
   [repo-url contents headings-pages delete-files delete-headings]
-  (let [file-contents (map (fn [[file content]]
-                             (when content
-                               {:file/path file
-                                :file/content content}))
-                        contents)
-        all-data (-> (concat delete-files delete-headings file-contents headings-pages)
+  (let [files (doall
+               (map (fn [[file content]]
+                      (state/set-file-content! repo-url file content)
+                      {:file/path file})
+                 contents))
+        all-data (-> (concat delete-files delete-headings files headings-pages)
                      (util/remove-nils))]
     (transact! repo-url all-data)))
 
@@ -641,14 +640,6 @@
          (fn [headings ast]
            [[(get-page-name file ast) headings]]))))))
 
-(defn get-all-files-content
-  [repo-url]
-  (d/q '[:find ?path ?content
-         :where
-         [?file :file/content ?content]
-         [?file :file/path ?path]]
-    (get-conn repo-url)))
-
 (defn extract-all-headings-pages
   [contents]
   (vec
@@ -662,54 +653,16 @@
 ;; TODO: compare headings
 (defn reset-file!
   [repo-url file content]
+  (state/set-file-content! repo-url file content)
   (let [format (format/get-format file)
         utf8-content (utf8/encode content)
-        file-content [{:file/path file
-                       :file/content content}]
+        file-content [{:file/path file}]
         tx (if (contains? config/hiccup-support-formats format)
              (let [delete-headings (delete-file-headings! repo-url file)
                    headings-pages (extract-headings-pages file content utf8-content)]
                (concat file-content delete-headings headings-pages))
              file-content)]
     (transact! repo-url tx)))
-
-(defn get-file-content
-  ([path]
-   (get-file-content (state/get-current-repo) path))
-  ([repo-url path]
-   (->> (d/q '[:find ?content
-               :in $ ?path
-               :where
-               [?file :file/path ?path]
-               [?file :file/content ?content]]
-          (get-conn repo-url) path)
-        (map first)
-        first)))
-
-(defn get-file
-  [path]
-  (->
-   (d/q '[:find ?content
-          :in $ ?path
-          :where
-          [?file :file/path ?path]
-          [?file :file/content ?content]]
-     (get-conn)
-     path)
-   ffirst))
-
-(defn sub-file
-  [path]
-  (->
-   (posh/q '[:find ?content
-             :in $ ?path
-             :where
-             [?file :file/path ?path]
-             [?file :file/content ?content]]
-     (get-conn false)
-     path)
-   (react)
-   ffirst))
 
 ;; marker should be one of: TODO, DOING, IN-PROGRESS
 ;; time duration
@@ -852,8 +805,7 @@
                            pages)
                          react
                          seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages)))
-  )
+      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
@@ -989,7 +941,7 @@
                (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
              (posh/posh! db-conn)
              (listen-handler repo db-conn)
-             (let [config-content (get-file-content url config/config-file)]
+             (when-let [config-content (state/get-file url config/config-file)]
                (reset-config! url config-content))))))
       (p/then render-fn)))
 
@@ -997,59 +949,59 @@
   [page theme]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
-     (let [page (string/lower-case page)
-           ref-pages (get-page-referenced-pages repo page)
-           mentioned-pages (get-pages-that-mentioned-page repo page)
-           edges (concat
-                  (map (fn [[p aliases]]
-                         [page p]) ref-pages)
-                  (map (fn [[p aliases]]
-                         [p page]) mentioned-pages))
-           other-pages (->> (concat (map first ref-pages)
-                                    (map first mentioned-pages))
-                            (remove nil?)
-                            (set))
-           other-pages-edges (mapcat
-                              (fn [page]
-                                (let [ref-pages (-> (map first (get-page-referenced-pages repo page))
-                                                    (set)
-                                                    (set/intersection other-pages))
-                                      mentioned-pages (-> (map first (get-pages-that-mentioned-page repo page))
-                                                          (set)
-                                                          (set/intersection other-pages))]
-                                  (concat
-                                   (map (fn [p] [page p]) ref-pages)
-                                   (map (fn [p] [p page]) mentioned-pages))))
-                              other-pages)
-           edges (->> (concat edges other-pages-edges)
-                      (remove nil?)
-                      (distinct)
-                      (map (fn [[from to]]
-                             {:from from
-                              :to to})))
-           get-connections (fn [page]
-                             (count (filter (fn [{:keys [from to]}]
-                                              (or (= from page)
-                                                  (= to page)))
-                                            edges)))
-           nodes (->> (concat
-                       [page]
-                       (map first ref-pages)
-                       (map first mentioned-pages))
-                      (remove nil?)
-                      (distinct)
-                      (mapv (fn [p]
-                              (cond->
-                                  {:id p
-                                   :label (util/capitalize-all p)
-                                   :value (get-connections p)}
-                                (= p page)
-                                (assoc :color "#5850ec")
-                                dark?
-                                (assoc :font {:color "#dfdfdf"})
-                                ))))]
-       {:nodes nodes
-        :edges edges}))))
+      (let [page (string/lower-case page)
+            ref-pages (get-page-referenced-pages repo page)
+            mentioned-pages (get-pages-that-mentioned-page repo page)
+            edges (concat
+                   (map (fn [[p aliases]]
+                          [page p]) ref-pages)
+                   (map (fn [[p aliases]]
+                          [p page]) mentioned-pages))
+            other-pages (->> (concat (map first ref-pages)
+                                     (map first mentioned-pages))
+                             (remove nil?)
+                             (set))
+            other-pages-edges (mapcat
+                               (fn [page]
+                                 (let [ref-pages (-> (map first (get-page-referenced-pages repo page))
+                                                     (set)
+                                                     (set/intersection other-pages))
+                                       mentioned-pages (-> (map first (get-pages-that-mentioned-page repo page))
+                                                           (set)
+                                                           (set/intersection other-pages))]
+                                   (concat
+                                    (map (fn [p] [page p]) ref-pages)
+                                    (map (fn [p] [p page]) mentioned-pages))))
+                               other-pages)
+            edges (->> (concat edges other-pages-edges)
+                       (remove nil?)
+                       (distinct)
+                       (map (fn [[from to]]
+                              {:from from
+                               :to to})))
+            get-connections (fn [page]
+                              (count (filter (fn [{:keys [from to]}]
+                                               (or (= from page)
+                                                   (= to page)))
+                                             edges)))
+            nodes (->> (concat
+                        [page]
+                        (map first ref-pages)
+                        (map first mentioned-pages))
+                       (remove nil?)
+                       (distinct)
+                       (mapv (fn [p]
+                               (cond->
+                                   {:id p
+                                    :label (util/capitalize-all p)
+                                    :value (get-connections p)}
+                                 (= p page)
+                                 (assoc :color "#5850ec")
+                                 dark?
+                                 (assoc :font {:color "#dfdfdf"})
+                                 ))))]
+        {:nodes nodes
+         :edges edges}))))
 
 (comment
   (defn debug!

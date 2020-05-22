@@ -340,7 +340,8 @@
      {:style (merge
               {:top (+ top 24)
                :left left
-               :max-height 600}
+               :max-height 600
+               :z-index 11}
               (if set-default-width?
                 {:width 400}))}
      cp]))

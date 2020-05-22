@@ -48,13 +48,15 @@
                     (:page/name (db/entity (:db/id (:heading/page (first raw-page-headings)))))
                     page-name)
         page (db/entity [:page/name page-name])
+        file (:page/file page)
+        file-path (and (:db/id file) (:file/path (db/entity (:db/id file))))
         page-headings (db/with-dummy-heading raw-page-headings format
                         (if (empty? raw-page-headings)
                           {:heading/page {:db/id (:db/id page)}
                            :heading/file {:db/id (:db/id (:page/file page))}
                            :heading/meta
                            (let [file-id (:db/id (:page/file page))
-                                 content (:file/content (db/entity file-id))]
+                                 content (state/get-file file-path)]
                              {:pos (utf8/length (utf8/encode content))
                               :end-pos nil})})
                         journal?)
@@ -90,6 +92,12 @@
            (svg/star-solid "stroke-current")
            (svg/star-outline "stroke-current h-5 w-5"))]])
 
+     (when (and file-path (not sidebar?) (not journal?))
+       [:div.text-sm.mb-2.ml-1 "File: "
+        [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
+                                :href (str "/file/" (util/url-encode file-path))}
+         file-path]])
+
      (when (and repo (not journal?))
        (let [alias (db/get-page-alias repo page-name)]
          (when (seq alias)
@@ -107,7 +115,7 @@
              heading-start-pos (get-in (first raw-page-headings) [:heading/meta :pos])]
          (when (or (not (zero? heading-start-pos))
                    (seq (:page/directives page)))
-           (let [content (db/sub-file path)
+           (let [content (state/get-file path)
                  encoded-content (utf8/encode content)
                  content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
              [:div.before-heading.ml-4

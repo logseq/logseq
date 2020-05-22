@@ -5,53 +5,55 @@
             [clojure.string :as string]
             [medley.core :as medley]))
 
-;; TODO: move git/latest-commit, git/status, git/error to corresponding datascript
-;; dbs.
-(def state (atom
-            {:route-match nil
-             :notification/show? false
-             :notification/content nil
-             :repo/cloning? false
-             :repo/loading-files? nil
-             :repo/importing-to-db? nil
-             :me nil
-             :git/clone-repo (or (storage/get :git/clone-repo) "")
-             :git/current-repo (storage/get :git/current-repo)
-             :format/loading {}
+(defonce state
+  (atom
+   {:route-match nil
+    :notification/show? false
+    :notification/content nil
+    :repo/cloning? false
+    :repo/loading-files? nil
+    :repo/importing-to-db? nil
+    :me nil
+    :git/clone-repo (or (storage/get :git/clone-repo) "")
+    :git/current-repo (storage/get :git/current-repo)
+    :format/loading {}
 
-             :journals-length 1
+    :journals-length 1
 
-             :search/q ""
-             :search/result nil
+    ;; cached files, {repo-name {:path ""}}
+    :files/content {}
 
-             :ui/theme (or (storage/get :ui/theme) "white")
-             :ui/toggle-state false
-             :ui/collapsed-headings {}
-             :ui/sidebar-collapsed-blocks {}
+    :search/q ""
+    :search/result nil
 
-             :github/contents {}
-             :config {}
-             :editor/show-page-search? false
-             :editor/show-date-picker? false
-             ;; With label or other data
-             :editor/show-input nil
-             :editor/last-saved-cursor nil
-             :editor/editing? nil
-             :editor/content {}
-             :editor/heading nil
-             :cursor-range nil
-             :cursor-pos nil
+    :ui/theme (or (storage/get :ui/theme) "white")
+    :ui/toggle-state false
+    :ui/collapsed-headings {}
+    :ui/sidebar-collapsed-blocks {}
 
-             :selection/mode false
-             :selection/headings nil
-             :custom-context-menu/show? false
+    :github/contents {}
+    :config {}
+    :editor/show-page-search? false
+    :editor/show-date-picker? false
+    ;; With label or other data
+    :editor/show-input nil
+    :editor/last-saved-cursor nil
+    :editor/editing? nil
+    :editor/content {}
+    :editor/heading nil
+    :cursor-range nil
+    :cursor-pos nil
 
-             ;; encrypted github token
-             :encrypt/token (storage/get :encrypt/token)
+    :selection/mode false
+    :selection/headings nil
+    :custom-context-menu/show? false
 
-             ;; pages or headings in the right sidebar
-             :sidebar/blocks '()
-             }))
+    ;; encrypted github token
+    :encrypt/token (storage/get :encrypt/token)
+
+    ;; pages or headings in the right sidebar
+    :sidebar/blocks '()
+    }))
 
 (defn sub
   [ks]
@@ -315,3 +317,28 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn- file-content-key
+  [repo path]
+  (str "ls_file_content_" repo path))
+
+(defn set-file-content!
+  ([repo path content]
+   (set-file-content! repo path content true))
+  ([repo path content set-storage?]
+   (when (and repo path)
+     (set-state! [:files/content repo path] content)
+     (when set-storage?
+       (let [file-key (file-content-key repo path)]
+         (storage/set file-key content))))))
+
+(defn get-file
+  ([path]
+   (get-file (get-current-repo) path))
+  ([repo path]
+   (when (and repo path)
+     (if-let [content (sub [:files/content repo path])]
+       content
+       (let [content (storage/get (file-content-key repo path))]
+         (set-file-content! repo path content false)
+         content)))))

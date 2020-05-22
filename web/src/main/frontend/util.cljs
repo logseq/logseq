@@ -610,3 +610,9 @@
   (doseq [block (-> (js/document.querySelectorAll "pre code")
                     (array-seq))]
     (js/hljs.highlightBlock block)))
+
+(defn get-repo-dir
+  [repo-url]
+  (str "/"
+       (->> (take-last 2 (string/split repo-url #"/"))
+            (string/join "_"))))

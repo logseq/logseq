@@ -46,7 +46,7 @@
 (defn load-file
   [repo-url path]
   (->
-   (p/let [content (fs/read-file (git/get-repo-dir repo-url) path)]
+   (p/let [content (fs/read-file (util/get-repo-dir repo-url) path)]
      content)
    (p/catch
        (fn [e]
@@ -151,7 +151,7 @@
 
 (defn create-month-journal-if-not-exists
   [repo-url]
-  (let [repo-dir (git/get-repo-dir repo-url)
+  (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)
         path (util/current-journal-path format)
         file-path (str "/" path)
@@ -165,7 +165,7 @@
 
 (defn create-config-file-if-not-exists
   [repo-url]
-  (let [repo-dir (git/get-repo-dir repo-url)
+  (let [repo-dir (util/get-repo-dir repo-url)
         path config/config-file
         file-path (str "/" path)
         default-content "{}"]
@@ -444,10 +444,11 @@
 (defn alter-file
   [repo-url path content {:keys [reset?]
                           :or {reset? true}}]
+  (state/set-file-content! repo-url path content)
   (when reset?
     (db/reset-file! repo-url path content))
   (util/p-handle
-   (fs/write-file (git/get-repo-dir repo-url) path content)
+   (fs/write-file (util/get-repo-dir repo-url) path content)
    (fn [_]
      (git-add repo-url path))))
 
@@ -455,7 +456,7 @@
   [repo-url {:keys [name email]}]
   (when (and name email)
     (git/set-username-email
-     (git/get-repo-dir repo-url)
+     (util/get-repo-dir repo-url)
      name
      email)))
 
@@ -507,7 +508,7 @@
                      (subs path 1)
                      path)]
           (util/p-handle
-           (fs/read-file-2 (git/get-repo-dir (state/get-current-repo))
+           (fs/read-file-2 (util/get-repo-dir (state/get-current-repo))
                            path)
            (fn [blob]
              (let [blob (js/Blob. (array blob) (clj->js {:type "image"}))
@@ -691,7 +692,7 @@
                       (util/url-encode)) "." format)
         file-path (str "/" path)
         repo (state/get-current-repo)
-        dir (git/get-repo-dir repo)]
+        dir (util/get-repo-dir repo)]
     (p/let [exists? (fs/file-exists? dir file-path)]
       (if exists?
         (show-notification!
@@ -713,26 +714,19 @@
     (when (not= (string/trim content) value) ; heading content changed
       (let [file (db/entity (:db/id file))
             page (db/entity (:db/id page))
-            t1 (util/time-ms)
             save-heading (fn [file {:heading/keys [uuid content meta page dummy? format] :as heading}]
-                           (let [file-content (:file/content file)
-                                 file-path (:file/path file)
-                                 format (format/get-format file-path)
-                                 [new-content value] (new-file-content heading file-content value)
-                                 {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-                                 after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
-                                 t2 (util/time-ms)]
-                             (prn "runtime 2: " (- t2 t1))
-                             (db/transact!
-                               (concat
-                                pages
-                                [[:db.fn/retractEntity [:heading/uuid uuid]]]
-                                headings
-                                after-headings
-                                [{:file/path file-path
-                                  :file/content new-content}]))
-                             (prn "runtime 2: " (- (util/time-ms) t2))
-                             (alter-file repo file-path new-content {:reset? false})))]
+                           (let [file-path (:file/path file)
+                                 format (format/get-format file-path)]
+                             (let [file-content (state/get-file file-path)
+                                   [new-content value] (new-file-content heading file-content value)
+                                   {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+                               (db/transact!
+                                 (concat
+                                  pages
+                                  headings
+                                  after-headings))
+                               (alter-file repo file-path new-content {:reset? false}))))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -741,7 +735,7 @@
                               (string/replace #"\s+" "_")
                               (util/url-encode)) "." format)
                 file-path (str "/" path)
-                dir (git/get-repo-dir repo)]
+                dir (util/get-repo-dir repo)]
             (p/let [exists? (fs/file-exists? dir file-path)]
               (if exists?
                 (show-notification!
@@ -759,10 +753,10 @@
                                          :heading/page {:db/id (:db/id page)}
                                          :heading/file {:db/id (:db/id file)}
                                          :heading/meta
-                                         (let [content (:file/content file)]
-                                           {:pos (utf8/length (utf8/encode content))
-                                            :end-pos nil}))]
+                                         {:pos (utf8/length (utf8/encode content))
+                                          :end-pos nil})]
                       (save-heading file heading)))))))
+
           (and file page)
           (save-heading file heading)
 
@@ -776,8 +770,8 @@
         format (:heading/format heading)
         new-heading-content (config/default-empty-heading format level)]
     (let [file (db/entity (:db/id file))
-          file-content (:file/content file)
           file-path (:file/path file)
+          file-content (state/get-file file-path)
           value (str value "\n" new-heading-content "\n")
           [new-content value] (new-file-content heading file-content value)
           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
@@ -787,11 +781,8 @@
       (db/transact!
         (concat
          pages
-         [[:db.fn/retractEntity [:heading/uuid uuid]]]
          headings
-         after-headings
-         [{:file/path file-path
-           :file/content new-content}]))
+         after-headings))
       (alter-file repo file-path new-content {:reset? false})
       [first-heading last-heading new-heading-content])))
 
@@ -811,15 +802,14 @@
   (when-not dummy?
     (let [repo (state/get-current-repo)
           file-path (:file/path (db/entity (:db/id file)))
-          file-content (:file/content (db/entity (:db/id file)))
+          file-content (state/get-file file-path)
           after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
           new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
       (db/transact!
         (concat
          [[:db.fn/retractEntity [:heading/uuid uuid]]]
          after-headings
-         [{:file/path file-path
-           :file/content new-content}]))
+         [{:file/path file-path}]))
       (alter-file repo file-path new-content {:reset? false}))))
 
 (defn delete-headings!
@@ -830,7 +820,7 @@
           last-heading (db/entity [:heading/uuid (last heading-uuids)])
           file (db/entity (:db/id (:heading/file first-heading)))
           file-path (:file/path file)
-          file-content (:file/content file)
+          file-content (state/get-file file-path)
           start-pos (:pos (:heading/meta first-heading))
           end-pos (:end-pos (:heading/meta last-heading))
           after-headings (rebuild-after-headings repo file end-pos start-pos)
@@ -842,8 +832,7 @@
             [:db.fn/retractEntity [:heading/uuid uuid]])
           heading-uuids)
          after-headings
-         [{:file/path file-path
-           :file/content new-content}]))
+         [{:file/path file-path}]))
       (alter-file repo file-path new-content {:reset? false}))))
 
 (defn set-heading-property!
@@ -912,7 +901,7 @@
                (fn []
                  (db/remove-conn! url)
                  (db/remove-db! (db/datascript-db url))
-                 (fs/rmdir (git/get-repo-dir url))
+                 (fs/rmdir (util/get-repo-dir url))
                  (state/delete-repo! repo)
                  )
                (fn [error]
@@ -922,7 +911,7 @@
   [{:keys [id url] :as repo}]
   (db/remove-conn! url)
   (-> (p/let [_ (db/remove-db! (db/datascript-db url))]
-        (fs/rmdir (git/get-repo-dir url)))
+        (fs/rmdir (util/get-repo-dir url)))
       (p/catch (fn [error]
                  (prn "Delete repo failed, error: " error)))
       (p/finally (fn []
@@ -938,7 +927,7 @@
                    (when (not= (get-in new-state [:config repo])
                                (get-in old-state [:config repo]))
                      ;; persistent to file
-                     (let [repo-dir (git/get-repo-dir repo)
+                     (let [repo-dir (util/get-repo-dir repo)
                            file-path (str "/" config/config-file)
                            content (js/JSON.stringify (bean/->js (get-in new-state [:config repo]))
                                                       nil
@@ -1040,7 +1029,7 @@
                (doseq [{:keys [id url]} (:repos me)]
                  (let [repo url]
                    (p/let [config-exists? (fs/file-exists?
-                                           (git/get-repo-dir url)
+                                           (util/get-repo-dir url)
                                            ".git/config")]
                      (if (and config-exists?
                               (db/cloned? repo))
@@ -1119,7 +1108,7 @@
     [path]
     (p/let [content (load-file (state/get-current-repo)
                                path)]
-      (let [db-content (db/get-file path)]
+      (let [db-content (state/get-file path)]
         (prn {:content content
               :utf8-length (utf8/length (utf8/encode content))}))))
 

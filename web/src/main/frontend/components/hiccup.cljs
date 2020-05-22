@@ -421,9 +421,9 @@
 
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::collapsed?)
-  {:did-update (fn [state]
-                 (util/code-highlight!)
-                 state)}
+  ;; {:did-update (fn [state]
+  ;;                (util/code-highlight!)
+  ;;                state)}
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
   (let [config (assoc config :heading heading)
         ref? (boolean (:ref? config))
