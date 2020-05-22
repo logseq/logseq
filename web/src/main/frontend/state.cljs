@@ -24,6 +24,7 @@
              :search/q ""
              :search/result nil
 
+             :ui/theme (or (storage/get :ui/theme) "white")
              :ui/toggle-state false
              :ui/collapsed-headings {}
              :ui/sidebar-collapsed-blocks {}
@@ -309,3 +310,8 @@
             (-> @state
                 (assoc-in [:editor/content edit-input-id] content)
                 (assoc    :editor/last-saved-cursor new-pos)))))
+
+(defn set-theme!
+  [theme]
+  (set-state! :ui/theme theme)
+  (storage/set :ui/theme theme))

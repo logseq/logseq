@@ -161,7 +161,7 @@
   [state]
   (let [title (get state ::title)]
     [:div#page-new
-     [:div.mt-10.text-gray-700.mb-2 {:style {:font-size "1.5rem"}}
+     [:div.mt-10.mb-2 {:style {:font-size "1.5rem"}}
       "What's your new page title?"]
      [:input#page-title.focus:outline-none.ml-1.text-gray-900
       {:style {:border "none"

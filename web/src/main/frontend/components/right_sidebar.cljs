@@ -86,10 +86,11 @@
 (defn render-graph
   [state]
   (let [match (:route-match @state/state)
-        collapse? (get-in @state/state [:ui/sidebar-collapsed-blocks fake-db-id])]
+        collapse? (get-in @state/state [:ui/sidebar-collapsed-blocks fake-db-id])
+        theme (:ui/theme @state/state)]
     (when-not collapse?
       (when-let [page (get-page match)]
-        (let [graph (db/build-page-graph page)]
+        (let [graph (db/build-page-graph page theme)]
           (vis/new-network "page-graph" graph))))
     state))
 
@@ -97,10 +98,15 @@
   {:did-mount render-graph
    :did-remount render-graph}
   []
-  (let [match (state/sub :route-match)]
+  (let [match (state/sub :route-match)
+        dark? (= "dark" (state/sub :ui/theme))]
     [:div.sidebar-item.flex-col.flex-1
-     [:div.flex.flex-row
-      [:div.ml-2.font-bold "Graph"]]
+     [:div#theme-selector.flex.flex-row.justify-between
+      [:div.ml-2.font-bold "Dark theme"]
+      [:div.px-1
+       (ui/toggle dark? (fn []
+                          (prn "hi")
+                          (state/set-theme! (if dark? "white" "dark"))))]]
      [:div#page-graph]]))
 
 (rum/defcs sidebar < rum/reactive

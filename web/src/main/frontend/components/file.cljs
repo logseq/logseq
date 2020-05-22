@@ -45,7 +45,7 @@
                              (content/content encoded-path {:content content
                                                             :format format
                                                             :on-hide (save-file-handler content)})))]
-    [:div#file
+    [:div.file
      [:h1.title
       path]
      (cond

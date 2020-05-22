@@ -142,7 +142,7 @@
 
 (rum/defc checkbox
   [option]
-  [:input.form-checkbox.h-4.w-4.text-indigo-600.transition.duration-150.ease-in-out
+  [:input.form-checkbox.h-4.w-4.transition.duration-150.ease-in-out
    (merge {:type "checkbox"} option)])
 
 (rum/defc badge
@@ -241,3 +241,13 @@
          empty-div))]))
 
 (def datepicker frontend.ui.date-picker/date-picker)
+
+(rum/defc toggle
+  [on? on-click]
+  [:a {:on-click on-click}
+   [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
+    {:aria-checked "false", :tabindex "0", :role "checkbox"
+     :class (if on? "bg-indigo-600" "bg-gray-200")}
+    [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
+     {:class (if on? "translate-x-5" "translate-x-0")
+      :aria-hidden "true"}]]])

@@ -59,7 +59,7 @@
     [:div#search.flex-1.flex.ml-0.md:ml-12
      [:div.w-full.flex.md:ml-0
       [:label.sr-only {:for "search_field"} "Search"]
-      [:div.relative.w-full.text-gray-400.focus-within:text-gray-600
+      [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
        [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
         [:svg.h-5.w-5
          {:view-box "0 0 20 20", :fill "currentColor"}
@@ -68,7 +68,7 @@
            "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z",
            :clip-rule "evenodd",
            :fill-rule "evenodd"}]]]
-       [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.text-gray-900.placeholder-gray-500.focus:outline-none.focus:placeholder-gray-400.sm:text-sm.bg-base-3.sm:bg-transparent
+       [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.bg-base-3.sm:bg-transparent
 
         {:style {:padding-left "2rem"}
          :placeholder "Search"
@@ -95,5 +95,5 @@
                     :href (str "/page/" (util/url-encode page) "#ls-heading-parent-" uuid)
                     :on-click handler/clear-search!}
                    [:div.flex-1
-                    [:div.text-sm.font-bold page]
+                    [:div.text-sm.font-bold (util/capitalize-all page)]
                     (highlight content search-q)])))]))))]]]))

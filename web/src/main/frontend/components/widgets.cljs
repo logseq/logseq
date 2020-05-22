@@ -68,7 +68,6 @@
          "Import your notes"]
         [:p.text-sm.text-gray-500.pl-1 "You can import your notes from a repo on Github."]
         [:div.mt-4.mb-2.relative.rounded-md.shadow-sm.max-w-xs
-         [:div.font-bold.text-gray-600.mb-1 "Repo url:"]
          [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
           {:autoFocus true
            :placeholder "https://github.com/username/repo"

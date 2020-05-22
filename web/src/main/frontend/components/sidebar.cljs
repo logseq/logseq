@@ -27,10 +27,7 @@
 
 (rum/defc repos < rum/reactive
   [current-repo head?]
-  (let [class (if head?
-                "hover:text-gray-900.text-gray-500"
-                "hover:text-gray-200.text-gray-500.font-bold")
-        get-repo-name-f (fn [repo]
+  (let [get-repo-name-f (fn [repo]
                           (if head?
                             (db/get-repo-path repo)
                             (util/take-at-most (db/get-repo-name repo) 20)))]
@@ -39,8 +36,7 @@
         (if (> (count repos) 1)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch {:on-click toggle-fn
-                              :class (util/hiccup->class class)}
+             [:a#repo-switch {:on-click toggle-fn}
               [:span (get-repo-name-f current-repo)]
               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
            (mapv
@@ -54,8 +50,7 @@
            (util/hiccup->class
             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
           [:a
-           {:class (util/hiccup->class class)
-            :href current-repo
+           {:href current-repo
             :target "_blank"}
            (get-repo-name-f current-repo)])))))
 
@@ -198,7 +193,9 @@
         status (db/sub-key-value :git/status)
         pulling? (= :pulling status)
         right-sidebar? false
-        white? false]
+        theme (state/sub :ui/theme)
+        white? (= "white" (state/sub :ui/theme))]
+    (prn {:theme theme})
     [:div {:class (if white? "white-theme" "dark-theme")}
      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden
