@@ -298,15 +298,11 @@
                            (handler/hide-right-sidebar)
                            (handler/show-right-sidebar))))}
           (svg/menu)]]]]
-      [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-hidden
-       {:tabIndex "0"
-        :style {:width "100%"
-                :height "100%"}}
+      [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-y-auto
+       {:tabIndex "0"}
        [:div#main-content
         {:style {:width "100%"
                  :height "100%"
-                 :overflow-y "scroll"
-                 :padding-right 17
                  :box-sizing "content-box"}}
         [:div.flex.justify-center
          [:div.flex-1.m-6#main-content-container
