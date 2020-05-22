@@ -73,12 +73,18 @@
            :as option}]
   (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
         class (if background (string/replace class "indigo" background) class)]
-    [:button
-     (merge
-      {:type "button"
-       :class (util/hiccup->class class)}
-      (dissoc option :background))
-     text]))
+    (if href
+      [:a.button (merge
+                  {:type "button"
+                   :class (util/hiccup->class class)}
+                  (dissoc option :background))
+       text]
+      [:button
+       (merge
+        {:type "button"
+         :class (util/hiccup->class class)}
+        (dissoc option :background))
+       text])))
 
 (rum/defc notification-content
   [state content status]
@@ -246,7 +252,7 @@
   [on? on-click]
   [:a {:on-click on-click}
    [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
-    {:aria-checked "false", :tabindex "0", :role "checkbox"
+    {:aria-checked "false", :tab-index 0, :role "checkbox"
      :class (if on? "bg-indigo-600" "bg-gray-200")}
     [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
      {:class (if on? "translate-x-5" "translate-x-0")

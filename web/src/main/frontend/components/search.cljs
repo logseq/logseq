@@ -35,23 +35,41 @@
      [:mark q]
      (when-not (string/blank? after)
        [:span after])]))
-;; TODO: support down/up keycode
+
+(defn- leave-focus
+  []
+  (when-let [input (gdom/getElement "search_field")]
+    (.blur input)))
+
+(rum/defc search-auto-complete
+  [search-result search-q]
+  [:div.absolute.rounded-md.shadow-lg
+   {:style (merge
+            {:top 48
+             :left 32
+             :width 500})}
+   (ui/auto-complete
+    search-result
+    {:on-chosen (fn [chosen]
+                  (handler/clear-search!)
+                  (leave-focus)
+                  (let [page (:page/name (:heading/page chosen))
+                        path (str "/page/" (util/url-encode page) "#ls-heading-parent-" (:heading/uuid chosen))]
+                    (handler/redirect-with-fragment! path)))
+     :item-render (fn [{:heading/keys [uuid page content]}]
+                    (let [page (:page/name page)]
+                      [:div.flex-1
+                       [:div.text-sm.font-bold (util/capitalize-all page)]
+                       (highlight content search-q)]))})])
+
 (rum/defc search < rum/reactive
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn []
-                 (handler/clear-search!)))
-     (mixins/on-enter state
-                      :node (gdom/getElement "search_field")
-                      :on-enter (fn []
-                                  (when-let [first-match (first (:search/result @state/state))]
-                                    (handler/clear-search!)
-                                    (let [page (util/url-encode (:page/name (:heading/page first-match)))
-                                          uuid (:heading/uuid first-match)
-                                          path (str "/page/" page "#ls-heading-parent-" uuid)]
-                                      (handler/redirect-with-fragment! path)))))))
+                 (handler/clear-search!)
+                 (leave-focus)))))
   []
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
@@ -81,19 +99,9 @@
                           (do
                             (state/set-q! value)
                             (handler/search value)))))}]
-       (ui/css-transition
-        {:in show-result? :timeout 0}
-        (fn [state]
-          (if show-result?
-            (dropdown-content-wrapper
-             state
-             [:div {:class "py-1 rounded-md bg-base-3 shadow-xs"}
-              (for [{:heading/keys [uuid page content]} search-result]
-                (let [page (:page/name page)]
-                  (ui/menu-link
-                   {:key (str "search-" uuid)
-                    :href (str "/page/" (util/url-encode page) "#ls-heading-parent-" uuid)
-                    :on-click handler/clear-search!}
-                   [:div.flex-1
-                    [:div.text-sm.font-bold (util/capitalize-all page)]
-                    (highlight content search-q)])))]))))]]]))
+       (when-not (string/blank? search-q)
+         (ui/css-transition
+          {:class-names "fade"
+           :timeout {:enter 500
+                     :exit 300}}
+          (search-auto-complete search-result search-q)))]]]))
