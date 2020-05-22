@@ -1,5 +1,6 @@
 var git = {};
 git.walk = function() {};
+git.walkBeta1 = function() {};
 git.TREE = function() {};
 git.log = function() {};
 var fs = {};

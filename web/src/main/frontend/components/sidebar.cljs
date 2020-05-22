@@ -198,7 +198,7 @@
         status (db/sub-key-value :git/status)
         pulling? (= :pulling status)
         right-sidebar? false
-        white? true]
+        white? false]
     [:div {:class (if white? "white-theme" "dark-theme")}
      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden

@@ -1045,7 +1045,7 @@
            (p/catch
                (fn [error]
                  (println "Token decrypted failed")
-                 (state/set-encrypt-token! nil)))))))))
+                 (state/clear-encrypt-token!)))))))))
 
 (defn load-docs!
   []

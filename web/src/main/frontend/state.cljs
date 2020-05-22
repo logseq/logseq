@@ -263,6 +263,11 @@
     (set-state! :encrypt/token encrypted)
     (storage/set :encrypt/token encrypted)))
 
+(defn clear-encrypt-token!
+  []
+  (set-state! :encrypt/token nil)
+  (storage/remove :encrypt/token))
+
 (defn sidebar-add-block!
   [db-id block-type block-data]
   (when db-id
