@@ -348,7 +348,8 @@
 
 (rum/defc heading-control < rum/reactive
   [config uuid heading-id level start-level collapsed? collapsed-atom? dummy?]
-  (let [control-show (util/react (rum/cursor *control-show? heading-id))]
+  (let [control-show (util/react (rum/cursor *control-show? heading-id))
+        dark? (= "dark" (state/sub :ui/theme))]
     [:div.hd-control.flex.flex-row.items-center
      {:style {:margin-left (str (max 0 (- level start-level)) "rem")
               :height 24
@@ -389,13 +390,27 @@
                               :heading
                               (:heading config))
                              (handler/show-right-sidebar)))))
-      [:svg {:height 10
-             :width 10
-             :fill "currentColor"
-             :display "inline-block"}
-       [:circle {:cx 5
-                 :cy 5
-                 :r 2}]]]]))
+      (if collapsed?
+        [:svg {:height 20
+               :width 20
+               :fill "currentColor"
+               :display "inline-block"}
+         [:circle {:cx 7
+                   :cy 10
+                   :r 4
+                   :stroke (if dark? "#1d6577" "#cbd7de")
+                   :stroke-width 3
+                   :fill "none"}]
+         [:circle {:cx 7
+                   :cy 10
+                   :r 2}]]
+        [:svg {:height 10
+               :width 10
+               :fill "currentColor"
+               :display "inline-block"}
+         [:circle {:cx 5
+                   :cy 5
+                   :r 2}]])]]))
 
 (defn- build-id
   [config ref? sidebar?]
@@ -407,8 +422,8 @@
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::collapsed?)
   {:did-update (fn [state]
-                  (util/code-highlight!)
-                  state)}
+                 (util/code-highlight!)
+                 state)}
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
   (let [config (assoc config :heading heading)
         ref? (boolean (:ref? config))
