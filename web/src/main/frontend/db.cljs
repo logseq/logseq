@@ -911,15 +911,22 @@
          (pull-many '[*])
          react)))
 
-(defn get-all-headings
-  []
-  (-> (d/q '[:find (pull ?h [:heading/uuid
-                             :heading/content
-                             {:heading/page [:page/name]}])
-             :where
-             [?h :heading/uuid]]
-        (get-conn))
-      seq-flatten))
+(defn get-matched-headings
+  [pattern limit]
+  (->> (posh/q '[:find ?heading
+                 :in $ ?pattern
+                 :where
+                 [?heading :heading/content ?content]
+                 [(re-find ?pattern ?content)]]
+         (get-conn (state/get-current-repo) false)
+         pattern)
+       react
+       (take limit)
+       seq-flatten
+       (pull-many '[:heading/uuid
+                    :heading/content
+                    {:heading/page [:page/name]}])
+       react))
 
 ;; TODO: Does the result preserves the order of the arguments?
 (defn get-headings-contents

@@ -713,13 +713,16 @@
     (when (not= (string/trim content) value) ; heading content changed
       (let [file (db/entity (:db/id file))
             page (db/entity (:db/id page))
+            t1 (util/time-ms)
             save-heading (fn [file {:heading/keys [uuid content meta page dummy? format] :as heading}]
                            (let [file-content (:file/content file)
                                  file-path (:file/path file)
                                  format (format/get-format file-path)
                                  [new-content value] (new-file-content heading file-content value)
                                  {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-                                 after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+                                 after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
+                                 t2 (util/time-ms)]
+                             (prn "runtime 2: " (- t2 t1))
                              (db/transact!
                                (concat
                                 pages
@@ -728,6 +731,7 @@
                                 after-headings
                                 [{:file/path file-path
                                   :file/content new-content}]))
+                             (prn "runtime 2: " (- (util/time-ms) t2))
                              (alter-file repo file-path new-content {:reset? false})))]
         (cond
           ;; Page was referenced but no related file

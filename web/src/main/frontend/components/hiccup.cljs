@@ -673,7 +673,7 @@
             attr (if language
                    {:data-lang language
                     :class lines})]
-        [:pre.pre-wrap-white-space
+        [:pre.pre-wrap-white-space.code
          [:code attr
           (join-lines lines)]])
       ["Quote" l]

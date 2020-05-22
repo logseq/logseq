@@ -12,13 +12,7 @@
   ([q]
    (search q 5))
   ([q limit]
-   (let [headings (db/get-all-headings)]
-     (some->>
-      (filter (fn [{:heading/keys [content]}]
-                (re-find (re-pattern (str "(?i)" q))
-                         content))
-              headings)
-      (take limit)))))
+   (db/get-matched-headings (re-pattern (str "(?i)" q)) limit)))
 
 (defn page-search
   ([q]
