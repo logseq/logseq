@@ -5,6 +5,9 @@
             [frontend.util :as util]))
 
 ;; TODO: optimization, maybe something like elasticsearch?
+;; blocks search
+;; TODO: fuzzy search
+
 (defn search
   ([q]
    (search q 5))
@@ -15,4 +18,16 @@
                 (re-find (re-pattern (str "(?i)" q))
                          content))
               headings)
+      (take limit)))))
+
+(defn page-search
+  ([q]
+   (page-search q 2))
+  ([q limit]
+   (let [pages (db/get-pages (state/get-current-repo))]
+     (some->>
+      (filter (fn [page]
+                (re-find (re-pattern (str "(?i)" q))
+                         page))
+              pages)
       (take limit)))))

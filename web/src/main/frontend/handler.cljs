@@ -608,7 +608,9 @@
 
 (defn search
   [q]
-  (swap! state/state assoc :search/result (search/search q)))
+  (swap! state/state assoc :search/result
+         {:pages (search/page-search q)
+          :blocks (search/search q)}))
 
 (defn clear-search!
   []

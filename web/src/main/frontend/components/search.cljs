@@ -42,25 +42,51 @@
     (.blur input)))
 
 (rum/defc search-auto-complete
-  [search-result search-q]
-  [:div.absolute.rounded-md.shadow-lg
-   {:style (merge
-            {:top 48
-             :left 32
-             :width 500})}
-   (ui/auto-complete
-    search-result
-    {:on-chosen (fn [chosen]
-                  (handler/clear-search!)
-                  (leave-focus)
-                  (let [page (:page/name (:heading/page chosen))
-                        path (str "/page/" (util/url-encode page) "#ls-heading-parent-" (:heading/uuid chosen))]
-                    (handler/redirect-with-fragment! path)))
-     :item-render (fn [{:heading/keys [uuid page content]}]
-                    (let [page (:page/name page)]
-                      [:div.flex-1
-                       [:div.text-sm.font-bold (util/capitalize-all page)]
-                       (highlight content search-q)]))})])
+  [{:keys [pages blocks]} search-q]
+  (let [new-page [{:type :new-page}]
+        pages (map (fn [page] {:type :page :data page}) pages)
+        blocks (map (fn [block] {:type :block :data block}) blocks)
+        result (concat new-page pages blocks)]
+    [:div.absolute.rounded-md.shadow-lg
+     {:style (merge
+              {:top 48
+               :left 32
+               :width 500})}
+     (ui/auto-complete
+      result
+      {:on-chosen (fn [{:keys [type data]}]
+                    (handler/clear-search!)
+                    (leave-focus)
+                    (case type
+                      :new-page
+                      (handler/create-new-page! search-q)
+
+                      :page
+                      (handler/redirect! {:to :page
+                                          :path-params {:name (util/url-encode data)}})
+
+                      :block
+                      (let [page (:page/name (:heading/page data))
+                            path (str "/page/" (util/url-encode page) "#ls-heading-parent-" (:heading/uuid data))]
+                        (handler/redirect-with-fragment! path))
+                      nil))
+       :item-render (fn [{:keys [type data]}]
+                      (case type
+                        :new-page
+                        [:div.text.font-bold "New page: "
+                         [:span.ml-1 (str "\""search-q "\"")]]
+
+                        :page
+                        [:div.text-sm.font-bold (util/capitalize-all data)]
+
+                        :block
+                        (let [{:heading/keys [page content]} data]
+                          (let [page (:page/name page)]
+                            [:div.flex-1
+                             [:div.text-sm.font-bold (util/capitalize-all page)]
+                             (highlight content search-q)]))
+
+                        nil))})]))
 
 (rum/defc search < rum/reactive
   (mixins/event-mixin
