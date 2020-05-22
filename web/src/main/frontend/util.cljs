@@ -604,3 +604,9 @@
 (defn time-ms
   []
   (tc/to-long (cljs-time.core/now)))
+
+(defn code-highlight!
+  []
+  (doseq [block (-> (js/document.querySelectorAll "pre code")
+                    (array-seq))]
+    (js/hljs.highlightBlock block)))

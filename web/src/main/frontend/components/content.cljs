@@ -14,12 +14,6 @@
             [clojure.string :as string]
             [frontend.components.editor :as editor]))
 
-(defn- code-highlight!
-  []
-  (doseq [block (-> (js/document.querySelectorAll "pre code")
-                    (array-seq))]
-    (js/hljs.highlightBlock block)))
-
 (defn lazy-load-js
   [state]
   (when-let [format (:format (last (:rum/args state)))]
@@ -156,7 +150,7 @@
                     (fn [e]
                       ;; t
                       (when (and
-                             ;; not input
+                             ;; not input, t
                              (not (state/get-edit-input-id))
                              (= 84 (.-keyCode e)))
                         (let [id (first (:rum/args state))]
@@ -166,12 +160,12 @@
                  state)
    :did-mount (fn [state]
                 (highlight-block-if-fragment)
-                (code-highlight!)
+                (util/code-highlight!)
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (highlight-block-if-fragment)
-                 (code-highlight!)
+                 (util/code-highlight!)
                  (handler/render-local-images!)
                  (lazy-load-js state)
                  state)}
