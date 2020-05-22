@@ -160,7 +160,7 @@
 ;; scroll
 (defn main-node
   []
-  (gdom/getElement "main-content"))
+  (gdom/getElement "main"))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
@@ -172,6 +172,7 @@
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
         bottom-reached? (<= (- full-height scroll-top client-height) 700)]
+    (prn (- full-height scroll-top client-height))
     (when bottom-reached?
       (on-load))))
 
