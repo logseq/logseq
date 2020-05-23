@@ -158,7 +158,7 @@
                            (string/replace-first (subs edit-content pos)
                                                  marker-pattern
                                                  (str marker " ")))]
-        (state/set-edit-content! input-id new-value)))))
+        (state/set-edit-content! input-id new-value true)))))
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
