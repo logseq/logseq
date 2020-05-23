@@ -1,6 +1,5 @@
 (ns frontend.db
   (:require [datascript.core :as d]
-            [posh.rum :as posh]
             [frontend.util :as util]
             [medley.core :as medley]
             [datascript.transit :as dt]
@@ -168,51 +167,104 @@
 (defn reset-conn! [conn db]
   (reset! conn db))
 
+;; Query atom of map of Key ([repo q inputs]) -> atom
+(defonce query-state (atom {}))
+(defn add-q!
+  [k query inputs result]
+  (let [result-atom (atom result)]
+    (swap! query-state assoc k {:query query
+                                :inputs inputs
+                                :result result-atom})
+    result-atom))
+
+(defn set-new-result!
+  [k new-result]
+  (util/d "set new result spend: "
+          (fn []
+            (when-let [result-atom (get-in @query-state [k :result])]
+              (reset! result-atom new-result)))))
+
+;; TODO: support multiple keys, e.g., a heading change might affects the page, right sidebar or even agenda
+(defn get-handler-key
+  [{:keys [key data]}]
+  (cond
+    (coll? key)
+    key
+
+    :else
+    (case key
+      :page/headings
+      (let [{:heading/keys [page]} data]
+        (when-let [page-id (:db/id page)]
+          [:page/headings page-id]))
+      [key])))
+
+(defn q
+  [repo k query & inputs]
+  (when-let [conn (get-conn repo)]
+    (let [result (if (seq inputs)
+                   (apply d/q query conn inputs)
+                   (d/q query conn))]
+      (add-q! (vec (cons repo k)) query inputs result))))
+
+(defn refresh-query-result!
+  [repo query inputs]
+  (let [k [repo query inputs]]
+    (when-let [conn (get-conn repo)]
+      (let [new-result (apply d/q query conn inputs)]
+        (set-new-result! k new-result)))))
+
 (defn transact!
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
    (let [tx-data (remove nil? tx-data)]
      (when (seq tx-data)
-       (when-let [conn (get-conn repo-url false)]
-         (posh/transact! conn (vec tx-data)))))))
+       (when-let [conn (get-conn repo-url)]
+         (d/transact! conn (vec tx-data)))))))
 
-(defn d-pull
+(defn transact-react!
+  [repo-url tx-data {:keys [key data] :as handler-opts}]
+  (let [repo-url (or repo-url (state/get-current-repo))
+        tx-data (remove nil? tx-data)]
+    (when (seq tx-data)
+      (when-let [conn (get-conn repo-url false)]
+        (let [db (:db-after (d/transact! conn (vec tx-data)))
+              handler-key (vec (cons repo-url (get-handler-key handler-opts)))
+              {:keys [query inputs]} (get @query-state handler-key)
+              new-result (apply d/q query db inputs)]
+          (set-new-result! handler-key new-result))))))
+
+(defn pull
   ([eid]
-   (d-pull '[*] eid))
+   (pull '[*] eid))
   ([selector eid]
    (when-let [conn (get-conn)]
      (d/pull conn
              selector
              eid))))
 
-(defn d-pull-many
+(defn pull-many
   ([eids]
-   (d-pull-many '[*] eids))
+   (pull-many '[*] eids))
   ([selector eids]
    (when-let [conn (get-conn)]
      (d/pull-many conn selector eids))))
 
-(defn pull
-  ([eid]
-   (pull '[*] eid))
-  ([selector eid]
-   (when-let [conn (get-conn (state/get-current-repo) false)]
-     (posh/pull conn
-                selector
-                eid))))
-
-(defn pull-many
-  [selector eids]
-  (when-let [conn (get-conn (state/get-current-repo) false)]
-    (posh/pull-many conn
-                    selector
-                    eids)))
+(defn pull-heading
+  [id]
+  (when-let [conn (get-conn (state/get-current-repo))]
+    (d/q '[:find (pull ?heading '[*])
+           :in $ ?id
+           :where
+           [?heading :heading/uuid ?id]]
+      conn
+      id)))
 
 (defn entity
   [id-or-lookup-ref]
-  (when-let [conn (get-conn (state/get-current-repo) false)]
-    (d/entity (d/db conn) id-or-lookup-ref)))
+  (when-let [db (get-conn (state/get-current-repo) true)]
+    (d/entity db id-or-lookup-ref)))
 
 (defn kv
   [key value]
@@ -248,34 +300,32 @@
 
 (defn get-pages
   [repo]
-  (when-let [conn (get-conn repo false)]
-    (->> (posh/q '[:find ?page-name
-                   :where
-                   [?page :page/name ?page-name]]
-           conn)
-         (react)
-         (map first)
-         distinct)))
+  (->> (q repo [:pages]
+         '[:find ?page-name
+           :where
+           [?page :page/name ?page-name]])
+       (react)
+       (map first)
+       distinct))
 
 (defn get-page-alias
   [repo page-name]
-  (when-let [conn (and repo (get-conn repo false))]
-    (some->> (posh/q '[:find ?alias-name
-                       :in $ ?page-name
-                       :where
-                       [?page :page/name ?page-name]
-                       [?page :page/alias ?alias]
-                       [?alias :page/name ?alias-name]]
+  (when-let [conn (and repo (get-conn repo))]
+    (some->> (d/q '[:find ?alias-name
+                    :in $ ?page-name
+                    :where
+                    [?page :page/name ?page-name]
+                    [?page :page/alias ?alias]
+                    [?alias :page/name ?alias-name]]
                conn
                page-name)
-             (react)
              seq-flatten
              distinct
              remove-journal-files)))
 
 (defn d-get-page-alias
   [repo page-name]
-  (when-let [conn (and repo (get-conn repo true))]
+  (when-let [conn (and repo (get-conn repo))]
     (some->> (d/q '[:find ?alias-name
                     :in $ ?page-name
                     :where
@@ -290,10 +340,10 @@
 
 (defn get-files
   [repo]
-  (->> (posh/q '[:find ?file-path
-                 :where
-                 [?file :file/path ?file-path]]
-         (get-conn repo false))
+  (->> (q repo [:files]
+         '[:find ?file-path
+           :where
+           [?file :file/path ?file-path]])
        (react)
        (map first)
        (distinct)
@@ -385,72 +435,45 @@
   [uuid]
   (entity [:heading/uuid uuid]))
 
-(defn sub-heading
-  [uuid]
-  (util/react (pull [:heading/uuid uuid])))
-
 (defn remove-key
   [repo-url key]
-  (transact! repo-url [[:db.fn/retractEntity [:db/ident key]]]))
+  (transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
+  (set-new-result! [repo-url :kv key] nil))
 
 (defn set-key-value
-  ([key value]
-   (set-key-value (state/get-current-repo) key))
-  ([repo-url key value]
-   (if value
-     (transact! repo-url [(kv key value)])
-     (remove-key repo-url key))))
+  [repo-url key value]
+  (if value
+    (transact-react! repo-url [(kv key value)]
+                     {:key [:kv key]})
+    (remove-key repo-url key)))
 
 (defn get-key-value
   ([key]
    (get-key-value (state/get-current-repo) key))
   ([repo-url key]
-   (when-let [conn (get-conn repo-url false)]
-     (when-let [db (d/db conn)]
-       (some-> (d/entity db key)
-               key)))))
+   (when-let [db (get-conn repo-url)]
+     (some-> (d/entity db key)
+             key))))
 
 (defn sub-key-value
   ([key]
    (sub-key-value (state/get-current-repo) key))
   ([repo-url key]
-   (when-let [conn (get-conn repo-url false)]
-     (-> (posh/pull conn '[*] [:db/ident key])
-         (react)
-         (get key)))))
-
-(defn get-file-by-concat-headings
-  ([file]
-   (get-file-by-concat-headings
-    (state/get-current-repo)
-    file))
-  ([repo-url file]
-   (->> (posh/q '[:find ?heading
-                  ;; (pull ?heading [*])
-                  :in $ ?file
-                  :where
-                  [?p :file/path ?file]
-                  [?heading :heading/file ?p]]
-          (get-conn repo-url false) file)
-        react
-        seq-flatten
-        (pull-many '[*])
-        react
-        sort-by-pos)))
+   (-> (q repo-url [:kv key]
+         '[:find ?value
+           :in $ ?key
+           :where
+           [?e :db/ident ?key]
+           [?e ?key ?value]]
+         key)
+       react
+       ffirst)))
 
 (defn get-page-format
   [page-name]
   (when-let [file (:page/file (entity [:page/name page-name]))]
     (when-let [path (:file/path (entity (:db/id file)))]
       (format/get-format path))))
-
-;; TODO: pass a pred in causes the editing very slow
-;; (defn page-pred
-;;   [repo page]
-;;   (let [alias (d-get-page-alias repo page)
-;;         pages (set (conj alias page))]
-;;     (fn [db page-name]
-;;       (contains? pages page-name))))
 
 (defn page-alias-set
   [repo-url page]
@@ -462,18 +485,19 @@
    (get-page-headings (state/get-current-repo)
                       page))
   ([repo-url page]
-   (let [pages (page-alias-set repo-url page)]
-     (->> (posh/q '[:find ?heading
-                    :in $ ?pages
-                    :where
-                    [?p :page/name ?page]
-                    [?heading :heading/page ?p]
-                    [(contains? ?pages ?page)]]
-            (get-conn repo-url false) pages)
+   (let [pages (page-alias-set repo-url page)
+         page-id (:db/id (entity [:page/name page]))]
+     (->> (q repo-url [:page/headings page-id]
+            '[:find (pull ?heading [*])
+              :in $ ?page
+              :where
+              [?p :page/name ?page]
+              [?heading :heading/page ?p]
+              ;; [(contains? ?pages ?page)]
+              ]
+            page)
           react
           seq-flatten
-          (pull-many '[*])
-          react
           sort-by-pos))))
 
 (defn get-page-name
@@ -672,25 +696,22 @@
    (get-agenda (state/get-current-repo) :week))
   ([repo time]
    ;; TODO:
-   (when-let [conn (get-conn repo false)]
-     (let [duration (case time
-                      :today []
-                      :week  []
-                      :month [])
-           pred (fn [db marker]
-                  (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
-       (->>
-        (posh/q '[:find ?h
-                  :in $ ?pred
-                  :where
-                  [?h :heading/marker ?marker]
-                  [(?pred $ ?marker)]]
-          conn
-          pred)
-        react
-        seq-flatten
-        (pull-many '[*])
-        react)))))
+   (let [duration (case time
+                    :today []
+                    :week  []
+                    :month [])
+         pred (fn [db marker]
+                (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
+     (->>
+      (q repo [:agenda]
+        '[:find (pull ?h [*])
+          :in $ ?pred
+          :where
+          [?h :heading/marker ?marker]
+          [(?pred $ ?marker)]]
+        pred)
+      react
+      seq-flatten))))
 
 (defn get-current-journal-path
   []
@@ -725,32 +746,31 @@
   ([n]
    (get-latest-journals (state/get-current-repo) n))
   ([repo-url n]
-   (when-let [conn (get-conn repo-url false)]
-     (let [date (js/Date.)
-           _ (.setDate date (- (.getDate date) (dec n)))
-           before-day (date->int date)
-           today (date->int (js/Date.))
-           pages (->>
-                  (posh/q '[:find ?page-name ?journal-day
-                            :in $ ?before-day ?today
-                            :where
-                            [?page :page/name ?page-name]
-                            [?page :page/journal? true]
-                            [?page :page/journal-day ?journal-day]
-                            [(<= ?before-day ?journal-day ?today)]]
-                    conn
-                    before-day
-                    today)
-                  (react)
-                  (sort-by last)
-                  (reverse)
-                  (map first))]
-       (mapv
-        (fn [page]
-          [page
-           (get-page-headings repo-url page)
-           (get-page-format page)])
-        pages)))))
+   (let [date (js/Date.)
+         _ (.setDate date (- (.getDate date) (dec n)))
+         before-day (date->int date)
+         today (date->int (js/Date.))
+         pages (->>
+                (q repo-url [:journals]
+                  '[:find ?page-name ?journal-day
+                    :in $ ?before-day ?today
+                    :where
+                    [?page :page/name ?page-name]
+                    [?page :page/journal? true]
+                    [?page :page/journal-day ?journal-day]
+                    [(<= ?before-day ?journal-day ?today)]]
+                  before-day
+                  today)
+                (react)
+                (sort-by last)
+                (reverse)
+                (map first))]
+     (mapv
+      (fn [page]
+        [page
+         (get-page-headings repo-url page)
+         (get-page-format page)])
+      pages))))
 
 (defn me-tx
   [db {:keys [name email avatar repos]}]
@@ -791,100 +811,94 @@
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
   [repo page]
-  (when-let [conn (and repo (get-conn repo false))]
-    (let [pages (page-alias-set repo page)
-          ref-pages (->> (posh/q '[:find ?ref-page-name
-                                   :in $ ?pages
-                                   :where
-                                   [?p :page/name ?page]
-                                   [?heading :heading/page ?p]
-                                   [?heading :heading/ref-pages ?ref-page]
-                                   [?ref-page :page/name ?ref-page-name]
-                                   [(contains? ?pages ?page)]]
-                           conn
-                           pages)
-                         react
-                         seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
+  (let [pages (page-alias-set repo page)
+        page-id (:db/id (entity {:page/name page}))
+        ref-pages (->> (q repo [:page/ref-pages page-id]
+                         '[:find ?ref-page-name
+                           :in $ ?pages
+                           :where
+                           [?p :page/name ?page]
+                           [?heading :heading/page ?p]
+                           [?heading :heading/ref-pages ?ref-page]
+                           [?ref-page :page/name ?ref-page-name]
+                           [(contains? ?pages ?page)]]
+                         pages)
+                       react
+                       seq-flatten)]
+    (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages)))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page]
-  (when-let [conn (and repo (get-conn repo false))]
-    (let [pages (page-alias-set repo page)
-          mentioned-pages (->> (posh/q '[:find ?mentioned-page-name
-                                         :in $ ?pages ?page-name
-                                         :where
-                                         [?heading :heading/ref-pages ?p]
-                                         [?p :page/name ?page]
-                                         [(contains? ?pages ?page)]
-                                         [?heading :heading/page ?mentioned-page]
-                                         [?mentioned-page :page/name ?mentioned-page-name]]
-                                 conn
-                                 pages
-                                 page)
-                               react
-                               seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages)))
-  )
+  (let [page-id (:db/id (entity {:page/name page}))
+        pages (page-alias-set repo page)
+        mentioned-pages (->> (q repo [:page/mentioned-pages page-id]
+                               '[:find ?mentioned-page-name
+                                 :in $ ?pages ?page-name
+                                 :where
+                                 [?heading :heading/ref-pages ?p]
+                                 [?p :page/name ?page]
+                                 [(contains? ?pages ?page)]
+                                 [?heading :heading/page ?mentioned-page]
+                                 [?mentioned-page :page/name ?mentioned-page-name]]
+                               pages
+                               page)
+                             react
+                             seq-flatten)]
+    (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages)))
 
 ;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
   [page]
   (when-let [repo (state/get-current-repo)]
-    (when-let [conn (get-conn repo false)]
-      (let [pages (page-alias-set repo page)]
-        (->> (posh/q '[:find ?heading
-                       ;; (pull ?heading [*])
-                       :in $ ?pages
-                       :where
-                       [?ref-page :page/name ?page]
-                       [?heading :heading/ref-pages ?ref-page]
-                       [(contains? ?pages ?page)]]
-               conn
-               pages)
-             react
-             seq-flatten
-             (pull-many '[*])
-             react)))))
+    (let [page-id (:db/id (entity {:page/name page}))
+          pages (page-alias-set repo page)]
+      (->> (q repo [:page/refed-headings page-id]
+             '[:find (pull ?heading [*])
+               :in $ ?pages
+               :where
+               [?ref-page :page/name ?page]
+               [?heading :heading/ref-pages ?ref-page]
+               [(contains? ?pages ?page)]]
+             pages)
+           react
+           seq-flatten))))
 
 (defn get-heading-referenced-headings
   [heading-uuid]
-  (when-let [current-repo (state/get-current-repo)]
-    (->> (posh/q '[:find ?ref-heading
-                   :in $ ?page-name
-                   :where
-                   [?heading :heading/uuid ?heading-uuid]
-                   [?heading :heading/ref-headings ?ref-heading]]
-           (get-conn current-repo false)
+  (when-let [repo (state/get-current-repo)]
+    (->> (q repo [:heading/refed-headings heading-uuid]
+           '[:find (pull ?ref-heading [*])
+             :in $ ?page-name
+             :where
+             [?heading :heading/uuid ?heading-uuid]
+             [?heading :heading/ref-headings ?ref-heading]]
            heading-uuid)
          react
-         seq-flatten
-         (pull-many '[*])
-         react)))
+         seq-flatten)))
 
 (defn get-matched-headings
   [pattern limit]
-  (->> (posh/q '[:find ?heading
-                 :in $ ?pattern
-                 :where
-                 [?heading :heading/content ?content]
-                 [(re-find ?pattern ?content)]]
-         (get-conn (state/get-current-repo) false)
-         pattern)
-       react
-       (take limit)
-       seq-flatten
-       (pull-many '[:heading/uuid
-                    :heading/content
-                    {:heading/page [:page/name]}])
-       react))
+  (when-let [repo (state/get-current-repo)]
+    (->> (q repo [:matched-headings]
+           '[:find ?heading
+             :in $ ?pattern
+             :where
+             [?heading :heading/content ?content]
+             [(re-find ?pattern ?content)]]
+           pattern)
+         react
+         (take limit)
+         seq-flatten
+         (pull-many '[:heading/uuid
+                      :heading/content
+                      {:heading/page [:page/name]}]))))
 
 ;; TODO: Does the result preserves the order of the arguments?
 (defn get-headings-contents
   [heading-uuids]
-  (let [conn (get-conn (state/get-current-repo) false)]
-    (d/pull-many (d/db conn) '[:heading/content]
+  (let [db (get-conn (state/get-current-repo))]
+    (d/pull-many db '[:heading/content]
                  (mapv (fn [id] [:heading/uuid id]) heading-uuids))))
 
 (defn journal-page?
@@ -922,8 +936,7 @@
         db-conn (d/create-conn schema)]
     (swap! conns assoc db-name db-conn)
     (listen-handler repo db-conn)
-    (d/transact! db-conn [(me-tx (d/db db-conn) me)])
-    (posh/posh! db-conn)))
+    (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
 
 (defn restore! [{:keys [repos] :as me} listen-handler render-fn]
   (-> (p/all
@@ -939,7 +952,6 @@
                  (when (= (:schema stored-db) schema) ;; check for code update
                    (reset-conn! db-conn attached-db)))
                (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-             (posh/posh! db-conn)
              (listen-handler repo db-conn)
              (when-let [config-content (state/get-file url config/config-file)]
                (reset-config! url config-content))))))

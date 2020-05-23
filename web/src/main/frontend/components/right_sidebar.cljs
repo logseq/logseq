@@ -15,7 +15,7 @@
 (rum/defc heading-cp < rum/reactive
   [heading]
   (let [id (:heading/uuid heading)
-        heading (db/sub-heading id)]
+        heading (db/pull-heading id)]
     (hiccup/heading {:id id
                      :sidebar? true}
                     (assoc heading

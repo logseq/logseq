@@ -102,6 +102,18 @@
        el))
    nm))
 
+(defn remove-nils-or-empty
+  [nm]
+  (walk/postwalk
+   (fn [el]
+     (if (map? el)
+       (not-empty (into {} (remove (comp #(or
+                                           (nil? %)
+                                           (and (coll? %)
+                                                (empty? %))) second)) el))
+       el))
+   nm))
+
 (defn index-by
   [col k]
   (->> (map (fn [entry] [(get entry k) entry])
@@ -616,3 +628,10 @@
   (str "/"
        (->> (take-last 2 (string/split repo-url #"/"))
             (string/join "_"))))
+
+(defn d
+  [k f]
+  (let [result (atom nil)]
+    (prn k)
+    (time (reset! result (f)))
+    @result))

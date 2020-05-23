@@ -26,7 +26,7 @@
 (defn- get-headings
   [page-name journal? heading?]
   (if heading?
-    (util/react (db/pull-many '[*] [[:heading/uuid (uuid page-name)]]))
+    (util/react [(db/pull-heading (uuid page-name))])
     (let [page-headings (db/get-page-headings page-name)
           page-headings (if journal?
                           (update (vec page-headings) 0 assoc :heading/lock? true)
@@ -75,7 +75,7 @@
         [:a {:on-click (fn [e]
                          (util/stop e)
                          (when (gobj/get e "shiftKey")
-                           (when-let [page (db/d-pull [:page/name page-name])]
+                           (when-let [page (db/pull [:page/name page-name])]
                              (state/sidebar-add-block!
                               (:db/id page)
                               :page

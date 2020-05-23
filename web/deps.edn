@@ -2,11 +2,10 @@
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
   rum {:mvn/version "0.12.0-SNAPSHOT"}
-  posh {:git/url "https://github.com/tiensonqin/posh"
-        :sha "c41039c65448856da0307abed7f722e8f6acbbd9"}
   datascript-transit          {:mvn/version "0.3.0"
                                :exclusions [datascript]}
-  datascript                  {:mvn/version "0.18.12"}
+  ;; datascript                  {:mvn/version "0.18.12"}
+  datascript                  {:local/root "/home/tienson/codes/source/clj/datascript"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}

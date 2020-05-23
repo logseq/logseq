@@ -136,7 +136,7 @@
 
           (heading-block? block)
           (let [heading (-> (assoc (second block)
-                                   :children (reverse heading-children)
+                                   :children (vec (reverse heading-children))
                                    :timestamps timestamps
                                    :properties properties)
                             (assoc-in [:meta :end-pos] last-pos)

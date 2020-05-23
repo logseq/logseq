@@ -716,17 +716,25 @@
             page (db/entity (:db/id page))
             save-heading (fn [file {:heading/keys [uuid content meta page dummy? format] :as heading}]
                            (let [file-path (:file/path file)
+                                 t1 (util/time-ms)
                                  format (format/get-format file-path)]
                              (let [file-content (state/get-file file-path)
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-                               (db/transact!
+                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
+                                   t2 (util/time-ms)]
+                               (prn "save heading spent part1: " (- (util/time-ms) t2))
+                               (db/transact-react!
+                                 repo
                                  (concat
                                   pages
                                   headings
-                                  after-headings))
-                               (alter-file repo file-path new-content {:reset? false}))))]
+                                  after-headings)
+                                 {:key :page/headings
+                                  :data heading})
+                               (prn "save heading spent: " (- (util/time-ms) t2))
+                               (alter-file repo file-path new-content {:reset? false})
+                               )))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -777,12 +785,17 @@
           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
           first-heading (first headings)
           last-heading (last headings)
-          after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-      (db/transact!
-        (concat
-         pages
-         headings
-         after-headings))
+          after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
+          t1 (util/time-ms)]
+      (db/transact-react!
+       repo
+       (concat
+        pages
+        headings
+        after-headings)
+       {:key :page/headings
+        :data heading})
+      (prn "spent time: " (- (util/time-ms) t1))
       (alter-file repo file-path new-content {:reset? false})
       [first-heading last-heading new-heading-content])))
 
@@ -840,7 +853,7 @@
   (let [heading-id (if (string? heading-id) (uuid heading-id) heading-id)
         key (string/upper-case (name key))
         value (name value)]
-    (when-let [heading (db/d-pull [:heading/uuid heading-id])]
+    (when-let [heading (db/pull [:heading/uuid heading-id])]
       (let [{:heading/keys [file page content properties meta]} heading
             {:keys [properties start-pos end-pos]} properties
             new-content (if (and start-pos
@@ -950,7 +963,7 @@
 (defn edit-heading!
   [heading-id prev-pos format]
   (let [heading (or
-                 (db/d-pull [:heading/uuid heading-id])
+                 (db/pull [:heading/uuid heading-id])
                  ;; dummy?
                  {:heading/uuid heading-id
                   :heading/content ""})]

@@ -140,9 +140,11 @@
        (not preferred-format)
        (widgets/choose-preferred-format)
 
+       ;; TODO: delay this
        (and logged? (nil? (:email me)))
        (settings/set-email)
 
+       ;; TODO: delay this
        ;; personal token
        (and logged? (nil? token))
        (widgets/set-personal-access-token)

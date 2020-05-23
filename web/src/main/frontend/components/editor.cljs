@@ -387,7 +387,7 @@
   (let [{:keys [heading value format]} (get-state state)
         heading-id (:heading/uuid heading)
         heading (try
-                  (db/d-pull [:heading/uuid heading-id])
+                  (db/pull [:heading/uuid heading-id])
                   (catch js/Error e     ; dummy heading
                     heading))]
     (set-last-edit-heading! (:heading/uuid heading) value)
