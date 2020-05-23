@@ -519,14 +519,14 @@
                       (reset! *matched-commands matched-commands)))
                   (reset! *show-commands false)
                   )))))))))
-  {:init (fn [state _props]
+  {:after (fn [state _props]
            (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)]
-             (state/set-edit-content! id (string/trim (or content "")))
              (reset! *should-delete? false))
            state)
    :did-mount (fn [state]
                 (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)]
                   (let [content (handler/remove-level-spaces content format)]
+                    (state/set-edit-content! id (string/trim (or content "")) true)
                     (handler/restore-cursor-pos! id content dummy?))
                   (when-let [input (gdom/getElement id)]
                     (dnd/subscribe!
@@ -563,56 +563,52 @@
   [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}
             :as option} id]
-  (let [value (state/sub [:editor/content id])
-        value (if heading
-                (handler/remove-level-spaces value format)
-                value)]
-    [:div.editor {:style {:position "relative"
-                          :display "flex"
-                          :flex "1 1 0%"}
-                  :class (if heading "heading-editor" "non-heading-editor")}
-     (ui/textarea
-      {:id id
-       :on-change (fn [e]
-                    (let [value (util/evalue e)]
-                      (state/set-edit-content! id value)
-                      (reset! *should-delete? false)))
-       :value (or value "")
-       :auto-focus true})
-     (transition-cp
-      (commands id format)
-      true)
+  [:div.editor {:style {:position "relative"
+                        :display "flex"
+                        :flex "1 1 0%"}
+                :class (if heading "heading-editor" "non-heading-editor")}
+   (ui/textarea
+    {:id id
+     :default-value content
+     :on-change (fn [e]
+                  (let [value (util/evalue e)]
+                    (state/set-edit-content! id value false)
+                    (reset! *should-delete? false)))
+     :auto-focus true})
+   (transition-cp
+    (commands id format)
+    true)
 
-     (transition-cp
-      (page-search id format)
-      true)
+   (transition-cp
+    (page-search id format)
+    true)
 
-     (transition-cp
-      (block-search id format)
-      true)
+   (transition-cp
+    (block-search id format)
+    true)
 
-     (transition-cp
-      (date-picker id format)
-      false)
+   (transition-cp
+    (date-picker id format)
+    false)
 
-     (transition-cp
-      (input id
-             (fn [{:keys [link label]} pos]
-               (if (and (string/blank? link)
-                        (string/blank? label))
-                 nil
-                 (insert-command! id
-                                  (util/format "[[%s][%s]]"
-                                               (or link "")
-                                               (or label ""))
-                                  format
-                                  {:last-pattern "/link"}))
-               (state/set-editor-show-input nil)
-               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-                 (when-let [input (gdom/getElement id)]
-                   (.focus input)
-                   (util/move-cursor-to input saved-cursor)))))
-      true)
+   (transition-cp
+    (input id
+           (fn [{:keys [link label]} pos]
+             (if (and (string/blank? link)
+                      (string/blank? label))
+               nil
+               (insert-command! id
+                                (util/format "[[%s][%s]]"
+                                             (or link "")
+                                             (or label ""))
+                                format
+                                {:last-pattern "/link"}))
+             (state/set-editor-show-input nil)
+             (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+               (when-let [input (gdom/getElement id)]
+                 (.focus input)
+                 (util/move-cursor-to input saved-cursor)))))
+    true)
 
-     (when format
-       (image-uploader id format))]))
+   (when format
+     (image-uploader id format))])

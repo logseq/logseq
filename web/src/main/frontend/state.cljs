@@ -3,7 +3,9 @@
             [rum.core :as rum]
             [frontend.util :as util]
             [clojure.string :as string]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [goog.object :as gobj]
+            [goog.dom :as gdom]))
 
 (defonce state
   (atom
@@ -119,8 +121,11 @@
   (get-in @state [:editor/content input-id]))
 
 (defn set-edit-content!
-  [input-id value]
+  [input-id value set-input-value?]
   (when input-id
+    (when set-input-value?
+      (when-let [input (gdom/getElement input-id)]
+       (gobj/set input "value" value)))
     (update-state! :editor/content (fn [m]
                                      (assoc m input-id value)))))
 
@@ -308,10 +313,8 @@
 (defn set-heading-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
-    (reset! state
-            (-> @state
-                (assoc-in [:editor/content edit-input-id] content)
-                (assoc    :editor/last-saved-cursor new-pos)))))
+    (set-edit-content! edit-input-id content true)
+    (reset! state (assoc @state :editor/last-saved-cursor new-pos))))
 
 (defn set-theme!
   [theme]
