@@ -279,10 +279,10 @@
               {:title "Settings"
                :options {:href (str "/file/" (util/url-encode config/config-file))}}
               {:title "Bug report"
-               :options {:href "https://github.com/logseq/issues/issues/new"
+               :options {:href "https://github.com/logseq/logseq/issues/new"
                          :target "_blank"}}
               {:title "Feature request"
-               :options {:href "https://github.com/logseq/issues/issues/new"
+               :options {:href "https://github.com/logseq/logseq/issues/new"
                          :target "_blank"}}
               {:title "Logseq documentation"
                :options {:href "/docs"}}
