@@ -498,7 +498,10 @@
             page)
           react
           seq-flatten
-          sort-by-pos))))
+          sort-by-pos
+          (map (fn [heading]
+                 (dissoc heading :meta)))
+          ))))
 
 (defn get-page-name
   [file ast]
@@ -768,7 +771,7 @@
      (mapv
       (fn [page]
         [page
-         (get-page-headings repo-url page)
+         ;; (get-page-headings repo-url page)
          (get-page-format page)])
       pages))))
 

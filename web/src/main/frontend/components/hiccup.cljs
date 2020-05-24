@@ -437,15 +437,14 @@
         collapsed? (or toggle-collapsed? @collapsed-atom?)
         agenda? (= (:id config) "agenda")
         start-level (or (:start-level config) 1)]
-    [:<>
+    [:div {:key (str uuid)}
      (if show-page?
        (let [page (db/entity (:db/id page))]
          [:a.page-ref {:href (str "/page/" (util/url-encode (:page/name page)))}
           (util/capitalize-all (:page/name page))]))
      (when-not lock?
        [:div.ls-heading-parent.flex-1
-        {:key (str uuid)
-         :id heading-id
+        {:id heading-id
          :headingid (str uuid)
          :level level
          :class (if dummy? "dummy")}
@@ -511,9 +510,10 @@
 
     nil))
 
-(defn heading
+(rum/defc heading
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children format]
            :as t}]
+  (prn "re-render")
   (let [config (assoc config :heading t)
         agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t
@@ -728,7 +728,7 @@
 ;; TODO: handle case of no headings
 (defn ->hiccup
   [headings config]
-  (let [headings (map-indexed (fn [idx heading] ["Heading" (assoc heading :heading/idx idx)]) headings)
+  (let [headings (map (fn [heading] ["Heading" heading]) headings)
         blocks (blocks config headings)]
     (->elem
      :div.content

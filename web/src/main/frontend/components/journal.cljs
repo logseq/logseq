@@ -13,14 +13,16 @@
             [frontend.utf8 :as utf8]
             [goog.object :as gobj]))
 
-(rum/defc journal-cp
+(rum/defc journal-cp < rum/reactive
   [[title headings format]]
   (let [;; Don't edit the journal title
+        page (string/lower-case title)
+        headings (db/get-page-headings page)
         headings (when (seq headings)
                    (update (vec headings) 0 assoc :heading/lock? true))
         headings (db/with-dummy-heading headings format nil true)
 
-        encoded-page-name (util/url-encode (string/lower-case title))]
+        encoded-page-name (util/url-encode page)]
     [:div.flex-1
      [:a.initial-color {:href (str "/page/" encoded-page-name)
                         :on-click (fn [e]
@@ -46,8 +48,8 @@
   [latest-journals]
   [:div#journals
    (ui/infinite-list
-    (for [[journal-name body format] latest-journals]
+    (for [[journal-name format] latest-journals]
       [:div.journal.content {:key journal-name}
-       (journal-cp [journal-name body format])])
+       (journal-cp [journal-name format])])
     {:on-load (fn []
                 (handler/load-more-journals!))})])
