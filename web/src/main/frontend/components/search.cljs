@@ -48,7 +48,7 @@
   (let [new-page [{:type :new-page}]
         pages (map (fn [page] {:type :page :data page}) pages)
         blocks (map (fn [block] {:type :block :data block}) blocks)
-        result (concat new-page pages blocks)]
+        result (concat pages blocks new-page)]
     [:div.absolute.rounded-md.shadow-lg
      {:style (merge
               {:top 48
