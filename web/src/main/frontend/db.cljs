@@ -943,21 +943,23 @@
            seq-flatten))))
 
 (defn get-matched-headings
-  [pattern limit]
+  [match-fn limit]
   (when-let [repo (state/get-current-repo)]
-    (->> (q repo [:matched-headings] {:use-cache? false}
-           '[:find ?heading
-             :in $ ?pattern
-             :where
-             [?heading :heading/content ?content]
-             [(re-find ?pattern ?content)]]
-           pattern)
-         react
-         (take limit)
-         seq-flatten
-         (pull-many '[:heading/uuid
-                      :heading/content
-                      {:heading/page [:page/name]}]))))
+    (let [pred (fn [db content]
+                 (match-fn content))]
+      (->> (q repo [:matched-headings] {:use-cache? false}
+            '[:find ?heading
+              :in $ ?pred
+              :where
+              [?heading :heading/content ?content]
+              [(?pred $ ?content)]]
+             pred)
+          react
+          (take limit)
+          seq-flatten
+          (pull-many '[:heading/uuid
+                       :heading/content
+                       {:heading/page [:page/name]}])))))
 
 ;; TODO: Does the result preserves the order of the arguments?
 (defn get-headings-contents

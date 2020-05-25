@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.config :as config]
+            [frontend.search :as search]
             [clojure.string :as string]
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]
@@ -22,7 +23,8 @@
 
 (rum/defc highlight
   [content q]
-  (let [n (count content)
+  (let [q (search/clean q)
+        n (count content)
         [before after] (string/split content (re-find (re-pattern (str "(?i)" q))
                                                       content))
         [before after] (if (>= n 64)
