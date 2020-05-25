@@ -15,6 +15,7 @@
     :repo/cloning? false
     :repo/loading-files? nil
     :repo/importing-to-db? nil
+    :repo/sync-status {}
     :me nil
     :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
@@ -345,3 +346,9 @@
        (let [content (storage/get (file-content-key repo path))]
          (set-file-content! repo path content false)
          content)))))
+
+(defn update-sync-status!
+  [status]
+  (when (seq status)
+    (when-let [current-repo (get-current-repo)]
+     (set-state! [:repo/sync-status current-repo] status))))

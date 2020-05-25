@@ -144,7 +144,7 @@
 
 (declare map-inline)
 (declare block)
-(defn inline
+(rum/defc inline < rum/reactive
   [config item]
   (match item
     ["Plain" s]
@@ -189,7 +189,7 @@
     ;; get heading content
     (when-not (string/blank? id)
       (when (util/uuid-string? id)
-        (when-let [heading (db/get-heading-by-uuid (uuid id))]
+        (when-let [heading (db/pull-heading (uuid id))]
           [:span
            [:span.text-gray-500 "(("]
            [:a {:href (str "/page/" id)
@@ -199,8 +199,7 @@
                               (state/sidebar-add-block!
                                (:db/id heading)
                                :heading-ref
-                               {:heading (:heading config)
-                                :ref-heading heading})
+                               {:heading heading})
                               (handler/show-right-sidebar)))}
             (->elem :span.block-ref
                     (map-inline config (:heading/title heading)))]
@@ -223,12 +222,11 @@
                 :on-click (fn [e]
                             (util/stop e)
                             (when (gobj/get e "shiftKey")
-                              (when-let [page (db/entity [:page/name s])]
+                              (when-let [page (db/entity [:page/name (string/lower-case s)])]
                                 (state/sidebar-add-block!
-                                 (get-in config [:heading :db/id])
-                                 :page-ref
-                                 {:heading (:heading config)
-                                  :ref-page page}))
+                                 (:db/id page)
+                                 :page
+                                 {:page page}))
                               (handler/show-right-sidebar)))} s]
            [:span.text-gray-500 "]]"]])
 
@@ -421,9 +419,9 @@
 
 (rum/defcs heading-cp < rum/reactive
   (rum/local false ::collapsed?)
-  ;; {:did-update (fn [state]
-  ;;                (util/code-highlight!)
-  ;;                state)}
+  {:did-update (fn [state]
+                 (util/code-highlight!)
+                 state)}
   [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
   (let [config (assoc config :heading heading)
         ref? (boolean (:ref? config))
@@ -437,10 +435,19 @@
         collapsed? (or toggle-collapsed? @collapsed-atom?)
         agenda? (= (:id config) "agenda")
         start-level (or (:start-level config) 1)]
-    [:div {:key (str uuid)}
+    [:<>
      (if show-page?
        (let [page (db/entity (:db/id page))]
-         [:a.page-ref {:href (str "/page/" (util/url-encode (:page/name page)))}
+         [:a.page-ref {:href (str "/page/" (util/url-encode (:page/name page)))
+                       :on-click (fn [e]
+                                   (util/stop e)
+                                   (when (gobj/get e "shiftKey")
+                                     (when-let [page (db/entity [:page/name (:page/name page)])]
+                                       (state/sidebar-add-block!
+                                        (:db/id page)
+                                        :page
+                                        {:page page}))
+                                     (handler/show-right-sidebar)))}
           (util/capitalize-all (:page/name page))]))
      (when-not lock?
        [:div.ls-heading-parent.flex-1
@@ -510,10 +517,9 @@
 
     nil))
 
-(rum/defc heading
+(rum/defc heading < rum/static
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children format]
            :as t}]
-  (prn "re-render")
   (let [config (assoc config :heading t)
         agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t
@@ -725,14 +731,16 @@
   [config col]
   (map #(block config %) col))
 
-;; TODO: handle case of no headings
 (defn ->hiccup
   [headings config]
-  (let [headings (map (fn [heading] ["Heading" heading]) headings)
-        blocks (blocks config headings)]
-    (->elem
-     :div.content
-     blocks)))
+  [:div.content
+   (for [item headings]
+     (let [item (if (:heading/dummy? item)
+                  item
+                  (dissoc item :heading/meta))]
+       (rum/with-key
+        (heading config item)
+        (:heading/uuid item))))])
 
 (comment
   ;; timestamps

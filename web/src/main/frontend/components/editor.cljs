@@ -125,7 +125,7 @@
                          (+ current-pos))
                   (subs edit-content pos current-pos))
               matched-pages (when-not (string/blank? q)
-                              (get-matched-pages q))
+                              (map util/capitalize-all (get-matched-pages q)))
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-page-search false)
                                (insert-command! id
@@ -295,7 +295,7 @@
         (do
           (util/stop e)
           ;; delete heading, edit previous heading
-          (let [heading (db/entity [:heading/uuid heading-id])
+          (let [heading (db/pull [:heading/uuid heading-id])
                 heading-parent (gdom/getElement heading-parent-id)
                 sibling-heading (gdom/getPreviousElementSibling heading-parent)]
             (handler/delete-heading! heading dummy?)

@@ -25,6 +25,53 @@
      {:alt "Logseq",
       :src "/static/img/logo.png"}]]])
 
+(rum/defc sync-status < rum/reactive
+  []
+  (let [repo (state/get-current-repo)
+        git-status (db/sub-key-value repo :git/status)
+        pulling? (= :pulling git-status)
+        pushing? (= :pushing git-status)
+        status (state/sub [:repo/sync-status repo])
+        status (remove (fn [[_ files]]
+                         (empty? files))
+                       status)
+        synced? (empty? (apply concat (vals status)))
+        last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
+    (ui/dropdown
+     (fn [{:keys [toggle-fn]}]
+       [:div.cursor.w-3.h-3.sync-status.mr-2.mt-1
+        {:class (if synced? "bg-green-600" "bg-orange-400")
+         :style {:border-radius 6}
+         :on-mouse-over toggle-fn}])
+     (fn [{:keys [toggle-fn]}]
+       [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
+        (when synced?
+          [:p "All local changes are synced!"])
+        (when-not synced?
+          [:div
+           [:div.changes
+            (for [[k files] status]
+              [:div {:key (str "sync-" (name k))}
+               [:div.text-sm.font-bold (string/capitalize (name k))]
+               [:ul
+                (for [file files]
+                  [:li {:key (str "sync-" file)}
+                   file])]])]
+           [:div.flex.flex-row.justify-between.align-items.mt-2
+            (ui/button "Push now"
+              :on-click (fn [] (handler/push repo)))
+            (if pushing?
+              [:span.lds-dual-ring.mt-1])]])
+        [:hr]
+        [:div
+         [:p {:style {:font-size 12}} "Last pulled at: "
+          last-pulled-at]
+         [:div.flex.flex-row.justify-between.align-items
+          (ui/button "Pull now"
+            :on-click (fn [] (handler/pull-current-repo)))
+          (if pulling?
+            [:span.lds-dual-ring.mt-1])]]]))))
+
 (rum/defc repos < rum/reactive
   [current-repo head?]
   (let [get-repo-name-f (fn [repo]
@@ -200,129 +247,118 @@
     [:div {:class (if white? "white-theme" "dark-theme")}
      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden
-      [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
-       {:class (if @open?
-                 "opacity-75 pointer-events-auto"
-                 "opacity-0 pointer-events-none")
-        :on-click close-fn}]
-      [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
-       {:class (if @open?
-                 "translate-x-0"
-                 "-translate-x-full")
-        :style {:background-color "#002b36"}}
-       (if @open?
-         [:div.absolute.top-0.right-0.-mr-14.p-1
-          [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
-           {:on-click close-fn}
-           [:svg.h-6.w-6.text-white
-            {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-            [:path
-             {:d "M6 18L18 6M6 6l12 12",
-              :stroke-width "2",
-              :stroke-linejoin "round",
-              :stroke-linecap "round"}]]]])
-       [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
-        (repos current-repo false)]
-       [:div.flex-1.h-0.overflow-y-auto
-        (sidebar-nav route-match close-fn)]]]
-     [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-      [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10#head
-       [:button.px-4.text-gray-400.focus:outline-none.focus:text-gray-400.md:hidden.menu
-        {:on-click open-fn}
-        [:svg.h-6.w-6
-         {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-         [:path
-          {:d "M4 6h16M4 12h16M4 18h7",
-           :stroke-width "2",
-           :stroke-linejoin "round",
-           :stroke-linecap "round"}]]]
-       [:div.flex-1.px-4.flex.justify-between
-        (search/search)
-        [:div.ml-4.flex.items-center.md:ml-6
-         (repos current-repo true)
-         [:a.ml-1 {:title "Draw with Excalidraw"
-                   :href "/draw"}
-          [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
-           (svg/excalidraw-logo)]]
-         ;; [:div {:class (if pulling? "loader")}
-         ;;  [:a {:title "Git pull"}
-         ;;   [:button.p-1.m-2.text-gray-400.rounded-full.focus:outline-none.focus:shadow-outline.focus:text-gray-700.pull
-         ;;    {:on-click handler/pull-current-repo}
-         ;;    [:svg.h-6.w-6
-         ;;     {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-         ;;     [:path
-         ;;      {:d
-         ;;       "M6 18.7V21a1 1 0 0 1-2 0v-5a1 1 0 0 1 1-1h5a1 1 0 1 1 0 2H7.1A7 7 0 0 0 19 12a1 1 0 1 1 2 0 9 9 0 0 1-15 6.7zM18 5.3V3a1 1 0 0 1 2 0v5a1 1 0 0 1-1 1h-5a1 1 0 0 1 0-2h2.9A7 7 0 0 0 5 12a1 1 0 1 1-2 0 9 9 0 0 1 15-6.7z"
-         ;;       :stroke-width "1",
-         ;;       :stroke-linejoin "round",
-         ;;       :stroke-linecap "round"}]]]]]
-         (ui/dropdown-with-links
-          (fn [{:keys [toggle-fn]}]
-            [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
-             {:on-click toggle-fn}
-             (if-let [avatar (:avatar me)]
-               [:img.h-7.w-7.rounded-full
-                {:src avatar}]
-               [:div.h-7.w-7.rounded-full.bg-base-3])])
-          (let [logged? (:email me)]
-            (->>
-             [(when logged?
-                {:title "New page"
-                 :options {:href "/new-page"}})
-              (when logged?
-                {:title "Your repos"
-                 :options {:href "/repos"}})
-              (when logged?
-                {:title "Your pages"
-                 :options {:href "/all-pages"}})
-              (when logged?
-                {:title "Your files"
-                 :options {:href "/all-files"}})
-              {:title "Settings"
-               :options {:href (str "/file/" (util/url-encode config/config-file))}}
-              {:title "Bug report"
-               :options {:href "https://github.com/logseq/logseq/issues/new"
-                         :target "_blank"}}
-              {:title "Feature request"
-               :options {:href "https://github.com/logseq/logseq/issues/new"
-                         :target "_blank"}}
-              {:title "Logseq documentation"
-               :options {:href "/docs"}}
-              (when logged?
-                {:title "Sign out"
-                 :options {:on-click handler/sign-out!}})]
-             (remove nil?))))
+       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
+        {:class (if @open?
+                  "opacity-75 pointer-events-auto"
+                  "opacity-0 pointer-events-none")
+         :on-click close-fn}]
+       [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
+        {:class (if @open?
+                  "translate-x-0"
+                  "-translate-x-full")
+         :style {:background-color "#002b36"}}
+        (if @open?
+          [:div.absolute.top-0.right-0.-mr-14.p-1
+           [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+            {:on-click close-fn}
+            [:svg.h-6.w-6.text-white
+             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+             [:path
+              {:d "M6 18L18 6M6 6l12 12",
+               :stroke-width "2",
+               :stroke-linejoin "round",
+               :stroke-linecap "round"}]]]])
+        [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
+         (repos current-repo false)]
+        [:div.flex-1.h-0.overflow-y-auto
+         (sidebar-nav route-match close-fn)]]]
+      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
+       [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-10#head
+        [:button.px-4.text-gray-400.focus:outline-none.focus:text-gray-400.md:hidden.menu
+         {:on-click open-fn}
+         [:svg.h-6.w-6
+          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+          [:path
+           {:d "M4 6h16M4 12h16M4 18h7",
+            :stroke-width "2",
+            :stroke-linejoin "round",
+            :stroke-linecap "round"}]]]
+        [:div.flex-1.px-4.flex.justify-between
+         (search/search)
+         [:div.ml-4.flex.items-center.md:ml-6
+          (sync-status)
+          (repos current-repo true)
+          [:a.ml-1 {:title "Draw with Excalidraw"
+                    :href "/draw"}
+           [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
+            (svg/excalidraw-logo)]]
+          (ui/dropdown-with-links
+           (fn [{:keys [toggle-fn]}]
+             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
+              {:on-click toggle-fn}
+              (if-let [avatar (:avatar me)]
+                [:img.h-7.w-7.rounded-full
+                 {:src avatar}]
+                [:div.h-7.w-7.rounded-full.bg-base-3])])
+           (let [logged? (:email me)]
+             (->>
+              [(when logged?
+                 {:title "New page"
+                  :options {:href "/new-page"}})
+               (when logged?
+                 {:title "Your repos"
+                  :options {:href "/repos"}})
+               (when logged?
+                 {:title "Your pages"
+                  :options {:href "/all-pages"}})
+               (when logged?
+                 {:title "Your files"
+                  :options {:href "/all-files"}})
+               {:title "Settings"
+                :options {:href (str "/file/" (util/url-encode config/config-file))}}
+               {:title "Bug report"
+                :options {:href "https://github.com/logseq/logseq/issues/new"
+                          :target "_blank"}}
+               {:title "Feature request"
+                :options {:href "https://github.com/logseq/logseq/issues/new"
+                          :target "_blank"}}
+               {:title "Logseq documentation"
+                :options {:href "/docs"}}
+               (when logged?
+                 {:title "Sign out"
+                  :options {:on-click handler/sign-out!}})]
+              (remove nil?))))
 
-         [:a.hover:text-gray-900.text-gray-500.ml-3
-          {:on-click (fn []
-                       (let [sidebar (d/by-id "right-sidebar")]
-                         (if (d/has-class? sidebar "enter")
-                           (handler/hide-right-sidebar)
-                           (handler/show-right-sidebar))))}
-          (svg/menu)]]]]
-      [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-hidden
-       {:tabIndex "0"
-        :style {:width "100%"
-                :height "100%"}}
-       [:div#main-content
-        {:style {:width "100%"
-                 :height "100%"
-                 :overflow-y "scroll"
-                 :padding-right 17
-                 :box-sizing "content-box"}}
-        [:div.flex.justify-center
-         [:div.flex-1.m-6#main-content-container
-          {:style {:position "relative"
-                   :max-width 700
-                   :margin-bottom 200}}
-          main-content]]]
-       (right-sidebar/sidebar)]
-      [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
-       {:href "/"
-        :style {:position "absolute"
-                :top 6
-                :left 16
-                :z-index 111}                                                }
-       (svg/logo)]
-      (ui/notification)
-      (custom-context-menu)]]]))
+          [:a.hover:text-gray-900.text-gray-500.ml-3
+           {:on-click (fn []
+                        (let [sidebar (d/by-id "right-sidebar")]
+                          (if (d/has-class? sidebar "enter")
+                            (handler/hide-right-sidebar)
+                            (handler/show-right-sidebar))))}
+           (svg/menu)]]]]
+       [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-hidden
+        {:tabIndex "0"
+         :style {:width "100%"
+                 :height "100%"}}
+        [:div#main-content
+         {:style {:width "100%"
+                  :height "100%"
+                  :overflow-y "scroll"
+                  :padding-right 17
+                  :box-sizing "content-box"}}
+         [:div.flex.justify-center
+          [:div.flex-1.m-6#main-content-container
+           {:style {:position "relative"
+                    :max-width 700
+                    :margin-bottom 200}}
+           main-content]]]
+        (right-sidebar/sidebar)]
+       [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
+        {:href "/"
+         :style {:position "absolute"
+                 :top 6
+                 :left 16
+                 :z-index 111}                                                }
+        (svg/logo)]
+       (ui/notification)
+       (custom-context-menu)]]]))

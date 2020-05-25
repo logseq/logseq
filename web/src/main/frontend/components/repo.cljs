@@ -37,7 +37,10 @@
             [:a.control {:title "Clone again and rebuild the db"
                          :on-click (fn []
                                      (handler/rebuild-index! repo)
-                                     (handler/redirect! {:to :home}))}
+                                     (js/setTimeout
+                                      (fn []
+                                        (handler/redirect! {:to :home}))
+                                      500))}
              "Rebuild index"]
             [:a.text-gray-400.ml-4 {:on-click (fn []
                                                 (handler/remove-repo! repo))}

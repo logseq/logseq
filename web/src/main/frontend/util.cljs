@@ -11,7 +11,8 @@
             [goog.string.format]
             [dommy.core :as d]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [cljs-time.format :as format]))
 
 (defn format
   [fmt & args]
@@ -635,3 +636,13 @@
     (prn k)
     (time (reset! result (f)))
     @result))
+
+(defn concat-without-nil
+  [& cols]
+  (->> (apply concat cols)
+       (remove nil?)))
+
+(def custom-formatter (format/formatter "yyyy-MM-dd HH:mm:ssZ"))
+
+(defn get-date-time-string [date-time]
+  (format/unparse custom-formatter date-time))

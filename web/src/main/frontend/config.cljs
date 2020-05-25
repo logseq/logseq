@@ -30,8 +30,9 @@
   []
   (or 10 (get-in @state/state [:config :git-push-secs])))
 
-;; TODO: 1. add more formats
-;;       2. configure in the file `logseq.json`
+(defn git-repo-status-secs
+  []
+  (or 10 (get-in @state/state [:config :git-push-secs])))
 
 (defn text-formats
   []

@@ -24,11 +24,6 @@
 (defn build-sidebar-item
   [db-id block-type block-data]
   (case block-type
-    :page-ref
-    ["Page reference"
-     [:div.ml-2
-      (heading-cp (:heading block-data))]]
-
     :heading-ref
     ["Block reference"
      [:div.ml-2
@@ -82,43 +77,40 @@
     (if page
       (util/url-decode (string/lower-case page)))))
 
-(defonce fake-db-id "graph-db-id")
 (defn render-graph
   [state]
-  (let [match (:route-match @state/state)
-        collapse? (get-in @state/state [:ui/sidebar-collapsed-blocks fake-db-id])
-        theme (:ui/theme @state/state)]
-    (when-not collapse?
-      (when-let [page (get-page match)]
-        (let [graph (db/build-page-graph page theme)]
-          (vis/new-network "page-graph" graph))))
-    state))
+  (when-let [graph (first (get state :rum/args))]
+    (vis/new-network "page-graph" graph))
+  state)
 
 (rum/defc graph < rum/reactive
   {:did-mount render-graph
-   :did-remount render-graph}
-  []
-  (let [match (state/sub :route-match)
-        dark? (= "dark" (state/sub :ui/theme))]
-    [:div.sidebar-item.flex-col.flex-1
-     [:div#theme-selector.flex.flex-row.justify-between
-      [:div.ml-2.font-bold "Dark theme"]
-      [:div.px-1
-       (ui/toggle dark? (fn []
-                          (state/set-theme! (if dark? "white" "dark"))))]]
-     [:div#page-graph]]))
+   :did-update render-graph}
+  [data dark?]
+  [:div.sidebar-item.flex-col.flex-1
+   [:div#theme-selector.flex.flex-row.justify-between
+    [:div.ml-2.font-bold "Dark theme"]
+    [:div.px-1
+     (ui/toggle dark? (fn []
+                        (state/set-theme! (if dark? "white" "dark"))))]]
+   [:div#page-graph]])
 
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub :sidebar/blocks)
         repo (state/sub :git/current-repo)
-        starred (state/sub [:config repo :starred])]
+        starred (state/sub [:config repo :starred])
+        match (state/sub :route-match)
+        theme (state/sub :ui/theme)
+        dark? (= "dark" theme)
+        page (get-page match)
+        graph-data (db/build-page-graph page theme)]
     [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto {:style {:padding-bottom 300}}
      (for [[idx [db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item idx db-id block-type block-data)
          (str "sidebar-block-" idx)))
-     (graph)
+     (graph graph-data dark?)
      (when (and repo (seq starred))
        [:div.sidebar-item.flex-col.flex-1.content
         [:div.flex.flex-row

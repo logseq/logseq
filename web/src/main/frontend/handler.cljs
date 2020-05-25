@@ -29,7 +29,8 @@
             [frontend.format.protocol :as protocol]
             [frontend.format.block :as block]
             [frontend.commands :as commands]
-            [frontend.encrypt :as encrypt])
+            [frontend.encrypt :as encrypt]
+            [cljs-time.local :as tl])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -121,6 +122,11 @@
 (defn- set-git-status!
   [repo-url value]
   (db/set-key-value repo-url :git/status value))
+
+(defn- set-git-last-pulled-at!
+  [repo-url]
+  (db/set-key-value repo-url :git/last-pulled-at
+                    (util/get-date-time-string (tl/local-now))))
 
 (defn- set-git-error!
   [repo-url value]
@@ -246,10 +252,7 @@
   [repo-url token]
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
-           (not (state/get-edit-input-id))
-           ;; (or (nil? status)
-           ;;     (= status :pulling))
-           )
+           (not (state/get-edit-input-id)))
       (set-git-status! repo-url :pulling)
       (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
         (p/let [result (git/fetch repo-url token)
@@ -260,6 +263,7 @@
                         (-> (git/checkout repo-url)
                             (p/then (fn [result]
                                       (set-git-status! repo-url nil)
+                                      (set-git-last-pulled-at! repo-url)
                                       (when (and latest-commit fetchHead
                                                  (not= latest-commit fetchHead))
                                         (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
@@ -303,7 +307,8 @@
                     (first commits)
                     commits)))
        (p/catch (fn [error]
-                  (prn "get latest commit failed: " error))))))
+                  (prn "get latest commit failed: " error)
+                  (js/console.log (.-stack error)))))))
 
 (defn set-latest-commit-if-exists! [repo-url]
   (get-latest-commit
@@ -328,7 +333,6 @@
             (util/p-handle
              (git/push repo-url token)
              (fn []
-               (prn "Push successfully!")
                (set-git-status! repo-url nil)
                (set-git-error! repo-url nil)
                (set-latest-commit-if-exists! repo-url))
@@ -478,12 +482,26 @@
     (js/setInterval push
                     (* (config/git-push-secs) 1000))))
 
+(defn update-repo-sync-status!
+  []
+  (p/let [changes (git/get-status-matrix (state/get-current-repo))]
+    (state/update-sync-status! changes)))
+
+(defn periodically-update-repo-status
+  [repo-url]
+  (js/setInterval update-repo-sync-status!
+                  (* (config/git-repo-status-secs) 1000)))
+
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (when-not config/dev?
-    (periodically-pull repo-url pull-now?)
-    (periodically-push-tasks repo-url)))
+  (periodically-pull repo-url pull-now?)
+  (periodically-push-tasks repo-url)
+  (periodically-update-repo-status repo-url)
+  ;; (when-not config/dev?
+  ;;   (periodically-pull repo-url pull-now?)
+  ;;   (periodically-push-tasks repo-url))
+  )
 
 (defn render-local-images!
   []
@@ -707,32 +725,36 @@
             (redirect! {:to :page
                         :path-params {:name page}})))))))
 
+(defn- with-heading-meta
+  [heading]
+  (if (:heading/dummy? heading)
+    heading
+    (assoc heading :heading/meta
+           (:heading/meta (db/entity [:heading/uuid (:heading/uuid heading)])))))
+
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file page dummy? format] :as heading} value]
   (let [repo (state/get-current-repo)
+        heading (with-heading-meta heading)
         format (or format (state/get-preferred-format))]
     (when (not= (string/trim content) value) ; heading content changed
       (let [file (db/entity (:db/id file))
             page (db/entity (:db/id page))
             save-heading (fn [file {:heading/keys [uuid content meta page dummy? format] :as heading}]
                            (let [file-path (:file/path file)
-                                 t1 (util/time-ms)
                                  format (format/get-format file-path)]
                              (let [file-content (state/get-file file-path)
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
-                                   t2 (util/time-ms)]
-                               (prn "save heading spent part1: " (- (util/time-ms) t2))
+                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
                                (db/transact-react!
-                                 repo
-                                 (concat
-                                  pages
-                                  headings
-                                  after-headings)
-                                 {:key :page/headings
-                                  :data heading})
-                               (prn "save heading spent: " (- (util/time-ms) t2))
+                                repo
+                                (concat
+                                 pages
+                                 headings
+                                 after-headings)
+                                {:key :heading/change
+                                 :data headings})
                                (alter-file repo file-path new-content {:reset? false})
                                )))]
         (cond
@@ -775,6 +797,7 @@
   [{:heading/keys [uuid content meta file dummy? level] :as heading} value]
   (let [repo (state/get-current-repo)
         value (string/trim value)
+        heading (with-heading-meta heading)
         format (:heading/format heading)
         new-heading-content (config/default-empty-heading format level)]
     (let [file (db/entity (:db/id file))
@@ -785,17 +808,15 @@
           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
           first-heading (first headings)
           last-heading (last headings)
-          after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
-          t1 (util/time-ms)]
+          after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
       (db/transact-react!
        repo
        (concat
         pages
         headings
         after-headings)
-       {:key :page/headings
-        :data heading})
-      (prn "spent time: " (- (util/time-ms) t1))
+       {:key :heading/change
+        :data headings})
       (alter-file repo file-path new-content {:reset? false})
       [first-heading last-heading new-heading-content])))
 
@@ -814,23 +835,30 @@
   [{:heading/keys [uuid meta content file] :as heading} dummy?]
   (when-not dummy?
     (let [repo (state/get-current-repo)
+          heading (db/pull [:heading/uuid uuid])
           file-path (:file/path (db/entity (:db/id file)))
           file-content (state/get-file file-path)
           after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
           new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
-      (db/transact!
-        (concat
-         [[:db.fn/retractEntity [:heading/uuid uuid]]]
-         after-headings
-         [{:file/path file-path}]))
+      (db/transact-react!
+       repo
+       (concat
+        [[:db.fn/retractEntity [:heading/uuid uuid]]]
+        after-headings
+        [{:file/path file-path}])
+       {:key :heading/change
+        :data [heading]})
       (alter-file repo file-path new-content {:reset? false}))))
 
 (defn delete-headings!
   [heading-uuids]
   (when (seq heading-uuids)
     (let [repo (state/get-current-repo)
-          first-heading (db/entity [:heading/uuid (first heading-uuids)])
-          last-heading (db/entity [:heading/uuid (last heading-uuids)])
+          headings (db/pull-many (mapv (fn [id]
+                                         [:heading/uuid id])
+                                       heading-uuids))
+          first-heading (first headings)
+          last-heading (last headings)
           file (db/entity (:db/id (:heading/file first-heading)))
           file-path (:file/path file)
           file-content (state/get-file file-path)
@@ -838,14 +866,17 @@
           end-pos (:end-pos (:heading/meta last-heading))
           after-headings (rebuild-after-headings repo file end-pos start-pos)
           new-content (utf8/delete! file-content start-pos end-pos)]
-      (db/transact!
-        (concat
-         (mapv
-          (fn [uuid]
-            [:db.fn/retractEntity [:heading/uuid uuid]])
-          heading-uuids)
-         after-headings
-         [{:file/path file-path}]))
+      (db/transact-react!
+       repo
+       (concat
+        (mapv
+         (fn [uuid]
+           [:db.fn/retractEntity [:heading/uuid uuid]])
+         heading-uuids)
+        after-headings
+        [{:file/path file-path}])
+       {:key :heading/change
+        :data headings})
       (alter-file repo file-path new-content {:reset? false}))))
 
 (defn set-heading-property!
