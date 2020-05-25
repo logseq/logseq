@@ -11,4 +11,4 @@
     [:a {:on-click (fn [] (.back (gobj/get js/window "history")))}
      [:img.h-8.w-auto
       {:alt "Logseq"
-       :src "/static/img/logo.png"}]]]])
+       :src "/static/img/white_logo.png"}]]]])

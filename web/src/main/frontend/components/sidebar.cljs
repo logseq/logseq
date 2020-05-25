@@ -23,7 +23,7 @@
    [:a.opacity-50.hover:opacity-100 {:href "/docs"}
     [:img.h-6.w-auto
      {:alt "Logseq",
-      :src "/static/img/logo.png"}]]])
+      :src "/static/img/white_logo.png"}]]])
 
 (rum/defc sync-status < rum/reactive
   []
