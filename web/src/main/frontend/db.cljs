@@ -36,6 +36,10 @@
   [repo]
   (str "logseq-db/" (get-repo-path repo)))
 
+(defn datascript-files-db
+  [repo]
+  (str "logseq-files-db/" (get-repo-path repo)))
+
 (defn clear-store!
   []
   (p/let [_ (.clear localforage)
@@ -45,7 +49,8 @@
 
 (defn remove-db!
   [repo]
-  (.removeItem localforage-instance (datascript-db repo)))
+  (.removeItem localforage-instance (datascript-db repo))
+  (.removeItem localforage-instance (datascript-files-db repo)))
 
 (def react util/react)
 
@@ -70,9 +75,20 @@
          @conn
          conn)))))
 
+(defn get-files-conn
+  [repo]
+  (get @conns (datascript-files-db repo)))
+
 (defn remove-conn!
   [repo]
-  (swap! conns dissoc (datascript-db repo)))
+  (swap! conns dissoc (datascript-db repo))
+  (swap! conns dissoc (datascript-files-db repo))
+  )
+
+(def files-db-schema
+  {:file/path {:db/unique :db.unique/identity
+               :db/index       true}
+   :file/content {}})
 
 ;; A page can corresponds to multiple files (same title),
 ;; a month journal file can have multiple pages,
@@ -160,9 +176,11 @@
   (dt/read-transit-str s))
 
 ;; persisting DB between page reloads
-(defn persist [repo db]
+(defn persist [repo db files-db?]
   (.setItem localforage-instance
-            (datascript-db repo)
+            (if files-db?
+              (datascript-files-db repo)
+              (datascript-db repo))
             (db->string db)))
 
 (defn reset-conn! [conn db]
@@ -267,13 +285,16 @@
       [[key]])))
 
 (defn q
-  [repo k {:keys [use-cache?]
-           :or {use-cache? true}} query & inputs]
+  [repo k {:keys [use-cache? files-db?]
+           :or {use-cache? true
+                files-db? false}} query & inputs]
   (if-let [cached (and
                    use-cache?
                    (:result (get @query-state (vec (cons repo k)))))]
     cached
-    (when-let [conn (get-conn repo)]
+    (when-let [conn (if files-db?
+                      (deref (get-files-conn repo))
+                      (get-conn repo))]
       (let [result (if (seq inputs)
                      (apply d/q query conn inputs)
                      (d/q query conn))]
@@ -290,17 +311,22 @@
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
-   (let [tx-data (remove nil? tx-data)]
+   (let [tx-data (->> (util/remove-nils tx-data)
+                      (remove nil?))]
      (when (seq tx-data)
        (when-let [conn (get-conn repo-url false)]
          (d/transact! conn (vec tx-data)))))))
 
 (defn transact-react!
-  [repo-url tx-data {:keys [key data] :as handler-opts}]
+  [repo-url tx-data {:keys [key data files-db?] :as handler-opts
+                     :or {files-db? false}}]
   (let [repo-url (or repo-url (state/get-current-repo))
-        tx-data (remove nil? tx-data)]
+        tx-data (->> (util/remove-nils tx-data)
+                     (remove nil?))]
     (when (seq tx-data)
-      (when-let [conn (get-conn repo-url false)]
+      (when-let [conn (if files-db?
+                        (get-files-conn repo-url)
+                        (get-conn repo-url false))]
         (let [db (:db-after (d/transact! conn (vec tx-data)))
               handler-keys (get-handler-keys handler-opts)]
           (doseq [handler-key handler-keys]
@@ -468,11 +494,40 @@
   (let [headings (get-file-headings repo-url path)]
     (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
 
+(defn set-file-content!
+  [repo path content]
+  (when (and repo path)
+    (transact-react!
+     repo
+     [{:file/path path
+       :file/content content}]
+     {:key [:file/content path]
+      :files-db? true})))
+
+(defn get-file
+  ([path]
+   (get-file (state/get-current-repo) path))
+  ([repo path]
+   (when (and repo path)
+     (->
+      (q repo [:file/content path]
+        {:files-db? true
+         :use-cache? true}
+        '[:find ?content
+          :in $ ?path
+          :where
+          [?file :file/path ?path]
+          [?file :file/content ?content]
+          ]
+        path)
+      react
+      ffirst))))
+
 (defn reset-contents-and-headings!
   [repo-url contents headings-pages delete-files delete-headings]
   (let [files (doall
                (map (fn [[file content]]
-                      (state/set-file-content! repo-url file content)
+                      (set-file-content! repo-url file content)
                       {:file/path file})
                  contents))
         all-data (-> (concat delete-files delete-headings files headings-pages)
@@ -633,16 +688,17 @@
                                            (seq (remove #(= page %)
                                                         (:alias directives))))
                           other-alias (distinct
-                                       (if page-file?
-                                         other-alias
-                                         (conj other-alias (string/lower-case file))))]
+                                       (->> (if page-file?
+                                              other-alias
+                                              (conj other-alias (string/lower-case file)))
+                                            (remove nil?)))]
                       (cond->
-                          {:page/name page
-                           :page/file [:file/path file]
-                           :page/journal? journal?
-                           :page/journal-day (if journal?
-                                               (journal-page-name->int page)
-                                               0)}
+                        {:page/name page
+                         :page/file [:file/path file]
+                         :page/journal? journal?
+                         :page/journal-day (if journal?
+                                             (journal-page-name->int page)
+                                             0)}
                         (seq directives)
                         (assoc :page/directives directives)
 
@@ -650,14 +706,22 @@
                         (assoc :page/alias
                                (map
                                  (fn [alias]
-                                   (let [alias (string/lower-case alias)]
-                                     {:page/name alias
-                                      :page/alias (map
-                                                    (fn [alias]
-                                                      {:page/name alias})
-                                                    (conj
-                                                     (remove #{alias} other-alias)
-                                                     page))}))
+                                   (let [alias (string/lower-case alias)
+                                         aliases (->>
+                                                  (distinct
+                                                   (conj
+                                                    (remove #{alias} other-alias)
+                                                    page))
+                                                  (remove nil?))
+                                         aliases (if (seq aliases)
+                                                   (map
+                                                     (fn [alias]
+                                                       {:page/name alias})
+                                                     aliases))]
+                                     (if (seq aliases)
+                                       {:page/name alias
+                                        :page/alias aliases}
+                                       {:page/name alias})))
                                  other-alias))
 
                         (:tags directives)
@@ -736,7 +800,7 @@
 ;; TODO: compare headings
 (defn reset-file!
   [repo-url file content]
-  (state/set-file-content! repo-url file content)
+  (set-file-content! repo-url file content)
   (let [format (format/get-format file)
         utf8-content (utf8/encode content)
         file-content [{:file/path file}]
@@ -948,18 +1012,18 @@
     (let [pred (fn [db content]
                  (match-fn content))]
       (->> (q repo [:matched-headings] {:use-cache? false}
-            '[:find ?heading
-              :in $ ?pred
-              :where
-              [?heading :heading/content ?content]
-              [(?pred $ ?content)]]
+             '[:find ?heading
+               :in $ ?pred
+               :where
+               [?heading :heading/content ?content]
+               [(?pred $ ?content)]]
              pred)
-          react
-          (take limit)
-          seq-flatten
-          (pull-many '[:heading/uuid
-                       :heading/content
-                       {:heading/page [:page/name]}])))))
+           react
+           (take limit)
+           seq-flatten
+           (pull-many '[:heading/uuid
+                        :heading/content
+                        {:heading/page [:page/name]}])))))
 
 ;; TODO: Does the result preserves the order of the arguments?
 (defn get-headings-contents
@@ -1008,20 +1072,30 @@
 (defn restore! [{:keys [repos] :as me} listen-handler render-fn]
   (-> (p/all
        (for [{:keys [id url]} repos]
-         (let [repo url
-               db-name (datascript-db repo)
-               db-conn (d/create-conn schema)]
-           (swap! conns assoc db-name db-conn)
-           (p/let [stored (.getItem localforage-instance db-name)]
-             (if stored
-               (let [stored-db (string->db stored)
-                     attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                 (when (= (:schema stored-db) schema) ;; check for code update
-                   (reset-conn! db-conn attached-db)))
-               (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-             (listen-handler repo db-conn)
-             (when-let [config-content (state/get-file url config/config-file)]
-               (reset-config! url config-content))))))
+         (do
+           (let [repo url
+                 db-name (datascript-files-db repo)
+                 db-conn (d/create-conn files-db-schema)]
+             (swap! conns assoc db-name db-conn)
+             (p/let [stored (.getItem localforage-instance db-name)]
+               (when stored
+                 (let [stored-db (string->db stored)
+                       attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                   (when (= (:schema stored-db) files-db-schema) ;; check for code update
+                     (reset-conn! db-conn attached-db))))
+               (let [db-name (datascript-db repo)
+                     db-conn (d/create-conn schema)]
+                 (swap! conns assoc db-name db-conn)
+                 (p/let [stored (.getItem localforage-instance db-name)]
+                   (if stored
+                     (let [stored-db (string->db stored)
+                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                       (when (= (:schema stored-db) schema) ;; check for code update
+                         (reset-conn! db-conn attached-db)))
+                     (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+                   (listen-handler repo db-conn)
+                   (when-let [config-content (get-file url config/config-file)]
+                     (reset-config! url config-content)))))))))
       (p/then render-fn)))
 
 (defn build-page-graph
@@ -1071,9 +1145,9 @@
                        (distinct)
                        (mapv (fn [p]
                                (cond->
-                                   {:id p
-                                    :label (util/capitalize-all p)
-                                    :value (get-connections p)}
+                                 {:id p
+                                  :label (util/capitalize-all p)
+                                  :value (get-connections p)}
                                  (= p page)
                                  (assoc :color "#5850ec")
                                  dark?

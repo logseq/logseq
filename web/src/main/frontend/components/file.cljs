@@ -41,7 +41,7 @@
                               (when (handler/file-changed? encoded-path content)
                                 (handler/alter-file (state/get-current-repo) path (state/get-edit-content encoded-path) nil))))
         edit-raw-handler (fn []
-                           (let [content (state/get-file path)]
+                           (let [content (db/get-file path)]
                              (content/content encoded-path {:content content
                                                             :format format
                                                             :on-hide (save-file-handler content)})))]

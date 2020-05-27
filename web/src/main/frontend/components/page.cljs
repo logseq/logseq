@@ -56,7 +56,7 @@
                            :heading/file {:db/id (:db/id (:page/file page))}
                            :heading/meta
                            (let [file-id (:db/id (:page/file page))
-                                 content (state/get-file file-path)]
+                                 content (db/get-file file-path)]
                              {:pos (utf8/length (utf8/encode content))
                               :end-pos nil})})
                         journal?)
@@ -115,7 +115,7 @@
              heading-start-pos (get-in (first raw-page-headings) [:heading/meta :pos])]
          (when (or (not (zero? heading-start-pos))
                    (seq (:page/directives page)))
-           (let [content (state/get-file path)
+           (let [content (db/get-file path)
                  encoded-content (utf8/encode content)
                  content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
              [:div.before-heading.ml-4

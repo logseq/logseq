@@ -23,9 +23,6 @@
 
     :journals-length 1
 
-    ;; cached files, {repo-name {:path ""}}
-    :files/content {}
-
     :search/q ""
     :search/result nil
 
@@ -325,27 +322,6 @@
 (defn- file-content-key
   [repo path]
   (str "ls_file_content_" repo path))
-
-(defn set-file-content!
-  ([repo path content]
-   (set-file-content! repo path content true))
-  ([repo path content set-storage?]
-   (when (and repo path)
-     (set-state! [:files/content repo path] content)
-     (when set-storage?
-       (let [file-key (file-content-key repo path)]
-         (storage/set file-key content))))))
-
-(defn get-file
-  ([path]
-   (get-file (get-current-repo) path))
-  ([repo path]
-   (when (and repo path)
-     (if-let [content (sub [:files/content repo path])]
-       content
-       (let [content (storage/get (file-content-key repo path))]
-         (set-file-content! repo path content false)
-         content)))))
 
 (defn update-sync-status!
   [status]

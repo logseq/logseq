@@ -366,11 +366,15 @@
 
 (defn db-listen-to-tx!
   [repo db-conn]
+  (when-let [files-conn (db/get-files-conn repo)]
+    (d/listen! files-conn :persistence
+               (fn [tx-report]
+                 (when-let [db (:db-after tx-report)]
+                   (db/persist repo db true)))))
   (d/listen! db-conn :persistence
              (fn [tx-report]
                (when-let [db (:db-after tx-report)]
-                 (js/setTimeout (fn []
-                                  (db/persist repo db)) 0)))))
+                 (db/persist repo db false)))))
 
 (defn clone
   [repo-url]
@@ -448,7 +452,7 @@
 (defn alter-file
   [repo-url path content {:keys [reset?]
                           :or {reset? true}}]
-  (state/set-file-content! repo-url path content)
+  (db/set-file-content! repo-url path content)
   (when reset?
     (db/reset-file! repo-url path content))
   (util/p-handle
@@ -495,13 +499,10 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  ;; (periodically-pull repo-url pull-now?)
-  ;; (periodically-push-tasks repo-url)
   (periodically-update-repo-status repo-url)
   (when-not config/dev?
     (periodically-pull repo-url pull-now?)
-    (periodically-push-tasks repo-url))
-  )
+    (periodically-push-tasks repo-url)))
 
 (defn render-local-images!
   []
@@ -743,7 +744,7 @@
             save-heading (fn [file {:heading/keys [uuid content meta page dummy? format] :as heading}]
                            (let [file-path (:file/path file)
                                  format (format/get-format file-path)]
-                             (let [file-content (state/get-file file-path)
+                             (let [file-content (db/get-file file-path)
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
@@ -802,7 +803,7 @@
         new-heading-content (config/default-empty-heading format level)]
     (let [file (db/entity (:db/id file))
           file-path (:file/path file)
-          file-content (state/get-file file-path)
+          file-content (db/get-file file-path)
           value (str value "\n" new-heading-content "\n")
           [new-content value] (new-file-content heading file-content value)
           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
@@ -837,7 +838,7 @@
     (let [repo (state/get-current-repo)
           heading (db/pull [:heading/uuid uuid])
           file-path (:file/path (db/entity (:db/id file)))
-          file-content (state/get-file file-path)
+          file-content (db/get-file file-path)
           after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
           new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
       (db/transact-react!
@@ -861,7 +862,7 @@
           last-heading (last headings)
           file (db/entity (:db/id (:heading/file first-heading)))
           file-path (:file/path file)
-          file-content (state/get-file file-path)
+          file-content (db/get-file file-path)
           start-pos (:pos (:heading/meta first-heading))
           end-pos (:end-pos (:heading/meta last-heading))
           after-headings (rebuild-after-headings repo file end-pos start-pos)
@@ -946,8 +947,7 @@
                  (db/remove-conn! url)
                  (db/remove-db! (db/datascript-db url))
                  (fs/rmdir (util/get-repo-dir url))
-                 (state/delete-repo! repo)
-                 )
+                 (state/delete-repo! repo))
                (fn [error]
                  (prn "Delete repo failed, error: " error))))
 
@@ -1152,7 +1152,7 @@
     [path]
     (p/let [content (load-file (state/get-current-repo)
                                path)]
-      (let [db-content (state/get-file path)]
+      (let [db-content (db/get-file path)]
         (prn {:content content
               :utf8-length (utf8/length (utf8/encode content))}))))
 
