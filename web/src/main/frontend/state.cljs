@@ -30,6 +30,7 @@
     :ui/toggle-state false
     :ui/collapsed-headings {}
     :ui/sidebar-collapsed-blocks {}
+    :ui/root-component nil
 
     :github/contents {}
     :config {}
@@ -328,3 +329,11 @@
   (when (seq status)
     (when-let [current-repo (get-current-repo)]
      (set-state! [:repo/sync-status current-repo] status))))
+
+(defn set-root-component!
+  [component]
+  (set-state! :ui/root-component component))
+
+(defn get-root-component
+  []
+  (get @state :ui/root-component))

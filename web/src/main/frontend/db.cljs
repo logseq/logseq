@@ -188,6 +188,11 @@
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 (defonce query-state (atom {}))
+
+(defn clear-query-state!
+  []
+  (reset! query-state {}))
+
 (defn add-q!
   [k query inputs result]
   (let [result-atom (atom result)]

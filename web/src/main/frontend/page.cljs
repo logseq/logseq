@@ -9,6 +9,9 @@
   (view route-match))
 
 (rum/defc current-page < rum/reactive
+  {:did-mount (fn [state]
+                (state/set-root-component! (:rum/react-component state))
+                state)}
   []
   (when-let [route-match (state/sub :route-match)]
     (let [route-name (get-in route-match [:data :name])]

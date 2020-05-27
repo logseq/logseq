@@ -189,9 +189,15 @@
       (ok-handler
        (zipmap files contents)))))
 
+(defn re-render-root!
+  []
+  (when-let [component (state/get-root-component)]
+    (db/clear-query-state!)
+    (rum/request-render component)))
+
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]
-  (let [load-contents (fn [files delete-files delete-headings]
+  (let [load-contents (fn [files delete-files delete-headings re-render?]
                         (load-files-contents!
                          repo-url
                          files
@@ -207,11 +213,13 @@
                                                   (db/extract-all-headings-pages parsed-files)
                                                   [])]
                              (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
-                             (set-state-kv! :repo/importing-to-db? false)))))]
+                             (set-state-kv! :repo/importing-to-db? false)
+                             (when re-render?
+                               (re-render-root!))))))]
 
     (if first-clone?
       (p/let [files (load-files repo-url)]
-        (load-contents files nil nil))
+        (load-contents files nil nil false))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
@@ -222,7 +230,7 @@
                              (db/delete-files remove-files))
               delete-headings (db/delete-headings repo-url (concat remove-files modify-files))
               add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files delete-files delete-headings))))))
+          (load-contents add-or-modify-files delete-files delete-headings true))))))
 
 (defn journal-file-changed?
   [repo-url diffs]
@@ -251,8 +259,7 @@
 (defn pull
   [repo-url token]
   (let [status (db/get-key-value repo-url :git/status)]
-    (when (and
-           (not (state/get-edit-input-id)))
+    (when (not (state/get-edit-input-id))
       (set-git-status! repo-url :pulling)
       (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
         (p/let [result (git/fetch repo-url token)
@@ -500,8 +507,8 @@
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
   (periodically-update-repo-status repo-url)
+  (periodically-pull repo-url pull-now?)
   (when-not config/dev?
-    (periodically-pull repo-url pull-now?)
     (periodically-push-tasks repo-url)))
 
 (defn render-local-images!
