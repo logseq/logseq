@@ -34,11 +34,13 @@
 
 (defn datascript-db
   [repo]
-  (str "logseq-db/" (get-repo-path repo)))
+  (when repo
+    (str "logseq-db/" (get-repo-path repo))))
 
 (defn datascript-files-db
   [repo]
-  (str "logseq-files-db/" (get-repo-path repo)))
+  (when repo
+    (str "logseq-files-db/" (get-repo-path repo))))
 
 (defn clear-store!
   []
@@ -49,7 +51,10 @@
 
 (defn remove-db!
   [repo]
-  (.removeItem localforage-instance (datascript-db repo))
+  (.removeItem localforage-instance (datascript-db repo)))
+
+(defn remove-files-db!
+  [repo]
   (.removeItem localforage-instance (datascript-files-db repo)))
 
 (def react util/react)
@@ -698,12 +703,12 @@
                                               (conj other-alias (string/lower-case file)))
                                             (remove nil?)))]
                       (cond->
-                        {:page/name page
-                         :page/file [:file/path file]
-                         :page/journal? journal?
-                         :page/journal-day (if journal?
-                                             (journal-page-name->int page)
-                                             0)}
+                          {:page/name page
+                           :page/file [:file/path file]
+                           :page/journal? journal?
+                           :page/journal-day (if journal?
+                                               (journal-page-name->int page)
+                                               0)}
                         (seq directives)
                         (assoc :page/directives directives)
 
@@ -1068,40 +1073,49 @@
 
 (defn start-db-conn!
   [me repo listen-handler]
-  (let [db-name (datascript-db repo)
+  (let [files-db-name (datascript-files-db repo)
+        files-db-conn (d/create-conn files-db-schema)
+        db-name (datascript-db repo)
         db-conn (d/create-conn schema)]
+    (swap! conns assoc files-db-name files-db-conn)
     (swap! conns assoc db-name db-conn)
     (listen-handler repo db-conn)
     (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
 
-(defn restore! [{:keys [repos] :as me} listen-handler render-fn]
-  (-> (p/all
-       (for [{:keys [id url]} repos]
-         (do
-           (let [repo url
-                 db-name (datascript-files-db repo)
-                 db-conn (d/create-conn files-db-schema)]
+(defn restore!
+  [{:keys [repos] :as me} listen-handler]
+  (doall
+   (for [{:keys [id url]} repos]
+     (let [repo url
+           db-name (datascript-files-db repo)
+           db-conn (d/create-conn files-db-schema)]
+       (swap! conns assoc db-name db-conn)
+       (->
+        (p/let [stored (-> (.getItem localforage-instance db-name)
+                           (p/then (fn [result]
+                                     result))
+                           (p/catch (fn [error]
+                                      nil)))]
+          (when stored
+            (let [stored-db (string->db stored)
+                  attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+              (when (= (:schema stored-db) files-db-schema) ;; check for code update
+                (reset-conn! db-conn attached-db)))))
+        (p/then
+         (fn []
+           (let [db-name (datascript-db repo)
+                 db-conn (d/create-conn schema)]
              (swap! conns assoc db-name db-conn)
              (p/let [stored (.getItem localforage-instance db-name)]
-               (when stored
+               (if stored
                  (let [stored-db (string->db stored)
                        attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                   (when (= (:schema stored-db) files-db-schema) ;; check for code update
-                     (reset-conn! db-conn attached-db))))
-               (let [db-name (datascript-db repo)
-                     db-conn (d/create-conn schema)]
-                 (swap! conns assoc db-name db-conn)
-                 (p/let [stored (.getItem localforage-instance db-name)]
-                   (if stored
-                     (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                       (when (= (:schema stored-db) schema) ;; check for code update
-                         (reset-conn! db-conn attached-db)))
-                     (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-                   (listen-handler repo db-conn)
-                   (when-let [config-content (get-file url config/config-file)]
-                     (reset-config! url config-content)))))))))
-      (p/then render-fn)))
+                   (when (= (:schema stored-db) schema) ;; check for code update
+                     (reset-conn! db-conn attached-db)))
+                 (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+               (listen-handler repo db-conn)
+               (when-let [config-content (get-file url config/config-file)]
+                 (reset-config! url config-content)))))))))))
 
 (defn build-page-graph
   [page theme]
@@ -1150,9 +1164,9 @@
                        (distinct)
                        (mapv (fn [p]
                                (cond->
-                                 {:id p
-                                  :label (util/capitalize-all p)
-                                  :value (get-connections p)}
+                                   {:id p
+                                    :label (util/capitalize-all p)
+                                    :value (get-connections p)}
                                  (= p page)
                                  (assoc :color "#5850ec")
                                  dark?

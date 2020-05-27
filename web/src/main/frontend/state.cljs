@@ -254,7 +254,7 @@
 
 (defn logged?
   []
-  (get-in @state [:me :email]))
+  (get-in @state [:me :name]))
 
 (defn set-github-token!
   [token]

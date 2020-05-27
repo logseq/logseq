@@ -597,12 +597,15 @@
 ;; clear localforage
 (defn sign-out!
   [e]
-  (p/let [_idb-clear (js/window.pfs._idb.wipe)
-          _ (db/clear-store!)]
-    (storage/remove :git/current-repo)
-    (storage/remove :git/clone-repo)
-    ;; remember not to remove the encrypted token
-    (set! (.-href js/window.location) "/logout")))
+  (->
+   (p/let [_idb-clear (js/window.pfs._idb.wipe)
+           _ (db/clear-store!)]
+     ;; remember not to remove the encrypted token
+     (storage/remove :git/current-repo)
+     (storage/remove :git/clone-repo))
+   (p/catch (fn [e]))
+   (p/finally (fn []
+                (set! (.-href js/window.location) "/logout")))))
 
 (defn set-format-js-loading!
   [format value]
@@ -952,7 +955,8 @@
   (util/delete (str config/api "repos/" id)
                (fn []
                  (db/remove-conn! url)
-                 (db/remove-db! (db/datascript-db url))
+                 (db/remove-db! url)
+                 (db/remove-files-db! url)
                  (fs/rmdir (util/get-repo-dir url))
                  (state/delete-repo! repo))
                (fn [error]
@@ -961,7 +965,9 @@
 (defn rebuild-index!
   [{:keys [id url] :as repo}]
   (db/remove-conn! url)
-  (-> (p/let [_ (db/remove-db! (db/datascript-db url))]
+  (db/clear-query-state!)
+  (-> (p/let [_ (db/remove-db! url)
+              _ (db/remove-files-db! url)]
         (fs/rmdir (util/get-repo-dir url)))
       (p/catch (fn [error]
                  (prn "Delete repo failed, error: " error)))
@@ -1043,7 +1049,7 @@
   [format]
   (when format
     (state/set-preferred-format! format)
-    (when (:email (:me @state/state))
+    (when (:name (:me @state/state))
       (util/post (str config/api "set_preferred_format")
                  {:preferred_format (name format)}
                  (fn [])
@@ -1060,38 +1066,43 @@
                {:object-key base64-key}
                (fn []
                  ;; refresh the browser
-                 (set! (.-href js/window.location) "/"))
+                 ;; (set! (.-href js/window.location) "/")
+                 )
                (fn [_e]))))
 
 (defn start!
   [render]
   (let [me (and js/window.user (bean/->clj js/window.user))]
     ;; async
-    (db/restore! me db-listen-to-tx! render)
-    (when me
-      (set-state-kv! :me me)
-      (when-let [base64-key (:encrypt_object_key me)]
-        (when-let [encrypted-token (state/get-encrypted-token)]
-          (->
-           (p/let [token (encrypt/decrypt base64-key encrypted-token)]
-             ;; FIXME: Sometimes it has spaces in the front
-             (let [token (string/trim token)]
-               (state/set-github-token! token)
-               (doseq [{:keys [id url]} (:repos me)]
-                 (let [repo url]
-                   (p/let [config-exists? (fs/file-exists?
-                                           (util/get-repo-dir url)
-                                           ".git/config")]
-                     (if (and config-exists?
-                              (db/cloned? repo))
-                       (do
-                         (git-set-username-email! repo me)
-                         (periodically-pull-and-push repo {:pull-now? true}))
-                       (clone-and-pull repo)))))))
-           (p/catch
-               (fn [error]
-                 (println "Token decrypted failed")
-                 (state/clear-encrypt-token!)))))))))
+    (-> (p/all (db/restore! me db-listen-to-tx!))
+        (p/then
+         (fn []
+           (when me (set-state-kv! :me me))
+           (render)
+           (when me
+             (when-let [base64-key (:encrypt_object_key me)]
+               (when-let [encrypted-token (state/get-encrypted-token)]
+                 (->
+                  (p/let [token (encrypt/decrypt base64-key encrypted-token)]
+                    ;; FIXME: Sometimes it has spaces in the front
+                    (let [token (string/trim token)]
+                      (state/set-github-token! token)
+                      (doseq [{:keys [id url]} (:repos me)]
+                        (let [repo url]
+                          (p/let [config-exists? (fs/file-exists?
+                                                  (util/get-repo-dir url)
+                                                  ".git/config")]
+                            (if (and config-exists?
+                                     (db/cloned? repo))
+                              (do
+                                (git-set-username-email! repo me)
+                                (periodically-pull-and-push repo {:pull-now? true}))
+                              (clone-and-pull repo)))))))
+                  (p/catch
+                      (fn [error]
+                        (println "Token decrypted failed")
+                        (state/clear-encrypt-token!)))))))))
+        )))
 
 (defn load-docs!
   []

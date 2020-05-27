@@ -180,7 +180,7 @@
         current-repo (state/sub :git/current-repo)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
-        logged? (:email me)
+        logged? (:name me)
         token (state/sub :encrypt/token)]
     [:div.max-w-7xl.mx-auto
      (cond
@@ -286,7 +286,7 @@
         [:div.flex-1.px-4.flex.justify-between
          (search/search)
          [:div.ml-4.flex.items-center.md:ml-6
-          (sync-status)
+          (when current-repo (sync-status))
           (repos current-repo true)
           [:a.ml-1 {:title "Draw with Excalidraw"
                     :href "/draw"}
@@ -300,7 +300,7 @@
                 [:img.h-7.w-7.rounded-full
                  {:src avatar}]
                 [:div.h-7.w-7.rounded-full.bg-base-3])])
-           (let [logged? (:email me)]
+           (let [logged? (:name me)]
              (->>
               [(when logged?
                  {:title "New page"
