@@ -355,6 +355,10 @@
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:href "/"
+         :on-click (fn []
+                     (util/scroll-to-top)
+                     (state/set-journals-length! 1)
+                     )
          :style {:position "absolute"
                  :top 12
                  :left 16

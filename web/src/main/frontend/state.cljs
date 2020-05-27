@@ -337,3 +337,8 @@
 (defn get-root-component
   []
   (get @state :ui/root-component))
+
+(defn set-journals-length!
+  [value]
+  (when value
+    (set-state! :journals-length value)))

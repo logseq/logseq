@@ -87,6 +87,7 @@
         [:a.ml-1.text-gray-500.hover:text-gray-700
          {:class (if starred? "text-gray-800")
           :on-click (fn []
+                      ;; TODO: save to config file
                       (handler/star-page! page-name starred?))}
          (if starred?
            (svg/star-solid "stroke-current")

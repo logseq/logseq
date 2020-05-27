@@ -36,6 +36,8 @@
 
 ;; TODO: replace all util/p-handle with p/let
 ;; TODO: separate git status for push-failed, pull-failed, etc
+;; TODO: Support more storage options (dropbox, google drive), git logic should be
+;; moved to another namespace, better there should be a `protocol`.
 (defn set-state-kv!
   [key value]
   (swap! state/state assoc key value))

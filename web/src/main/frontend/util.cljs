@@ -367,6 +367,12 @@
       (when-let [element (gdom/getElement fragment)]
         (scroll-into-view element)))))
 
+(defn scroll-to-top
+  []
+  (.scroll (gdom/getElement "main-content")
+           #js {:top 0
+                :behavior "smooth"}))
+
 (defn url-encode
   [string]
   (some-> string str (js/encodeURIComponent) (.replace "+" "%20")))
