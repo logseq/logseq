@@ -30,7 +30,8 @@
             [frontend.format.block :as block]
             [frontend.commands :as commands]
             [frontend.encrypt :as encrypt]
-            [cljs-time.local :as tl])
+            [cljs-time.local :as tl]
+            [frontend.history :as history])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -461,13 +462,27 @@
 (defn alter-file
   [repo-url path content {:keys [reset?]
                           :or {reset? true}}]
-  (db/set-file-content! repo-url path content)
-  (when reset?
-    (db/reset-file! repo-url path content))
+  (if reset?
+    (db/reset-file! repo-url path content)
+    (db/set-file-content! repo-url path content))
   (util/p-handle
    (fs/write-file (util/get-repo-dir repo-url) path content)
    (fn [_]
-     (git-add repo-url path))))
+     (git-add repo-url path)
+     (re-render-root!))))
+
+(defn transact-react-and-alter-file!
+  [repo tx transact-option file-path new-content]
+  (db/transact-react!
+   repo
+   tx
+   transact-option)
+  (alter-file repo file-path new-content {:reset? false})
+  ;; add to history
+  (history/add-history!
+   [:git/repo repo]
+   {:db (d/db (db/get-conn repo false))
+    :files-db (d/db (db/get-files-conn repo))}))
 
 (defn git-set-username-email!
   [repo-url {:keys [name email]}]
@@ -760,16 +775,16 @@
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-                               (db/transact-react!
+                               (transact-react-and-alter-file!
                                 repo
                                 (concat
                                  pages
                                  headings
                                  after-headings)
                                 {:key :heading/change
-                                 :data headings})
-                               (alter-file repo file-path new-content {:reset? false})
-                               )))]
+                                 :data headings}
+                                file-path
+                                new-content))))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -822,15 +837,16 @@
           first-heading (first headings)
           last-heading (last headings)
           after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-      (db/transact-react!
+      (transact-react-and-alter-file!
        repo
        (concat
         pages
         headings
         after-headings)
        {:key :heading/change
-        :data headings})
-      (alter-file repo file-path new-content {:reset? false})
+        :data headings}
+       file-path
+       new-content)
       [first-heading last-heading new-heading-content])))
 
 ;; TODO: utf8 encode performance
@@ -853,15 +869,16 @@
           file-content (db/get-file file-path)
           after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
           new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
-      (db/transact-react!
+      (transact-react-and-alter-file!
        repo
        (concat
         [[:db.fn/retractEntity [:heading/uuid uuid]]]
         after-headings
         [{:file/path file-path}])
        {:key :heading/change
-        :data [heading]})
-      (alter-file repo file-path new-content {:reset? false}))))
+        :data [heading]}
+       file-path
+       new-content))))
 
 (defn delete-headings!
   [heading-uuids]
@@ -878,19 +895,21 @@
           start-pos (:pos (:heading/meta first-heading))
           end-pos (:end-pos (:heading/meta last-heading))
           after-headings (rebuild-after-headings repo file end-pos start-pos)
-          new-content (utf8/delete! file-content start-pos end-pos)]
-      (db/transact-react!
+          new-content (utf8/delete! file-content start-pos end-pos)
+          tx-data (concat
+                   (mapv
+                    (fn [uuid]
+                      [:db.fn/retractEntity [:heading/uuid uuid]])
+                    heading-uuids)
+                   after-headings
+                   [{:file/path file-path}])]
+      (transact-react-and-alter-file!
        repo
-       (concat
-        (mapv
-         (fn [uuid]
-           [:db.fn/retractEntity [:heading/uuid uuid]])
-         heading-uuids)
-        after-headings
-        [{:file/path file-path}])
+       tx-data
        {:key :heading/change
-        :data headings})
-      (alter-file repo file-path new-content {:reset? false}))))
+        :data headings}
+       file-path
+       new-content))))
 
 (defn set-heading-property!
   [heading-id key value]
