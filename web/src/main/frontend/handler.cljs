@@ -1173,6 +1173,21 @@
     (dom/add-class! (dom/by-id "main-content-container")
                     "right-sidebar-open")))
 
+;; history
+(defn undo!
+  []
+  (when-let [repo (state/get-current-repo)]
+    (let [k [:git/repo repo]]
+      (history/undo! k)
+      (re-render-root!))))
+
+(defn redo!
+  []
+  (when-let [repo (state/get-current-repo)]
+    (let [k [:git/repo repo]]
+      (history/redo! k)
+      (re-render-root!))))
+
 (comment
 
   (defn debug-latest-commits
