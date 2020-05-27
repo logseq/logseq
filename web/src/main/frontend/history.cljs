@@ -62,13 +62,19 @@
   [k value]
   (when (and k value)
     (let [id (d/squuid)
-          _ (reset! current-id id)
           value (assoc value :id id)]
+      (prn "History id: " id)
       (swap! history update k
              (fn [col]
+               (let [col (if @current-id
+                           (do
+                             (prn "drop tail id: " @current-id)
+                             (drop-tail col #(= @current-id (:id %))))
+                           col)])
                (-> col
                    (conj value)
-                   (trim-head history-limit)))))))
+                   (trim-head history-limit))))
+      (reset! current-id id))))
 
 (defn traverse!
   [k undo?]
@@ -80,6 +86,7 @@
         (let [{:keys [id db files-db]} item]
           (when (and (vector? k)
                      (= (first k) :git/repo))
+            (println (if undo? "Undo: " "Redo: ") id)
             (let [repo (last k)]
               (db/reset-conn! (db/get-conn repo false) db)
               (db/reset-conn! (db/get-files-conn repo) files-db)

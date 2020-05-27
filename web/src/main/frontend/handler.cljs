@@ -460,16 +460,20 @@
         (string/trim (state/get-edit-content input-id))))
 
 (defn alter-file
-  [repo-url path content {:keys [reset?]
+  [repo path content {:keys [reset?]
                           :or {reset? true}}]
   (if reset?
-    (db/reset-file! repo-url path content)
-    (db/set-file-content! repo-url path content))
+    (db/reset-file! repo path content)
+    (db/set-file-content! repo path content))
   (util/p-handle
-   (fs/write-file (util/get-repo-dir repo-url) path content)
+   (fs/write-file (util/get-repo-dir repo) path content)
    (fn [_]
-     (git-add repo-url path)
-     (re-render-root!))))
+     (git-add repo path)
+     (re-render-root!)
+     (history/add-history!
+      [:git/repo repo]
+      {:db (d/db (db/get-conn repo false))
+       :files-db (d/db (db/get-files-conn repo))}))))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option file-path new-content]
