@@ -245,7 +245,12 @@
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
       (create-month-journal-if-not-exists repo-url)
-      (create-config-file-if-not-exists repo-url))))
+      (create-config-file-if-not-exists repo-url)
+      (history/clear-specific-history! [:git/repo repo-url])
+      (history/add-history!
+       [:git/repo repo-url]
+       {:db (d/db (db/get-conn repo-url false))
+        :files-db (d/db (db/get-files-conn repo-url))}))))
 
 (defn show-notification!
   [content status]
@@ -461,7 +466,7 @@
 
 (defn alter-file
   [repo path content {:keys [reset?]
-                          :or {reset? true}}]
+                      :or {reset? true}}]
   (if reset?
     (db/reset-file! repo path content)
     (db/set-file-content! repo path content))
@@ -473,7 +478,14 @@
      (history/add-history!
       [:git/repo repo]
       {:db (d/db (db/get-conn repo false))
-       :files-db (d/db (db/get-files-conn repo))}))))
+       :files-db (d/db (db/get-files-conn repo))
+       :file-handler (fn [cb]
+                       (->
+                        (p/let [result (fs/write-file (util/get-repo-dir repo) path content)]
+                          (git-add repo path)
+                          (cb))
+                        (p/catch (fn [error]
+                                   (prn "Add history file handler failed, error: " error)))))}))))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option file-path new-content]
@@ -481,12 +493,7 @@
    repo
    tx
    transact-option)
-  (alter-file repo file-path new-content {:reset? false})
-  ;; add to history
-  (history/add-history!
-   [:git/repo repo]
-   {:db (d/db (db/get-conn repo false))
-    :files-db (d/db (db/get-files-conn repo))}))
+  (alter-file repo file-path new-content {:reset? false}))
 
 (defn git-set-username-email!
   [repo-url {:keys [name email]}]
@@ -969,6 +976,7 @@
           (fn []
             (git-set-username-email! repo-url (:me @state/state))
             (load-db-and-journals! repo-url nil true)
+
             (periodically-pull-and-push repo-url {:pull-now? false}))))
 
 (defn star-page!
@@ -1080,6 +1088,20 @@
                  (fn [])
                  (fn [_e])))))
 
+(defn clone-and-pull-repos
+  [me]
+  (doseq [{:keys [id url]} (:repos me)]
+    (let [repo url]
+      (p/let [config-exists? (fs/file-exists?
+                              (util/get-repo-dir url)
+                              ".git/config")]
+        (if (and config-exists?
+                 (db/cloned? repo))
+          (do
+            (git-set-username-email! repo me)
+            (periodically-pull-and-push repo {:pull-now? true}))
+          (clone-and-pull repo))))))
+
 (defn set-github-token!
   [token]
   (state/set-github-token! token)
@@ -1092,7 +1114,9 @@
                (fn []
                  ;; refresh the browser
                  ;; (set! (.-href js/window.location) "/")
-                 )
+                 (let [me (:me @state/state)]
+                   (when (:repos me)
+                     (clone-and-pull-repos me))))
                (fn [_e]))))
 
 (defn start!
@@ -1112,17 +1136,7 @@
                     ;; FIXME: Sometimes it has spaces in the front
                     (let [token (string/trim token)]
                       (state/set-github-token! token)
-                      (doseq [{:keys [id url]} (:repos me)]
-                        (let [repo url]
-                          (p/let [config-exists? (fs/file-exists?
-                                                  (util/get-repo-dir url)
-                                                  ".git/config")]
-                            (if (and config-exists?
-                                     (db/cloned? repo))
-                              (do
-                                (git-set-username-email! repo me)
-                                (periodically-pull-and-push repo {:pull-now? true}))
-                              (clone-and-pull repo)))))))
+                      (clone-and-pull-repos me)))
                   (p/catch
                       (fn [error]
                         (println "Token decrypted failed")
@@ -1177,20 +1191,38 @@
     (dom/add-class! (dom/by-id "main-content-container")
                     "right-sidebar-open")))
 
+;; document.execCommand("undo", false, null);
+(defn default-undo
+  []
+  (js/document.execCommand "undo" false nil))
+
+;; document.execCommand("redo", false, null);
+(defn default-redo
+  []
+  (js/document.execCommand "redo" false nil))
+
 ;; history
 (defn undo!
   []
-  (when-let [repo (state/get-current-repo)]
-    (let [k [:git/repo repo]]
-      (history/undo! k)
-      (re-render-root!))))
+  (let [route (get-in (:route-match @state/state) [:data :name])]
+    (if (and (contains? #{:home :page} route)
+             (not (state/get-edit-input-id))
+             (state/get-current-repo))
+      (let [repo (state/get-current-repo)
+            k [:git/repo repo]]
+        (history/undo! k re-render-root!))
+      (default-undo))))
 
 (defn redo!
   []
-  (when-let [repo (state/get-current-repo)]
-    (let [k [:git/repo repo]]
-      (history/redo! k)
-      (re-render-root!))))
+  (let [route (get-in (:route-match @state/state) [:data :name])]
+    (if (and (contains? #{:home :page} route)
+             (not (state/get-edit-input-id))
+             (state/get-current-repo))
+      (let [repo (state/get-current-repo)
+            k [:git/repo repo]]
+        (history/redo! k re-render-root!))
+      (default-redo))))
 
 (comment
 
@@ -1214,5 +1246,4 @@
         (prn {:content content
               :utf8-length (utf8/length (utf8/encode content))}))))
 
-  ;; (debug-file-and-headings "readme.org")
   )

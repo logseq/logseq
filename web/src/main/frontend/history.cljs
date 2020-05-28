@@ -5,26 +5,27 @@
 
 ;; Inspired by https://github.com/tonsky/datascript-todo
 
-(def state-keys
-  #{:route-match
-    :search/q
-    :search/result
-    :ui/toggle-state
-    :ui/collapsed-headings
-    :ui/sidebar-collapsed-blocks
-    :editor/show-page-search?
-    :editor/show-date-picker?
-    :editor/show-input
-    :editor/last-saved-cursor
-    :editor/editing?
-    :editor/content
-    :editor/heading
-    :cursor-range
-    :cursor-pos
-    :selection/mode
-    :selection/headings
-    :custom-context-menu/show?
-    :sidebar/blocks})
+;; TODO: add state/state
+;; (def state-keys
+;;   #{:route-match
+;;     :search/q
+;;     :search/result
+;;     :ui/toggle-state
+;;     :ui/collapsed-headings
+;;     :ui/sidebar-collapsed-blocks
+;;     :editor/show-page-search?
+;;     :editor/show-date-picker?
+;;     :editor/show-input
+;;     :editor/last-saved-cursor
+;;     :editor/editing?
+;;     :editor/content
+;;     :editor/heading
+;;     :cursor-range
+;;     :cursor-pos
+;;     :selection/mode
+;;     :selection/headings
+;;     :custom-context-menu/show?
+;;     :sidebar/blocks})
 
 ;; Undo && Redo
 ;; We need to track several states:
@@ -63,13 +64,10 @@
   (when (and k value)
     (let [id (d/squuid)
           value (assoc value :id id)]
-      (prn "History id: " id)
       (swap! history update k
              (fn [col]
                (let [col (if @current-id
-                           (do
-                             (prn "drop tail id: " @current-id)
-                             (drop-tail col #(= @current-id (:id %))))
+                           (drop-tail col #(= @current-id (:id %)))
                            col)])
                (-> col
                    (conj value)
@@ -77,31 +75,60 @@
       (reset! current-id id))))
 
 (defn traverse!
-  [k undo?]
+  [k re-render undo?]
   (when @current-id
     (let [next-fn (if undo? find-prev find-next)]
       (when-let [item (next-fn (get @history k)
                                (fn [{:keys [id] :as item}]
                                  (= id @current-id)))]
-        (let [{:keys [id db files-db]} item]
+        (let [{:keys [id db files-db file-handler]} item]
           (when (and (vector? k)
-                     (= (first k) :git/repo))
-            (println (if undo? "Undo: " "Redo: ") id)
-            (let [repo (last k)]
-              (db/reset-conn! (db/get-conn repo false) db)
-              (db/reset-conn! (db/get-files-conn repo) files-db)
-              (reset! current-id id))))))))
+                     (= (first k) :git/repo)
+                     id
+                     db
+                     files-db)
+            (let [repo (last k)
+                  reset-dbs (fn []
+                              (db/reset-conn! (db/get-conn repo false) db)
+                              (db/persist repo db false)
+                              (db/reset-conn! (db/get-files-conn repo) files-db)
+                              (db/persist repo files-db true)
+                              (reset! current-id id)
+                              (re-render))]
+              (if file-handler
+                (file-handler reset-dbs)
+                (reset-dbs)))))))))
 
 (defn undo!
-  [k]
-  (traverse! k true))
+  [k re-render]
+  (traverse! k re-render true))
 
 (defn redo!
+  [k re-render]
+  (traverse! k re-render false))
+
+(defn get-current-state
   [k]
-  (traverse! k false))
+  (and
+   @current-id
+   (filter #(= (:id %) @current-id)
+           (get @history k))))
+
+(defn clear-specific-history!
+  [k]
+  (swap! history assoc k []))
 
 (comment
   (def k [:git/repo "https://github.com/tiensonqin/notes"])
   (undo! k)
   (redo! k)
+
+  (keys @history)
+
+  (require '[clojure.pprint])
+  (->> (second (first @history))
+       (map (fn [v]
+              (select-keys v
+                           [:id :content])))
+       clojure.pprint/pprint)
   )

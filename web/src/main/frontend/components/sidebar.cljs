@@ -235,6 +235,8 @@
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
+  (mixins/keyboard-mixin "ctrl+z" handler/undo!)
+  (mixins/keyboard-mixin "ctrl+y" handler/redo!)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)
