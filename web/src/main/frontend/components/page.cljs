@@ -26,7 +26,7 @@
 (defn- get-headings
   [page-name journal? heading?]
   (if heading?
-    [(db/pull-heading (uuid page-name))]
+    (db/get-heading-and-children (state/get-current-repo) (uuid page-name))
     (let [page-headings (db/get-page-headings page-name)
           page-headings (if journal?
                           (update (vec page-headings) 0 assoc :heading/lock? true)

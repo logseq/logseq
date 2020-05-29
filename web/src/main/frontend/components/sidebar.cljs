@@ -243,7 +243,6 @@
         current-repo (state/sub :git/current-repo)
         status (db/sub-key-value :git/status)
         pulling? (= :pulling status)
-        right-sidebar? false
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))]
     [:div {:class (if white? "white-theme" "dark-theme")}

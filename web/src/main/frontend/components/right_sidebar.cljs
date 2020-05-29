@@ -14,12 +14,9 @@
 
 (rum/defc heading-cp < rum/reactive
   [heading]
-  (let [id (:heading/uuid heading)
-        heading (db/pull-heading id)]
-    (hiccup/heading {:id id
-                     :sidebar? true}
-                    (assoc heading
-                           :heading/show-page? true))))
+  (let [id (:heading/uuid heading)]
+    (page/page {:parameters {:path {:name (str id)}}
+                :sidebar? true})))
 
 (defn build-sidebar-item
   [db-id block-type block-data]
@@ -79,14 +76,14 @@
 
 (defn render-graph
   [state]
-  (when-let [graph (first (get state :rum/args))]
+  (when-let [graph (first (:rum/args state))]
     (vis/new-network "page-graph" graph))
   state)
 
-(rum/defc graph < rum/reactive
+(rum/defc graph < rum/static
   {:did-mount render-graph
    :did-update render-graph}
-  [data dark?]
+  [graph-data dark?]
   [:div.sidebar-item.flex-col.flex-1
    [:div#theme-selector.flex.flex-row.justify-between
     [:div.ml-2.font-bold "Dark theme"]
@@ -99,18 +96,18 @@
   [state]
   (let [blocks (state/sub :sidebar/blocks)
         repo (state/sub :git/current-repo)
-        starred (state/sub [:config repo :starred])
-        match (state/sub :route-match)
-        theme (state/sub :ui/theme)
-        dark? (= "dark" theme)
-        page (get-page match)
-        graph-data (db/build-page-graph page theme)]
+        starred (state/sub [:config repo :starred])]
     [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto {:style {:padding-bottom 300}}
      (for [[idx [db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item idx db-id block-type block-data)
          (str "sidebar-block-" idx)))
-     (graph graph-data dark?)
+     (let [match (state/sub :route-match)
+           theme (state/sub :ui/theme)
+           dark? (= "dark" theme)
+           page (get-page match)
+           graph-data (db/build-page-graph page theme)]
+       (graph graph-data dark?))
      (when (and repo (seq starred))
        [:div.sidebar-item.flex-col.flex-1.content
         [:div.flex.flex-row

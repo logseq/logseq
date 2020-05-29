@@ -376,7 +376,14 @@
         [:span ""])]
      [:a.flex.flex-row.items-center.justify-center
       (cond->
-          {:style {:width 14
+          {:draggable true
+           :on-drag (fn [event]
+                      )
+           :on-drag-over (fn [event]
+                           )
+           :on-drop (fn [event]
+                      )
+           :style {:width 14
                    :height 24}}
         (not dummy?)
         (assoc :href (str "/page/" uuid)

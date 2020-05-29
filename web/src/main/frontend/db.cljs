@@ -199,12 +199,11 @@
   (reset! query-state {}))
 
 (defn add-q!
-  [k query inputs result]
-  (let [result-atom (atom result)]
-    (swap! query-state assoc k {:query query
-                                :inputs inputs
-                                :result result-atom})
-    result-atom))
+  [k query inputs result-atom]
+  (swap! query-state assoc k {:query query
+                              :inputs inputs
+                              :result result-atom})
+  result-atom)
 
 (defn set-new-result!
   [k new-result]
@@ -298,17 +297,19 @@
   [repo k {:keys [use-cache? files-db?]
            :or {use-cache? true
                 files-db? false}} query & inputs]
-  (if-let [cached (and
-                   use-cache?
-                   (:result (get @query-state (vec (cons repo k)))))]
-    cached
+  (let [k (vec (cons repo k))]
     (when-let [conn (if files-db?
-                      (deref (get-files-conn repo))
-                      (get-conn repo))]
-      (let [result (if (seq inputs)
-                     (apply d/q query conn inputs)
-                     (d/q query conn))]
-        (add-q! (vec (cons repo k)) query inputs result)))))
+                     (deref (get-files-conn repo))
+                     (get-conn repo))]
+     (let [result (if (seq inputs)
+                    (apply d/q query conn inputs)
+                    (d/q query conn))
+           result-atom (or
+                        (:result (get @query-state k))
+                        (atom nil))]
+       ;; Don't notify watches now
+       (set! (.-state result-atom) result)
+       (add-q! k query inputs result-atom)))))
 
 (defn refresh-query-result!
   [repo query inputs]
@@ -612,7 +613,7 @@
   ([repo-url page]
    (let [pages (page-alias-set repo-url page)
          page-id (:db/id (entity [:page/name page]))]
-     (->> (q repo-url [:page/headings page-id] {}
+     (->> (q repo-url [:page/headings page-id] {:use-cache? false}
             '[:find (pull ?heading [*])
               :in $ ?pages
               :where
@@ -623,6 +624,32 @@
           react
           seq-flatten
           sort-by-pos))))
+
+(defn get-heading-and-children
+  [repo heading-uuid]
+  (let [heading (entity [:heading/uuid heading-uuid])
+        page (:db/id (:heading/page heading))
+        pos (:pos (:heading/meta heading))
+        level (:heading/level heading)
+        pred (fn [data meta]
+               (>= (:pos meta) pos))]
+    (->> (q repo [:page/headings page] {:use-cache? false}
+           '[:find (pull ?heading [*])
+             :in $ ?page ?pred
+             :where
+             [?heading :heading/page ?page]
+             [?heading :heading/meta ?meta]
+             [(?pred $ ?meta)]]
+           page
+           pred)
+         react
+         seq-flatten
+         sort-by-pos
+         (take-while (fn [h]
+                       (or
+                        (= (:heading/uuid h)
+                           heading-uuid)
+                        (> (:heading/level h) level)))))))
 
 (defn get-page-name
   [file ast]
@@ -739,8 +766,7 @@
                                (map
                                  (fn [tag]
                                    {:tag/name (string/lower-case tag)})
-                                 (:tags directives)))))
-                    )
+                                 (:tags directives))))))
                   (map first pages))
           pages (concat
                  pages
@@ -1168,10 +1194,11 @@
                                     :label (util/capitalize-all p)
                                     :value (get-connections p)}
                                  (= p page)
-                                 (assoc :color "#5850ec")
+                                 (assoc :color (if dark?
+                                                 "#a4b5b6"
+                                                 "#5850ec"))
                                  dark?
-                                 (assoc :font {:color "#dfdfdf"})
-                                 ))))]
+                                 (assoc :font {:color "#dfdfdf"})))))]
         {:nodes nodes
          :edges edges}))))
 

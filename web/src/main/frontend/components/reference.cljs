@@ -14,21 +14,22 @@
 
 (rum/defc references < rum/reactive
   [page-name]
-  (let [heading? (util/uuid-string? page-name)
-        heading-id (and heading? (uuid page-name))
-        page-name (string/lower-case page-name)
-        encoded-page-name (util/url-encode page-name)
-        ref-headings (if heading-id
-                       (db/get-heading-referenced-headings heading-id)
-                       (db/get-page-referenced-headings page-name))
-        ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
-        ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
-                                                  :start-level 2
-                                                  :ref? true})]
-    [:div.page-references
-     (let [n-ref (count ref-headings)]
-       (if (> n-ref 0)
-         [:h2.font-bold.mt-6 (let []
-                               (str n-ref " Linked References"))]))
-     (content/content encoded-page-name
-                      {:hiccup ref-hiccup})]))
+  (when page-name
+    (let [heading? (util/uuid-string? page-name)
+          heading-id (and heading? (uuid page-name))
+          page-name (string/lower-case page-name)
+          encoded-page-name (util/url-encode page-name)
+          ref-headings (if heading-id
+                         (db/get-heading-referenced-headings heading-id)
+                         (db/get-page-referenced-headings page-name))
+          ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
+          ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
+                                                    :start-level 2
+                                                    :ref? true})]
+      [:div.page-references
+       (let [n-ref (count ref-headings)]
+         (if (> n-ref 0)
+           [:h2.font-bold.mt-6 (let []
+                                 (str n-ref " Linked References"))]))
+       (content/content encoded-page-name
+                        {:hiccup ref-hiccup})])))
