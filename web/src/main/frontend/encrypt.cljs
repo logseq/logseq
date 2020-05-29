@@ -47,28 +47,32 @@
                key)]
     (gobj/get key "k")))
 
+(defn get-key-from-object-key
+  [object-key]
+  (js/window.crypto.subtle.importKey
+   "jwk"
+   (bean/->js
+    {:k object-key
+     :alg "A128GCM"
+     :ext true
+     :key_ops ["encrypt" "decrypt"]
+     :kty "oct"})
+   (bean/->js {:name "AES-GCM"
+               :length 128})
+   false
+   (bean/->js ["encrypt" "decrypt"])))
+
 (defn decrypt
   [object-key encrypted]
   ;; Build the key using object-key and decrypt the content
   (let [encrypted (str->array-buffer encrypted)]
-    (p/let [key (js/window.crypto.subtle.importKey
-                "jwk"
-                (bean/->js
-                 {:k object-key
-                  :alg "A128GCM"
-                  :ext true
-                  :key_ops ["encrypt" "decrypt"]
-                  :kty "oct"})
-                (bean/->js {:name "AES-GCM"
-                            :length 128})
-                false
-                (bean/->js ["decrypt"]))
-           decrypted (js/window.crypto.subtle.decrypt
-                      (bean/->js
-                       {:name "AES-GCM"
-                        :iv (js/Uint8Array. 12)})
-                      key
-                      encrypted)
-           decoded (.decode (js/window.TextDecoder.)
-                            (js/Uint8Array. decrypted))]
-     (js/JSON.parse decoded))))
+    (p/let [key (get-key-from-object-key object-key)
+            decrypted (js/window.crypto.subtle.decrypt
+                       (bean/->js
+                        {:name "AES-GCM"
+                         :iv (js/Uint8Array. 12)})
+                       key
+                       encrypted)
+            decoded (.decode (js/window.TextDecoder.)
+                             (js/Uint8Array. decrypted))]
+      (js/JSON.parse decoded))))

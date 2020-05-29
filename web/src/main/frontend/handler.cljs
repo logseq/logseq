@@ -1105,19 +1105,21 @@
 (defn set-github-token!
   [token]
   (state/set-github-token! token)
-  (p/let [key (encrypt/generate-key)
-          encrypted (encrypt/encrypt key token)
-          base64-key (encrypt/base64-key key)]
-    (state/set-encrypt-token! encrypted)
-    (util/post (str config/api "encrypt_object_key")
-               {:object-key base64-key}
-               (fn []
-                 ;; refresh the browser
-                 ;; (set! (.-href js/window.location) "/")
-                 (let [me (:me @state/state)]
-                   (when (:repos me)
-                     (clone-and-pull-repos me))))
-               (fn [_e]))))
+  (let [object-key (get-in @state/state [:me :encrypt_object_key])]
+    (p/let [key (if object-key
+                  (encrypt/get-key-from-object-key object-key)
+                  (encrypt/generate-key))
+            encrypted (encrypt/encrypt key token)
+            object-key (or object-key
+                           (encrypt/base64-key key))]
+      (state/set-encrypt-token! encrypted)
+      (util/post (str config/api "encrypt_object_key")
+                 {:object-key object-key}
+                 (fn []
+                   (let [me (:me @state/state)]
+                     (when (:repos me)
+                       (clone-and-pull-repos me))))
+                 (fn [_e])))))
 
 (defn start!
   [render]
@@ -1129,10 +1131,10 @@
            (when me (set-state-kv! :me me))
            (render)
            (when me
-             (when-let [base64-key (:encrypt_object_key me)]
+             (when-let [object-key (:encrypt_object_key me)]
                (when-let [encrypted-token (state/get-encrypted-token)]
                  (->
-                  (p/let [token (encrypt/decrypt base64-key encrypted-token)]
+                  (p/let [token (encrypt/decrypt object-key encrypted-token)]
                     ;; FIXME: Sometimes it has spaces in the front
                     (let [token (string/trim token)]
                       (state/set-github-token! token)
