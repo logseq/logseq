@@ -2,7 +2,8 @@
   (:require [frontend.util :as util]
             [frontend.state :as state]
             [clojure.string :as string]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [goog.object :as gobj]))
 
 (defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
@@ -69,8 +70,8 @@
    {:keys [last-pattern postfix-fn backward-pos forward-pos]
     :or {last-pattern "/"}
     :as option}]
-  (let [edit-content (state/get-edit-content id)
-        input (gdom/getElement id)
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
         current-pos (:pos (util/get-caret-pos input))
 
         prefix (subs edit-content 0 current-pos)
@@ -88,6 +89,38 @@
                          (if (or backward-pos forward-pos)
                            new-pos
                            (+ new-pos 1)))))
+
+(defn simple-insert!
+  [id value
+   {:keys [backward-pos forward-pos check-fn]
+    :as option}]
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        current-pos (:pos (util/get-caret-pos input))
+        prefix (subs edit-content 0 current-pos)
+        new-value (str prefix
+                       value
+                       (subs edit-content current-pos))
+        new-pos (- (+ (count prefix)
+                      (count value)
+                      (or forward-pos 0))
+                   (or backward-pos 0))]
+    (state/set-heading-content-and-last-pos! id new-value new-pos)
+    (util/move-cursor-to input new-pos)
+    (when check-fn
+      (check-fn new-value (dec (count prefix))))))
+
+(defn delete-pair!
+  [id]
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        current-pos (:pos (util/get-caret-pos input))
+        prefix (subs edit-content 0 (dec current-pos))
+        new-value (str prefix
+                       (subs edit-content (inc current-pos)))
+        new-pos (count prefix)]
+    (state/set-heading-content-and-last-pos! id new-value new-pos)
+    (util/move-cursor-to input new-pos)))
 
 (defn get-matched-commands
   [text]
@@ -128,7 +161,7 @@
 (defmethod handle-step :editor/clear-current-slash [[_]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (state/get-edit-content input-id)
+      (let [edit-content (gobj/get current-input "value")
             current-pos (:pos (util/get-caret-pos current-input))
             prefix (subs edit-content 0 current-pos)
             prefix (util/replace-last "/" prefix "")
@@ -144,7 +177,7 @@
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (state/get-edit-content input-id)
+      (let [edit-content (gobj/get current-input "value")
             slash-pos (:pos @*slash-caret-pos)
             [re-pattern new-line-re-pattern] (if (= :org format)
                                                [#"\*+\s" #"\n\*+\s"]

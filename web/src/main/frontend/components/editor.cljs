@@ -53,6 +53,39 @@
   (when restore?
     (commands/restore-state restore?)))
 
+(def autopair-map
+  {"[" "]"
+   "{" "}"
+   "(" ")"})
+
+(defn- autopair
+  [input-id prefix format {:keys [restore?]
+                           :or {restore? true}
+                           :as option}]
+  (let [value (get autopair-map prefix)
+        value (str prefix value)
+        input (gdom/getElement input-id)]
+    (when value
+      (let [[prefix pos] (commands/simple-insert! input-id value
+                                            {:backward-pos 1
+                                             :check-fn (fn [new-value prefix-pos]
+                                                         (when (>= prefix-pos 0)
+                                                           [(subs new-value prefix-pos (+ prefix-pos 2))
+                                                            (+ prefix-pos 2)]))})]
+        (case prefix
+          "[["
+          (do
+            (commands/handle-step [:editor/search-page])
+            (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+          "(("
+          (do
+            (commands/handle-step [:editor/search-block])
+            (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+          nil))
+      )))
+
 (defn- upload-image
   [id files format uploading? drop?]
   (image/upload
@@ -288,8 +321,7 @@
 
 (defn on-backspace
   [state e]
-  (let [{:keys [id heading-id heading-parent-id dummy? value  pos format]} (get-state state)
-        edit-content (state/get-edit-content id)]
+  (let [{:keys [id heading-id heading-parent-id dummy? value  pos format]} (get-state state)]
     (when (and heading-id (= value ""))
       (if @*should-delete?
         (do
@@ -443,7 +475,8 @@
   (mixins/keyboard-mixin "alt+shift+right" #(adjust-heading-level! % :right) edit-heading? get-input)
   (mixins/event-mixin
    (fn [state]
-     (let [input-id (last (:rum/args state))
+     (let [{:keys [id format]} (get-state state)
+           input-id id
            input (gdom/getElement input-id)]
        (let [{:keys [format heading]} (get-state state)]
          (mixins/hide-when-esc-or-outside
@@ -475,16 +508,53 @@
          8 (fn [state e]
              (let [node (gdom/getElement input-id)
                    current-pos (:pos (util/get-caret-pos node))
-                   value (gobj/get node "value")]
-               (when (and (> current-pos 1)
-                          (= (nth value (dec current-pos)) "/"))
-                 (reset! *slash-caret-pos nil)
-                 (reset! *show-commands false))))
+                   value (gobj/get node "value")
+                   deleted (and (> current-pos 0)
+                                (nth value (dec current-pos)))]
+               (cond
+                 (and (> current-pos 1)
+                      (= (nth value (dec current-pos)) "/"))
+                 (do
+                   (reset! *slash-caret-pos nil)
+                   (reset! *show-commands false))
+
+                 ;; pair
+                 (and
+                  deleted
+                  (contains?
+                   (set (keys autopair-map))
+                   deleted)
+                  (>= (count value) (inc current-pos))
+                  (= (nth value current-pos)
+                     (get autopair-map deleted)))
+                 (do
+                   (util/stop e)
+                   (commands/delete-pair! id)
+                   (reset! *should-delete? false))
+
+                 :else
+                 nil)))
          ;; tab
          9 (fn [state e]
              (when-not (state/get-editor-show-input)
                (util/stop e)
                (adjust-heading-level! state nil)))
+
+         ;; autopairs
+         ;; [ && { (shift+219)
+         219 (fn [state e]
+               (util/stop e)
+               (autopair input-id (gobj/get e "key") format nil)
+               (when (and (not (gobj/get e "shiftKey"))
+                          ;; double `[]`
+                          )
+                 ;; show page
+                 )
+               )
+         ;; (
+         57 (fn [state e]
+              (util/stop e)
+              (autopair input-id "(" format nil))
          }
         (fn [e key-code]
           ;; (swap! state/state assoc
@@ -498,6 +568,7 @@
                (when-let [matched-commands (seq (get-matched-commands input))]
                  (reset! *slash-caret-pos (util/get-caret-pos input))
                  (reset! *show-commands true)))
+
          ;; backspace
          8 on-backspace}
         (fn [e key-code]
@@ -520,9 +591,9 @@
                   (reset! *show-commands false)
                   )))))))))
   {:after (fn [state _props]
-           (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)]
-             (reset! *should-delete? false))
-           state)
+            (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)]
+              (reset! *should-delete? false))
+            state)
    :did-mount (fn [state]
                 (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)]
                   (let [content (handler/remove-level-spaces content format)]
@@ -553,11 +624,11 @@
                            :else
                            (let [cache [(:heading/uuid heading) value]]
                              (when (not= @*last-edit-heading cache)
-                              (when-not (string/blank? value)
-                                (when (not= (string/trim new-value)
-                                            (string/trim (:heading/content heading)))
-                                    (handler/save-heading-if-changed! heading new-value))
-                                (reset! *last-edit-heading cache)))))))
+                               (when-not (string/blank? value)
+                                 (when (not= (string/trim new-value)
+                                             (string/trim (:heading/content heading)))
+                                   (handler/save-heading-if-changed! heading new-value))
+                                 (reset! *last-edit-heading cache)))))))
                      (clear-when-saved!))
                    state)}
   [content {:keys [on-hide dummy? node format heading]

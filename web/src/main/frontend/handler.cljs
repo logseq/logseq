@@ -461,8 +461,9 @@
 
 (defn file-changed?
   [input-id content]
-  (not= (string/trim content)
-        (string/trim (state/get-edit-content input-id))))
+  (when-let [input (gdom/getElement input-id)]
+    (not= (string/trim content)
+          (string/trim (gobj/get input "value")))))
 
 (defn alter-file
   [repo path content {:keys [reset?]

@@ -10,7 +10,9 @@
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]
-            [frontend.utf8 :as utf8]))
+            [frontend.utf8 :as utf8]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]))
 
 (defn- get-path
   [state]
@@ -39,7 +41,9 @@
         save-file-handler (fn [content]
                             (fn [_]
                               (when (handler/file-changed? encoded-path content)
-                                (handler/alter-file (state/get-current-repo) path (state/get-edit-content encoded-path) nil))))
+                                (let [new-content (-> (gdom/getElement encoded-path)
+                                                    (gobj/get "value"))]
+                                  (handler/alter-file (state/get-current-repo) path new-content nil)))))
         edit-raw-handler (fn []
                            (let [content (db/get-file path)]
                              (content/content encoded-path {:content content

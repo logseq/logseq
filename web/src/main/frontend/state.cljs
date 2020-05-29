@@ -115,10 +115,6 @@
   []
   (:edit-heading @state))
 
-(defn get-edit-content
-  [input-id]
-  (get-in @state [:editor/content input-id]))
-
 (defn set-edit-content!
   [input-id value set-input-value?]
   (when input-id
