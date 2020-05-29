@@ -50,7 +50,7 @@
   []
   [:div#selection.hidden])
 
-(rum/defc hiccup-content < rum/reactive
+(rum/defc hiccup-content < rum/static
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "mouseup"
@@ -94,11 +94,8 @@
                                           :left (str client-x "px")
                                           :top (str client-y "px")))))))))
   [id {:keys [hiccup] :as option}]
-  (let [in-selection-mode? (state/sub :selection/mode)]
-    [:div {:id id}
-     hiccup
-     (when in-selection-mode?
-       (hidden-selection))]))
+  [:div {:id id}
+   hiccup])
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
@@ -143,7 +140,7 @@
              content)])))))
 
 ;; TODO: lazy load highlight.js
-(rum/defcs content <
+(rum/defcs content < rum/reactive
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "keyup"
@@ -176,7 +173,11 @@
                     on-click
                     on-hide]
              :as option}]
-  (if hiccup
-    (hiccup-content id option)
-    (let [format (format/normalize format)]
-      (non-hiccup-content id content on-click on-hide config format))))
+  (let [in-selection-mode? (state/sub :selection/mode)]
+    (if hiccup
+      [:div
+       (hiccup-content id option)
+       (when in-selection-mode?
+         (hidden-selection))]
+      (let [format (format/normalize format)]
+        (non-hiccup-content id content on-click on-hide config format)))))

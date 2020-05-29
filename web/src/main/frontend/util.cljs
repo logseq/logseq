@@ -7,6 +7,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             ["/frontend/caret_pos" :as caret-pos]
+            ["/frontend/selection" :as selection]
             [goog.string :as gstring]
             [goog.string.format]
             [dommy.core :as d]
@@ -563,13 +564,18 @@
       (let [selection (js/window.getSelection)
             range (.getRangeAt selection 0)
             container (gobj/get range "commonAncestorContainer")]
-        (let [container-nodes (array-seq (.getElementsByClassName container class-name))]
-          (filter
-           (fn [node]
-             (.containsNode selection node true))
-           container-nodes))))
+        (selection/getSelectedNodes container)
+        ;; (let [container-nodes (array-seq (.getElementsByClassName container class-name))]
+        ;;   (filter
+        ;;    (fn [node]
+        ;;      (let [result (.containsNode selection node true)]
+        ;;        result))
+        ;;    container-nodes))
+        ))
     (catch js/Error _e
       nil)))
+
+(def clear-selection! selection/clearSelection)
 
 (defn get-heading-id
   [id]

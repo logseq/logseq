@@ -1061,7 +1061,8 @@
     (doseq [heading (state/get-selection-headings)]
       (dom/remove-class! heading "selected")
       (dom/remove-class! heading "noselect"))
-    (state/clear-selection!)))
+    (state/clear-selection!))
+  (util/clear-selection!))
 
 (defn copy-selection-headings
   []
