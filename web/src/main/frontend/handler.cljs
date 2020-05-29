@@ -1075,6 +1075,7 @@
 
 (defn cut-selection-headings
   []
+  (copy-selection-headings)
   (when-let [headings (seq (get @state/state :selection/headings))]
     (let [ids (map #(util/get-heading-id (gobj/get % "id")) headings)]
       (delete-headings! ids))))
