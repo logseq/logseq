@@ -37,13 +37,13 @@
 (defn- cut-headings-and-clear-selections!
   [_]
   (handler/cut-selection-headings)
-  (handler/clear-selection!))
+  (handler/clear-selection! nil))
 
 (rum/defc hidden-selection < rum/reactive
   (mixins/keyboard-mixin "ctrl+c"
                          (fn [_]
                            (handler/copy-selection-headings)
-                           (handler/clear-selection!)))
+                           (handler/clear-selection! nil)))
   (mixins/keyboard-mixin "ctrl+x" cut-headings-and-clear-selections!)
   (mixins/keyboard-mixin "backspace" cut-headings-and-clear-selections!)
   (mixins/keyboard-mixin "delete" cut-headings-and-clear-selections!)
@@ -75,7 +75,7 @@
                         (d/add-class! main "overflow-y-auto")
                         )
 
-                      (handler/clear-selection!)))
+                      (handler/clear-selection! e)))
 
      (mixins/listen state js/window "contextmenu"
                     (fn [e]

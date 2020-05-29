@@ -1056,13 +1056,14 @@
       (state/set-editing! edit-input-id content heading))))
 
 (defn clear-selection!
-  []
+  [e]
   (when (state/in-selection-mode?)
     (doseq [heading (state/get-selection-headings)]
       (dom/remove-class! heading "selected")
       (dom/remove-class! heading "noselect"))
     (state/clear-selection!))
-  (util/clear-selection!))
+  (when-not (util/input? (gobj/get e "target"))
+    (util/clear-selection!)))
 
 (defn copy-selection-headings
   []

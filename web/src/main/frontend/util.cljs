@@ -391,7 +391,7 @@
 (defn input?
   [node]
   (contains?
-   #{"INPUT"}
+   #{"INPUT" "TEXTAREA"}
    (gobj/get node "tagName")))
 
 (defn journal?
