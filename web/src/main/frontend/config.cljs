@@ -87,5 +87,4 @@
    (default-empty-heading format 2))
   ([format n]
    (let [heading-pattern (get-heading-pattern format)]
-     (str (apply str (repeat n heading-pattern))
-          " "))))
+     (apply str (repeat n heading-pattern)))))

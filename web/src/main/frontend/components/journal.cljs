@@ -11,18 +11,27 @@
             [frontend.components.hiccup :as hiccup]
             [frontend.components.reference :as reference]
             [frontend.utf8 :as utf8]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [clojure.string :as string]))
 
 (rum/defc journal-cp < rum/reactive
-  [[title headings format]]
+  [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
-        headings (db/get-page-headings page)
-        headings (when (seq headings)
-                   (update (vec headings) 0 assoc :heading/lock? true))
-        headings (db/with-dummy-heading headings format nil true)
-
+        raw-headings (db/get-page-headings page)
+        raw-headings (when (seq raw-headings)
+                       (update (vec raw-headings) 0 assoc :heading/lock? true))
+        headings (db/with-dummy-heading raw-headings format nil true)
         encoded-page-name (util/url-encode page)]
+    (when (and
+           (= (string/lower-case title)
+              (string/lower-case (util/journal-name)))
+           (= 1 (count raw-headings)))
+      (when-let [template (state/get-journal-template)]
+        (handler/insert-new-heading!
+         (first headings)
+         (str (:heading/content (first headings)) "\n" template)
+         false)))
     [:div.flex-1
      [:a.initial-color {:href (str "/page/" encoded-page-name)
                         :on-click (fn [e]

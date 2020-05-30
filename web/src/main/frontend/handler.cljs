@@ -672,8 +672,8 @@
    (when-let [node (gdom/getElement (str id))]
      (when-let [cursor-range (state/get-cursor-range)]
        (when-let [range (string/trim cursor-range)]
-        (let [pos (inc (diff/find-position markup range))]
-          (util/set-caret-pos! node pos)))))))
+         (let [pos (inc (diff/find-position markup range))]
+           (util/set-caret-pos! node pos)))))))
 
 (defn search
   [q]
@@ -844,32 +844,36 @@
           nil)))))
 
 (defn insert-new-heading!
-  [{:heading/keys [uuid content meta file dummy? level] :as heading} value]
-  (let [repo (state/get-current-repo)
-        value (string/trim value)
-        heading (with-heading-meta heading)
-        format (:heading/format heading)
-        new-heading-content (config/default-empty-heading format level)]
-    (let [file (db/entity (:db/id file))
-          file-path (:file/path file)
-          file-content (db/get-file file-path)
-          value (str value "\n" new-heading-content "\n")
-          [new-content value] (new-file-content heading file-content value)
-          {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-          first-heading (first headings)
-          last-heading (last headings)
-          after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-      (transact-react-and-alter-file!
-       repo
-       (concat
-        pages
-        headings
-        after-headings)
-       {:key :heading/change
-        :data headings}
-       file-path
-       new-content)
-      [first-heading last-heading new-heading-content])))
+  ([heading value]
+   (insert-new-heading! heading value true))
+  ([{:heading/keys [uuid content meta file dummy? level] :as heading} value create-new-heading?]
+   (let [repo (state/get-current-repo)
+         value (string/trim value)
+         heading (with-heading-meta heading)
+         format (:heading/format heading)
+         new-heading-content (config/default-empty-heading format level)]
+     (let [file (db/entity (:db/id file))
+           file-path (:file/path file)
+           file-content (db/get-file file-path)
+           value (if create-new-heading?
+                   (str value "\n" new-heading-content "\n")
+                   (str value "\n"))
+           [new-content value] (new-file-content heading file-content value)
+           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+           first-heading (first headings)
+           last-heading (last headings)
+           after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+       (transact-react-and-alter-file!
+        repo
+        (concat
+         pages
+         headings
+         after-headings)
+        {:key :heading/change
+         :data headings}
+        file-path
+        new-content)
+       [first-heading last-heading new-heading-content]))))
 
 ;; TODO: utf8 encode performance
 (defn check
