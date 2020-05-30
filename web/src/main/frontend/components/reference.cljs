@@ -24,8 +24,8 @@
                          (db/get-page-referenced-headings page-name))
           ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
                                                     :start-level 2
-                                                    :show-page? true
-                                                    :ref? true})]
+                                                    :ref? true
+                                                    :group-by-page? true})]
       [:div.page-references
        (let [n-ref (count ref-headings)]
          (if (> n-ref 0)

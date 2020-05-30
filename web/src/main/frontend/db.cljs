@@ -263,26 +263,26 @@
               current-page-id (get-current-page-id)
               {:heading/keys [page]} (first headings)
               handler-keys (when-let [page-id (:db/id page)]
-                     (->>
-                      (util/concat-without-nil
-                       (map
-                         (fn [heading]
-                           [:headings (:heading/uuid heading)])
-                         headings)
-                       ;; affected page
-                       [[:page/headings page-id]
-                        [:page/ref-pages page-id]
-                        [:page/ref-pages current-page-id]
-                        [:page/refed-headings current-page-id]
-                        [:page/mentioned-pages current-page-id]]
+                             (->>
+                              (util/concat-without-nil
+                               (map
+                                 (fn [heading]
+                                   [:headings (:heading/uuid heading)])
+                                 headings)
+                               ;; affected page
+                               [[:page/headings page-id]
+                                [:page/ref-pages page-id]
+                                [:page/ref-pages current-page-id]
+                                [:page/refed-headings current-page-id]
+                                [:page/mentioned-pages current-page-id]]
 
-                       ;; refed-pages
-                       (apply concat
-                         (for [{:heading/keys [ref-pages]} headings]
-                           (map (fn [page]
-                                  [:page/refed-headings (:db/id page)])
-                             ref-pages))))
-                      (distinct)))
+                               ;; refed-pages
+                               (apply concat
+                                 (for [{:heading/keys [ref-pages]} headings]
+                                   (map (fn [page]
+                                          [:page/refed-headings (:db/id page)])
+                                     ref-pages))))
+                              (distinct)))
               refed-pages (map
                             (fn [[k page-id]]
                               (if (= k :page/refed-headings)
@@ -309,17 +309,17 @@
                 files-db? false}} query & inputs]
   (let [k (vec (cons repo k))]
     (when-let [conn (if files-db?
-                     (deref (get-files-conn repo))
-                     (get-conn repo))]
-     (let [result (if (seq inputs)
-                    (apply d/q query conn inputs)
-                    (d/q query conn))
-           result-atom (or
-                        (:result (get @query-state k))
-                        (atom nil))]
-       ;; Don't notify watches now
-       (set! (.-state result-atom) result)
-       (add-q! k query inputs result-atom)))))
+                      (deref (get-files-conn repo))
+                      (get-conn repo))]
+      (let [result (if (seq inputs)
+                     (apply d/q query conn inputs)
+                     (d/q query conn))
+            result-atom (or
+                         (:result (get @query-state k))
+                         (atom nil))]
+        ;; Don't notify watches now
+        (set! (.-state result-atom) result)
+        (add-q! k query inputs result-atom)))))
 
 (defn- distinct-result
   [query-result]
@@ -358,6 +358,18 @@
     :else
     input))
 
+(defn sort-by-pos
+  [headings]
+  (sort-by (fn [heading]
+             (get-in heading [:heading/meta :pos]))
+           headings))
+
+(defn group-by-page
+  [headings]
+  (some->> headings
+           (sort-by-pos)
+           (group-by :heading/page)))
+
 (defn custom-query
   [query-string]
   (try
@@ -367,10 +379,14 @@
                            [`~query nil])
           inputs (map resolve-input inputs)
           repo (state/get-current-repo)
-          k [:custom query-string]]
-      (-> (apply q repo k {} query inputs)
-          react
-          seq-flatten))
+          k [:custom query-string]
+          result (-> (apply q repo k {} query inputs)
+                     react
+                     seq-flatten)
+          heading? (:heading/uuid (first result))]
+      (if heading?
+        (group-by-page result)
+        result))
     (catch js/Error e
       (println "Query parsing failed: ")
       (js/console.dir e))))
@@ -533,12 +549,6 @@
              [?heading :heading/file ?file]]
         (get-conn repo-url) path)
       seq-flatten))
-
-(defn sort-by-pos
-  [headings]
-  (sort-by (fn [heading]
-             (get-in heading [:heading/meta :pos]))
-           headings))
 
 (defn get-file-after-headings
   [repo-url file-id end-pos]
@@ -1060,7 +1070,6 @@
                                seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
-;; TODO: sorted by last-modified-at
 (defn get-page-referenced-headings
   [page]
   (when-let [repo (state/get-current-repo)]
@@ -1076,7 +1085,8 @@
                  [(contains? ?pages ?page)]]
                pages)
              react
-             seq-flatten)))))
+             seq-flatten
+             group-by-page)))))
 
 (defn get-heading-referenced-headings
   [heading-uuid]
@@ -1090,7 +1100,8 @@
                [?heading :heading/ref-headings ?ref-heading]]
              heading-uuid)
            react
-           seq-flatten))))
+           seq-flatten
+           group-by-page))))
 
 (defn get-matched-headings
   [match-fn limit]

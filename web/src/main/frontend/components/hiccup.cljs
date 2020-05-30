@@ -144,6 +144,22 @@
 
 (declare map-inline)
 (declare block)
+
+(rum/defc page-cp
+  [page]
+  [:a.page-ref
+   {:href (str "/page/" (util/url-encode (:page/name page)))
+    :on-click (fn [e]
+                (util/stop e)
+                (when (gobj/get e "shiftKey")
+                  (when-let [page (db/entity [:page/name (:page/name page)])]
+                    (state/sidebar-add-block!
+                     (:db/id page)
+                     :page
+                     {:page page}))
+                  (handler/show-right-sidebar)))}
+   (util/capitalize-all (:page/name page))])
+
 (rum/defc inline < rum/reactive
   [config item]
   (match item
@@ -218,16 +234,7 @@
           ;; page reference
           [:span.page-reference
            [:span.text-gray-500 "[["]
-           [:a {:href (str "/page/" (util/url-encode s))
-                :on-click (fn [e]
-                            (util/stop e)
-                            (when (gobj/get e "shiftKey")
-                              (when-let [page (db/entity [:page/name (string/lower-case s)])]
-                                (state/sidebar-add-block!
-                                 (:db/id page)
-                                 :page
-                                 {:page page}))
-                              (handler/show-right-sidebar)))} s]
+           (page-cp {:page/name s})
            [:span.text-gray-500 "]]"]])
 
         :else
@@ -443,67 +450,53 @@
         collapsed? (or toggle-collapsed? @collapsed-atom?)
         agenda? (= (:id config) "agenda")
         start-level (or (:start-level config) 1)]
-    [:<>
-     (if (:show-page? config)
-       (let [page (db/entity (:db/id page))]
-         [:a.page-ref {:href (str "/page/" (util/url-encode (:page/name page)))
-                       :on-click (fn [e]
-                                   (util/stop e)
-                                   (when (gobj/get e "shiftKey")
-                                     (when-let [page (db/entity [:page/name (:page/name page)])]
-                                       (state/sidebar-add-block!
-                                        (:db/id page)
-                                        :page
-                                        {:page page}))
-                                     (handler/show-right-sidebar)))}
-          (util/capitalize-all (:page/name page))]))
-     (when-not lock?
-       [:div.ls-heading-parent.flex-1
-        {:id heading-id
-         :headingid (str uuid)
-         :level level
-         :class (if dummy? "dummy")}
-        ;; control
-        [:div.flex.flex-row
-         {:style {:cursor "pointer"}
-          :on-mouse-over (fn []
-                           (when (has-children? heading-id level)
-                             (swap! *control-show?
-                                    assoc heading-id true)))
-          :on-mouse-out (fn []
+    (when-not lock?
+      [:div.ls-heading-parent.flex-1
+       {:id heading-id
+        :headingid (str uuid)
+        :level level
+        :class (if dummy? "dummy")}
+       ;; control
+       [:div.flex.flex-row
+        {:style {:cursor "pointer"}
+         :on-mouse-over (fn []
                           (when (has-children? heading-id level)
                             (swap! *control-show?
-                                   assoc heading-id false)))}
-         (when-not agenda?
-           (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? dummy?))
+                                   assoc heading-id true)))
+         :on-mouse-out (fn []
+                         (when (has-children? heading-id level)
+                           (swap! *control-show?
+                                  assoc heading-id false)))}
+        (when-not agenda?
+          (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? dummy?))
 
-         (if edit?
-           (editor/box (string/trim content)
-                       {:heading heading
-                        :heading-id uuid
-                        :heading-parent-id heading-id
-                        :format format
-                        :dummy? dummy?}
-                       edit-input-id)
-           [:div.flex-1.heading-body
-            {:on-click (fn [e]
-                         (when-not (or (util/link? (gobj/get e "target"))
-                                       (util/input? (gobj/get e "target")))
-                           (util/stop e)
-                           (handler/reset-cursor-range! (gdom/getElement heading-id))
-                           (state/set-editing!
-                            edit-input-id
-                            (handler/remove-level-spaces content format)
-                            heading)))}
-            heading-part
+        (if edit?
+          (editor/box (string/trim content)
+                      {:heading heading
+                       :heading-id uuid
+                       :heading-parent-id heading-id
+                       :format format
+                       :dummy? dummy?}
+                      edit-input-id)
+          [:div.flex-1.heading-body
+           {:on-click (fn [e]
+                        (when-not (or (util/link? (gobj/get e "target"))
+                                      (util/input? (gobj/get e "target")))
+                          (util/stop e)
+                          (handler/reset-cursor-range! (gdom/getElement heading-id))
+                          (state/set-editing!
+                           edit-input-id
+                           (handler/remove-level-spaces content format)
+                           heading)))}
+           heading-part
 
-            ;; non-heading children
-            (when (seq children)
-              [:div.non-heading-children {:class (if agenda? "ml-5")}
-               (for [child children]
-                 (let [block (block config child)]
-                   (rum/with-key (heading-child block)
-                     (cljs.core/random-uuid))))])])]])]))
+           ;; non-heading children
+           (when (seq children)
+             [:div.non-heading-children {:class (if agenda? "ml-5")}
+              (for [child children]
+                (let [block (block config child)]
+                  (rum/with-key (heading-child block)
+                    (cljs.core/random-uuid))))])])]])))
 
 (rum/defc heading-checkbox
   [heading class]
@@ -673,8 +666,8 @@
    (let [result (db/custom-query content)]
      (if (seq result)
        (->hiccup result (assoc config
-                               :show-page? true
-                               :custom-query? true))
+                               :custom-query? true
+                               :group-by-page? true))
        [:div "Empty"]))])
 
 (defn block
@@ -760,16 +753,26 @@
   [config col]
   (map #(block config %) col))
 
+(rum/defc headings-cp
+  [headings config]
+  (for [item headings]
+    (let [item (if (:heading/dummy? item)
+                 item
+                 (dissoc item :heading/meta))]
+      (rum/with-key
+        (heading config item)
+        (:heading/uuid item)))))
+
 (defn ->hiccup
   [headings config]
   [:div.content
-   (for [item headings]
-     (let [item (if (:heading/dummy? item)
-                  item
-                  (dissoc item :heading/meta))]
-       (rum/with-key
-        (heading config item)
-        (:heading/uuid item))))])
+   (if (:group-by-page? config)
+     (for [[page headings] headings]
+       (let [page (db/entity (:db/id page))]
+         [:div {:key (str "page-" (:db/id page))}
+          (page-cp page)
+          (headings-cp headings config)]))
+     (headings-cp headings config))])
 
 (comment
   ;; timestamps
