@@ -1153,8 +1153,7 @@
 (defn reset-config!
   [repo-url content]
   (let [config (some->> content
-                        (js/JSON.parse)
-                        (bean/->clj))]
+                        (reader/read-string))]
     (state/set-config! repo-url config)
     config))
 
@@ -1170,7 +1169,7 @@
     (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
 
 (defn restore!
-  [{:keys [repos] :as me} listen-handler]
+  [{:keys [repos] :as me} listen-handler restore-config-handler]
   (doall
    (for [{:keys [id url]} repos]
      (let [repo url
@@ -1201,8 +1200,7 @@
                      (reset-conn! db-conn attached-db)))
                  (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
                (listen-handler repo db-conn)
-               (when-let [config-content (get-file url config/config-file)]
-                 (reset-config! url config-content)))))))))))
+               (restore-config-handler repo))))))))))
 
 (defn build-page-graph
   [page theme]
@@ -1255,9 +1253,11 @@
                                     :label (util/capitalize-all p)
                                     :value (get-connections p)}
                                  (= p page)
-                                 (assoc :color (if dark?
-                                                 "#a4b5b6"
-                                                 "#5850ec"))
+                                 (assoc :color
+                                        {:border "#5850ec"
+                                         :background "#5850ec"
+                                         :highlight {:background "#4C51BF"}}
+                                        :shape "dot")
                                  dark?
                                  (assoc :font {:color "#dfdfdf"})))))]
         {:nodes nodes

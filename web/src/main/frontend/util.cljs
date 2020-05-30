@@ -328,7 +328,10 @@
 
 (defn get-caret-pos
   [input]
-  (bean/->clj ((gobj/get caret-pos "position") input)))
+  (try
+    (bean/->clj ((gobj/get caret-pos "position") input))
+    (catch js/Error e
+      nil)))
 
 (defn minimize-html
   [s]
@@ -390,9 +393,10 @@
 
 (defn input?
   [node]
-  (contains?
-   #{"INPUT" "TEXTAREA"}
-   (gobj/get node "tagName")))
+  (when node
+    (contains?
+     #{"INPUT" "TEXTAREA"}
+     (gobj/get node "tagName"))))
 
 (defn journal?
   [path]
@@ -555,6 +559,12 @@
      (.getDate local-date-time)
      0 0 0 0)))
 
+(defn- rec-get-heading-node
+  [node]
+  (if (d/has-class? node "ls-heading-parent")
+    node
+    (rec-get-heading-node (gobj/get node "parentNode"))))
+
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
 (defn get-selected-nodes
@@ -563,15 +573,14 @@
     (when (gobj/get js/window "getSelection")
       (let [selection (js/window.getSelection)
             range (.getRangeAt selection 0)
-            container (gobj/get range "commonAncestorContainer")]
-        (selection/getSelectedNodes container)
-        ;; (let [container-nodes (array-seq (.getElementsByClassName container class-name))]
-        ;;   (filter
-        ;;    (fn [node]
-        ;;      (let [result (.containsNode selection node true)]
-        ;;        result))
-        ;;    container-nodes))
-        ))
+            container (gobj/get range "commonAncestorContainer")
+            container-nodes (array-seq (selection/getSelectedNodes container))]
+        (map
+          (fn [node]
+            (if (= 3 (gobj/get node "nodeType")) ;textnode
+              (rec-get-heading-node node)
+              node))
+          container-nodes)))
     (catch js/Error _e
       nil)))
 

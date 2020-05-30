@@ -178,7 +178,9 @@
         path config/config-file
         file-path (str "/" path)
         default-content "{}"]
+    (prn {:path path})
     (p/let [file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+      (prn "file-exists? " file-exists?)
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
         (git-add repo-url path)))))
@@ -246,8 +248,6 @@
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
-      (create-month-journal-if-not-exists repo-url)
-      (create-config-file-if-not-exists repo-url)
       (history/clear-specific-history! [:git/repo repo-url])
       (history/add-history!
        [:git/repo repo-url]
@@ -279,6 +279,9 @@
               (p/then (fn [result]
                         (-> (git/checkout repo-url)
                             (p/then (fn [result]
+                                      (prn "pulled")
+                                      (create-month-journal-if-not-exists repo-url)
+                                      (create-config-file-if-not-exists repo-url)
                                       (set-git-status! repo-url nil)
                                       (set-git-last-pulled-at! repo-url)
                                       (when (and latest-commit fetchHead
@@ -488,7 +491,10 @@
                           (git-add repo path)
                           (cb))
                         (p/catch (fn [error]
-                                   (prn "Add history file handler failed, error: " error)))))}))))
+                                   (prn "Add history file handler failed, error: " error)))))}))
+   (fn [error]
+     (prn "Write file failed, path: " path ", content: " content)
+     (js/console.dir error))))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option file-path new-content]
@@ -539,8 +545,10 @@
              :or {pull-now? true}}]
   (periodically-update-repo-status repo-url)
   (periodically-pull repo-url pull-now?)
-  (when-not config/dev?
-    (periodically-push-tasks repo-url)))
+  (periodically-push-tasks repo-url)
+  ;; (when-not config/dev?
+  ;;   (periodically-push-tasks repo-url))
+  )
 
 (defn render-local-images!
   []
@@ -663,9 +671,10 @@
    (restore-cursor-pos! id markup false))
   ([id markup dummy?]
    (when-let [node (gdom/getElement (str id))]
-     (when-let [range (string/trim (state/get-cursor-range))]
-       (let [pos (inc (diff/find-position markup range))]
-         (util/set-caret-pos! node pos))))))
+     (when-let [cursor-range (state/get-cursor-range)]
+       (when-let [range (string/trim cursor-range)]
+        (let [pos (inc (diff/find-position markup range))]
+          (util/set-caret-pos! node pos)))))))
 
 (defn search
   [q]
@@ -1010,28 +1019,6 @@
       (p/finally (fn []
                    (clone-and-pull url)))))
 
-(defn watch-config!
-  []
-  (add-watch state/state
-             :config-changed
-             (fn [_k _r old-state new-state]
-               (let [repos (seq (keys (:config new-state)))]
-                 (doseq [repo repos]
-                   (when (not= (get-in new-state [:config repo])
-                               (get-in old-state [:config repo]))
-                     ;; persistent to file
-                     (let [repo-dir (util/get-repo-dir repo)
-                           file-path (str "/" config/config-file)
-                           content (js/JSON.stringify (bean/->js (get-in new-state [:config repo]))
-                                                      nil
-                                                      ;; indent spacing level
-                                                      2)]
-                       (p/let [content' (load-file repo file-path)]
-                         (when (not= content content')
-                           (fs/write-file repo-dir file-path content)
-                           (db/reset-file! repo config/config-file content)
-                           (git-add repo config/config-file))))))))))
-
 (defn remove-level-spaces
   [text format]
   (if-not (string/blank? text)
@@ -1127,11 +1114,17 @@
                        (clone-and-pull-repos me))))
                  (fn [_e])))))
 
+(defn restore-config!
+  [repo-url]
+  (p/let [content (load-file repo-url config/config-file)]
+    (when content
+      (db/reset-config! repo-url content))))
+
 (defn start!
   [render]
   (let [me (and js/window.user (bean/->clj js/window.user))]
     ;; async
-    (-> (p/all (db/restore! me db-listen-to-tx!))
+    (-> (p/all (db/restore! me db-listen-to-tx! restore-config!))
         (p/then
          (fn []
            (when me (set-state-kv! :me me))
@@ -1252,6 +1245,6 @@
                                path)]
       (let [db-content (db/get-file path)]
         (prn {:content content
+              :db-content db-content
               :utf8-length (utf8/length (utf8/encode content))}))))
-
   )
