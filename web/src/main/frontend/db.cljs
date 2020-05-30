@@ -15,7 +15,9 @@
             [rum.core :as rum]
             [goog.object :as gobj]
             ["localforage" :as localforage]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs.reader :as reader]
+            [cljs-time.core :as t]))
 
 ;; offline db
 (def store-name "dbs")
@@ -311,6 +313,60 @@
        (set! (.-state result-atom) result)
        (add-q! k query inputs result-atom)))))
 
+(defn- distinct-result
+  [query-result]
+  (-> query-result
+      seq
+      flatten
+      distinct))
+
+(def seq-flatten (comp flatten seq))
+
+(defn- date->int
+  [date]
+  (util/parse-int
+   (string/replace (util/ymd date) "/" "")))
+
+(defn resolve-input
+  [input]
+  (cond
+    (= :today input)
+    (date->int (t/today))
+    (= :yesterday input)
+    (date->int (t/yesterday))
+    (= :tomorrow input)
+    (date->int (t/plus (t/today) (t/days 1)))
+    (and (keyword? input)
+         (re-find #"^\d+d(-before)?$" (name input)))
+    (let [input (name input)
+          days (util/parse-int (subs input 0 (dec (count input))))]
+      (date->int (t/minus (t/today) (t/days days))))
+    (and (keyword? input)
+         (re-find #"^\d+d(-after)?$" (name input)))
+    (let [input (name input)
+          days (util/parse-int (subs input 0 (dec (count input))))]
+      (date->int (t/plus (t/today) (t/days days))))
+
+    :else
+    input))
+
+(defn custom-query
+  [query-string]
+  (try
+    (let [query (reader/read-string query-string)
+          [query inputs] (if (vector? (first query))
+                           [`~(first query) (rest query)]
+                           [`~query nil])
+          inputs (map resolve-input inputs)
+          repo (state/get-current-repo)
+          k [:custom query-string]]
+      (-> (apply q repo k {} query inputs)
+          react
+          seq-flatten))
+    (catch js/Error e
+      (println "Query parsing failed: ")
+      (js/console.dir e))))
+
 (defn refresh-query-result!
   [repo query inputs]
   (let [k [repo query inputs]]
@@ -369,15 +425,6 @@
    key value})
 
 ;; queries
-
-(defn- distinct-result
-  [query-result]
-  (-> query-result
-      seq
-      flatten
-      distinct))
-
-(def seq-flatten (comp flatten seq))
 
 (defn get-all-tags
   [repo]
@@ -882,11 +929,6 @@
    (get-journal (util/journal-name)))
   ([page-name]
    [page-name (get-page-headings page-name)]))
-
-(defn- date->int
-  [date]
-  (util/parse-int
-   (string/replace (util/ymd date) "/" "")))
 
 (defn get-journals-length
   []

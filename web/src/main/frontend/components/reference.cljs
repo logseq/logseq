@@ -22,9 +22,9 @@
           ref-headings (if heading-id
                          (db/get-heading-referenced-headings heading-id)
                          (db/get-page-referenced-headings page-name))
-          ref-headings (mapv (fn [heading] (assoc heading :heading/show-page? true)) ref-headings)
           ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
                                                     :start-level 2
+                                                    :show-page? true
                                                     :ref? true})]
       [:div.page-references
        (let [n-ref (count ref-headings)]

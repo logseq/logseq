@@ -429,7 +429,7 @@
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
-  [state {:heading/keys [uuid idx level children meta content dummy? lock? show-page? page format] :as heading} heading-part config]
+  [state {:heading/keys [uuid idx level children meta content dummy? lock? page format] :as heading} heading-part config]
   (let [config (assoc config :heading heading)
         ref? (boolean (:ref? config))
         sidebar? (boolean (:sidebar? config))
@@ -443,7 +443,7 @@
         agenda? (= (:id config) "agenda")
         start-level (or (:start-level config) 1)]
     [:<>
-     (if show-page?
+     (if (:show-page? config)
        (let [page (db/entity (:db/id page))]
          [:a.page-ref {:href (str "/page/" (util/url-encode (:page/name page)))
                        :on-click (fn [e]
@@ -659,6 +659,17 @@
   [config col]
   (map #(inline config %) col))
 
+(declare ->hiccup)
+
+(rum/defc custom-query < rum/reactive
+  [config options content]
+  [:div.custom-query
+   [:code "Query result: "]
+   (let [result (db/custom-query content)]
+     (if (seq result)
+       (->hiccup result (assoc config :show-page? true))
+       [:div "Empty"]))])
+
 (defn block
   [config item]
   (try
@@ -698,6 +709,10 @@
              {:__html content}}]
       ["Export" "hiccup" options content]
       (reader/read-string content)
+
+      ["Custom" "query" options content]
+      (custom-query config options content)
+
 
       ["Custom" name options l]
       (->elem
