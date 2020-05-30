@@ -595,7 +595,7 @@
     (cond
       name
       [:dl {:checked checked?}
-       [:dt name]
+       [:dt (map-inline config name)]
        (->elem :dd
                (vec-cat content [items]))]
 
