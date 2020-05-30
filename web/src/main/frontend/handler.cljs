@@ -196,7 +196,9 @@
   []
   (when-let [component (state/get-root-component)]
     (db/clear-query-state!)
-    (rum/request-render component)))
+    (rum/request-render component)
+    (doseq [component (state/get-custom-query-components)]
+      (rum/request-render component))))
 
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]

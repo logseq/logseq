@@ -31,6 +31,7 @@
     :ui/collapsed-headings {}
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
+    :ui/custom-query-components {}
 
     :github/contents {}
     :config {}
@@ -338,3 +339,13 @@
   [value]
   (when value
     (set-state! :journals-length value)))
+
+(defn add-custom-query-component!
+  [query-string component]
+  (update-state! :ui/custom-query-components
+                 (fn [m]
+                   (assoc m query-string component))))
+
+(defn get-custom-query-components
+  []
+  (vals (get @state :ui/custom-query-components)))

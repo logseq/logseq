@@ -422,6 +422,7 @@
   (cond
     ref? (str (:id config) "-")
     sidebar? (str "sidebar-" (:id config) "-")
+    (:custom-query? config) (str "custom-query-" (:id config) "-")
     :else nil))
 
 (rum/defcs heading-cp < rum/reactive
@@ -662,12 +663,18 @@
 (declare ->hiccup)
 
 (rum/defc custom-query < rum/reactive
+  {:did-mount (fn [state]
+                (when-let [query (last (:rum/args state))]
+                  (state/add-custom-query-component! query (:rum/react-component state)))
+                state)}
   [config options content]
   [:div.custom-query
    [:code "Query result: "]
    (let [result (db/custom-query content)]
      (if (seq result)
-       (->hiccup result (assoc config :show-page? true))
+       (->hiccup result (assoc config
+                               :show-page? true
+                               :custom-query? true))
        [:div "Empty"]))])
 
 (defn block

@@ -262,7 +262,7 @@
         (let [headings data
               current-page-id (get-current-page-id)
               {:heading/keys [page]} (first headings)
-              keys (when-let [page-id (:db/id page)]
+              handler-keys (when-let [page-id (:db/id page)]
                      (->>
                       (util/concat-without-nil
                        (map
@@ -287,11 +287,19 @@
                             (fn [[k page-id]]
                               (if (= k :page/refed-headings)
                                 [:page/ref-pages page-id]))
-                            keys)]
+                            handler-keys)
+              custom-queries (some->>
+                              (filter (fn [v]
+                                        (and (= (first v) (state/get-current-repo))
+                                             (= (second v) :custom)))
+                                      (keys @query-state))
+                              (map (fn [v]
+                                     (vec (drop 1 v)))))]
           (->>
            (util/concat-without-nil
-            keys
-            refed-pages)
+            handler-keys
+            refed-pages
+            custom-queries)
            distinct)))
       [[key]])))
 
