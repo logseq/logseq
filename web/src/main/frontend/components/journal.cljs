@@ -44,7 +44,7 @@
 
      (reference/references title)]))
 
-(rum/defc journals
+(rum/defc journals <
   [latest-journals]
   [:div#journals
    (ui/infinite-list

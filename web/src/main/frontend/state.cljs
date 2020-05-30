@@ -10,6 +10,7 @@
 (defonce state
   (atom
    {:route-match nil
+    :today (util/today)
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -349,3 +350,12 @@
 (defn get-custom-query-components
   []
   (vals (get @state :ui/custom-query-components)))
+
+(defn get-journal-template
+  []
+  (when-let [repo (get-current-repo)]
+    (get-in @state [:config repo :templates :journals])))
+
+(defn set-today!
+  []
+  (set-state! :today (util/today)))

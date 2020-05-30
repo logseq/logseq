@@ -172,7 +172,8 @@
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   []
-  (let [cloning? (state/sub :repo/cloning?)
+  (let [today (state/sub :today)
+        cloning? (state/sub :repo/cloning?)
         importing-to-db? (state/sub :repo/importing-to-db?)
         loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)

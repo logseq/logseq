@@ -31,6 +31,8 @@
             [frontend.commands :as commands]
             [frontend.encrypt :as encrypt]
             [cljs-time.local :as tl]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
             [frontend.history :as history])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
@@ -178,9 +180,7 @@
         path config/config-file
         file-path (str "/" path)
         default-content "{}"]
-    (prn {:path path})
     (p/let [file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
-      (prn "file-exists? " file-exists?)
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
         (git-add repo-url path)))))
@@ -279,7 +279,6 @@
               (p/then (fn [result]
                         (-> (git/checkout repo-url)
                             (p/then (fn [result]
-                                      (prn "pulled")
                                       (create-month-journal-if-not-exists repo-url)
                                       (create-config-file-if-not-exists repo-url)
                                       (set-git-status! repo-url nil)
@@ -1120,6 +1119,14 @@
     (when content
       (db/reset-config! repo-url content))))
 
+(defn watch-for-date!
+  []
+  (let [ms (-> (t/interval (t/now)
+                           (t/plus (t/today) (t/days 1)))
+               (t/in-millis)
+               (+ 1000))]
+    (js/setTimeout state/set-today! ms)))
+
 (defn start!
   [render]
   (let [me (and js/window.user (bean/->clj js/window.user))]
@@ -1129,6 +1136,7 @@
          (fn []
            (when me (set-state-kv! :me me))
            (render)
+           (watch-for-date!)
            (when me
              (when-let [object-key (:encrypt_object_key me)]
                (when-let [encrypted-token (state/get-encrypted-token)]
@@ -1141,8 +1149,8 @@
                   (p/catch
                       (fn [error]
                         (println "Token decrypted failed")
-                        (state/clear-encrypt-token!)))))))))
-        )))
+                        (state/clear-encrypt-token!)))))))
+           )))))
 
 (defn load-docs!
   []
