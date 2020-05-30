@@ -667,7 +667,9 @@
      (if (seq result)
        (->hiccup result (assoc config
                                :custom-query? true
-                               :group-by-page? true))
+                               :group-by-page? true)
+                 {:style {:margin-top "0.25rem"
+                          :margin-left "0.25rem"}})
        [:div "Empty"]))])
 
 (defn block
@@ -764,15 +766,17 @@
         (:heading/uuid item)))))
 
 (defn ->hiccup
-  [headings config]
-  [:div.content
-   (if (:group-by-page? config)
-     (for [[page headings] headings]
-       (let [page (db/entity (:db/id page))]
-         [:div {:key (str "page-" (:db/id page))}
-          (page-cp page)
-          (headings-cp headings config)]))
-     (headings-cp headings config))])
+  ([headings config]
+   (->hiccup headings config {}))
+  ([headings config option]
+   [:div.content option
+    (if (:group-by-page? config)
+      (for [[page headings] headings]
+        (let [page (db/entity (:db/id page))]
+          [:div {:key (str "page-" (:db/id page))}
+           (page-cp page)
+           (headings-cp headings config)]))
+      (headings-cp headings config))]))
 
 (comment
   ;; timestamps
