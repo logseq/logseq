@@ -43,10 +43,7 @@
                       :else
                       "initial")]
        [:span.diff {:key idx
-                    :style {:background-color bg-color
-                            :color (if (= bg-color "initial")
-                                     "initial"
-                                     "#FFF")}}
+                    :style {:background-color bg-color}}
         value]))])
 
 (rum/defc file < rum/reactive
@@ -79,7 +76,8 @@
              diff? (some (fn [[_idx {:keys [added removed]}]]
                            (or added removed))
                          diff)]
-         [:div.pre-line-white-space.p-2 {:class (if collapse? "hidden")}
+         [:div.pre-line-white-space.p-2 {:class (if collapse? "hidden")
+                                         :style {:overflow "hidden"}}
           (if edit?
             [:div.grid.grid-cols-2.gap-1
              (diff-cp diff)
