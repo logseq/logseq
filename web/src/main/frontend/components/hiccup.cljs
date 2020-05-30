@@ -661,8 +661,9 @@
                   (state/add-custom-query-component! query (:rum/react-component state)))
                 state)}
   [config options content]
-  [:div.custom-query
-   [:code "Query result: "]
+  [:div.custom-query.my-2
+   [:code (or (:query-title options)
+              "Query result: ")]
    (let [result (db/custom-query content)]
      (if (seq result)
        (->hiccup result (assoc config

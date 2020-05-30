@@ -354,7 +354,7 @@
 (defn get-journal-template
   []
   (when-let [repo (get-current-repo)]
-    (get-in @state [:config repo :templates :journals])))
+    (get-in @state [:config repo :default-templates :journals])))
 
 (defn set-today!
   []

@@ -22,11 +22,11 @@
         raw-headings (when (seq raw-headings)
                        (update (vec raw-headings) 0 assoc :heading/lock? true))
         headings (db/with-dummy-heading raw-headings format nil true)
-        encoded-page-name (util/url-encode page)]
-    (when (and
-           (= (string/lower-case title)
-              (string/lower-case (util/journal-name)))
-           (= 1 (count raw-headings)))
+        encoded-page-name (util/url-encode page)
+        today? (= (string/lower-case title)
+                  (string/lower-case (util/journal-name)))]
+    ;; no contents yet
+    (when (and today? (= 1 (count raw-headings)))
       (when-let [template (state/get-journal-template)]
         (handler/insert-new-heading!
          (first headings)
@@ -50,6 +50,16 @@
                       {:hiccup (hiccup/->hiccup headings
                                                 {:id encoded-page-name
                                                  :start-level 2})})
+
+     (when today?
+       (when-let [repo (state/get-current-repo)]
+         (let [queries (state/sub [:config repo :default-queries :journals])]
+           (when (seq queries)
+             [:div#today-queries
+              (for [{:keys [title query]} queries]
+                [:div {:key (str "query-" title)}
+                 (hiccup/custom-query {:start-level 2} {:query-title title}
+                                      query)])]))))
 
      (reference/references title)]))
 
