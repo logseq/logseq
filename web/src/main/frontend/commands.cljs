@@ -33,6 +33,8 @@
      ["DOING" (->marker "DOING")]
      ["DONE" (->marker "DONE")]
      ["WAIT" (->marker "WAIT")]
+     ["WAITING" (->marker "WAITING")]
+     ["IN-PROGRESS" (->marker "IN-PROGRESS")]
      ["CANCELED" (->marker "CANCELED")]
      ["Tomorrow" (->page-reference (util/tomorrow))]
      ["Yesterday" (->page-reference (util/yesterday))]
