@@ -314,7 +314,7 @@
     ["Footnote_Reference" options]
     (let [{:keys [id name]} options
           encode-name (util/url-encode name)]
-      [:sup
+      [:sup.fn
        [:a {:id (str "fnr." encode-name)
             :class "footref"
             :href (str "#fn." encode-name)}
@@ -480,14 +480,17 @@
                       edit-input-id)
           [:div.flex-1.heading-body
            {:on-click (fn [e]
-                        (when-not (or (util/link? (gobj/get e "target"))
-                                      (util/input? (gobj/get e "target")))
-                          (util/stop e)
-                          (handler/reset-cursor-range! (gdom/getElement heading-id))
-                          (state/set-editing!
-                           edit-input-id
-                           (handler/remove-level-spaces content format)
-                           heading)))}
+                        (let [target (gobj/get e "target")]
+                          (when-not (or (util/link? target)
+                                        (util/input? target)
+                                        (and (util/sup? target)
+                                             (d/has-class? target "fn")))
+                           (util/stop e)
+                           (handler/reset-cursor-range! (gdom/getElement heading-id))
+                           (state/set-editing!
+                            edit-input-id
+                            (handler/remove-level-spaces content format)
+                            heading))))}
            heading-part
 
            ;; non-heading children
@@ -743,7 +746,7 @@
                      :style {:font-size 14}
                      :class "footnum"
                      :href (str "#fnr." id)}
-            [:sup (str name "↩︎")]])]
+            [:sup.fn (str name "↩︎")]])]
          ])
 
       :else

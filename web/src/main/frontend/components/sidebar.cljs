@@ -343,10 +343,9 @@
          :style {:width "100%"
                  :height "100%"}}
         [:div#main-content
-         {:style {:width "100%"
+         {:style {
                   :height "100%"
-                  :overflow-y "scroll"
-                  :padding-right 17
+                  :overflow-y "auto"
                   :box-sizing "content-box"}}
          [:div.flex.justify-center
           [:div.flex-1.m-6#main-content-container

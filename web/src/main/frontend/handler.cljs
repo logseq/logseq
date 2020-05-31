@@ -514,11 +514,19 @@
      name
      email)))
 
+(defn highlight-block!
+  [fragment]
+  (when-let [element (gdom/getElement fragment)]
+    (dom/add-class! element "highlight-area")
+    (js/setTimeout #(dom/remove-class! element "highlight-area")
+                   2000)))
+
 (defn set-route-match!
   [route]
   (swap! state/state assoc :route-match route)
   (when-let [fragment (util/get-fragment)]
-    (util/scroll-to-element fragment)))
+    (util/scroll-to-element fragment)
+    (highlight-block! fragment)))
 
 (defn set-ref-component!
   [k ref]

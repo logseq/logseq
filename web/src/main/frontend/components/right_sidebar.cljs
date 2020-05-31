@@ -98,7 +98,7 @@
   (let [blocks (state/sub :sidebar/blocks)
         repo (state/sub :git/current-repo)
         starred (state/sub [:config repo :starred])]
-    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto {:style {:padding-bottom 300}}
+    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto
      (for [[idx [db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item idx db-id block-type block-data)

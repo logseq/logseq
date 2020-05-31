@@ -22,15 +22,6 @@
         (when-not (format/loaded? format)
           (handler/lazy-load format))))))
 
-(defn highlight-block-if-fragment
-  []
-  (when-let [fragment (util/get-fragment)]
-    (when-let [element (gdom/getElement fragment)]
-      (d/add-class! element "highlight-area")
-      ;; (js/setTimeout #(d/remove-class! element "highlight-area")
-      ;;                2000)
-      )))
-
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; headings were already selected.
@@ -156,12 +147,10 @@
                  (lazy-load-js state)
                  state)
    :did-mount (fn [state]
-                (highlight-block-if-fragment)
                 (util/code-highlight!)
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
-                 (highlight-block-if-fragment)
                  (util/code-highlight!)
                  (handler/render-local-images!)
                  (lazy-load-js state)

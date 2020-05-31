@@ -253,25 +253,56 @@
           (string/split #"\?")
           (first)))))
 
-(defn scroll-into-view
-  [element]
-  (let [scroll-top (gobj/get element "offsetTop")
-        scroll-top (if (zero? scroll-top)
-                     (-> (gobj/get element "parentElement")
-                         (gobj/get "offsetTop"))
-                     scroll-top)]
+;; (defn scroll-into-view
+;;   [element]
+;;   (let [scroll-top (gobj/get element "offsetTop")
+;;         scroll-top (if (zero? scroll-top)
+;;                      (-> (gobj/get element "parentElement")
+;;                          (gobj/get "offsetTop"))
+;;                      scroll-top)]
+;;     (prn {:scroll-top scroll-top})
+;;     (when-let [main (gdom/getElement "main-content")]
+;;       (prn {:main main})
+;;       (.scroll main #js {:top scroll-top
+;;                          ;; :behavior "smooth"
+;;                          }))))
 
-    (when-let [main (first (array-seq (gdom/getElementsByTagName "main")))]
-      (.scroll main #js {:top scroll-top
-                         ;; :behavior "smooth"
-                         }))))
+;; (defn scroll-to-element
+;;   [fragment]
+;;   (when fragment
+;;     (prn {:fragment fragment})
+;;     (when-not (string/blank? fragment)
+;;       (when-let [element (gdom/getElement fragment)]
+;;         (scroll-into-view element)))))
+
+(def speed 500)
+(def moving-frequency 15)
+
+(defn cur-doc-top []
+  (+ (.. js/document -body -scrollTop) (.. js/document -documentElement -scrollTop)))
+
+(defn element-top [elem top]
+  (if (.-offsetParent elem)
+    (let [client-top (or (.-clientTop elem) 0)
+          offset-top (.-offsetTop elem)]
+      (+ top client-top offset-top (element-top (.-offsetParent elem) top)))
+    top))
 
 (defn scroll-to-element
-  [fragment]
-  (when fragment
-    (when-not (string/blank? fragment)
-      (when-let [element (gdom/getElement fragment)]
-        (scroll-into-view element)))))
+  [elem-id]
+  (when elem-id
+    (let [elem (.getElementById js/document elem-id)
+          hop-count (/ speed moving-frequency)
+          doc-top (cur-doc-top)
+          gap (/ (- (element-top elem 0) doc-top) hop-count)
+          main (gdom/getElement "main-content")]
+      (doseq [i (range 1 (inc hop-count))]
+        (let [hop-top-pos (* gap i)
+              move-to (- hop-top-pos doc-top 68)
+              timeout (* moving-frequency i)]
+          (js/setTimeout (fn []
+                           (.scrollTo main 0 move-to))
+                         timeout))))))
 
 (defn scroll-to-top
   []
@@ -291,6 +322,12 @@
   [node]
   (contains?
    #{"A" "BUTTON"}
+   (gobj/get node "tagName")))
+
+(defn sup?
+  [node]
+  (contains?
+   #{"SUP"}
    (gobj/get node "tagName")))
 
 (defn input?
