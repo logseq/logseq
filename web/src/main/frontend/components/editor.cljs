@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
             [frontend.util :as util]
+            [frontend.date :as date]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.image :as image]
@@ -225,7 +226,7 @@
      {:on-change
       (fn [e date]
         (util/stop e)
-        (let [journal (util/journal-name (tc/to-date date))]
+        (let [journal (date/journal-name (tc/to-date date))]
           ;; similar to page reference
           (insert-command! id
                            (util/format "[[%s]]" journal)

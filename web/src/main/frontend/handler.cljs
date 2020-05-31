@@ -28,6 +28,7 @@
             [frontend.format :as format]
             [frontend.format.protocol :as protocol]
             [frontend.format.block :as block]
+            [frontend.date :as date]
             [frontend.commands :as commands]
             [frontend.encrypt :as encrypt]
             [cljs-time.local :as tl]
@@ -131,7 +132,7 @@
 (defn- set-git-last-pulled-at!
   [repo-url]
   (db/set-key-value repo-url :git/last-pulled-at
-                    (util/get-date-time-string (tl/local-now))))
+                    (date/get-date-time-string (tl/local-now))))
 
 (defn- set-git-error!
   [repo-url value]
@@ -144,19 +145,17 @@
 
 ;; journals
 
-;; org-journal format, something like `* Tuesday, 06/04/13`
+;; Something like `* May 1st, 2020`
 (defn default-month-journal-content
   [format]
-  (let [{:keys [year month day]} (util/get-date)
-        last-day (util/get-month-last-day)
-        month-pad (if (< month 10) (str "0" month) month)]
+  (let [{:keys [year month day]} (date/get-date)
+        last-day (date/get-month-last-day)]
     (->> (map
            (fn [day]
-             (let [day-pad (if (< day 10) (str "0" day) day)
-                   weekday (util/get-weekday (js/Date. year (dec month) day))]
-               (str (if (= format :org)
-                      "* "
-                      "# ") weekday ", " month-pad "/" day-pad "/" year "\n")))
+             (util/format
+              "%s %s\n"
+              (config/get-heading-pattern format)
+              (date/format (t/date-time year month day))))
            (range 1 (inc last-day)))
          (apply str))))
 
@@ -164,7 +163,7 @@
   [repo-url]
   (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)
-        path (util/current-journal-path format)
+        path (date/current-journal-path format)
         file-path (str "/" path)
         default-content (default-month-journal-content format)]
     (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
@@ -455,7 +454,7 @@
                                     {:keys [hour min]
                                      :or {hour 9
                                           min 0}} time
-                                    now (util/get-local-date)]
+                                    now (date/get-local-date)]
                                 (when (and (contains? #{"Scheduled" "Deadline"} type)
                                            (= (assoc date :hour hour :minute min) now))
                                   (let [notification-text (str type ": " (second (first title)))]
@@ -1125,11 +1124,13 @@
 
 (defn watch-for-date!
   []
+  (state/set-today! (date/today))
   (let [ms (-> (t/interval (t/now)
                            (t/plus (t/today) (t/days 1)))
                (t/in-millis)
                (+ 1000))]
-    (js/setTimeout state/set-today! ms)))
+    (js/setTimeout (fn []
+                     (state/set-today! (date/today))) ms)))
 
 (defn start!
   [render]

@@ -10,7 +10,7 @@
 (defonce state
   (atom
    {:route-match nil
-    :today (util/today)
+    :today nil
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -122,7 +122,7 @@
   (when input-id
     (when set-input-value?
       (when-let [input (gdom/getElement input-id)]
-       (gobj/set input "value" value)))
+        (gobj/set input "value" value)))
     (update-state! :editor/content (fn [m]
                                      (assoc m input-id value)))))
 
@@ -326,7 +326,7 @@
   [status]
   (when (seq status)
     (when-let [current-repo (get-current-repo)]
-     (set-state! [:repo/sync-status current-repo] status))))
+      (set-state! [:repo/sync-status current-repo] status))))
 
 (defn set-root-component!
   [component]
@@ -357,5 +357,14 @@
     (get-in @state [:config repo :default-templates :journals])))
 
 (defn set-today!
+  [value]
+  (set-state! :today value))
+
+(defn get-date-formatter
   []
-  (set-state! :today (util/today)))
+  (or
+   (when-let [repo (get-current-repo)]
+     (get-in @state [:config repo :date-formatter]))
+   ;; TODO:
+   (get-in @state [:me :settings :date-formatter])
+   "MMM do, yyyy"))

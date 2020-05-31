@@ -3,6 +3,7 @@
             [frontend.blob :as blob]
             ["/frontend/exif" :as exif]
             [frontend.util :as util]
+            [frontend.date :as date]
             [clojure.string :as string]))
 
 (defn reverse?
@@ -84,7 +85,7 @@
                          files-limit 1}}]
   (doseq [file (take files-limit (array-seq files))]
     (let [file-type (gobj/get file "type")
-          ymd (->> (vals (util/year-month-day-padded))
+          ymd (->> (vals (date/year-month-day-padded))
                    (string/join "_"))
           file-name (str ymd "_" (gobj/get file "name"))]
       (when (= 0 (.indexOf file-type "image/"))

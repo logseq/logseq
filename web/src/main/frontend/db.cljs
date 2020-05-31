@@ -1,6 +1,7 @@
 (ns frontend.db
   (:require [datascript.core :as d]
             [frontend.util :as util]
+            [frontend.date :as date]
             [medley.core :as medley]
             [datascript.transit :as dt]
             [frontend.format :as format]
@@ -228,7 +229,7 @@
                :file
                (get-in match [:path-params :path])
 
-               (util/journal-name))]
+               (date/journal-name))]
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
         (:db/id (entity [:page/name page-name]))))))
@@ -333,7 +334,7 @@
 (defn- date->int
   [date]
   (util/parse-int
-   (string/replace (util/ymd date) "/" "")))
+   (string/replace (date/ymd date) "/" "")))
 
 (defn resolve-input
   [input]
@@ -939,12 +940,12 @@
 
 (defn get-current-journal-path
   []
-  (let [{:keys [year month]} (util/get-date)]
-    (util/journals-path year month (state/get-preferred-format))))
+  (let [{:keys [year month]} (date/get-date)]
+    (date/journals-path year month (state/get-preferred-format))))
 
 (defn get-journal
   ([]
-   (get-journal (util/journal-name)))
+   (get-journal (date/journal-name)))
   ([page-name]
    [page-name (get-page-headings page-name)]))
 
@@ -988,7 +989,6 @@
        (mapv
         (fn [page]
           [page
-           ;; (get-page-headings repo-url page)
            (get-page-format page)])
         pages)))))
 

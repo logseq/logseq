@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.util :as util]
+            [frontend.date :as date]
             [medley.core :as medley]
             [frontend.graph.vis :as vis]
             [clojure.string :as string]))
@@ -70,7 +71,7 @@
                :file
                (get-in match [:path-params :path])
 
-               (util/journal-name))]
+               (date/journal-name))]
     (if page
       (util/url-decode (string/lower-case page)))))
 

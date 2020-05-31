@@ -1,6 +1,7 @@
 (ns frontend.components.journal
   (:require [rum.core :as rum]
             [frontend.util :as util]
+            [frontend.date :as date]
             [frontend.handler :as handler]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -24,7 +25,7 @@
         headings (db/with-dummy-heading raw-headings format nil true)
         encoded-page-name (util/url-encode page)
         today? (= (string/lower-case title)
-                  (string/lower-case (util/journal-name)))]
+                  (string/lower-case (date/journal-name)))]
     ;; no contents yet
     (when (and today? (= 1 (count raw-headings)))
       (when-let [template (state/get-journal-template)]

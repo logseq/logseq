@@ -46,20 +46,6 @@
   [pred coll]
   (first (filter pred coll)))
 
-(defn get-local-date
-  []
-  (let [date (js/Date.)
-        year (.getFullYear date)
-        month (inc (.getMonth date))
-        day (.getDate date)
-        hour (.getHours date)
-        minute (.getMinutes date)]
-    {:year year
-     :month month
-     :day day
-     :hour hour
-     :minute minute}))
-
 (defn dissoc-in
   "Dissociates an entry from a nested associative structure returning a new
   nested structure. keys is a sequence of keys. Any empty maps that result
@@ -185,95 +171,11 @@
          on-ok
          on-failed))
 
-(defn get-weekday
-  [date]
-  (.toLocaleString date "en-us" (clj->js {:weekday "long"})))
-
-(defn get-date
-  ([]
-   (get-date (js/Date.)))
-  ([date]
-   {:year (.getFullYear date)
-    :month (inc (.getMonth date))
-    :day (.getDate date)
-    :weekday (get-weekday date)}))
-
-(defn journals-path
-  [year month preferred-format]
-  (let [month (if (< month 10) (str "0" month) month)]
-    (str "journals/" year "_" month "." (string/lower-case (name preferred-format)))))
-
-(defn current-journal-path
-  [preferred-format]
-  (let [{:keys [year month]} (get-date)]
-    (journals-path year month preferred-format)))
-
 (defn zero-pad
   [n]
   (if (< n 10)
     (str "0" n)
     (str n)))
-
-(defn year-month-day-padded
-  ([]
-   (year-month-day-padded (get-date)))
-  ([date]
-   (let [{:keys [year month day]} date]
-     {:year year
-      :month (zero-pad month)
-      :day (zero-pad day)})))
-
-(defn mdy
-  ([]
-   (mdy (js/Date.)))
-  ([date]
-   (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
-     (str month "/" day "/" year))))
-
-(defn ymd
-  ([]
-   (ymd (js/Date.)))
-  ([date]
-   (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
-     (str year "/" month "/" day))))
-
-(defn journal-name
-  ([]
-   (journal-name (js/Date.)))
-  ([date]
-   (str (get-weekday date) ", " (mdy date))))
-
-(defn today
-  []
-  (journal-name))
-
-(defn tomorrow
-  []
-  (let [d (js/Date.)
-        _ (.setDate d (inc (.getDate (js/Date.))))]
-    (journal-name d)))
-
-(defn yesterday
-  []
-  (let [d (js/Date.)
-        _ (.setDate d (dec (.getDate (js/Date.))))]
-    (journal-name d)))
-
-(defn get-current-time
-  []
-  (let [d (js/Date.)]
-    (.toLocaleTimeString
-     d
-     (gobj/get js/window.navigator "language")
-     (bean/->js {:hour "2-digit"
-                 :minute "2-digit"
-                 :hour12 false}))))
-
-(defn get-month-last-day
-  []
-  (let [today (js/Date.)
-        date (js/Date. (.getFullYear today) (inc (.getMonth today)) 0)]
-    (.getDate date)))
 
 (defn parse-int
   [x]
@@ -662,8 +564,3 @@
   [& cols]
   (->> (apply concat cols)
        (remove nil?)))
-
-(def custom-formatter (format/formatter "yyyy-MM-dd HH:mm:ssZ"))
-
-(defn get-date-time-string [date-time]
-  (format/unparse custom-formatter date-time))
