@@ -247,7 +247,7 @@
             (->elem
              :a
              (cond->
-                 {:href href}
+               {:href href}
                title
                (assoc :title title))
              (map-inline config label))
@@ -260,8 +260,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -383,15 +383,15 @@
         [:span ""])]
      [:a.flex.flex-row.items-center.justify-center
       (cond->
-          {:draggable true
-           :on-drag (fn [event]
-                      )
-           :on-drag-over (fn [event]
-                           )
-           :on-drop (fn [event]
-                      )
-           :style {:width 14
-                   :height 24}}
+        {:draggable true
+         :on-drag (fn [event]
+                    )
+         :on-drag-over (fn [event]
+                         )
+         :on-drop (fn [event]
+                    )
+         :style {:width 14
+                 :height 24}}
         (not dummy?)
         (assoc :href (str "/page/" uuid)
                :on-click (fn [e]
@@ -485,12 +485,12 @@
                                         (util/input? target)
                                         (and (util/sup? target)
                                              (d/has-class? target "fn")))
-                           (util/stop e)
-                           (handler/reset-cursor-range! (gdom/getElement heading-id))
-                           (state/set-editing!
-                            edit-input-id
-                            (handler/remove-level-spaces content format)
-                            heading))))}
+                            (util/stop e)
+                            (handler/reset-cursor-range! (gdom/getElement heading-id))
+                            (state/set-editing!
+                             edit-input-id
+                             (handler/remove-level-spaces content format)
+                             heading))))}
            heading-part
 
            ;; non-heading children
@@ -676,6 +676,24 @@
                           :margin-left "0.25rem"}})
        [:div "Empty"]))])
 
+(rum/defc admonition
+  [type options content]
+  (when-let [icon (case (string/lower-case (name type))
+                    "note" svg/note
+                    "tip" svg/tip
+                    "important" svg/important
+                    "caution" svg/caution
+                    "warning" svg/warning
+                    nil)]
+    [:div.admonitionblock {:class type}
+     [:table
+      [:tbody
+       [:tr
+        [:td.icon (icon)]
+        [:td.content
+         [:div.paragraph
+          content]]]]]]))
+
 (defn block
   [config item]
   (try
@@ -719,6 +737,20 @@
       ["Custom" "query" options content]
       (custom-query config options content)
 
+      ["Custom" "note" options content]
+      (admonition "note" options content)
+
+      ["Custom" "tip" options content]
+      (admonition "tip" options content)
+
+      ["Custom" "important" options content]
+      (admonition "important" options content)
+
+      ["Custom" "caution" options content]
+      (admonition "caution" options content)
+
+      ["Custom" "warning" options content]
+      (admonition "warning" options content)
 
       ["Custom" name options l]
       (->elem

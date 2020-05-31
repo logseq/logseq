@@ -555,9 +555,9 @@
              :or {pull-now? true}}]
   (periodically-update-repo-status repo-url)
   (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url)
-  ;; (when-not config/dev?
-  ;;   (periodically-push-tasks repo-url))
+  ;; (periodically-push-tasks repo-url)
+  (when-not config/dev?
+    (periodically-push-tasks repo-url))
   )
 
 (defn render-local-images!
