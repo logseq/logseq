@@ -569,7 +569,7 @@
     [l1 & tl]
     (let [{:keys [ordered name]} l1]
       (cond
-        name
+        (seq name)
         :dl
         ordered
         :ol
@@ -596,7 +596,7 @@
                  (for [item items]
                    (list-item config item))))]
     (cond
-      name
+      (seq name)
       [:dl {:checked checked?}
        [:dt (map-inline config name)]
        (->elem :dd
