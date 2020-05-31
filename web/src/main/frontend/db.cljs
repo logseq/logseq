@@ -737,7 +737,9 @@
 (defn valid-journal-title?
   [title]
   (and title
-       (not (js/isNaN (js/Date.parse title)))))
+       (or
+        (date/valid? (string/capitalize title))
+        (not (js/isNaN (js/Date.parse title))))))
 
 (defn get-heading-content
   [utf8-content heading]
@@ -750,12 +752,6 @@
                       (:pos meta)))))
 
 ;; file
-
-(defn journal-page-name->int
-  [page-name]
-  (let [[m d y] (-> (last (string/split page-name #", "))
-                    (string/split #"/"))]
-    (util/parse-int (str y m d))))
 
 (defn extract-pages-and-headings
   [format ast directives file content utf8-content journal? pages-fn]
@@ -800,7 +796,7 @@
                            :page/file [:file/path file]
                            :page/journal? journal?
                            :page/journal-day (if journal?
-                                               (journal-page-name->int page)
+                                               (date/journal-title->int (string/capitalize page))
                                                0)}
                         (seq directives)
                         (assoc :page/directives directives)
@@ -846,7 +842,8 @@
              headings)
             (remove nil?))))
     (catch js/Error e
-      (prn "Parsing error: " e))))
+      (prn "Parsing error: " e)
+      (js/console.dir e))))
 
 ;; check journal formats and report errors
 (defn extract-headings-pages

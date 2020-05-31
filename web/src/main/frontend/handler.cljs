@@ -159,6 +159,14 @@
            (range 1 (inc last-day)))
          (apply str))))
 
+(defn re-render-root!
+  []
+  (when-let [component (state/get-root-component)]
+    (db/clear-query-state!)
+    (rum/request-render component)
+    (doseq [component (state/get-custom-query-components)]
+      (rum/request-render component))))
+
 (defn create-month-journal-if-not-exists
   [repo-url]
   (let [repo-dir (util/get-repo-dir repo-url)
@@ -171,6 +179,7 @@
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
+        (re-render-root!)
         (git-add repo-url path)))))
 
 (defn create-config-file-if-not-exists
@@ -192,14 +201,6 @@
                                (load-file repo-url file))))]
       (ok-handler
        (zipmap files contents)))))
-
-(defn re-render-root!
-  []
-  (when-let [component (state/get-root-component)]
-    (db/clear-query-state!)
-    (rum/request-render component)
-    (doseq [component (state/get-custom-query-components)]
-      (rum/request-render component))))
 
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]
@@ -247,6 +248,9 @@
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
+      (create-month-journal-if-not-exists repo-url)
+      (create-config-file-if-not-exists repo-url)
+
       (history/clear-specific-history! [:git/repo repo-url])
       (history/add-history!
        [:git/repo repo-url]

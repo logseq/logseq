@@ -501,7 +501,7 @@
 (rum/defc heading-checkbox
   [heading class]
   (case (:heading/marker heading)
-    (list "DOING" "IN-PROGRESS" "TODO" "WAIT")
+    (list "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING")
     (ui/checkbox {:class class
                   :style {:margin-top -2}
                   :on-change (fn [_e]
@@ -525,7 +525,7 @@
         agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t
                                    (str "mr-1 cursor"))
-        marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT"} marker)
+        marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
                     [:span {:class (str "task-status " (string/lower-case marker))
                             :style {:margin-right 3.5}}
                      (string/upper-case marker)])

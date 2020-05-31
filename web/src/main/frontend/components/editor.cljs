@@ -226,7 +226,8 @@
      {:on-change
       (fn [e date]
         (util/stop e)
-        (let [journal (date/journal-name (tc/to-date date))]
+        (let [date (t/to-default-time-zone date)
+              journal (date/journal-name date)]
           ;; similar to page reference
           (insert-command! id
                            (util/format "[[%s]]" journal)

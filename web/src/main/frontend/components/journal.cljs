@@ -16,6 +16,21 @@
             [clojure.string :as string]))
 
 (rum/defc journal-cp < rum/reactive
+  {:init (fn [state]
+           (let [[[title format]] (:rum/args state)
+                 page (string/lower-case title)
+                 today? (= page (string/lower-case (date/journal-name)))]
+             ;; no contents yet
+             (when today?
+               (let [raw-headings (db/get-page-headings page)
+                     headings (db/with-dummy-heading raw-headings format nil true)]
+                 (when (= 1 (count raw-headings))
+                   (when-let [template (state/get-journal-template)]
+                     (handler/insert-new-heading!
+                      (first headings)
+                      (str (:heading/content (first headings)) "\n" template)
+                      false))))))
+           state)}
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
@@ -26,13 +41,6 @@
         encoded-page-name (util/url-encode page)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))]
-    ;; no contents yet
-    (when (and today? (= 1 (count raw-headings)))
-      (when-let [template (state/get-journal-template)]
-        (handler/insert-new-heading!
-         (first headings)
-         (str (:heading/content (first headings)) "\n" template)
-         false)))
     [:div.flex-1
      [:a.initial-color {:href (str "/page/" encoded-page-name)
                         :on-click (fn [e]
