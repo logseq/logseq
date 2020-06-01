@@ -247,7 +247,7 @@
             (->elem
              :a
              (cond->
-               {:href href}
+                 {:href href}
                title
                (assoc :title title))
              (map-inline config label))
@@ -260,8 +260,8 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -383,15 +383,15 @@
         [:span ""])]
      [:a.flex.flex-row.items-center.justify-center
       (cond->
-        {:draggable true
-         :on-drag (fn [event]
-                    )
-         :on-drag-over (fn [event]
-                         )
-         :on-drop (fn [event]
-                    )
-         :style {:width 14
-                 :height 24}}
+          {:draggable true
+           :on-drag (fn [event]
+                      )
+           :on-drag-over (fn [event]
+                           )
+           :on-drop (fn [event]
+                      )
+           :style {:width 14
+                   :height 24}}
         (not dummy?)
         (assoc :href (str "/page/" uuid)
                :on-click (fn [e]
@@ -685,14 +685,10 @@
                     "caution" svg/caution
                     "warning" svg/warning
                     nil)]
-    [:div.admonitionblock {:class type}
-     [:table
-      [:tbody
-       [:tr
-        [:td.icon (icon)]
-        [:td.content
-         [:div.paragraph
-          content]]]]]]))
+    [:div.flex.flex-row.admonitionblock.my-4.align-items {:class type}
+     [:div.pr-4.admonition-icon
+      {:title (string/upper-case type)} (icon)]
+     [:div.ml-4.text-lg content]]))
 
 (defn block
   [config item]
