@@ -677,7 +677,7 @@
        [:div "Empty"]))])
 
 (rum/defc admonition
-  [type options content]
+  [config type options result]
   (when-let [icon (case (string/lower-case (name type))
                     "note" svg/note
                     "tip" svg/tip
@@ -686,9 +686,10 @@
                     "warning" svg/warning
                     nil)]
     [:div.flex.flex-row.admonitionblock.my-4.align-items {:class type}
-     [:div.pr-4.admonition-icon
+     [:div.pr-4.admonition-icon.flex.flex-col.justify-center
       {:title (string/upper-case type)} (icon)]
-     [:div.ml-4.text-lg content]]))
+     [:div.ml-4.text-lg
+      (blocks config result)]]))
 
 (defn block
   [config item]
@@ -730,23 +731,23 @@
       ["Export" "hiccup" options content]
       (reader/read-string content)
 
-      ["Custom" "query" options content]
+      ["Custom" "query" options _result content]
       (custom-query config options content)
 
-      ["Custom" "note" options content]
-      (admonition "note" options content)
+      ["Custom" "note" options result content]
+      (admonition config "note" options result)
 
-      ["Custom" "tip" options content]
-      (admonition "tip" options content)
+      ["Custom" "tip" options result content]
+      (admonition config "tip" options result)
 
-      ["Custom" "important" options content]
-      (admonition "important" options content)
+      ["Custom" "important" options result content]
+      (admonition config "important" options result)
 
-      ["Custom" "caution" options content]
-      (admonition "caution" options content)
+      ["Custom" "caution" options result content]
+      (admonition config "caution" options result)
 
-      ["Custom" "warning" options content]
-      (admonition "warning" options content)
+      ["Custom" "warning" options result content]
+      (admonition config "warning" options result)
 
       ["Custom" name options l]
       (->elem
