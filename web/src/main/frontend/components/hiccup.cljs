@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [dommy.core :as d]
+            [datascript.core :as dc]
             [goog.dom :as gdom]
             [frontend.expand :as expand]
             [frontend.components.editor :as editor]
@@ -160,6 +161,30 @@
                   (handler/show-right-sidebar)))}
    (util/capitalize-all (:page/name page))])
 
+(defn- latex-environment-content
+  [name option content]
+  (if (= (string/lower-case name) "equation")
+    content
+    (util/format "\\begin%s\n%s\\end{%s}"
+                 (str "{" name "}" option)
+                 content
+                 name)))
+
+(rum/defc latex <
+  {:did-mount (fn [state]
+                (let [[id s display?] (:rum/args state)
+                      component (:rum/react-component state)]
+                  (js/katex.render s (gdom/getElement id)
+                                   #js {:displayMode display?
+                                        :throwOnError false}))
+                state)}
+  [id s block? display?]
+  (let [element (if block?
+                  :div.latex
+                  :span.latex-inline)]
+    [element {:id id}
+    s]))
+
 (rum/defc inline < rum/reactive
   [config item]
   (match item
@@ -184,10 +209,10 @@
             {:__html (:html e)}}]
 
     ["Latex_Fragment" ["Displayed" s]]
-    (util/format "\\[%s\\]" s)
+    (latex (str (dc/squuid)) s false true)
 
     ["Latex_Fragment" ["Inline" s]]
-    (util/format "\\(%s\\)" s)
+    (latex (str (dc/squuid)) s false false)
 
     ["Target" s]
     [:a {:id s} s]
@@ -708,8 +733,7 @@
       ["Table" t]
       (table config t)
       ["Math" s]
-      [:div.mathblock
-       (str "$$" s "$$")]
+      (latex (str (dc/squuid)) s true true)
       ["Example" l]
       [:pre.pre-wrap-white-space
        (join-lines l)]
@@ -730,6 +754,8 @@
              {:__html content}}]
       ["Export" "hiccup" options content]
       (reader/read-string content)
+      ["Export" "latex" options content]
+      (latex (str (dc/squuid)) content true false)
 
       ["Custom" "query" options result content]
       (custom-query config options content)
@@ -757,14 +783,10 @@
       ["Latex_Fragment" l]
       [:p.latex-fragment
        (inline config ["Latex_Fragment" l])]
+
       ["Latex_Environment" name option content]
-      (let [content (util/format "\n\begin{%s} {%s}\n%s\n\\end{%s}"
-                                 name
-                                 option
-                                 (join-lines content)
-                                 name)]
-        [:div.latex-environment
-         content])
+      (let [content (latex-environment-content name option content)]
+        (latex (str (dc/squuid)) content true true))
       ["Footnote_Definition" name definition]
       (let [id (util/url-encode name)]
         [:div.footdef
