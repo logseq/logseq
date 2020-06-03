@@ -607,7 +607,9 @@
                                          nil))
 
                       :else
-                      (reset! *matched-commands matched-commands)))
+                      (do
+                        (reset! *show-commands true)
+                        (reset! *matched-commands matched-commands))))
                   (reset! *show-commands false)
                   )))))))))
   {:after (fn [state _props]
