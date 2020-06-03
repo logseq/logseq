@@ -60,7 +60,14 @@
 (def autopair-map
   {"[" "]"
    "{" "}"
-   "(" ")"})
+   "(" ")"
+   "$" "$"                              ; math
+   "`" "`"
+   "~" "~"
+   "/" "/"
+   "*" "*"
+   "_" "_"
+   "^" "^"})
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -585,30 +592,30 @@
              (when-not (state/get-editor-show-input)
                (util/stop e)
                (adjust-heading-level! state nil)))
-
-         ;; autopairs
-         ;; [ && { (shift+219)
-         219 (fn [state e]
-               (util/stop e)
-               (autopair input-id (gobj/get e "key") format nil))
-         ;; (
-         57 (fn [state e]
-              (util/stop e)
-              (autopair input-id "(" format nil))
          }
         (fn [e key-code]
           (let [key (gobj/get e "key")]
-            (when (and
-                   (contains? (set (keys reversed-autopair-map)) key)
-                   (or
-                    (=
-                     (get-previous-input-char input)
-                     (get reversed-autopair-map key))
-                    (=
-                     (get-previous-input-char input)
-                     key)))
-              (util/stop e)
-              (util/cursor-move-forward input 1)))
+            (cond
+              (contains? (set (keys autopair-map)) key)
+              (do
+                (util/stop e)
+                (autopair input-id key format nil))
+
+              (and
+               (contains? (set (keys reversed-autopair-map)) key)
+               (or
+                (=
+                 (get-previous-input-char input)
+                 (get reversed-autopair-map key))
+                (=
+                 (get-previous-input-char input)
+                 key)))
+              (do
+                (util/stop e)
+                (util/cursor-move-forward input 1))
+
+              :else
+              nil))
           ;; (swap! state/state assoc
           ;;        :editor/last-saved-cursor nil)
           ))
