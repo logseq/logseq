@@ -825,7 +825,8 @@
                              (let [file-content (db/get-file file-path)
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
+                                   page-modified-time [[:db/add (:db/id page) :page/last-modified-at (tc/to-long (t/now))]]]
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -833,12 +834,12 @@
                                  (concat
                                   pages
                                   headings
-                                  after-headings)
+                                  after-headings
+                                  page-modified-time)
                                  {:key :heading/change
                                   :data headings}
                                  file-path
-                                 new-content))
-                               )))]
+                                 new-content)))))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))

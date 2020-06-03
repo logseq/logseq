@@ -7,6 +7,8 @@
             [frontend.state :as state]
             [goog.object :as gobj]
             [cljs-bean.core :as bean]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
             ["/frontend/git_ext" :as git-ext]))
 
 ;; TODO: move to a js worker
@@ -215,3 +217,25 @@
                      :ref (str "refs/heads/" default-branch)
                      :value oid
                      :force true})))
+
+;; "git log -1 --pretty=\"format:%cI\""
+;; FIXME: Uncaught (in promise) ObjectTypeAssertionFail: Object 0698e8812d6f7b37dc98aea28de2d04714cead80 was anticipated to be a commit but it is a blob. This is probably a bug deep in isomorphic-git!
+;; (defn get-last-modified-date
+;;   [repo-url token path]
+;;   (let [dir (util/get-repo-dir repo-url)]
+;;     (p/let [commits (log repo-url token 1)
+;;             commit (first commits)
+;;             time (try
+;;                    (p/let [o (js/git.readObject #js {:dir dir
+;;                                                      :oid (gobj/get commit "oid")
+;;                                                      :filepath path})
+;;                            oid (gobj/get o "oid")
+;;                            commit (read-commit repo-url oid)]
+;;                      (-> (gobj/get commit "author")
+;;                          (gobj/get "timestamp")))
+;;                      (catch js/Error e
+;;                        nil))]
+;;       (when time
+;;         (-> (* time 1000)
+;;             (tc/to-date-time)
+;;             (t/to-default-time-zone))))))

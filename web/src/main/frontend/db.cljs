@@ -130,7 +130,6 @@
                      :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
-   :page/created-at {}
    :page/last-modified-at {}
    :page/journal?   {}
    :page/journal-day {}
@@ -461,18 +460,34 @@
   (->> (q repo [:pages] {}
          '[:find ?page-name
            :where
-           [?page :page/name ?page-name]
-           [?h :heading/page ?page]
-           [?h :heading/level ?level]
-           [?page :page/journal? ?journal]
-           (or
-            ;; journal
-            (and [(true? ?journal)]
-                 [(> ?level 1)])
-            [(false? ?journal)])])
+           [?page :page/name ?page-name]])
        (react)
-       (map first)
-       distinct))
+       (map first)))
+
+(defn get-pages-with-modified-at
+  [repo]
+  (->> (q repo [:pages] {}
+         '[:find ?page-name ?modified-at
+           :where
+           [?page :page/name ?page-name]
+           [?page :page/journal? ?journal]
+           [(get-else $ ?page :page/last-modified-at 0) ?modified-at]
+           (or
+            ;; journal pages, can't be empty
+            (and [(true? ?journal)]
+                 [?h :heading/page ?page]
+                 [?h :heading/level ?level]
+                 [(> ?level 1)])
+            ;; non-journals, might be empty pages
+            (and [(false? ?journal)]
+                 [?h :heading/page]
+                 [?h :heading/level ?level]))])
+       (react)
+       (seq)
+       (sort-by last)
+       (reverse)
+       (remove (fn [[page modified-at]]
+                 (util/file-page? page)))))
 
 (defn get-page-alias
   [repo page-name]

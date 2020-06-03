@@ -17,7 +17,9 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.utf8 :as utf8]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]))
 
 (defn- get-page-name
   [state]
@@ -162,14 +164,23 @@
      [:h1.title
       "All Pages"]
      (when current-repo
-       (let [pages (->> (db/get-pages current-repo)
-                        (remove util/file-page?)
-                        sort)]
-         (for [page pages]
-           (let [page-id (util/url-encode page)]
-             [:div {:key page-id}
-              [:a {:href (str "/page/" page-id)}
-               (util/capitalize-all page)]]))))]))
+       (let [pages (db/get-pages-with-modified-at current-repo)]
+         [:table
+          [:thead
+           [:tr
+            [:th "Page name"]
+            [:th "Last modified at"]]]
+          [:tbody
+           (for [[page modified-at] pages]
+             (let [page-id (util/url-encode page)]
+               [:tr {:key page-id}
+                [:td [:a.text-gray-700 {:href (str "/page/" page-id)}
+                      (util/capitalize-all page)]]
+                [:td [:span.text-gray-500.text-sm
+                      (if (zero? modified-at)
+                        "No data"
+                        (date/get-date-time-string
+                         (t/to-default-time-zone (tc/to-date-time modified-at))))]]]))]]))]))
 
 (rum/defcs new < rum/reactive
   (rum/local "" ::title)
