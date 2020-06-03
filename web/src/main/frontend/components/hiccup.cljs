@@ -731,7 +731,7 @@
       ["Export" "hiccup" options content]
       (reader/read-string content)
 
-      ["Custom" "query" options _result content]
+      ["Custom" "query" options result content]
       (custom-query config options content)
 
       ["Custom" "note" options result content]

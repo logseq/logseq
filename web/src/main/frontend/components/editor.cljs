@@ -59,6 +59,10 @@
    "{" "}"
    "(" ")"})
 
+(def reversed-autopair-map
+  (zipmap (vals autopair-map)
+          (keys autopair-map)))
+
 (defn- autopair
   [input-id prefix format {:keys [restore?]
                            :or {restore? true}
@@ -146,6 +150,14 @@
         (string/lower-case page)
         (string/lower-case q)))
      pages)))
+
+(defn get-previous-input-char
+  [input]
+  (when-let [pos (:pos (util/get-caret-pos input))]
+    (let [value (gobj/get input "value")]
+      (when (and (>= (count value) pos)
+                 (>= pos 1))
+        (nth value (- pos 1))))))
 
 (rum/defc page-search < rum/reactive
   [id format]
@@ -546,19 +558,25 @@
          ;; [ && { (shift+219)
          219 (fn [state e]
                (util/stop e)
-               (autopair input-id (gobj/get e "key") format nil)
-               (when (and (not (gobj/get e "shiftKey"))
-                          ;; double `[]`
-                          )
-                 ;; show page
-                 )
-               )
+               (autopair input-id (gobj/get e "key") format nil))
          ;; (
          57 (fn [state e]
               (util/stop e)
               (autopair input-id "(" format nil))
          }
         (fn [e key-code]
+          (let [key (gobj/get e "key")]
+            (when (and
+                   (contains? (set (keys reversed-autopair-map)) key)
+                   (or
+                    (=
+                     (get-previous-input-char input)
+                     (get reversed-autopair-map key))
+                    (=
+                     (get-previous-input-char input)
+                     key)))
+              (util/stop e)
+              (util/cursor-move-forward input 1)))
           ;; (swap! state/state assoc
           ;;        :editor/last-saved-cursor nil)
           ))
