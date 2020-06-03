@@ -181,6 +181,14 @@
                  (>= pos 1))
         (nth value (- pos 1))))))
 
+(defn get-previous-input-chars
+  [input length]
+  (when-let [pos (:pos (util/get-caret-pos input))]
+    (let [value (gobj/get input "value")]
+      (when (and (>= (count value) pos)
+                 (>= pos 1))
+        (subs value (- pos length) pos)))))
+
 (defn get-current-input-char
   [input]
   (when-let [pos (:pos (util/get-caret-pos input))]
@@ -603,6 +611,11 @@
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
+              (and
+               (contains? (set (keys reversed-autopair-map)) key)
+               (= (get-previous-input-chars input 2) (str key key)))
+              nil
+
               (and
                (contains? (set (keys reversed-autopair-map)) key)
                (or
