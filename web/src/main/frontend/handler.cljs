@@ -6,7 +6,7 @@
             [frontend.db :as db]
             [frontend.storage :as storage]
             [frontend.search :as search]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.diff :as diff]
             [clojure.walk :as walk]
@@ -392,12 +392,15 @@
   (when-let [files-conn (db/get-files-conn repo)]
     (d/listen! files-conn :persistence
                (fn [tx-report]
-                 (when-let [db (:db-after tx-report)]
-                   (db/persist repo db true)))))
+                 (when (seq (:tx-data tx-report))
+                   (when-let [db (:db-after tx-report)]
+                     (js/setTimeout #(db/persist repo db true) 0))))))
   (d/listen! db-conn :persistence
              (fn [tx-report]
-               (when-let [db (:db-after tx-report)]
-                 (db/persist repo db false)))))
+               (when (seq (:tx-data tx-report))
+                 (when-let [db (:db-after tx-report)]
+                   (js/setTimeout #(db/persist repo db false) 0)))))
+  )
 
 (defn clone
   [repo-url]
@@ -823,16 +826,19 @@
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-                               (transact-react-and-alter-file!
-                                repo
-                                (concat
-                                 pages
-                                 headings
-                                 after-headings)
-                                {:key :heading/change
-                                 :data headings}
-                                file-path
-                                new-content))))]
+                               (profile
+                                "Save heading: "
+                                (transact-react-and-alter-file!
+                                 repo
+                                 (concat
+                                  pages
+                                  headings
+                                  after-headings)
+                                 {:key :heading/change
+                                  :data headings}
+                                 file-path
+                                 new-content))
+                               )))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -889,16 +895,18 @@
            first-heading (first headings)
            last-heading (last headings)
            after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-       (transact-react-and-alter-file!
-        repo
-        (concat
-         pages
-         headings
-         after-headings)
-        {:key :heading/change
-         :data headings}
-        file-path
-        new-content)
+       (profile
+        "Insert new heading: "
+        (transact-react-and-alter-file!
+         repo
+         (concat
+          pages
+          headings
+          after-headings)
+         {:key :heading/change
+          :data headings}
+         file-path
+         new-content))
        [first-heading last-heading new-heading-content]))))
 
 ;; TODO: utf8 encode performance
@@ -925,8 +933,7 @@
        repo
        (concat
         [[:db.fn/retractEntity [:heading/uuid uuid]]]
-        after-headings
-        [{:file/path file-path}])
+        after-headings)
        {:key :heading/change
         :data [heading]}
        file-path

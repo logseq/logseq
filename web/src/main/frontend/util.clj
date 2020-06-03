@@ -1,4 +1,4 @@
-(ns frontend.core)
+(ns frontend.util)
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 (defmacro profile [k & body]

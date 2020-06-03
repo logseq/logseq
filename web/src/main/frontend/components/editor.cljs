@@ -606,8 +606,7 @@
          9 (fn [state e]
              (when-not (state/get-editor-show-input)
                (util/stop e)
-               (adjust-heading-level! state nil)))
-         }
+               (adjust-heading-level! state nil)))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
@@ -714,10 +713,15 @@
                                          value
                                          format
                                          (:heading/level heading))]
-                         (let [cache [(:heading/uuid heading) value]]
-                           (when (not= @*last-edit-heading cache)
-                             (handler/save-heading-if-changed! heading new-value)
-                             (reset! *last-edit-heading cache)))))
+                         (cond
+                           @*should-delete?
+                           (reset! *should-delete? false)
+
+                           :else
+                           (let [cache [(:heading/uuid heading) value]]
+                            (when (not= @*last-edit-heading cache)
+                              (handler/save-heading-if-changed! heading new-value)
+                              (reset! *last-edit-heading cache))))))
                      (clear-when-saved!))
                    state)}
   [content {:keys [on-hide dummy? node format heading]

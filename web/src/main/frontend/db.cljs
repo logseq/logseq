@@ -94,8 +94,7 @@
   )
 
 (def files-db-schema
-  {:file/path {:db/unique :db.unique/identity
-               :db/index       true}
+  {:file/path {:db/unique :db.unique/identity}
    :file/content {}})
 
 ;; A page can corresponds to multiple files (same title),
@@ -120,36 +119,28 @@
    :git/error {}
 
    ;; file
-   :file/path       {:db/unique :db.unique/identity
-                     :db/index       true}
+   :file/path       {:db/unique :db.unique/identity}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
-   :page/name       {:db/unique      :db.unique/identity
-                     :db/index       true}
-   :page/file       {:db/valueType   :db.type/ref
-                     :db/index       true}
+   :page/name       {:db/unique      :db.unique/identity}
+   :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
    :page/alias      {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many
-                     :db/index       true}
+                     :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many
-                     :db/index       true}
+                     :db/cardinality :db.cardinality/many}
    :page/created-at {}
    :page/last-modified-at {}
    :page/journal?   {}
    :page/journal-day {}
 
    ;; heading
-   :heading/uuid   {:db/unique      :db.unique/identity
-                    :db/index       true}
-   :heading/file   {:db/valueType   :db.type/ref
-                    :db/index       true}
+   :heading/uuid   {:db/unique      :db.unique/identity}
+   :heading/file   {:db/valueType   :db.type/ref}
    :heading/format {}
    ;; belongs to which page
-   :heading/page   {:db/valueType   :db.type/ref
-                    :db/index       true}
+   :heading/page   {:db/valueType   :db.type/ref}
    ;; referenced pages
    :heading/ref-pages {:db/valueType   :db.type/ref
                        :db/cardinality :db.cardinality/many}
@@ -162,8 +153,7 @@
    :heading/priority {}
    :heading/level {}
    :heading/tags {:db/valueType   :db.type/ref
-                  :db/cardinality :db.cardinality/many
-                  :db/index       true}
+                  :db/cardinality :db.cardinality/many}
    :heading/meta {}
    :heading/properties {}
 
@@ -172,8 +162,7 @@
    :heading/parent {:db/valueType   :db.type/ref}
 
    ;; tag
-   :tag/name       {:db/unique :db.unique/identity
-                    :db/index       true}})
+   :tag/name       {:db/unique :db.unique/identity}})
 
 ;; transit serialization
 
@@ -270,6 +259,7 @@
                                  (fn [heading]
                                    [:headings (:heading/uuid heading)])
                                  headings)
+
                                ;; affected page
                                [[:page/headings page-id]
                                 [:page/ref-pages page-id]
@@ -1273,6 +1263,15 @@
                :git/latest-commit (get-key-value repo :git/latest-commit)
                :git/error (get-key-value repo :git/error)})
             repos)))
+
+  (defn headings-count
+    []
+    (->
+     (d/q '[:find (count ?h)
+            :where
+            [?h :heading/uuid]]
+       (get-conn))
+     ffirst))
 
   (def react deref)
 
