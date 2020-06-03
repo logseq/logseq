@@ -16,7 +16,8 @@
             [frontend.mixins :as mixins]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [frontend.utf8 :as utf8]))
+            [frontend.utf8 :as utf8]
+            [frontend.date :as date]))
 
 (defn- get-page-name
   [state]
@@ -68,7 +69,10 @@
         starred? (contains? (set
                              (some->> (state/sub [:config repo :starred])
                                       (map string/lower-case)))
-                            page-name)]
+                            page-name)
+        today? (and
+                journal?
+                (= page-name (string/lower-case (date/journal-name))))]
     [:div.flex-1.page
      (when-not sidebar?
        [:div.flex.flex-row
@@ -136,6 +140,16 @@
      (content/content encoded-page-name
                       {:hiccup hiccup
                        :sidebar? sidebar?})
+
+     (when today?
+       (when-let [repo (state/get-current-repo)]
+         (let [queries (state/sub [:config repo :default-queries :journals])]
+           (when (seq queries)
+             [:div#today-queries
+              (for [{:keys [title query]} queries]
+                [:div {:key (str "query-" title)}
+                 (hiccup/custom-query {:start-level 2} {:query-title title}
+                                      query)])]))))
 
      ;; referenced headings
      (when-not sidebar?
