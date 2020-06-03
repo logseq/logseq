@@ -174,16 +174,17 @@
   {:did-mount (fn [state]
                 (let [[id s display?] (:rum/args state)
                       component (:rum/react-component state)]
-                  (js/katex.render s (gdom/getElement id)
-                                   #js {:displayMode display?
-                                        :throwOnError false}))
+                  (when js/window.katex
+                    (js/katex.render s (gdom/getElement id)
+                                     #js {:displayMode display?
+                                          :throwOnError false})))
                 state)}
   [id s block? display?]
   (let [element (if block?
                   :div.latex
                   :span.latex-inline)]
     [element {:id id}
-    s]))
+     s]))
 
 (rum/defc inline < rum/reactive
   [config item]
