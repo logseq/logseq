@@ -16,7 +16,10 @@
             [frontend.commands :as commands
              :refer [*show-commands
                      *matched-commands
-                     *slash-caret-pos]]
+                     *slash-caret-pos
+                     *angle-bracket-caret-pos
+                     *matched-block-commands
+                     *show-block-commands]]
             [medley.core :as medley]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -105,7 +108,7 @@
                                       signed-url
                                       file-name)
                          format
-                         {:last-pattern (if drop? "" "/")})
+                         {:last-pattern (if drop? "" commands/slash)})
 
         (reset! *image-uploading-process 0))
       (fn [e]
@@ -139,6 +142,19 @@
                        (insert-command! id (get (into {} matched) chosen)
                                         format
                                         {:restore? restore-slash?})))
+        :class "black"}))))
+
+(rum/defc block-commands < rum/reactive
+  [id format]
+  (when (and (util/react *show-block-commands)
+             @*angle-bracket-caret-pos)
+    (let [matched (util/react *matched-block-commands)]
+      (ui/auto-complete
+       (map first matched)
+       {:on-chosen (fn [chosen]
+                     (insert-command! id (get (into {} matched) chosen)
+                                      format
+                                      {:last-pattern commands/angle-bracket}))
         :class "black"}))))
 
 (defn get-matched-pages
@@ -361,14 +377,28 @@
       (when (> pos 0)
         (or
          (and (= \/ (nth edit-content (dec pos)))
-              ;; (or
-              ;;  (and
-              ;;   (>= (count edit-content) 2)
-              ;;   (contains? #{" " "\r" "\n" "\t"} (nth edit-content (- (count edit-content) 2))))
-              ;;  (= edit-content "/"))
               (commands/commands-map))
          (and last-command
               (commands/get-matched-commands last-command)))))
+    (catch js/Error e
+      nil)))
+
+(defn get-matched-block-commands
+  [input]
+  (try
+    (let [edit-content (gobj/get input "value")
+          pos (:pos (util/get-caret-pos input))
+          last-command (subs edit-content
+                             (:pos @*angle-bracket-caret-pos)
+                             pos)]
+      (when (> pos 0)
+        (or
+         (and (= \< (nth edit-content (dec pos)))
+              (commands/block-commands-map))
+         (and last-command
+              (commands/get-matched-commands
+               last-command
+               (commands/block-commands-map))))))
     (catch js/Error e
       nil)))
 
@@ -380,8 +410,8 @@
       (state/get-editor-show-date-picker)))
 
 (rum/defc absolute-modal < rum/reactive
-  [cp set-default-width?]
-  (let [{:keys [top left pos]} (util/react *slash-caret-pos)]
+  [cp set-default-width? pos]
+  (let [{:keys [top left pos]} (rum/react pos)]
     [:div.absolute.rounded-md.shadow-lg
      {:style (merge
               {:top (+ top 24)
@@ -393,12 +423,12 @@
      cp]))
 
 (rum/defc transition-cp
-  [cp set-default-width?]
+  [cp set-default-width? pos]
   (ui/css-transition
    {:class-names "fade"
     :timeout {:enter 500
               :exit 300}}
-   (absolute-modal cp set-default-width?)))
+   (absolute-modal cp set-default-width? pos)))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -416,7 +446,8 @@
         [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.pl-1.pr-1
          [:span.lds-dual-ring.mr-2]
          [:span {:style {:margin-top 2}}
-          (util/format "Uploading %s%" (util/format "%2d" processing))]])))])
+          (util/format "Uploading %s%" (util/format "%2d" processing))]]
+        *slash-caret-pos)))])
 
 (defn- clear-when-saved!
   []
@@ -424,9 +455,7 @@
   (state/set-editor-show-date-picker false)
   (state/set-editor-show-page-search false)
   (state/set-editor-show-block-search false)
-  (reset! *slash-caret-pos nil)
-  (reset! *show-commands false)
-  (reset! *matched-commands (commands/commands-map)))
+  (commands/restore-state true))
 
 (defn- insert-new-heading!
   [state]
@@ -499,14 +528,10 @@
           (fn [state]
             (let [{:keys [on-hide format value heading id]} (get-state state)
                   current-edit-id (state/get-edit-input-id)]
-              (if (and heading (= current-edit-id id))
-                (do
-                  (state/set-edit-input-id! nil)
-                  (state/set-edit-heading! nil))
-                (when on-hide           ;might be raw file editing
-
-                  (on-hide value)
-                  (state/set-edit-input-id! nil)))))))
+              (state/set-edit-input-id! nil)
+              (when on-hide (on-hide value))
+              (when (and heading (= current-edit-id id))
+                (state/set-edit-heading! nil))))))
        (mixins/on-key-down
         state
         {
@@ -527,10 +552,17 @@
                                 (nth value (dec current-pos)))]
                (cond
                  (and (> current-pos 1)
-                      (= (nth value (dec current-pos)) "/"))
+                      (= (nth value (dec current-pos)) commands/slash))
                  (do
                    (reset! *slash-caret-pos nil)
                    (reset! *show-commands false))
+
+                 (and (> current-pos 1)
+                      (= (nth value (dec current-pos)) commands/angle-bracket))
+                 (do
+                   (reset! *angle-bracket-caret-pos nil)
+                   (reset! *show-block-commands false))
+
 
                  ;; pair
                  (and
@@ -589,6 +621,12 @@
                  (reset! *slash-caret-pos (util/get-caret-pos input))
                  (reset! *show-commands true)))
 
+         ;; <
+         188 (fn [state e]
+               (when-let [matched-commands (seq (get-matched-block-commands input))]
+                 (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
+                 (reset! *show-block-commands true)))
+
          ;; backspace
          8 on-backspace}
         (fn [e key-code]
@@ -610,8 +648,22 @@
                       (do
                         (reset! *show-commands true)
                         (reset! *matched-commands matched-commands))))
-                  (reset! *show-commands false)
-                  )))))))))
+                  (reset! *show-commands false))))
+            (when (not= key-code 188)     ; not <
+              (let [matched-block-commands (get-matched-block-commands input)]
+                (if (seq matched-block-commands)
+                  (cond
+                    (= key-code 9)      ;tab
+                    (when @*show-block-commands
+                      (util/stop e)
+                      (insert-command! input-id
+                                       (last (first matched-block-commands))
+                                       format
+                                       {:last-pattern commands/angle-bracket}))
+
+                    :else
+                    (reset! *matched-block-commands matched-block-commands))
+                  (reset! *show-block-commands false))))))))))
   {:after (fn [state _props]
             (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)]
               (reset! *should-delete? false))
@@ -639,69 +691,74 @@
                                          value
                                          format
                                          (:heading/level heading))]
-                         (cond
-                           @*should-delete?
-                           (reset! *should-delete? false)
-
-                           :else
-                           (let [cache [(:heading/uuid heading) value]]
-                             (when (not= @*last-edit-heading cache)
-                               (when-not (string/blank? value)
-                                 (when (not= (string/trim new-value)
-                                             (string/trim (:heading/content heading)))
-                                   (handler/save-heading-if-changed! heading new-value))
-                                 (reset! *last-edit-heading cache)))))))
+                         (let [cache [(:heading/uuid heading) value]]
+                           (when (not= @*last-edit-heading cache)
+                             (when (not= (string/trim new-value)
+                                         (string/trim (:heading/content heading)))
+                               (handler/save-heading-if-changed! heading new-value))
+                             (reset! *last-edit-heading cache)))))
                      (clear-when-saved!))
                    state)}
   [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}
             :as option} id]
-  [:div.editor {:style {:position "relative"
-                        :display "flex"
-                        :flex "1 1 0%"}
-                :class (if heading "heading-editor" "non-heading-editor")}
-   (ui/textarea
-    {:id id
-     :default-value content
-     :on-change (fn [e]
-                  (let [value (util/evalue e)]
-                    (state/set-edit-content! id value false)
-                    (reset! *should-delete? false)))
-     :auto-focus true})
-   (transition-cp
-    (commands id format)
-    true)
+  (let [edit-content (state/sub [:editor/content id])]
+    [:div.editor {:style {:position "relative"
+                         :display "flex"
+                         :flex "1 1 0%"}
+                 :class (if heading "heading-editor" "non-heading-editor")}
+    (ui/textarea
+     {:id id
+      :value (or edit-content content)
+      :on-change (fn [e]
+                   (let [value (util/evalue e)]
+                     (state/set-edit-content! id value false)
+                     (reset! *should-delete? false)))
+      :auto-focus true})
+    (transition-cp
+     (commands id format)
+     true
+     *slash-caret-pos)
 
-   (transition-cp
-    (page-search id format)
-    true)
+    (transition-cp
+     (block-commands id format)
+     true
+     *angle-bracket-caret-pos)
 
-   (transition-cp
-    (block-search id format)
-    true)
+    (transition-cp
+     (page-search id format)
+     true
+     *slash-caret-pos)
 
-   (transition-cp
-    (date-picker id format)
-    false)
+    (transition-cp
+     (block-search id format)
+     true
+     *slash-caret-pos)
 
-   (transition-cp
-    (input id
-           (fn [{:keys [link label]} pos]
-             (if (and (string/blank? link)
-                      (string/blank? label))
-               nil
-               (insert-command! id
-                                (util/format "[[%s][%s]]"
-                                             (or link "")
-                                             (or label ""))
-                                format
-                                {:last-pattern "/link"}))
-             (state/set-editor-show-input nil)
-             (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-               (when-let [input (gdom/getElement id)]
-                 (.focus input)
-                 (util/move-cursor-to input saved-cursor)))))
-    true)
+    (transition-cp
+     (date-picker id format)
+     false
+     *slash-caret-pos)
 
-   (when format
-     (image-uploader id format))])
+    (transition-cp
+     (input id
+            (fn [{:keys [link label]} pos]
+              (if (and (string/blank? link)
+                       (string/blank? label))
+                nil
+                (insert-command! id
+                                 (util/format "[[%s][%s]]"
+                                              (or link "")
+                                              (or label ""))
+                                 format
+                                 {:last-pattern (str commands/slash "link")}))
+              (state/set-editor-show-input nil)
+              (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+                (when-let [input (gdom/getElement id)]
+                  (.focus input)
+                  (util/move-cursor-to input saved-cursor)))))
+     true
+     *slash-caret-pos)
+
+    (when format
+      (image-uploader id format))]))

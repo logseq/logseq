@@ -8,12 +8,16 @@
 
 (defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
+(defonce slash "/")
+(defonce *show-block-commands (atom false))
+(defonce angle-bracket "<")
+(defonce *angle-bracket-caret-pos (atom nil))
 
 (defn ->page-reference
   [page]
   (util/format "[[%s]]" page))
 
-(def link-steps [[:editor/input "/link"]
+(def link-steps [[:editor/input (str slash "link")]
                  [:editor/show-input [{:id :link
                                        :placeholder "Link"}
                                       {:id :label
@@ -61,17 +65,64 @@
 
 (defonce *matched-commands (atom (commands-map)))
 
+(defn ->block
+  ([type]
+   (->block type nil))
+  ([type optional]
+   (let [left (util/format "#+BEGIN_%s"
+                           (string/upper-case type))
+         right (util/format "\n#+END_%s" (string/upper-case type))
+         template (str
+                   left
+                   (if optional (str " " optional) "")
+                   "\n"
+                   right)
+         backward-pos (if (= type "src")
+                        (+ 1 (count right))
+                        (count right))]
+     [[:editor/input template {:last-pattern angle-bracket
+                               :backward-pos backward-pos}]])))
+
+;; https://orgmode.org/manual/Structure-Templates.html
+(defn block-commands-map
+  []
+  (->>
+   (concat
+    [["quote" (->block "quote")]
+     ["src" (->block "src" "")]
+     ["query" (->block "query")]
+     ["hiccup" (->block "export" "hiccup")]
+     ["html export" (->block "export" "html")]
+     ["latex export" (->block "export" "latex")]
+     ["example" (->block "example")]
+     ["export" (->block "export")]
+     ["verse" (->block "verse")]
+     ["ascii" (->block "export" "ascii")]
+     ["center" (->block "export")]
+     ["comment" (->block "comment")]]
+
+    ;; Allow user to modify or extend, should specify how to extend.
+    (get-in @state/state [:config (state/get-current-repo) :block-commands]))
+   (remove nil?)
+   (util/distinct-by-last-wins first)))
+
+(defonce *matched-block-commands (atom (block-commands-map)))
+
 (defn restore-state
   [restore-slash-caret-pos?]
   (when restore-slash-caret-pos?
     (reset! *slash-caret-pos nil))
   (reset! *show-commands false)
-  (reset! *matched-commands (commands-map)))
+  (reset! *matched-commands (commands-map))
+  (reset! *angle-bracket-caret-pos nil)
+  (reset! *show-block-commands false)
+  (reset! *matched-block-commands (block-commands-map))
+  )
 
 (defn insert!
   [id value
    {:keys [last-pattern postfix-fn backward-pos forward-pos]
-    :or {last-pattern "/"}
+    :or {last-pattern slash}
     :as option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
@@ -126,16 +177,18 @@
     (util/move-cursor-to input new-pos)))
 
 (defn get-matched-commands
-  [text]
-  (filter
-   (fn [[command _]]
-     (string/index-of (string/lower-case command) (string/lower-case text)))
-   (commands-map)))
+  ([text]
+   (get-matched-commands text (commands-map)))
+  ([text commands]
+   (filter
+    (fn [[command _]]
+      (string/index-of (string/lower-case command) (string/lower-case text)))
+    commands)))
 
 (defn get-command-input
   [edit-content]
   (when-not (string/blank? edit-content)
-    (let [result (last (util/split-last "/" edit-content))]
+    (let [result (last (util/split-last slash edit-content))]
       (if (string/blank? result)
         nil
         result))))
@@ -167,7 +220,7 @@
       (let [edit-content (gobj/get current-input "value")
             current-pos (:pos (util/get-caret-pos current-input))
             prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last "/" prefix "")
+            prefix (util/replace-last slash prefix "")
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-heading-content-and-last-pos! input-id
