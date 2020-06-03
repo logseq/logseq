@@ -18,6 +18,7 @@
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]
             [goog.dom :as gdom]
+            [goog.dom.classes :as gdom-classes]
             [rum.core :as rum]
             [datascript.core :as d]
             [dommy.core :as dom]
@@ -792,6 +793,20 @@
     heading
     (assoc heading :heading/meta
            (:heading/meta (db/entity [:heading/uuid (:heading/uuid heading)])))))
+
+(defn highlight-heading!
+  [heading-uuid]
+  (let [headings (array-seq (js/document.getElementsByClassName (str heading-uuid)))]
+    (doseq [heading headings]
+      (dom/add-class! heading "block-highlight"))))
+
+(defn unhighlight-heading!
+  []
+  (let [headings (some->> (array-seq (js/document.getElementsByClassName "block-highlight"))
+                          (repeat 2)
+                          (apply concat))]
+    (doseq [heading headings]
+      (gdom-classes/remove heading "block-highlight"))))
 
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file page dummy? format] :as heading} value]

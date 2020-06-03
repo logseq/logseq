@@ -479,9 +479,10 @@
     (when-not lock?
       [:div.ls-heading-parent.flex-1
        {:id heading-id
+        :class (str uuid
+                    (if dummy? " dummy"))
         :headingid (str uuid)
-        :level level
-        :class (if dummy? "dummy")}
+        :level level}
        ;; control
        [:div.flex.flex-row
         {:style {:cursor "pointer"}
@@ -502,7 +503,9 @@
                        :heading-id uuid
                        :heading-parent-id heading-id
                        :format format
-                       :dummy? dummy?}
+                       :dummy? dummy?
+                       :on-hide (fn [value]
+                                  (handler/highlight-heading! uuid))}
                       edit-input-id)
           [:div.flex-1.heading-body
            {:on-click (fn [e]
@@ -511,6 +514,7 @@
                                         (util/input? target)
                                         (and (util/sup? target)
                                              (d/has-class? target "fn")))
+                            (handler/unhighlight-heading!)
                             (util/stop e)
                             (handler/reset-cursor-range! (gdom/getElement heading-id))
                             (state/set-editing!
@@ -532,7 +536,7 @@
   (case (:heading/marker heading)
     (list "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING")
     (ui/checkbox {:class class
-                  :style {:margin-top -2}
+                  :style {:margin-top -5}
                   :on-change (fn [_e]
                                ;; FIXME: Log timestamp
                                (handler/check heading))})
@@ -540,7 +544,7 @@
     "DONE"
     (ui/checkbox {:checked true
                   :class (str class " checked")
-                  :style {:margin-top -2}
+                  :style {:margin-top -5}
                   :on-change (fn [_e]
                                ;; FIXME: Log timestamp
                                (handler/uncheck heading))})

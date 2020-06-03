@@ -716,9 +716,7 @@
                                          (:heading/level heading))]
                          (let [cache [(:heading/uuid heading) value]]
                            (when (not= @*last-edit-heading cache)
-                             (when (not= (string/trim new-value)
-                                         (string/trim (:heading/content heading)))
-                               (handler/save-heading-if-changed! heading new-value))
+                             (handler/save-heading-if-changed! heading new-value)
                              (reset! *last-edit-heading cache)))))
                      (clear-when-saved!))
                    state)}

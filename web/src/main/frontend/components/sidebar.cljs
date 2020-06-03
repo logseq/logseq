@@ -246,7 +246,9 @@
         pulling? (= :pulling status)
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))]
-    [:div {:class (if white? "white-theme" "dark-theme")}
+    [:div {:class (if white? "white-theme" "dark-theme")
+           :on-click (fn []
+                       (handler/unhighlight-heading!))}
      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden
        [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
