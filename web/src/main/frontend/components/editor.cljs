@@ -64,7 +64,6 @@
    "$" "$"                              ; math
    "`" "`"
    "~" "~"
-   "/" "/"
    "*" "*"
    "_" "_"
    "^" "^"})
@@ -181,6 +180,14 @@
       (when (and (>= (count value) pos)
                  (>= pos 1))
         (nth value (- pos 1))))))
+
+(defn get-current-input-char
+  [input]
+  (when-let [pos (:pos (util/get-caret-pos input))]
+    (let [value (gobj/get input "value")]
+      (when (and (>= (count value) (inc pos))
+                 (>= pos 1))
+        (nth value pos)))))
 
 (rum/defc page-search < rum/reactive
   [id format]
@@ -596,23 +603,19 @@
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
+              (and
+               (contains? (set (keys reversed-autopair-map)) key)
+               (or
+                (= (get-previous-input-char input) key)
+                (= (get-current-input-char input) key)))
+              (do
+                (util/stop e)
+                (util/cursor-move-forward input 1))
+
               (contains? (set (keys autopair-map)) key)
               (do
                 (util/stop e)
                 (autopair input-id key format nil))
-
-              (and
-               (contains? (set (keys reversed-autopair-map)) key)
-               (or
-                (=
-                 (get-previous-input-char input)
-                 (get reversed-autopair-map key))
-                (=
-                 (get-previous-input-char input)
-                 key)))
-              (do
-                (util/stop e)
-                (util/cursor-move-forward input 1))
 
               :else
               nil))
