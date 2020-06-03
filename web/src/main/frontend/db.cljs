@@ -461,7 +461,15 @@
   (->> (q repo [:pages] {}
          '[:find ?page-name
            :where
-           [?page :page/name ?page-name]])
+           [?page :page/name ?page-name]
+           [?h :heading/page ?page]
+           [?h :heading/level ?level]
+           [?page :page/journal? ?journal]
+           (or
+            ;; journal
+            (and [(true? ?journal)]
+                 [(> ?level 1)])
+            [(false? ?journal)])])
        (react)
        (map first)
        distinct))

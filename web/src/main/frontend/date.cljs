@@ -2,6 +2,7 @@
   (:require [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-time.format :as tf]
+            [cljs-time.local :as tl]
             [frontend.state :as state]
             [cljs-bean.core :as bean]
             [frontend.util :as util]
@@ -61,7 +62,7 @@
 
 (defn journal-name
   ([]
-   (journal-name (t/now)))
+   (journal-name (tl/local-now)))
   ([date]
    (format date)))
 
