@@ -780,7 +780,7 @@
       ["Custom" "warning" options result content]
       (admonition config "warning" options result)
 
-      ["Custom" name options l]
+      ["Custom" name options l content]
       (->elem
        :div
        {:class name}
