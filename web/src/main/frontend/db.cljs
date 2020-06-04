@@ -120,6 +120,7 @@
 
    ;; file
    :file/path       {:db/unique :db.unique/identity}
+   :file/last-modified-at {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
@@ -522,13 +523,14 @@
 (defn get-files
   [repo]
   (->> (q repo [:files] {}
-         '[:find ?file-path
+         '[:find ?path ?modified-at
            :where
-           [?file :file/path ?file-path]])
+           [?file :file/path ?path]
+           [(get-else $ ?file :file/last-modified-at 0) ?modified-at]])
        (react)
-       (map first)
-       (distinct)
-       (sort)))
+       (seq)
+       (sort-by last)
+       (reverse)))
 
 (defn get-files-headings
   [repo-url paths]

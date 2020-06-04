@@ -819,14 +819,17 @@
     (when (not= (string/trim content) value) ; heading content changed
       (let [file (db/entity (:db/id file))
             page (db/entity (:db/id page))
-            save-heading (fn [file {:heading/keys [uuid content meta page dummy? format] :as heading}]
-                           (let [file-path (:file/path file)
+            save-heading (fn [file {:heading/keys [uuid content meta page file dummy? format] :as heading}]
+                           (let [file (db/entity (:db/id file))
+                                 file-path (:file/path file)
                                  format (format/get-format file-path)]
                              (let [file-content (db/get-file file-path)
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
-                                   page-modified-time [[:db/add (:db/id page) :page/last-modified-at (tc/to-long (t/now))]]]
+                                   modified-time (let [modified-at (tc/to-long (t/now))]
+                                                   [[:db/add (:db/id page) :page/last-modified-at modified-at]
+                                                    [:db/add (:db/id file) :file/last-modified-at modified-at]])]
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -835,7 +838,7 @@
                                   pages
                                   headings
                                   after-headings
-                                  page-modified-time)
+                                  modified-time)
                                  {:key :heading/change
                                   :data headings}
                                  file-path

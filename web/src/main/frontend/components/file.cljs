@@ -12,7 +12,10 @@
             [frontend.config :as config]
             [frontend.utf8 :as utf8]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.date :as date]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]))
 
 (defn- get-path
   [state]
@@ -28,11 +31,22 @@
     "All files"]
    (when-let [current-repo (state/sub :git/current-repo)]
      (let [files (db/get-files current-repo)]
-       (for [file files]
-         (let [file-id (util/url-encode file)]
-           [:div {:key file-id}
-            [:a {:href (str "/file/" file-id)}
-             file]]))))])
+       [:table
+        [:thead
+         [:tr
+          [:th "File name"]
+          [:th "Last modified at"]]]
+        [:tbody
+         (for [[file modified-at] files]
+           (let [file-id (util/url-encode file)]
+             [:tr {:key file-id}
+              [:td [:a.text-gray-700 {:href (str "/file/" file-id)}
+                    (util/capitalize-all file)]]
+              [:td [:span.text-gray-500.text-sm
+                    (if (zero? modified-at)
+                      "No data"
+                      (date/get-date-time-string
+                       (t/to-default-time-zone (tc/to-date-time modified-at))))]]]))]]))])
 
 (rum/defcs file < rum/reactive
   [state]
