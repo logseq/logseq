@@ -41,7 +41,7 @@
            (let [file-id (util/url-encode file)]
              [:tr {:key file-id}
               [:td [:a.text-gray-700 {:href (str "/file/" file-id)}
-                    (util/capitalize-all file)]]
+                    file]]
               [:td [:span.text-gray-500.text-sm
                     (if (zero? modified-at)
                       "No data"
