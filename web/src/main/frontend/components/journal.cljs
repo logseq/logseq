@@ -48,6 +48,7 @@
                                     (when (gobj/get e "shiftKey")
                                       (when-let [page (db/pull [:page/name title])]
                                         (state/sidebar-add-block!
+                                         (state/get-current-repo)
                                          (:db/id page)
                                          :page
                                          {:page page

@@ -155,6 +155,7 @@
                 (when (gobj/get e "shiftKey")
                   (when-let [page (db/entity [:page/name (:page/name page)])]
                     (state/sidebar-add-block!
+                     (state/get-current-repo)
                      (:db/id page)
                      :page
                      {:page page}))
@@ -239,6 +240,7 @@
                             (util/stop e)
                             (when (gobj/get e "shiftKey")
                               (state/sidebar-add-block!
+                               (state/get-current-repo)
                                (:db/id heading)
                                :heading-ref
                                {:heading heading})
@@ -424,6 +426,7 @@
                            (util/stop e)
                            (when (gobj/get e "shiftKey")
                              (state/sidebar-add-block!
+                              (state/get-current-repo)
                               (get-in config [:heading :db/id])
                               :heading
                               (:heading config))
@@ -463,7 +466,7 @@
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
-  [state {:heading/keys [uuid idx level children meta content dummy? lock? page format] :as heading} heading-part config]
+  [state {:heading/keys [uuid idx level children meta content dummy? lock? page format repo] :as heading} heading-part config]
   (let [config (assoc config :heading heading)
         ref? (boolean (:ref? config))
         sidebar? (boolean (:sidebar? config))
@@ -474,7 +477,6 @@
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
         collapsed? (or toggle-collapsed? @collapsed-atom?)
-        agenda? (= (:id config) "agenda")
         start-level (or (:start-level config) 1)]
     (when-not lock?
       [:div.ls-heading-parent.flex-1
@@ -482,6 +484,7 @@
         :class (str uuid
                     (if dummy? " dummy"))
         :headingid (str uuid)
+        :repo repo
         :level level}
        ;; control
        [:div.flex.flex-row
@@ -494,8 +497,7 @@
                          (when (has-children? heading-id level)
                            (swap! *control-show?
                                   assoc heading-id false)))}
-        (when-not agenda?
-          (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? dummy?))
+        (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? dummy?)
 
         (if edit?
           (editor/box (string/trim content)
@@ -525,7 +527,7 @@
 
            ;; non-heading children
            (when (seq children)
-             [:div.non-heading-children {:class (if agenda? "ml-5")}
+             [:div.non-heading-children
               (for [child children]
                 (let [block (block config child)]
                   (rum/with-key (heading-child block)
@@ -555,7 +557,6 @@
   [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children format]
            :as t}]
   (let [config (assoc config :heading t)
-        agenda? (= (:id config) "agenda")
         checkbox (heading-checkbox t
                                    (str "mr-1 cursor"))
         marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)

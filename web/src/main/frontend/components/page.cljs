@@ -27,10 +27,10 @@
     (get-in route-match [:parameters :path :name])))
 
 (defn- get-headings
-  [page-name journal? heading?]
+  [repo page-name journal? heading?]
   (if heading?
-    (db/get-heading-and-children (state/get-current-repo) (uuid page-name))
-    (let [page-headings (db/get-page-headings page-name)
+    (db/get-heading-and-children repo (uuid page-name))
+    (let [page-headings (db/get-page-headings repo page-name)
           page-headings (if journal?
                           (update (vec page-headings) 0 assoc :heading/lock? true)
                           page-headings)]
@@ -38,36 +38,36 @@
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
-  [state option]
-  (let [encoded-page-name (get-page-name state)
+  [state {:keys [repo] :as option}]
+  (let [repo (or repo (state/sub :git/current-repo))
+        encoded-page-name (get-page-name state)
         page-name (string/lower-case (util/url-decode encoded-page-name))
         format (db/get-page-format page-name)
         journal? (db/journal-page? page-name)
         heading? (util/uuid-string? page-name)
         heading-id (and heading? (uuid page-name))
         sidebar? (:sidebar? option)
-        raw-page-headings (get-headings page-name journal? heading?)
+        raw-page-headings (get-headings repo page-name journal? heading?)
         page-name (if heading?
-                    (:page/name (db/entity (:db/id (:heading/page (first raw-page-headings)))))
+                    (:page/name (db/entity repo (:db/id (:heading/page (first raw-page-headings)))))
                     page-name)
-        page (db/entity [:page/name page-name])
+        page (db/entity repo [:page/name page-name])
         file (:page/file page)
-        file-path (and (:db/id file) (:file/path (db/entity (:db/id file))))
+        file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
         page-headings (db/with-dummy-heading raw-page-headings format
                         (if (empty? raw-page-headings)
                           {:heading/page {:db/id (:db/id page)}
                            :heading/file {:db/id (:db/id (:page/file page))}
                            :heading/meta
                            (let [file-id (:db/id (:page/file page))
-                                 content (db/get-file file-path)]
+                                 content (db/get-file repo file-path)]
                              {:pos (utf8/length (utf8/encode content))
                               :end-pos nil})})
                         journal?)
         start-level (if journal? 2 1)
         hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
                                                :start-level start-level
-                                               :sidebar? sidebar? })
-        repo (state/get-current-repo)
+                                               :sidebar? sidebar?})
         starred? (contains? (set
                              (some->> (state/sub [:config repo :starred])
                                       (map string/lower-case)))
@@ -81,8 +81,9 @@
         [:a {:on-click (fn [e]
                          (util/stop e)
                          (when (gobj/get e "shiftKey")
-                           (when-let [page (db/pull [:page/name page-name])]
+                           (when-let [page (db/pull repo '[*] [:page/name page-name])]
                              (state/sidebar-add-block!
+                              repo
                               (:db/id page)
                               :page
                               {:page page}))
@@ -117,12 +118,12 @@
      ;; content before headings, maybe directives or summary it can be anything
      (when (and (not journal?) (not heading?) (:page/file page))
        (let [path (let [file-id (:db/id (:page/file page))]
-                    (:file/path (db/entity file-id)))
+                    (:file/path (db/entity repo file-id)))
              encoded-path (util/url-encode path)
              heading-start-pos (get-in (first raw-page-headings) [:heading/meta :pos])]
          (when (or (not (zero? heading-start-pos))
                    (seq (:page/directives page)))
-           (let [content (db/get-file path)
+           (let [content (db/get-file repo path)
                  encoded-content (utf8/encode content)
                  content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
              [:div.before-heading.ml-4
@@ -137,21 +138,20 @@
                                                     (utf8/substring encoded-content heading-start-pos)))]
                              (when (not= (string/trim new-content)
                                          (string/trim content))
-                               (handler/alter-file (state/get-current-repo) path new-content nil))))})]))))
+                               (handler/alter-file repo path new-content nil))))})]))))
      ;; headings
      (content/content encoded-page-name
                       {:hiccup hiccup
                        :sidebar? sidebar?})
 
-     (when today?
-       (when-let [repo (state/get-current-repo)]
-         (let [queries (state/sub [:config repo :default-queries :journals])]
-           (when (seq queries)
-             [:div#today-queries
-              (for [{:keys [title query]} queries]
-                [:div {:key (str "query-" title)}
-                 (hiccup/custom-query {:start-level 2} {:query-title title}
-                                      query)])]))))
+     (when (and today? (not sidebar?))
+       (let [queries (state/sub [:config repo :default-queries :journals])]
+         (when (seq queries)
+           [:div#today-queries
+            (for [{:keys [title query]} queries]
+              [:div {:key (str "query-" title)}
+               (hiccup/custom-query {:start-level 2} {:query-title title}
+                                    query)])])))
 
      ;; referenced headings
      (when-not sidebar?

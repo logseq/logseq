@@ -230,7 +230,7 @@
         (load-contents files nil nil false))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
-                                           (map :path)))
+                                          (map :path)))
               remove-files (filter-diffs "remove")
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
@@ -521,8 +521,8 @@
 (defn highlight-block!
   [fragment]
   (when-let [element (gdom/getElement fragment)]
-    (dom/add-class! element "highlight-area")
-    (js/setTimeout #(dom/remove-class! element "highlight-area")
+    (dom/add-class! element "block-highlight")
+    (js/setTimeout #(dom/remove-class! element "block-highlight")
                    2000)))
 
 (defn set-route-match!
@@ -791,11 +791,11 @@
                         :path-params {:name page}})))))))
 
 (defn- with-heading-meta
-  [heading]
+  [repo heading]
   (if (:heading/dummy? heading)
     heading
     (assoc heading :heading/meta
-           (:heading/meta (db/entity [:heading/uuid (:heading/uuid heading)])))))
+           (:heading/meta (db/entity repo [:heading/uuid (:heading/uuid heading)])))))
 
 (defn highlight-heading!
   [heading-uuid]
@@ -812,18 +812,18 @@
       (gdom-classes/remove heading "block-highlight"))))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file page dummy? format] :as heading} value]
-  (let [repo (state/get-current-repo)
-        heading (with-heading-meta heading)
+  [{:heading/keys [uuid content meta file page dummy? format repo] :as heading} value]
+  (let [repo (or repo (state/get-current-repo))
+        heading (with-heading-meta repo heading)
         format (or format (state/get-preferred-format))]
     (when (not= (string/trim content) value) ; heading content changed
-      (let [file (db/entity (:db/id file))
-            page (db/entity (:db/id page))
+      (let [file (db/entity repo (:db/id file))
+            page (db/entity repo (:db/id page))
             save-heading (fn [file {:heading/keys [uuid content meta page file dummy? format] :as heading}]
-                           (let [file (db/entity (:db/id file))
+                           (let [file (db/entity repo (:db/id file))
                                  file-path (:file/path file)
                                  format (format/get-format file-path)]
-                             (let [file-content (db/get-file file-path)
+                             (let [file-content (db/get-file repo file-path)
                                    [new-content value] (new-file-content heading file-content value)
                                    {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
@@ -864,7 +864,7 @@
                     (db/reset-file! repo path content)
                     (git-add repo path)
                     ;; save heading
-                    (let [file (db/entity [:file/path path])
+                    (let [file (db/entity repo [:file/path path])
                           heading (assoc heading
                                          :heading/page {:db/id (:db/id page)}
                                          :heading/file {:db/id (:db/id file)}
@@ -882,15 +882,15 @@
 (defn insert-new-heading!
   ([heading value]
    (insert-new-heading! heading value true))
-  ([{:heading/keys [uuid content meta file dummy? level] :as heading} value create-new-heading?]
-   (let [repo (state/get-current-repo)
+  ([{:heading/keys [uuid content meta file dummy? level repo] :as heading} value create-new-heading?]
+   (let [repo (or repo (state/get-current-repo))
          value (string/trim value)
-         heading (with-heading-meta heading)
+         heading (with-heading-meta repo heading)
          format (:heading/format heading)
          new-heading-content (config/default-empty-heading format level)]
-     (let [file (db/entity (:db/id file))
+     (let [file (db/entity repo (:db/id file))
            file-path (:file/path file)
-           file-content (db/get-file file-path)
+           file-content (db/get-file repo file-path)
            value (if create-new-heading?
                    (str value "\n" new-heading-content "\n")
                    (str value "\n"))
@@ -925,12 +925,12 @@
     (save-heading-if-changed! heading new-content)))
 
 (defn delete-heading!
-  [{:heading/keys [uuid meta content file] :as heading} dummy?]
+  [{:heading/keys [uuid meta content file repo] :as heading} dummy?]
   (when-not dummy?
-    (let [repo (state/get-current-repo)
-          heading (db/pull [:heading/uuid uuid])
-          file-path (:file/path (db/entity (:db/id file)))
-          file-content (db/get-file file-path)
+    (let [repo (or repo (state/get-current-repo))
+          heading (db/pull repo '[*] [:heading/uuid uuid])
+          file-path (:file/path (db/entity repo (:db/id file)))
+          file-content (db/get-file repo file-path)
           after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
           new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
       (transact-react-and-alter-file!
@@ -944,17 +944,16 @@
        new-content))))
 
 (defn delete-headings!
-  [heading-uuids]
+  [repo heading-uuids]
   (when (seq heading-uuids)
-    (let [repo (state/get-current-repo)
-          headings (db/pull-many (mapv (fn [id]
-                                         [:heading/uuid id])
-                                       heading-uuids))
+    (let [headings (db/pull-many repo '[*] (mapv (fn [id]
+                                                   [:heading/uuid id])
+                                                 heading-uuids))
           first-heading (first headings)
           last-heading (last headings)
-          file (db/entity (:db/id (:heading/file first-heading)))
+          file (db/entity repo (:db/id (:heading/file first-heading)))
           file-path (:file/path file)
-          file-content (db/get-file file-path)
+          file-content (db/get-file repo file-path)
           start-pos (:pos (:heading/meta first-heading))
           end-pos (:end-pos (:heading/meta last-heading))
           after-headings (rebuild-after-headings repo file end-pos start-pos)
@@ -1068,7 +1067,7 @@
       (string/replace-first text (re-pattern pattern) ""))))
 
 (defn edit-heading!
-  [heading-id prev-pos format]
+  [heading-id prev-pos format id]
   (let [heading (or
                  (db/pull [:heading/uuid heading-id])
                  ;; dummy?
@@ -1076,7 +1075,7 @@
                   :heading/content ""})]
     (let [{:heading/keys [content]} heading
           content (remove-level-spaces content format)
-          edit-input-id (str "edit-heading-" heading-id)
+          edit-input-id (str (subs id 0 (- (count id) 36)) heading-id)
           content-length (count content)
           text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
                        content
@@ -1097,8 +1096,9 @@
 (defn copy-selection-headings
   []
   (when-let [headings (seq (get @state/state :selection/headings))]
-    (let [ids (map #(util/get-heading-id (gobj/get % "id")) headings)
-          content (some->> (db/get-headings-contents ids)
+    (let [repo (dom/attr (first headings) "repo")
+          ids (distinct (map #(uuid (dom/attr % "headingid")) headings))
+          content (some->> (db/get-headings-contents repo ids)
                            (map :heading/content)
                            (string/join ""))]
       (when-not (string/blank? content)
@@ -1108,8 +1108,9 @@
   []
   (copy-selection-headings)
   (when-let [headings (seq (get @state/state :selection/headings))]
-    (let [ids (map #(util/get-heading-id (gobj/get % "id")) headings)]
-      (delete-headings! ids))))
+    (let [repo (dom/attr (first headings) "repo")
+          ids (distinct (map #(uuid (dom/attr % "headingid")) headings))]
+      (delete-headings! repo ids))))
 
 (defn set-preferred-format!
   [format]

@@ -203,9 +203,11 @@
     (reset! result-atom new-result)))
 
 (defn entity
-  [id-or-lookup-ref]
-  (when-let [db (get-conn (state/get-current-repo))]
-    (d/entity db id-or-lookup-ref)))
+  ([id-or-lookup-ref]
+   (entity (state/get-current-repo) id-or-lookup-ref))
+  ([repo id-or-lookup-ref]
+   (when-let [db (get-conn repo)]
+     (d/entity db id-or-lookup-ref))))
 
 (defn get-current-page-id
   []
@@ -225,9 +227,11 @@
 
 (defn pull
   ([eid]
-   (pull '[*] eid))
+   (pull (state/get-current-repo) '[*] eid))
   ([selector eid]
-   (when-let [conn (get-conn)]
+   (pull (state/get-current-repo) selector eid))
+  ([repo selector eid]
+   (when-let [conn (get-conn repo)]
      (d/pull conn
              selector
              eid))))
@@ -236,7 +240,9 @@
   ([eids]
    (pull-many '[*] eids))
   ([selector eids]
-   (when-let [conn (get-conn)]
+   (pull-many (state/get-current-repo) selector eids))
+  ([repo selector eids]
+   (when-let [conn (get-conn repo)]
      (d/pull-many conn selector eids))))
 
 (defn get-handler-keys
@@ -687,6 +693,12 @@
   (let [aliases (d-get-page-alias repo-url page)]
     (set (conj aliases page))))
 
+(defn- with-repo
+  [repo headings]
+  (map (fn [heading]
+         (assoc heading :heading/repo repo))
+    headings))
+
 (defn get-page-headings
   ([page]
    (get-page-headings (state/get-current-repo)
@@ -704,11 +716,12 @@
             pages)
           react
           seq-flatten
-          sort-by-pos))))
+          sort-by-pos
+          (with-repo repo-url)))))
 
 (defn get-heading-and-children
   [repo heading-uuid]
-  (let [heading (entity [:heading/uuid heading-uuid])
+  (let [heading (entity repo [:heading/uuid heading-uuid])
         page (:db/id (:heading/page heading))
         pos (:pos (:heading/meta heading))
         level (:heading/level heading)
@@ -730,7 +743,8 @@
                        (or
                         (= (:heading/uuid h)
                            heading-uuid)
-                        (> (:heading/level h) level)))))))
+                        (> (:heading/level h) level))))
+         (with-repo repo))))
 
 (defn get-page-name
   [file ast]
@@ -925,31 +939,6 @@
              file-content)]
     (transact! repo-url tx)))
 
-;; marker should be one of: TODO, DOING, IN-PROGRESS
-;; time duration
-;; TODO: posh doesn't support or query
-(defn get-agenda
-  ([repo]
-   (get-agenda (state/get-current-repo) :week))
-  ([repo time]
-   ;; TODO:
-   (let [duration (case time
-                    :today []
-                    :week  []
-                    :month [])
-         pred (fn [db marker]
-                (contains? #{"TODO" "DOING" "IN-PROGRESS"} marker))]
-     (->>
-      (q repo [:agenda] {}
-        '[:find (pull ?h [*])
-          :in $ ?pred
-          :where
-          [?h :heading/marker ?marker]
-          [(?pred $ ?marker)]]
-        pred)
-      react
-      seq-flatten))))
-
 (defn get-current-journal-path
   []
   (let [{:keys [year month]} (date/get-date)]
@@ -1136,8 +1125,8 @@
 
 ;; TODO: Does the result preserves the order of the arguments?
 (defn get-headings-contents
-  [heading-uuids]
-  (let [db (get-conn (state/get-current-repo))]
+  [repo heading-uuids]
+  (let [db (get-conn repo)]
     (d/pull-many db '[:heading/content]
                  (mapv (fn [id] [:heading/uuid id]) heading-uuids))))
 

@@ -340,13 +340,14 @@
 ;; TODO: refactor
 (defn get-state
   [state]
-  (let [[content {:keys [on-hide heading heading-id heading-parent-id dummy? format]} id] (:rum/args state)
+  (let [[content {:keys [on-hide heading heading-id heading-parent-id dummy? format sidebar?]} id] (:rum/args state)
         node (gdom/getElement id)
         value (gobj/get node "value")
         pos (gobj/get node "selectionStart")]
     {:on-hide on-hide
      :content content
      :dummy? dummy?
+     :sidebar? sidebar?
      :format format
      :id id
      :heading heading
@@ -369,7 +370,7 @@
             sibling-heading (f (gdom/getElement heading-parent-id))]
         (when sibling-heading
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-            (handler/edit-heading! (uuid sibling-heading-id) pos format)))))))
+            (handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))
 
 (defn on-backspace
   [state e]
@@ -385,7 +386,7 @@
             (handler/delete-heading! heading dummy?)
             (when sibling-heading
               (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-                (handler/edit-heading! (uuid sibling-heading-id) :max format)))))
+                (handler/edit-heading! (uuid sibling-heading-id) :max format id)))))
         (reset! *should-delete? true)))))
 
 (defn get-matched-commands
@@ -481,7 +482,7 @@
 
 (defn- insert-new-heading!
   [state]
-  (let [{:keys [heading value format]} (get-state state)
+  (let [{:keys [heading value format id]} (get-state state)
         heading-id (:heading/uuid heading)
         heading (try
                   (db/pull [:heading/uuid heading-id])
@@ -492,7 +493,7 @@
     (let [value-with-levels (with-levels value format (:heading/level heading))
           [_first-heading last-heading _new-heading-content] (handler/insert-new-heading! heading value-with-levels)
           last-id (:heading/uuid last-heading)]
-      (handler/edit-heading! last-id :max format)
+      (handler/edit-heading! last-id :max format id)
       (clear-when-saved!))))
 
 (defn get-previous-heading-level

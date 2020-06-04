@@ -14,36 +14,38 @@
             [clojure.string :as string]))
 
 (rum/defc heading-cp < rum/reactive
-  [heading]
+  [repo heading]
   (let [id (:heading/uuid heading)]
     (page/page {:parameters {:path {:name (str id)}}
-                :sidebar? true})))
+                :sidebar? true
+                :repo repo})))
 
 (defn build-sidebar-item
-  [db-id block-type block-data]
+  [repo db-id block-type block-data]
   (case block-type
     :heading-ref
     ["Block reference"
      [:div.ml-2
-      (heading-cp (:heading block-data))]]
+      (heading-cp repo (:heading block-data))]]
 
     :heading
     ["Block"
      [:div.ml-2
-      (heading-cp block-data)]]
+      (heading-cp repo block-data)]]
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
       [page-name (page/page {:parameters {:path {:name page-name}}
-                             :sidebar? true})])
+                             :sidebar? true
+                             :repo repo})])
 
     ["" [:span]]))
 
 (rum/defc sidebar-item < rum/reactive
-  [idx db-id block-type block-data]
+  [repo idx db-id block-type block-data]
   (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
     [:div.sidebar-item.content
-     (let [[title component] (build-sidebar-item db-id block-type block-data)]
+     (let [[title component] (build-sidebar-item repo db-id block-type block-data)]
        [:div.flex.flex-col
         [:div.flex.flex-row.justify-between
          [:div.flex.flex-row.justify-center
@@ -99,9 +101,9 @@
         repo (state/sub :git/current-repo)
         starred (state/sub [:config repo :starred])]
     [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto
-     (for [[idx [db-id block-type block-data]] (medley/indexed blocks)]
+     (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
-         (sidebar-item idx db-id block-type block-data)
+         (sidebar-item repo idx db-id block-type block-data)
          (str "sidebar-block-" idx)))
      (let [match (state/sub :route-match)
            theme (state/sub :ui/theme)

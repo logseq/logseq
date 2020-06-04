@@ -500,9 +500,10 @@
 
 (defn- rec-get-heading-node
   [node]
-  (if (d/has-class? node "ls-heading-parent")
+  (if (and node (d/has-class? node "ls-heading-parent"))
     node
-    (rec-get-heading-node (gobj/get node "parentNode"))))
+    (and node
+         (rec-get-heading-node (gobj/get node "parentNode")))))
 
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
@@ -516,7 +517,8 @@
             container-nodes (array-seq (selection/getSelectedNodes container))]
         (map
           (fn [node]
-            (if (= 3 (gobj/get node "nodeType")) ;textnode
+            (if (or (= 3 (gobj/get node "nodeType"))
+                    (not (d/has-class? node class-name))) ;textnode
               (rec-get-heading-node node)
               node))
           container-nodes)))
@@ -524,13 +526,6 @@
       nil)))
 
 (def clear-selection! selection/clearSelection)
-
-(defn get-heading-id
-  [id]
-  (try
-    (uuid (string/replace id "ls-heading-parent-" ""))
-    (catch js/Error e
-      (prn "get-heading-id failed, error: " e))))
 
 (defn copy-to-clipboard! [s]
   (let [el (js/document.createElement "textarea")]
@@ -572,7 +567,7 @@
   [ref]
   (when rum.core/*reactions*
     (vswap! rum.core/*reactions* conj ref))
-  @ref)
+  (and ref @ref))
 
 (defn time-ms
   []
