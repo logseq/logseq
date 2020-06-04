@@ -90,7 +90,8 @@
             (fn [{:keys [id url]}]
               {:title (get-repo-name-f url)
                :options {:on-click (fn []
-                                     (state/set-current-repo! url))}})
+                                     (state/set-current-repo! url)
+                                     (handler/redirect! {:to :home}))}})
             (remove (fn [repo]
                       (= current-repo (:url repo)))
                     repos))
