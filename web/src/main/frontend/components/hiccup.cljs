@@ -694,7 +694,7 @@
                   (state/add-custom-query-component! query (:rum/react-component state)))
                 state)}
   [config options content]
-  [:div.custom-query.my-2
+  [:div.custom-query.my-4
    [:code (or (:query-title options)
               "Query result: ")]
    (let [result (db/custom-query content)]
@@ -833,7 +833,7 @@
     (if (:group-by-page? config)
       (for [[page headings] headings]
         (let [page (db/entity (:db/id page))]
-          [:div {:key (str "page-" (:db/id page))}
+          [:div.my-2 {:key (str "page-" (:db/id page))}
            (page-cp page)
            (headings-cp headings config)]))
       (headings-cp headings config))]))

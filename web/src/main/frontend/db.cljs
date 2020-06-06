@@ -236,9 +236,12 @@
    (pull (state/get-current-repo) selector eid))
   ([repo selector eid]
    (when-let [conn (get-conn repo)]
-     (d/pull conn
-             selector
-             eid))))
+     (try
+       (d/pull conn
+              selector
+              eid)
+       (catch js/Error e
+         nil)))))
 
 (defn pull-many
   ([eids]
@@ -276,8 +279,7 @@
                                 [:page/ref-pages page-id]
                                 [:page/ref-pages current-page-id]
                                 [:page/refed-headings current-page-id]
-                                [:page/mentioned-pages current-page-id]
-                                ]
+                                [:page/mentioned-pages current-page-id]]
 
                                ;; refed-pages
                                (apply concat

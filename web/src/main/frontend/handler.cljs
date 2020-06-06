@@ -230,7 +230,7 @@
         (load-contents files nil nil false))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
-                                           (map :path)))
+                                          (map :path)))
               remove-files (filter-diffs "remove")
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
@@ -914,7 +914,8 @@
   ([heading value]
    (insert-new-heading! heading value true))
   ([{:heading/keys [uuid content meta file dummy? level repo] :as heading} value create-new-heading?]
-   (let [repo (or repo (state/get-current-repo))
+   (when-not dummy?
+     (let [repo (or repo (state/get-current-repo))
          value (string/trim value)
          heading (with-heading-meta repo heading)
          format (:heading/format heading)
@@ -940,7 +941,7 @@
          :data headings}
         file-path
         new-content)
-       [first-heading last-heading new-heading-content]))))
+       [first-heading last-heading new-heading-content])))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -957,20 +958,21 @@
   [{:heading/keys [uuid meta content file repo] :as heading} dummy?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
-          heading (db/pull repo '[*] [:heading/uuid uuid])
-          file-path (:file/path (db/entity repo (:db/id file)))
-          file-content (db/get-file repo file-path)
-          after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
-          new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
-      (transact-react-and-alter-file!
-       repo
-       (concat
-        [[:db.fn/retractEntity [:heading/uuid uuid]]]
-        after-headings)
-       {:key :heading/change
-        :data [heading]}
-       file-path
-       new-content))))
+          heading (db/pull repo '[*] [:heading/uuid uuid])]
+      (when heading
+        (let [file-path (:file/path (db/entity repo (:db/id file)))
+              file-content (db/get-file repo file-path)
+              after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
+              new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
+          (transact-react-and-alter-file!
+           repo
+           (concat
+            [[:db.fn/retractEntity [:heading/uuid uuid]]]
+            after-headings)
+           {:key :heading/change
+            :data [heading]}
+           file-path
+           new-content))))))
 
 (defn delete-headings!
   [repo heading-uuids]

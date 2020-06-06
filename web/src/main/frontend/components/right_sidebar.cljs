@@ -14,24 +14,25 @@
             [clojure.string :as string]))
 
 (rum/defc heading-cp < rum/reactive
-  [repo heading]
+  [repo idx heading]
   (let [id (:heading/uuid heading)]
     (page/page {:parameters {:path {:name (str id)}}
                 :sidebar? true
+                :sidebar/idx idx
                 :repo repo})))
 
 (defn build-sidebar-item
-  [repo db-id block-type block-data]
+  [repo idx db-id block-type block-data]
   (case block-type
     :heading-ref
     ["Block reference"
      [:div.ml-2
-      (heading-cp repo (:heading block-data))]]
+      (heading-cp repo idx (:heading block-data))]]
 
     :heading
     ["Block"
      [:div.ml-2
-      (heading-cp repo block-data)]]
+      (heading-cp repo idx block-data)]]
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
@@ -45,7 +46,7 @@
   [repo idx db-id block-type block-data]
   (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
     [:div.sidebar-item.content
-     (let [[title component] (build-sidebar-item repo db-id block-type block-data)]
+     (let [[title component] (build-sidebar-item repo idx db-id block-type block-data)]
        [:div.flex.flex-col
         [:div.flex.flex-row.justify-between
          [:div.flex.flex-row.justify-center
@@ -86,7 +87,6 @@
     (vis/new-network "page-graph" graph))
   state)
 
-
 (defonce *show-graph? (atom false))
 (rum/defc graph < rum/reactive
   {:did-mount render-graph
@@ -116,7 +116,7 @@
        [:div.mr-1.font-bold.text-sm "Graph"]
        [:div.px-1
         (ui/toggle show-graph? (fn []
-                           (swap! *show-graph? not)))]]]
+                                 (swap! *show-graph? not)))]]]
 
      (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key

@@ -278,7 +278,8 @@
   (when db-id
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (first %) db-id) blocks)
-                                          (cons [repo db-id block-type block-data]))))))
+                                          (cons [repo db-id block-type block-data])
+                                          (distinct))))))
 (defn sidebar-remove-block!
   [idx]
   (update-state! :sidebar/blocks #(util/drop-nth idx %)))
