@@ -48,12 +48,13 @@
                     (fn [e]
                       (when-let [headings (seq (util/get-selected-nodes "ls-heading-parent"))]
                         (let [headings (remove #(d/has-class? % "dummy") headings)]
-                          (doseq [heading headings]
-                            (d/add-class! heading "selected noselect"))
-                          ;; TODO: We delay this so the following "click" event won't clear the selections.
-                          ;; Needs more thinking.
-                          (js/setTimeout #(state/set-selection-headings! headings)
-                                         200)))))
+                          (when (seq headings)
+                            (doseq [heading headings]
+                              (d/add-class! heading "selected noselect"))
+                            ;; TODO: We delay this so the following "click" event won't clear the selections.
+                            ;; Needs more thinking.
+                            (js/setTimeout #(state/set-selection-headings! headings)
+                                           200))))))
 
      (mixins/listen state js/window "click"
                     (fn [e]
@@ -63,8 +64,7 @@
                       ;; enable scroll
                       (let [main (d/by-id "main-content")]
                         (d/remove-class! main "overflow-hidden")
-                        (d/add-class! main "overflow-y-auto")
-                        )
+                        (d/add-class! main "overflow-y-auto"))
 
                       (handler/clear-selection! e)))
 

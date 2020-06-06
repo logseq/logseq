@@ -157,7 +157,7 @@
      {:did-mount
       (fn [state]
         (if (enable-f state)
-          (assoc state ::keyboard-listener
+          (assoc state (str (name ::keyboard-listener) key)
                 (keyboard/install-shortcut! key
                                             (fn [] (f state))
                                             false
@@ -166,5 +166,5 @@
       :will-unmount
       (fn [state]
         (when (enable-f state)
-          ((::keyboard-listener state)))
+          ((get state (str (name ::keyboard-listener) key))))
         state)})))

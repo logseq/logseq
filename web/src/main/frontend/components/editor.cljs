@@ -596,6 +596,7 @@
                   (>= (count value) (inc current-pos))
                   (= (nth value current-pos)
                      (get autopair-map deleted)))
+
                  (do
                    (util/stop e)
                    (commands/delete-pair! id)
