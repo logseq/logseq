@@ -529,7 +529,7 @@
   [name path-params]
   (case name
     :home
-    "Home"
+    "Journals"
     :repos
     "Repos"
     :repo-add
