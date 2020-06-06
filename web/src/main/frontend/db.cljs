@@ -18,7 +18,8 @@
             ["localforage" :as localforage]
             [promesa.core :as p]
             [cljs.reader :as reader]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [frontend.util :as util :refer-macros [profile]]))
 
 ;; offline db
 (def store-name "dbs")
@@ -119,12 +120,14 @@
    :git/error {}
 
    ;; file
-   :file/path       {:db/unique :db.unique/identity}
+   :file/path       {:db/unique :db.unique/identity
+                     :index true}
    :file/last-modified-at {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
-   :page/name       {:db/unique      :db.unique/identity}
+   :page/name       {:db/unique      :db.unique/identity
+                     :index true}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
    :page/alias      {:db/valueType   :db.type/ref
@@ -162,7 +165,8 @@
    :heading/parent {:db/valueType   :db.type/ref}
 
    ;; tag
-   :tag/name       {:db/unique :db.unique/identity}})
+   :tag/name       {:db/unique :db.unique/identity
+                    :index true}})
 
 ;; transit serialization
 
@@ -267,11 +271,13 @@
                                  headings)
 
                                ;; affected page
-                               [[:page/headings page-id]
+                               [
+                                [:page/headings page-id]
                                 [:page/ref-pages page-id]
                                 [:page/ref-pages current-page-id]
                                 [:page/refed-headings current-page-id]
-                                [:page/mentioned-pages current-page-id]]
+                                [:page/mentioned-pages current-page-id]
+                                ]
 
                                ;; refed-pages
                                (apply concat
@@ -285,18 +291,20 @@
                               (if (= k :page/refed-headings)
                                 [:page/ref-pages page-id]))
                             handler-keys)
-              custom-queries (some->>
-                              (filter (fn [v]
-                                        (and (= (first v) (state/get-current-repo))
-                                             (= (second v) :custom)))
-                                      (keys @query-state))
-                              (map (fn [v]
-                                     (vec (drop 1 v)))))]
+              ;; custom-queries (some->>
+              ;;                 (filter (fn [v]
+              ;;                           (and (= (first v) (state/get-current-repo))
+              ;;                                (= (second v) :custom)))
+              ;;                         (keys @query-state))
+              ;;                 (map (fn [v]
+              ;;                        (vec (drop 1 v)))))
+              ]
           (->>
            (util/concat-without-nil
             handler-keys
             refed-pages
-            custom-queries)
+            ;; custom-queries
+            )
            distinct)))
       [[key]])))
 
@@ -410,20 +418,20 @@
                      :or {files-db? false}}]
   (let [repo-url (or repo-url (state/get-current-repo))
         tx-data (->> (util/remove-nils tx-data)
-                     (remove nil?))]
+                     (remove nil?))
+        get-conn (fn [] (if files-db?
+                         (get-files-conn repo-url)
+                         (get-conn repo-url false)))]
     (when (seq tx-data)
-      (when-let [conn (if files-db?
-                        (get-files-conn repo-url)
-                        (get-conn repo-url false))]
-        (let [db (:db-after (d/transact! conn (vec tx-data)))
-              handler-keys (get-handler-keys handler-opts)]
-          (doseq [handler-key handler-keys]
-            (let [handler-key (vec (cons repo-url handler-key))]
-              (when-let [cache (get @query-state handler-key)]
-                (let [{:keys [query inputs]} cache]
-                  (when (and db query inputs)
-                    (let [new-result (apply d/q query db inputs)]
-                      (set-new-result! handler-key new-result))))))))))))
+      (d/transact! (get-conn) (vec tx-data))
+      (let [handler-keys (get-handler-keys handler-opts)]
+        (doseq [handler-key handler-keys]
+          (let [handler-key (vec (cons repo-url handler-key))]
+            (when-let [cache (get @query-state handler-key)]
+              (let [{:keys [query inputs]} cache]
+                (when (and query inputs)
+                  (let [new-result (apply d/q query (d/db (get-conn)) inputs)]
+                    (set-new-result! handler-key new-result)))))))))))
 
 (defn pull-heading
   [id]
@@ -497,21 +505,6 @@
                  (util/file-page? page)))))
 
 (defn get-page-alias
-  [repo page-name]
-  (when-let [conn (and repo (get-conn repo))]
-    (some->> (d/q '[:find ?alias-name
-                    :in $ ?page-name
-                    :where
-                    [?page :page/name ?page-name]
-                    [?page :page/alias ?alias]
-                    [?alias :page/name ?alias-name]]
-               conn
-               page-name)
-             seq-flatten
-             distinct
-             remove-journal-files)))
-
-(defn d-get-page-alias
   [repo page-name]
   (when-let [conn (and repo (get-conn repo))]
     (some->> (d/q '[:find ?alias-name
@@ -621,6 +614,21 @@
       react
       ffirst))))
 
+(defn get-file-no-sub
+  ([path]
+   (get-file-no-sub (state/get-current-repo) path))
+  ([repo path]
+   (when (and repo path)
+     (->
+      (d/q '[:find ?content
+             :in $ ?path
+             :where
+             [?file :file/path ?path]
+             [?file :file/content ?content]]
+        (get-conn repo)
+        path)
+      ffirst))))
+
 (defn reset-contents-and-headings!
   [repo-url contents headings-pages delete-files delete-headings]
   (let [files (doall
@@ -690,7 +698,7 @@
 
 (defn page-alias-set
   [repo-url page]
-  (let [aliases (d-get-page-alias repo-url page)]
+  (let [aliases (get-page-alias repo-url page)]
     (set (conj aliases page))))
 
 (defn- with-repo
@@ -704,20 +712,20 @@
    (get-page-headings (state/get-current-repo)
                       page))
   ([repo-url page]
-   (let [pages (page-alias-set repo-url page)
-         page-id (:db/id (entity [:page/name page]))]
-     (->> (q repo-url [:page/headings page-id] {:use-cache? false}
-            '[:find (pull ?heading [*])
-              :in $ ?pages
-              :where
-              [?p :page/name ?page]
-              [?heading :heading/page ?p]
-              [(contains? ?pages ?page)]]
-            pages)
-          react
-          seq-flatten
-          sort-by-pos
-          (with-repo repo-url)))))
+   (let [page-id (:db/id (entity [:page/name page]))
+         result (q repo-url [:page/headings page-id] {:use-cache? false}
+                  '[:find (pull ?heading [*])
+                    :in $ ?page-id
+                    :where
+                    [?heading :heading/page ?page-id]]
+                  page-id)]
+     (some->> result
+              react
+              seq-flatten
+              sort-by-pos
+              (with-repo repo-url)
+              (map (fn [heading]
+                     (dissoc heading :heading/meta)))))))
 
 (defn get-heading-and-children
   [repo heading-uuid]
@@ -1284,10 +1292,6 @@
      (d/q '[:find (count ?h)
             :where
             [?h :heading/uuid]]
-       (get-conn))
+       (get-conn ))
      ffirst))
-
-  (def react deref)
-
-  (def react rum/react)
   )

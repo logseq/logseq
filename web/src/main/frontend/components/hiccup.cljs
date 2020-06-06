@@ -466,7 +466,7 @@
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
-  [state {:heading/keys [uuid idx level children meta content dummy? lock? page format repo] :as heading} heading-part config]
+  [state {:heading/keys [uuid idx title level children meta content dummy? lock? page format repo] :as heading} heading-part config]
   (let [config (assoc config :heading heading)
         ref? (boolean (:ref? config))
         sidebar? (boolean (:sidebar? config))
@@ -554,11 +554,10 @@
     nil))
 
 (rum/defc heading < rum/static
-  [config {:heading/keys [uuid title tags marker level priority anchor meta numbering children format]
+  [config {:heading/keys [uuid title tags marker level priority anchor meta children format content]
            :as t}]
   (let [config (assoc config :heading t)
-        checkbox (heading-checkbox t
-                                   (str "mr-1 cursor"))
+        checkbox (heading-checkbox t (str "mr-1 cursor"))
         marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
                     [:span {:class (str "task-status " (string/lower-case marker))
                             :style {:margin-right 3.5}}

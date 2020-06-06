@@ -1,6 +1,6 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [frontend.handler :as handler]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -38,6 +38,7 @@
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
+  ;; (mixins/perf-measure-mixin "Page")
   [state {:keys [repo] :as option}]
   (let [repo (or repo (state/sub :git/current-repo))
         encoded-page-name (get-page-name state)
@@ -54,13 +55,13 @@
         page (db/entity repo [:page/name page-name])
         file (:page/file page)
         file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
+        content (db/get-file-no-sub repo file-path)
         page-headings (db/with-dummy-heading raw-page-headings format
                         (if (empty? raw-page-headings)
                           {:heading/page {:db/id (:db/id page)}
                            :heading/file {:db/id (:db/id (:page/file page))}
                            :heading/meta
-                           (let [file-id (:db/id (:page/file page))
-                                 content (db/get-file repo file-path)]
+                           (let [file-id (:db/id (:page/file page))]
                              {:pos (utf8/length (utf8/encode content))
                               :end-pos nil})})
                         journal?)
@@ -123,8 +124,7 @@
              heading-start-pos (get-in (first raw-page-headings) [:heading/meta :pos])]
          (when (or (not (zero? heading-start-pos))
                    (seq (:page/directives page)))
-           (let [content (db/get-file repo path)
-                 encoded-content (utf8/encode content)
+           (let [encoded-content (utf8/encode content)
                  content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
              [:div.before-heading.ml-4
               (content/content
@@ -138,7 +138,7 @@
                                                     (utf8/substring encoded-content heading-start-pos)))]
                              (when (not= (string/trim new-content)
                                          (string/trim content))
-                               (handler/alter-file repo path new-content nil))))})]))))
+                               (handler/alter-file repo path new-content {:re-render-root? true}))))})]))))
      ;; headings
      (content/content encoded-page-name
                       {:hiccup hiccup

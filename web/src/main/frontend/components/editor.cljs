@@ -27,7 +27,6 @@
             [frontend.search :as search]))
 
 ;; TODO: refactor the state, it is already too complex.
-(defonce *should-delete? (atom false))
 (defonce *last-edit-heading (atom nil))
 
 ;; FIXME: should support multiple images concurrently uploading
@@ -372,22 +371,20 @@
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
             (handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))
 
-(defn on-backspace
+(defn delete-heading!
   [state e]
   (let [{:keys [id heading-id heading-parent-id dummy? value  pos format]} (get-state state)]
     (when (and heading-id (= value ""))
-      (if @*should-delete?
-        (do
-          (util/stop e)
-          ;; delete heading, edit previous heading
-          (let [heading (db/pull [:heading/uuid heading-id])
-                heading-parent (gdom/getElement heading-parent-id)
-                sibling-heading (gdom/getPreviousElementSibling heading-parent)]
-            (handler/delete-heading! heading dummy?)
-            (when sibling-heading
-              (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-                (handler/edit-heading! (uuid sibling-heading-id) :max format id)))))
-        (reset! *should-delete? true)))))
+      (do
+        (util/stop e)
+        ;; delete heading, edit previous heading
+        (let [heading (db/pull [:heading/uuid heading-id])
+              heading-parent (gdom/getElement heading-parent-id)
+              sibling-heading (gdom/getPreviousElementSibling heading-parent)]
+          (handler/delete-heading! heading dummy?)
+          (when sibling-heading
+            (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+              (handler/edit-heading! (uuid sibling-heading-id) :max format id))))))))
 
 (defn get-matched-commands
   [input]
@@ -574,6 +571,9 @@
                    deleted (and (> current-pos 0)
                                 (nth value (dec current-pos)))]
                (cond
+                 (= value "")
+                 (delete-heading! state e)
+
                  (and (> current-pos 1)
                       (= (nth value (dec current-pos)) commands/slash))
                  (do
@@ -585,7 +585,6 @@
                  (do
                    (reset! *angle-bracket-caret-pos nil)
                    (reset! *show-block-commands false))
-
 
                  ;; pair
                  (and
@@ -599,8 +598,7 @@
 
                  (do
                    (util/stop e)
-                   (commands/delete-pair! id)
-                   (reset! *should-delete? false))
+                   (commands/delete-pair! id))
 
                  :else
                  nil)))
@@ -649,10 +647,7 @@
          188 (fn [state e]
                (when-let [matched-commands (seq (get-matched-block-commands input))]
                  (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                 (reset! *show-block-commands true)))
-
-         ;; backspace
-         8 on-backspace}
+                 (reset! *show-block-commands true)))}
         (fn [e key-code]
           (let [format (:format (get-state state))]
             (when (not= key-code 191)     ; not /
@@ -688,11 +683,7 @@
                     :else
                     (reset! *matched-block-commands matched-block-commands))
                   (reset! *show-block-commands false))))))))))
-  {:after (fn [state _props]
-            (let [[content {:keys [dummy? heading heading-id]} id] (:rum/args state)]
-              (reset! *should-delete? false))
-            state)
-   :did-mount (fn [state]
+  {:did-mount (fn [state]
                 (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)]
                   (let [content (handler/remove-level-spaces content format)]
                     (state/set-edit-content! id (string/trim (or content "")) true)
@@ -710,20 +701,15 @@
                        (dnd/unsubscribe!
                         input
                         :upload-images))
-                     (when heading
+                     (when (and heading (not= value ""))
                        (let [new-value (with-levels
                                          value
                                          format
                                          (:heading/level heading))]
-                         (cond
-                           @*should-delete?
-                           (reset! *should-delete? false)
-
-                           :else
-                           (let [cache [(:heading/uuid heading) value]]
-                            (when (not= @*last-edit-heading cache)
-                              (handler/save-heading-if-changed! heading new-value)
-                              (reset! *last-edit-heading cache))))))
+                         (let [cache [(:heading/uuid heading) value]]
+                           (when (not= @*last-edit-heading cache)
+                             (handler/save-heading-if-changed! heading new-value)
+                             (reset! *last-edit-heading cache)))))
                      (clear-when-saved!))
                    state)}
   [content {:keys [on-hide dummy? node format heading]
@@ -739,8 +725,7 @@
       :value (or edit-content content)
       :on-change (fn [e]
                    (let [value (util/evalue e)]
-                     (state/set-edit-content! id value false)
-                     (reset! *should-delete? false)))
+                     (state/set-edit-content! id value false)))
       :auto-focus true})
     (transition-cp
      (commands id format)

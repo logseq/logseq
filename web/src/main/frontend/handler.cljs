@@ -230,7 +230,7 @@
         (load-contents files nil nil false))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
-                                          (map :path)))
+                                           (map :path)))
               remove-files (filter-diffs "remove")
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
@@ -477,8 +477,9 @@
           (string/trim (gobj/get input "value")))))
 
 (defn alter-file
-  [repo path content {:keys [reset?]
-                      :or {reset? true}}]
+  [repo path content {:keys [reset? re-render-root?]
+                      :or {reset? true
+                           re-render-root? false}}]
   (if reset?
     (db/reset-file! repo path content)
     (db/set-file-content! repo path content))
@@ -486,7 +487,7 @@
    (fs/write-file (util/get-repo-dir repo) path content)
    (fn [_]
      (git-add repo path)
-     (re-render-root!)
+     (when re-render-root? (re-render-root!))
      (history/add-history!
       [:git/repo repo]
       {:db (d/db (db/get-conn repo false))
@@ -508,7 +509,8 @@
    repo
    tx
    transact-option)
-  (alter-file repo file-path new-content {:reset? false}))
+  (alter-file repo file-path new-content {:reset? false
+                                          :re-render-root? false}))
 
 (defn git-set-username-email!
   [repo-url {:keys [name email]}]
@@ -536,6 +538,8 @@
     "Add another repo"
     :all-files
     "All your files"
+    :all-pages
+    "All your pages"
     :file
     (str "File " (util/url-decode (:path path-params)))
     :new-page
@@ -859,19 +863,17 @@
                                    modified-time (let [modified-at (tc/to-long (t/now))]
                                                    [[:db/add (:db/id page) :page/last-modified-at modified-at]
                                                     [:db/add (:db/id file) :file/last-modified-at modified-at]])]
-                               (profile
-                                "Save heading: "
-                                (transact-react-and-alter-file!
-                                 repo
-                                 (concat
-                                  pages
-                                  headings
-                                  after-headings
-                                  modified-time)
-                                 {:key :heading/change
-                                  :data headings}
-                                 file-path
-                                 new-content)))))]
+                               (transact-react-and-alter-file!
+                                repo
+                                (concat
+                                 pages
+                                 headings
+                                 after-headings
+                                 modified-time)
+                                {:key :heading/change
+                                 :data headings}
+                                file-path
+                                new-content))))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -928,18 +930,16 @@
            first-heading (first headings)
            last-heading (last headings)
            after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-       (profile
-        "Insert new heading: "
-        (transact-react-and-alter-file!
-         repo
-         (concat
-          pages
-          headings
-          after-headings)
-         {:key :heading/change
-          :data headings}
-         file-path
-         new-content))
+       (transact-react-and-alter-file!
+        repo
+        (concat
+         pages
+         headings
+         after-headings)
+        {:key :heading/change
+         :data headings}
+        file-path
+        new-content)
        [first-heading last-heading new-heading-content]))))
 
 ;; TODO: utf8 encode performance

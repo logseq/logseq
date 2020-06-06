@@ -2,7 +2,8 @@
   (:require [rum.core :as rum]
             [goog.dom :as dom]
             [goog.object :as gobj]
-            [frontend.keyboard :as keyboard])
+            [frontend.keyboard :as keyboard]
+            [frontend.util :refer-macros [profile]])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -168,3 +169,14 @@
         (when (enable-f state)
           ((get state (str (name ::keyboard-listener) key))))
         state)})))
+
+;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
+(defn perf-measure-mixin
+  [desc]
+  "Does performance measurements in development."
+  {:wrap-render
+   (fn wrap-render [render-fn]
+     (fn [state]
+       (profile
+        (str "Render " desc)
+        (render-fn state))))})

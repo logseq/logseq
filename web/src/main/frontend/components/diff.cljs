@@ -96,7 +96,8 @@
                  (reset! *edit? false)
                  (let [new-content @*edit-content]
                    (handler/alter-file repo path new-content
-                                       {:commit? false})
+                                       {:commit? false
+                                        :re-render-root? true})
                    (swap! state/state
                           assoc-in [:github/contents repo remote-oid path] new-content)
                    (mark-as-resolved path))))]
@@ -108,7 +109,8 @@
                (fn []
                  ;; overwrite the file
                  (handler/alter-file repo path content
-                                     {:commit? false})
+                                     {:commit? false
+                                      :re-render-root? true})
                  (mark-as-resolved path))
                :background "green")
 
