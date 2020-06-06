@@ -525,9 +525,38 @@
     (js/setTimeout #(dom/remove-class! element "block-highlight")
                    2000)))
 
+(defn get-title
+  [name path-params]
+  (case name
+    :home
+    "Home"
+    :repos
+    "Repos"
+    :repo-add
+    "Add another repo"
+    :all-files
+    "All your files"
+    :file
+    (str "File " (util/url-decode (:path path-params)))
+    :new-page
+    "Create a new page"
+    :page
+    (util/capitalize-all (util/url-decode (:name path-params)))
+    :diff
+    "Git diff"
+    :draw
+    "Draw"
+    :docs
+    "Logseq documents"
+    :else
+    "Logseq"))
+
 (defn set-route-match!
   [route]
   (swap! state/state assoc :route-match route)
+  (let [{:keys [data path-params]} route
+        title (get-title (:name data) path-params)]
+    (util/set-title! title))
   (when-let [fragment (util/get-fragment)]
     (util/scroll-to-element fragment)
     (highlight-block! fragment)))

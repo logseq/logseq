@@ -596,3 +596,7 @@
   [& cols]
   (->> (apply concat cols)
        (remove nil?)))
+
+(defn set-title!
+  [title]
+  (set! (.-title js/document) title))
