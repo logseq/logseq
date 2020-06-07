@@ -18,6 +18,7 @@
             [goog.object :as gobj]
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
+            [frontend.expand :as expand]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
 
@@ -38,6 +39,16 @@
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
+  (mixins/keyboard-mixin "tab"
+                         (fn [state e]
+                           (when (and
+                                  ;; not input, t
+                                  (nil? (state/get-edit-input-id))
+                                  (string/blank? (:search/q @state/state)))
+                             (util/stop e)
+                             (let [encoded-page-name (get-page-name state)
+                                   id encoded-page-name]
+                               (expand/toggle-all! id)))))
   ;; (mixins/perf-measure-mixin "Page")
   [state {:keys [repo] :as option}]
   (let [repo (or repo (state/sub :git/current-repo))
@@ -121,13 +132,12 @@
                    [:span.mr-1 (util/capitalize-all item)]])])))
 
          ;; content before headings, maybe directives or summary it can be anything
-         (when (and (not journal?) (not heading?) (:page/file page))
+         (when (and (not journal?) (not heading?))
            (let [path (let [file-id (:db/id (:page/file page))]
                         (:file/path (db/entity repo file-id)))
                  encoded-path (util/url-encode path)
                  heading-start-pos (get-in (first raw-page-headings) [:heading/meta :pos])]
-             (when (or (not (zero? heading-start-pos))
-                       (seq (:page/directives page)))
+             (when (and heading-start-pos (not (zero? heading-start-pos)))
                (let [encoded-content (utf8/encode content)
                      content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
                  [:div.before-heading.ml-4

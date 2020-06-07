@@ -160,7 +160,7 @@
         (if (enable-f state)
           (assoc state (str (name ::keyboard-listener) key)
                 (keyboard/install-shortcut! key
-                                            (fn [] (f state))
+                                            (fn [e] (f state e))
                                             false
                                             (target-fn state)))
           state))

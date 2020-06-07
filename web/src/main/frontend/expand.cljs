@@ -106,7 +106,7 @@
   [id]
   ;; default to level 2
   (let [all-headings (get-headings id)
-        headings (next all-headings)]
+        headings all-headings]
     (when (seq headings)
       (let [toggle-state (:ui/toggle-state @state/state)]
         (doseq [heading headings]

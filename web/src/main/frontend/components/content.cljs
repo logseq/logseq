@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]
-            [frontend.expand :as expand]
             [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -133,19 +132,7 @@
              [:div.text-gray-500.cursor "Click to edit"]
              content)])))))
 
-;; TODO: lazy load highlight.js
 (rum/defcs content < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/listen state js/window "keyup"
-                    (fn [e]
-                      ;; t
-                      (when (and
-                             ;; not input, t
-                             (not (state/get-edit-input-id))
-                             (= 84 (.-keyCode e)))
-                        (let [id (first (:rum/args state))]
-                          (expand/toggle-all! id)))))))
   {:will-mount (fn [state]
                  (lazy-load-js state)
                  state)
