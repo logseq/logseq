@@ -47,7 +47,8 @@
      (mixins/listen state js/window "mouseup"
                     (fn [e]
                       (when-let [headings (seq (util/get-selected-nodes "ls-heading-parent"))]
-                        (let [headings (remove #(d/has-class? % "dummy") headings)]
+                        (let [headings (remove nil? headings)
+                              headings (remove #(d/has-class? % "dummy") headings)]
                           (when (seq headings)
                             (doseq [heading headings]
                               (d/add-class! heading "selected noselect"))

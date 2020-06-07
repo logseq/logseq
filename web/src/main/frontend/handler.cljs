@@ -470,11 +470,11 @@
       (notify-fn)
       (js/setInterval notify-fn (* 1000 60)))))
 
-(defn file-changed?
-  [input-id content]
-  (when-let [input (gdom/getElement input-id)]
-    (not= (string/trim content)
-          (string/trim (gobj/get input "value")))))
+(defn restore-config!
+  [repo-url]
+  (p/let [content (load-file repo-url config/config-file)]
+    (when content
+      (db/reset-config! repo-url content))))
 
 (defn alter-file
   [repo path content {:keys [reset? re-render-root?]
@@ -487,6 +487,8 @@
    (fs/write-file (util/get-repo-dir repo) path content)
    (fn [_]
      (git-add repo path)
+     (when (= path config/config-file)
+       (restore-config! repo))
      (when re-render-root? (re-render-root!))
      (history/add-history!
       [:git/repo repo]
@@ -1185,12 +1187,6 @@
                      (when (:repos me)
                        (clone-and-pull-repos me))))
                  (fn [_e])))))
-
-(defn restore-config!
-  [repo-url]
-  (p/let [content (load-file repo-url config/config-file)]
-    (when content
-      (db/reset-config! repo-url content))))
 
 (defn watch-for-date!
   []

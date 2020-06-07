@@ -53,11 +53,9 @@
   (let [[encoded-path path] (get-path state)
         format (format/get-format path)
         save-file-handler (fn [content]
-                            (fn [_]
-                              (when (handler/file-changed? encoded-path content)
-                                (let [new-content (-> (gdom/getElement encoded-path)
-                                                    (gobj/get "value"))]
-                                  (handler/alter-file (state/get-current-repo) path new-content nil)))))
+                            (fn [value]
+                              (when (not= (string/trim value) (string/trim content))
+                                (handler/alter-file (state/get-current-repo) path (string/trim value) nil))))
         edit-raw-handler (fn []
                            (let [content (db/get-file path)]
                              (content/content encoded-path {:content content

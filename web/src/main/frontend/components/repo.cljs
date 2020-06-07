@@ -20,13 +20,10 @@
        [:h1.title "Your Repos: "]
 
        [:div.pl-1.content
-        ;; [:a {:href "/repo/add"}
-        ;;  "Add another repo"]
-        (ui/button
-          "Add another repo"
-          :href "/repo/add"
-          ;; :on-click identity
-          :style {:margin-bottom 24})
+        [:div.flex.my-4 {:key "add-button"}
+         (ui/button
+           "Add another repo"
+           :href "/repo/add")]
 
         (for [{:keys [id url] :as repo} repos]
           [:div.flex.justify-between.mb-1 {:key id}

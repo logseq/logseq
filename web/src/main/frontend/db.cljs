@@ -293,20 +293,18 @@
                               (if (= k :page/refed-headings)
                                 [:page/ref-pages page-id]))
                             handler-keys)
-              ;; custom-queries (some->>
-              ;;                 (filter (fn [v]
-              ;;                           (and (= (first v) (state/get-current-repo))
-              ;;                                (= (second v) :custom)))
-              ;;                         (keys @query-state))
-              ;;                 (map (fn [v]
-              ;;                        (vec (drop 1 v)))))
-              ]
+              custom-queries (some->>
+                              (filter (fn [v]
+                                        (and (= (first v) (state/get-current-repo))
+                                             (= (second v) :custom)))
+                                      (keys @query-state))
+                              (map (fn [v]
+                                     (vec (drop 1 v)))))]
           (->>
            (util/concat-without-nil
             handler-keys
             refed-pages
-            ;; custom-queries
-            )
+            custom-queries)
            distinct)))
       [[key]])))
 
