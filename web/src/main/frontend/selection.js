@@ -39,15 +39,22 @@ function getNodesBetween(rootNode, node1, node2) {
   }
 }
 
-export var getSelectedNodes = function (selectionAncestor) {
+export var getSelectedNodes = function (selectionAncestor, startNode) {
   // from https://developer.mozilla.org/en-US/docs/Web/API/Selection
-  var selection = window.getSelection();
-  if (selection.isCollapsed) {
-    return [];
-  };
-  var node1 = selection.anchorNode;
-  var node2 = selection.focusNode;
-  return getNodesBetween(selectionAncestor, node1, node2);
+  var selection = null;
+  if(window.getSelection){
+    selection = window.getSelection();
+  } else if(document.selection){
+    selection = document.selection;
+  }
+
+  if(selection) {
+    if (selection.isCollapsed) {
+      return [];
+    };
+    var node2 = selection.focusNode;
+    return getNodesBetween(selectionAncestor, startNode, node2);
+  }
 };
 
 export var clearSelection = function () {

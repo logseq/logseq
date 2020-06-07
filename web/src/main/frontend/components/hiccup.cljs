@@ -516,6 +516,7 @@
                                         (util/input? target)
                                         (and (util/sup? target)
                                              (d/has-class? target "fn")))
+                            (handler/clear-selection! nil)
                             (handler/unhighlight-heading!)
                             (util/stop e)
                             (handler/reset-cursor-range! (gdom/getElement heading-id))
@@ -817,13 +818,14 @@
 
 (rum/defc headings-cp
   [headings config]
-  (for [item headings]
-    (let [item (if (:heading/dummy? item)
-                 item
-                 (dissoc item :heading/meta))]
-      (rum/with-key
-        (heading config item)
-        (:heading/uuid item)))))
+  [:div.headings-container
+   (for [item headings]
+     (let [item (if (:heading/dummy? item)
+                  item
+                  (dissoc item :heading/meta))]
+       (rum/with-key
+         (heading config item)
+         (:heading/uuid item))))])
 
 (defn ->hiccup
   ([headings config]

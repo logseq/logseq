@@ -505,6 +505,13 @@
     (and node
          (rec-get-heading-node (gobj/get node "parentNode")))))
 
+(defn- rec-get-headings-container
+  [node]
+  (if (and node (d/has-class? node "headings-container"))
+    node
+    (and node
+         (rec-get-headings-container (gobj/get node "parentNode")))))
+
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
 (defn get-selected-nodes
@@ -513,8 +520,10 @@
     (when (gobj/get js/window "getSelection")
       (let [selection (js/window.getSelection)
             range (.getRangeAt selection 0)
-            container (gobj/get range "commonAncestorContainer")
-            container-nodes (array-seq (selection/getSelectedNodes container))]
+            container (-> (gobj/get range "commonAncestorContainer")
+                          (rec-get-headings-container))
+            start-node (gobj/get range "startContainer")
+            container-nodes (array-seq (selection/getSelectedNodes container start-node))]
         (map
           (fn [node]
             (if (or (= 3 (gobj/get node "nodeType"))
