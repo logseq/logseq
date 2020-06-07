@@ -288,7 +288,8 @@
          (search/search)
          [:div.ml-4.flex.items-center.md:ml-6
           (when current-repo (sync-status))
-          (repos current-repo true)
+          [:div.repos.hidden.md:block
+           (repos current-repo true)]
           [:a.ml-1 {:title "Draw with Excalidraw"
                     :href "/draw"}
            [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
@@ -330,7 +331,7 @@
                   :options {:on-click handler/sign-out!}})]
               (remove nil?))))
 
-          [:a.hover:text-gray-900.text-gray-500.ml-3
+          [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
            {:on-click (fn []
                         (let [sidebar (d/by-id "right-sidebar")]
                           (if (d/has-class? sidebar "enter")

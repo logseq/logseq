@@ -275,7 +275,7 @@
             (->elem
              :a
              (cond->
-                 {:href href}
+               {:href href}
                title
                (assoc :title title))
              (map-inline config label))
@@ -288,8 +288,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -411,15 +411,14 @@
         [:span ""])]
      [:a.flex.flex-row.items-center.justify-center
       (cond->
-          {:draggable true
-           :on-drag (fn [event]
-                      )
-           :on-drag-over (fn [event]
-                           )
-           :on-drop (fn [event]
-                      )
-           :style {:width 14
-                   :height 24}}
+        {:draggable true
+         :on-drag-start (fn [event]
+                          (.setData (gobj/get event "dataTransfer")
+                                    "heading-uuid"
+                                    uuid))
+         :style {:width 14
+                 :height 24}
+         :headingid (str uuid)}
         (not dummy?)
         (assoc :href (str "/page/" uuid)
                :on-click (fn [e]
@@ -671,10 +670,12 @@
                         :tbody
                         (mapv #(tr :td %) group)))
                      groups)]
-    [:div.table-wrapper
+    [:div.table-wrapper {:style {:max-width (min 700
+                                                 (gobj/get js/window "innerHeight"))}}
      (->elem
       :table
-      {:border 2
+      {:class "table-auto"
+       :border 2
        :cell-spacing 0
        :cell-padding 6
        :rules "groups"
@@ -819,6 +820,16 @@
 (rum/defc headings-cp
   [headings config]
   [:div.headings-container
+   {:on-drag-over (fn [event]
+                    (prn "on drag over")
+                    (js/console.dir event)
+                    (util/stop event))
+    :on-drop (fn [event]
+               (let [heading-uuid (.getData
+                                   (gobj/get event "dataTransfer")
+                                   "heading-uuid")]
+                 (prn "moving heading: "
+                      heading-uuid)))}
    (for [item headings]
      (let [item (if (:heading/dummy? item)
                   item

@@ -1045,6 +1045,15 @@
                                    (string/join "\n" others)))))]
         (save-heading-if-changed! heading new-content)))))
 
+(defn move-heading
+  "There can be several possible situations:
+  1. Move a heading in the same file (either top-to-bottom or bottom-to-top)
+  2. Move a heading between two different files
+
+  "
+  [heading from to]
+  )
+
 (defn clone-and-pull
   [repo-url]
   (util/post (str config/api "repos")
