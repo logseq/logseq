@@ -86,14 +86,14 @@
         tags))
 
 (defn with-refs
-  [{:keys [title children] :as heading}]
+  [{:keys [title body] :as heading}]
   (let [ref-pages (atom [])]
     (walk/postwalk
      (fn [form]
        (when-let [page (get-page-reference form)]
          (swap! ref-pages conj (string/lower-case page)))
        form)
-     (concat title children))
+     (concat title body))
     (assoc heading :ref-pages (vec @ref-pages))))
 
 (defn safe-headings
@@ -112,11 +112,34 @@
              heading)))
         headings))
 
-;; TODO create a dummy heading if no headings exists
+(defn ->nested-headings [col]
+  (loop [coll (rest col)
+         children []
+         result [(first col)]]
+    (cond
+      (empty? coll)
+      result
+
+      (<= (:heading/level (first coll))
+          (:heading/level (last result)))
+      (recur
+       (rest coll)
+       []
+       (let [last-element (assoc (last result) :heading/children children)]
+         (-> (vec (drop-last result))
+             (conj last-element (first coll)))))
+
+      (> (:heading/level (first coll))
+         (:heading/level (last result)))
+      (recur
+       (rest coll)
+       (->nested-headings (conj children (first coll)))
+       result))))
+
 (defn extract-headings
   [blocks last-pos]
   (loop [headings []
-         heading-children []
+         heading-body []
          blocks (reverse blocks)
          timestamps {}
          properties {}
@@ -128,15 +151,15 @@
           (paragraph-timestamp-block? block)
           (let [timestamp (extract-timestamp block)
                 timestamps' (conj timestamps timestamp)]
-            (recur headings heading-children (rest blocks) timestamps' properties last-pos))
+            (recur headings heading-body (rest blocks) timestamps' properties last-pos))
 
           (properties-block? block)
           (let [properties (extract-properties block)]
-            (recur headings heading-children (rest blocks) timestamps properties last-pos))
+            (recur headings heading-body (rest blocks) timestamps properties last-pos))
 
           (heading-block? block)
           (let [heading (-> (assoc (second block)
-                                   :children (vec (reverse heading-children))
+                                   :body (vec (reverse heading-body))
                                    :timestamps timestamps
                                    :properties properties)
                             (assoc-in [:meta :end-pos] last-pos)
@@ -146,9 +169,10 @@
             (recur (conj headings heading) [] (rest blocks) {} {} last-pos'))
 
           :else
-          (let [heading-children' (conj heading-children block)]
-            (recur headings heading-children' (rest blocks) timestamps properties last-pos))))
-      (reverse headings))))
+          (let [heading-body' (conj heading-body block)]
+            (recur headings heading-body' (rest blocks) timestamps properties last-pos))))
+      (-> (reverse headings)
+          safe-headings))))
 
 ;; marker: DOING | IN-PROGRESS > TODO > WAITING | WAIT > DONE > CANCELED | CANCELLED
 ;; priority: A > B > C
@@ -183,7 +207,6 @@
           encoded-content (utf8/encode content)
           content-length (utf8/length encoded-content)
           headings (extract-headings ast content-length)
-          headings (safe-headings headings)
           ref-pages-atom (atom [])
           headings (doall
                     (map-indexed

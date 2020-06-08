@@ -34,32 +34,17 @@
                                  (> (get-level node) level))))]
     nodes))
 
-(defn get-non-heading-children
-  [node]
-  (some->
-   (d/sel node [".non-heading-children"])
-   (array-seq)
-   (seq)))
-
 (defn collapse-non-heading!
   [id]
   (when-let [node (gdom/getElement id)]
-    (let [[self & children] (array-seq (d/children node))]
-      (when-let [non-heading-children (get-non-heading-children self)]
-        (doseq [node non-heading-children]
-          (d/hide! node)))
-      (doseq [node children]
-        (d/hide! node)))))
+    (doseq [node (d/sel node [".heading-body"])]
+      (d/hide! node))))
 
 (defn expand-non-heading!
   [id]
   (when-let [node (gdom/getElement id)]
-    (let [[self & children] (array-seq (d/children node))]
-      (when-let [non-heading-children (get-non-heading-children self)]
-        (doseq [node non-heading-children]
-          (d/show! node)))
-      (doseq [node children]
-        (d/show! node)))))
+    (doseq [node (d/sel node [".heading-body"])]
+      (d/show! node))))
 
 (defn collapse!
   [headings-id heading-id]

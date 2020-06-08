@@ -162,7 +162,9 @@
 
    :heading/created-at {}
    :heading/last-modified-at {}
-   :heading/parent {:db/valueType   :db.type/ref}
+   :heading/body {}
+   :heading/children {:db/valueType   :db.type/ref
+                      :db/cardinality :db.cardinality/many}
 
    ;; tag
    :tag/name       {:db/unique :db.unique/identity
@@ -238,8 +240,8 @@
    (when-let [conn (get-conn repo)]
      (try
        (d/pull conn
-              selector
-              eid)
+               selector
+               eid)
        (catch js/Error e
          nil)))))
 
@@ -780,7 +782,7 @@
 
 (defn get-heading-content
   [utf8-content heading]
-  (let [meta (:meta heading)]
+  (let [meta (:heading/meta heading)]
     (if-let [end-pos (:end-pos meta)]
       (utf8/substring utf8-content
                       (:pos meta)
@@ -801,7 +803,7 @@
                     (fn [[page headings]]
                       (if page
                         (map (fn [heading]
-                               (let [heading-ref-pages (seq (:ref-pages heading))]
+                               (let [heading-ref-pages (seq (:heading/ref-pages heading))]
                                  (when heading-ref-pages
                                    (swap! ref-pages set/union (set heading-ref-pages)))
                                  (-> heading
@@ -816,7 +818,6 @@
                                                                 heading-ref-pages)))))
                           headings)))
                     pages)
-          headings (block/safe-headings headings)
           pages (map
                   (fn [page]
                     (let [page-file? (= page (string/lower-case file))
@@ -905,7 +906,7 @@
                   last-page-name nil
                   headings headings]
              (if (seq headings)
-               (let [[{:keys [level title] :as heading} & tl] headings]
+               (let [[{:heading/keys [level title] :as heading} & tl] headings]
                  (if (and (= level 1)
                           (when-let [title (last (first title))]
                             (valid-journal-title? title)))
@@ -1031,7 +1032,7 @@
                              :heading/anchor (str uuid)
                              :heading/meta {:pos end-pos
                                             :end-pos nil}
-                             :heading/children nil
+                             :heading/body nil
                              :heading/dummy? true
                              :heading/marker nil
                              :heading/lock? false})
@@ -1271,6 +1272,30 @@
                                  (assoc :font {:color "#dfdfdf"})))))]
         {:nodes nodes
          :edges edges}))))
+
+(defn ->nested-headings [col]
+  (loop [coll (rest col)
+         children []
+         result [(first col)]]
+    (cond
+      (empty? coll)
+      result
+
+      (<= (:heading/level (first coll))
+          (:heading/level (last result)))
+      (recur
+       (rest coll)
+       []
+       (let [last-element (assoc (last result) :heading/children children)]
+         (-> (vec (drop-last result))
+             (conj last-element (first coll)))))
+
+      (> (:heading/level (first coll))
+         (:heading/level (last result)))
+      (recur
+       (rest coll)
+       (->nested-headings (conj children (first coll)))
+       result))))
 
 (comment
   (defn debug!

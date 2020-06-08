@@ -609,3 +609,16 @@
 (defn set-title!
   [title]
   (set! (.-title js/document) title))
+
+(defn get-prev-heading
+  [heading]
+  (when-let [headings (d/by-class "ls-heading-parent")]
+    (when-let [index (.indexOf headings heading)]
+      (when (> index 0)
+        (nth headings (dec index))))))
+
+(defn get-next-heading
+  [heading]
+  (when-let [headings (d/by-class "ls-heading-parent")]
+    (when-let [index (.indexOf headings heading)]
+      (nth headings (inc index)))))

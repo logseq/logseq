@@ -58,13 +58,13 @@
             (fn [e]
               ;; If the click target is outside of current node
               (when-not (dom/contains node (.. e -target))
-                (on-hide state e))))
+                (on-hide state e :click))))
 
     (listen state node "keydown"
             (fn [e]
               (case (.-keyCode e)
                 ;; Esc
-                27 (on-hide state e)
+                27 (on-hide state e :esc)
                 nil)))))
 
 (defn on-enter

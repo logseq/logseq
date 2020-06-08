@@ -115,7 +115,7 @@
 
 (rum/defc caret-down
   []
-  [:svg
+  [:svg.h-4.w-5
    {:aria-hidden "true",
     :height "12",
     :width "10",
@@ -132,7 +132,7 @@
 
 (rum/defc caret-right
   []
-  [:svg
+  [:svg.h-4.w-4
    {:aria-hidden "true",
     :height "12",
     :width "10",

@@ -35,7 +35,8 @@
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [frontend.history :as history])
+            [frontend.history :as history]
+            ["/frontend/utils" :as utils])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -230,7 +231,7 @@
         (load-contents files nil nil false))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
-                                          (map :path)))
+                                           (map :path)))
               remove-files (filter-diffs "remove")
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
@@ -918,32 +919,32 @@
   ([{:heading/keys [uuid content meta file dummy? level repo] :as heading} value create-new-heading?]
    (when-not dummy?
      (let [repo (or repo (state/get-current-repo))
-         value (string/trim value)
-         heading (with-heading-meta repo heading)
-         format (:heading/format heading)
-         new-heading-content (config/default-empty-heading format level)]
-     (let [file (db/entity repo (:db/id file))
-           file-path (:file/path file)
-           file-content (db/get-file repo file-path)
-           value (if create-new-heading?
-                   (str value "\n" new-heading-content "\n")
-                   (str value "\n"))
-           [new-content value] (new-file-content heading file-content value)
-           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-           first-heading (first headings)
-           last-heading (last headings)
-           after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-       (transact-react-and-alter-file!
-        repo
-        (concat
-         pages
-         headings
-         after-headings)
-        {:key :heading/change
-         :data headings}
-        file-path
-        new-content)
-       [first-heading last-heading new-heading-content])))))
+           value (string/trim value)
+           heading (with-heading-meta repo heading)
+           format (:heading/format heading)
+           new-heading-content (config/default-empty-heading format level)]
+       (let [file (db/entity repo (:db/id file))
+             file-path (:file/path file)
+             file-content (db/get-file repo file-path)
+             value (if create-new-heading?
+                     (str value "\n" new-heading-content "\n")
+                     (str value "\n"))
+             [new-content value] (new-file-content heading file-content value)
+             {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+             first-heading (first headings)
+             last-heading (last headings)
+             after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+         (transact-react-and-alter-file!
+          repo
+          (concat
+           pages
+           headings
+           after-headings)
+          {:key :heading/change
+           :data headings}
+          file-path
+          new-content)
+         [first-heading last-heading new-heading-content])))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -1045,14 +1046,54 @@
                                    (string/join "\n" others)))))]
         (save-heading-if-changed! heading new-content)))))
 
+(defn calculate-level
+  [to-heading to-id *mouse]
+  ;; (js/console.dir heading-element)
+  (let [element (gdom/getElement (str "dot-" to-id))
+        {:keys [left]} (bean/->clj (utils/getOffsetRect element))
+        offset (- (:client-x @*mouse) left)
+        level (:heading/level to-heading)
+        new-level (js/Math.floor (/ offset 27))]
+    (prn {:level level
+          :new-level new-level})
+    (if (> offset 10)
+      (inc level)
+      level)))
+
+;; previous-sibling
+;; top-part-of-to-target, insert-before-the-heading
+;; 1. calculate the new `level`, compare the new level with the target level:
+;; 2. if the level increased, nested to the target heading
+;; 3. if the level not changed:
+;;   1. if the target heading is the `previous sibling`, do nothing
+;;   2. otherwise, down to the target heading
+
 (defn move-heading
   "There can be several possible situations:
-  1. Move a heading in the same file (either top-to-bottom or bottom-to-top)
-  2. Move a heading between two different files
-
+  1. Move a heading in the same file (either top-to-bottom or bottom-to-top).
+  2. Move a heading between two different files.
   "
-  [heading from to]
-  )
+  [from-id to-id from-dom-id *mouse]
+  (prn "move heading")
+  (let [heading (db/entity [:heading/uuid from-id])
+        to-heading (db/entity [:heading/uuid to-id])
+        new-level (calculate-level to-heading to-id *mouse)
+        current-level (:heading/level to-heading)
+        from-content (string/replace (string/trim (:heading/content heading)) #"\*+\s" "")
+        to-content (string/replace (string/trim (:heading/content to-heading)) #"\*+\s" "")]
+    (cond
+      (> new-level current-level)
+      (println "moving" from-content "nested to" to-content)
+
+      (let [prev-heading (util/get-prev-heading (gdom/getElement from-dom-id))
+            prev-heading-id (and prev-heading
+                                 (some-> (dom/attr prev-heading "headingid")
+                                         (uuid)))]
+        (= to-id prev-heading-id))
+      nil
+
+      :else
+      (println "moving" from-content "down to" to-content))))
 
 (defn clone-and-pull
   [repo-url]
@@ -1134,7 +1175,7 @@
     (state/clear-selection!))
   (when e
     (when-not (util/input? (gobj/get e "target"))
-     (util/clear-selection!))))
+      (util/clear-selection!))))
 
 (defn copy-selection-headings
   []

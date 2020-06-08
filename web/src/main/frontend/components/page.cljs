@@ -153,6 +153,7 @@
                                  (when (not= (string/trim new-content)
                                              (string/trim content))
                                    (handler/alter-file repo path new-content {:re-render-root? true}))))})]))))
+
          ;; headings
          (content/content encoded-page-name
                           {:hiccup hiccup

@@ -24,7 +24,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-drag-n-drop.core :as dnd]
-            [frontend.search :as search]))
+            [frontend.search :as search]
+            ["/frontend/utils" :as utils]))
 
 ;; TODO: refactor the state, it is already too complex.
 (defonce *last-edit-heading (atom nil))
@@ -80,11 +81,11 @@
         input (gdom/getElement input-id)]
     (when value
       (let [[prefix pos] (commands/simple-insert! input-id value
-                                            {:backward-pos 1
-                                             :check-fn (fn [new-value prefix-pos]
-                                                         (when (>= prefix-pos 0)
-                                                           [(subs new-value prefix-pos (+ prefix-pos 2))
-                                                            (+ prefix-pos 2)]))})]
+                                                  {:backward-pos 1
+                                                   :check-fn (fn [new-value prefix-pos]
+                                                               (when (>= prefix-pos 0)
+                                                                 [(subs new-value prefix-pos (+ prefix-pos 2))
+                                                                  (+ prefix-pos 2)]))})]
         (case prefix
           "[["
           (do
@@ -365,7 +366,7 @@
                (or (and up? (util/textarea-cursor-first-row? element line-height))
                    (and (not up?) (util/textarea-cursor-end-row? element line-height))))
       (util/stop e)
-      (let [f (if up? gdom/getPreviousElementSibling gdom/getNextElementSibling)
+      (let [f (if up? util/get-prev-heading util/get-next-heading)
             sibling-heading (f (gdom/getElement heading-parent-id))]
         (when sibling-heading
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
@@ -380,7 +381,7 @@
         ;; delete heading, edit previous heading
         (let [heading (db/pull [:heading/uuid heading-id])
               heading-parent (gdom/getElement heading-parent-id)
-              sibling-heading (gdom/getPreviousElementSibling heading-parent)]
+              sibling-heading (util/get-prev-heading heading-parent)]
           (handler/delete-heading! heading dummy?)
           (when sibling-heading
             (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
@@ -496,7 +497,7 @@
 (defn get-previous-heading-level
   [current-id]
   (when-let [input (gdom/getElement current-id)]
-    (when-let [prev-heading (gdom/getPreviousElementSibling input)]
+    (when-let [prev-heading (util/get-prev-heading input)]
       (util/parse-int (d/attr prev-heading "level")))))
 
 (defn- adjust-heading-level!
@@ -545,11 +546,11 @@
          (mixins/hide-when-esc-or-outside
           state
           :on-hide
-          (fn [state]
+          (fn [state e event]
             (let [{:keys [on-hide format value heading id]} (get-state state)
                   current-edit-id (state/get-edit-input-id)]
               (state/set-edit-input-id! nil)
-              (when on-hide (on-hide value))
+              (when on-hide (on-hide value event))
               (when (and heading (= current-edit-id id))
                 (state/set-edit-heading! nil))))))
        (mixins/on-key-down
@@ -717,60 +718,60 @@
             :as option} id]
   (let [edit-content (state/sub [:editor/content id])]
     [:div.editor {:style {:position "relative"
-                         :display "flex"
-                         :flex "1 1 0%"}
-                 :class (if heading "heading-editor" "non-heading-editor")}
-    (ui/textarea
-     {:id id
-      :value (or edit-content content)
-      :on-change (fn [e]
-                   (let [value (util/evalue e)]
-                     (state/set-edit-content! id value false)))
-      :auto-focus true})
-    (transition-cp
-     (commands id format)
-     true
-     *slash-caret-pos)
+                          :display "flex"
+                          :flex "1 1 0%"}
+                  :class (if heading "heading-editor" "non-heading-editor")}
+     (ui/textarea
+      {:id id
+       :value (or edit-content content)
+       :on-change (fn [e]
+                    (let [value (util/evalue e)]
+                      (state/set-edit-content! id value false)))
+       :auto-focus true})
+     (transition-cp
+      (commands id format)
+      true
+      *slash-caret-pos)
 
-    (transition-cp
-     (block-commands id format)
-     true
-     *angle-bracket-caret-pos)
+     (transition-cp
+      (block-commands id format)
+      true
+      *angle-bracket-caret-pos)
 
-    (transition-cp
-     (page-search id format)
-     true
-     *slash-caret-pos)
+     (transition-cp
+      (page-search id format)
+      true
+      *slash-caret-pos)
 
-    (transition-cp
-     (block-search id format)
-     true
-     *slash-caret-pos)
+     (transition-cp
+      (block-search id format)
+      true
+      *slash-caret-pos)
 
-    (transition-cp
-     (date-picker id format)
-     false
-     *slash-caret-pos)
+     (transition-cp
+      (date-picker id format)
+      false
+      *slash-caret-pos)
 
-    (transition-cp
-     (input id
-            (fn [{:keys [link label]} pos]
-              (if (and (string/blank? link)
-                       (string/blank? label))
-                nil
-                (insert-command! id
-                                 (util/format "[[%s][%s]]"
-                                              (or link "")
-                                              (or label ""))
-                                 format
-                                 {:last-pattern (str commands/slash "link")}))
-              (state/set-editor-show-input nil)
-              (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-                (when-let [input (gdom/getElement id)]
-                  (.focus input)
-                  (util/move-cursor-to input saved-cursor)))))
-     true
-     *slash-caret-pos)
+     (transition-cp
+      (input id
+             (fn [{:keys [link label]} pos]
+               (if (and (string/blank? link)
+                        (string/blank? label))
+                 nil
+                 (insert-command! id
+                                  (util/format "[[%s][%s]]"
+                                               (or link "")
+                                               (or label ""))
+                                  format
+                                  {:last-pattern (str commands/slash "link")}))
+               (state/set-editor-show-input nil)
+               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+                 (when-let [input (gdom/getElement id)]
+                   (.focus input)
+                   (util/move-cursor-to input saved-cursor)))))
+      true
+      *slash-caret-pos)
 
-    (when format
-      (image-uploader id format))]))
+     (when format
+       (image-uploader id format))]))

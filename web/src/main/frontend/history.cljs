@@ -11,7 +11,6 @@
 ;;     :search/q
 ;;     :search/result
 ;;     :ui/toggle-state
-;;     :ui/collapsed-headings
 ;;     :ui/sidebar-collapsed-blocks
 ;;     :editor/show-page-search?
 ;;     :editor/show-date-picker?
