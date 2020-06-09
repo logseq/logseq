@@ -35,8 +35,6 @@
   (let [;; Don't edit the journal title
         page (string/lower-case title)
         raw-headings (db/get-page-headings page)
-        raw-headings (when (seq raw-headings)
-                       (update (vec raw-headings) 0 assoc :heading/lock? true))
         headings (db/with-dummy-heading raw-headings format nil true)
         encoded-page-name (util/url-encode page)
         today? (= (string/lower-case title)

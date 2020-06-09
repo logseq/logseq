@@ -482,10 +482,8 @@
   [state]
   (let [{:keys [heading value format id]} (get-state state)
         heading-id (:heading/uuid heading)
-        heading (try
-                  (db/pull [:heading/uuid heading-id])
-                  (catch js/Error e     ; dummy heading
-                    heading))]
+        heading (or (db/pull [:heading/uuid heading-id])
+                    heading)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     ;; save the current heading and insert a new heading
     (let [value-with-levels (with-levels value format (:heading/level heading))

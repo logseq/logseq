@@ -112,30 +112,6 @@
              heading)))
         headings))
 
-(defn ->nested-headings [col]
-  (loop [coll (rest col)
-         children []
-         result [(first col)]]
-    (cond
-      (empty? coll)
-      result
-
-      (<= (:heading/level (first coll))
-          (:heading/level (last result)))
-      (recur
-       (rest coll)
-       []
-       (let [last-element (assoc (last result) :heading/children children)]
-         (-> (vec (drop-last result))
-             (conj last-element (first coll)))))
-
-      (> (:heading/level (first coll))
-         (:heading/level (last result)))
-      (recur
-       (rest coll)
-       (->nested-headings (conj children (first coll)))
-       result))))
-
 (defn extract-headings
   [blocks last-pos]
   (loop [headings []

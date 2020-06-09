@@ -31,11 +31,7 @@
   [repo page-name journal? heading?]
   (if heading?
     (db/get-heading-and-children repo (uuid page-name))
-    (let [page-headings (db/get-page-headings repo page-name)
-          page-headings (if journal?
-                          (update (vec page-headings) 0 assoc :heading/lock? true)
-                          page-headings)]
-      page-headings)))
+    (db/get-page-headings repo page-name)))
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
@@ -136,9 +132,15 @@
            (let [path (let [file-id (:db/id (:page/file page))]
                         (:file/path (db/entity repo file-id)))
                  encoded-path (util/url-encode path)
-                 heading-start-pos (get-in (first raw-page-headings) [:heading/meta :pos])]
-             (when (and heading-start-pos (not (zero? heading-start-pos)))
+                 heading-start-pos (and
+                                    (seq raw-page-headings)
+                                    (get-in (first raw-page-headings) [:heading/meta :pos]))]
+
+             (when (or
+                    (nil? heading-start-pos)
+                    (and heading-start-pos (not (zero? heading-start-pos))))
                (let [encoded-content (utf8/encode content)
+                     heading-start-pos (or heading-start-pos (utf8/length encoded-content))
                      content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
                  [:div.before-heading.ml-4
                   (content/content

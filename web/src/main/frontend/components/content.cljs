@@ -47,7 +47,7 @@
                     (fn [e]
                       (when-not (state/in-selection-mode?)
                         (when-not false
-                            (when-let [headings (seq (util/get-selected-nodes "ls-heading-parent"))]
+                            (when-let [headings (seq (util/get-selected-nodes "ls-heading"))]
                            (let [headings (remove nil? headings)
                                  headings (remove #(d/has-class? % "dummy") headings)]
                              (when (seq headings)
@@ -88,7 +88,9 @@
                                           :top (str client-y "px")))))))))
   [id {:keys [hiccup] :as option}]
   [:div {:id id}
-   hiccup])
+   (if hiccup
+     hiccup
+     [:div.text-gray-500.cursor "Click to edit"])])
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]

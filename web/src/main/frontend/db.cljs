@@ -627,7 +627,7 @@
              :where
              [?file :file/path ?path]
              [?file :file/content ?content]]
-        (get-conn repo)
+        (d/db (get-files-conn repo))
         path)
       ffirst))))
 
@@ -726,8 +726,9 @@
               seq-flatten
               sort-by-pos
               (with-repo repo-url)
-              (map (fn [heading]
-                     (dissoc heading :heading/meta)))))))
+              ;; (map (fn [heading]
+              ;;        (dissoc heading :heading/meta)))
+              ))))
 
 (defn get-heading-and-children
   [repo heading-uuid]
@@ -1016,7 +1017,9 @@
      (cond
        (or (and (not journal?) (seq headings))
            (and journal? (> (count headings) 1)))
-       headings
+       (if journal?
+         (rest headings)
+         headings)
 
        :else
        (let [last-heading (last headings)
@@ -1273,29 +1276,45 @@
         {:nodes nodes
          :edges edges}))))
 
-(defn ->nested-headings [col]
-  (loop [coll (rest col)
-         children []
-         result [(first col)]]
-    (cond
-      (empty? coll)
-      result
+(defn headings->vec-tree [col]
+  (let [parent? (fn [item children]
+                  (and (seq children)
+                       (every? #(< (:heading/level item) (:heading/level %)) children)))]
+    (loop [col (reverse col)
+           children (list)]
+     (if (empty? col)
+       children
+       (let [[item & others] col
+             cur-level (:heading/level item)
+             child-level (:heading/level (first children))]
+         (cond
+           (empty? children)
+           (recur others (list item))
 
-      (<= (:heading/level (first coll))
-          (:heading/level (last result)))
-      (recur
-       (rest coll)
-       []
-       (let [last-element (assoc (last result) :heading/children children)]
-         (-> (vec (drop-last result))
-             (conj last-element (first coll)))))
+           (<= child-level cur-level)
+           (recur others (conj children item))
 
-      (> (:heading/level (first coll))
-         (:heading/level (last result)))
-      (recur
-       (rest coll)
-       (->nested-headings (conj children (first coll)))
-       result))))
+           (> child-level cur-level)      ; parent
+           (let [children (if (parent? item children)
+                            (list (assoc item :heading/children children))
+                            (cons
+                             (assoc item :heading/children [(first children)])
+                             (rest children)))]
+             (recur others children))))))))
+
+(comment
+  (def col
+    [{:level 1 :id 1}
+     {:level 2 :id 2}
+     {:level 3 :id 3}
+     {:level 4 :id 4}
+     {:level 5 :id 5}
+     {:level 6 :id 6}
+     {:level 4 :id 7}
+     {:level 5 :id 8}
+     {:level 5 :id 9}
+     {:level 6 :id 10}])
+  )
 
 (comment
   (defn debug!

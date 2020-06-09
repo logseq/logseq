@@ -621,4 +621,10 @@
   [heading]
   (when-let [headings (d/by-class "ls-heading-parent")]
     (when-let [index (.indexOf headings heading)]
-      (nth headings (inc index)))))
+      (when (> (count headings) (inc index))
+        (nth headings (inc index))))))
+
+(defn nth-safe [c i]
+  (if (or (< i 0) (>= i (count c)))
+    nil
+    (nth c i)))

@@ -397,7 +397,7 @@
        :class "transition ease-in-out duration-150"
        :on-click (fn [e]
                    (util/stop e)
-                   (let [id (str "ls-heading-parent-" uuid)]
+                   (let [id (str "ls-heading-" uuid)]
                      (if collapsed?
                        (expand/expand! (:id config) id)
                        (expand/collapse! (:id config) id))
@@ -423,6 +423,9 @@
                                       "heading-dom-id"
                                       heading-id)
                             (reset! *dragging? true))
+           ;; :on-drag-end (fn [event]
+           ;;                (reset! *dragging? false)
+           ;;                (reset! *mouse {}))
 
            :style {:width 16
                    :height 16}
@@ -470,41 +473,42 @@
 
 (rum/defc dnd-separator
   [heading margin-left top?]
-  [:div.dnd-separator
-   {:style (merge
-            {:border-bottom "3px solid"
-             :position "absolute"
-             :left margin-left
-             :width (- 700 margin-left)}
-            (if top?
-              {:top 0}
-              {:bottom 0}))
-    :key (cljs.core/random-uuid)
-    :on-drag-over (fn [event]
-                    (prn "drag over")
-                    (util/stop event))
-    :on-drop (fn [event]
-               (reset! *dragging? false)
-               (let [client-x (gobj/get event "clientX")]
-                 (reset! *mouse {:client-x client-x}))
-               (let [get-data-transfer-attr (fn [attr] (.getData (gobj/get event "dataTransfer") attr))
-                     from-id (cljs.core/uuid (get-data-transfer-attr "heading-uuid"))
-                     from-dom-id (get-data-transfer-attr "heading-dom-id")
-                     to-target (gobj/get event "currentTarget")
-                     to-id (when-let [id (d/attr to-target "headingid")]
-                             (cljs.core/uuid id))]
-                 (cond
-                   (= from-id to-id)
-                   nil
+  (let [id (str (:heading/uuid heading) (if top? "_top" "_bottom"))]
+    [:div.dnd-separator
+     {:id id
+      :style (merge
+              {:position "absolute"
+               :left margin-left
+               :width (- 700 margin-left)}
+              (if top?
+                {:top 0}
+                {:bottom 0}))
+      :on-drag-over (fn [event]
+                      (let [element (gdom/getElement id)]
+                        (d/remove-class! element "dnd-separator")
+                        (d/add-class! element "dnd-separator-cur"))
+                      (util/stop event))
+      :on-drag-leave (fn [event]
+                       (let [element (gdom/getElement id)]
+                         (d/remove-class! element "dnd-separator-cur")
+                         (d/add-class! element "dnd-separator")))
+      :on-drop (fn [event]
+                 (reset! *dragging? false)
+                 (let [get-data-transfer-attr (fn [attr] (.getData (gobj/get event "dataTransfer") attr))
+                       from-id (cljs.core/uuid (get-data-transfer-attr "heading-uuid"))
+                       from-dom-id (get-data-transfer-attr "heading-dom-id")]
+                   (cond
+                     (= from-id (:heading/uuid heading))
+                     nil
 
-                   :else
-                   (handler/move-heading from-id
-                                         to-id
-                                         from-dom-id
-                                         *mouse))))
-    :on-mouse-move (fn [event]
-                     (let [client-x (gobj/get event "clientX")]
-                       (reset! *mouse {:client-x client-x})))}])
+                     :else
+                     (handler/move-heading from-id
+                                           heading
+                                           from-dom-id
+                                           top?))))
+      :on-mouse-move (fn [event]
+                       (let [client-x (gobj/get event "clientX")]
+                         (reset! *mouse {:client-x client-x})))}]))
 
 (declare heading-container)
 (rum/defcs heading-cp < rum/reactive
@@ -512,7 +516,7 @@
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
-  [state {:heading/keys [uuid idx title level body meta content dummy? lock? page format repo] :as heading} heading-part config]
+  [state {:heading/keys [uuid title level body meta content dummy? lock? page format repo children] :as heading} heading-part config]
   (let [dragging? (rum/react *dragging?)
         config (assoc config :heading heading)
         ref? (boolean (:ref? config))
@@ -520,10 +524,10 @@
         unique-dom-id (build-id config ref? sidebar?)
         edit-input-id (str "edit-heading-" unique-dom-id uuid)
         edit? (state/sub [:editor/editing? edit-input-id])
-        heading-id (str "ls-heading-parent-" unique-dom-id uuid)
+        heading-id (str "ls-heading-" unique-dom-id uuid)
         collapsed-atom? (get state ::collapsed?)
         toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
-        has-child? (or (has-child? heading-id level)
+        has-child? (or (seq children)
                        (seq body))
         collapsed? (or (and
                         toggle-collapsed?
@@ -534,7 +538,7 @@
                       -27
                       (- (* 27 (max 0 (- level start-level))) 27))]
     (when-not lock?
-      [:div.ls-heading-parent.flex
+      [:div.ls-heading.flex.flex-col
        {:id heading-id
         :style {:position "relative"}
         :class (str uuid
@@ -551,12 +555,9 @@
                         (when has-child?
                           (swap! *control-show?
                                  assoc heading-id false)))}
-       (if (and dragging? (zero? idx))
-         (dnd-separator heading margin-left true))
        [:div.flex-1.flex-row
         {:style {:margin-left margin-left}}
         (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? body dummy?)
-
 
         (if edit?
           (editor/box (string/trim content)
@@ -570,7 +571,8 @@
                                     (handler/highlight-heading! uuid)))}
                       edit-input-id)
           [:div.flex.flex-col
-           {:style {:cursor "text"}
+           {:style {:cursor "text"
+                    :min-height 24}
             :on-click (fn [e]
                         (let [target (gobj/get e "target")]
                           (when-not (or (util/link? target)
@@ -593,10 +595,18 @@
                 (let [block (block config child)]
                   (rum/with-key (heading-child block)
                     (cljs.core/random-uuid))))])])]
-       (if dragging?
-         (for [level (cljs.core/range 2 (inc level))]
-           (let [margin-left (- (* 27 (max 0 (- level start-level))) 27)]
-             (dnd-separator heading margin-left false))))])))
+
+       (when (seq children)
+         (for [child children]
+           (do
+             (prn {:child child})
+             (rum/with-key (heading-container config child)
+              (:heading/uuid child)))))
+       ;; (if dragging?
+       ;;   (for [level (cljs.core/range 2 (inc level))]
+       ;;     (let [margin-left (- (* 27 (max 0 (- level start-level))) 27)]
+       ;;       (dnd-separator heading margin-left false))))
+       ])))
 
 (rum/defc heading-checkbox
   [heading class]
@@ -885,13 +895,14 @@
 (rum/defc headings-cp
   [headings config]
   [:div.headings-container
-   (for [[idx item] (medley/indexed headings)]
-     (let [item (if (:heading/dummy? item)
-                  item
-                  (dissoc item :heading/meta))]
-       (rum/with-key
-         (heading-container config (assoc item :heading/idx idx))
-         (:heading/uuid item))))])
+   (let [headings (db/headings->vec-tree headings)]
+     (for [item headings]
+       (let [item (if (:heading/dummy? item)
+                    item
+                    (dissoc item :heading/meta))]
+         (rum/with-key
+           (heading-container config item)
+           (:heading/uuid item)))))])
 
 (defn ->hiccup
   ([headings config]

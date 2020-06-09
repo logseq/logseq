@@ -866,17 +866,19 @@
                                    modified-time (let [modified-at (tc/to-long (t/now))]
                                                    [[:db/add (:db/id page) :page/last-modified-at modified-at]
                                                     [:db/add (:db/id file) :file/last-modified-at modified-at]])]
-                               (transact-react-and-alter-file!
-                                repo
-                                (concat
-                                 pages
-                                 headings
-                                 after-headings
-                                 modified-time)
-                                {:key :heading/change
-                                 :data headings}
-                                file-path
-                                new-content))))]
+                               (profile
+                                "Save heading: "
+                                (transact-react-and-alter-file!
+                                 repo
+                                 (concat
+                                  pages
+                                  headings
+                                  after-headings
+                                  modified-time)
+                                 {:key :heading/change
+                                  :data headings}
+                                 file-path
+                                 new-content)))))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -917,34 +919,35 @@
   ([heading value]
    (insert-new-heading! heading value true))
   ([{:heading/keys [uuid content meta file dummy? level repo] :as heading} value create-new-heading?]
-   (when-not dummy?
-     (let [repo (or repo (state/get-current-repo))
-           value (string/trim value)
-           heading (with-heading-meta repo heading)
-           format (:heading/format heading)
-           new-heading-content (config/default-empty-heading format level)]
-       (let [file (db/entity repo (:db/id file))
-             file-path (:file/path file)
-             file-content (db/get-file repo file-path)
-             value (if create-new-heading?
-                     (str value "\n" new-heading-content "\n")
-                     (str value "\n"))
-             [new-content value] (new-file-content heading file-content value)
-             {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-             first-heading (first headings)
-             last-heading (last headings)
-             after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-         (transact-react-and-alter-file!
-          repo
-          (concat
-           pages
-           headings
-           after-headings)
-          {:key :heading/change
-           :data headings}
-          file-path
-          new-content)
-         [first-heading last-heading new-heading-content])))))
+   (let [repo (or repo (state/get-current-repo))
+         value (string/trim value)
+         heading (with-heading-meta repo heading)
+         format (:heading/format heading)
+         new-heading-content (config/default-empty-heading format level)]
+     (let [file (db/entity repo (:db/id file))
+           file-path (:file/path file)
+           file-content (db/get-file repo file-path)
+           value (if create-new-heading?
+                   (str value "\n" new-heading-content "\n")
+                   (str value "\n"))
+           [new-content value] (new-file-content heading file-content value)
+           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+           first-heading (first headings)
+           last-heading (last headings)
+           after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+       (profile
+        "Insert heading"
+        (transact-react-and-alter-file!
+         repo
+         (concat
+          pages
+          headings
+          after-headings)
+         {:key :heading/change
+          :data headings}
+         file-path
+         new-content))
+       [first-heading last-heading new-heading-content]))))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -1046,20 +1049,6 @@
                                    (string/join "\n" others)))))]
         (save-heading-if-changed! heading new-content)))))
 
-(defn calculate-level
-  [to-heading to-id *mouse]
-  ;; (js/console.dir heading-element)
-  (let [element (gdom/getElement (str "dot-" to-id))
-        {:keys [left]} (bean/->clj (utils/getOffsetRect element))
-        offset (- (:client-x @*mouse) left)
-        level (:heading/level to-heading)
-        new-level (js/Math.floor (/ offset 27))]
-    (prn {:level level
-          :new-level new-level})
-    (if (> offset 10)
-      (inc level)
-      level)))
-
 ;; previous-sibling
 ;; top-part-of-to-target, insert-before-the-heading
 ;; 1. calculate the new `level`, compare the new level with the target level:
@@ -1073,27 +1062,21 @@
   1. Move a heading in the same file (either top-to-bottom or bottom-to-top).
   2. Move a heading between two different files.
   "
-  [from-id to-id from-dom-id *mouse]
+  [from-id to-heading from-dom-id top?]
   (prn "move heading")
   (let [heading (db/entity [:heading/uuid from-id])
-        to-heading (db/entity [:heading/uuid to-id])
-        new-level (calculate-level to-heading to-id *mouse)
-        current-level (:heading/level to-heading)
         from-content (string/replace (string/trim (:heading/content heading)) #"\*+\s" "")
         to-content (string/replace (string/trim (:heading/content to-heading)) #"\*+\s" "")]
-    (cond
-      (> new-level current-level)
-      (println "moving" from-content "nested to" to-content)
+    (if top?
+      (println "moving" from-content "to the top of" to-content)
+      (println "moving" from-content "to the bottom of" to-content)
 
-      (let [prev-heading (util/get-prev-heading (gdom/getElement from-dom-id))
-            prev-heading-id (and prev-heading
-                                 (some-> (dom/attr prev-heading "headingid")
-                                         (uuid)))]
-        (= to-id prev-heading-id))
-      nil
-
-      :else
-      (println "moving" from-content "down to" to-content))))
+      ;; (let [prev-heading (util/get-prev-heading (gdom/getElement from-dom-id))
+      ;;       prev-heading-id (and prev-heading
+      ;;                            (some-> (dom/attr prev-heading "headingid")
+      ;;                                    (uuid)))]
+      ;;   (= to-id prev-heading-id))
+      )))
 
 (defn clone-and-pull
   [repo-url]

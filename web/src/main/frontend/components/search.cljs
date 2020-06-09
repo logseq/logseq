@@ -69,7 +69,7 @@
 
                       :block
                       (let [page (:page/name (:heading/page data))
-                            path (str "/page/" (util/url-encode page) "#ls-heading-parent-" (:heading/uuid data))]
+                            path (str "/page/" (util/url-encode page) "#ls-heading-" (:heading/uuid data))]
                         (handler/redirect-with-fragment! path))
                       nil))
        :item-render (fn [{:keys [type data]}]
