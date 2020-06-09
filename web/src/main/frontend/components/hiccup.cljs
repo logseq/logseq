@@ -598,10 +598,8 @@
 
        (when (seq children)
          (for [child children]
-           (do
-             (prn {:child child})
-             (rum/with-key (heading-container config child)
-              (:heading/uuid child)))))
+           (rum/with-key (heading-container config child)
+             (:heading/uuid child))))
        ;; (if dragging?
        ;;   (for [level (cljs.core/range 2 (inc level))]
        ;;     (let [margin-left (- (* 27 (max 0 (- level start-level))) 27)]

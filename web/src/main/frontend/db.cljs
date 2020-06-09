@@ -1286,35 +1286,23 @@
        children
        (let [[item & others] col
              cur-level (:heading/level item)
-             child-level (:heading/level (first children))]
+             bottom-level (:heading/level (first children))]
          (cond
            (empty? children)
            (recur others (list item))
 
-           (<= child-level cur-level)
+           (<= bottom-level cur-level)
            (recur others (conj children item))
 
-           (> child-level cur-level)      ; parent
-           (let [children (if (parent? item children)
-                            (list (assoc item :heading/children children))
-                            (cons
-                             (assoc item :heading/children [(first children)])
-                             (rest children)))]
-             (recur others children))))))))
+           (> bottom-level cur-level)      ; parent
+           (let [[children other-children] (split-with (fn [h]
+                                        (> (:heading/level h) cur-level))
+                                      children)
 
-(comment
-  (def col
-    [{:level 1 :id 1}
-     {:level 2 :id 2}
-     {:level 3 :id 3}
-     {:level 4 :id 4}
-     {:level 5 :id 5}
-     {:level 6 :id 6}
-     {:level 4 :id 7}
-     {:level 5 :id 8}
-     {:level 5 :id 9}
-     {:level 6 :id 10}])
-  )
+                 children (cons
+                           (assoc item :heading/children children)
+                           other-children)]
+             (recur others children))))))))
 
 (comment
   (defn debug!
