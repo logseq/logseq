@@ -11,7 +11,7 @@
   [id]
   ;; TODO: dommy/by-id will fail if id includes `=`
   (when-let [node (gdom/getElement id)]
-    (some-> (d/sel node [".ls-heading-parent"])
+    (some-> (d/sel node [".ls-heading"])
             (array-seq))))
 
 (defn- get-level

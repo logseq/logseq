@@ -500,7 +500,7 @@
 
 (defn- rec-get-heading-node
   [node]
-  (if (and node (d/has-class? node "ls-heading-parent"))
+  (if (and node (d/has-class? node "ls-heading"))
     node
     (and node
          (rec-get-heading-node (gobj/get node "parentNode")))))
@@ -612,14 +612,14 @@
 
 (defn get-prev-heading
   [heading]
-  (when-let [headings (d/by-class "ls-heading-parent")]
+  (when-let [headings (d/by-class "ls-heading")]
     (when-let [index (.indexOf headings heading)]
       (when (> index 0)
         (nth headings (dec index))))))
 
 (defn get-next-heading
   [heading]
-  (when-let [headings (d/by-class "ls-heading-parent")]
+  (when-let [headings (d/by-class "ls-heading")]
     (when-let [index (.indexOf headings heading)]
       (when (> (count headings) (inc index))
         (nth headings (inc index))))))

@@ -392,9 +392,8 @@
   (try
     (let [edit-content (gobj/get input "value")
           pos (:pos (util/get-caret-pos input))
-          last-command (subs edit-content
-                             (:pos @*slash-caret-pos)
-                             pos)]
+          last-slash-caret-pos (:pos @*slash-caret-pos)
+          last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
          (and (= \/ (nth edit-content (dec pos)))
