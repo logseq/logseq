@@ -533,8 +533,6 @@
 (rum/defc box < rum/reactive
   ;; TODO: Overwritten by user's configuration
   (mixins/keyboard-mixin "alt+enter" insert-new-heading! edit-heading? get-input)
-  (mixins/keyboard-mixin "alt+shift+left" #(adjust-heading-level! % :left) edit-heading? get-input)
-  (mixins/keyboard-mixin "alt+shift+right" #(adjust-heading-level! % :right) edit-heading? get-input)
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [id format]} (get-state state)
@@ -605,7 +603,10 @@
          9 (fn [state e]
              (when-not (state/get-editor-show-input)
                (util/stop e)
-               (adjust-heading-level! state nil)))}
+               (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
+                                 :left
+                                 :right)]
+                 (adjust-heading-level! state direction))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
