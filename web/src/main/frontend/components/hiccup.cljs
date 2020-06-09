@@ -370,26 +370,19 @@
   [block]
   block)
 
-(defn- has-child?
-  [heading-id level]
-  (when-let [next-heading (gobj/get (gdom/getElement heading-id)
-                                    "nextSibling")]
-    (when-let [child-level (d/attr next-heading "level")]
-      (> child-level level))))
-
 (defonce *control-show? (atom {}))
 
 (rum/defc heading-control < rum/reactive
-  [config uuid heading-id level start-level collapsed? collapsed-atom? body dummy?]
+  [config uuid heading-id level start-level collapsed? collapsed-atom? body children dummy?]
   (let [control-show (util/react (rum/cursor *control-show? heading-id))
         dark? (= "dark" (state/sub :ui/theme))
-        has-child? (or (has-child? heading-id level)
+        has-child? (or (seq children)
                        (seq body))]
     [:div.hd-control.mr-2.flex.flex-row.items-center
      {:style {:height 24
-              :padding-left 4
+              :padding-left 10
               :float "left"}}
-     [:a.heading-control.mr-1
+     [:a.heading-control
       {:id (str "control-" uuid)
        :style {:width 16
                :height 16
@@ -473,39 +466,16 @@
 
 (rum/defc dnd-separator
   [heading margin-left top?]
-  (let [id (str (:heading/uuid heading) (if top? "_top" "_bottom"))]
+  (let [id (str (:heading/uuid heading))]
     [:div.dnd-separator
      {:id id
       :style (merge
               {:position "absolute"
-               :left margin-left
+               :left 0
                :width (- 700 margin-left)}
               (if top?
                 {:top 0}
                 {:bottom 0}))
-      :on-drag-over (fn [event]
-                      (let [element (gdom/getElement id)]
-                        (d/remove-class! element "dnd-separator")
-                        (d/add-class! element "dnd-separator-cur"))
-                      (util/stop event))
-      :on-drag-leave (fn [event]
-                       (let [element (gdom/getElement id)]
-                         (d/remove-class! element "dnd-separator-cur")
-                         (d/add-class! element "dnd-separator")))
-      :on-drop (fn [event]
-                 (reset! *dragging? false)
-                 (let [get-data-transfer-attr (fn [attr] (.getData (gobj/get event "dataTransfer") attr))
-                       from-id (cljs.core/uuid (get-data-transfer-attr "heading-uuid"))
-                       from-dom-id (get-data-transfer-attr "heading-dom-id")]
-                   (cond
-                     (= from-id (:heading/uuid heading))
-                     nil
-
-                     :else
-                     (handler/move-heading from-id
-                                           heading
-                                           from-dom-id
-                                           top?))))
       :on-mouse-move (fn [event]
                        (let [client-x (gobj/get event "clientX")]
                          (reset! *mouse {:client-x client-x})))}]))
@@ -534,9 +504,7 @@
                         has-child?)
                        @collapsed-atom?)
         start-level (or (:start-level config) 1)
-        margin-left (if (= level start-level)
-                      -27
-                      (- (* 27 (max 0 (- level start-level))) 27))]
+        margin-left -27]
     (when-not lock?
       [:div.ls-heading.flex.flex-col
        {:id heading-id
@@ -546,6 +514,32 @@
         :headingid (str uuid)
         :repo repo
         :level level
+        :on-drag-over (fn [event]
+                        (let [element (gdom/getElement (str uuid))]
+                          (when (d/has-class? element "dnd-separator")
+                            (d/remove-class! element "dnd-separator")
+                            (d/add-class! element "dnd-separator-cur")))
+                        (util/stop event))
+        :on-drag-leave (fn [event]
+                         (let [element (gdom/getElement (str uuid))]
+                           (when (d/has-class? element "dnd-separator-cur")
+                             (d/remove-class! element "dnd-separator-cur")
+                             (d/add-class! element "dnd-separator"))))
+        :on-drop (fn [event]
+                   (reset! *dragging? false)
+                   ;; (let [get-data-transfer-attr (fn [attr] (.getData (gobj/get event "dataTransfer") attr))
+                   ;;       from-id (cljs.core/uuid (get-data-transfer-attr "heading-uuid"))
+                   ;;       from-dom-id (get-data-transfer-attr "heading-dom-id")]
+                   ;;   (cond
+                   ;;     (= from-id (:heading/uuid heading))
+                   ;;     nil
+
+                   ;;     :else
+                   ;;     (handler/move-heading from-id
+                   ;;                           heading
+                   ;;                           from-dom-id
+                   ;;                           false)))
+                   )
         :on-mouse-over (fn [e]
                          (util/stop e)
                          (when has-child?
@@ -557,7 +551,7 @@
                                  assoc heading-id false)))}
        [:div.flex-1.flex-row
         {:style {:margin-left margin-left}}
-        (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? body dummy?)
+        (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? body children dummy?)
 
         (if edit?
           (editor/box (string/trim content)
@@ -597,13 +591,13 @@
                     (cljs.core/random-uuid))))])])]
 
        (when (seq children)
-         (for [child children]
-           (rum/with-key (heading-container config child)
-             (:heading/uuid child))))
-       ;; (if dragging?
-       ;;   (for [level (cljs.core/range 2 (inc level))]
-       ;;     (let [margin-left (- (* 27 (max 0 (- level start-level))) 27)]
-       ;;       (dnd-separator heading margin-left false))))
+         [:div.heading-children {:style {:padding-left 20
+                                         :margin-left 6}}
+          (for [child children]
+            (rum/with-key (heading-container config child)
+              (:heading/uuid child)))])
+       (when dragging?
+         (dnd-separator heading 0 false))
        ])))
 
 (rum/defc heading-checkbox

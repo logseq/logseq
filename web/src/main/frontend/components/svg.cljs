@@ -115,7 +115,7 @@
 
 (rum/defc caret-down
   []
-  [:svg.h-4.w-5
+  [:svg.h-4.w-4
    {:aria-hidden "true",
     :height "12",
     :width "10",
