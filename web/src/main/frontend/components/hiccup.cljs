@@ -884,9 +884,9 @@
              [:pre.pre-wrap-white-space.code
               (try
                 (let [result (sci/eval-string code)]
-                  [:code attr (str result)])
+                  (str result))
                 (catch js/Error e
-                  [:code (str "Error: " (gobj/get e "message"))]))]]]]
+                  (str "Error: " (gobj/get e "message"))))]]]]
           [:pre.pre-wrap-white-space.code
            [:code attr code]]))
       ["Quote" l]
@@ -941,8 +941,7 @@
                      :style {:font-size 14}
                      :class "footnum"
                      :href (str "#fnr." id)}
-            [:sup.fn (str name "↩︎")]])]
-         ])
+            [:sup.fn (str name "↩︎")]])]])
 
       :else
       "")

@@ -107,16 +107,16 @@
     [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto
      [:div#theme-selector.flex.flex-row.justify-between.sidebar-item {:style {:padding-top 12
                                                                               :margin-bottom 12}}
+      [:div.flex.flex-row
+       [:div.mr-1.font-bold.text-sm "Page Graph"]
+       [:div.px-1
+        (ui/toggle show-graph? (fn []
+                                 (swap! *show-graph? not)))]]
       [:div.flex.flex-row {:key "right-sidebar-settings"}
        [:div.mr-1.font-bold.text-sm "Dark theme"]
        [:div.px-1
         (ui/toggle dark? (fn []
-                           (state/set-theme! (if dark? "white" "dark"))))]]
-      [:div.flex.flex-row
-       [:div.mr-1.font-bold.text-sm "Graph"]
-       [:div.px-1
-        (ui/toggle show-graph? (fn []
-                                 (swap! *show-graph? not)))]]]
+                           (state/set-theme! (if dark? "white" "dark"))))]]]
 
      (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
