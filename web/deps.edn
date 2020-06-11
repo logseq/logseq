@@ -13,7 +13,9 @@
   prismatic/dommy             {:mvn/version "1.1.0"}
   org.clojure/core.match      {:mvn/version "1.0.0"}
   com.andrewmcveigh/cljs-time {:mvn/version "0.5.2"}
-  cljs-drag-n-drop            {:mvn/version "0.1.0"}}
+  cljs-drag-n-drop            {:mvn/version "0.1.0"}
+  borkdude/sci {:mvn/version "0.0.13-alpha.27"}
+  }
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}

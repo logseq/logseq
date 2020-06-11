@@ -19,6 +19,7 @@
             [promesa.core :as p]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
+            [clojure.walk :as walk]
             [frontend.util :as util :refer-macros [profile]]))
 
 ;; offline db
@@ -1303,6 +1304,26 @@
                            (assoc item :heading/children children)
                            other-children)]
              (recur others children))))))))
+
+;; recursively with children content
+(defn get-heading-content-rec
+  [heading]
+  (let [contents (atom [])
+        _ (walk/postwalk
+           (fn [form]
+             (when (map? form)
+               (when-let [content (:heading/content form)]
+                 (swap! contents conj content)))
+             form)
+           heading)]
+    (apply str (reverse @contents))))
+
+(defn get-heading-end-pos-rec
+  [heading]
+  (let [children (:heading/children heading)]
+    (if (seq children)
+     (get-heading-end-pos-rec (last children))
+     (get-in heading [:heading/meta :end-pos]))))
 
 (comment
   (defn debug!
