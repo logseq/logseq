@@ -871,16 +871,22 @@
             attr (if language
                    {:data-lang language})
             code (join-lines lines)]
-        (if (= language "clojure")
+        (prn {:language language
+              :options options
+              :code code})
+        (if (and (= language "clojure") (contains? (set options) ":results"))
           [:div
            [:pre.pre-wrap-white-space.code
             [:code attr code]]
-           (let [result (sci/eval-string code)]
-             [:div
-              [:code "Results:"]
-             [:div.results.mt-1
-              [:pre.pre-wrap-white-space.code
-               [:code attr (str result)]]]])]
+           [:div
+            [:code "Results:"]
+            [:div.results.mt-1
+             [:pre.pre-wrap-white-space.code
+              (try
+                (let [result (sci/eval-string code)]
+                  [:code attr (str result)])
+                (catch js/Error e
+                  [:code (str "Error: " (gobj/get e "message"))]))]]]]
           [:pre.pre-wrap-white-space.code
            [:code attr code]]))
       ["Quote" l]
