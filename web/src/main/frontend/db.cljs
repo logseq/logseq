@@ -1308,7 +1308,7 @@
 ;; recursively with children content
 (defn get-heading-content-rec
   ([heading]
-   (get-heading-content-rec heading (fn [_level content] content)))
+   (get-heading-content-rec heading (fn [_uuid _level content] content)))
   ([heading transform-fn]
    (let [contents (atom [])
          _ (walk/postwalk
@@ -1316,6 +1316,7 @@
               (when (map? form)
                 (when-let [content (:heading/content form)]
                   (swap! contents conj (transform-fn
+                                        (:heading/uuid form)
                                         (:heading/level form)
                                         content))))
               form)
