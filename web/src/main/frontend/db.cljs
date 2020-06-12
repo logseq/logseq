@@ -1307,16 +1307,20 @@
 
 ;; recursively with children content
 (defn get-heading-content-rec
-  [heading]
-  (let [contents (atom [])
-        _ (walk/postwalk
-           (fn [form]
-             (when (map? form)
-               (when-let [content (:heading/content form)]
-                 (swap! contents conj content)))
-             form)
-           heading)]
-    (apply str (reverse @contents))))
+  ([heading]
+   (get-heading-content-rec heading (fn [_level content] content)))
+  ([heading transform-fn]
+   (let [contents (atom [])
+         _ (walk/postwalk
+            (fn [form]
+              (when (map? form)
+                (when-let [content (:heading/content form)]
+                  (swap! contents conj (transform-fn
+                                        (:heading/level form)
+                                        content))))
+              form)
+            heading)]
+     (apply str (reverse @contents)))))
 
 (defn get-heading-end-pos-rec
   [heading]
