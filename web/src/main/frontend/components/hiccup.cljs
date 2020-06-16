@@ -288,7 +288,7 @@
             (->elem
              :a
              (cond->
-               {:href href}
+                 {:href href}
                title
                (assoc :title title))
              (map-inline config label))
@@ -301,8 +301,8 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -412,25 +412,25 @@
         [:span ""])]
      [:a
       (cond->
-        {:id (str "dot-" uuid)
-         :draggable true
-         :on-drag-start (fn [event]
-                          (handler/highlight-heading! uuid)
-                          (.setData (gobj/get event "dataTransfer")
-                                    "heading-uuid"
-                                    uuid)
-                          (.setData (gobj/get event "dataTransfer")
-                                    "heading-dom-id"
-                                    heading-id)
-                          (reset! *dragging? true)
-                          (reset! *dragging-heading heading))
-         ;; :on-drag-end (fn [event]
-         ;;                (reset! *dragging? false)
-         ;;                (reset! *mouse {}))
+          {:id (str "dot-" uuid)
+           :draggable true
+           :on-drag-start (fn [event]
+                            (handler/highlight-heading! uuid)
+                            (.setData (gobj/get event "dataTransfer")
+                                      "heading-uuid"
+                                      uuid)
+                            (.setData (gobj/get event "dataTransfer")
+                                      "heading-dom-id"
+                                      heading-id)
+                            (reset! *dragging? true)
+                            (reset! *dragging-heading heading))
+           ;; :on-drag-end (fn [event]
+           ;;                (reset! *dragging? false)
+           ;;                (reset! *mouse {}))
 
-         :style {:width 16
-                 :height 16}
-         :headingid (str uuid)}
+           :style {:width 16
+                   :height 16}
+           :headingid (str uuid)}
         (not dummy?)
         (assoc :href (str "/page/" uuid)
                :on-click (fn [e]
