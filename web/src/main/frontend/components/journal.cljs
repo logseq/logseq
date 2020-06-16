@@ -39,7 +39,6 @@
         encoded-page-name (util/url-encode page)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))]
-    (prn headings)
     [:div.flex-1
      [:a.initial-color {:href (str "/page/" encoded-page-name)
                         :on-click (fn [e]

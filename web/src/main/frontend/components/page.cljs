@@ -129,32 +129,31 @@
 
          ;; content before headings, maybe directives or summary it can be anything
          (when (and (not journal?) (not heading?))
-           (let [path (let [file-id (:db/id (:page/file page))]
-                        (:file/path (db/entity repo file-id)))
-                 encoded-path (util/url-encode path)
-                 heading-start-pos (and
-                                    (seq raw-page-headings)
-                                    (get-in (first raw-page-headings) [:heading/meta :pos]))]
-
-             (when (or
-                    (nil? heading-start-pos)
-                    (and heading-start-pos (not (zero? heading-start-pos))))
-               (let [encoded-content (utf8/encode content)
-                     heading-start-pos (or heading-start-pos (utf8/length encoded-content))
-                     content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
-                 [:div.before-heading.ml-4
-                  (content/content
-                   encoded-path
-                   {:content content-before-heading
-                    :format format
-                    :on-hide (fn [value]
-                               (let [new-content (str (string/trim value)
-                                                      "\n"
-                                                      (when heading-start-pos
-                                                        (utf8/substring encoded-content heading-start-pos)))]
-                                 (when (not= (string/trim new-content)
-                                             (string/trim content))
-                                   (handler/alter-file repo path new-content {:re-render-root? true}))))})]))))
+           (when-let [path (let [file-id (:db/id (:page/file page))]
+                             (:file/path (db/entity repo file-id)))]
+             (let [encoded-path (util/url-encode path)
+                   heading-start-pos (and
+                                      (seq raw-page-headings)
+                                      (get-in (first raw-page-headings) [:heading/meta :pos]))]
+               (when (or
+                     (nil? heading-start-pos)
+                     (and heading-start-pos (not (zero? heading-start-pos))))
+                (let [encoded-content (utf8/encode content)
+                      heading-start-pos (or heading-start-pos (utf8/length encoded-content))
+                      content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
+                  [:div.before-heading.ml-4
+                   (content/content
+                    encoded-path
+                    {:content content-before-heading
+                     :format format
+                     :on-hide (fn [value]
+                                (let [new-content (str (string/trim value)
+                                                       "\n"
+                                                       (when heading-start-pos
+                                                         (utf8/substring encoded-content heading-start-pos)))]
+                                  (when (not= (string/trim new-content)
+                                              (string/trim content))
+                                    (handler/alter-file repo path new-content {:re-render-root? true}))))})])))))
 
          ;; headings
          (content/content encoded-page-name
