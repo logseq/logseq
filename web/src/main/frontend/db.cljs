@@ -1040,8 +1040,11 @@
                              :heading/dummy? true
                              :heading/marker nil
                              :heading/lock? false})
-                          default-option)]
-         (vec (concat headings [dummy])))))))
+                          default-option)
+             headings (vec (concat headings [dummy]))]
+         (if journal?
+           (rest headings)
+           headings))))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
