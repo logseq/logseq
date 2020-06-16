@@ -164,8 +164,8 @@
    :heading/created-at {}
    :heading/last-modified-at {}
    :heading/body {}
-   :heading/children {:db/valueType   :db.type/ref
-                      :db/cardinality :db.cardinality/many}
+   ;; :heading/children {:db/valueType   :db.type/ref
+   ;;                    :db/cardinality :db.cardinality/many}
 
    ;; tag
    :tag/name       {:db/unique :db.unique/identity

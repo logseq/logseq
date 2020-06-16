@@ -792,6 +792,36 @@
           :heading/meta new-meta}))
      after-headings)))
 
+(defn rebuild-dnd-headings
+  [repo file start-pos new-top-heading offset-heading]
+  (let [file-id (:db/id file)
+        top-heading-id (:heading/uuid new-top-heading)
+        after-headings (->> (db/get-file-after-headings repo file-id start-pos)
+                            (remove (fn [h] (= (:heading/uuid h) top-heading-id))))
+        after-headings (let [[before after] (split-with (fn [h] (not= (:heading/uuid h)
+                                                                     (:heading/uuid offset-heading))) after-headings)]
+                         (concat (conj before (first after))
+                                 [new-top-heading] (rest after)))
+        last-start-pos (atom start-pos)]
+    (mapv
+     (fn [{:heading/keys [uuid meta content level] :as heading}]
+       (let [target-heading? (= uuid top-heading-id)
+             content-length (if target-heading?
+                              (utf8/length (utf8/encode content))
+                              (- (:end-pos meta) (:pos meta)))
+             new-end-pos (if (:end-pos meta)
+                           (+ @last-start-pos content-length))
+             new-meta {:pos @last-start-pos
+                       :end-pos new-end-pos}]
+         (reset! last-start-pos new-end-pos)
+         (cond->
+             {:heading/uuid uuid
+              :heading/meta new-meta}
+           target-heading?
+           (merge {:heading/level level
+                   :heading/content content}))))
+     after-headings)))
+
 (defn- default-content-with-title
   [format title]
   (case format
@@ -1049,10 +1079,14 @@
                                    (string/join "\n" others)))))]
         (save-heading-if-changed! heading new-content)))))
 
+(defn recompute-heading-level
+  [to-heading nested?]
+  (+ (:heading/level to-heading)
+     (if nested? 1 0)))
+
 (defn recompute-heading-content
   [target-heading to-heading nested?]
-  (let [new-level (+ (:heading/level to-heading)
-                     (if nested? 1 0))
+  (let [new-level (recompute-heading-level to-heading nested?)
         target-level (:heading/level target-heading)
         format (:heading/format target-heading)
         pattern (config/get-heading-pattern format)]
@@ -1155,13 +1189,15 @@
       nil
 
       :else
-      (let [target-heading (assoc target-heading
+      (let [pattern (config/get-heading-pattern (:heading/format to-heading))
+            target-heading (assoc target-heading
                                   :heading/meta
                                   (:heading/meta (db/entity [:heading/uuid (:heading/uuid target-heading)])))
             to-heading (assoc to-heading
                               :heading/meta
                               (:heading/meta (db/entity [:heading/uuid (:heading/uuid to-heading)])))
-            same-file? (= (:db/id (:heading/file target-heading))
+            target-file (:heading/file target-heading)
+            same-file? (= (:db/id target-file)
                           (:db/id (:heading/file to-heading)))
             get-start-pos (fn [heading] (get-in heading [:heading/meta :pos]))
             get-end-pos (fn [heading] (get-in heading [:heading/meta :end-pos]))
@@ -1175,16 +1211,6 @@
             target-heading-repo (:heading/repo target-heading)
             to-heading-repo (:heading/repo to-heading)
             same-repo? (= target-heading-repo to-heading-repo)]
-        ;; debug, remove this after tested
-        (let [target-content (string/replace (string/trim (:heading/content target-heading)) #"\*+\s" "")
-              to-content (string/replace (string/trim (:heading/content to-heading)) #"\*+\s" "")]
-          (cond
-            top?
-            (println "moving" target-content "to the top of" to-content)
-            nested?
-            (println "moving" target-content "nested to" to-content)
-            :else
-            (println "moving" target-content "to the bottom of" to-content)))
         (cond
           same-file?
           (let [target-child? (target-child? target-heading to-heading)
@@ -1195,31 +1221,44 @@
                 bottom-content (db/get-heading-content-rec bottom-heading)
                 top-content (db/get-heading-content-rec top-heading)
                 parent-content (when (and target-child? (not nested?)))
-                new-file-content (let [top-area (subs 0 (get-start-pos top-heading))
+                [new-file-content after-headings data]
+                (let [top-area (subs 0 (get-start-pos top-heading))
+                      bottom-area (subs (db/get-heading-end-pos-rec bottom-heading) nil)]
+                  (cond
+                    move-parent-to-child?
+                    (let [top-content (recompute-heading-content (dissoc target-heading :heading/children) to-heading nested?)
+                          top-content-length (utf8/length (utf8/encode top-content))
+                          original-top-heading-start-pos (get-start-pos top-heading)
+                          original-top-content-length (utf8/length (utf8/encode (:heading/content top-heading)))
+                          [changed-area offset-heading]
+                          (if nested?
+                            [(str (:heading/content bottom-heading)
+                                  top-content
+                                  (db/get-heading-content-rec (:heading/children bottom-heading)))
+                             bottom-heading]
+                            [(str bottom-content top-content)
+                             (or (last (:heading/children bottom-heading))
+                                 bottom-heading)])
+                          file-content (str top-area changed-area bottom-area)
+                          top-heading (let [new-level (recompute-heading-level to-heading nested?)
+                                            new-content (string/replace-first (:heading/content top-heading)
+                                                                              (apply str (repeat (:heading/level top-heading) pattern))
+                                                                              (apply str (repeat new-level pattern)))]
+                                        (-> top-heading
+                                            (dissoc :heading/children :heading/idx)
+                                            (assoc :heading/level (recompute-heading-level to-heading nested?)
+                                                   :heading/content new-content)))
+                          after-headings (rebuild-dnd-headings target-heading-repo target-file
+                                                               original-top-heading-start-pos
+                                                               top-heading
+                                                               offset-heading)]
+                      [file-content after-headings [top-heading]])
 
-                                       bottom-area (subs (db/get-heading-end-pos-rec bottom-heading) nil)]
-                                   (cond
-                                     move-parent-to-child?
-                                     (let [between-area (subs (get-end-pos target-heading) (get-start-pos to-heading))]
-                                       (str
-                                        top-area
-
-                                        between-area
-
-                                        (let [top-content (recompute-heading-content (dissoc target-heading :heading/children) to-heading nested?)]
-                                          (if nested?
-                                            (str (:heading/content bottom-heading)
-                                                 top-content
-                                                 (db/get-heading-content-rec (:heading/children bottom-content)))
-                                            (str bottom-content top-content)))
-
-                                        bottom-area))
-
-                                     :else
-                                     (let [between-area (if (= direction :down)
-                                                          (subs (db/get-heading-end-pos-rec target-heading) (get-start-pos to-heading))
-                                                          (subs (db/get-heading-end-pos-rec to-heading) (get-start-pos target-heading)))]
-                                       (str
+                    :else
+                    (let [between-area (if (= direction :down)
+                                         (subs (db/get-heading-end-pos-rec target-heading) (get-start-pos to-heading))
+                                         (subs (db/get-heading-end-pos-rec to-heading) (get-start-pos target-heading)))
+                          file-content (str
                                         top-area
 
                                         (when (= direction :up)
@@ -1250,10 +1289,42 @@
                                                    (db/get-heading-content-rec (:heading/children bottom-content)))
                                               (str bottom-content top-content))))
 
-                                        bottom-area))))
-                path (:file/path (db/entity to-heading-repo (:db/id (:heading/file to-heading))))]
-            (alter-file to-heading-repo path new-file-content
-                        {:re-render-root? true}))
+                                        bottom-area)]
+                      [file-content [] []])))
+                path (:file/path (db/entity to-heading-repo (:db/id (:heading/file to-heading))))
+                ;; tx-heading target-heading and its children, level, content and meta
+
+                ;; ;; TODO: ignore target heading and its children
+                ;; after-headings (rebuild-after-headings to-heading-repo
+                ;;                                        (:heading/file to-heading)
+                ;;                                        separate-pos
+                ;;                                        (+ separate-pos
+                ;;                                           (utf8/length
+                ;;                                            (utf8/encode
+                ;;                                             (db/get-heading-content-rec target-heading)))))
+                modified-time (let [modified-at (tc/to-long (t/now))]
+                                (->
+                                 [[:db/add (:db/id (:heading/page target-heading)) :page/last-modified-at modified-at]
+                                  [:db/add (:db/id (:heading/page to-heading)) :page/last-modified-at modified-at]
+                                  [:db/add (:db/id (:heading/file target-heading)) :file/last-modified-at modified-at]
+                                  [:db/add (:db/id (:heading/file to-heading)) :file/last-modified-at modified-at]]
+                                 distinct
+                                 vec))
+                ]
+            (profile
+             "Move heading in the same file: "
+             (transact-react-and-alter-file!
+              to-heading-repo
+              (concat
+               after-headings
+               modified-time)
+              {:key :heading/change
+               :data data}
+              path
+              new-file-content))
+            ;; (alter-file to-heading-repo path new-file-content
+            ;;             {:re-render-root? true})
+            )
 
           ;; same repo but different files
           :else
