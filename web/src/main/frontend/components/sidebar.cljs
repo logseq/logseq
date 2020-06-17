@@ -290,8 +290,10 @@
           (when current-repo (sync-status))
           [:div.repos.hidden.md:block
            (repos current-repo true)]
-          [:a.ml-1 {:title "Draw with Excalidraw"
-                    :href "/draw"}
+          [:a {:title "Draw with Excalidraw"
+               :href "/draw"
+               :style {:margin-left 8
+                       :margin-right 4}}
            [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
             (svg/excalidraw-logo)]]
           (ui/dropdown-with-links

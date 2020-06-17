@@ -617,21 +617,6 @@
       react
       ffirst))))
 
-(defn get-file-no-sub
-  ([path]
-   (get-file-no-sub (state/get-current-repo) path))
-  ([repo path]
-   (when (and repo path)
-     (->
-      (d/q '[:find ?content
-             :in $ ?path
-             :where
-             [?file :file/path ?path]
-             [?file :file/content ?content]]
-        (d/db (get-files-conn repo))
-        path)
-      ffirst))))
-
 (defn reset-contents-and-headings!
   [repo-url contents headings-pages delete-files delete-headings]
   (let [files (doall

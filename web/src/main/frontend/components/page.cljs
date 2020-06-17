@@ -66,7 +66,7 @@
             page (db/entity repo [:page/name page-name])
             file (:page/file page)
             file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
-            content (db/get-file-no-sub repo file-path)
+            content (db/get-file repo file-path)
             page-headings (db/with-dummy-heading raw-page-headings format
                             (if (empty? raw-page-headings)
                               {:heading/page {:db/id (:db/id page)}

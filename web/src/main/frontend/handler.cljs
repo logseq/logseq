@@ -1438,9 +1438,17 @@
     (when-not (util/input? (gobj/get e "target"))
       (util/clear-selection!))))
 
-(defn copy-selection-headings
+(defn- get-selected-headings-with-children
   []
   (when-let [headings (seq (get @state/state :selection/headings))]
+    (mapcat (fn [heading]
+              (cons heading
+                    (array-seq (dom/by-class heading "ls-heading"))))
+            headings)))
+
+(defn copy-selection-headings
+  []
+  (when-let [headings (seq (get-selected-headings-with-children))]
     (let [repo (dom/attr (first headings) "repo")
           ids (distinct (map #(uuid (dom/attr % "headingid")) headings))
           content (some->> (db/get-headings-contents repo ids)
@@ -1452,7 +1460,7 @@
 (defn cut-selection-headings
   []
   (copy-selection-headings)
-  (when-let [headings (seq (get @state/state :selection/headings))]
+  (when-let [headings (seq (get-selected-headings-with-children))]
     (let [repo (dom/attr (first headings) "repo")
           ids (distinct (map #(uuid (dom/attr % "headingid")) headings))]
       (delete-headings! repo ids))))
