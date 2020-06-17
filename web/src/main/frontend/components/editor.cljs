@@ -55,7 +55,11 @@
     nil)
 
   (when restore?
-    (commands/restore-state restore?)))
+    (let [restore-slash-caret-pos? (if (= :editor/click-hidden-file-input
+                                          (ffirst command-output))
+                                     false
+                                     true)]
+      (commands/restore-state restore-slash-caret-pos?))))
 
 (def autopair-map
   {"[" "]"
@@ -114,7 +118,8 @@
                                       signed-url
                                       file-name)
                          format
-                         {:last-pattern (if drop? "" commands/slash)})
+                         {:last-pattern (if drop? "" commands/slash)
+                          :restore? false})
 
         (reset! *image-uploading-process 0))
       (fn [e]
@@ -431,16 +436,17 @@
 
 (rum/defc absolute-modal < rum/reactive
   [cp set-default-width? pos]
-  (let [{:keys [top left pos]} (rum/react pos)]
-    [:div.absolute.rounded-md.shadow-lg
-     {:style (merge
-              {:top (+ top 24)
-               :left left
-               :max-height 600
-               :z-index 11}
-              (if set-default-width?
-                {:width 400}))}
-     cp]))
+  (when pos
+    (let [{:keys [top left pos]} (rum/react pos)]
+      [:div.absolute.rounded-md.shadow-lg
+       {:style (merge
+                {:top (+ top 24)
+                 :left left
+                 :max-height 600
+                 :z-index 11}
+                (if set-default-width?
+                  {:width 400}))}
+       cp])))
 
 (rum/defc transition-cp
   [cp set-default-width? pos]
@@ -467,6 +473,7 @@
          [:span.lds-dual-ring.mr-2]
          [:span {:style {:margin-top 2}}
           (util/format "Uploading %s%" (util/format "%2d" processing))]]
+        false
         *slash-caret-pos)))])
 
 (defn- clear-when-saved!
