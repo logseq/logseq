@@ -500,7 +500,7 @@
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
-  [state {:heading/keys [uuid title level body meta content dummy? lock? page format repo children idx] :as heading} heading-part config]
+  [state {:heading/keys [uuid title level body meta content dummy? page format repo children idx] :as heading} heading-part config]
   (let [dragging? (rum/react *dragging?)
         config (assoc config :heading heading)
         ref? (boolean (:ref? config))
@@ -532,128 +532,127 @@
                                  (.getData (gobj/get event "dataTransfer") attr))
         dnd-same-heading? (fn [event]
                             (= (:heading/uuid @*dragging-heading) uuid))]
-    (when-not lock?
-      [:div.ls-heading.flex.flex-col
-       {:id heading-id
-        :style {:position "relative"}
-        :class (str uuid
-                    (if dummy? " dummy"))
-        :headingid (str uuid)
-        :repo repo
-        :level level
-        :on-drag-over (fn [event]
-                        (util/stop event)
-                        (when-not (dnd-same-heading? event)
-                          (if (zero? idx)
-                            (let [element-top (gobj/get (utils/getOffsetRect (gdom/getElement heading-id)) "top")
-                                  cursor-top (gobj/get event "clientY")]
-                              (if (<= (js/Math.abs (- cursor-top element-top)) 16)
-                                ;; top
-                                (do
-                                  (hide-dnd-separator (str uuid))
-                                  (show-dnd-separator (str uuid "-top"))
-                                  (reset! *move-to-top? true))
-                                (do
-                                  (hide-dnd-separator (str uuid "-top"))
-                                  (show-dnd-separator (str uuid)))))
-                            (show-dnd-separator (str uuid)))))
-        :on-drag-leave (fn [event]
-                         (hide-dnd-separator (str uuid))
-                         (hide-dnd-separator (str uuid "-nested"))
-                         (hide-dnd-separator (str uuid "-top"))
-                         (reset! *move-to-top? false))
-        :on-drop (fn [event]
-                   (when-not (dnd-same-heading? event)
-                     (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
-                       (handler/move-heading @*dragging-heading
-                                             heading
-                                             from-dom-id
-                                             @*move-to-top?
-                                             false)))
-                   (reset! *dragging? false)
-                   (reset! *dragging-heading nil)
-                   (handler/unhighlight-heading!))
-        :on-mouse-over (fn [e]
-                         (util/stop e)
-                         (when has-child?
-                           (swap! *control-show? assoc heading-id true)))
-        :on-mouse-out (fn [e]
-                        (util/stop e)
-                        (when has-child?
-                          (swap! *control-show?
-                                 assoc heading-id false)))}
-       (when (and (zero? idx) dragging?)
-         (dnd-separator heading 30 0 true false))
-       [:div.flex-1.flex-row.py-1
-        (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? body children heading dummy?)
+    [:div.ls-heading.flex.flex-col
+     {:id heading-id
+      :style {:position "relative"}
+      :class (str uuid
+                  (if dummy? " dummy"))
+      :headingid (str uuid)
+      :repo repo
+      :level level
+      :on-drag-over (fn [event]
+                      (util/stop event)
+                      (when-not (dnd-same-heading? event)
+                        (if (zero? idx)
+                          (let [element-top (gobj/get (utils/getOffsetRect (gdom/getElement heading-id)) "top")
+                                cursor-top (gobj/get event "clientY")]
+                            (if (<= (js/Math.abs (- cursor-top element-top)) 16)
+                              ;; top
+                              (do
+                                (hide-dnd-separator (str uuid))
+                                (show-dnd-separator (str uuid "-top"))
+                                (reset! *move-to-top? true))
+                              (do
+                                (hide-dnd-separator (str uuid "-top"))
+                                (show-dnd-separator (str uuid)))))
+                          (show-dnd-separator (str uuid)))))
+      :on-drag-leave (fn [event]
+                       (hide-dnd-separator (str uuid))
+                       (hide-dnd-separator (str uuid "-nested"))
+                       (hide-dnd-separator (str uuid "-top"))
+                       (reset! *move-to-top? false))
+      :on-drop (fn [event]
+                 (when-not (dnd-same-heading? event)
+                   (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
+                     (handler/move-heading @*dragging-heading
+                                           heading
+                                           from-dom-id
+                                           @*move-to-top?
+                                           false)))
+                 (reset! *dragging? false)
+                 (reset! *dragging-heading nil)
+                 (handler/unhighlight-heading!))
+      :on-mouse-over (fn [e]
+                       (util/stop e)
+                       (when has-child?
+                         (swap! *control-show? assoc heading-id true)))
+      :on-mouse-out (fn [e]
+                      (util/stop e)
+                      (when has-child?
+                        (swap! *control-show?
+                               assoc heading-id false)))}
+     (when (and (zero? idx) dragging?)
+       (dnd-separator heading 30 0 true false))
+     [:div.flex-1.flex-row.py-1
+      (heading-control config uuid heading-id level start-level collapsed? collapsed-atom? body children heading dummy?)
 
-        (if edit?
-          (editor/box (string/trim content)
-                      {:heading heading
-                       :heading-id uuid
-                       :heading-parent-id heading-id
-                       :format format
-                       :dummy? dummy?
-                       :on-hide (fn [value event]
-                                  (when (= event :esc)
-                                    (handler/highlight-heading! uuid)))}
-                      edit-input-id)
-          [:div.flex.flex-col.relative
-           {:style {:cursor "text"
-                    :min-height 24}
-            :on-click (fn [e]
-                        (let [target (gobj/get e "target")]
-                          (when-not (or (util/link? target)
-                                        (util/input? target)
-                                        (and (util/sup? target)
-                                             (d/has-class? target "fn")))
-                            (handler/clear-selection! nil)
-                            (handler/unhighlight-heading!)
-                            (util/stop e)
-                            (handler/reset-cursor-range! (gdom/getElement heading-id))
-                            (state/set-editing!
-                             edit-input-id
-                             (handler/remove-level-spaces content format)
-                             heading))))
-            :on-drag-over (fn [event]
-                            (util/stop event)
-                            (when-not (dnd-same-heading? event)
-                              (show-dnd-separator (str uuid "-nested"))))
-            :on-drag-leave (fn [event]
-                             (hide-dnd-separator (str uuid))
-                             (hide-dnd-separator (str uuid "-nested"))
-                             (hide-dnd-separator (str uuid "-top")))
-            :on-drop (fn [event]
-                       (util/stop event)
-                       (when-not (dnd-same-heading? event)
-                         (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
-                           (handler/move-heading @*dragging-heading
-                                                 heading
-                                                 from-dom-id
-                                                 false
-                                                 true)))
-                       (reset! *dragging? false)
-                       (reset! *dragging-heading nil)
-                       (handler/unhighlight-heading!))}
-           heading-part
+      (if edit?
+        (editor/box (string/trim content)
+                    {:heading heading
+                     :heading-id uuid
+                     :heading-parent-id heading-id
+                     :format format
+                     :dummy? dummy?
+                     :on-hide (fn [value event]
+                                (when (= event :esc)
+                                  (handler/highlight-heading! uuid)))}
+                    edit-input-id)
+        [:div.flex.flex-col.relative
+         {:style {:cursor "text"
+                  :min-height 24}
+          :on-click (fn [e]
+                      (let [target (gobj/get e "target")]
+                        (when-not (or (util/link? target)
+                                      (util/input? target)
+                                      (and (util/sup? target)
+                                           (d/has-class? target "fn")))
+                          (handler/clear-selection! nil)
+                          (handler/unhighlight-heading!)
+                          (util/stop e)
+                          (handler/reset-cursor-range! (gdom/getElement heading-id))
+                          (state/set-editing!
+                           edit-input-id
+                           (handler/remove-level-spaces content format)
+                           heading))))
+          :on-drag-over (fn [event]
+                          (util/stop event)
+                          (when-not (dnd-same-heading? event)
+                            (show-dnd-separator (str uuid "-nested"))))
+          :on-drag-leave (fn [event]
+                           (hide-dnd-separator (str uuid))
+                           (hide-dnd-separator (str uuid "-nested"))
+                           (hide-dnd-separator (str uuid "-top")))
+          :on-drop (fn [event]
+                     (util/stop event)
+                     (when-not (dnd-same-heading? event)
+                       (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
+                         (handler/move-heading @*dragging-heading
+                                               heading
+                                               from-dom-id
+                                               false
+                                               true)))
+                     (reset! *dragging? false)
+                     (reset! *dragging-heading nil)
+                     (handler/unhighlight-heading!))}
+         heading-part
 
-           (when dragging?
-             (dnd-separator heading 0 -4 false true))
+         (when dragging?
+           (dnd-separator heading 0 -4 false true))
 
-           (when (seq body)
-             [:div.heading-body
-              (for [child body]
-                (let [block (block config child)]
-                  (rum/with-key (heading-child block)
-                    (cljs.core/random-uuid))))])])]
+         (when (seq body)
+           [:div.heading-body
+            (for [child body]
+              (let [block (block config child)]
+                (rum/with-key (heading-child block)
+                  (cljs.core/random-uuid))))])])]
 
-       (when (seq children)
-         [:div.heading-children {:style {:margin-left 33}}
-          (for [child children]
-            (rum/with-key (heading-container config child)
-              (:heading/uuid child)))])
-       (when dragging?
-         (dnd-separator heading 30 0 false))])))
+     (when (seq children)
+       [:div.heading-children {:style {:margin-left 33}}
+        (for [child children]
+          (rum/with-key (heading-container config child)
+            (:heading/uuid child)))])
+     (when dragging?
+       (dnd-separator heading 30 0 false))]))
 
 (rum/defc heading-checkbox
   [heading class]

@@ -1023,8 +1023,7 @@
                                             :end-pos nil}
                              :heading/body nil
                              :heading/dummy? true
-                             :heading/marker nil
-                             :heading/lock? false})
+                             :heading/marker nil})
                           default-option)
              headings (vec (concat headings [dummy]))]
          (if journal?

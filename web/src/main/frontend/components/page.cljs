@@ -119,7 +119,8 @@
              file-path]])
 
          (when (and repo (not journal?))
-           (let [alias (db/get-page-alias repo page-name)]
+           (let [alias (some->> (db/get-page-alias repo page-name)
+                           (remove util/file-page?))]
              (when (seq alias)
                [:div.alias.ml-1.mb-1.content
                 [:span.font-bold.mr-1 "Page aliases: "]
@@ -141,7 +142,7 @@
                 (let [encoded-content (utf8/encode content)
                       heading-start-pos (or heading-start-pos (utf8/length encoded-content))
                       content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
-                  [:div.before-heading.ml-4
+                  [:div.before-heading.ml-1.mt-4
                    (content/content
                     encoded-path
                     {:content content-before-heading

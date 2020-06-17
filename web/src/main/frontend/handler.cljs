@@ -825,15 +825,24 @@
                           new-meta {:pos @last-start-pos
                                     :end-pos new-end-pos}]
                       (reset! last-start-pos new-end-pos)
-                      (cond->
-                        {:heading/uuid uuid
-                         :heading/meta new-meta}
-                        target-heading?
-                        (merge {:heading/level level
-                                :heading/content content}
-                               (when-not same-file?
-                                 (select-keys heading [:heading/file :heading/page]))))))
+                      (let [data {:heading/uuid uuid
+                                  :heading/meta new-meta}]
+                        (cond
+                          (and target-heading? (not same-file?))
+                          (merge
+                           (dissoc heading :heading/idx :heading/dummy?)
+                           data)
+
+                          target-heading?
+                          (merge
+                           data
+                           {:heading/level level
+                            :heading/content content})
+
+                          :else
+                          data))))
                   after-headings)]
+      (prn {:result result})
       result)))
 
 (defn- default-content-with-title
@@ -1106,7 +1115,6 @@
                      target-heading
                      (fn [{:heading/keys [uuid level content]
                            :as heading}]
-                       (prn {:heading heading})
                        (let [new-level (+ new-level (- level target-level))
                              new-content (string/replace-first content
                                                                (apply str (repeat level pattern))
@@ -1218,13 +1226,13 @@
 
       :else
       (let [pattern (config/get-heading-pattern (:heading/format to-heading))
+            target-heading-repo (:heading/repo target-heading)
             target-heading (assoc target-heading
                                   :heading/meta
-                                  (:heading/meta (db/entity [:heading/uuid (:heading/uuid target-heading)])))
+                                  (:heading/meta (db/entity target-heading-repo [:heading/uuid (:heading/uuid target-heading)])))
             to-heading (assoc to-heading
                               :heading/meta
                               (:heading/meta (db/entity [:heading/uuid (:heading/uuid to-heading)])))
-            target-heading-repo (:heading/repo target-heading)
             to-heading-repo (:heading/repo to-heading)
             same-repo? (= target-heading-repo to-heading-repo)
             target-file (:heading/file target-heading)
@@ -1268,10 +1276,7 @@
                                         (util/join-newline (:heading/content top-heading)
                                                            target-content
                                                            (if target-child?
-                                                             (do
-                                                               (prn {:top-content (remove-heading-child! target-heading (:heading/children to-heading))
-                                                                     :target-content target-content})
-                                                               (remove-heading-child! target-heading (:heading/children to-heading)))
+                                                             (remove-heading-child! target-heading (:heading/children to-heading))
                                                              (db/get-heading-content-rec (:heading/children top-heading))))
                                         top?
                                         (util/join-newline target-content top-content)
@@ -1280,7 +1285,6 @@
                                         (let [top-content (if target-child?
                                                             (remove-heading-child! target-heading to-heading)
                                                             top-content)]
-                                          (prn {:top-content top-content})
                                           (util/join-newline top-content target-content))))
 
                                     between-area
@@ -1341,8 +1345,7 @@
                  modified-time)
                 {:key :heading/change
                  :data heading-changes}
-                [[path new-file-content]]))
-              (prn {:new-file-content new-file-content})))
+                [[path new-file-content]]))))
 
           ;; same repo but different files
           same-repo?
@@ -1435,10 +1438,9 @@
                                        (utf8/substring to-file-content 0 separate-pos)
                                        target-content
                                        (utf8/substring to-file-content separate-pos)))
-                target-delete-tx (let [target-headings (get-heading-ids target-heading)]
-                                   (map (fn [h]
-                                          [:db.fn/retractEntity [:heading/uuid (:heading/uuid h)]])
-                                     target-headings))
+                target-delete-tx (map (fn [id]
+                                        [:db.fn/retractEntity [:heading/uuid id]])
+                                   (get-heading-ids target-heading))
                 [target-modified-time to-modified-time]
                 (let [modified-at (tc/to-long (t/now))]
                   [[[:db/add (:db/id (:heading/page target-heading)) :page/last-modified-at modified-at]
@@ -1472,28 +1474,28 @@
                   :target-delete-tx target-delete-tx
                   :target-after-headings target-after-headings
                   :to-after-headings to-after-headings})
-            ;; (profile
-            ;;  "Move heading between different files: "
-            ;;  (transact-react-and-alter-file!
-            ;;   target-heading-repo
-            ;;   (concat
-            ;;    target-delete-tx
-            ;;    target-after-headings
-            ;;    target-modified-time)
-            ;;   {:key :heading/change
-            ;;    :data [(dissoc target-heading :heading/children)]}
-            ;;   [[target-file-path new-target-file-content]]))
+            (profile
+             "[Target file] Move heading between different files: "
+             (transact-react-and-alter-file!
+              target-heading-repo
+              (concat
+               target-delete-tx
+               target-after-headings
+               target-modified-time)
+              {:key :heading/change
+               :data [(dissoc target-heading :heading/children)]}
+              [[target-file-path new-target-file-content]]))
 
-            ;; (profile
-            ;;  "Move heading between different files: "
-            ;;  (transact-react-and-alter-file!
-            ;;   to-heading-repo
-            ;;   (concat
-            ;;    to-after-headings
-            ;;    to-modified-time)
-            ;;   {:key :heading/change
-            ;;    :data [heading-changes]}
-            ;;   [[to-file-path new-to-file-content]]))
+            (profile
+             "[Destination file] Move heading between different files: "
+             (transact-react-and-alter-file!
+              to-heading-repo
+              (concat
+               to-after-headings
+               to-modified-time)
+              {:key :heading/change
+               :data [heading-changes]}
+              [[to-file-path new-to-file-content]]))
             ))))))
 
 (defn clone-and-pull
