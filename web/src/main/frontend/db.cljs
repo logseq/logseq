@@ -700,7 +700,7 @@
    (get-page-headings (state/get-current-repo)
                       page))
   ([repo-url page]
-   (let [page-id (:db/id (entity [:page/name page]))
+   (let [page-id (:db/id (entity repo-url [:page/name page]))
          result (q repo-url [:page/headings page-id] {:use-cache? false}
                   '[:find (pull ?heading [*])
                     :in $ ?page-id
@@ -1296,17 +1296,14 @@
 ;; recursively with children content
 (defn get-heading-content-rec
   ([heading]
-   (get-heading-content-rec heading (fn [_uuid _level content] content)))
+   (get-heading-content-rec heading (fn [heading] (:heading/content heading))))
   ([heading transform-fn]
    (let [contents (atom [])
          _ (walk/prewalk
             (fn [form]
               (when (map? form)
                 (when-let [content (:heading/content form)]
-                  (swap! contents conj (transform-fn
-                                        (:heading/uuid form)
-                                        (:heading/level form)
-                                        content))))
+                  (swap! contents conj (transform-fn form))))
               form)
             heading)]
      (apply util/join-newline @contents))))
