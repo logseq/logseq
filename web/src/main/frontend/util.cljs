@@ -438,6 +438,15 @@
            (when-not not-space? " ")
            (triml-without-newlines right)))))
 
+(defn join-newline
+  [& col]
+  (let [col (remove nil? col)]
+    (reduce (fn [acc s]
+             (if (or (= acc "") (= "\n" (last acc)))
+               (str acc s)
+               (str acc "\n"
+                    (.replace s #"^[\n]+" "")))) "" col)))
+
 ;; Add documentation
 (defn replace-first [pattern s new-value]
   (when-let [first-index (string/index-of s pattern)]

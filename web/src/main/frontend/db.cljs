@@ -1299,7 +1299,7 @@
    (get-heading-content-rec heading (fn [_uuid _level content] content)))
   ([heading transform-fn]
    (let [contents (atom [])
-         _ (walk/postwalk
+         _ (walk/prewalk
             (fn [form]
               (when (map? form)
                 (when-let [content (:heading/content form)]
@@ -1309,7 +1309,7 @@
                                         content))))
               form)
             heading)]
-     (apply str (reverse @contents)))))
+     (apply util/join-newline @contents))))
 
 (defn get-heading-end-pos-rec
   [heading]
