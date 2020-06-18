@@ -27,7 +27,7 @@
                           {:id tag
                            :label tag
                            :value refs
-                           :font {:size (* refs 14)}
+                           :font {:size (* (min 4 (max 1 (/ refs 3))) 14)}
                            :shadow {:enabled true}}
                         dark?
                         (assoc-in [:font :color] "#dfdfdf")))
