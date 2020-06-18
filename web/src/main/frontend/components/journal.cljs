@@ -24,6 +24,7 @@
              (when today?
                (let [raw-headings (db/get-page-headings page)
                      headings (db/with-dummy-heading raw-headings format nil true)]
+                 (prn {:headings (count raw-headings)})
                  (when (= 1 (count raw-headings))
                    (when-let [template (state/get-journal-template)]
                      (handler/insert-new-heading!

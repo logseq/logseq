@@ -386,13 +386,13 @@
                        (seq body))]
     [:div.hd-control.mr-2.flex.flex-row.items-center
      {:style {:height 24
-              :padding-left 10
+              :padding-left 9
               :float "left"}}
      [:a.heading-control
       {:id (str "control-" uuid)
-       :style {:width 16
+       :style {:width 14
                :height 16
-               :padding-left 2}
+               :margin-right 2}
        :class "transition ease-in-out duration-150"
        :on-click (fn [e]
                    (util/stop e)
@@ -659,7 +659,8 @@
   (case (:heading/marker heading)
     (list "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING")
     (ui/checkbox {:class class
-                  :style {:margin-top -5}
+                  :style {:margin-top -3
+                          :margin-right 6}
                   :on-change (fn [_e]
                                ;; FIXME: Log timestamp
                                (handler/check heading))})

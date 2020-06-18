@@ -251,9 +251,19 @@
 (rum/defc toggle
   [on? on-click]
   [:a {:on-click on-click}
-   [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
-    {:aria-checked "false", :tab-index 0, :role "checkbox"
-     :class (if on? "bg-indigo-600" "bg-gray-200")}
-    [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
-     {:class (if on? "translate-x-5" "translate-x-0")
-      :aria-hidden "true"}]]])
+   [:span.group.relative.inline-flex.items-center.justify-center.flex-shrink-0.h-5.w-10.cursor-pointer.focus:outline-none
+    {:aria-checked "false", :tabindex "0", :role "checkbox"}
+    [:span.absolute.h-4.w-9.mx-auto.rounded-full.transition-colors.ease-in-out.duration-200
+     {:aria-hidden "true"
+      :class (if on? "bg-indigo-600" "bg-gray-200")}]
+    [:span.absolute.left-0.inline-block.h-5.w-5.border.border-gray-200.rounded-full.bg-white.shadow.transform.group-focus:shadow-outline.group-focus:border-blue-300.transition-transform.ease-in-out.duration-200
+     {:aria-hidden "true"
+      :class (if on? "translate-x-5" "translate-x-0")}]]]
+  ;; [:a {:on-click on-click}
+  ;;  [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
+  ;;   {:aria-checked "false", :tab-index 0, :role "checkbox"
+  ;;    :class (if on? "bg-indigo-600" "bg-gray-200")}
+  ;;   [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
+  ;;    {:class (if on? "translate-x-5" "translate-x-0")
+  ;;     :aria-hidden "true"}]]]
+  )

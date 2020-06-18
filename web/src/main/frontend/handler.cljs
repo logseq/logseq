@@ -842,7 +842,6 @@
                           :else
                           data))))
                   after-headings)]
-      (prn {:result result})
       result)))
 
 (defn- default-content-with-title
