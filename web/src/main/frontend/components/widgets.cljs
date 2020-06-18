@@ -37,7 +37,7 @@
         [:div
          [:div
           [:h1.title.mb-1
-           "Set your Github personal access token"]
+           "Set Github personal access token"]
           [:div.pl-1
            [:p.text-sm.text-gray-500
             "Git clone and push require the token to work."

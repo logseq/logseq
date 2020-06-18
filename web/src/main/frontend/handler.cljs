@@ -273,39 +273,40 @@
 
 (defn pull
   [repo-url token]
-  (let [status (db/get-key-value repo-url :git/status)]
-    (when (not (state/get-edit-input-id))
-      (set-git-status! repo-url :pulling)
-      (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
-        (p/let [result (git/fetch repo-url token)
-                {:keys [fetchHead]} (bean/->clj result)
-                _ (set-latest-commit! repo-url fetchHead)]
-          (-> (git/merge repo-url)
-              (p/then (fn [result]
-                        (-> (git/checkout repo-url)
-                            (p/then (fn [result]
-                                      (create-month-journal-if-not-exists repo-url)
-                                      (create-config-file-if-not-exists repo-url)
-                                      (set-git-status! repo-url nil)
-                                      (set-git-last-pulled-at! repo-url)
-                                      (when (and latest-commit fetchHead
-                                                 (not= latest-commit fetchHead))
-                                        (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                          (load-db-and-journals! repo-url diffs false)))))
-                            (p/catch (fn [error]
-                                       (set-git-status! repo-url :checkout-failed)
-                                       (set-git-error! repo-url error))))))
-              (p/catch (fn [error]
-                         (set-git-status! repo-url :merge-failed)
-                         (set-git-error! repo-url error)
-                         (show-notification!
-                          [:p.content
-                           "Failed to merge, please "
-                           [:span.text-gray-700.font-bold
-                            "resolve any diffs first."]]
-                          :error)
-                         (redirect! {:to :diff})
-                         ))))))))
+  (when (db/get-conn repo-url true)
+    (let [status (db/get-key-value repo-url :git/status)]
+     (when (not (state/get-edit-input-id))
+       (set-git-status! repo-url :pulling)
+       (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
+         (p/let [result (git/fetch repo-url token)
+                 {:keys [fetchHead]} (bean/->clj result)
+                 _ (set-latest-commit! repo-url fetchHead)]
+           (-> (git/merge repo-url)
+               (p/then (fn [result]
+                         (-> (git/checkout repo-url)
+                             (p/then (fn [result]
+                                       (create-month-journal-if-not-exists repo-url)
+                                       (create-config-file-if-not-exists repo-url)
+                                       (set-git-status! repo-url nil)
+                                       (set-git-last-pulled-at! repo-url)
+                                       (when (and latest-commit fetchHead
+                                                  (not= latest-commit fetchHead))
+                                         (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                           (load-db-and-journals! repo-url diffs false)))))
+                             (p/catch (fn [error]
+                                        (set-git-status! repo-url :checkout-failed)
+                                        (set-git-error! repo-url error))))))
+               (p/catch (fn [error]
+                          (set-git-status! repo-url :merge-failed)
+                          (set-git-error! repo-url error)
+                          (show-notification!
+                           [:p.content
+                            "Failed to merge, please "
+                            [:span.text-gray-700.font-bold
+                             "resolve any diffs first."]]
+                           :error)
+                          (redirect! {:to :diff})
+                          )))))))))
 
 (defn pull-current-repo
   []
@@ -541,15 +542,19 @@
     :repo-add
     "Add another repo"
     :all-files
-    "All your files"
+    "All files"
     :all-pages
-    "All your pages"
+    "All pages"
     :file
     (str "File " (util/url-decode (:path path-params)))
     :new-page
     "Create a new page"
     :page
     (util/capitalize-all (util/url-decode (:name path-params)))
+    :tag
+    (str "#" (util/url-decode (:name path-params)))
+    :all-tags
+    "All tags"
     :diff
     "Git diff"
     :draw
@@ -1468,11 +1473,6 @@
                                                             heading-changes
                                                             nil
                                                             {:same-file? false})))]
-            (prn {:target-content new-target-file-content
-                  :to-content new-to-file-content
-                  :target-delete-tx target-delete-tx
-                  :target-after-headings target-after-headings
-                  :to-after-headings to-after-headings})
             (profile
              "[Target file] Move heading between different files: "
              (transact-react-and-alter-file!

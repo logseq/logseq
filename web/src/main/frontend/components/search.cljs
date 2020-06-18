@@ -79,13 +79,13 @@
                          [:span.ml-1 (str "\""search-q "\"")]]
 
                         :page
-                        [:div.text-sm.font-bold (util/capitalize-all data)]
+                        [:div.text-sm.font-medium (util/capitalize-all data)]
 
                         :block
                         (let [{:heading/keys [page content]} data]
                           (let [page (:page/name page)]
                             [:div.flex-1
-                             [:div.text-sm.font-bold (util/capitalize-all page)]
+                             [:div.text-sm.font-medium (util/capitalize-all page)]
                              (highlight content search-q)]))
 
                         nil))})]))

@@ -242,7 +242,8 @@
         status (db/sub-key-value :git/status)
         pulling? (= :pulling status)
         theme (state/sub :ui/theme)
-        white? (= "white" (state/sub :ui/theme))]
+        white? (= "white" (state/sub :ui/theme))
+        all-tags? (= :all-tags (get-in route-match [:data :name]))]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
                        (handler/unhighlight-heading!))}
@@ -310,13 +311,16 @@
                  {:title "New page"
                   :options {:href "/new-page"}})
                (when logged?
-                 {:title "Your repos"
+                 {:title "All repos"
                   :options {:href "/repos"}})
                (when logged?
-                 {:title "Your pages"
+                 {:title "All pages"
                   :options {:href "/all-pages"}})
                (when logged?
-                 {:title "Your files"
+                 {:title "All tags"
+                  :options {:href "/all-tags"}})
+               (when logged?
+                 {:title "All files"
                   :options {:href "/all-files"}})
                {:title "Settings"
                 :options {:href (str "/file/" (util/url-encode config/config-file))}}
@@ -351,9 +355,11 @@
                   :box-sizing "content-box"}}
          [:div.flex.justify-center
           [:div.flex-1.m-6#main-content-container
-           {:style {:position "relative"
-                    :max-width 700
-                    :margin-bottom 200}}
+           {:style (if all-tags?
+                     {:position "relative"}
+                     {:position "relative"
+                      :max-width 700
+                      :margin-bottom 200})}
            main-content]]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block

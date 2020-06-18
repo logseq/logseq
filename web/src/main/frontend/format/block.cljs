@@ -14,6 +14,12 @@
    (vector? block)
    (= "Heading" (first block))))
 
+(defn get-tag
+  [block]
+  (and (vector? block)
+       (= "Tag" (first block))
+       (second block)))
+
 (defn get-page-reference
   [block]
   (when (and (vector? block) (= "Link" (first block)))
@@ -78,13 +84,6 @@
       first
       second))
 
-(defn ->tags
-  [tags]
-  (mapv (fn [tag]
-          {:db/id tag
-           :tag/name (string/lower-case tag)})
-        tags))
-
 (defn with-refs
   [{:keys [title body] :as heading}]
   (let [ref-pages (atom [])]
@@ -112,6 +111,29 @@
              heading)))
         headings))
 
+(defn ->tags
+  [tags]
+  (mapv (fn [tag]
+          {:db/id tag
+           :tag/name (string/lower-case tag)})
+        tags))
+
+(defn collect-heading-tags
+  [{:keys [title body tags] :as heading}]
+  (let [other-tags (atom #{})]
+    (walk/postwalk
+     (fn [form]
+       (when-let [tag (get-tag form)]
+         (swap! other-tags conj (string/lower-case tag)))
+       form)
+     (concat title body))
+    (let [all-tags (set/union tags @other-tags)]
+      (cond-> heading
+        (seq tags)
+        (assoc :tags (->tags tags))
+        (seq all-tags)
+        (assoc :all-tags (->tags all-tags))))))
+
 (defn extract-headings
   [blocks last-pos]
   (loop [headings []
@@ -138,10 +160,10 @@
                                    :body (vec (reverse heading-body))
                                    :timestamps timestamps
                                    :properties properties)
-                            (assoc-in [:meta :end-pos] last-pos)
-                            (update :tags ->tags))
+                            (assoc-in [:meta :end-pos] last-pos))
                 heading (with-refs heading)
-                last-pos' (get-in heading [:meta :pos])]
+                last-pos' (get-in heading [:meta :pos])
+                heading (collect-heading-tags heading)]
             (recur (conj headings heading) [] (rest blocks) {} {} last-pos'))
 
           :else
@@ -209,7 +231,8 @@
                                                   page {:page/name page-name}]
                                               (swap! ref-pages-atom conj page)
                                               page))
-                                          ref-pages)}))]
+                                          ref-pages)}))
+                             heading (collect-heading-tags heading)]
                          (-> heading
                              (assoc-in [:heading/meta :pos] (+ (:pos meta) start-pos))
                              (assoc-in [:heading/meta :end-pos] (+ (:end-pos meta) start-pos)))))

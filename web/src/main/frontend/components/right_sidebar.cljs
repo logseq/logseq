@@ -108,12 +108,14 @@
      [:div#theme-selector.flex.flex-row.justify-between.sidebar-item {:style {:padding-top 12
                                                                               :margin-bottom 12}}
       [:div.flex.flex-row
-       [:div.mr-1.font-bold.text-sm "Page Graph"]
+       [:div.mr-1.text-sm {:style {:font-weight 500}}
+        "Page Graph"]
        [:div.px-1
         (ui/toggle show-graph? (fn []
                                  (swap! *show-graph? not)))]]
       [:div.flex.flex-row {:key "right-sidebar-settings"}
-       [:div.mr-1.font-bold.text-sm "Dark theme"]
+       [:div.mr-1.text-sm {:style {:font-weight 500}}
+        "Dark theme"]
        [:div.px-1
         (ui/toggle dark? (fn []
                            (state/set-theme! (if dark? "white" "dark"))))]]]
@@ -126,11 +128,13 @@
        (graph dark?))
      (when (and repo (seq starred))
        [:div.sidebar-item.flex-col.flex-1.content {:key "starred-pages"}
-        [:div.flex.flex-row
-         [:div.ml-2.font-bold "Starred pages"]]
+        [:div.flex.flex-row.items-center
+         (svg/star-outline "stroke-current h-4 w-4")
+         [:div.ml-2 {:style {:font-weight 500}}
+          "Starred"]]
         (for [page starred]
           (let [encoded-page (util/url-encode page)]
-            [:a.mt-1.flex.items-center.pl-2.py-2.text-base.leading-6
+            [:a.flex.items-center.pl-1.py-1.text-sm
              {:key encoded-page
               :href (str "/page/" encoded-page)}
              (util/capitalize-all page)]))])]))

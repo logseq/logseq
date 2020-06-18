@@ -211,6 +211,9 @@
     (->elem :sup (map-inline config l))
     ["Subscript" l]
     (->elem :sub (map-inline config l))
+    ["Tag" s]
+    [:a.tag.mr-1 {:href (str "/tag/" s)}
+     (str "#" s)]
     ["Emphasis" [[kind] data] ]
     (let [elem (case kind
                  "Bold" :b
@@ -668,7 +671,8 @@
     "DONE"
     (ui/checkbox {:checked true
                   :class (str class " checked")
-                  :style {:margin-top -5}
+                  :style {:margin-top -3
+                          :margin-right 6}
                   :on-change (fn [_e]
                                ;; FIXME: Log timestamp
                                (handler/uncheck heading))})
@@ -693,9 +697,9 @@
                 :span
                 {:class "heading-tags"}
                 (mapv (fn [{:keys [db/id tag/name]}]
-                        [:span.tag {:key (str "tag-" id)}
-                         [:span {:class name}
-                          name]])
+                        [:a.tag.mx-1 {:key (str "tag-" id)
+                                      :href (str "/tag/" name)}
+                         (str "#" name)])
                       tags)))
         heading-part (when level
                        (let [element (if (<= level 6)
@@ -871,9 +875,6 @@
             attr (if language
                    {:data-lang language})
             code (join-lines lines)]
-        (prn {:language language
-              :options options
-              :code code})
         (if (and (= language "clojure") (contains? (set options) ":results"))
           [:div
            [:pre.pre-wrap-white-space.code

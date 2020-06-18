@@ -13,23 +13,27 @@
             [frontend.db :as db]))
 
 (rum/defc references < rum/reactive
-  [page-name]
-  (when page-name
-    (let [heading? (util/uuid-string? page-name)
-          heading-id (and heading? (uuid page-name))
-          page-name (string/lower-case page-name)
-          encoded-page-name (util/url-encode page-name)
-          ref-headings (if heading-id
+  [page-or-tag-name tag?]
+  (when page-or-tag-name
+    (let [heading? (util/uuid-string? page-or-tag-name)
+          heading-id (and heading? (uuid page-or-tag-name))
+          page-or-tag-name (string/lower-case page-or-tag-name)
+          encoded-page-or-tag-name (util/url-encode page-or-tag-name)
+          ref-headings (cond
+                         tag?
+                         (db/get-tag-referenced-headings page-or-tag-name)
+                         heading-id
                          (db/get-heading-referenced-headings heading-id)
-                         (db/get-page-referenced-headings page-name))
-          ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-name
+                         :else
+                         (db/get-page-referenced-headings page-or-tag-name))
+          ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-or-tag-name
                                                     :start-level 2
                                                     :ref? true
                                                     :group-by-page? true})]
-      [:div.page-references
+      [:div.references
        (let [n-ref (count ref-headings)]
          (if (> n-ref 0)
-           [:h2.font-bold.mt-6 (let []
+           [:h2.font-medium.mt-6 (let []
                                  (str n-ref " Linked References"))]))
-       (content/content encoded-page-name
+       (content/content encoded-page-or-tag-name
                         {:hiccup ref-hiccup})])))

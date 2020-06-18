@@ -24,7 +24,6 @@
              (when today?
                (let [raw-headings (db/get-page-headings page)
                      headings (db/with-dummy-heading raw-headings format nil true)]
-                 (prn {:headings (count raw-headings)})
                  (when (= 1 (count raw-headings))
                    (when-let [template (state/get-journal-template)]
                      (handler/insert-new-heading!
@@ -70,7 +69,7 @@
                  (hiccup/custom-query {:start-level 2} {:query-title title}
                                       query)])]))))
 
-     (reference/references title)]))
+     (reference/references title false)]))
 
 (rum/defc journals <
   [latest-journals]

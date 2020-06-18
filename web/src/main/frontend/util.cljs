@@ -442,10 +442,10 @@
   [& col]
   (let [col (remove nil? col)]
     (reduce (fn [acc s]
-             (if (or (= acc "") (= "\n" (last acc)))
-               (str acc s)
-               (str acc "\n"
-                    (.replace s #"^[\n]+" "")))) "" col)))
+              (if (or (= acc "") (= "\n" (last acc)))
+                (str acc s)
+                (str acc "\n"
+                     (.replace s #"^[\n]+" "")))) "" col)))
 
 ;; Add documentation
 (defn replace-first [pattern s new-value]
@@ -637,3 +637,14 @@
   (if (or (< i 0) (>= i (count c)))
     nil
     (nth c i)))
+
+(defn sort-by-value
+  [order m]
+  (into (sorted-map-by
+         (fn [k1 k2]
+           (let [v1 (get m k1)
+                 v2 (get m k2)]
+             (if (= order :desc)
+               (compare [v2 k2] [v1 k1])
+               (compare [v1 k1] [v2 k2])))))
+        m))

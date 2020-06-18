@@ -157,7 +157,11 @@
    :heading/priority {}
    :heading/level {}
    :heading/tags {:db/valueType   :db.type/ref
-                  :db/cardinality :db.cardinality/many}
+                  :db/cardinality :db.cardinality/many
+                  :db/isComponent true}
+   :heading/all-tags {:db/valueType   :db.type/ref
+                      :db/cardinality :db.cardinality/many
+                      :db/isComponent true}
    :heading/meta {}
    :heading/properties {}
 
@@ -220,6 +224,7 @@
   []
   (let [match (:route-match @state/state)
         route-name (get-in match [:data :name])
+        tag? (= route-name :tag)
         page (case route-name
                :page
                (get-in match [:path-params :name])
@@ -227,10 +232,22 @@
                :file
                (get-in match [:path-params :path])
 
+               :tag
+               (get-in match [:path-params :name])
+
                (date/journal-name))]
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
-        (:db/id (entity [:page/name page-name]))))))
+        (:db/id (entity (if tag?
+                          [:page/name page-name]
+                          [:tag/name page-name])))))))
+
+(defn get-current-tag
+  []
+  (let [match (:route-match @state/state)
+        route-name (get-in match [:data :name])]
+    (when (= route-name :tag)
+         (get-in match [:path-params :name]))))
 
 (defn pull
   ([eid]
@@ -266,6 +283,7 @@
       :heading/change
       (when (seq data)
         (let [headings data
+              current-tag (get-current-tag)
               current-page-id (get-current-page-id)
               {:heading/keys [page]} (first headings)
               handler-keys (when-let [page-id (:db/id page)]
@@ -275,6 +293,10 @@
                                  (fn [heading]
                                    [:headings (:heading/uuid heading)])
                                  headings)
+
+                               ;; affected tag
+                               (when current-tag
+                                 [[:tag/ref-headings current-tag]])
 
                                ;; affected page
                                [
@@ -423,8 +445,8 @@
         tx-data (->> (util/remove-nils tx-data)
                      (remove nil?))
         get-conn (fn [] (if files-db?
-                         (get-files-conn repo-url)
-                         (get-conn repo-url false)))]
+                          (get-files-conn repo-url)
+                          (get-conn repo-url false)))]
     (when (seq tx-data)
       (d/transact! (get-conn) (vec tx-data))
       (let [handler-keys (get-handler-keys handler-opts)]
@@ -459,12 +481,20 @@
 ;; queries
 
 (defn get-all-tags
-  [repo]
-  (distinct-result
-   (d/q '[:find ?tags
-          :where
-          [?h :heading/tags ?tags]]
-     (get-conn repo))))
+  []
+  (let [repo (state/get-current-repo)]
+    (when (get-conn repo)
+      (some->>
+       (q repo [:tags] {}
+         '[:find ?name ?h
+           :where
+           [?t :tag/name ?name]
+           [?h :heading/all-tags ?t]])
+       react
+       (seq)
+       (map first)
+       frequencies
+       (util/sort-by-value :desc)))))
 
 (defn- remove-journal-files
   [files]
@@ -628,16 +658,20 @@
                      (util/remove-nils))]
     (transact! repo-url all-data)))
 
-(defn get-headings-by-tag
-  [repo tag]
-  (let [pred (fn [db tags]
-               (some #(= tag %) tags))]
-    (d/q '[:find (flatten (pull ?h [*]))
-           :in $ ?pred
-           :where
-           [?h :heading/tags ?tags]
-           [(?pred $ ?tags)]]
-      (get-conn repo) pred)))
+(defn get-tag-referenced-headings
+  [tag]
+  (when-let [repo (state/get-current-repo)]
+    (when (get-conn repo)
+      (let [tag-id (:db/id (entity [:tag/name tag]))]
+        (->> (q repo [:tag/ref-headings tag] {}
+               '[:find (pull ?h [*])
+                 :in $ ?tag-id
+                 :where
+                 [?h :heading/all-tags ?tag-id]]
+               tag-id)
+             react
+             seq-flatten
+             group-by-page)))))
 
 (defn get-heading-by-uuid
   [uuid]
@@ -1270,27 +1304,27 @@
                        (every? #(< (:heading/level item) (:heading/level %)) children)))]
     (loop [col (reverse col)
            children (list)]
-     (if (empty? col)
-       children
-       (let [[item & others] col
-             cur-level (:heading/level item)
-             bottom-level (:heading/level (first children))]
-         (cond
-           (empty? children)
-           (recur others (list item))
+      (if (empty? col)
+        children
+        (let [[item & others] col
+              cur-level (:heading/level item)
+              bottom-level (:heading/level (first children))]
+          (cond
+            (empty? children)
+            (recur others (list item))
 
-           (<= bottom-level cur-level)
-           (recur others (conj children item))
+            (<= bottom-level cur-level)
+            (recur others (conj children item))
 
-           (> bottom-level cur-level)      ; parent
-           (let [[children other-children] (split-with (fn [h]
-                                        (> (:heading/level h) cur-level))
-                                      children)
+            (> bottom-level cur-level)      ; parent
+            (let [[children other-children] (split-with (fn [h]
+                                                          (> (:heading/level h) cur-level))
+                                                        children)
 
-                 children (cons
-                           (assoc item :heading/children children)
-                           other-children)]
-             (recur others children))))))))
+                  children (cons
+                            (assoc item :heading/children children)
+                            other-children)]
+              (recur others children))))))))
 
 ;; recursively with children content
 (defn get-heading-content-rec
@@ -1311,8 +1345,8 @@
   [heading]
   (let [children (:heading/children heading)]
     (if (seq children)
-     (get-heading-end-pos-rec (last children))
-     (get-in heading [:heading/meta :end-pos]))))
+      (get-heading-end-pos-rec (last children))
+      (get-in heading [:heading/meta :end-pos]))))
 
 (comment
   (defn debug!

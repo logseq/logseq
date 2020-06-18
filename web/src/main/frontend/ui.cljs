@@ -229,14 +229,15 @@
                          item-render
                          class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-3 {:class class}
+    [:div.py-1.rounded-md.shadow-xs.bg-base-3.overflow-y-auto {:class class
+                                                                 :style {:max-height 450}}
      (if (seq matched)
        (for [[idx item] (medley/indexed matched)]
          (rum/with-key
            (menu-link
             {:style {:padding "6px"}
              :class (when (= @current-idx idx)
-                      "bg-base-2")
+                      "chosen")
              :tab-index 0
              :on-click (fn [e]
                          (util/stop e)
@@ -252,7 +253,7 @@
   [on? on-click]
   [:a {:on-click on-click}
    [:span.group.relative.inline-flex.items-center.justify-center.flex-shrink-0.h-5.w-10.cursor-pointer.focus:outline-none
-    {:aria-checked "false", :tabindex "0", :role "checkbox"}
+    {:aria-checked "false", :tab-index "0", :role "checkbox"}
     [:span.absolute.h-4.w-9.mx-auto.rounded-full.transition-colors.ease-in-out.duration-200
      {:aria-hidden "true"
       :class (if on? "bg-indigo-600" "bg-gray-200")}]

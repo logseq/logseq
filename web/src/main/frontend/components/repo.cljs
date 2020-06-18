@@ -17,7 +17,7 @@
         repos (util/distinct-by :url repos)]
     (if (seq repos)
       [:div#repos
-       [:h1.title "Your Repos: "]
+       [:h1.title "All Repos"]
 
        [:div.pl-1.content
         [:div.flex.my-4 {:key "add-button"}

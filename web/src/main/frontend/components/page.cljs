@@ -172,7 +172,7 @@
 
          ;; referenced headings
          (when-not sidebar?
-           (reference/references page-name))]))))
+           (reference/references page-name false))]))))
 
 (rum/defc all-pages < rum/reactive
   []
