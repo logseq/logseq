@@ -235,7 +235,8 @@
        (for [[idx item] (medley/indexed matched)]
          (rum/with-key
            (menu-link
-            {:style {:padding "6px"}
+            {:style {:padding-top 6
+                     :padding-bottom 6}
              :class (when (= @current-idx idx)
                       "chosen")
              :tab-index 0
