@@ -38,7 +38,7 @@
                                       (fn []
                                         (handler/redirect! {:to :home}))
                                       500))}
-             "Rebuild index"]
+             "Rebuild the db"]
             [:a.text-gray-400.ml-4 {:on-click (fn []
                                                 (handler/remove-repo! repo))}
              "Remove"]]])]]

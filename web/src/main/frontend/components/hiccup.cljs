@@ -816,23 +816,30 @@
 
 (declare ->hiccup)
 
-(rum/defc custom-query < rum/reactive
-  {:did-mount (fn [state]
+(rum/defcs custom-query < rum/reactive
+  {:will-mount (fn [state]
+                 (let [[config _options content] (:rum/args state)
+                       current-heading-uuid (:heading/uuid (:heading config))
+                       remove-headings (if current-heading-uuid [current-heading-uuid] nil)
+                       result (db/custom-query content remove-headings)]
+                   (assoc state :query-result result)))
+   :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
                 state)}
-  [config options content]
-  [:div.custom-query.my-4
-   [:code (or (:query-title options)
-              "Query result: ")]
-   (let [result (db/custom-query content)]
+  [state config options content]
+  ;; exclude the current one, otherwise it'll loop forever
+  (let [result (:query-result state)]
+    [:div.custom-query.my-2
+    [:code (or (:query-title options)
+               "Query result: ")]
      (if (seq result)
        (->hiccup result (assoc config
                                :custom-query? true
                                :group-by-page? true)
                  {:style {:margin-top "0.25rem"
                           :margin-left "0.25rem"}})
-       [:div "Empty"]))])
+       [:div "Empty"])]))
 
 (rum/defc admonition
   [config type options result]

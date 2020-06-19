@@ -113,7 +113,8 @@
                (svg/star-outline "stroke-current h-5 w-5"))]])
 
          (when (and file-path (not sidebar?) (not journal?))
-           [:div.text-sm.mb-2.ml-1 "File: "
+           [:div.text-sm.ml-1
+            "File: "
             [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
                                     :href (str "/file/" (util/url-encode file-path))}
              file-path]])
@@ -129,7 +130,7 @@
                    [:span.mr-1 (util/capitalize-all item)]])])))
 
          ;; content before headings, maybe directives or summary it can be anything
-         (when (and (not journal?) (not heading?))
+         (when (and (not journal?) (not heading?) (not sidebar?))
            (when-let [path (let [file-id (:db/id (:page/file page))]
                              (:file/path (db/entity repo file-id)))]
              (let [encoded-path (util/url-encode path)
@@ -142,7 +143,7 @@
                 (let [encoded-content (utf8/encode content)
                       heading-start-pos (or heading-start-pos (utf8/length encoded-content))
                       content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
-                  [:div.before-heading.ml-1.mt-4
+                  [:div.before-heading.ml-1.mt-5.mb-3
                    (content/content
                     encoded-path
                     {:content content-before-heading

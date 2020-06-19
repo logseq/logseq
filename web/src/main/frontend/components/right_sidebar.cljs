@@ -36,9 +36,11 @@
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
-      [page-name (page/page {:parameters {:path {:name page-name}}
-                             :sidebar? true
-                             :repo repo})])
+      [page-name
+       [:div.ml-2
+        (page/page {:parameters {:path {:name page-name}}
+                    :sidebar? true
+                    :repo repo})]])
 
     ["" [:span]]))
 

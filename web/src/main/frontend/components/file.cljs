@@ -60,10 +60,16 @@
                            (let [content (db/get-file path)]
                              (content/content encoded-path {:content content
                                                             :format format
-                                                            :on-hide (save-file-handler content)})))]
+                                                            :on-hide (save-file-handler content)})))
+        page (db/get-file-page path)]
     [:div.file
      [:h1.title
       path]
+     (when page
+       [:div.text-sm.mb-4.ml-1 "Page: "
+        [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
+                                :href (str "/page/" (util/url-encode page))}
+         (util/capitalize-all page)]])
      (cond
        ;; image type
        (and format (contains? (config/img-formats) format))

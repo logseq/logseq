@@ -28,7 +28,7 @@
                    (when-let [template (state/get-journal-template)]
                      (handler/insert-new-heading!
                       (first headings)
-                      (str (:heading/content (first headings)) "\n" template)
+                      template
                       false))))))
            state)}
   [[title format]]
