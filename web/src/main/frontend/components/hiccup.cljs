@@ -824,7 +824,12 @@
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (when-let [query (last (:rum/args state))]
+                     (state/remove-custom-query-component! query)
+                     (db/remove-custom-query! (state/get-current-repo) query))
+                   state)}
   [state config options content]
   (let [current-heading-uuid (:heading/uuid (:heading config))
         ;; exclude the current one, otherwise it'll loop forever

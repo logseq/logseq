@@ -348,6 +348,12 @@
                  (fn [m]
                    (assoc m query-string component))))
 
+(defn remove-custom-query-component!
+  [query-string]
+  (update-state! :ui/custom-query-components
+                 (fn [m]
+                   (dissoc m query-string))))
+
 (defn get-custom-query-components
   []
   (vals (get @state :ui/custom-query-components)))

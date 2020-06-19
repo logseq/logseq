@@ -206,6 +206,12 @@
                               :result result-atom})
   result-atom)
 
+;; TODO: rename :custom to :query/custom
+(defn remove-custom-query!
+  [repo query-string]
+  (prn "remove custom query: " [repo :custom query-string])
+  (swap! query-state dissoc [repo :custom query-string]))
+
 (defn set-new-result!
   [k new-result]
   (when-let [result-atom (get-in @query-state [k :result])]
