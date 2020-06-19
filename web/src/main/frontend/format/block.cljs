@@ -114,8 +114,10 @@
 (defn ->tags
   [tags]
   (mapv (fn [tag]
-          {:db/id tag
-           :tag/name (string/lower-case tag)})
+          (let [tag (-> (string/lower-case tag)
+                        (string/replace #"\s+" "-"))]
+            {:db/id tag
+             :tag/name tag}))
         tags))
 
 (defn collect-heading-tags

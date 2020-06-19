@@ -1252,54 +1252,85 @@
                                              [target-heading to-heading]
                                              [to-heading target-heading])
                                            [nil nil])
-            direction (if (= top-heading target-heading) :down :up)
+            target-child? (target-child? target-heading to-heading)
+            direction (cond
+                        (= top-heading target-heading)
+                        :down
+
+                        (and target-child? nested?)
+                        :up
+
+                        (and target-child? (not top?))
+                        :down
+
+                        :else
+                        :up)
             original-top-heading-start-pos (get-start-pos top-heading)
             [target-content heading-changes] (recompute-heading-content target-heading to-heading nested? same-repo? same-file?)]
         (cond
           same-file?
           (if (move-parent-to-child? target-heading to-heading)
             nil
-            (let [target-child? (target-child? target-heading to-heading)
-                  old-file-content (-> (db/get-file (:file/path (db/entity (:db/id (:heading/file target-heading)))))
-                                       (utf8/encode))
+            (let [old-file-content (db/get-file (:file/path (db/entity (:db/id (:heading/file target-heading)))))
+                  old-file-content (utf8/encode old-file-content)
                   subs (fn [start-pos end-pos] (utf8/substring old-file-content start-pos end-pos))
                   bottom-content (db/get-heading-content-rec bottom-heading)
-                  top-content (db/get-heading-content-rec top-heading)
-                  parent-content (when (and target-child? (not nested?)))
+                  top-content (remove-heading-child! bottom-heading top-heading)
                   top-area (subs 0 (get-start-pos top-heading))
-                  bottom-area (subs (db/get-heading-end-pos-rec bottom-heading) nil)
+                  ;; _ (prn {:direction direction
+                  ;;         :target-child? target-child?})
+                  bottom-area (subs
+                               (cond
+                                 (and nested? (= direction :down))
+                                 (get-end-pos bottom-heading)
+                                 target-child?
+                                 (db/get-heading-end-pos-rec top-heading)
+                                 :else
+                                 (db/get-heading-end-pos-rec bottom-heading))
+                                    nil)
                   between-area (if (= direction :down)
                                  (subs (db/get-heading-end-pos-rec target-heading) (get-start-pos to-heading))
                                  (subs (db/get-heading-end-pos-rec to-heading) (get-start-pos target-heading)))
+                  up-content (when (= direction :up)
+                               (cond
+                                 nested?
+                                 (util/join-newline (:heading/content top-heading)
+                                                    target-content
+                                                    (if target-child?
+                                                      (remove-heading-child! target-heading (:heading/children to-heading))
+                                                      (db/get-heading-content-rec (:heading/children top-heading))))
+                                 (and top? target-child?)
+                                 (util/join-newline target-content (remove-heading-child! target-heading to-heading))
+
+                                 top?
+                                 (util/join-newline target-content top-content)
+
+                                 :else
+                                 (let [top-content (if target-child?
+                                                     (remove-heading-child! target-heading to-heading)
+                                                     top-content)]
+                                   (util/join-newline top-content target-content))))
+                  down-content (when (= direction :down)
+                                 (cond
+                                   nested?
+                                   (util/join-newline (:heading/content bottom-heading)
+                                                      target-content)
+                                   target-child?
+                                   (util/join-newline top-content target-content)
+
+                                   :else
+                                   (util/join-newline bottom-content target-content)))
+                  ;; _ (prn {:top-area top-area
+                  ;;         ;; :top-content top-content
+                  ;;         :up-content up-content
+                  ;;         :between-area between-area
+                  ;;         :down-content down-content
+                  ;;         :bottom-area bottom-area})
                   new-file-content (util/join-newline
                                     top-area
-
-                                    (when (= direction :up)
-                                      (cond
-                                        nested?
-                                        (util/join-newline (:heading/content top-heading)
-                                                           target-content
-                                                           (if target-child?
-                                                             (remove-heading-child! target-heading (:heading/children to-heading))
-                                                             (db/get-heading-content-rec (:heading/children top-heading))))
-                                        top?
-                                        (util/join-newline target-content top-content)
-
-                                        :else
-                                        (let [top-content (if target-child?
-                                                            (remove-heading-child! target-heading to-heading)
-                                                            top-content)]
-                                          (util/join-newline top-content target-content))))
-
+                                    up-content
                                     between-area
-
-                                    (when (= direction :down)
-                                      (if nested?
-                                        (util/join-newline (:heading/content bottom-heading)
-                                                           target-content
-                                                           (db/get-heading-content-rec (:heading/children bottom-content)))
-                                        (util/join-newline bottom-content target-content)))
-
+                                    down-content
                                     bottom-area)
                   after-headings (cond
                                    top?
@@ -1349,7 +1380,12 @@
                  modified-time)
                 {:key :heading/change
                  :data heading-changes}
-                [[path new-file-content]]))))
+                [[path new-file-content]]))
+              ;; (alter-file to-heading-repo
+              ;;             path
+              ;;             new-file-content
+              ;;             {:re-render-root? true})
+              ))
 
           ;; same repo but different files
           same-repo?
@@ -1741,7 +1777,7 @@
 (defn undo!
   []
   (let [route (get-in (:route-match @state/state) [:data :name])]
-    (if (and (contains? #{:home :page} route)
+    (if (and (contains? #{:home :page :file :tag} route)
              (not (state/get-edit-input-id))
              (state/get-current-repo))
       (let [repo (state/get-current-repo)

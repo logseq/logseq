@@ -121,14 +121,13 @@
    :git/error {}
 
    ;; file
-   :file/path       {:db/unique :db.unique/identity
-                     :index true}
+   :file/path       {:db/unique :db.unique/identity}
    :file/last-modified-at {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
-   :page/name       {:db/unique      :db.unique/identity
-                     :index true}
+   :page/id         {:db/unique      :db.unique/identity}
+   :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
    :page/alias      {:db/valueType   :db.type/ref
@@ -172,8 +171,7 @@
    ;;                    :db/cardinality :db.cardinality/many}
 
    ;; tag
-   :tag/name       {:db/unique :db.unique/identity
-                    :index true}})
+   :tag/name       {:db/unique :db.unique/identity}})
 
 ;; transit serialization
 

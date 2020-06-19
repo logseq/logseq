@@ -31,14 +31,14 @@
                 :href url}
             (db/get-repo-path url)]
            [:div.controls
-            [:a.control {:title "Clone again and rebuild the db"
+            [:a.control {:title "Clone again and re-index the db"
                          :on-click (fn []
                                      (handler/rebuild-index! repo)
                                      (js/setTimeout
                                       (fn []
                                         (handler/redirect! {:to :home}))
                                       500))}
-             "Rebuild the db"]
+             "Re-index"]
             [:a.text-gray-400.ml-4 {:on-click (fn []
                                                 (handler/remove-repo! repo))}
              "Remove"]]])]]

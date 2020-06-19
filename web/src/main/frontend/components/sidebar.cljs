@@ -39,7 +39,7 @@
         last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
     (ui/dropdown
      (fn [{:keys [toggle-fn]}]
-       [:div.cursor.w-2.h-2.sync-status.mr-2.mt-1
+       [:div.cursor.w-2.h-2.sync-status.mr-2
         {:class (if synced? "bg-green-600" "bg-orange-400")
          :style {:border-radius "50%"}
          :on-mouse-over toggle-fn}])

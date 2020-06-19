@@ -648,3 +648,11 @@
                (compare [v2 k2] [v1 k1])
                (compare [v1 k1] [v2 k2])))))
         m))
+
+(defn unique-id
+  []
+  (str
+   (-> (.toString (js/Math.random) 36)
+       (.substr 2 6))
+   (-> (.toString (js/Math.random) 36)
+       (.substr 2 3))))
