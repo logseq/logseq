@@ -819,20 +819,21 @@
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
                  (let [[config _options content] (:rum/args state)
-                       current-heading-uuid (:heading/uuid (:heading config))
-                       remove-headings (if current-heading-uuid [current-heading-uuid] nil)
-                       result (db/custom-query content remove-headings)]
-                   (assoc state :query-result result)))
+                       query-atom (db/custom-query content)]
+                   (assoc state :query-atom query-atom)))
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
                 state)}
   [state config options content]
-  ;; exclude the current one, otherwise it'll loop forever
-  (let [result (:query-result state)]
+  (let [current-heading-uuid (:heading/uuid (:heading config))
+        ;; exclude the current one, otherwise it'll loop forever
+        remove-headings (if current-heading-uuid [current-heading-uuid] nil)
+        query-result (rum/react (:query-atom state))
+        result (db/custom-query-result-transform query-result remove-headings)]
     [:div.custom-query.my-2
-    [:code (or (:query-title options)
-               "Query result: ")]
+     [:code (or (:query-title options)
+                "Query result: ")]
      (if (seq result)
        (->hiccup result (assoc config
                                :custom-query? true

@@ -318,20 +318,19 @@
                               (if (= k :page/refed-headings)
                                 [:page/ref-pages page-id]))
                             handler-keys)
-              ;; custom-queries (some->>
-              ;;                 (filter (fn [v]
-              ;;                           (and (= (first v) (state/get-current-repo))
-              ;;                                (= (second v) :custom)))
-              ;;                         (keys @query-state))
-              ;;                 (map (fn [v]
-              ;;                        (vec (drop 1 v)))))
+              custom-queries (some->>
+                              (filter (fn [v]
+                                        (and (= (first v) (state/get-current-repo))
+                                             (= (second v) :custom)))
+                                      (keys @query-state))
+                              (map (fn [v]
+                                     (vec (drop 1 v)))))
               ]
           (->>
            (util/concat-without-nil
             handler-keys
             refed-pages
-            ;; custom-queries
-            )
+            custom-queries)
            distinct)))
       [[key]])))
 
@@ -409,35 +408,36 @@
     headings))
 
 (defn custom-query
-  ([query-string]
-   (custom-query query-string nil))
-  ([query-string remove-headings]
-   (try
-     (let [query (reader/read-string query-string)
-           [query inputs] (if (vector? (first query))
-                            [`~(first query) (rest query)]
-                            [`~query nil])
-           inputs (map resolve-input inputs)
-           repo (state/get-current-repo)
-           k [:custom query-string]
-           result (-> (apply q repo k {} query inputs)
-                      react
-                      seq-flatten)
-           heading? (:heading/uuid (first result))]
-       (if heading?
-         (let [result (if (seq remove-headings)
-                        (let [remove-headings (set remove-headings)]
-                          (remove (fn [h]
-                                     (contains? remove-headings (:heading/uuid h)))
-                                  result))
-                        result)]
-           (some->> result
-                   (with-repo repo)
-                   (group-by-page)))
-         result))
-     (catch js/Error e
-       (println "Query parsing failed: ")
-       (js/console.dir e)))))
+  [query-string]
+  (try
+    (let [query (reader/read-string query-string)
+          [query inputs] (if (vector? (first query))
+                           [`~(first query) (rest query)]
+                           [`~query nil])
+          inputs (map resolve-input inputs)
+          repo (state/get-current-repo)
+          k [:custom query-string]]
+      (apply q repo k {} query inputs))
+    (catch js/Error e
+      (println "Query parsing failed: ")
+      (js/console.dir e))))
+
+(defn custom-query-result-transform
+  [query-result remove-headings]
+  (let [repo (state/get-current-repo)
+        result (seq-flatten query-result)
+        heading? (:heading/uuid (first result))]
+    (if heading?
+      (let [result (if (seq remove-headings)
+                     (let [remove-headings (set remove-headings)]
+                       (remove (fn [h]
+                                 (contains? remove-headings (:heading/uuid h)))
+                               result))
+                     result)]
+        (some->> result
+                 (with-repo repo)
+                 (group-by-page)))
+      result)))
 
 (defn refresh-query-result!
   [repo query inputs]

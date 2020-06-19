@@ -130,13 +130,13 @@
        (graph dark?))
      (when (and repo (seq starred))
        [:div.sidebar-item.flex-col.flex-1.content {:key "starred-pages"}
-        [:div.flex.flex-row.items-center
+        [:div.flex.flex-row.items-center.mb-2
          (svg/star-outline "stroke-current h-4 w-4")
          [:div.ml-2 {:style {:font-weight 500}}
           "Starred"]]
         (for [page starred]
           (let [encoded-page (util/url-encode page)]
-            [:a.flex.items-center.pl-1.py-1.text-sm
+            [:a.flex.items-center.pl-1.pb-2.text-sm
              {:key encoded-page
               :href (str "/page/" encoded-page)}
              (util/capitalize-all page)]))])]))
