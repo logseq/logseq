@@ -15,22 +15,25 @@
             [goog.object :as gobj]
             [clojure.string :as string]))
 
+(defn- journal-include-template!
+  [state]
+  (let [[[title format]] (:rum/args state)
+        page (string/lower-case title)
+        today? (= page (string/lower-case (date/journal-name)))]
+    ;; no contents yet
+    (when today?
+      (let [raw-headings (db/get-page-headings page)
+            headings (db/with-dummy-heading raw-headings format nil true)]
+        (when (= 1 (count raw-headings))
+          (when-let [template (state/get-journal-template)]
+            (handler/insert-new-heading!
+             (first headings)
+             template
+             false))))))
+  state)
 (rum/defc journal-cp < rum/reactive
-  {:init (fn [state]
-           (let [[[title format]] (:rum/args state)
-                 page (string/lower-case title)
-                 today? (= page (string/lower-case (date/journal-name)))]
-             ;; no contents yet
-             (when today?
-               (let [raw-headings (db/get-page-headings page)
-                     headings (db/with-dummy-heading raw-headings format nil true)]
-                 (when (= 1 (count raw-headings))
-                   (when-let [template (state/get-journal-template)]
-                     (handler/insert-new-heading!
-                      (first headings)
-                      template
-                      false))))))
-           state)}
+  {:init journal-include-template!
+   :did-update journal-include-template!}
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
