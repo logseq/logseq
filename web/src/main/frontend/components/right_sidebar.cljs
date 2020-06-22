@@ -46,11 +46,15 @@
 
     :page-presentation
     (let [page-name (get-in block-data [:page :page/name])
+          journal? (:journal? block-data)
           headings (db/get-page-headings repo page-name)
+          headings (if journal?
+                     (rest headings)
+                     headings)
           sections (hiccup/build-slide-sections headings {:id "bingo"
-                                                    :start-level 2
-                                                    :slide? true
-                                                    :sidebar? true})]
+                                                          :start-level 2
+                                                          :slide? true
+                                                          :sidebar? true})]
       [[:a {:href (str "/page/" (util/url-encode page-name))}
         (util/capitalize-all page-name)]
        [:div.ml-2.slide.mt-2
@@ -111,6 +115,29 @@
   [:div.sidebar-item.flex-col.flex-1
    [:div#page-graph]])
 
+(rum/defcs starred-cp <
+  (rum/local true ::show?)
+  [state repo starred]
+  (let [show? (get state ::show?)]
+    (when @show?
+      (when (and repo (seq starred))
+        [:div.sidebar-item.flex-col.content {:key "starred-pages"}
+         [:div.flex.flex-row.justify-between
+          [:div.flex.flex-row.items-center.mb-2
+           (svg/star-outline "stroke-current h-4 w-4")
+           [:div.ml-2 {:style {:font-weight 500}}
+            "Starred"]]
+          [:a.close.hover:text-gray-900.text-gray-500.flex.items-center
+           {:on-click (fn [] (reset! show? false))}
+           svg/close]]
+         [:div.flex.flex-row.justify-start
+          (for [page starred]
+            (let [encoded-page (util/url-encode page)]
+              [:a.flex.items-center.pb-2.px-2.text-sm
+               {:key encoded-page
+                :href (str "/page/" encoded-page)}
+               (util/capitalize-all page)]))]]))))
+
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub :sidebar/blocks)
@@ -121,36 +148,29 @@
         dark? (= "dark" theme)
         show-graph? (rum/react *show-graph?)]
     [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto
-     [:div#theme-selector.flex.flex-row.justify-between.sidebar-item {:style {:padding-top 12
-                                                                              :margin-bottom 12}}
+     [:div#theme-selector.ml-3.mb-2
       [:div.flex.flex-row
-       [:div.mr-1.text-sm {:style {:font-weight 500}}
-        "Page Graph"]
-       [:div.px-1
-        (ui/toggle show-graph? (fn []
-                                 (swap! *show-graph? not)))]]
-      [:div.flex.flex-row {:key "right-sidebar-settings"}
-       [:div.mr-1.text-sm {:style {:font-weight 500}}
-        "Dark theme"]
-       [:div.px-1
-        (ui/toggle dark? (fn []
-                           (state/set-theme! (if dark? "white" "dark"))))]]]
+       [:div.flex.flex-row {:key "right-sidebar-settings"}
+        [:div.mr-1.text-sm
+         (let [theme (if dark? "white" "dark")]
+           [:a {:title (str "Switch to "
+                            theme
+                            " theme")
+                :on-click (fn []
+                            (state/set-theme! theme))}
+            (str (string/capitalize theme) " theme")])]]
 
+       [:div.flex.flex-row.ml-4
+        [:div.mr-1.text-sm
+         [:a {:on-click (fn []
+                          (swap! *show-graph? not))}
+          (if @*show-graph?
+            "Close page graph"
+            "Open page graph")]]]]]
      (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item repo idx db-id block-type block-data)
          (str "sidebar-block-" idx)))
      (when show-graph?
        (graph dark?))
-     (when (and repo (seq starred))
-       [:div.sidebar-item.flex-col.flex-1.content {:key "starred-pages"}
-        [:div.flex.flex-row.items-center.mb-2
-         (svg/star-outline "stroke-current h-4 w-4")
-         [:div.ml-2 {:style {:font-weight 500}}
-          "Starred"]]
-        (for [page starred]
-          (let [encoded-page (util/url-encode page)]
-            [:a.flex.items-center.pl-1.pb-2.text-sm
-             {:key encoded-page
-              :href (str "/page/" encoded-page)}
-             (util/capitalize-all page)]))])]))
+     (starred-cp repo starred)]))
