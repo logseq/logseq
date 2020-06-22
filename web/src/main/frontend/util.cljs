@@ -282,28 +282,29 @@
   (+ (.. js/document -body -scrollTop) (.. js/document -documentElement -scrollTop)))
 
 (defn element-top [elem top]
-  (if (.-offsetParent elem)
-    (let [client-top (or (.-clientTop elem) 0)
-          offset-top (.-offsetTop elem)]
-      (+ top client-top offset-top (element-top (.-offsetParent elem) top)))
-    top))
+  (when elem
+    (if (.-offsetParent elem)
+      (let [client-top (or (.-clientTop elem) 0)
+            offset-top (.-offsetTop elem)]
+        (+ top client-top offset-top (element-top (.-offsetParent elem) top)))
+      top)))
 
 (defn scroll-to-element
   [elem-id]
   (when-not (re-find #"^/\d+$" elem-id)
     (when elem-id
-      (let [elem (.getElementById js/document elem-id)
-            hop-count (/ speed moving-frequency)
-            doc-top (cur-doc-top)
-            gap (/ (- (element-top elem 0) doc-top) hop-count)
-            main (gdom/getElement "main-content")]
-        (doseq [i (range 1 (inc hop-count))]
-          (let [hop-top-pos (* gap i)
-                move-to (- hop-top-pos doc-top 68)
-                timeout (* moving-frequency i)]
-            (js/setTimeout (fn []
-                             (.scrollTo main 0 move-to))
-                           timeout)))))))
+      (when-let [elem (.getElementById js/document elem-id)]
+        (let [hop-count (/ speed moving-frequency)
+              doc-top (cur-doc-top)
+              gap (/ (- (element-top elem 0) doc-top) hop-count)
+              main (gdom/getElement "main-content")]
+          (doseq [i (range 1 (inc hop-count))]
+            (let [hop-top-pos (* gap i)
+                  move-to (- hop-top-pos doc-top 68)
+                  timeout (* moving-frequency i)]
+              (js/setTimeout (fn []
+                               (.scrollTo main 0 move-to))
+                             timeout))))))))
 
 (defn scroll-to-top
   []

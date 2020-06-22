@@ -536,7 +536,7 @@
   [name path-params]
   (case name
     :home
-    "Journals"
+    "Logseq"
     :repos
     "Repos"
     :repo-add
