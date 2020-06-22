@@ -77,9 +77,10 @@
                                   :end-pos nil})})
                             journal?)
             start-level (if journal? 2 1)
-            hiccup (hiccup/->hiccup page-headings {:id encoded-page-name
-                                                   :start-level start-level
-                                                   :sidebar? sidebar?})
+            hiccup-config {:id encoded-page-name
+                           :start-level start-level
+                           :sidebar? sidebar?}
+            hiccup (hiccup/->hiccup page-headings hiccup-config)
             starred? (contains? (set
                                  (some->> (state/sub [:config repo :starred])
                                           (map string/lower-case)))
@@ -89,28 +90,40 @@
                     (= page-name (string/lower-case (date/journal-name))))]
         [:div.flex-1.page
          (when-not sidebar?
-           [:div.flex.flex-row
-            [:a {:on-click (fn [e]
-                             (util/stop e)
-                             (when (gobj/get e "shiftKey")
-                               (when-let [page (db/pull repo '[*] [:page/name page-name])]
-                                 (state/sidebar-add-block!
-                                  repo
-                                  (:db/id page)
-                                  :page
-                                  {:page page}))
-                               (handler/show-right-sidebar)))}
-             [:h1.title
-              (util/capitalize-all page-name)]]
+           [:div.flex.flex-row.justify-between.items-center
+            [:div.flex.flex-row
+             [:a {:on-click (fn [e]
+                              (util/stop e)
+                              (when (gobj/get e "shiftKey")
+                                (when-let [page (db/pull repo '[*] [:page/name page-name])]
+                                  (state/sidebar-add-block!
+                                   repo
+                                   (:db/id page)
+                                   :page
+                                   {:page page}))
+                                (handler/show-right-sidebar)))}
+              [:h1.title
+               (util/capitalize-all page-name)]]
 
-            [:a.ml-1.text-gray-500.hover:text-gray-700
-             {:class (if starred? "text-gray-800")
-              :on-click (fn []
-                          ;; TODO: save to config file
-                          (handler/star-page! page-name starred?))}
-             (if starred?
-               (svg/star-solid "stroke-current")
-               (svg/star-outline "stroke-current h-5 w-5"))]])
+             [:a.ml-1.text-gray-500.hover:text-gray-700
+              {:class (if starred? "text-gray-800")
+               :on-click (fn []
+                           ;; TODO: save to config file
+                           (handler/star-page! page-name starred?))}
+              (if starred?
+                (svg/star-solid "stroke-current")
+                (svg/star-outline "stroke-current h-5 w-5"))]]
+
+            (when-not journal?
+              [:a {:title "Presentation mode(Reveal.js)"
+                   :on-click (fn []
+                               (state/sidebar-add-block!
+                                repo
+                                (:db/id page)
+                                :page-presentation
+                                {:page page})
+                               (handler/show-right-sidebar))}
+               svg/reveal-js])])
 
          (when (and file-path (not sidebar?) (not journal?))
            [:div.text-sm.ml-1

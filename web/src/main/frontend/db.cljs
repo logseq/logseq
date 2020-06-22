@@ -209,7 +209,6 @@
 ;; TODO: rename :custom to :query/custom
 (defn remove-custom-query!
   [repo query-string]
-  (prn "remove custom query: " [repo :custom query-string])
   (swap! query-state dissoc [repo :custom query-string]))
 
 (defn set-new-result!

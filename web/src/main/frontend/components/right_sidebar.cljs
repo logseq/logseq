@@ -11,7 +11,8 @@
             [frontend.date :as date]
             [medley.core :as medley]
             [frontend.graph.vis :as vis]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.extensions.slide :as slide]))
 
 (rum/defc heading-cp < rum/reactive
   [repo idx heading]
@@ -36,11 +37,24 @@
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
-      [page-name
+      [[:a {:href (str "/page/" (util/url-encode page-name))}
+        (util/capitalize-all page-name)]
        [:div.ml-2
         (page/page {:parameters {:path {:name page-name}}
                     :sidebar? true
                     :repo repo})]])
+
+    :page-presentation
+    (let [page-name (get-in block-data [:page :page/name])
+          headings (db/get-page-headings repo page-name)
+          sections (hiccup/build-slide-sections headings {:id "bingo"
+                                                    :start-level 2
+                                                    :slide? true
+                                                    :sidebar? true})]
+      [[:a {:href (str "/page/" (util/url-encode page-name))}
+        (util/capitalize-all page-name)]
+       [:div.ml-2.slide.mt-2
+        (slide/slide sections)]])
 
     ["" [:span]]))
 
@@ -57,8 +71,8 @@
            (if collapse?
              (svg/caret-right)
              (svg/caret-down))]
-          [:div.ml-1 {:style {:font-size "1.2rem"}}
-           (util/capitalize-all title)]]
+          [:div.ml-1.font-medium
+           title]]
          [:a.close.hover:text-gray-900.text-gray-500.flex.items-center
           {:on-click (fn []
                        (state/sidebar-remove-block! idx))}

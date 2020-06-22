@@ -83,6 +83,14 @@
      [[:editor/input template {:last-pattern angle-bracket
                                :backward-pos backward-pos}]])))
 
+(defn ->properties
+  []
+  (let [template (util/format
+                  ":PROPERTIES:\n:: \n:END:\n")
+        backward-pos 9]
+    [[:editor/input template {:last-pattern angle-bracket
+                              :backward-pos backward-pos}]]))
+
 ;; https://orgmode.org/manual/Structure-Templates.html
 (defn block-commands-map
   []
@@ -94,6 +102,7 @@
      ["hiccup" (->block "export" "hiccup")]
      ["html export" (->block "export" "html")]
      ["latex export" (->block "export" "latex")]
+     ["properties" (->properties)]
      ["example" (->block "example")]
      ["export" (->block "export")]
      ["verse" (->block "verse")]

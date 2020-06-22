@@ -98,7 +98,7 @@
 (defn safe-headings
   [headings]
   (mapv (fn [heading]
-          (let [id (or (when-let [custom-id (get-in heading [:properties :properties "CUSTOM_ID"])]
+          (let [id (or (when-let [custom-id (get-in heading [:properties "CUSTOM_ID"])]
                          (when (util/uuid-string? custom-id)
                            (uuid custom-id)))
                        ;; editing old headings
@@ -161,7 +161,7 @@
           (let [heading (-> (assoc (second block)
                                    :body (vec (reverse heading-body))
                                    :timestamps timestamps
-                                   :properties properties)
+                                   :properties (:properties properties))
                             (assoc-in [:meta :end-pos] last-pos))
                 heading (with-refs heading)
                 last-pos' (get-in heading [:meta :pos])
@@ -214,6 +214,8 @@
                        (let [heading (merge
                                       heading
                                       {:heading/meta meta
+                                       :heading/marker (get heading :heading/marker "removed")
+                                       :heading/properties (get heading :heading/properties [])
                                        :heading/file file
                                        :heading/format format
                                        :heading/page page
