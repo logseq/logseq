@@ -59,7 +59,7 @@
     (if (and sidebar? (empty? raw-page-headings))
       (do
         (state/sidebar-remove-block! (:sidebar/idx option))
-        [:div "Deleted"])
+        [:div "Empty"])
       (let [page-name (if heading?
                         (:page/name (db/entity repo (:db/id (:heading/page (first raw-page-headings)))))
                         page-name)

@@ -289,33 +289,32 @@
               current-tag (get-current-tag)
               current-page-id (get-current-page-id)
               {:heading/keys [page]} (first headings)
-              handler-keys (when-let [page-id (:db/id page)]
-                             (->>
-                              (util/concat-without-nil
-                               (map
-                                 (fn [heading]
-                                   [:headings (:heading/uuid heading)])
-                                 headings)
+              handler-keys (->>
+                            (util/concat-without-nil
+                             (mapcat
+                               (fn [heading]
+                                 (let [page-id (:db/id (:heading/page heading))]
+                                   [[:headings (:heading/uuid heading)]
+                                    [:page/headings page-id]
+                                    [:page/ref-pages page-id]]))
+                               headings)
 
-                               ;; affected tag
-                               (when current-tag
-                                 [[:tag/ref-headings current-tag]])
+                             ;; affected tag
+                             (when current-tag
+                               [[:tag/ref-headings current-tag]])
 
-                               ;; affected page
-                               [
-                                [:page/headings page-id]
-                                [:page/ref-pages page-id]
-                                [:page/ref-pages current-page-id]
+                             (when current-page-id
+                               [[:page/ref-pages current-page-id]
                                 [:page/refed-headings current-page-id]
-                                [:page/mentioned-pages current-page-id]]
+                                [:page/mentioned-pages current-page-id]])
 
-                               ;; refed-pages
-                               (apply concat
-                                 (for [{:heading/keys [ref-pages]} headings]
-                                   (map (fn [page]
-                                          [:page/refed-headings (:db/id page)])
-                                     ref-pages))))
-                              (distinct)))
+                             ;; refed-pages
+                             (apply concat
+                               (for [{:heading/keys [ref-pages]} headings]
+                                 (map (fn [page]
+                                        [:page/refed-headings (:db/id page)])
+                                   ref-pages))))
+                            (distinct))
               refed-pages (map
                             (fn [[k page-id]]
                               (if (= k :page/refed-headings)

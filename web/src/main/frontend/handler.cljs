@@ -1381,10 +1381,10 @@
                 {:key :heading/change
                  :data heading-changes}
                 [[path new-file-content]]))
-              ;; (alter-file to-heading-repo
-              ;;             path
-              ;;             new-file-content
-              ;;             {:re-render-root? true})
+              (alter-file to-heading-repo
+                          path
+                          new-file-content
+                          {:re-render-root? true})
               ))
 
           ;; same repo but different files
@@ -1450,7 +1450,7 @@
                to-after-headings
                modified-time)
               {:key :heading/change
-               :data (conj heading-changes to-heading)}
+               :data (conj heading-changes target-heading)}
               [[target-file-path new-target-file-content]
                [to-file-path new-to-file-content]])))
 
