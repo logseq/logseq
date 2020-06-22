@@ -276,7 +276,7 @@
          (sidebar-nav route-match close-fn)]]]
       [:div.flex.flex-col.w-0.flex-1.overflow-hidden
        [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
-        [:button.px-4.text-gray-400.focus:outline-none.focus:text-gray-400.md:hidden.menu
+        [:button.px-4.focus:outline-none.md:hidden.menu
          {:on-click open-fn}
          [:svg.h-6.w-6
           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}

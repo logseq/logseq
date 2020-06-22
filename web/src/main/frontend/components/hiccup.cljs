@@ -804,7 +804,7 @@
                         (mapv #(tr :td %) group)))
                      groups)]
     [:div.table-wrapper {:style {:max-width (min 700
-                                                 (gobj/get js/window "innerHeight"))}}
+                                                 (gobj/get js/window "innerWidth"))}}
      (->elem
       :table
       {:class "table-auto"
