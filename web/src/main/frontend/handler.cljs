@@ -401,8 +401,7 @@
              (fn [tx-report]
                (when (seq (:tx-data tx-report))
                  (when-let [db (:db-after tx-report)]
-                   (js/setTimeout #(db/persist repo db false) 0)))))
-  )
+                   (js/setTimeout #(db/persist repo db false) 0))))))
 
 (defn clone
   [repo-url]
@@ -1530,8 +1529,7 @@
                to-modified-time)
               {:key :heading/change
                :data [heading-changes]}
-              [[to-file-path new-to-file-content]]))
-            ))))))
+              [[to-file-path new-to-file-content]]))))))))
 
 (defn clone-and-pull
   [repo-url]

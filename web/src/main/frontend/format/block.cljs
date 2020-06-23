@@ -214,7 +214,7 @@
                        (let [heading (merge
                                       heading
                                       {:heading/meta meta
-                                       :heading/marker (get heading :heading/marker "removed")
+                                       :heading/marker (get heading :heading/marker "nil")
                                        :heading/properties (get heading :heading/properties [])
                                        :heading/file file
                                        :heading/format format

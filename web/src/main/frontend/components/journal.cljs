@@ -1,6 +1,6 @@
 (ns frontend.components.journal
   (:require [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [frontend.date :as date]
             [frontend.handler :as handler]
             [frontend.db :as db]
@@ -19,10 +19,11 @@
   [state]
   (let [[[title format]] (:rum/args state)
         page (string/lower-case title)
-        today? (= page (string/lower-case (date/journal-name)))]
+        today? (= page (string/lower-case (date/journal-name)))
+        repo (state/get-current-repo)]
     ;; no contents yet
     (when today?
-      (let [raw-headings (db/get-page-headings page)
+      (let [raw-headings (db/get-page-headings repo page)
             headings (db/with-dummy-heading raw-headings format nil true)]
         (when (= 1 (count raw-headings))
           (when-let [template (state/get-journal-template)]
@@ -37,7 +38,8 @@
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
-        raw-headings (db/get-page-headings page)
+        repo (state/get-current-repo)
+        raw-headings (db/get-page-headings repo page)
         headings (db/with-dummy-heading raw-headings format nil true)
         encoded-page-name (util/url-encode page)
         today? (= (string/lower-case title)
@@ -60,7 +62,8 @@
      (content/content encoded-page-name
                       {:hiccup (hiccup/->hiccup headings
                                                 {:id encoded-page-name
-                                                 :start-level 2})})
+                                                 :start-level 2}
+                                                {})})
 
      (when today?
        (when-let [repo (state/get-current-repo)]

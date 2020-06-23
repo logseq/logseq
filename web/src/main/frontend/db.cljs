@@ -20,7 +20,8 @@
             [cljs.reader :as reader]
             [cljs-time.core :as t]
             [clojure.walk :as walk]
-            [frontend.util :as util :refer-macros [profile]]))
+            [frontend.util :as util :refer-macros [profile]]
+            [goog.array :as garray]))
 
 ;; offline db
 (def store-name "dbs")
@@ -200,10 +201,11 @@
   (reset! query-state {}))
 
 (defn add-q!
-  [k query inputs result-atom]
+  [k query inputs result-atom transform-fn]
   (swap! query-state assoc k {:query query
                               :inputs inputs
-                              :result result-atom})
+                              :result result-atom
+                              :transform-fn transform-fn})
   result-atom)
 
 ;; TODO: rename :custom to :query/custom
@@ -292,12 +294,12 @@
               handler-keys (->>
                             (util/concat-without-nil
                              (mapcat
-                               (fn [heading]
-                                 (let [page-id (:db/id (:heading/page heading))]
-                                   [[:headings (:heading/uuid heading)]
-                                    [:page/headings page-id]
-                                    [:page/ref-pages page-id]]))
-                               headings)
+                              (fn [heading]
+                                (let [page-id (:db/id (:heading/page heading))]
+                                  [[:headings (:heading/uuid heading)]
+                                   [:page/headings page-id]
+                                   [:page/ref-pages page-id]]))
+                              headings)
 
                              ;; affected tag
                              (when current-tag
@@ -337,22 +339,32 @@
       [[key]])))
 
 (defn q
-  [repo k {:keys [use-cache? files-db?]
+  [repo k {:keys [use-cache? files-db? transform-fn]
            :or {use-cache? true
-                files-db? false}} query & inputs]
-  (let [k (vec (cons repo k))]
+                files-db? false
+                transform-fn identity}} query & inputs]
+  (let [kv? (and (vector? k) (= :kv (first k)))
+        k (vec (cons repo k))]
     (when-let [conn (if files-db?
                       (deref (get-files-conn repo))
                       (get-conn repo))]
-      (let [result (if (seq inputs)
-                     (apply d/q query conn inputs)
-                     (d/q query conn))
-            result-atom (or
-                         (:result (get @query-state k))
-                         (atom nil))]
-        ;; Don't notify watches now
-        (set! (.-state result-atom) result)
-        (add-q! k query inputs result-atom)))))
+      (let [result-atom (:result (get @query-state k))]
+        (if (and use-cache? result-atom)
+          result-atom
+          (let [result (cond
+                         kv?
+                         (d/entity conn (last k))
+
+                         (seq inputs)
+                         (apply d/q query conn inputs)
+
+                         :else
+                         (d/q query conn))
+                result (transform-fn result)
+                result-atom (or result-atom (atom nil))]
+            ;; Don't notify watches now
+            (set! (.-state result-atom) result)
+            (add-q! k query inputs result-atom transform-fn))) ))))
 
 (defn- distinct-result
   [query-result]
@@ -393,8 +405,7 @@
 
 (defn sort-by-pos
   [headings]
-  (sort-by (fn [heading]
-             (get-in heading [:heading/meta :pos]))
+  (sort-by (comp :pos :heading/meta)
            headings))
 
 (defn group-by-page
@@ -441,13 +452,6 @@
                  (group-by-page)))
       result)))
 
-(defn refresh-query-result!
-  [repo query inputs]
-  (let [k [repo query inputs]]
-    (when-let [conn (get-conn repo)]
-      (let [new-result (apply d/q query conn inputs)]
-        (set-new-result! k new-result)))))
-
 (defn transact!
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
@@ -457,6 +461,23 @@
      (when (seq tx-data)
        (when-let [conn (get-conn repo-url false)]
          (d/transact! conn (vec tx-data)))))))
+
+(defn get-key-value
+  ([key]
+   (get-key-value (state/get-current-repo) key))
+  ([repo-url key]
+   (when-let [db (get-conn repo-url)]
+     (some-> (d/entity db key)
+             key))))
+
+(defn sub-key-value
+  ([key]
+   (sub-key-value (state/get-current-repo) key))
+  ([repo-url key]
+   (when (get-conn repo-url)
+     (-> (q repo-url [:kv key] {} key key)
+         react
+         key))))
 
 (defn transact-react!
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
@@ -473,9 +494,13 @@
         (doseq [handler-key handler-keys]
           (let [handler-key (vec (cons repo-url handler-key))]
             (when-let [cache (get @query-state handler-key)]
-              (let [{:keys [query inputs]} cache]
+              (let [{:keys [query inputs transform-fn]} cache]
                 (when (and query inputs)
-                  (let [new-result (apply d/q query (d/db (get-conn)) inputs)]
+                  (let [new-result (->
+                                    (if (keyword? query)
+                                      (get-key-value repo-url query)
+                                      (apply d/q query (d/db (get-conn)) inputs))
+                                    transform-fn)]
                     (set-new-result! handler-key new-result)))))))))))
 
 (defn pull-heading
@@ -667,6 +692,23 @@
       react
       ffirst))))
 
+(defn get-file-no-sub
+  ([path]
+   (get-file (state/get-current-repo) path))
+  ([repo path]
+   (when (and repo path)
+     (->
+      (d/q
+        '[:find ?content
+          :in $ ?path
+          :where
+          [?file :file/path ?path]
+          [?file :file/content ?content]
+          ]
+        (d/db (get-files-conn repo))
+        path)
+      ffirst))))
+
 (defn reset-contents-and-headings!
   [repo-url contents headings-pages delete-files delete-headings]
   (let [files (doall
@@ -709,29 +751,6 @@
                      {:key [:kv key]})
     (remove-key repo-url key)))
 
-(defn get-key-value
-  ([key]
-   (get-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when-let [db (get-conn repo-url)]
-     (some-> (d/entity db key)
-             key))))
-
-(defn sub-key-value
-  ([key]
-   (sub-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when (get-conn repo-url)
-     (-> (q repo-url [:kv key] {}
-           '[:find ?value
-             :in $ ?key
-             :where
-             [?e :db/ident ?key]
-             [?e ?key ?value]]
-           key)
-         react
-         ffirst))))
-
 (defn get-page-format
   [page-name]
   (when-let [file (:page/file (entity [:page/name page-name]))]
@@ -743,26 +762,37 @@
   (let [aliases (get-page-alias repo-url page)]
     (set (conj aliases page))))
 
+(defn page-headings-transform
+  [repo-url result]
+  (let [result (seq-flatten result)
+        sorted (sort-by-pos result)]
+    (with-repo repo-url sorted)))
+
 (defn get-page-headings
-  ([page]
-   (get-page-headings (state/get-current-repo)
-                      page))
-  ([repo-url page]
-   (let [page-id (:db/id (entity repo-url [:page/name page]))
-         result (q repo-url [:page/headings page-id] {:use-cache? false}
-                  '[:find (pull ?heading [*])
-                    :in $ ?page-id
-                    :where
-                    [?heading :heading/page ?page-id]]
-                  page-id)]
-     (some->> result
-              react
-              seq-flatten
-              sort-by-pos
-              (with-repo repo-url)
-              ;; (map (fn [heading]
-              ;;        (dissoc heading :heading/meta)))
-              ))))
+  [repo-url page]
+  (let [page-id (:db/id (entity repo-url [:page/name page]))]
+    (some->
+     (q repo-url [:page/headings page-id]
+       {:use-cache? true
+        :transform-fn #(page-headings-transform repo-url %)}
+       '[:find (pull ?heading [*])
+         :in $ ?page-id
+         :where
+         [?heading :heading/page ?page-id]]
+       page-id)
+     react)))
+
+(defn heading-and-children-transform
+  [result repo-url heading-uuid level]
+  (some->> result
+           seq-flatten
+           sort-by-pos
+           (take-while (fn [h]
+                         (or
+                          (= (:heading/uuid h)
+                             heading-uuid)
+                          (> (:heading/level h) level))))
+           (with-repo repo-url)))
 
 (defn get-heading-and-children
   [repo heading-uuid]
@@ -772,24 +802,18 @@
         level (:heading/level heading)
         pred (fn [data meta]
                (>= (:pos meta) pos))]
-    (->> (q repo [:page/headings page] {:use-cache? false}
-           '[:find (pull ?heading [*])
-             :in $ ?page ?pred
-             :where
-             [?heading :heading/page ?page]
-             [?heading :heading/meta ?meta]
-             [(?pred $ ?meta)]]
-           page
-           pred)
-         react
-         seq-flatten
-         sort-by-pos
-         (take-while (fn [h]
-                       (or
-                        (= (:heading/uuid h)
-                           heading-uuid)
-                        (> (:heading/level h) level))))
-         (with-repo repo))))
+    (some-> (q repo [:page/headings page]
+              {:use-cache? false
+               :transform-fn #(heading-and-children-transform % repo heading-uuid level)}
+              '[:find (pull ?heading [*])
+                :in $ ?page ?pred
+                :where
+                [?heading :heading/page ?page]
+                [?heading :heading/meta ?meta]
+                [(?pred $ ?meta)]]
+              page
+              pred)
+            react)))
 
 (defn get-page-name
   [file ast]
@@ -992,7 +1016,7 @@
   ([]
    (get-journal (date/journal-name)))
   ([page-name]
-   [page-name (get-page-headings page-name)]))
+   [page-name (get-page-headings (state/get-current-repo) page-name)]))
 
 (defn get-journals-length
   []

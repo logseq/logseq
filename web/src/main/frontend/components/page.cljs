@@ -59,14 +59,14 @@
     (if (and sidebar? (empty? raw-page-headings))
       (do
         (state/sidebar-remove-block! (:sidebar/idx option))
-        [:div "Empty"])
+        [:div.text-sm "Empty"])
       (let [page-name (if heading?
                         (:page/name (db/entity repo (:db/id (:heading/page (first raw-page-headings)))))
                         page-name)
             page (db/entity repo [:page/name page-name])
             file (:page/file page)
             file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
-            content (db/get-file repo file-path)
+            content (db/get-file-no-sub repo file-path)
             page-headings (db/with-dummy-heading raw-page-headings format
                             (if (empty? raw-page-headings)
                               {:heading/page {:db/id (:db/id page)}
@@ -80,7 +80,7 @@
             hiccup-config {:id encoded-page-name
                            :start-level start-level
                            :sidebar? sidebar?}
-            hiccup (hiccup/->hiccup page-headings hiccup-config)
+            hiccup (hiccup/->hiccup page-headings hiccup-config {})
             starred? (contains? (set
                                  (some->> (state/sub [:config repo :starred])
                                           (map string/lower-case)))

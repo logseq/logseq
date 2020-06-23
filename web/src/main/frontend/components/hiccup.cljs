@@ -19,6 +19,8 @@
             [medley.core :as medley]
             [cljs.reader :as reader]
             [frontend.extensions.sci :as sci]
+            [frontend.util :as util :refer-macros [profile]]
+            [frontend.mixins :as mixins]
             ["/frontend/utils" :as utils]))
 
 ;; local state
@@ -995,8 +997,8 @@
                       (let [heading (dissoc heading :heading/meta)
                             level (:heading/level heading)
                             heading-cp (rum/with-key
-                                      (heading-container config heading)
-                                      (str "slide-" (:heading/uuid heading)))]
+                                         (heading-container config heading)
+                                         (str "slide-" (:heading/uuid heading)))]
                         (if (= first-heading-level level)
                           ;; new slide
                           (conj acc [[heading heading-cp]])
@@ -1012,18 +1014,17 @@
   [:div.headings-container {:style {:margin-left -24}}
    (build-headings headings config)])
 
-(defn ->hiccup
-  ([headings config]
-   (->hiccup headings config {}))
-  ([headings config option]
-   [:div.content option
-    (if (:group-by-page? config)
-      (for [[page headings] headings]
-        (let [page (db/entity (:db/id page))]
-          [:div.my-2 {:key (str "page-" (:db/id page))}
-           (page-cp page)
-           (headings-container headings config)]))
-      (headings-container headings config))]))
+(rum/defc ->hiccup < rum/static
+  ;; (mixins/perf-measure-mixin "hiccup")
+  [headings config option]
+  [:div.content option
+   (if (:group-by-page? config)
+     (for [[page headings] headings]
+       (let [page (db/entity (:db/id page))]
+         [:div.my-2 {:key (str "page-" (:db/id page))}
+          (page-cp page)
+          (headings-container headings config)]))
+     (headings-container headings config))])
 
 (comment
   ;; timestamps

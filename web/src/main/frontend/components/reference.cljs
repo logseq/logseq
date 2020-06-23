@@ -26,10 +26,12 @@
                          (db/get-heading-referenced-headings heading-id)
                          :else
                          (db/get-page-referenced-headings page-or-tag-name))
-          ref-hiccup (hiccup/->hiccup ref-headings {:id encoded-page-or-tag-name
-                                                    :start-level 2
-                                                    :ref? true
-                                                    :group-by-page? true})]
+          ref-hiccup (hiccup/->hiccup ref-headings
+                                      {:id encoded-page-or-tag-name
+                                       :start-level 2
+                                       :ref? true
+                                       :group-by-page? true}
+                                      {})]
       [:div.references
        (let [n-ref (count ref-headings)]
          (if (> n-ref 0)
