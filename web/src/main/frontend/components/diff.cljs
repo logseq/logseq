@@ -52,9 +52,8 @@
         edit? (util/react *edit?)]
     [:div.mb-3 {:style {:border "1px solid #ddd"
                         :border-radius 3}}
-     [:div.flex.flex-row.items-center.justify-between
-      {:style {:background-color "#fafbfc"
-               :padding "5px 10px"
+     [:div.flex.flex-row.items-center.justify-between.bg-base-2
+      {:style {:padding "5px 10px"
                :border-bottom "1px solid #e1e4e8"
                :border-top-left-radius 3
                :border-top-right-radius 3}}
