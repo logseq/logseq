@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.format :as format]
             [frontend.handler :as handler]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]

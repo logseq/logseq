@@ -28,7 +28,7 @@
 (rum/defc sync-status < rum/reactive
   []
   (let [repo (state/get-current-repo)
-        git-status (db/sub-key-value repo :git/status)
+        git-status (state/sub [:git/status repo])
         pulling? (= :pulling git-status)
         pushing? (= :pushing git-status)
         status (state/sub [:repo/sync-status repo])
@@ -239,8 +239,6 @@
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
-        status (db/sub-key-value :git/status)
-        pulling? (= :pulling status)
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))
         all-tags? (= :all-tags (get-in route-match [:data :name]))]

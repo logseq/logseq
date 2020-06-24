@@ -349,33 +349,34 @@
                       (deref (get-files-conn repo))
                       (get-conn repo))]
       (let [result-atom (:result (get @query-state k))]
-        (let [result (cond
-                       kv?
-                       (d/entity conn (last k))
+        (if (and use-cache? result-atom)
+          result-atom
+          (let [result (cond
+                         kv?
+                         (d/entity conn (last k))
 
-                       (seq inputs)
-                       (apply d/q query conn inputs)
+                         (seq inputs)
+                         (apply d/q query conn inputs)
 
-                       :else
-                       (d/q query conn))
-              result (transform-fn result)
-              result-atom (or result-atom (atom nil))]
-          ;; Don't notify watches now
-          (set! (.-state result-atom) result)
-          (add-q! k query inputs result-atom transform-fn))
-        ;; (if (and use-cache? result-atom)
-        ;;   result-atom
-        ;;   )
-        ))))
+                         :else
+                         (d/q query conn))
+                result (transform-fn result)
+                result-atom (or result-atom (atom nil))]
+            ;; Don't notify watches now
+            (set! (.-state result-atom) result)
+            (add-q! k query inputs result-atom transform-fn)))))))
+
+(defn seq-flatten [col]
+  (reduce
+   (fn [acc x]
+     (conj acc (first x)))
+   [] col))
 
 (defn- distinct-result
   [query-result]
   (-> query-result
-      seq
-      flatten
+      seq-flatten
       distinct))
-
-(def seq-flatten (comp flatten seq))
 
 (defn- date->int
   [date]
@@ -407,8 +408,9 @@
 
 (defn sort-by-pos
   [headings]
-  (sort-by (comp :pos :heading/meta)
-           headings))
+  (sort-by
+   #(get-in % [:heading/meta :pos])
+   headings))
 
 (defn group-by-page
   [headings]
@@ -501,9 +503,23 @@
                   (let [new-result (->
                                     (if (keyword? query)
                                       (get-key-value repo-url query)
-                                      (apply d/q query (d/db (get-conn)) inputs))
+                                      ;; TODO: Datascript query performance
+                                      ;; (if files-db?
+                                      ;;   (apply d/q query (d/db (get-conn)) inputs)
+                                      ;;   (profile
+                                      ;;    "Query"
+                                      ;;    (doall (apply d/q query (d/db (get-conn)) inputs))))
+
+                                      (apply d/q query (d/db (get-conn)) inputs)
+                                      )
                                     transform-fn)]
-                    (set-new-result! handler-key new-result)))))))))))
+                    (set-new-result! handler-key new-result)
+                    ;; (if files-db?
+                    ;;   (set-new-result! handler-key new-result)
+                    ;;   (profile
+                    ;;    (str "set new result " handler-key)
+                    ;;    (set-new-result! handler-key new-result)))
+                    ))))))))))
 
 (defn pull-heading
   [id]
@@ -1365,7 +1381,8 @@
          :edges edges}))))
 
 (defn headings->vec-tree [col]
-  (let [parent? (fn [item children]
+  (let [col (map (fn [h] (dissoc h :heading/meta)) col)
+        parent? (fn [item children]
                   (and (seq children)
                        (every? #(< (:heading/level item) (:heading/level %)) children)))]
     (loop [col (reverse col)

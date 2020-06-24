@@ -20,6 +20,7 @@
     :me nil
     :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
+    :git/status {}
     :format/loading {}
 
     :journals-length 1
@@ -375,3 +376,7 @@
    ;; TODO:
    (get-in @state [:me :settings :date-formatter])
    "MMM do, yyyy"))
+
+(defn set-git-status!
+  [repo-url value]
+  (swap! state assoc-in [:git/status repo-url] value))

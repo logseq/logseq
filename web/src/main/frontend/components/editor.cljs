@@ -717,7 +717,8 @@
   [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}
             :as option} id]
-  (let [edit-content (string/triml (state/sub [:editor/content id]))]
+  (let [edit-content (state/sub [:editor/content id])
+        edit-content (and edit-content (string/triml edit-content))]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}

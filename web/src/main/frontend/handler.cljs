@@ -129,7 +129,8 @@
 
 (defn- set-git-status!
   [repo-url value]
-  (db/set-key-value repo-url :git/status value))
+  (db/set-key-value repo-url :git/status value)
+  (state/set-git-status! repo-url value))
 
 (defn- set-git-last-pulled-at!
   [repo-url]
