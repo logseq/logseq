@@ -239,7 +239,7 @@
                                                  (count prefix))))))
 
 (def marker-pattern
-  #"(TODO|DOING|DONE|WAIT|CANCELED|STARTED|IN-PROGRESS)?\s?")
+  #"(NOW|LATER|TODO|DOING|DONE|WAIT|CANCELED|STARTED|IN-PROGRESS)?\s?")
 
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]

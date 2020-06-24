@@ -178,7 +178,7 @@
 ;; priority: A > B > C
 (defn sort-tasks
   [headings]
-  (let [markers ["DOING" "IN-PROGRESS" "TODO" "WAITING" "WAIT" "DONE" "CANCELED" "CANCELLED"]
+  (let [markers ["NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAITING" "WAIT" "DONE" "CANCELED" "CANCELLED"]
         markers (zipmap markers (reverse (range 1 (count markers))))
         priorities ["A" "B" "C" "D" "E" "F" "G"]
         priorities (zipmap priorities (reverse (range 1 (count priorities))))]
