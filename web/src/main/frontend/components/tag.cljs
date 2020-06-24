@@ -15,7 +15,7 @@
   (when-let [tag (get-tag state)]
     [:div.tag
      [:h1.title (str "#" tag)]
-     (reference/references tag true)]))
+     (reference/references tag true false)]))
 
 (defn render-graph
   [state]

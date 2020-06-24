@@ -61,10 +61,20 @@
                     page-name)
         page (db/entity repo [:page/name page-name])
         file (:page/file page)]
-    (if (and sidebar? file (empty? raw-page-headings))
+    (cond
+      (db/marker-page? page-name)
+      [:div
+       [:h1.title
+        (string/upper-case page-name)]
+       [:div.ml-2
+        (reference/references page-name false true)]]
+
+      (and sidebar? file (empty? raw-page-headings))
       (do
         (state/sidebar-remove-block! (:sidebar/idx option))
         [:div.text-sm "Empty"])
+
+      :else
       (let [file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
             content (db/get-file-no-sub repo file-path)
             page-headings (db/with-dummy-heading raw-page-headings format
@@ -185,7 +195,7 @@
                                         query)])])))
 
          ;; referenced headings
-         (reference/references page-name false)]))))
+         (reference/references page-name false false)]))))
 
 (rum/defc all-pages < rum/reactive
   []

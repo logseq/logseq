@@ -13,13 +13,15 @@
             [frontend.db :as db]))
 
 (rum/defc references < rum/reactive
-  [page-or-tag-name tag?]
+  [page-or-tag-name tag? marker?]
   (when page-or-tag-name
     (let [heading? (util/uuid-string? page-or-tag-name)
           heading-id (and heading? (uuid page-or-tag-name))
           page-or-tag-name (string/lower-case page-or-tag-name)
           encoded-page-or-tag-name (util/url-encode page-or-tag-name)
           ref-headings (cond
+                         marker?
+                         (db/get-marker-headings (state/get-current-repo) page-or-tag-name)
                          tag?
                          (db/get-tag-referenced-headings page-or-tag-name)
                          heading-id

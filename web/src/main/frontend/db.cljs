@@ -770,19 +770,45 @@
         sorted (sort-by-pos result)]
     (with-repo repo-url sorted)))
 
+(defn marker-page?
+  [page]
+  (contains?
+   #{"NOW" "LATER" "TODO" "DOING"
+     "DONE" "WAIT" "WAITING" "CANCELED" "STARTED" "IN-PROGRESS"}
+   (string/upper-case page)))
+
+(defn get-marker-headings
+  [repo-url marker]
+  (let [marker (string/upper-case marker)]
+    (some->>
+     (q repo-url [:marker/headings marker]
+       {:use-cache? true}
+       '[:find (pull ?h [*])
+         :in $ ?marker
+         :where
+         [?h :heading/marker ?m]
+         [(= ?marker ?m)]]
+       marker)
+     react
+     seq-flatten
+     sort-by-pos
+     (with-repo repo-url)
+     (group-by-page))))
+
 (defn get-page-headings
   [repo-url page]
-  (let [page-id (:db/id (entity repo-url [:page/name page]))]
-    (some->
-     (q repo-url [:page/headings page-id]
-       {:use-cache? true
-        :transform-fn #(page-headings-transform repo-url %)}
-       '[:find (pull ?heading [*])
-         :in $ ?page-id
-         :where
-         [?heading :heading/page ?page-id]]
-       page-id)
-     react)))
+  (let [page (string/lower-case page)]
+    (let [page-id (:db/id (entity repo-url [:page/name page]))]
+      (some->
+       (q repo-url [:page/headings page-id]
+         {:use-cache? true
+          :transform-fn #(page-headings-transform repo-url %)}
+         '[:find (pull ?heading [*])
+           :in $ ?page-id
+           :where
+           [?heading :heading/page ?page-id]]
+         page-id)
+       react))))
 
 (defn heading-and-children-transform
   [result repo-url heading-uuid level]
