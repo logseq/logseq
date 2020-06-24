@@ -856,7 +856,7 @@
                                :group-by-page? true)
                  {:style {:margin-top "0.25rem"
                           :margin-left "0.25rem"}})
-       [:div "Empty"])]))
+       [:div.text-sm "Empty"])]))
 
 (rum/defc admonition
   [config type options result]
