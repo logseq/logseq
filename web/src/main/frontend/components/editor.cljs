@@ -430,6 +430,7 @@
 (defn in-auto-complete?
   [input]
   (or (seq (get-matched-commands input))
+      (state/get-editor-show-input)
       (state/get-editor-show-page-search)
       (state/get-editor-show-block-search)
       (state/get-editor-show-date-picker)))
@@ -527,18 +528,7 @@
     (set-last-edit-heading! (:heading/uuid heading) value)
     (handler/save-heading-if-changed! heading new-value)))
 
-(defn- get-input
-  [state]
-  (when-let [input-id (last (:rum/args state))]
-    (gdom/getElement input-id)))
-
-(defn edit-heading?
-  [state]
-  (some? (:heading (nth (:rum/args state) 1))))
-
 (rum/defc box < rum/reactive
-  ;; TODO: Overwritten by user's configuration
-  (mixins/keyboard-mixin "alt+enter" insert-new-heading! edit-heading? get-input)
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [id format]} (get-state state)
@@ -558,6 +548,12 @@
        (mixins/on-key-down
         state
         {
+         ;; enter
+         13 (fn [state e]
+              (if (gobj/get e "shiftKey")
+                nil
+                (when-not (in-auto-complete? input)
+                  (insert-new-heading! state))))
          ;; up
          38 (fn [state e]
               (when-not (in-auto-complete? input)
@@ -721,7 +717,7 @@
   [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}
             :as option} id]
-  (let [edit-content (state/sub [:editor/content id])]
+  (let [edit-content (string/triml (state/sub [:editor/content id]))]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}

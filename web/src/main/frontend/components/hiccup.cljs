@@ -694,6 +694,7 @@
   [config {:heading/keys [uuid title tags marker level priority anchor meta format content idx]
            :as t}]
   (let [config (assoc config :heading t)
+        slide? (boolean (:slide? config))
         checkbox (heading-checkbox t (str "mr-1 cursor"))
         marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
                     [:span {:class (str "task-status " (string/lower-case marker))
@@ -723,7 +724,7 @@
                                     {:class (string/lower-case marker)}))
                                  (remove-nils
                                   (concat
-                                   [checkbox
+                                   [(when-not slide? checkbox)
                                     marker-cp
                                     priority]
                                    (map-inline config title)
