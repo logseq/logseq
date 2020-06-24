@@ -68,7 +68,17 @@
      (when page
        [:div.text-sm.mb-4.ml-1 "Page: "
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                :href (str "/page/" (util/url-encode page))}
+                                :href (str "/page/" (util/url-encode page))
+                                :on-click (fn [e]
+                                            (util/stop e)
+                                            (when (gobj/get e "shiftKey")
+                                              (when-let [page (db/entity [:page/name page])]
+                                                (state/sidebar-add-block!
+                                                 (state/get-current-repo)
+                                                 (:db/id page)
+                                                 :page
+                                                 {:page page}))
+                                              (handler/show-right-sidebar)))}
          (util/capitalize-all page)]])
      (cond
        ;; image type

@@ -414,6 +414,11 @@
     [(subs s 0 last-index)
      (subs s (+ last-index (count pattern)) (count s))]))
 
+(defn trim-safe
+  [s]
+  (when s
+    (string/trim s)))
+
 (defn trimr-without-newlines
   [s]
   (.replace s #"[ \t\r]+$" ""))

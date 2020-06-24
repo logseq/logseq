@@ -55,17 +55,17 @@
         heading? (util/uuid-string? page-name)
         heading-id (and heading? (uuid page-name))
         sidebar? (:sidebar? option)
-        raw-page-headings (get-headings repo page-name journal? heading?)]
-    (if (and sidebar? (empty? raw-page-headings))
+        raw-page-headings (get-headings repo page-name journal? heading?)
+        page-name (if heading?
+                    (:page/name (db/entity repo (:db/id (:heading/page (first raw-page-headings)))))
+                    page-name)
+        page (db/entity repo [:page/name page-name])
+        file (:page/file page)]
+    (if (and sidebar? file (empty? raw-page-headings))
       (do
         (state/sidebar-remove-block! (:sidebar/idx option))
         [:div.text-sm "Empty"])
-      (let [page-name (if heading?
-                        (:page/name (db/entity repo (:db/id (:heading/page (first raw-page-headings)))))
-                        page-name)
-            page (db/entity repo [:page/name page-name])
-            file (:page/file page)
-            file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
+      (let [file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
             content (db/get-file-no-sub repo file-path)
             page-headings (db/with-dummy-heading raw-page-headings format
                             (if (empty? raw-page-headings)
@@ -134,7 +134,7 @@
 
          (when (and repo (not journal?))
            (let [alias (some->> (db/get-page-alias repo page-name)
-                           (remove util/file-page?))]
+                                (remove util/file-page?))]
              (when (seq alias)
                [:div.alias.ml-1.mb-1.content
                 [:span.font-bold.mr-1 "Page aliases: "]
@@ -151,24 +151,24 @@
                                       (seq raw-page-headings)
                                       (get-in (first raw-page-headings) [:heading/meta :pos]))]
                (when (or
-                     (nil? heading-start-pos)
-                     (and heading-start-pos (not (zero? heading-start-pos))))
-                (let [encoded-content (utf8/encode content)
-                      heading-start-pos (or heading-start-pos (utf8/length encoded-content))
-                      content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
-                  [:div.before-heading.ml-1.mt-5.mb-3
-                   (content/content
-                    encoded-path
-                    {:content content-before-heading
-                     :format format
-                     :on-hide (fn [value]
-                                (let [new-content (str (string/trim value)
-                                                       "\n"
-                                                       (when heading-start-pos
-                                                         (utf8/substring encoded-content heading-start-pos)))]
-                                  (when (not= (string/trim new-content)
-                                              (string/trim content))
-                                    (handler/alter-file repo path new-content {:re-render-root? true}))))})])))))
+                      (nil? heading-start-pos)
+                      (and heading-start-pos (not (zero? heading-start-pos))))
+                 (let [encoded-content (utf8/encode content)
+                       heading-start-pos (or heading-start-pos (utf8/length encoded-content))
+                       content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
+                   [:div.before-heading.ml-1.mt-5.mb-3
+                    (content/content
+                     encoded-path
+                     {:content content-before-heading
+                      :format format
+                      :on-hide (fn [value]
+                                 (let [new-content (str (string/trim value)
+                                                        "\n"
+                                                        (when heading-start-pos
+                                                          (utf8/substring encoded-content heading-start-pos)))]
+                                   (when (not= (string/trim new-content)
+                                               (string/trim content))
+                                     (handler/alter-file repo path new-content {:re-render-root? true}))))})])))))
 
          ;; headings
          (content/content encoded-page-name
@@ -185,8 +185,7 @@
                                         query)])])))
 
          ;; referenced headings
-         (when-not sidebar?
-           (reference/references page-name false))]))))
+         (reference/references page-name false)]))))
 
 (rum/defc all-pages < rum/reactive
   []

@@ -295,7 +295,7 @@
                             (util/concat-without-nil
                              (mapcat
                               (fn [heading]
-                                (let [page-id (:db/id (:heading/page heading))]
+                                (when-let [page-id (:db/id (:heading/page heading))]
                                   [[:headings (:heading/uuid heading)]
                                    [:page/headings page-id]
                                    [:page/ref-pages page-id]]))
@@ -349,22 +349,24 @@
                       (deref (get-files-conn repo))
                       (get-conn repo))]
       (let [result-atom (:result (get @query-state k))]
-        (if (and use-cache? result-atom)
-          result-atom
-          (let [result (cond
-                         kv?
-                         (d/entity conn (last k))
+        (let [result (cond
+                       kv?
+                       (d/entity conn (last k))
 
-                         (seq inputs)
-                         (apply d/q query conn inputs)
+                       (seq inputs)
+                       (apply d/q query conn inputs)
 
-                         :else
-                         (d/q query conn))
-                result (transform-fn result)
-                result-atom (or result-atom (atom nil))]
-            ;; Don't notify watches now
-            (set! (.-state result-atom) result)
-            (add-q! k query inputs result-atom transform-fn))) ))))
+                       :else
+                       (d/q query conn))
+              result (transform-fn result)
+              result-atom (or result-atom (atom nil))]
+          ;; Don't notify watches now
+          (set! (.-state result-atom) result)
+          (add-q! k query inputs result-atom transform-fn))
+        ;; (if (and use-cache? result-atom)
+        ;;   result-atom
+        ;;   )
+        ))))
 
 (defn- distinct-result
   [query-result]

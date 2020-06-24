@@ -15,6 +15,7 @@
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [frontend.handler :as handler]
+            [frontend.handler.dnd :as dnd]
             [goog.object :as gobj]
             [medley.core :as medley]
             [cljs.reader :as reader]
@@ -163,19 +164,20 @@
 
 (rum/defc page-cp
   [page]
-  [:a.page-ref
-   {:href (str "/page/" (util/url-encode (:page/name page)))
-    :on-click (fn [e]
-                (util/stop e)
-                (when (gobj/get e "shiftKey")
-                  (when-let [page (db/entity [:page/name (:page/name page)])]
-                    (state/sidebar-add-block!
-                     (state/get-current-repo)
-                     (:db/id page)
-                     :page
-                     {:page page}))
-                  (handler/show-right-sidebar)))}
-   (util/capitalize-all (:page/name page))])
+  (let [page (string/lower-case page)]
+    [:a.page-ref
+     {:href (str "/page/" (util/url-encode page))
+      :on-click (fn [e]
+                  (util/stop e)
+                  (when (gobj/get e "shiftKey")
+                    (when-let [page (db/entity [:page/name page])]
+                      (state/sidebar-add-block!
+                       (state/get-current-repo)
+                       (:db/id page)
+                       :page
+                       {:page page}))
+                    (handler/show-right-sidebar)))}
+     (util/capitalize-all page)]))
 
 (defn- latex-environment-content
   [name option content]
@@ -280,7 +282,7 @@
           ;; page reference
           [:span.page-reference
            [:span.text-gray-500 "[["]
-           (page-cp {:page/name s})
+           (page-cp s)
            [:span.text-gray-500 "]]"]])
 
         :else
@@ -562,11 +564,11 @@
                     :on-drop (fn [event]
                                (when-not (dnd-same-heading? event)
                                  (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
-                                   (handler/move-heading @*dragging-heading
-                                                         heading
-                                                         from-dom-id
-                                                         @*move-to-top?
-                                                         false)))
+                                   (dnd/move-heading @*dragging-heading
+                                                     heading
+                                                     from-dom-id
+                                                     @*move-to-top?
+                                                     false)))
                                (reset! *dragging? false)
                                (reset! *dragging-heading nil)
                                (handler/unhighlight-heading!))
@@ -633,11 +635,11 @@
                                      (util/stop event)
                                      (when-not (dnd-same-heading? event)
                                        (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
-                                         (handler/move-heading @*dragging-heading
-                                                               heading
-                                                               from-dom-id
-                                                               false
-                                                               true)))
+                                         (dnd/move-heading @*dragging-heading
+                                                           heading
+                                                           from-dom-id
+                                                           false
+                                                           true)))
                                      (reset! *dragging? false)
                                      (reset! *dragging-heading nil)
                                      (handler/unhighlight-heading!))}]
@@ -1022,7 +1024,7 @@
      (for [[page headings] headings]
        (let [page (db/entity (:db/id page))]
          [:div.my-2 {:key (str "page-" (:db/id page))}
-          (page-cp page)
+          (page-cp (:page/name page))
           (headings-container headings config)]))
      (headings-container headings config))])
 
