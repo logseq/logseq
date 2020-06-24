@@ -671,7 +671,7 @@
 (rum/defc heading-checkbox
   [heading class]
   (case (:heading/marker heading)
-    (list "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING")
+    (list "NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING")
     (ui/checkbox {:class class
                   :style {:margin-top -3
                           :margin-right 6}

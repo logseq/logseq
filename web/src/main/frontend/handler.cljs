@@ -961,7 +961,7 @@
 
 (defn uncheck
   [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
-  (let [new-content (string/replace-first content "DONE" "TODO")]
+  (let [new-content (string/replace-first content "DONE" "NOW")]
     (save-heading-if-changed! heading new-content)))
 
 (defn delete-heading!

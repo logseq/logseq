@@ -34,9 +34,11 @@
   []
   (->>
    (concat
-    [["TODO" (->marker "TODO")]
-     ["DOING" (->marker "DOING")]
+    [["NOW" (->marker "NOW")]
+     ["LATER" (->marker "LATER")]
      ["DONE" (->marker "DONE")]
+     ["TODO" (->marker "TODO")]
+     ["DOING" (->marker "DOING")]
      ["WAIT" (->marker "WAIT")]
      ["WAITING" (->marker "WAITING")]
      ["IN-PROGRESS" (->marker "IN-PROGRESS")]
