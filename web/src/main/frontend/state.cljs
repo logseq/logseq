@@ -28,7 +28,7 @@
     :search/q ""
     :search/result nil
 
-    :ui/theme (or (storage/get :ui/theme) "white")
+    :ui/theme (or (storage/get :ui/theme) "black")
     :ui/toggle-state false
     :ui/collapsed-headings {}
     :ui/sidebar-collapsed-blocks {}
