@@ -97,19 +97,19 @@
 
 (defn safe-headings
   [headings]
-  (mapv (fn [heading]
-          (let [id (or (when-let [custom-id (get-in heading [:properties "CUSTOM_ID"])]
-                         (when (util/uuid-string? custom-id)
-                           (uuid custom-id)))
-                       ;; editing old headings
-                       (:heading/uuid heading)
-                       (d/squuid))
-                heading (util/remove-nils heading)
-                heading (assoc heading :heading/uuid id)]
-            (medley/map-keys
-             (fn [k] (keyword "heading" k))
-             heading)))
-        headings))
+  (map (fn [heading]
+         (let [id (or (when-let [custom-id (get-in heading [:properties "CUSTOM_ID"])]
+                        (when (util/uuid-string? custom-id)
+                          (uuid custom-id)))
+                      ;; editing old headings
+                      (:heading/uuid heading)
+                      (d/squuid))
+               heading (util/remove-nils heading)
+               heading (assoc heading :heading/uuid id)]
+           (medley/map-keys
+            (fn [k] (keyword "heading" k))
+            heading)))
+    headings))
 
 (defn ->tags
   [tags]
@@ -137,42 +137,64 @@
         (assoc :all-tags (->tags all-tags))))))
 
 (defn extract-headings
-  [blocks last-pos]
-  (loop [headings []
-         heading-body []
-         blocks (reverse blocks)
-         timestamps {}
-         properties {}
-         last-pos last-pos]
-    (if (seq blocks)
-      (let [block (first blocks)
-            level (:level (second block))]
-        (cond
-          (paragraph-timestamp-block? block)
-          (let [timestamp (extract-timestamp block)
-                timestamps' (conj timestamps timestamp)]
-            (recur headings heading-body (rest blocks) timestamps' properties last-pos))
+  [blocks last-pos encoded-content]
+  (let [headings
+        (loop [headings []
+               heading-body []
+               blocks (reverse blocks)
+               timestamps {}
+               properties {}
+               last-pos last-pos]
+          (if (seq blocks)
+            (let [block (first blocks)
+                  level (:level (second block))]
+              (cond
+                (paragraph-timestamp-block? block)
+                (let [timestamp (extract-timestamp block)
+                      timestamps' (conj timestamps timestamp)]
+                  (recur headings heading-body (rest blocks) timestamps' properties last-pos))
 
-          (properties-block? block)
-          (let [properties (extract-properties block)]
-            (recur headings heading-body (rest blocks) timestamps properties last-pos))
+                (properties-block? block)
+                (let [properties (extract-properties block)]
+                  (recur headings heading-body (rest blocks) timestamps properties last-pos))
 
-          (heading-block? block)
-          (let [heading (-> (assoc (second block)
-                                   :body (vec (reverse heading-body))
-                                   :timestamps timestamps
-                                   :properties (:properties properties))
-                            (assoc-in [:meta :end-pos] last-pos))
-                heading (with-refs heading)
-                last-pos' (get-in heading [:meta :pos])
-                heading (collect-heading-tags heading)]
-            (recur (conj headings heading) [] (rest blocks) {} {} last-pos'))
+                (heading-block? block)
 
-          :else
-          (let [heading-body' (conj heading-body block)]
-            (recur headings heading-body' (rest blocks) timestamps properties last-pos))))
-      (-> (reverse headings)
-          safe-headings))))
+                (let [heading (-> (assoc (second block)
+                                         :body (vec (reverse heading-body))
+                                         :timestamps timestamps
+                                         :properties (:properties properties))
+                                  (assoc-in [:meta :end-pos] last-pos))
+                      heading (with-refs heading)
+                      last-pos' (get-in heading [:meta :pos])
+                      heading (collect-heading-tags heading)]
+                  (recur (conj headings heading) [] (rest blocks) {} {} last-pos'))
+
+                :else
+                (let [heading-body' (conj heading-body block)]
+                  (recur headings heading-body' (rest blocks) timestamps properties last-pos))))
+            (-> (reverse headings)
+                safe-headings)))]
+    (let [first-heading (first headings)
+          first-heading-start-pos (get-in first-heading [:heading/meta :pos])]
+      (if (or (empty? headings)
+              (<= first-heading-start-pos 1))
+        headings
+        (cons
+         (merge
+          (let [content (utf8/substring encoded-content 0 first-heading-start-pos)
+                uuid (d/squuid)]
+            {:heading/uuid uuid
+             :heading/content content
+             :heading/anchor (str uuid)
+             :heading/level 2
+             ;; :heading/all-tags
+             :heading/meta {:pos 0
+                            :end-pos first-heading-start-pos}
+             :heading/body (take-while (fn [block] (not (heading-block? block))) blocks)
+             :heading/pre-heading? true})
+          (select-keys first-heading [:heading/file :heading/format :heading/page]))
+         headings)))))
 
 ;; marker: DOING | IN-PROGRESS > TODO > WAITING | WAIT > DONE > CANCELED | CANCELLED
 ;; priority: A > B > C
@@ -206,7 +228,7 @@
           start-pos (:pos meta)
           encoded-content (utf8/encode content)
           content-length (utf8/length encoded-content)
-          headings (extract-headings ast content-length)
+          headings (extract-headings ast content-length encoded-content)
           ref-pages-atom (atom [])
           headings (doall
                     (map-indexed

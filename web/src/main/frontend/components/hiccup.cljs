@@ -536,28 +536,32 @@
     nil))
 
 (defn build-heading-part
-  [config {:heading/keys [uuid title tags marker level priority anchor meta format content]
+  [config {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading?]
            :as t}]
   (let [config (assoc config :heading t)
         slide? (boolean (:slide? config))
-        checkbox (heading-checkbox t (str "mr-1 cursor"))
-        marker-cp (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
-                    [:span {:class (str "task-status " (string/lower-case marker))
+        checkbox (when-not pre-heading?
+                   (heading-checkbox t (str "mr-1 cursor")))
+        marker-cp (when-not pre-heading?
+                    (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
+                     [:span {:class (str "task-status " (string/lower-case marker))
+                             :style {:margin-right 3.5}}
+                      (string/upper-case marker)]))
+        priority (when-not pre-heading?
+                   (if priority
+                    [:span {:class "priority"
                             :style {:margin-right 3.5}}
-                     (string/upper-case marker)])
-        priority (if priority
-                   [:span {:class "priority"
-                           :style {:margin-right 3.5}}
-                    (util/format "[#%s]" (str priority))])
-        tags (when-not (empty? tags)
-               (->elem
-                :span
-                {:class "heading-tags"}
-                (mapv (fn [{:keys [db/id tag/name]}]
-                        [:a.tag.mx-1 {:key (str "tag-" id)
-                                      :href (str "/tag/" name)}
-                         (str "#" name)])
-                      tags)))]
+                     (util/format "[#%s]" (str priority))]))
+        tags (when-not pre-heading?
+               (when-not (empty? tags)
+                (->elem
+                 :span
+                 {:class "heading-tags"}
+                 (mapv (fn [{:keys [db/id tag/name]}]
+                         [:a.tag.mx-1 {:key (str "tag-" id)
+                                       :href (str "/tag/" name)}
+                          (str "#" name)])
+                       tags))))]
     (when level
       (let [element (if (<= level 6)
                       (keyword (str "h" level))
@@ -598,7 +602,7 @@
   (.getData (gobj/get event "dataTransfer") attr))
 
 (rum/defc heading-content-or-editor < rum/reactive
-  [config {:heading/keys [uuid title level body meta content dummy? page format repo children idx] :as heading} edit-input-id heading-id slide?]
+  [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? idx] :as heading} edit-input-id heading-id slide?]
   (let [edit? (state/sub [:editor/editing? edit-input-id])]
     (if edit?
       [:div {:id (str "editor-" edit-input-id)}
@@ -653,7 +657,10 @@
            (not slide?)
            (merge drag-attrs))
 
-         (build-heading-part config heading)
+         (if pre-heading?
+           [:div.pre-heading.pre-white-space
+            (string/trim content)]
+           (build-heading-part config heading))
 
          (when (and dragging? (not slide?))
            (dnd-separator heading 0 -4 false true))

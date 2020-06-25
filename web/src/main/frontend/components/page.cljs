@@ -34,15 +34,16 @@
     (db/get-page-headings repo page-name)))
 
 (rum/defc page-headings-cp < rum/reactive
-  [repo page raw-page-headings file-path page-name encoded-page-name sidebar? journal? heading? format content]
+  [repo page raw-page-headings file-path page-name encoded-page-name sidebar? journal? heading? format]
   (let [page-headings (db/with-dummy-heading raw-page-headings format
                         (if (empty? raw-page-headings)
-                          {:heading/page {:db/id (:db/id page)}
-                           :heading/file {:db/id (:db/id (:page/file page))}
-                           :heading/meta
-                           (let [file-id (:db/id (:page/file page))]
-                             {:pos (utf8/length (utf8/encode content))
-                              :end-pos nil})})
+                          (let [content (db/get-file repo file-path)]
+                            {:heading/page {:db/id (:db/id page)}
+                             :heading/file {:db/id (:db/id (:page/file page))}
+                             :heading/meta
+                             (let [file-id (:db/id (:page/file page))]
+                               {:pos (utf8/length (utf8/encode content))
+                                :end-pos nil})}))
                         journal?)
         start-level (if journal? 2 1)
         hiccup-config {:id encoded-page-name
@@ -85,128 +86,100 @@
                (db/entity repo [:page/name page-name]))
         page-name (:page/name page)
         file (:page/file page)]
-    (cond
-      (db/marker-page? page-name)
-      [:div
-       [:h1.title
-        (string/upper-case page-name)]
-       [:div.ml-2
-        (reference/references page-name false true)]]
+    (when page-name
+      (cond
+       (db/marker-page? page-name)
+       [:div
+        [:h1.title
+         (string/upper-case page-name)]
+        [:div.ml-2
+         (reference/references page-name false true)]]
 
-      ;; (and sidebar? file (empty? raw-page-headings))
-      ;; (do
-      ;;   (state/sidebar-remove-block! (:sidebar/idx option))
-      ;;   [:div.text-sm "Empty"])
+       ;; (and sidebar? file (empty? raw-page-headings))
+       ;; (do
+       ;;   (state/sidebar-remove-block! (:sidebar/idx option))
+       ;;   [:div.text-sm "Empty"])
 
-      :else
-      (let [file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
-            content (db/get-file-no-sub repo file-path)
-            starred? (contains? (set
-                                 (some->> (state/sub [:config repo :starred])
-                                          (map string/lower-case)))
-                                page-name)
-            today? (and
-                    journal?
-                    (= page-name (string/lower-case (date/journal-name))))]
-        [:div.flex-1.page
-         (when-not sidebar?
-           [:div.flex.flex-row.justify-between.items-center {:key "page-title"}
-            [:div.flex.flex-row
-             [:a {:on-click (fn [e]
-                              (util/stop e)
-                              (when (gobj/get e "shiftKey")
-                                (when-let [page (db/pull repo '[*] [:page/name page-name])]
-                                  (state/sidebar-add-block!
-                                   repo
-                                   (:db/id page)
-                                   :page
-                                   {:page page}))
-                                (handler/show-right-sidebar)))}
-              [:h1.title
-               (util/capitalize-all page-name)]]
+       :else
+       (let [file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
+             starred? (contains? (set
+                                  (some->> (state/sub [:config repo :starred])
+                                           (map string/lower-case)))
+                                 page-name)
+             today? (and
+                     journal?
+                     (= page-name (string/lower-case (date/journal-name))))]
+         [:div.flex-1.page
+          (when-not sidebar?
+            [:div.flex.flex-row.justify-between.items-center {:key "page-title"}
+             [:div.flex.flex-row
+              [:a {:on-click (fn [e]
+                               (util/stop e)
+                               (when (gobj/get e "shiftKey")
+                                 (when-let [page (db/pull repo '[*] [:page/name page-name])]
+                                   (state/sidebar-add-block!
+                                    repo
+                                    (:db/id page)
+                                    :page
+                                    {:page page}))
+                                 (handler/show-right-sidebar)))}
+               [:h1.title
+                (util/capitalize-all page-name)]]
 
-             [:a.ml-1.text-gray-500.hover:text-gray-700
-              {:class (if starred? "text-gray-800")
-               :on-click (fn []
-                           ;; TODO: save to config file
-                           (handler/star-page! page-name starred?))}
-              (if starred?
-                (svg/star-solid "stroke-current")
-                (svg/star-outline "stroke-current h-5 w-5"))]]
+              [:a.ml-1.text-gray-500.hover:text-gray-700
+               {:class (if starred? "text-gray-800")
+                :on-click (fn []
+                            ;; TODO: save to config file
+                            (handler/star-page! page-name starred?))}
+               (if starred?
+                 (svg/star-solid "stroke-current")
+                 (svg/star-outline "stroke-current h-5 w-5"))]]
 
-            [:a {:title "Presentation mode(Reveal.js)"
-                 :on-click (fn []
-                             (state/sidebar-add-block!
-                              repo
-                              (:db/id page)
-                              :page-presentation
-                              {:page page
-                               :journal? journal?})
-                             (handler/show-right-sidebar))}
-             svg/reveal-js]])
+             [:a {:title "Presentation mode(Reveal.js)"
+                  :on-click (fn []
+                              (state/sidebar-add-block!
+                               repo
+                               (:db/id page)
+                               :page-presentation
+                               {:page page
+                                :journal? journal?})
+                              (handler/show-right-sidebar))}
+              svg/reveal-js]])
 
-         (when (and file-path (not sidebar?) (not journal?))
-           [:div.text-sm.ml-1 {:key "page-file"}
-            "File: "
-            [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                    :href (str "/file/" (util/url-encode file-path))}
-             file-path]])
+          (when (and file-path (not sidebar?) (not journal?))
+            [:div.text-sm.ml-1.mb-2 {:key "page-file"}
+             "File: "
+             [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
+                                     :href (str "/file/" (util/url-encode file-path))}
+              file-path]])
 
-         (when (and repo (not journal?) (not heading?))
-           (let [alias (some->> (db/get-page-alias repo page-name)
-                                (remove util/file-page?))]
-             (when (seq alias)
-               [:div.alias.ml-1.mb-1.content {:key "page-alias"}
-                [:span.font-bold.mr-1 "Page aliases: "]
-                (for [item alias]
-                  [:a {:href (str "/page/" (util/url-encode item))}
-                   [:span.mr-1 (util/capitalize-all item)]])])))
+          (when (and repo (not journal?) (not heading?))
+            (let [alias (some->> (db/get-page-alias repo page-name)
+                                 (remove util/file-page?))]
+              (when (seq alias)
+                [:div.alias.ml-1.mb-1.content {:key "page-alias"}
+                 [:span.font-bold.mr-1 "Page aliases: "]
+                 (for [item alias]
+                   [:a {:href (str "/page/" (util/url-encode item))}
+                    [:span.mr-1 (util/capitalize-all item)]])])))
 
-         ;; content before headings, maybe directives or summary it can be anything
-         (when (and (not journal?) (not heading?) (not sidebar?))
-           (when-let [path (let [file-id (:db/id (:page/file page))]
-                             (:file/path (db/entity repo file-id)))]
-             (let [encoded-path (util/url-encode path)
-                   heading-start-pos (and
-                                      (seq raw-page-headings)
-                                      (get-in (first raw-page-headings) [:heading/meta :pos]))]
-               (when (or
-                      (nil? heading-start-pos)
-                      (and heading-start-pos (not (zero? heading-start-pos))))
-                 (let [encoded-content (utf8/encode content)
-                       heading-start-pos (or heading-start-pos (utf8/length encoded-content))
-                       content-before-heading (string/trim (utf8/substring encoded-content 0 heading-start-pos))]
-                   [:div.before-heading.ml-1.mt-5.mb-3 {:key "page-before-content"}
-                    (content/content
-                     encoded-path
-                     {:content content-before-heading
-                      :format format
-                      :on-hide (fn [value]
-                                 (let [new-content (str (string/trim value)
-                                                        "\n"
-                                                        (when heading-start-pos
-                                                          (utf8/substring encoded-content heading-start-pos)))]
-                                   (when (not= (string/trim new-content)
-                                               (string/trim content))
-                                     (handler/alter-file repo path new-content {:re-render-root? true}))))})])))))
+          ;; headings
+          (rum/with-key
+            (page-headings-cp repo page raw-page-headings file-path page-name encoded-page-name sidebar? journal? heading? format)
+            "page-headings")
 
-         ;; headings
-         (rum/with-key
-           (page-headings-cp repo page raw-page-headings file-path page-name encoded-page-name sidebar? journal? heading? format content)
-           "page-headings")
+          (when (and today? (not sidebar?))
+            (let [queries (state/sub [:config repo :default-queries :journals])]
+              (when (seq queries)
+                [:div#today-queries {:keys "page-today-queries"}
+                 (for [{:keys [title query]} queries]
+                   [:div {:key (str "query-" title)}
+                    (hiccup/custom-query {:start-level 2} {:query-title title}
+                                         query)])])))
 
-         (when (and today? (not sidebar?))
-           (let [queries (state/sub [:config repo :default-queries :journals])]
-             (when (seq queries)
-               [:div#today-queries {:keys "page-today-queries"}
-                (for [{:keys [title query]} queries]
-                  [:div {:key (str "query-" title)}
-                   (hiccup/custom-query {:start-level 2} {:query-title title}
-                                        query)])])))
-
-         ;; referenced headings
-         [:div {:key "page-references"}
-          (reference/references page-name false false)]]))))
+          ;; referenced headings
+          [:div {:key "page-references"}
+           (reference/references page-name false false)]])))))
 
 (rum/defc all-pages < rum/reactive
   []

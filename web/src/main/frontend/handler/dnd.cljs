@@ -231,13 +231,13 @@
                          (and nested? (= direction :down))
                          (get-end-pos bottom-heading)
                          target-child?
-                         (db/get-heading-end-pos-rec top-heading)
+                         (db/get-heading-end-pos-rec repo top-heading)
                          :else
-                         (db/get-heading-end-pos-rec bottom-heading))
+                         (db/get-heading-end-pos-rec repo bottom-heading))
                        nil)
           between-area (if (= direction :down)
-                         (subs (db/get-heading-end-pos-rec target-heading) (get-start-pos to-heading))
-                         (subs (db/get-heading-end-pos-rec to-heading) (get-start-pos target-heading)))
+                         (subs (db/get-heading-end-pos-rec repo target-heading) (get-start-pos to-heading))
+                         (subs (db/get-heading-end-pos-rec repo to-heading) (get-start-pos target-heading)))
           up-content (when (= direction :up)
                        (cond
                          nested?
@@ -271,12 +271,11 @@
           ;;         :nested? nested?
           ;;         :top? top?
           ;;         :target-child? target-child?
-          ;;         ;; :top-area top-area
-          ;;         ;; :top-content top-content
-          ;;         ;; :up-content up-content
-          ;;         ;; :between-area between-area
-          ;;         ;; :down-content down-content
-          ;;         ;; :bottom-area bottom-area
+          ;;         :top-area top-area
+          ;;         :up-content up-content
+          ;;         :between-area between-area
+          ;;         :down-content down-content
+          ;;         :bottom-area bottom-area
           ;;         })
           new-file-content (string/trim
                             (util/join-newline
@@ -319,9 +318,9 @@
         target-file-content (db/get-file repo target-file-path)
         to-file (db/entity repo (:db/id (:heading/file to-heading)))
         to-file-path (:file/path to-file)
-        target-heading-end-pos (db/get-heading-end-pos-rec target-heading)
+        target-heading-end-pos (db/get-heading-end-pos-rec repo target-heading)
         to-heading-start-pos (get-start-pos to-heading)
-        to-heading-end-pos (db/get-heading-end-pos-rec to-heading)
+        to-heading-end-pos (db/get-heading-end-pos-rec repo to-heading)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-heading)
                                               target-heading-end-pos)
@@ -387,9 +386,9 @@
         target-file-content (db/get-file target-heading-repo target-file-path)
         to-file (db/entity to-heading-repo (:db/id (:heading/file to-heading)))
         to-file-path (:file/path to-file)
-        target-heading-end-pos (db/get-heading-end-pos-rec target-heading)
+        target-heading-end-pos (db/get-heading-end-pos-rec target-heading-repo target-heading)
         to-heading-start-pos (get-start-pos to-heading)
-        to-heading-end-pos (db/get-heading-end-pos-rec to-heading)
+        to-heading-end-pos (db/get-heading-end-pos-rec to-heading-repo to-heading)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-heading)
                                               target-heading-end-pos)

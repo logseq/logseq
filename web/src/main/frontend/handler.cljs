@@ -276,38 +276,38 @@
   [repo-url token]
   (when (db/get-conn repo-url true)
     (let [status (db/get-key-value repo-url :git/status)]
-     (when (not (state/get-edit-input-id))
-       (set-git-status! repo-url :pulling)
-       (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
-         (p/let [result (git/fetch repo-url token)
-                 {:keys [fetchHead]} (bean/->clj result)
-                 _ (set-latest-commit! repo-url fetchHead)]
-           (-> (git/merge repo-url)
-               (p/then (fn [result]
-                         (-> (git/checkout repo-url)
-                             (p/then (fn [result]
-                                       (create-month-journal-if-not-exists repo-url)
-                                       (create-config-file-if-not-exists repo-url)
-                                       (set-git-status! repo-url nil)
-                                       (set-git-last-pulled-at! repo-url)
-                                       (when (and latest-commit fetchHead
-                                                  (not= latest-commit fetchHead))
-                                         (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                           (load-db-and-journals! repo-url diffs false)))))
-                             (p/catch (fn [error]
-                                        (set-git-status! repo-url :checkout-failed)
-                                        (set-git-error! repo-url error))))))
-               (p/catch (fn [error]
-                          (set-git-status! repo-url :merge-failed)
-                          (set-git-error! repo-url error)
-                          (show-notification!
-                           [:p.content
-                            "Failed to merge, please "
-                            [:span.text-gray-700.font-bold
-                             "resolve any diffs first."]]
-                           :error)
-                          (redirect! {:to :diff})
-                          )))))))))
+      (when (not (state/get-edit-input-id))
+        (set-git-status! repo-url :pulling)
+        (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
+          (p/let [result (git/fetch repo-url token)
+                  {:keys [fetchHead]} (bean/->clj result)
+                  _ (set-latest-commit! repo-url fetchHead)]
+            (-> (git/merge repo-url)
+                (p/then (fn [result]
+                          (-> (git/checkout repo-url)
+                              (p/then (fn [result]
+                                        (create-month-journal-if-not-exists repo-url)
+                                        (create-config-file-if-not-exists repo-url)
+                                        (set-git-status! repo-url nil)
+                                        (set-git-last-pulled-at! repo-url)
+                                        (when (and latest-commit fetchHead
+                                                   (not= latest-commit fetchHead))
+                                          (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                            (load-db-and-journals! repo-url diffs false)))))
+                              (p/catch (fn [error]
+                                         (set-git-status! repo-url :checkout-failed)
+                                         (set-git-error! repo-url error))))))
+                (p/catch (fn [error]
+                           (set-git-status! repo-url :merge-failed)
+                           (set-git-error! repo-url error)
+                           (show-notification!
+                            [:p.content
+                             "Failed to merge, please "
+                             [:span.text-gray-700.font-bold
+                              "resolve any diffs first."]]
+                            :error)
+                           (redirect! {:to :diff})
+                           )))))))))
 
 (defn pull-current-repo
   []
@@ -854,7 +854,7 @@
      after-headings)))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file page dummy? format repo] :as heading} value]
+  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading?] :as heading} value]
   (let [repo (or repo (state/get-current-repo))
         heading (with-heading-meta repo heading)
         format (or format (state/get-preferred-format))]
@@ -867,7 +867,15 @@
                                  format (format/get-format file-path)]
                              (let [file-content (db/get-file repo file-path)
                                    [new-content value] (new-file-content heading file-content value)
-                                   {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+                                   {:keys [headings pages start-pos end-pos]} (if pre-heading?
+                                                                                (let [new-end-pos (utf8/length (utf8/encode value))]
+                                                                                  {:headings [(-> heading
+                                                                                                  (assoc :heading/content value)
+                                                                                                  (assoc-in [:heading/meta :end-pos] new-end-pos))]
+                                                                                   :pages []
+                                                                                   :start-pos 0
+                                                                                   :end-pos new-end-pos})
+                                                                                (block/parse-heading (assoc heading :heading/content value) format))
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
                                    modified-time (let [modified-at (tc/to-long (t/now))]
                                                    [[:db/add (:db/id page) :page/last-modified-at modified-at]
@@ -934,8 +942,8 @@
            file-path (:file/path file)
            file-content (db/get-file repo file-path)
            value (if create-new-heading?
-                   (str value "\n" new-heading-content "\n")
-                   (str value "\n"))
+                   (str value "\n" new-heading-content)
+                   value)
            [new-content value] (new-file-content heading file-content value)
            {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
            first-heading (first headings)

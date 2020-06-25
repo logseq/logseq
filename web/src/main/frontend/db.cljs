@@ -164,10 +164,10 @@
                       :db/isComponent true}
    :heading/meta {}
    :heading/properties {}
-
    :heading/created-at {}
    :heading/last-modified-at {}
    :heading/body {}
+   :heading/pre-heading? {}
    ;; :heading/children {:db/valueType   :db.type/ref
    ;;                    :db/cardinality :db.cardinality/many}
 
@@ -344,7 +344,9 @@
                 files-db? false
                 transform-fn identity}} query & inputs]
   (let [kv? (and (vector? k) (= :kv (first k)))
-        k (vec (cons repo k))]
+        k (vec (cons repo k))
+        ;; TODO: refactor
+        use-cache? false]
     (when-let [conn (if files-db?
                       (deref (get-files-conn repo))
                       (get-conn repo))]
@@ -859,22 +861,39 @@
               pred)
             react)))
 
+(defn get-file-page
+  [file-path]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (get-conn repo)]
+      (some->
+       (d/q
+         '[:find ?page-name
+           :in $ ?path
+           :where
+           [?file :file/path ?path]
+           [?page :page/file ?file]
+           [?page :page/name ?page-name]]
+         conn file-path)
+       seq-flatten
+       first))))
+
 (defn get-page-name
   [file ast]
   ;; headline
-  (let [first-heading (first (filter block/heading-block? ast))
-        other-name (cond
-                     (and (= "Directives" (ffirst ast))
-                          (not (string/blank? (:title (last (first ast))))))
-                     (:title (last (first ast)))
-
-                     first-heading
-                     ;; FIXME:
-                     (str (last (first (:title (second first-heading)))))
-
-                     :else
-                     nil)]
-    (string/lower-case (or other-name file))))
+  (let [file-page-name (get-file-page file)
+        first-heading (first (filter block/heading-block? ast))
+        directive-name (when (and (= "Directives" (ffirst ast))
+                                  (not (string/blank? (:title (last (first ast))))))
+                         (:title (last (first ast))))
+        first-heading-name (when (and first-heading
+                                      (= (:heading/level first-heading) 1))
+                             ;; FIXME:
+                             (str (last (first (:title (second first-heading))))))]
+    (string/lower-case (or
+                        directive-name
+                        file-page-name
+                        first-heading-name
+                        file))))
 
 (defn valid-journal-title?
   [title]
@@ -897,9 +916,8 @@
 
 (defn extract-pages-and-headings
   [format ast directives file content utf8-content journal? pages-fn]
-  (println "Parsing file: " file)
   (try
-    (let [headings (block/extract-headings ast (utf8/length utf8-content))
+    (let [headings (block/extract-headings ast (utf8/length utf8-content) utf8-content)
           pages (pages-fn headings ast)
           ref-pages (atom #{})
           headings (mapcat
@@ -1425,27 +1443,14 @@
      (apply util/join-newline @contents))))
 
 (defn get-heading-end-pos-rec
-  [heading]
+  [repo heading]
   (let [children (:heading/children heading)]
     (if (seq children)
-      (get-heading-end-pos-rec (last children))
-      (get-in heading [:heading/meta :end-pos]))))
-
-(defn get-file-page
-  [file-path]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [conn (get-conn repo)]
-      (some->
-       (d/q
-         '[:find ?page-name
-           :in $ ?path
-           :where
-           [?file :file/path ?path]
-           [?page :page/file ?file]
-           [?page :page/name ?page-name]]
-         conn file-path)
-       seq-flatten
-       first))))
+      (get-heading-end-pos-rec repo (last children))
+      (if-let [end-pos (get-in heading [:heading/meta :end-pos])]
+        end-pos
+        (when-let [heading (entity repo [:heading/uuid (:heading/uuid heading)])]
+          (get-in heading [:heading/meta :end-pos]))))))
 
 (comment
   (defn debug!

@@ -129,11 +129,10 @@
           (reset! *image-uploading-process process)))))))
 
 (defn with-levels
-  [text format level]
-  (let [pattern (config/get-heading-pattern format)]
-    (str (apply str (repeat level pattern))
-         " "
-         (string/triml text))))
+  [text format {:heading/keys [level pre-heading?]}]
+  (let [pattern (config/get-heading-pattern format)
+        prefix (if pre-heading? "" (str (apply str (repeat level pattern)) " "))]
+    (str prefix (string/triml text))))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -493,7 +492,7 @@
                     heading)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     ;; save the current heading and insert a new heading
-    (let [value-with-levels (with-levels value format (:heading/level heading))
+    (let [value-with-levels (with-levels value format heading)
           [_first-heading last-heading _new-heading-content] (handler/insert-new-heading! heading value-with-levels)
           last-id (:heading/uuid last-heading)]
       (handler/edit-heading! last-id :max format id)
@@ -524,7 +523,7 @@
                                 (dec level)
                                 level)
                       :else level)
-        new-value (with-levels value format final-level)]
+        new-value (with-levels value format (assoc heading :heading/level final-level))]
     (set-last-edit-heading! (:heading/uuid heading) value)
     (handler/save-heading-if-changed! heading new-value)))
 
@@ -550,10 +549,12 @@
         {
          ;; enter
          13 (fn [state e]
-              (if (gobj/get e "shiftKey")
-                nil
-                (when-not (in-auto-complete? input)
-                  (insert-new-heading! state))))
+              (let [{:keys [heading]} (get-state state)]
+                (when heading
+                  (if (gobj/get e "shiftKey")
+                    nil
+                    (when-not (in-auto-complete? input)
+                      (insert-new-heading! state))))))
          ;; up
          38 (fn [state e]
               (when-not (in-auto-complete? input)
@@ -687,7 +688,9 @@
                   (reset! *show-block-commands false))))))))))
   {:did-mount (fn [state]
                 (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)]
-                  (let [content (handler/remove-level-spaces content format)]
+                  (let [content (if heading
+                                  (handler/remove-level-spaces content format)
+                                  content)]
                     (state/set-edit-content! id (string/trim (or content "")) true)
                     (handler/restore-cursor-pos! id content dummy?))
                   (when-let [input (gdom/getElement id)]
@@ -704,10 +707,7 @@
                         input
                         :upload-images))
                      (when (and heading (not= value ""))
-                       (let [new-value (with-levels
-                                         value
-                                         format
-                                         (:heading/level heading))]
+                       (let [new-value (with-levels value format heading)]
                          (let [cache [(:heading/uuid heading) value]]
                            (when (not= @*last-edit-heading cache)
                              (handler/save-heading-if-changed! heading new-value)

@@ -57,7 +57,7 @@
                               (when (not= (string/trim value) (string/trim content))
                                 (handler/alter-file (state/get-current-repo) path (string/trim value) nil))))
         edit-raw-handler (fn []
-                           (let [content (db/get-file path)]
+                           (let [content (string/trim (db/get-file path))]
                              (content/content encoded-path {:content content
                                                             :format format
                                                             :on-hide (save-file-handler content)})))
