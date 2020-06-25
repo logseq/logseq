@@ -9,6 +9,7 @@
             [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.config :as config]
+            [frontend.utf8 :as utf8]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -377,9 +378,9 @@
             (handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))
 
 (defn delete-heading!
-  [state e]
-  (let [{:keys [id heading-id heading-parent-id dummy? value  pos format]} (get-state state)]
-    (when (and heading-id (= value ""))
+  [state repo e]
+  (let [{:keys [id heading-id heading-parent-id dummy? value pos format]} (get-state state)]
+    (when heading-id
       (do
         (util/stop e)
         ;; delete heading, edit previous heading
@@ -389,7 +390,18 @@
           (handler/delete-heading! heading dummy?)
           (when sibling-heading
             (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-              (handler/edit-heading! (uuid sibling-heading-id) :max format id))))))))
+              (when repo
+                (when-let [heading (db/pull repo '[*] [:heading/uuid (uuid sibling-heading-id)])]
+                  (let [original-content (util/trim-safe (:heading/content heading))
+                        new-value (str original-content value)
+                        pos (max
+                             (if original-content
+                               (utf8/length (utf8/encode (handler/remove-level-spaces original-content format)))
+                               0)
+                             0)]
+                    (handler/save-heading-if-changed! heading new-value)
+                    (handler/edit-heading! (uuid sibling-heading-id)
+                                           pos format id)))))))))))
 
 (defn get-matched-commands
   [input]
@@ -530,20 +542,20 @@
 (rum/defc box < rum/reactive
   (mixins/event-mixin
    (fn [state]
-     (let [{:keys [id format]} (get-state state)
+     (let [{:keys [id format heading]} (get-state state)
            input-id id
-           input (gdom/getElement input-id)]
-       (let [{:keys [format heading]} (get-state state)]
-         (mixins/hide-when-esc-or-outside
-          state
-          :on-hide
-          (fn [state e event]
-            (let [{:keys [on-hide format value heading id]} (get-state state)
-                  current-edit-id (state/get-edit-input-id)]
-              (state/set-edit-input-id! nil)
-              (when on-hide (on-hide value event))
-              (when (and heading (= current-edit-id id))
-                (state/set-edit-heading! nil))))))
+           input (gdom/getElement input-id)
+           repo (:heading/repo heading)]
+       (mixins/hide-when-esc-or-outside
+        state
+        :on-hide
+        (fn [state e event]
+          (let [{:keys [on-hide format value heading id]} (get-state state)
+                current-edit-id (state/get-edit-input-id)]
+            (state/set-edit-input-id! nil)
+            (when on-hide (on-hide value event))
+            (when (and heading (= current-edit-id id))
+              (state/set-edit-heading! nil)))))
        (mixins/on-key-down
         state
         {
@@ -571,8 +583,9 @@
                    deleted (and (> current-pos 0)
                                 (nth value (dec current-pos)))]
                (cond
-                 (= value "")
-                 (delete-heading! state e)
+                 (or (= value "")
+                     (zero? current-pos))
+                 (delete-heading! state repo e)
 
                  (and (> current-pos 1)
                       (= (nth value (dec current-pos)) commands/slash))
