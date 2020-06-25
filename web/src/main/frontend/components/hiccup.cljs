@@ -665,7 +665,7 @@
          (when (and dragging? (not slide?))
            (dnd-separator heading 0 -4 false true))
 
-         (when (seq body)
+         (when (and (not pre-heading?) (seq body))
            [:div.heading-body
             (for [child body]
               (let [block (block config child)]
