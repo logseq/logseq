@@ -107,7 +107,7 @@
   [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.text-gray-500.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
    {:href href
     :on-click close-modal-fn}
-   [:svg.mr-4.h-5.w-5.text-gray-500.group-hover:text-gray-200.group-focus:text-gray-200.transition.ease-in-out.duration-150
+   [:svg.mr-4.h-6.w-6.group-hover:text-gray-200.group-focus:text-gray-200.transition.ease-in-out.duration-150
     {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
     [:path
      {:d svg-d
