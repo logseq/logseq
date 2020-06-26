@@ -665,18 +665,7 @@
           ))
        (mixins/on-key-up
         state
-        {
-         ;; /
-         191 (fn [state e]
-               (when-let [matched-commands (seq (get-matched-commands input))]
-                 (reset! *slash-caret-pos (util/get-caret-pos input))
-                 (reset! *show-commands true)))
-
-         ;; <
-         188 (fn [state e]
-               (when-let [matched-commands (seq (get-matched-block-commands input))]
-                 (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                 (reset! *show-block-commands true)))}
+        {}
         (fn [e key-code]
           (let [format (:format (get-state state))]
             (when (not= key-code 191)     ; not /
@@ -754,7 +743,18 @@
        :value (or edit-content content)
        :on-change (fn [e]
                     (let [value (util/evalue e)]
-                      (state/set-edit-content! id value false)))
+                      (state/set-edit-content! id value false)
+                      (let [input (gdom/getElement id)]
+                        (case (last value)
+                         "/"
+                         (when-let [matched-commands (seq (get-matched-commands input))]
+                           (reset! *slash-caret-pos (util/get-caret-pos input))
+                           (reset! *show-commands true))
+                         "<"
+                         (when-let [matched-commands (seq (get-matched-block-commands input))]
+                           (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
+                           (reset! *show-block-commands true))
+                         nil))))
        :auto-focus true})
      (transition-cp
       (commands id format)
