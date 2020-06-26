@@ -26,12 +26,12 @@
 
 (rum/defc files < rum/reactive
   []
-  [:div.flex-1
+  [:div.flex-1.overflow-hidden
    [:h1.title
     "All files"]
    (when-let [current-repo (state/sub :git/current-repo)]
      (let [files (db/get-files current-repo)]
-       [:table
+       [:table.table-auto
         [:thead
          [:tr
           [:th "File name"]

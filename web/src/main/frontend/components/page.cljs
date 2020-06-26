@@ -185,7 +185,7 @@
       "All Pages"]
      (when current-repo
        (let [pages (db/get-pages-with-modified-at current-repo)]
-         [:table
+         [:table.table-auto
           [:thead
            [:tr
             [:th "Page name"]
@@ -214,12 +214,13 @@
                                       (handler/create-new-page! title)))))))
   [state]
   (let [title (get state ::title)]
-    [:div#page-new
+    [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}
      [:div.mt-10.mb-2 {:style {:font-size "1.5rem"}}
       "What's your new page title?"]
      [:input#page-title.focus:outline-none.ml-1.text-gray-900
       {:style {:border "none"
-               :font-size "1.8rem"}
+               :font-size "1.8rem"
+               :max-width 300}
        :auto-focus true
        :auto-complete "off"
        :on-change (fn [e]

@@ -216,7 +216,7 @@
         props-with-defaults (merge args {:start-of-week start-of-week})
         configuration       (configure props-with-defaults)]
     (main-div-with
-     [:table {:class "table-condensed"}
+     [:table.table-auto {:class "table-condensed"}
       (table-thead display-month configuration)
       (table-tbody display-month internal-model configuration disabled? on-change)]
      class

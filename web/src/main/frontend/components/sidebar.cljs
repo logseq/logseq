@@ -352,7 +352,7 @@
                   :overflow-y "auto"
                   :box-sizing "content-box"}}
          [:div.flex.justify-center
-          [:div.flex-1.m-6#main-content-container
+          [:div.flex-1.m-6#main-content-container.overflow-hidden
            {:style (if all-tags?
                      {:position "relative"}
                      {:position "relative"
