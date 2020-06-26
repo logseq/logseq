@@ -563,9 +563,23 @@
          13 (fn [state e]
               (let [{:keys [heading]} (get-state state)]
                 (when heading
-                  (if (gobj/get e "shiftKey")
-                    nil
-                    (when-not (in-auto-complete? input)
+                  (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
+                                   (string/lower-case (string/trim v)))
+                        insert? (cond
+                                  config/mobile?
+                                  false
+
+                                  (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
+                                  false
+
+                                  (gobj/get e "shiftKey")
+                                  false
+
+                                  :else
+                                  true)]
+                    (when (and
+                           insert?
+                           (not (in-auto-complete? input)))
                       (insert-new-heading! state))))))
          ;; up
          38 (fn [state e]

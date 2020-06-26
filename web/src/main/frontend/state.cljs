@@ -380,3 +380,7 @@
 (defn set-git-status!
   [repo-url value]
   (swap! state assoc-in [:git/status repo-url] value))
+
+(defn get-shortcut
+  [repo key]
+  (get-in @state [:config repo :shortcuts key]))
