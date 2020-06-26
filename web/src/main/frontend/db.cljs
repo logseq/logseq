@@ -289,6 +289,7 @@
       :heading/change
       (when (seq data)
         (let [headings data
+              _ (prn headings)
               current-tag (get-current-tag)
               current-page-id (get-current-page-id)
               {:heading/keys [page]} (first headings)
@@ -315,7 +316,8 @@
                              (apply concat
                                (for [{:heading/keys [ref-pages]} headings]
                                  (map (fn [page]
-                                        [:page/refed-headings (:db/id page)])
+                                        (when-let [page (entity [:page/name (:page/name page)])]
+                                          [:page/refed-headings (:db/id page)]))
                                    ref-pages))))
                             (distinct))
               refed-pages (map
@@ -345,10 +347,7 @@
                 files-db? false
                 transform-fn identity}} query & inputs]
   (let [kv? (and (vector? k) (= :kv (first k)))
-        k (vec (cons repo k))
-        ;; TODO: refactor
-        use-cache? false
-        ]
+        k (vec (cons repo k))]
     (when-let [conn (if files-db?
                       (deref (get-files-conn repo))
                       (get-conn repo))]
