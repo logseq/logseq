@@ -160,17 +160,21 @@
   [value]
   (set-state! :repo/cloning? value))
 
-(defn collapse-heading!
-  [heading-id]
-  (set-state! [:ui/collapsed-headings heading-id] (atom true)))
-
 (defn get-heading-collapsed-state
   [heading-id]
   (get-in @state [:ui/collapsed-headings heading-id]))
 
+(defn set-collapsed-state!
+  [heading-id value]
+  (set-state! [:ui/collapsed-headings heading-id] value))
+
+(defn collapse-heading!
+  [heading-id]
+  (set-collapsed-state! heading-id true))
+
 (defn expand-heading!
   [heading-id]
-  (set-state! [:ui/collapsed-headings heading-id] (atom false)))
+  (set-collapsed-state! heading-id false))
 
 (defn clear-collapsed-headings!
   []

@@ -18,8 +18,9 @@
 
 (defn collapse!
   [heading]
-  (let [heading-id (str "ls-heading-" (:heading/uuid heading))]
-    (when-let [node (gdom/getElement heading-id)]
+  (let [uuid (:heading/uuid heading)
+        nodes (array-seq (js/document.getElementsByClassName (str uuid)))]
+    (doseq [node nodes]
       (d/add-class! node "collapsed")
       (when-let [e (.querySelector node ".heading-body")]
         (hide! e))
@@ -29,18 +30,14 @@
 
 (defn expand!
   [heading]
-  (let [heading-id (str "ls-heading-" (:heading/uuid heading))]
-    (when-let [node (gdom/getElement heading-id)]
-      ;; (d/remove-class! node "collapsed")
+  (let [uuid (:heading/uuid heading)
+        nodes (array-seq (js/document.getElementsByClassName (str uuid)))]
+    (doseq [node nodes]
       (when-let [e (.querySelector node ".heading-body")]
         (show! e))
       (when-let [e (.querySelector node ".heading-children")]
         (show! e))
-      (db/expand-heading! heading)
-      ;; (doseq [element (d/by-class node "cycle-collapsed")]
-      ;;   (d/remove-class! element "cycle-collapsed")
-      ;;   (show! element))
-      )))
+      (db/expand-heading! heading))))
 
 (defn set-bullet-closed!
   [element]

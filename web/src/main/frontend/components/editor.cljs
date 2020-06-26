@@ -597,8 +597,7 @@
                    deleted (and (> current-pos 0)
                                 (nth value (dec current-pos)))]
                (cond
-                 (or (= value "")
-                     (zero? current-pos))
+                 (= value "")
                  (delete-heading! state repo e)
 
                  (and (> current-pos 1)

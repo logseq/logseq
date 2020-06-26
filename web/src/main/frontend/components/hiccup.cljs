@@ -387,13 +387,19 @@
 (defonce *control-show? (atom {}))
 
 (rum/defcs heading-control < rum/reactive
-  [state config heading uuid heading-id level start-level body children dummy? collapsed-atom]
+  {:will-mount (fn [state]
+                 (let [heading (nth (:rum/args state) 1)
+                       collapsed? (:heading/collapsed? heading)]
+                   (state/set-collapsed-state! (:heading/uuid heading)
+                                               collapsed?))
+                 state)}
+  [state config heading uuid heading-id level start-level body children dummy?]
   (let [has-child? (and
                     (not (:pre-heading? heading))
                     (or (seq children)
                         (seq body)))
-        collapsed? (and has-child?
-                        (rum/react collapsed-atom))
+        collapsed? (state/sub [:ui/collapsed-headings uuid])
+        collapsed? (and has-child? collapsed?)
         control-show (util/react (rum/cursor *control-show? heading-id))
         dark? (= "dark" (state/sub :ui/theme))]
     [:div.hd-control.mr-2.flex.flex-row.items-center
@@ -410,7 +416,8 @@
                    (if collapsed?
                      (expand/expand! heading)
                      (expand/collapse! heading))
-                   (reset! collapsed-atom (not collapsed?)))}
+
+                   (state/set-collapsed-state! uuid (not collapsed?)))}
       (cond
         (and control-show collapsed?)
         (svg/caret-right)
@@ -647,7 +654,6 @@
 
 ;; TODO: performance improvement: don't re-render the who parent when there's any changes.
 (rum/defc heading-container < rum/static
-  rum/reactive
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
@@ -664,7 +670,6 @@
                      (or (seq children)
                          (seq body))))
         start-level (or (:start-level config) 1)
-        collapsed-atom (atom collapsed?)
         drag-attrs {:on-drag-over (fn [event]
                                     (util/stop event)
                                     (when-not (dnd-same-heading? uuid)
@@ -704,7 +709,9 @@
                                      (when-let [parent (gdom/getElement heading-id)]
                                        (let [node (.querySelector parent ".bullet-container")
                                              closed? (d/has-class? node "bullet-closed")]
-                                         (reset! collapsed-atom closed?))))
+                                         (if closed?
+                                           (state/collapse-heading! uuid)
+                                           (state/expand-heading! uuid)))))
                     :on-mouse-out (fn [e]
                                     (util/stop e)
                                     (when has-child?
@@ -729,7 +736,7 @@
 
      [:div.flex-1.flex-row.py-1
       (when-not slide?
-        (heading-control config heading uuid heading-id level start-level body children dummy? collapsed-atom))
+        (heading-control config heading uuid heading-id level start-level body children dummy?))
 
       (heading-content-or-editor config heading edit-input-id heading-id slide?)]
 
