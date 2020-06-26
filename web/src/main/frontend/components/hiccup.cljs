@@ -405,7 +405,6 @@
        :style {:width 14
                :height 16
                :margin-right 2}
-       :class "transition ease-in-out duration-150"
        :on-click (fn [e]
                    (util/stop e)
                    (if collapsed?
