@@ -716,7 +716,6 @@
                     :on-mouse-out (fn [e]
                                     (util/stop e)
                                     (when has-child?
-                                      (prn "swap to false")
                                       (swap! *control-show?
                                              assoc heading-id false)))}]
     [:div.ls-heading.flex.flex-col
