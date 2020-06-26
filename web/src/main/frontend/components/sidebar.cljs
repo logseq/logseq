@@ -352,7 +352,9 @@
                   :overflow-y "auto"
                   :box-sizing "content-box"}}
          [:div.flex.justify-center
-          [:div.flex-1.m-6#main-content-container.overflow-hidden
+          ;; FIXME: overflow-x-hidden conflicts with heading collapsers
+          [:div.flex-1.m-6#main-content-container
+           ;; .overflow-x-hidden
            {:style (if all-tags?
                      {:position "relative"}
                      {:position "relative"

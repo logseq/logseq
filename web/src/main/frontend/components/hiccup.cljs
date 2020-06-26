@@ -406,6 +406,7 @@
      {:style {:height 24
               :padding-left 9
               :float "left"}}
+
      [:a.heading-control
       {:id (str "control-" uuid)
        :style {:width 14
@@ -715,6 +716,7 @@
                     :on-mouse-out (fn [e]
                                     (util/stop e)
                                     (when has-child?
+                                      (prn "swap to false")
                                       (swap! *control-show?
                                              assoc heading-id false)))}]
     [:div.ls-heading.flex.flex-col
