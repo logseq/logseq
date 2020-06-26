@@ -168,6 +168,7 @@
    :heading/last-modified-at {}
    :heading/body {}
    :heading/pre-heading? {}
+   :heading/collapsed? {}
    ;; :heading/children {:db/valueType   :db.type/ref
    ;;                    :db/cardinality :db.cardinality/many}
 
@@ -346,7 +347,8 @@
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))
         ;; TODO: refactor
-        use-cache? false]
+        use-cache? false
+        ]
     (when-let [conn (if files-db?
                       (deref (get-files-conn repo))
                       (get-conn repo))]
@@ -505,23 +507,16 @@
                   (let [new-result (->
                                     (if (keyword? query)
                                       (get-key-value repo-url query)
-                                      ;; TODO: Datascript query performance
-                                      ;; (if files-db?
-                                      ;;   (apply d/q query (d/db (get-conn)) inputs)
-                                      ;;   (profile
-                                      ;;    "Query"
-                                      ;;    (doall (apply d/q query (d/db (get-conn)) inputs))))
-
-                                      (apply d/q query (d/db (get-conn)) inputs)
-                                      )
+                                      ;; TODO: Improve Datascript query performance
+                                      (if files-db?
+                                        (apply d/q query (d/db (get-conn)) inputs)
+                                        (profile
+                                         "Query"
+                                         (doall (apply d/q query (d/db (get-conn)) inputs)))))
                                     transform-fn)]
-                    (set-new-result! handler-key new-result)
-                    ;; (if files-db?
-                    ;;   (set-new-result! handler-key new-result)
-                    ;;   (profile
-                    ;;    (str "set new result " handler-key)
-                    ;;    (set-new-result! handler-key new-result)))
-                    ))))))))))
+                    (profile
+                     (str "set new result " handler-key)
+                     (set-new-result! handler-key new-result))))))))))))
 
 (defn pull-heading
   [id]
@@ -1452,7 +1447,64 @@
         (when-let [heading (entity repo [:heading/uuid (:heading/uuid heading)])]
           (get-in heading [:heading/meta :end-pos]))))))
 
+(defn get-heading-ids
+  [heading]
+  (let [ids (atom [])
+        _ (walk/prewalk
+           (fn [form]
+             (when (map? form)
+               (when-let [id (:heading/uuid form)]
+                 (swap! ids conj id)))
+             form)
+           heading)]
+    @ids))
+
+(defn collapse-heading!
+  [heading]
+  (let [repo (:heading/repo heading)]
+    (transact! repo
+      [{:heading/uuid (:heading/uuid heading)
+        :heading/collapsed? true}])))
+
+(defn collapse-headings!
+  [heading-ids]
+  (let [repo (state/get-current-repo)]
+    (transact! repo
+      (map
+        (fn [id]
+          {:heading/uuid id
+           :heading/collapsed? true})
+        heading-ids))))
+
+(defn expand-heading!
+  [heading]
+  (let [repo (:heading/repo heading)]
+    (transact! repo
+      [{:heading/uuid (:heading/uuid heading)
+        :heading/collapsed? false}])))
+
+(defn expand-headings!
+  [heading-ids]
+  (let [repo (state/get-current-repo)]
+    (transact! repo
+      (map
+        (fn [id]
+          {:heading/uuid id
+           :heading/collapsed? false})
+        heading-ids))))
+
+(defn get-collapsed-headings
+  []
+  (d/q
+    '[:find ?content
+      :where
+      [?h :heading/content ?content]
+      [?h :heading/collapsed? true]]
+    (get-conn)))
+
 (comment
+
+
   (defn debug!
     []
     (let [repos (->> (get-in @state/state [:me :repos])

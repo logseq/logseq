@@ -514,7 +514,7 @@
      (.getDate local-date-time)
      0 0 0 0)))
 
-(defn- rec-get-heading-node
+(defn rec-get-heading-node
   [node]
   (if (and node (d/has-class? node "ls-heading"))
     node

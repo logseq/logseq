@@ -29,9 +29,6 @@
 (defonce *heading-children
   (atom {}))
 
-(defonce *mouse
-  (atom {}))
-
 (defonce *dragging?
   (atom false))
 (defonce *dragging-heading
@@ -390,16 +387,13 @@
 (defonce *control-show? (atom {}))
 
 (rum/defcs heading-control < rum/reactive
-  (rum/local false ::collapsed?)
-  [state config uuid heading-id level start-level body children heading dummy?]
-  (let [collapsed-atom? (get state ::collapsed?)
-        toggle-collapsed? (state/sub [:ui/collapsed-headings heading-id])
-        has-child? (or (seq children)
-                       (seq body))
-        collapsed? (or (and
-                        toggle-collapsed?
-                        has-child?)
-                       @collapsed-atom?)
+  [state config heading uuid heading-id level start-level body children dummy? collapsed-atom]
+  (let [has-child? (and
+                    (not (:pre-heading? heading))
+                    (or (seq children)
+                        (seq body)))
+        collapsed? (and has-child?
+                        (rum/react collapsed-atom))
         control-show (util/react (rum/cursor *control-show? heading-id))
         dark? (= "dark" (state/sub :ui/theme))]
     [:div.hd-control.mr-2.flex.flex-row.items-center
@@ -414,11 +408,10 @@
        :class "transition ease-in-out duration-150"
        :on-click (fn [e]
                    (util/stop e)
-                   (let [id (str "ls-heading-" uuid)]
-                     (if collapsed?
-                       (expand/expand! (:id config) id)
-                       (expand/collapse! (:id config) id))
-                     (reset! collapsed-atom? (not collapsed?))))}
+                   (if collapsed?
+                     (expand/expand! heading)
+                     (expand/collapse! heading))
+                   (reset! collapsed-atom (not collapsed?)))}
       (cond
         (and control-show collapsed?)
         (svg/caret-right)
@@ -428,59 +421,33 @@
 
         :else
         [:span ""])]
-     [:a
-      (cond->
-          {:id (str "dot-" uuid)
-           :draggable true
-           :on-drag-start (fn [event]
-                            (handler/highlight-heading! uuid)
-                            (.setData (gobj/get event "dataTransfer")
-                                      "heading-uuid"
-                                      uuid)
-                            (.setData (gobj/get event "dataTransfer")
-                                      "heading-dom-id"
-                                      heading-id)
-                            (reset! *dragging? true)
-                            (reset! *dragging-heading heading))
-           ;; :on-drag-end (fn [event]
-           ;;                (reset! *dragging? false)
-           ;;                (reset! *mouse {}))
-
-           :style {:width 16
-                   :height 16}
-           :headingid (str uuid)}
-        (not dummy?)
-        (assoc :href (str "/page/" uuid)
-               :on-click (fn [e]
-                           (util/stop e)
-                           (when (gobj/get e "shiftKey")
-                             (state/sidebar-add-block!
-                              (state/get-current-repo)
-                              (:db/id heading)
-                              :heading
-                              heading)
-                             (handler/show-right-sidebar)))))
-      (if collapsed?
-        [:svg {:height 16
-               :width 16
-               :fill "currentColor"
-               :display "inline-block"}
-         [:circle {:cx 8
-                   :cy 8
-                   :r 5
-                   :stroke (if dark? "#1d6577" "#cbd7de")
-                   :stroke-width 5
-                   :fill "none"}]
-         [:circle {:cx 8
-                   :cy 8
-                   :r 3}]]
-        [:svg {:height 16
-               :width 16
-               :fill "currentColor"
-               :display "inline-block"}
-         [:circle {:cx 8
-                   :cy 8
-                   :r 3}]])]]))
+     [:a (if (not dummy?)
+           {:href (str "/page/" uuid)
+            :on-click (fn [e]
+                        (util/stop e)
+                        (when (gobj/get e "shiftKey")
+                          (state/sidebar-add-block!
+                           (state/get-current-repo)
+                           (:db/id heading)
+                           :heading
+                           heading)
+                          (handler/show-right-sidebar)))})
+      [:span.bullet-container.cursor
+       {:id (str "dot-" uuid)
+        :draggable true
+        :on-drag-start (fn [event]
+                         (handler/highlight-heading! uuid)
+                         (.setData (gobj/get event "dataTransfer")
+                                   "heading-uuid"
+                                   uuid)
+                         (.setData (gobj/get event "dataTransfer")
+                                   "heading-dom-id"
+                                   heading-id)
+                         (reset! *dragging? true)
+                         (reset! *dragging-heading heading))
+        :headingid (str uuid)
+        :class (if collapsed? "bullet-closed")}
+       [:span.bullet]]]]))
 
 (defn- build-id
   [config ref? sidebar?]
@@ -507,10 +474,7 @@
                :width (- 700 margin-left)}
               (if top?
                 {:top 0}
-                {:bottom bottom}))
-      :on-mouse-move (fn [event]
-                       (let [client-x (gobj/get event "clientX")]
-                         (reset! *mouse {:client-x client-x})))}]))
+                {:bottom bottom}))}]))
 
 (declare heading-container)
 (rum/defc heading-checkbox
@@ -544,24 +508,24 @@
                    (heading-checkbox t (str "mr-1 cursor")))
         marker-cp (when-not pre-heading?
                     (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
-                     [:span {:class (str "task-status " (string/lower-case marker))
-                             :style {:margin-right 3.5}}
-                      (string/upper-case marker)]))
+                      [:span {:class (str "task-status " (string/lower-case marker))
+                              :style {:margin-right 3.5}}
+                       (string/upper-case marker)]))
         priority (when-not pre-heading?
                    (if priority
-                    [:span {:class "priority"
-                            :style {:margin-right 3.5}}
-                     (util/format "[#%s]" (str priority))]))
+                     [:span {:class "priority"
+                             :style {:margin-right 3.5}}
+                      (util/format "[#%s]" (str priority))]))
         tags (when-not pre-heading?
                (when-not (empty? tags)
-                (->elem
-                 :span
-                 {:class "heading-tags"}
-                 (mapv (fn [{:keys [db/id tag/name]}]
-                         [:a.tag.mx-1 {:key (str "tag-" id)
-                                       :href (str "/tag/" name)}
-                          (str "#" name)])
-                       tags))))]
+                 (->elem
+                  :span
+                  {:class "heading-tags"}
+                  (mapv (fn [{:keys [db/id tag/name]}]
+                          [:a.tag.mx-1 {:key (str "tag-" id)
+                                        :href (str "/tag/" name)}
+                           (str "#" name)])
+                        tags))))]
     (when level
       (let [element (if (<= level 6)
                       (keyword (str "h" level))
@@ -602,7 +566,7 @@
   (.getData (gobj/get event "dataTransfer") attr))
 
 (rum/defc heading-content-or-editor < rum/reactive
-  [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? idx] :as heading} edit-input-id heading-id slide?]
+  [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
   (let [edit? (state/sub [:editor/editing? edit-input-id])]
     (if edit?
       [:div {:id (str "editor-" edit-input-id)}
@@ -666,7 +630,7 @@
            (dnd-separator heading 0 -4 false true))
 
          (when (and (not pre-heading?) (seq body))
-           [:div.heading-body
+           [:div.heading-body {:style {:display (if collapsed? "none" "")}}
             (for [child body]
               (let [block (block config child)]
                 (rum/with-key (heading-child block)
@@ -688,17 +652,20 @@
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
-
-  [config {:heading/keys [uuid title level body meta content dummy? page format repo children idx] :as heading}]
+  [config {:heading/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-heading? idx] :as heading}]
   (let [ref? (boolean (:ref? config))
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
         unique-dom-id (build-id config ref? sidebar?)
         edit-input-id (str "edit-heading-" unique-dom-id uuid)
         heading-id (str "ls-heading-" unique-dom-id uuid)
-        has-child? (or (seq children)
-                       (seq body))
+        has-child? (boolean
+                    (and
+                     (not pre-heading?)
+                     (or (seq children)
+                         (seq body))))
         start-level (or (:start-level config) 1)
+        collapsed-atom (atom collapsed?)
         drag-attrs {:on-drag-over (fn [event]
                                     (util/stop event)
                                     (when-not (dnd-same-heading? uuid)
@@ -734,7 +701,11 @@
                     :on-mouse-over (fn [e]
                                      (util/stop e)
                                      (when has-child?
-                                       (swap! *control-show? assoc heading-id true)))
+                                       (swap! *control-show? assoc heading-id true))
+                                     (when-let [parent (gdom/getElement heading-id)]
+                                       (let [node (.querySelector parent ".bullet-container")
+                                             closed? (d/has-class? node "bullet-closed")]
+                                         (reset! collapsed-atom closed?))))
                     :on-mouse-out (fn [e]
                                     (util/stop e)
                                     (when has-child?
@@ -745,10 +716,13 @@
          {:id heading-id
           :style {:position "relative"}
           :class (str uuid
-                      (if dummy? " dummy"))
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-heading? " pre-heading"))
           :headingid (str uuid)
           :repo repo
-          :level level}
+          :level level
+          :haschild (str has-child?)}
        (not slide?)
        (merge drag-attrs))
 
@@ -756,12 +730,13 @@
 
      [:div.flex-1.flex-row.py-1
       (when-not slide?
-        (heading-control config uuid heading-id level start-level body children heading dummy?))
+        (heading-control config heading uuid heading-id level start-level body children dummy? collapsed-atom))
 
       (heading-content-or-editor config heading edit-input-id heading-id slide?)]
 
      (when (seq children)
-       [:div.heading-children {:style {:margin-left 33}}
+       [:div.heading-children {:style {:margin-left 31
+                                       :display (if collapsed? "none" "")}}
         (for [child children]
           (let [child (dissoc child :heading/meta)]
             (rum/with-key (heading-container config child)

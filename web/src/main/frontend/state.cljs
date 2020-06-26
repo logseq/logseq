@@ -29,7 +29,8 @@
     :search/result nil
 
     :ui/theme (or (storage/get :ui/theme) "black")
-    :ui/toggle-state false
+    ;; :show-all, :hide-heading-body, :hide-heading-children
+    :ui/cycle-collapse :show-all
     :ui/collapsed-headings {}
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
@@ -110,9 +111,21 @@
   (when (= (get-current-repo) (:url repo))
     (set-current-repo! (:url (first (get-repos))))))
 
-(defn ui-toggle-state!
+(defn next-collapse-mode
   []
-  (update-state! :ui/toggle-state not))
+  (case (:ui/cycle-collapse @state)
+    :show-all
+    :hide-heading-body
+
+    :hide-heading-body
+    :hide-heading-children
+
+    :hide-heading-children
+    :show-all))
+
+(defn cycle-collapse!
+  []
+  (set-state! :ui/cycle-collapse (next-collapse-mode)))
 
 (defn get-edit-heading
   []
@@ -149,11 +162,15 @@
 
 (defn collapse-heading!
   [heading-id]
-  (set-state! [:ui/collapsed-headings heading-id] true))
+  (set-state! [:ui/collapsed-headings heading-id] (atom true)))
+
+(defn get-heading-collapsed-state
+  [heading-id]
+  (get-in @state [:ui/collapsed-headings heading-id]))
 
 (defn expand-heading!
   [heading-id]
-  (set-state! [:ui/collapsed-headings heading-id] false))
+  (set-state! [:ui/collapsed-headings heading-id] (atom false)))
 
 (defn clear-collapsed-headings!
   []

@@ -9,21 +9,9 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
 
-(defn- get-heading-ids
-  [heading]
-  (let [ids (atom [])
-        _ (walk/prewalk
-           (fn [form]
-             (when (map? form)
-               (when-let [id (:heading/uuid form)]
-                 (swap! ids conj id)))
-             form)
-           heading)]
-    @ids))
-
 (defn- remove-heading-child!
   [target-heading parent-heading]
-  (let [child-ids (set (get-heading-ids target-heading))]
+  (let [child-ids (set (db/get-heading-ids target-heading))]
     (db/get-heading-content-rec
      parent-heading
      (fn [{:heading/keys [uuid level content]}]
@@ -195,7 +183,7 @@
     (= direction :up)
     (let [offset-heading-id (if nested?
                               (:heading/uuid to-heading)
-                              (last (get-heading-ids to-heading)))
+                              (last (db/get-heading-ids to-heading)))
           offset-end-pos (get-end-pos
                           (db/entity repo [:heading/uuid offset-heading-id]))]
       (rebuild-dnd-headings repo target-file target-child?
@@ -207,7 +195,7 @@
     (= direction :down)
     (let [offset-heading-id (if nested?
                               (:heading/uuid to-heading)
-                              (last (get-heading-ids to-heading)))
+                              (last (db/get-heading-ids to-heading)))
           target-start-pos (get-start-pos target-heading)]
       (rebuild-dnd-headings repo target-file target-child?
                             target-start-pos
@@ -358,7 +346,7 @@
                             :else
                             (let [offset-heading-id (if nested?
                                                       (:heading/uuid to-heading)
-                                                      (last (get-heading-ids to-heading)))
+                                                      (last (db/get-heading-ids to-heading)))
                                   offset-end-pos (get-end-pos
                                                   (db/entity repo [:heading/uuid offset-heading-id]))]
                               (rebuild-dnd-headings repo to-file target-child?
@@ -406,7 +394,7 @@
                                 (utf8/substring to-file-content separate-pos))))
         target-delete-tx (map (fn [id]
                                 [:db.fn/retractEntity [:heading/uuid id]])
-                           (get-heading-ids target-heading))
+                           (db/get-heading-ids target-heading))
         [target-modified-time to-modified-time]
         (let [modified-at (tc/to-long (t/now))]
           [[[:db/add (:db/id (:heading/page target-heading)) :page/last-modified-at modified-at]
@@ -427,7 +415,7 @@
                             :else
                             (let [offset-heading-id (if nested?
                                                       (:heading/uuid to-heading)
-                                                      (last (get-heading-ids to-heading)))
+                                                      (last (db/get-heading-ids to-heading)))
                                   offset-end-pos (get-end-pos
                                                   (db/entity to-heading-repo [:heading/uuid offset-heading-id]))]
                               (rebuild-dnd-headings to-heading-repo to-file target-child?

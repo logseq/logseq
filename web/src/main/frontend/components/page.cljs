@@ -68,7 +68,8 @@
        (util/stop e)
        (let [encoded-page-name (get-page-name state)
              id encoded-page-name]
-         (expand/toggle-all! id)))))
+         (expand/cycle!)
+         (handler/re-render-root!)))))
   ;; (mixins/perf-measure-mixin "Page")
   [state {:keys [repo] :as option}]
   (let [repo (or repo (state/get-current-repo))

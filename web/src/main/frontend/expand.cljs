@@ -5,103 +5,95 @@
             [frontend.util :as util]
             [clojure.string :as string]
             [medley.core :as medley]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.db :as db]))
 
-(defn get-headings
-  [id]
-  ;; TODO: dommy/by-id will fail if id includes `=`
-  (when-let [node (gdom/getElement id)]
-    (some-> (d/sel node [".ls-heading"])
-            (array-seq))))
+(defn- hide!
+  [element]
+  (d/set-style! element :display "none"))
 
-(defn- get-level
-  [node]
-  (-> (d/attr node "level")
-      (util/parse-int)))
-
-(defn get-heading-children
-  [headings heading]
-  (let [heading-id (gobj/get heading "id")
-        level (get-level heading)
-        nodes (->> headings
-                   ;; drop preceding nodes
-                   (drop-while (fn [node]
-                                 (not= heading-id (gobj/get node "id"))))
-                   ;; drop self
-                   (next)
-                   ;; take the children
-                   (take-while (fn [node]
-                                 (> (get-level node) level))))]
-    nodes))
-
-(defn collapse-non-heading!
-  [id]
-  (when-let [node (gdom/getElement id)]
-    (doseq [node (d/sel node [".heading-body"])]
-      (d/hide! node))))
-
-(defn expand-non-heading!
-  [id]
-  (when-let [node (gdom/getElement id)]
-    (doseq [node (d/sel node [".heading-body"])]
-      (d/show! node))))
+(defn- show!
+  [element]
+  (d/set-style! element :display ""))
 
 (defn collapse!
-  [headings-id heading-id]
-  (let [all-headings (get-headings headings-id)]
-    (collapse-non-heading! heading-id)
+  [heading]
+  (let [heading-id (str "ls-heading-" (:heading/uuid heading))]
     (when-let [node (gdom/getElement heading-id)]
-      (let [root-level (d/attr node "level")]
-        (let [children (get-heading-children all-headings node)]
-          (doseq [node children]
-            (let [child-level (d/attr node "level")]
-              (when (and root-level
-                         child-level
-                         (= 1 (- (util/parse-int child-level)
-                                 (util/parse-int root-level))))
-                (d/add-class! node "is-collapsed"))
-              (d/hide! node))))))))
+      (d/add-class! node "collapsed")
+      (when-let [e (.querySelector node ".heading-body")]
+        (hide! e))
+      (when-let [e (.querySelector node ".heading-children")]
+        (hide! e))
+      (db/collapse-heading! heading))))
 
 (defn expand!
-  [headings-id heading-id]
-  (let [all-headings (get-headings headings-id)]
-    (state/expand-heading! heading-id)
-    (expand-non-heading! heading-id)
+  [heading]
+  (let [heading-id (str "ls-heading-" (:heading/uuid heading))]
     (when-let [node (gdom/getElement heading-id)]
-      (d/remove-class! node "is-collapsed")
-      (let [root-level (d/attr node "level")]
-        (let [children (get-heading-children all-headings node)]
-          (doseq [node children]
-            (let [child-level (d/attr node "level")
-                  collapsed? (d/has-class? node "is-collapsed")
-                  next-child? (and collapsed?
-                                   root-level
-                                   child-level
-                                   (= 1 (- (util/parse-int child-level)
-                                           (util/parse-int root-level))))]
-              (when next-child?
-                (d/remove-class! node "is-collapsed"))
-              (when (or (not collapsed?)
-                        next-child?)
-                (d/show! node)))))))))
+      ;; (d/remove-class! node "collapsed")
+      (when-let [e (.querySelector node ".heading-body")]
+        (show! e))
+      (when-let [e (.querySelector node ".heading-children")]
+        (show! e))
+      (db/expand-heading! heading)
+      ;; (doseq [element (d/by-class node "cycle-collapsed")]
+      ;;   (d/remove-class! element "cycle-collapsed")
+      ;;   (show! element))
+      )))
 
+(defn set-bullet-closed!
+  [element]
+  (when element
+    (when-let [node (.querySelector element ".bullet-container")]
+      (d/add-class! node "bullet-closed"))))
 
-;; ;; Collapse acts like TOC
-(defn toggle-all!
-  [id]
-  ;; default to level 2
-  (let [all-headings (get-headings id)
-        headings all-headings]
-    (when (seq headings)
-      (let [toggle-state (:ui/toggle-state @state/state)]
-        (doseq [heading headings]
-          (let [heading-id (gobj/get heading "id")
-                level (util/parse-int (d/attr heading "level"))]
-            (if toggle-state
-              (expand! id heading-id)
-              (when (= level 2)
-                (collapse! id heading-id)
-                (state/collapse-heading! heading-id)))))
-        (when toggle-state
-          (state/clear-collapsed-headings!))
-        (state/ui-toggle-state!)))))
+;; Collapse acts like TOC
+;; There are three modes to cycle:
+;; 1. Collapse all headings which levels are greater than 2
+;; 2. Hide all heading's body (user can still see the heading title)
+;; 3. Show everything
+(defn cycle!
+  []
+  (let [mode (state/next-collapse-mode)
+        get-headings (fn []
+                       (let [elements (d/by-class "ls-heading")
+                             result (group-by (fn [e]
+                                                (let [level (d/attr e "level")]
+                                                  (and level
+                                                       (> (util/parse-int level) 2)))) elements)]
+                         [(get result true) (get result false)]))]
+    (case mode
+      :show-all
+      (do
+        (doseq [element (d/by-class "ls-heading")]
+          (show! element))
+        (let [elements (d/by-class "heading-body")]
+          (doseq [element elements]
+            (show! element)))
+        (doseq [element (d/by-class "bullet-closed")]
+          (d/remove-class! element "bullet-closed"))
+        (doseq [element (d/by-class "heading-children")]
+          (show! element)))
+
+      :hide-heading-body
+      (let [elements (d/by-class "heading-body")]
+        (doseq [element elements]
+          (d/set-style! element :display "none")
+          (when-let [parent (util/rec-get-heading-node element)]
+            (set-bullet-closed! parent))))
+
+      :hide-heading-children
+      (let [[elements top-level-elements] (get-headings)
+            level-2-elements (filter (fn [e]
+                                       (let [level (d/attr e "level")]
+                                         (and level
+                                              (= (util/parse-int level) 2)
+                                              (not (d/has-class? e "pre-heading")))))
+                                     top-level-elements)]
+        (doseq [element elements]
+          (hide! element))
+        (doseq [element level-2-elements]
+          (when (= "true" (d/attr element "haschild"))
+            (set-bullet-closed! element)))))
+    (state/cycle-collapse!)))
