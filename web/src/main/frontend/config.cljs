@@ -7,12 +7,12 @@
 
 (def website
   (if dev?
-    "http://192.168.1.145:3000"
+    "http://localhost:3000"
     "https://logseq.com"))
 
 (def api
   (if dev?
-    "http://192.168.1.145:3000/api/v1/"
+    "http://localhost:3000/api/v1/"
     (str website "/api/v1/")))
 
 (def asset-domain "https://asset.logseq.com")
