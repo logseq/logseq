@@ -53,8 +53,8 @@
         hiccup (hiccup/->hiccup page-headings hiccup-config {})]
     (rum/with-key
       (content/content encoded-page-name
-                      {:hiccup hiccup
-                       :sidebar? sidebar?})
+                       {:hiccup hiccup
+                        :sidebar? sidebar?})
       (str encoded-page-name "-hiccup"))))
 
 ;; A page is just a logical heading
@@ -81,7 +81,6 @@
          [repo :heading/page (uuid page-name)]
          (when-let [page-id (db/entity repo [:page/name page-name])]
            [repo :page/headings page-id])))))
-  ;; (mixins/perf-measure-mixin "Page")
   [state {:keys [repo] :as option}]
   (let [repo (or repo (state/get-current-repo))
         encoded-page-name (get-page-name state)
@@ -185,8 +184,9 @@
                                         query)])])))
 
          ;; referenced headings
-         [:div {:key "page-references"}
-          (reference/references page-name false false)]]))))
+         (when-not sidebar?
+           [:div {:key "page-references"}
+            (reference/references page-name false false)])]))))
 
 (rum/defc all-pages < rum/reactive
   []

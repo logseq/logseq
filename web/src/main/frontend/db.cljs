@@ -885,14 +885,13 @@
   [file ast]
   ;; headline
   (let [file-page-name (get-file-page file)
-        first-heading (first (filter block/heading-block? ast))
+        first-heading (last (first (filter block/heading-block? ast)))
         directive-name (when (and (= "Directives" (ffirst ast))
                                   (not (string/blank? (:title (last (first ast))))))
                          (:title (last (first ast))))
-        first-heading-name (when (and first-heading
-                                      (= (:heading/level first-heading) 1))
+        first-heading-name (and first-heading
                              ;; FIXME:
-                             (str (last (first (:title (second first-heading))))))]
+                             (str (last (first (:title first-heading)))))]
     (string/lower-case (or
                         directive-name
                         file-page-name
@@ -922,91 +921,91 @@
   [format ast directives file content utf8-content journal? pages-fn]
   (try
     (let [headings (block/extract-headings ast (utf8/length utf8-content) utf8-content)
-          pages (pages-fn headings ast)
-          ref-pages (atom #{})
-          headings (mapcat
-                    (fn [[page headings]]
-                      (if page
-                        (map (fn [heading]
-                               (let [heading-ref-pages (seq (:heading/ref-pages heading))]
-                                 (when heading-ref-pages
-                                   (swap! ref-pages set/union (set heading-ref-pages)))
-                                 (-> heading
-                                     (dissoc :ref-pages)
-                                     (assoc :heading/content (get-heading-content utf8-content heading)
-                                            :heading/file [:file/path file]
-                                            :heading/format format
-                                            :heading/page [:page/name (string/lower-case page)]
-                                            :heading/ref-pages (mapv
-                                                                (fn [page]
-                                                                  {:page/name (string/lower-case page)})
-                                                                heading-ref-pages)))))
-                          headings)))
-                    pages)
-          pages (map
+         pages (pages-fn headings ast)
+         ref-pages (atom #{})
+         headings (mapcat
+                   (fn [[page headings]]
+                     (if page
+                       (map (fn [heading]
+                              (let [heading-ref-pages (seq (:heading/ref-pages heading))]
+                                (when heading-ref-pages
+                                  (swap! ref-pages set/union (set heading-ref-pages)))
+                                (-> heading
+                                    (dissoc :ref-pages)
+                                    (assoc :heading/content (get-heading-content utf8-content heading)
+                                           :heading/file [:file/path file]
+                                           :heading/format format
+                                           :heading/page [:page/name (string/lower-case page)]
+                                           :heading/ref-pages (mapv
+                                                               (fn [page]
+                                                                 {:page/name (string/lower-case page)})
+                                                               heading-ref-pages)))))
+                         headings)))
+                   pages)
+         pages (map
+                 (fn [page]
+                   (let [page-file? (= page (string/lower-case file))
+                         other-alias (and (:alias directives)
+                                          (seq (remove #(= page %)
+                                                       (:alias directives))))
+                         other-alias (distinct
+                                      (->> (if page-file?
+                                             other-alias
+                                             (conj other-alias (string/lower-case file)))
+                                           (remove nil?)))]
+                     (cond->
+                         {:page/name page
+                          :page/file [:file/path file]
+                          :page/journal? journal?
+                          :page/journal-day (if journal?
+                                              (date/journal-title->int (string/capitalize page))
+                                              0)}
+                       (seq directives)
+                       (assoc :page/directives directives)
+
+                       other-alias
+                       (assoc :page/alias
+                              (map
+                                (fn [alias]
+                                  (let [alias (string/lower-case alias)
+                                        aliases (->>
+                                                 (distinct
+                                                  (conj
+                                                   (remove #{alias} other-alias)
+                                                   page))
+                                                 (remove nil?))
+                                        aliases (if (seq aliases)
+                                                  (map
+                                                    (fn [alias]
+                                                      {:page/name alias})
+                                                    aliases))]
+                                    (if (seq aliases)
+                                      {:page/name alias
+                                       :page/alias aliases}
+                                      {:page/name alias})))
+                                other-alias))
+
+                       (:tags directives)
+                       (assoc :page/tags
+                              (map
+                                (fn [tag]
+                                  {:tag/name (string/lower-case tag)})
+                                (:tags directives))))))
+                 (->> (map first pages)
+                      (remove nil?)))
+         pages (concat
+                pages
+                (map
                   (fn [page]
-                    (let [page-file? (= page (string/lower-case file))
-                          other-alias (and (:alias directives)
-                                           (seq (remove #(= page %)
-                                                        (:alias directives))))
-                          other-alias (distinct
-                                       (->> (if page-file?
-                                              other-alias
-                                              (conj other-alias (string/lower-case file)))
-                                            (remove nil?)))]
-                      (cond->
-                          {:page/name page
-                           :page/file [:file/path file]
-                           :page/journal? journal?
-                           :page/journal-day (if journal?
-                                               (date/journal-title->int (string/capitalize page))
-                                               0)}
-                        (seq directives)
-                        (assoc :page/directives directives)
-
-                        other-alias
-                        (assoc :page/alias
-                               (map
-                                 (fn [alias]
-                                   (let [alias (string/lower-case alias)
-                                         aliases (->>
-                                                  (distinct
-                                                   (conj
-                                                    (remove #{alias} other-alias)
-                                                    page))
-                                                  (remove nil?))
-                                         aliases (if (seq aliases)
-                                                   (map
-                                                     (fn [alias]
-                                                       {:page/name alias})
-                                                     aliases))]
-                                     (if (seq aliases)
-                                       {:page/name alias
-                                        :page/alias aliases}
-                                       {:page/name alias})))
-                                 other-alias))
-
-                        (:tags directives)
-                        (assoc :page/tags
-                               (map
-                                 (fn [tag]
-                                   {:tag/name (string/lower-case tag)})
-                                 (:tags directives))))))
-                  (map first pages))
-          pages (concat
-                 pages
-                 (map
-                   (fn [page]
-                     {:page/name (string/lower-case page)})
-                   @ref-pages))]
-      (vec
-       (->> (concat
-             pages
-             headings)
-            (remove nil?))))
+                    {:page/name (string/lower-case page)})
+                  @ref-pages))]
+     (vec
+      (->> (concat
+            pages
+            headings)
+           (remove nil?))))
     (catch js/Error e
-      (prn "Parsing error: " e)
-      (js/console.dir e))))
+      (js/console.log e))))
 
 ;; check journal formats and report errors
 (defn extract-headings-pages
