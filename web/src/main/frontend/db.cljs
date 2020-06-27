@@ -209,10 +209,14 @@
                               :transform-fn transform-fn})
   result-atom)
 
+(defn remove-q!
+  [k]
+  (swap! query-state dissoc k))
+
 ;; TODO: rename :custom to :query/custom
 (defn remove-custom-query!
   [repo query-string]
-  (swap! query-state dissoc [repo :custom query-string]))
+  (remove-q! [repo :custom query-string]))
 
 (defn set-new-result!
   [k new-result]
@@ -289,7 +293,6 @@
       :heading/change
       (when (seq data)
         (let [headings data
-              _ (prn headings)
               current-tag (get-current-tag)
               current-page-id (get-current-page-id)
               {:heading/keys [page]} (first headings)
@@ -332,12 +335,19 @@
                                       (keys @query-state))
                               (map (fn [v]
                                      (vec (drop 1 v)))))
-              ]
+              heading-blocks (some->>
+                              (filter (fn [v]
+                                        (and (= (first v) (state/get-current-repo))
+                                             (= (second v) :heading/block)))
+                                      (keys @query-state))
+                              (map (fn [v]
+                                     (vec (drop 1 v)))))]
           (->>
            (util/concat-without-nil
             handler-keys
             refed-pages
-            custom-queries)
+            custom-queries
+            heading-blocks)
            distinct)))
       [[key]])))
 
@@ -842,7 +852,7 @@
         level (:heading/level heading)
         pred (fn [data meta]
                (>= (:pos meta) pos))]
-    (some-> (q repo [:page/headings page]
+    (some-> (q repo [:heading/block heading-uuid]
               {:use-cache? false
                :transform-fn #(heading-and-children-transform % repo heading-uuid level)}
               '[:find (pull ?heading [*])

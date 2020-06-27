@@ -345,11 +345,12 @@
 ;; TODO: refactor
 (defn get-state
   [state]
-  (let [[content {:keys [on-hide heading heading-id heading-parent-id dummy? format sidebar?]} id] (:rum/args state)
+  (let [[content {:keys [on-hide heading heading-id heading-parent-id dummy? format sidebar?]} id config] (:rum/args state)
         node (gdom/getElement id)
         value (gobj/get node "value")
         pos (gobj/get node "selectionStart")]
-    {:on-hide on-hide
+    {:config config
+     :on-hide on-hide
      :content content
      :dummy? dummy?
      :sidebar? sidebar?
@@ -561,8 +562,10 @@
         {
          ;; enter
          13 (fn [state e]
-              (let [{:keys [heading]} (get-state state)]
-                (when heading
+              (let [{:keys [heading config]} (get-state state)]
+                (when (and heading
+                           (not (:ref? config))
+                           (not (:custom-query? config))) ; in reference section
                   (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
                                    (string/lower-case (string/trim v)))
                         insert? (cond
@@ -731,7 +734,7 @@
                    state)}
   [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}
-            :as option} id]
+            :as option} id config]
   (let [edit-content (state/sub [:editor/content id])
         edit-content (and edit-content (string/triml edit-content))]
     [:div.editor {:style {:position "relative"

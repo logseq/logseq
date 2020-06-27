@@ -586,7 +586,8 @@
                     :on-hide (fn [value event]
                                (when (= event :esc)
                                  (handler/highlight-heading! uuid)))}
-                   edit-input-id)]
+                   edit-input-id
+                   config)]
       (let [dragging? (rum/react *dragging?)
             drag-attrs {:on-click (fn [e]
                                     (let [target (gobj/get e "target")]
@@ -1003,15 +1004,6 @@
 (defn build-headings
   [headings config]
   (let [headings (db/headings->vec-tree headings)]
-    ;; (walk/postwalk
-    ;;  (fn [form]
-    ;;    (when (and (map? form)
-    ;;               (:heading/children form))
-    ;;      (swap! *heading-children assoc
-    ;;             (:heading/uuid form)
-    ;;             (:heading/children form)))
-    ;;    form)
-    ;;  headings)
     (when (seq headings)
       (let [first-id (:heading/uuid (first headings))]
         (for [item headings]

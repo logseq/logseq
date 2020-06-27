@@ -28,7 +28,7 @@
     (get-in route-match [:parameters :path :name])))
 
 (defn- get-headings
-  [repo page-name journal? heading?]
+  [repo page-name heading?]
   (if heading?
     (db/get-heading-and-children repo (uuid page-name))
     (db/get-page-headings repo page-name)))
@@ -48,7 +48,8 @@
         start-level (if journal? 2 1)
         hiccup-config {:id encoded-page-name
                        :start-level start-level
-                       :sidebar? sidebar?}
+                       :sidebar? sidebar?
+                       :heading? heading?}
         hiccup (hiccup/->hiccup page-headings hiccup-config {})]
     (rum/with-key
       (content/content encoded-page-name
@@ -70,6 +71,16 @@
              id encoded-page-name]
          (expand/cycle!)
          (handler/re-render-root!)))))
+  (mixins/clear-query-cache
+   (fn [state]
+     (let [repo (or (:repo (first (:rum/args state))) (state/get-current-repo))
+           encoded-page-name (get-page-name state)
+           page-name (string/lower-case (util/url-decode encoded-page-name))
+           heading? (util/uuid-string? page-name)]
+       (if heading?
+         [repo :heading/page (uuid page-name)]
+         (when-let [page-id (db/entity repo [:page/name page-name])]
+           [repo :page/headings page-id])))))
   ;; (mixins/perf-measure-mixin "Page")
   [state {:keys [repo] :as option}]
   (let [repo (or repo (state/get-current-repo))
@@ -81,7 +92,7 @@
         heading? (util/uuid-string? page-name)
         heading-id (and heading? (uuid page-name))
         sidebar? (:sidebar? option)
-        raw-page-headings (get-headings repo page-name journal? heading?)]
+        raw-page-headings (get-headings repo page-name heading?)]
     (cond
       marker-page?
       [:div
