@@ -255,10 +255,13 @@
      (get-github-token)
      repo-url
      name
-     (fn []
+     (fn [permission]
        (create-month-journal-if-not-exists repo-url)
-       (create-config-file-if-not-exists repo-url))
-     (fn [] nil))))
+       (create-config-file-if-not-exists repo-url)
+       (let [permission (:permission permission)
+             write-permission (contains? #{"admin" "write"} permission)]
+         (db/set-key-value repo-url :git/write-permission? write-permission)))
+     (fn []))))
 
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
@@ -359,6 +362,7 @@
   [repo-url]
   ;; TODO: find un-committed changes, and create a commit
   (when (and
+         (db/get-key-value repo-url :git/write-permission?)
          (not (state/get-edit-input-id))
          (= :should-push (db/get-key-value repo-url :git/status)))
     ;; auto commit if there are any un-committed changes

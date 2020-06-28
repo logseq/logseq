@@ -45,6 +45,6 @@
                             :headers {:Accept "application/json"
                                       :Content-Type "application/json"
                                       :Authorization token}})
-                (fn [result] (true-handler))
-                (fn [_error]
+                (fn [result] (true-handler result))
+                (fn [error]
                   (false-handler)))))
