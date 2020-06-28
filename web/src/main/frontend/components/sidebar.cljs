@@ -330,6 +330,12 @@
                           :target "_blank"}}
                {:title "Logseq documentation"
                 :options {:href "/docs"}}
+               {:title [:div.flex-row.flex.justify-between.items-center
+                        [:span "Join the community"]
+                        svg/discord]
+                :options {:href "https://discord.gg/KpN4eHY"
+                          :title "Our discord group!"
+                          :target "_blank"}}
                (when logged?
                  {:title "Sign out"
                   :options {:on-click handler/sign-out!}})]
