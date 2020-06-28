@@ -442,6 +442,8 @@
 (defn in-auto-complete?
   [input]
   (or (seq (get-matched-commands input))
+      (seq (get-matched-block-commands input))
+      @*show-block-commands
       (state/get-editor-show-input)
       (state/get-editor-show-page-search)
       (state/get-editor-show-block-search)
