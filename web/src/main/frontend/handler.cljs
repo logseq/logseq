@@ -9,6 +9,7 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.diff :as diff]
+            [frontend.github :as github]
             [clojure.walk :as walk]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -247,12 +248,23 @@
   (contains? (set (map :path diffs))
              (db/get-current-journal-path)))
 
+(defn create-default-files!
+  [repo-url]
+  (when-let [name (get-in @state/state [:me :name])]
+    (github/get-repo-permission
+     (get-github-token)
+     repo-url
+     name
+     (fn []
+       (create-month-journal-if-not-exists repo-url)
+       (create-config-file-if-not-exists repo-url))
+     (fn [] nil))))
+
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
-      (create-month-journal-if-not-exists repo-url)
-      (create-config-file-if-not-exists repo-url)
+      (create-default-files! repo-url)
 
       (history/clear-specific-history! [:git/repo repo-url])
       (history/add-history!
@@ -286,8 +298,7 @@
                 (p/then (fn [result]
                           (-> (git/checkout repo-url)
                               (p/then (fn [result]
-                                        (create-month-journal-if-not-exists repo-url)
-                                        (create-config-file-if-not-exists repo-url)
+                                        (create-default-files! repo-url)
                                         (set-git-status! repo-url nil)
                                         (set-git-last-pulled-at! repo-url)
                                         (when (and latest-commit fetchHead

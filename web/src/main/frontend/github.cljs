@@ -3,6 +3,8 @@
             [cljs-bean.core :as bean]
             [goog.crypt.base64 :as b64]))
 
+(defonce API "https://api.github.com/")
+
 ;; https://developer.github.com/v3/repos/contents/
 ;; GET /repos/:owner/:repo/contents/:path?ref=oid
 ;; header 'authorization: Basic PASSWORD'
@@ -10,7 +12,7 @@
   [token repo-url path ref ok-handler error-handler]
   (let [[owner repo-name] (util/get-git-owner-and-repo repo-url)
         token (str "Basic "(b64/encodeString (str token ":x-oauth-basic")))
-        url (util/format "https://api.github.com/repos/%s/%s/contents/%s?ref=%s"
+        url (util/format (str API "repos/%s/%s/contents/%s?ref=%s")
                          owner
                          repo-name
                          path
@@ -28,3 +30,21 @@
                         :content content}))
                     (fn [error]
                       (error-handler error)))))
+
+;; GET /repos/:owner/:repo/collaborators/:username/permission
+(defn get-repo-permission
+  [token repo-url current-user-name true-handler false-handler]
+  (let [[owner repo-name] (util/get-git-owner-and-repo repo-url)
+        token (str "Basic "(b64/encodeString (str token ":x-oauth-basic")))
+        url (util/format (str API "repos/%s/%s/collaborators/%s/permission")
+                         owner
+                         repo-name
+                         current-user-name)]
+    (util/fetch url
+                (bean/->js {:method "get"
+                            :headers {:Accept "application/json"
+                                      :Content-Type "application/json"
+                                      :Authorization token}})
+                (fn [result] (true-handler))
+                (fn [_error]
+                  (false-handler)))))
