@@ -1402,7 +1402,10 @@
          :edges edges}))))
 
 (defn headings->vec-tree [col]
-  (let [col (map (fn [h] (dissoc h :heading/meta)) col)
+  (let [col (map (fn [h] (cond->
+                           h
+                           (not (:heading/dummy? h))
+                           (dissoc h :heading/meta))) col)
         parent? (fn [item children]
                   (and (seq children)
                        (every? #(< (:heading/level item) (:heading/level %)) children)))]

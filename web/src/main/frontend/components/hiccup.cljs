@@ -639,10 +639,12 @@
 
          (when (and (not pre-heading?) (seq body))
            [:div.heading-body {:style {:display (if collapsed? "none" "")}}
-            (for [child body]
-              (let [block (block config child)]
-                (rum/with-key (heading-child block)
-                  (cljs.core/random-uuid))))])]))))
+            ;; TODO: consistent id instead of the idx (since it could be changed later)
+            (for [[idx child] (medley/indexed body)]
+              (rum/with-key
+                (heading-child
+                 (block config child))
+                (str uuid "-" idx)))])]))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [heading slide? top?]
