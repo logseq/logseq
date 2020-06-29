@@ -340,10 +340,9 @@
       (let [s (string/trim s)]
         (if (util/uuid-string? s)
           (let [id (uuid s)
-                headings (db/get-heading-and-children (state/get-current-repo) id)
-                headings (map (fn [h] (assoc h "embed?" true)) headings)]
-            [:div.embed-block
-             (headings-container headings config)]))))
+                headings (db/get-heading-and-children (state/get-current-repo) id)]
+            [:div.embed-block.pt-2.px-3.bg-base-2
+             (headings-container headings (assoc config :embed? true))]))))
 
     ["Break_Line"]
     [:br]
