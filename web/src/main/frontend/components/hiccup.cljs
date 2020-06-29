@@ -453,7 +453,11 @@
                          (reset! *dragging? true)
                          (reset! *dragging-heading heading))
         :headingid (str uuid)
-        :class (if collapsed? "bullet-closed")}
+        :class (str (when collapsed? "bullet-closed")
+                    " "
+                    (when (and (:document/mode? config)
+                               (not collapsed?))
+                      "hide-inner-bullet"))}
        [:span.bullet]]]]))
 
 (defn- build-id
@@ -665,6 +669,7 @@
   (let [ref? (boolean (:ref? config))
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
+        doc-mode? (:document/mode? config)
         unique-dom-id (build-id config ref? sidebar?)
         edit-input-id (str "edit-heading-" unique-dom-id uuid)
         heading-id (str "ls-heading-" unique-dom-id uuid)
@@ -715,12 +720,18 @@
                                              closed? (d/has-class? node "bullet-closed")]
                                          (if closed?
                                            (state/collapse-heading! uuid)
-                                           (state/expand-heading! uuid)))))
+                                           (state/expand-heading! uuid))
+                                         (when doc-mode?
+                                           (d/remove-class! node "hide-inner-bullet")))))
                     :on-mouse-out (fn [e]
                                     (util/stop e)
                                     (when has-child?
                                       (swap! *control-show?
-                                             assoc heading-id false)))}]
+                                             assoc heading-id false))
+                                    (when doc-mode?
+                                      (when-let [parent (gdom/getElement heading-id)]
+                                        (when-let [node (.querySelector parent ".bullet-container")]
+                                          (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-heading.flex.flex-col
      (cond->
          {:id heading-id
@@ -739,13 +750,13 @@
      (dnd-separator-wrapper heading slide? (zero? idx))
 
      [:div.flex-1.flex-row.py-1
-      (when-not slide?
+      (when (not slide?)
         (heading-control config heading uuid heading-id level start-level body children dummy?))
 
       (heading-content-or-editor config heading edit-input-id heading-id slide?)]
 
      (when (seq children)
-       [:div.heading-children {:style {:margin-left 31
+       [:div.heading-children {:style {:margin-left (if doc-mode? 12 31)
                                        :display (if collapsed? "none" "")}}
         (for [child children]
           (let [child (dissoc child :heading/meta)]
@@ -1040,22 +1051,27 @@
                     headings)]
       sections)))
 
-(rum/defc headings-container
+(rum/defc headings-container < rum/static
   [headings config]
   [:div.headings-container {:style {:margin-left -24}}
    (build-headings headings config)])
 
-(rum/defc ->hiccup < rum/static
+(rum/defc ->hiccup < rum/reactive
   ;; (mixins/perf-measure-mixin "hiccup")
   [headings config option]
-  [:div.content option
-   (if (:group-by-page? config)
-     (for [[page headings] headings]
-       (let [page (db/entity (:db/id page))]
-         [:div.my-2 {:key (str "page-" (:db/id page))}
-          (page-cp (:page/name page))
-          (headings-container headings config)]))
-     (headings-container headings config))])
+  (let [document-mode? (state/sub [:document/mode?])
+        config (assoc config :document/mode? document-mode?)]
+    (prn document-mode?)
+    [:div.content (cond-> option
+                    document-mode?
+                    (assoc :class "doc-mode"))
+     (if (:group-by-page? config)
+       (for [[page headings] headings]
+         (let [page (db/entity (:db/id page))]
+           [:div.my-2 {:key (str "page-" (:db/id page))}
+            (page-cp (:page/name page))
+            (headings-container headings config)]))
+       (headings-container headings config))]))
 
 (comment
   ;; timestamps

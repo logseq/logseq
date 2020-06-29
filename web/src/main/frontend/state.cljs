@@ -35,6 +35,7 @@
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
     :ui/custom-query-components {}
+    :document/mode? (or (storage/get :document/mode?) false)
 
     :github/contents {}
     :config {}
@@ -388,6 +389,12 @@
 (defn set-today!
   [value]
   (set-state! :today value))
+
+(defn toggle-document-mode!
+  []
+  (let [mode (get @state :document/mode?)]
+    (set-state! :document/mode? (not mode))
+    (storage/set :document/mode? (not mode))))
 
 (defn get-date-formatter
   []

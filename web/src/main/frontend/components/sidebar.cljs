@@ -168,6 +168,7 @@
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
+  (mixins/keyboard-mixin "ctrl+alt+d" state/toggle-document-mode!)
   []
   (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
