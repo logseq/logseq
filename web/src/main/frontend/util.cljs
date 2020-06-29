@@ -568,11 +568,15 @@
   (if (<= (count s) n)
     s
     (subs s 0 n)))
-
-(defonce uuid-pattern #"^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$")
+(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+(defonce exactly-uuid-pattern (re-pattern (str "^" uuid-pattern "$")))
 (defn uuid-string?
   [s]
-  (re-find uuid-pattern s))
+  (re-find exactly-uuid-pattern s))
+
+(defn extract-uuid
+  [s]
+  (re-find (re-pattern uuid-pattern) s))
 
 (defn drop-nth [n coll]
   (keep-indexed #(if (not= %1 n) %2) coll))

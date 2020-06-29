@@ -21,6 +21,7 @@
                      *angle-bracket-caret-pos
                      *matched-block-commands
                      *show-block-commands]]
+            [frontend.format.block :as block]
             [medley.core :as medley]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -129,12 +130,6 @@
                          100)]
           (reset! *image-uploading-process process)))))))
 
-(defn with-levels
-  [text format {:heading/keys [level pre-heading?]}]
-  (let [pattern (config/get-heading-pattern format)
-        prefix (if pre-heading? "" (str (apply str (repeat level pattern)) " "))]
-    (str prefix (string/triml text))))
-
 (rum/defc commands < rum/reactive
   [id format]
   (when (and (util/react *show-commands)
@@ -146,6 +141,7 @@
       (ui/auto-complete
        (map first matched)
        {:on-chosen (fn [chosen]
+                     (reset! commands/*current-command chosen)
                      (let [restore-slash? (not (contains? #{"Page Reference"
                                                             "Link"
                                                             "Image Link"
@@ -253,10 +249,9 @@
                                (state/set-editor-show-block-search false)
                                (let [uuid-string (str (:heading/uuid chosen))]
                                  (insert-command! id
-                                                  (util/format "((%s))" uuid-string)
+                                                  (str "@@embed: " uuid-string)
                                                   format
-                                                  {:last-pattern (str "((" q)
-                                                   :postfix-fn (fn [s] (util/replace-first "))" s ""))})
+                                                  {:last-pattern "@@embed: "})
                                  ;; Save it so it'll be remembered when next time it got parsing
                                  (handler/set-heading-property! (:heading/uuid chosen)
                                                                 "CUSTOM_ID"
@@ -506,7 +501,7 @@
                     heading)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     ;; save the current heading and insert a new heading
-    (let [value-with-levels (with-levels value format heading)
+    (let [value-with-levels (block/with-levels value format heading)
           [_first-heading last-heading _new-heading-content] (handler/insert-new-heading! heading value-with-levels)
           last-id (:heading/uuid last-heading)]
       (handler/edit-heading! last-id :max format id)
@@ -537,7 +532,7 @@
                                 (dec level)
                                 level)
                       :else level)
-        new-value (with-levels value format (assoc heading :heading/level final-level))]
+        new-value (block/with-levels value format (assoc heading :heading/level final-level))]
     (set-last-edit-heading! (:heading/uuid heading) value)
     (handler/save-heading-if-changed! heading new-value)))
 
@@ -726,7 +721,7 @@
                         input
                         :upload-images))
                      (when (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
-                       (let [new-value (with-levels value format heading)]
+                       (let [new-value (block/with-levels value format heading)]
                          (let [cache [(:heading/uuid heading) value]]
                            (when (not= @*last-edit-heading cache)
                              (handler/save-heading-if-changed! heading new-value)

@@ -5,6 +5,7 @@
             [frontend.format :as format]
             [frontend.utf8 :as utf8]
             [medley.core :as medley]
+            [frontend.config :as config]
             [datascript.core :as d]
             [clojure.set :as set]))
 
@@ -67,7 +68,7 @@
    (= "Property_Drawer" (first block))))
 
 (defn extract-properties
-  [[_ properties start-pos end-pos]]
+  [[_ properties start-pos end-pos :as all]]
   {:properties (into {} properties)
    :start-pos start-pos
    :end-pos end-pos})
@@ -163,7 +164,8 @@
                 (let [heading (-> (assoc (second block)
                                          :body (vec (reverse heading-body))
                                          :timestamps timestamps
-                                         :properties (:properties properties))
+                                         :properties (:properties properties)
+                                         :properties-meta (dissoc properties :properties))
                                   (assoc-in [:meta :end-pos] last-pos))
                       heading (with-refs heading)
                       last-pos' (get-in heading [:meta :pos])
@@ -238,6 +240,7 @@
                                       {:heading/meta meta
                                        :heading/marker (get heading :heading/marker "nil")
                                        :heading/properties (get heading :heading/properties [])
+                                       :heading/properties-meta (get heading :heading/properties-meta [])
                                        :heading/file file
                                        :heading/format format
                                        :heading/page page
@@ -268,3 +271,9 @@
        :pages pages
        :start-pos start-pos
        :end-pos (+ start-pos content-length)})))
+
+(defn with-levels
+  [text format {:heading/keys [level pre-heading?]}]
+  (let [pattern (config/get-heading-pattern format)
+        prefix (if pre-heading? "" (str (apply str (repeat level pattern)) " "))]
+    (str prefix (string/triml text))))

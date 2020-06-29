@@ -165,6 +165,7 @@
                       :db/isComponent true}
    :heading/meta {}
    :heading/properties {}
+   :heading/properties-meta {}
    :heading/created-at {}
    :heading/last-modified-at {}
    :heading/body {}

@@ -12,6 +12,7 @@
 (defonce *show-block-commands (atom false))
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
+(defonce *current-command (atom nil))
 
 (defn ->page-reference
   [page]
@@ -31,12 +32,10 @@
 
 (defn ->inline
   [type]
-  (let [template (util/format "@@%s: %s@@"
-                              type
-                              type)
-        backward-pos (count (str type "@@"))]
+  (let [template (util/format "@@%s: @@"
+                              type)]
     [[:editor/input template {:last-pattern slash
-                              :backward-pos backward-pos}]]))
+                              :backward-pos 2}]]))
 
 (defn embed-block
   []
@@ -154,6 +153,8 @@
    {:keys [last-pattern postfix-fn backward-pos forward-pos]
     :or {last-pattern slash}
     :as option}]
+  (prn "Insert: "{:value value
+                  :option option})
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (:pos (util/get-caret-pos input))
@@ -167,6 +168,8 @@
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
+    (prn {:prefix prefix
+          :postfix postfix})
     (state/set-heading-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input
                          (if (or backward-pos forward-pos)

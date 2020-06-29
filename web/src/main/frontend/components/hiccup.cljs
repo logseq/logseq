@@ -23,6 +23,7 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.mixins :as mixins]
             ["/frontend/utils" :as utils]
+            [frontend.format.block :as block]
             [clojure.walk :as walk]))
 
 ;; local state
@@ -205,6 +206,8 @@
     [element {:id id}
      s]))
 
+(declare headings-container)
+
 (rum/defc inline < rum/reactive
   [config item]
   (match item
@@ -331,6 +334,16 @@
     ;; String to hiccup
     ["Export_Snippet" "hiccup" s]
     (reader/read-string s)
+
+    ["Export_Snippet" "embed" s]
+    (when s
+      (let [s (string/trim s)]
+        (if (util/uuid-string? s)
+          (let [id (uuid s)
+                headings (db/get-heading-and-children (state/get-current-repo) id)
+                headings (map (fn [h] (assoc h "embed?" true)) headings)]
+            [:div.embed-block
+             (headings-container headings config)]))))
 
     ["Break_Line"]
     [:br]
@@ -461,12 +474,20 @@
        [:span.bullet]]]]))
 
 (defn- build-id
-  [config ref? sidebar?]
-  (cond
-    ref? (str (:id config) "-")
-    sidebar? (str "sidebar-" (:id config) "-")
-    (:custom-query? config) (str "custom-query-" (:id config) "-")
-    :else nil))
+  [config ref? sidebar? embed?]
+  (cond->>
+      ""
+    (:id config)
+    (str (:id config) "-")
+
+    (:custom-query? config)
+    (str "custom-query-")
+
+    embed?
+    (str "embed-")
+
+    sidebar?
+    (str "sidebar-")))
 
 (rum/defc dnd-separator
   [heading margin-left bottom top? nested?]
@@ -578,7 +599,24 @@
 
 (rum/defc heading-content-or-editor < rum/reactive
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
-  (let [edit? (state/sub [:editor/editing? edit-input-id])]
+  (let [current-edit-input-id (state/sub-edit-input-id)
+        edit? (= current-edit-input-id edit-input-id)
+        follower? (and (not edit?)
+                       current-edit-input-id
+                       (when-let [s (util/extract-uuid current-edit-input-id)]
+                         (= (cljs.core/uuid s) uuid)))
+        heading (if follower?
+                  (let [content (state/sub [:editor/content current-edit-input-id])
+                        content (block/with-levels content format heading)
+                        new-heading (first (second (first (block/parse-heading
+                                                     (assoc heading :heading/content content) format))))]
+                    (merge new-heading
+                           {:heading/level level
+                            :heading/meta meta
+                            :heading/dummy? dummy?
+                            :heading/children children
+                            :heading/pre-heading? pre-heading?}))
+                  heading)]
     (if edit?
       [:div {:id (str "editor-" edit-input-id)}
        (editor/box (string/trim content)
@@ -644,7 +682,7 @@
          (when (and (not pre-heading?) (seq body))
            [:div.heading-body {:style {:display (if collapsed? "none" "")}}
             ;; TODO: consistent id instead of the idx (since it could be changed later)
-            (for [[idx child] (medley/indexed body)]
+            (for [[idx child] (medley/indexed (:heading/body heading))]
               (rum/with-key
                 (heading-child
                  (block config child))
@@ -670,7 +708,8 @@
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
-        unique-dom-id (build-id config ref? sidebar?)
+        embed? (:embed? config)
+        unique-dom-id (build-id config ref? sidebar? embed?)
         edit-input-id (str "edit-heading-" unique-dom-id uuid)
         heading-id (str "ls-heading-" unique-dom-id uuid)
         has-child? (boolean

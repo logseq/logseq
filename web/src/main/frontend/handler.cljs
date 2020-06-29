@@ -1042,38 +1042,44 @@
         key (string/upper-case (name key))
         value (name value)]
     (when-let [heading (db/pull [:heading/uuid heading-id])]
-      (let [{:heading/keys [file page content properties meta]} heading
-            {:keys [properties start-pos end-pos]} properties
-            new-content (if (and start-pos
-                                 end-pos
-                                 (> end-pos start-pos))
-                          (let [encoded (utf8/encode content)
-                                properties (utf8/substring encoded start-pos end-pos)
-                                properties (let [lines (string/split-lines properties)
-                                                 property-check? #(re-find (re-pattern
-                                                                            (util/format ":%s:" key))
-                                                                           %)]
-                                             (if (some property-check? lines)
-                                               (str
-                                                (->> (map (fn [line]
-                                                            (if (property-check? line)
-                                                              (util/format "   :%s: %s" key value)
-                                                              line)) lines)
-                                                     (string/join "\n"))
-                                                "\n")
-                                               (str properties
-                                                    (util/format "\n   :%s: %s\n" key value))))
-                                prefix (utf8/substring encoded 0 start-pos)
-                                postfix (when (> (:end-pos meta) end-pos)
-                                          (utf8/substring encoded end-pos (:end-pos meta)))]
-                            (str prefix properties postfix))
-                          (let [properties (util/format
-                                            "\n   :PROPERTIES:\n   :%s: %s\n   :END:\n"
-                                            key value)]
-                            (let [[heading-line & others] (string/split-lines content)]
-                              (str heading-line properties
-                                   (string/join "\n" others)))))]
-        (save-heading-if-changed! heading new-content)))))
+      (let [{:heading/keys [file page content properties properties-meta meta]} heading
+            {:keys [start-pos end-pos]} properties-meta
+            start-pos (- start-pos (:pos meta))]
+        (cond
+          (and start-pos end-pos (> end-pos start-pos))
+          (let [encoded (utf8/encode content)
+                properties (utf8/substring encoded start-pos end-pos)
+                lines (string/split-lines properties)
+                property-check? #(re-find (re-pattern
+                                           (util/format ":%s:" key))
+                                          %)
+                has-property? (some property-check? lines)]
+            (when-not (and has-property?
+                           (some #(string/includes? % (str ":" key ": " value)) lines)) ; same key-value, skip it
+              (let [properties (if has-property?
+                                 (str
+                                  (->> (map (fn [line]
+                                              (if (property-check? line)
+                                                (util/format "   :%s: %s" key value)
+                                                line)) lines)
+                                       (string/join "\n"))
+                                  "\n")
+                                 (str properties
+                                      (util/format "\n   :%s: %s\n" key value)))
+                    prefix (utf8/substring encoded 0 start-pos)
+                    postfix (when (> (:end-pos meta) end-pos)
+                              (utf8/substring encoded end-pos (:end-pos meta)))
+                    new-content (str prefix properties postfix)]
+                (save-heading-if-changed! heading new-content))))
+
+          :else
+          (let [properties (util/format
+                            "\n   :PROPERTIES:\n   :%s: %s\n   :END:\n"
+                            key value)
+                [heading-line & others] (string/split-lines content)
+                new-content (str heading-line properties
+                                 (string/join "\n" others))]
+            (save-heading-if-changed! heading new-content)))))))
 
 ;; FIXME: not working for nested parent
 (defn- unchanged-sibling?
