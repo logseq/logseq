@@ -28,7 +28,7 @@
     :search/q ""
     :search/result nil
 
-    :ui/theme (or (storage/get :ui/theme) "black")
+    :ui/theme (or (storage/get :ui/theme) "dark")
     ;; :show-all, :hide-heading-body, :hide-heading-children
     :ui/cycle-collapse :show-all
     :ui/collapsed-headings {}

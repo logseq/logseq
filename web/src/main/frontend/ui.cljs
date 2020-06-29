@@ -3,6 +3,8 @@
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
+            ["force-graph" :as force-graph]
+            ["react-kapsule" :as fromKapsule]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
@@ -10,11 +12,29 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [medley.core :as medley]
-            [frontend.ui.date-picker]))
+            [frontend.ui.date-picker]
+            [cljs-bean.core :as bean]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
+(defonce force-graph-2d (r/adapt-class
+                         (fromKapsule force-graph
+                                      (bean/->js
+                                       {:methodNames [
+                                                      "emitParticle",
+                                                      "d3Force",
+                                                      "d3ReheatSimulation",
+                                                      "stopAnimation",
+                                                      "pauseAnimation",
+                                                      "resumeAnimation",
+                                                      "centerAt",
+                                                      "zoom",
+                                                      "zoomToFit",
+                                                      "getGraphBbox",
+                                                      "screen2GraphCoords",
+                                                      "graph2ScreenCoords"
+                                                      ]}))))
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg"))]
