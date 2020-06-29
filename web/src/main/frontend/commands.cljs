@@ -29,6 +29,21 @@
    [:editor/set-marker marker]
    [:editor/move-cursor-to-end]])
 
+(defn ->inline
+  [type]
+  (let [template (util/format "@@%s: %s@@"
+                              type
+                              type)
+        backward-pos (count (str type "@@"))]
+    [[:editor/input template {:last-pattern slash
+                              :backward-pos backward-pos}]]))
+
+(defn embed-block
+  []
+  (conj
+   (->inline "embed")
+   [:editor/search-block]))
+
 ;; Credits to roamresearch.com
 (defn commands-map
   []
@@ -52,11 +67,15 @@
                         [:editor/search-page]]]
      ["Block Reference" [[:editor/input "(())" {:backward-pos 2}]
                          [:editor/search-block]]]
+     ["Block Embed" (embed-block)]
      ["Link" link-steps]
      ;; same as link
      ["Image Link" link-steps]
      (when (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
+     ["Html Inline " (->inline "html")]
+     ["Hiccup Inline" (->inline "hiccup")]
+
      ;; TODO:
      ;; ["Upload a file" nil]
      ]
@@ -98,19 +117,19 @@
   []
   (->>
    (concat
-    [["quote" (->block "quote")]
-     ["src" (->block "src" "")]
-     ["query" (->block "query")]
-     ["hiccup" (->block "export" "hiccup")]
-     ["html export" (->block "export" "html")]
-     ["latex export" (->block "export" "latex")]
-     ["properties" (->properties)]
-     ["example" (->block "example")]
-     ["export" (->block "export")]
-     ["verse" (->block "verse")]
-     ["ascii" (->block "export" "ascii")]
-     ["center" (->block "export")]
-     ["comment" (->block "comment")]]
+    [["Quote" (->block "quote")]
+     ["Src" (->block "src" "")]
+     ["Query" (->block "query")]
+     ["Hiccup" (->block "export" "hiccup")]
+     ["Html export" (->block "export" "html")]
+     ["Latex export" (->block "export" "latex")]
+     ["Properties" (->properties)]
+     ["Example" (->block "example")]
+     ["Export" (->block "export")]
+     ["Verse" (->block "verse")]
+     ["Ascii" (->block "export" "ascii")]
+     ["Center" (->block "export")]
+     ["Comment" (->block "comment")]]
 
     ;; Allow user to modify or extend, should specify how to extend.
     (get-in @state/state [:config (state/get-current-repo) :block-commands]))
@@ -138,7 +157,6 @@
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (:pos (util/get-caret-pos input))
-
         prefix (subs edit-content 0 current-pos)
         prefix (if (string/blank? last-pattern)
                  (util/concat-without-spaces prefix value)

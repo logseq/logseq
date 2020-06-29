@@ -442,7 +442,6 @@
 (defn in-auto-complete?
   [input]
   (or (seq (get-matched-commands input))
-      (seq (get-matched-block-commands input))
       @*show-block-commands
       (state/get-editor-show-input)
       (state/get-editor-show-page-search)
@@ -602,7 +601,7 @@
                    deleted (and (> current-pos 0)
                                 (nth value (dec current-pos)))]
                (cond
-                 (= value "")
+                 (zero? current-pos)
                  (delete-heading! state repo e)
 
                  (and (> current-pos 1)
@@ -721,12 +720,12 @@
                               (upload-image id files format *image-uploading? true))})))
                 state)
    :will-unmount (fn [state]
-                   (let [{:keys [id value format heading]} (get-state state)]
+                   (let [{:keys [id value format heading repo]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
                        (dnd/unsubscribe!
                         input
                         :upload-images))
-                     (when heading
+                     (when (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
                        (let [new-value (with-levels value format heading)]
                          (let [cache [(:heading/uuid heading) value]]
                            (when (not= @*last-edit-heading cache)
@@ -751,15 +750,15 @@
                       (state/set-edit-content! id value false)
                       (let [input (gdom/getElement id)]
                         (case (last value)
-                         "/"
-                         (when-let [matched-commands (seq (get-matched-commands input))]
-                           (reset! *slash-caret-pos (util/get-caret-pos input))
-                           (reset! *show-commands true))
-                         "<"
-                         (when-let [matched-commands (seq (get-matched-block-commands input))]
-                           (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                           (reset! *show-block-commands true))
-                         nil))))
+                          "/"
+                          (when-let [matched-commands (seq (get-matched-commands input))]
+                            (reset! *slash-caret-pos (util/get-caret-pos input))
+                            (reset! *show-commands true))
+                          "<"
+                          (when-let [matched-commands (seq (get-matched-block-commands input))]
+                            (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
+                            (reset! *show-block-commands true))
+                          nil))))
        :auto-focus true})
      (transition-cp
       (commands id format)

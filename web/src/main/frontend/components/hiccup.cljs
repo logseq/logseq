@@ -1061,7 +1061,6 @@
   [headings config option]
   (let [document-mode? (state/sub [:document/mode?])
         config (assoc config :document/mode? document-mode?)]
-    (prn document-mode?)
     [:div.content (cond-> option
                     document-mode?
                     (assoc :class "doc-mode"))
