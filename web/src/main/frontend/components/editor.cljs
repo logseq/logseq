@@ -726,7 +726,7 @@
                        (dnd/unsubscribe!
                         input
                         :upload-images))
-                     (when (and heading (not= value ""))
+                     (when heading
                        (let [new-value (with-levels value format heading)]
                          (let [cache [(:heading/uuid heading) value]]
                            (when (not= @*last-edit-heading cache)
