@@ -88,11 +88,11 @@
 (defn ->tags
   [tags]
   (->> (map (fn [tag]
-          (let [tag (-> (string/lower-case tag)
-                        (string/replace #"\s+" "-"))]
-            (if (util/tag-valid? tag)
-              {:db/id tag
-               :tag/name tag})))
+              (let [tag (-> (string/lower-case tag)
+                            (string/replace #"\s+" "-"))]
+                (if (util/tag-valid? tag)
+                  {:db/id tag
+                   :tag/name tag})))
          (remove nil? tags))
        (remove nil?)
        vec))
@@ -106,7 +106,8 @@
        (when-let [page (get-page-reference form)]
          (swap! ref-pages conj (string/lower-case page)))
        (when-let [tag (get-tag form)]
-         (swap! ref-pages conj (string/lower-case tag)))
+         (when (util/tag-valid? tag)
+           (swap! ref-pages conj (string/lower-case tag))))
        form)
      (concat title body))
     (let [ref-pages (remove string/blank? @ref-pages)]
