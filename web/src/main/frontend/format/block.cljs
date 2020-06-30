@@ -87,12 +87,15 @@
 
 (defn ->tags
   [tags]
-  (mapv (fn [tag]
+  (->> (map (fn [tag]
           (let [tag (-> (string/lower-case tag)
                         (string/replace #"\s+" "-"))]
-            {:db/id tag
-             :tag/name tag}))
-        (remove nil? tags)))
+            (if (util/tag-valid? tag)
+              {:db/id tag
+               :tag/name tag})))
+         (remove nil? tags))
+       (remove nil?)
+       vec))
 
 (defn with-refs
   [{:keys [title body tags] :as heading}]

@@ -190,11 +190,13 @@
            [:div {:key "page-references"}
             (reference/references page-name false)])]))))
 
-(rum/defc global-graph < rum/static
-  []
-  (let [theme (:ui/theme @state/state)
+(rum/defcs global-graph < rum/reactive
+  (rum/local false ::show-journal?)
+  [state]
+  (let [show-journal? (get state ::show-journal?)
+        theme (state/sub :ui/theme)
         dark? (= theme "dark")
-        graph (db/build-global-graph theme)]
+        graph (db/build-global-graph theme @show-journal?)]
     (ui/force-graph-2d (graph/build-graph-opts graph dark? {}))))
 
 (rum/defc all-pages < rum/reactive

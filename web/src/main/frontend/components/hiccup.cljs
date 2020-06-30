@@ -220,8 +220,11 @@
     ["Subscript" l]
     (->elem :sub (map-inline config l))
     ["Tag" s]
-    [:a.tag.mr-1 {:href (str "/page/" s)}
-     (str "#" s)]
+    (if (and s (util/tag-valid? s))
+      [:a.tag.mr-1 {:href (str "/page/" s)}
+       (str "#" s)]
+      [:span.warning.mr-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
+       (str "#" s)])
     ["Emphasis" [[kind] data] ]
     (let [elem (case kind
                  "Bold" :b
@@ -553,9 +556,12 @@
                   :span
                   {:class "heading-tags"}
                   (mapv (fn [{:keys [db/id tag/name]}]
-                          [:a.tag.mx-1 {:key (str "tag-" id)
-                                        :href (str "/page/" name)}
-                           (str "#" name)])
+                          (if (util/tag-valid? name)
+                            [:a.tag.mx-1 {:key (str "tag-" id)
+                                          :href (str "/page/" name)}
+                             (str "#" name)]
+                            [:span.warning.mx-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
+                             (str "#" name)]))
                         tags))))]
     (when level
       (let [element (if (<= level 6)
@@ -608,7 +614,7 @@
                   (let [content (state/sub [:editor/content current-edit-input-id])
                         content (block/with-levels content format heading)
                         new-heading (first (second (first (block/parse-heading
-                                                     (assoc heading :heading/content content) format))))]
+                                                           (assoc heading :heading/content content) format))))]
                     (merge new-heading
                            {:heading/level level
                             :heading/meta meta

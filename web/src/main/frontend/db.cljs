@@ -1157,16 +1157,19 @@
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 (defn get-pages-relation
-  [repo]
+  [repo with-journal?]
   (when-let [conn (get-conn repo)]
     (d/q
       '[:find ?page ?ref-page-name
+        :in $ ?with-journal
         :where
         [?p :page/name ?page]
+        [?p :page/journal? ?with-journal]
         [?heading :heading/page ?p]
-        [?heading :heading/ref-pages ?ref-page]
-        [?ref-page :page/name ?ref-page-name]]
-      conn)))
+        [(get-else $ ?heading :heading/ref-pages 100000000) ?ref-page]
+        [(get-else $ ?ref-page :page/name "logseq") ?ref-page-name]]
+      conn
+      with-journal?)))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
@@ -1340,10 +1343,13 @@
   [dark? current-page edges nodes]
   (mapv (fn [p]
           (cond->
-              {:id (util/capitalize-all p)
-               :name (util/capitalize-all p)
-               :val (get-connections p edges)
-               :color "#222222"}
+              (let [p (util/capitalize-all p)]
+                {:id p
+                 :name p
+                 :val (get-connections p edges)
+                 :autoColorBy "group"
+                 :group (js/Math.ceil (* (js/Math.random) 12))
+                 :color "#222222"})
             dark?
             (assoc :color "#8abbbb")
             (= p current-page)
@@ -1353,11 +1359,11 @@
         (set (flatten nodes))))
 
 (defn build-global-graph
-  [theme]
+  [theme show-journal?]
   (let [dark? (= "dark" theme)
         current-page (:page/name (get-current-page))]
     (when-let [repo (state/get-current-repo)]
-      (let [relation (get-pages-relation repo)
+      (let [relation (get-pages-relation repo show-journal?)
             nodes (seq relation)
             edges (build-edges nodes)
             nodes (build-nodes dark? current-page edges nodes)]
