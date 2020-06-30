@@ -32,6 +32,7 @@
              template
              false))))))
   state)
+
 (rum/defc journal-cp < rum/reactive
   {:init journal-include-template!
    :did-update journal-include-template!}

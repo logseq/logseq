@@ -164,7 +164,7 @@
 (declare map-inline)
 (declare block)
 
-(rum/defc page-cp
+(defn page-cp
   [page]
   (let [page (string/lower-case page)]
     [:a.page-ref
@@ -208,7 +208,7 @@
 
 (declare headings-container)
 
-(rum/defc inline < rum/reactive
+(defn inline
   [config item]
   (match item
     ["Plain" s]
@@ -931,7 +931,7 @@
                           :margin-left "0.25rem"}})
        [:div.text-sm.mt-2 "Empty"])]))
 
-(rum/defc admonition
+(defn admonition
   [config type options result]
   (when-let [icon (case (string/lower-case (name type))
                     "note" svg/note

@@ -153,8 +153,6 @@
    {:keys [last-pattern postfix-fn backward-pos forward-pos]
     :or {last-pattern slash}
     :as option}]
-  (prn "Insert: "{:value value
-                  :option option})
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (:pos (util/get-caret-pos input))
@@ -168,8 +166,6 @@
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (prn {:prefix prefix
-          :postfix postfix})
     (state/set-heading-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input
                          (if (or backward-pos forward-pos)
