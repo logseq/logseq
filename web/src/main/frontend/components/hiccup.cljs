@@ -770,7 +770,7 @@
                                       (when-let [parent (gdom/getElement heading-id)]
                                         (when-let [node (.querySelector parent ".bullet-container")]
                                           (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-heading.flex.flex-col
+    [:div.ls-heading.flex.flex-col.pt-1
      (cond->
          {:id heading-id
           :style {:position "relative"}
@@ -787,7 +787,7 @@
 
      (dnd-separator-wrapper heading slide? (zero? idx))
 
-     [:div.flex-1.flex-row.py-1
+     [:div.flex-1.flex-row
       (when (not slide?)
         (heading-control config heading uuid heading-id level start-level body children dummy?))
 
@@ -940,7 +940,7 @@
                     "caution" svg/caution
                     "warning" svg/warning
                     nil)]
-    [:div.flex.flex-row.admonitionblock.my-4.align-items {:class type}
+    [:div.flex.flex-row.admonitionblock.align-items {:class type}
      [:div.pr-4.admonition-icon.flex.flex-col.justify-center
       {:title (string/upper-case type)} (icon)]
      [:div.ml-4.text-lg

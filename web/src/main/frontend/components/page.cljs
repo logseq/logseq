@@ -142,7 +142,7 @@
                 (svg/star-solid "stroke-current")
                 (svg/star-outline "stroke-current h-5 w-5"))]]
 
-            [:a {:title "Presentation mode(Reveal.js)"
+            [:a {:title "Presentation mode (Powered by Reveal.js)"
                  :on-click (fn []
                              (state/sidebar-add-block!
                               repo
@@ -151,7 +151,7 @@
                               {:page page
                                :journal? journal?})
                              (handler/show-right-sidebar))}
-             svg/reveal-js]])
+             svg/slideshow]])
 
          (when (and file-path (not sidebar?) (not journal?))
            [:div.text-sm.ml-1.mb-2 {:key "page-file"}

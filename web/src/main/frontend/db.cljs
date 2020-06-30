@@ -1052,6 +1052,7 @@
   (vec
    (mapcat
     (fn [[file content] contents]
+      (prn "Parsing : " file)
       (when content
         (let [utf8-content (utf8/encode content)]
           (extract-headings-pages file content utf8-content))))
