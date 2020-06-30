@@ -13,7 +13,8 @@
             [clojure.string :as string]
             [frontend.extensions.slide :as slide]
             [cljs-bean.core :as bean]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.graph :as graph]))
 
 (rum/defc heading-cp < rum/reactive
   [repo idx heading]
@@ -100,46 +101,6 @@
       (util/url-decode (string/lower-case page)))))
 
 (defonce *show-page-graph? (atom false))
-(defonce *show-global-graph? (atom false))
-
-(defn- build-graph-opts
-  [graph dark?]
-  {:graphData (bean/->js graph)
-   :width 600
-   :onNodeClick (fn [node]
-                  (let [page-name (string/lower-case (gobj/get node "id"))]
-                    (handler/redirect! {:to :page
-                                        :path-params {:name (util/url-encode page-name)}})))
-   :nodeCanvasObject
-   (fn [node ^CanvasRenderingContext2D ctx global-scale]
-     (let [label (gobj/get node "id")
-           font-size (/ 14 global-scale)
-           _ (set! (.-font ctx)
-                   (str font-size "px Inter"))
-           text-width (gobj/get (.measureText ctx label) "width")
-           bg-dimensions (mapv
-                          (fn [n] (+ n (* font-size 0.2)))
-                          [text-width font-size])
-           x (- (gobj/get node "x") 1)
-           y (- (gobj/get node "y") 1)
-           [new-text-width new-font-size] bg-dimensions]
-       (set! (.-fillStyle ctx) "transparent")
-       (.fillRect ctx
-                  (- x (/ new-text-width 2))
-                  (- y (/ new-font-size 2))
-                  new-text-width
-                  new-font-size)
-       (set! (.-filltextAlign ctx)
-             "center")
-       (set! (.-textBaseLine ctx)
-             "middle")
-       (set! (.-fillStyle ctx)
-             (gobj/get node "color"))
-       (.fillText ctx label (gobj/get node "x") (gobj/get node "y"))
-       (.beginPath ctx)
-       (.arc ctx x y 0.5 0 (* 2 js/Math.PI) false)
-       (set! (.-fillStyle ctx) (if dark? "#aaa" "#222"))
-       (.fill ctx)))})
 
 (rum/defc page-graph < rum/reactive
   [dark?]
@@ -148,14 +109,7 @@
         page (get-page match)
         graph (db/build-page-graph page theme)]
     [:div.sidebar-item.flex-col.flex-1
-     (ui/force-graph-2d (build-graph-opts graph dark?))]))
-
-(rum/defc global-graph < rum/static
-  [dark?]
-  (let [theme (:ui/theme @state/state)
-        graph (db/build-global-graph theme)]
-    [:div.sidebar-item.flex-col.flex-1
-     (ui/force-graph-2d (build-graph-opts graph dark?))]))
+     (ui/force-graph-2d (graph/build-graph-opts graph dark? {:width 600}))]))
 
 (rum/defcs starred-cp <
   (rum/local true ::show?)
@@ -188,8 +142,7 @@
         match (state/sub :route-match)
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
-        show-page-graph? (rum/react *show-page-graph?)
-        show-global-graph? (rum/react *show-global-graph?)]
+        show-page-graph? (rum/react *show-page-graph?)]
     [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto
      [:div#theme-selector.ml-3.mb-2
       [:div.flex.flex-row
@@ -209,21 +162,11 @@
                           (swap! *show-page-graph? not))}
           (if @*show-page-graph?
             "Close page graph"
-            "Open page graph")]]]
-
-       [:div.flex.flex-row.ml-4
-        [:div.mr-1.text-sm
-         [:a {:on-click (fn []
-                          (swap! *show-global-graph? not))}
-          (if @*show-global-graph?
-            "Close global graph"
-            "Open global graph")]]]]]
+            "Open page graph")]]]]]
      (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
        (rum/with-key
          (sidebar-item repo idx db-id block-type block-data)
          (str "sidebar-block-" idx)))
      (when show-page-graph?
        (page-graph dark?))
-     (when show-global-graph?
-       (global-graph dark?))
      (starred-cp repo starred)]))

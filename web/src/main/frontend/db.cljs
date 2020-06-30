@@ -128,7 +128,7 @@
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
-   :page/id         {:db/unique      :db.unique/identity}
+   :page/ido         {:db/unique      :db.unique/identity}
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
@@ -160,9 +160,6 @@
    :heading/tags {:db/valueType   :db.type/ref
                   :db/cardinality :db.cardinality/many
                   :db/isComponent true}
-   :heading/all-tags {:db/valueType   :db.type/ref
-                      :db/cardinality :db.cardinality/many
-                      :db/isComponent true}
    :heading/meta {}
    :heading/properties {}
    :heading/properties-meta {}
@@ -172,9 +169,7 @@
    :heading/pre-heading? {}
    :heading/collapsed? {}
    ;; :heading/children {:db/valueType   :db.type/ref
-   ;;                    :db/cardinality :db.cardinality/many}
-
-   ;; tag
+   ;;                    :db/cardinality :db.cardinality/many}})
    :tag/name       {:db/unique :db.unique/identity}})
 
 ;; transit serialization
@@ -498,6 +493,7 @@
 (defn transact-react!
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
                      :or {files-db? false}}]
+  ;; (prn "transact-react! data: " tx-data)
   (let [repo-url (or repo-url (state/get-current-repo))
         tx-data (->> (util/remove-nils tx-data)
                      (remove nil?))
@@ -548,22 +544,6 @@
 
 ;; queries
 
-(defn get-all-tags
-  []
-  (let [repo (state/get-current-repo)]
-    (when (get-conn repo)
-      (some->>
-       (q repo [:tags] {}
-         '[:find ?name ?h
-           :where
-           [?t :tag/name ?name]
-           [?h :heading/all-tags ?t]])
-       react
-       (seq)
-       (map first)
-       frequencies
-       (util/sort-by-value :desc)))))
-
 (defn- remove-journal-files
   [files]
   (remove
@@ -573,7 +553,7 @@
 
 (defn get-pages
   [repo]
-  (->> (q repo [:pages] {}
+  (->> (q repo [:pages] {:use-cache? false}
          '[:find ?page-name
            :where
            [?page :page/name ?page-name]])
@@ -582,28 +562,31 @@
 
 (defn get-pages-with-modified-at
   [repo]
-  (->> (q repo [:pages] {}
+  (->> (q repo [:pages] {:use-cache? false}
          '[:find ?page-name ?modified-at
            :where
            [?page :page/name ?page-name]
-           [?page :page/journal? ?journal]
+           [(get-else $ ?page :page/journal? false) ?journal]
            [(get-else $ ?page :page/last-modified-at 0) ?modified-at]
-           (or
-            ;; journal pages, can't be empty
-            (and [(true? ?journal)]
-                 [?h :heading/page ?page]
-                 [?h :heading/level ?level]
-                 [(> ?level 1)])
-            ;; non-journals, might be empty pages
-            (and [(false? ?journal)]
-                 [?h :heading/page]
-                 [?h :heading/level ?level]))])
+           ;; (or
+           ;;  ;; journal pages, can't be empty
+           ;;  (and [(true? ?journal)]
+           ;;       [?h :heading/page ?page]
+           ;;       [?h :heading/level ?level]
+           ;;       [(> ?level 1)])
+           ;;  ;; non-journals, might be empty pages
+           ;;  (and [(false? ?journal)]
+           ;;       [?h :heading/page]
+           ;;       [?h :heading/level ?level]))
+           ])
        (react)
        (seq)
-       (sort-by last)
+       (sort-by (fn [[page modified-at]]
+                  [modified-at page]))
        (reverse)
        (remove (fn [[page modified-at]]
-                 (util/file-page? page)))))
+                 (util/file-page? page)))
+       ))
 
 (defn get-page-alias
   [repo page-name]
@@ -742,21 +725,6 @@
         all-data (-> (concat delete-files delete-headings files headings-pages)
                      (util/remove-nils))]
     (transact! repo-url all-data)))
-
-(defn get-tag-referenced-headings
-  [tag]
-  (when-let [repo (state/get-current-repo)]
-    (when (get-conn repo)
-      (let [tag-id (:db/id (entity [:tag/name tag]))]
-        (->> (q repo [:tag/ref-headings tag] {}
-               '[:find (pull ?h [*])
-                 :in $ ?tag-id
-                 :where
-                 [?h :heading/all-tags ?tag-id]]
-               tag-id)
-             react
-             seq-flatten
-             group-by-page)))))
 
 (defn get-heading-by-uuid
   [uuid]
@@ -922,25 +890,26 @@
     (let [headings (block/extract-headings ast (utf8/length utf8-content) utf8-content)
           pages (pages-fn headings ast)
           ref-pages (atom #{})
-          headings (mapcat
-                    (fn [[page headings]]
-                      (if page
-                        (map (fn [heading]
-                               (let [heading-ref-pages (seq (:heading/ref-pages heading))]
-                                 (when heading-ref-pages
-                                   (swap! ref-pages set/union (set heading-ref-pages)))
-                                 (-> heading
-                                     (dissoc :ref-pages)
-                                     (assoc :heading/content (get-heading-content utf8-content heading)
-                                            :heading/file [:file/path file]
-                                            :heading/format format
-                                            :heading/page [:page/name (string/lower-case page)]
-                                            :heading/ref-pages (mapv
-                                                                (fn [page]
-                                                                  {:page/name (string/lower-case page)})
-                                                                heading-ref-pages)))))
-                          headings)))
-                    pages)
+          headings (doall
+                    (mapcat
+                     (fn [[page headings]]
+                       (if page
+                         (map (fn [heading]
+                                (let [heading-ref-pages (seq (:heading/ref-pages heading))]
+                                  (when heading-ref-pages
+                                    (swap! ref-pages set/union (set heading-ref-pages)))
+                                  (-> heading
+                                      (dissoc :ref-pages)
+                                      (assoc :heading/content (get-heading-content utf8-content heading)
+                                             :heading/file [:file/path file]
+                                             :heading/format format
+                                             :heading/page [:page/name (string/lower-case page)]
+                                             :heading/ref-pages (mapv
+                                                                 (fn [page]
+                                                                   {:page/name (string/lower-case page)})
+                                                                 heading-ref-pages)))))
+                           headings)))
+                     (remove nil? pages)))
           pages (map
                   (fn [page]
                     (let [page-file? (= page (string/lower-case file))

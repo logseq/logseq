@@ -19,6 +19,7 @@
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.expand :as expand]
+            [frontend.graph :as graph]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
 
@@ -99,7 +100,7 @@
        [:h1.title
         (string/upper-case page-name)]
        [:div.ml-2
-        (reference/references page-name false true)]]
+        (reference/references page-name true)]]
 
       :else
       (let [page (if heading?
@@ -187,14 +188,20 @@
          ;; referenced headings
          (when-not sidebar?
            [:div {:key "page-references"}
-            (reference/references page-name false false)])]))))
+            (reference/references page-name false)])]))))
+
+(rum/defc global-graph < rum/static
+  []
+  (let [theme (:ui/theme @state/state)
+        dark? (= theme "dark")
+        graph (db/build-global-graph theme)]
+    (ui/force-graph-2d (graph/build-graph-opts graph dark? {}))))
 
 (rum/defc all-pages < rum/reactive
   []
   (let [current-repo (state/sub :git/current-repo)]
     [:div.flex-1
-     [:h1.title
-      "All Pages"]
+     [:h1.title "All Pages"]
      (when current-repo
        (let [pages (db/get-pages-with-modified-at current-repo)]
          [:table.table-auto

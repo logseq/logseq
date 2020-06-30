@@ -76,7 +76,7 @@
                  (hiccup/custom-query {:start-level 2} {:query-title title}
                                       query)])]))))
 
-     (reference/references title false false)]))
+     (reference/references title false)]))
 
 (rum/defc journals <
   [latest-journals]

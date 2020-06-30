@@ -556,6 +556,8 @@
     "Repos"
     :repo-add
     "Add another repo"
+    :graph
+    "Graph"
     :all-files
     "All files"
     :all-pages
@@ -568,8 +570,6 @@
     (util/capitalize-all (util/url-decode (:name path-params)))
     :tag
     (str "#" (util/url-decode (:name path-params)))
-    :all-tags
-    "All tags"
     :diff
     "Git diff"
     :draw

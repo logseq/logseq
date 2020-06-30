@@ -220,7 +220,7 @@
     ["Subscript" l]
     (->elem :sub (map-inline config l))
     ["Tag" s]
-    [:a.tag.mr-1 {:href (str "/tag/" s)}
+    [:a.tag.mr-1 {:href (str "/page/" s)}
      (str "#" s)]
     ["Emphasis" [[kind] data] ]
     (let [elem (case kind
@@ -554,7 +554,7 @@
                   {:class "heading-tags"}
                   (mapv (fn [{:keys [db/id tag/name]}]
                           [:a.tag.mx-1 {:key (str "tag-" id)
-                                        :href (str "/tag/" name)}
+                                        :href (str "/page/" name)}
                            (str "#" name)])
                         tags))))]
     (when level

@@ -4,7 +4,6 @@
             [frontend.components.sidebar :as sidebar]
             [frontend.components.file :as file]
             [frontend.components.page :as page]
-            [frontend.components.tag :as tag]
             [frontend.components.diff :as diff]
             [frontend.components.draw :as draw]
             [frontend.components.docs :as docs]))
@@ -38,17 +37,13 @@
     {:name :page
      :view page/page}]
 
-   ["/tag/:name"
-    {:name :tag
-     :view tag/tag}]
-
-   ["/all-tags"
-    {:name :all-tags
-     :view tag/all-tags}]
-
    ["/all-pages"
     {:name :all-pages
      :view page/all-pages}]
+
+   ["/graph"
+    {:name :graph
+     :view page/global-graph}]
 
    ["/diff"
     {:name :diff

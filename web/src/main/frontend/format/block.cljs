@@ -85,16 +85,29 @@
       first
       second))
 
+(defn ->tags
+  [tags]
+  (mapv (fn [tag]
+          (let [tag (-> (string/lower-case tag)
+                        (string/replace #"\s+" "-"))]
+            {:db/id tag
+             :tag/name tag}))
+        (remove nil? tags)))
+
 (defn with-refs
-  [{:keys [title body] :as heading}]
-  (let [ref-pages (atom [])]
+  [{:keys [title body tags] :as heading}]
+  (let [tags (mapv :tag/name (->tags (map :tag/name tags)))
+        ref-pages (atom tags)]
     (walk/postwalk
      (fn [form]
        (when-let [page (get-page-reference form)]
          (swap! ref-pages conj (string/lower-case page)))
+       (when-let [tag (get-tag form)]
+         (swap! ref-pages conj (string/lower-case tag)))
        form)
      (concat title body))
-    (assoc heading :ref-pages (vec @ref-pages))))
+    (let [ref-pages (remove string/blank? @ref-pages)]
+      (assoc heading :ref-pages (vec ref-pages)))))
 
 (defn safe-headings
   [headings]
@@ -112,30 +125,11 @@
             heading)))
     headings))
 
-(defn ->tags
-  [tags]
-  (mapv (fn [tag]
-          (let [tag (-> (string/lower-case tag)
-                        (string/replace #"\s+" "-"))]
-            {:db/id tag
-             :tag/name tag}))
-        tags))
-
 (defn collect-heading-tags
   [{:keys [title body tags] :as heading}]
-  (let [other-tags (atom #{})]
-    (walk/postwalk
-     (fn [form]
-       (when-let [tag (get-tag form)]
-         (swap! other-tags conj (string/lower-case tag)))
-       form)
-     (concat title body))
-    (let [all-tags (set/union tags @other-tags)]
-      (cond-> heading
-        (seq tags)
-        (assoc :tags (->tags tags))
-        (seq all-tags)
-        (assoc :all-tags (->tags all-tags))))))
+  (cond-> heading
+    (seq tags)
+    (assoc :tags (->tags tags))))
 
 (defn extract-headings
   [blocks last-pos encoded-content]
@@ -167,9 +161,9 @@
                                          :properties (:properties properties)
                                          :properties-meta (dissoc properties :properties))
                                   (assoc-in [:meta :end-pos] last-pos))
+                      heading (collect-heading-tags heading)
                       heading (with-refs heading)
-                      last-pos' (get-in heading [:meta :pos])
-                      heading (collect-heading-tags heading)]
+                      last-pos' (get-in heading [:meta :pos])]
                   (recur (conj headings heading) [] (rest blocks) {} {} last-pos'))
 
                 :else
@@ -190,7 +184,6 @@
              :heading/content content
              :heading/anchor (str uuid)
              :heading/level 2
-             ;; :heading/all-tags
              :heading/meta {:pos 0
                             :end-pos first-heading-start-pos}
              :heading/body (take-while (fn [block] (not (heading-block? block))) blocks)
@@ -235,7 +228,8 @@
           headings (doall
                     (map-indexed
                      (fn [idx {:heading/keys [ref-pages meta] :as heading}]
-                       (let [heading (merge
+                       (let [heading (collect-heading-tags heading)
+                             heading (merge
                                       heading
                                       {:heading/meta meta
                                        :heading/marker (get heading :heading/marker "nil")
@@ -260,8 +254,7 @@
                                                   page {:page/name page-name}]
                                               (swap! ref-pages-atom conj page)
                                               page))
-                                          ref-pages)}))
-                             heading (collect-heading-tags heading)]
+                                          ref-pages)}))]
                          (-> heading
                              (assoc-in [:heading/meta :pos] (+ (:pos meta) start-pos))
                              (assoc-in [:heading/meta :end-pos] (+ (:end-pos meta) start-pos)))))

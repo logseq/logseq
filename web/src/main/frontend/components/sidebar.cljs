@@ -242,7 +242,7 @@
         current-repo (state/sub :git/current-repo)
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))
-        all-tags? (= :all-tags (get-in route-match [:data :name]))]
+        global-graph-pages? (= :graph (get-in route-match [:data :name]))]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
                        (handler/unhighlight-heading!))}
@@ -310,14 +310,14 @@
                  {:title "New page"
                   :options {:href "/new-page"}})
                (when logged?
+                 {:title "Graph"
+                  :options {:href "/graph"}})
+               (when logged?
                  {:title "All repos"
                   :options {:href "/repos"}})
                (when logged?
                  {:title "All pages"
                   :options {:href "/all-pages"}})
-               (when logged?
-                 {:title "All tags"
-                  :options {:href "/all-tags"}})
                (when logged?
                  {:title "All files"
                   :options {:href "/all-files"}})
@@ -362,7 +362,7 @@
           ;; FIXME: overflow-x-hidden conflicts with heading collapsers
           [:div.flex-1.m-6#main-content-container
            ;; .overflow-x-hidden
-           {:style (if all-tags?
+           {:style (if global-graph-pages?
                      {:position "relative"}
                      {:position "relative"
                       :max-width 700

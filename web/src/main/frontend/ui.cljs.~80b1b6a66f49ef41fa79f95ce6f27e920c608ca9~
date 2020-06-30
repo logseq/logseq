@@ -3,7 +3,6 @@
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-force-graph-2d" :as ForceGraph2D]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
@@ -16,7 +15,6 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
-(defonce force-graph-2d (r/adapt-class ForceGraph2D))
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg"))]
@@ -75,18 +73,12 @@
            :as option}]
   (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
         class (if background (string/replace class "indigo" background) class)]
-    (if href
-      [:a.button (merge
-                  {:type "button"
-                   :class (util/hiccup->class class)}
-                  (dissoc option :background))
-       text]
-      [:button
-       (merge
-        {:type "button"
-         :class (util/hiccup->class class)}
-        (dissoc option :background))
-       text])))
+    [:button
+     (merge
+      {:type "button"
+       :class (util/hiccup->class class)}
+      (dissoc option :background))
+     text]))
 
 (rum/defc notification-content
   [state content status]
@@ -231,16 +223,14 @@
                          item-render
                          class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-3.overflow-y-auto {:class class
-                                                                 :style {:max-height 450}}
+    [:div.py-1.rounded-md.shadow-xs.bg-base-3 {:class class}
      (if (seq matched)
        (for [[idx item] (medley/indexed matched)]
          (rum/with-key
            (menu-link
-            {:style {:padding-top 6
-                     :padding-bottom 6}
+            {:style {:padding "6px"}
              :class (when (= @current-idx idx)
-                      "chosen")
+                      "bg-base-2")
              :tab-index 0
              :on-click (fn [e]
                          (util/stop e)
