@@ -479,8 +479,8 @@
   [config ref? sidebar? embed?]
   (cond->>
       ""
-    (:id config)
-    (str (:id config) "-")
+    (and (:id config) (or ref? sidebar? embed?))
+    (str (util/url-encode (:id config)) "-")
 
     (:custom-query? config)
     (str "custom-query-")

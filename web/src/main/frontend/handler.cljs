@@ -540,12 +540,19 @@
      name
      email)))
 
-(defn highlight-block!
+(defn highlight-element!
   [fragment]
   (when-let [element (gdom/getElement fragment)]
+    (prn {:element element})
     (dom/add-class! element "block-highlight")
     (js/setTimeout #(dom/remove-class! element "block-highlight")
-                   2000)))
+                   4000)))
+
+(defn scroll-and-highlight!
+  []
+  (when-let [fragment (util/get-fragment)]
+    (util/scroll-to-element fragment)
+    (highlight-element! fragment)))
 
 (defn get-title
   [name path-params]
@@ -584,10 +591,8 @@
   (swap! state/state assoc :route-match route)
   (let [{:keys [data path-params]} route
         title (get-title (:name data) path-params)]
-    (util/set-title! title))
-  (when-let [fragment (util/get-fragment)]
-    (util/scroll-to-element fragment)
-    (highlight-block! fragment)))
+    (util/set-title! title)
+    (scroll-and-highlight!)))
 
 (defn set-ref-component!
   [k ref]

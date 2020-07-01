@@ -83,6 +83,8 @@
          [repo :heading/page (uuid page-name)]
          (when-let [page-id (db/entity repo [:page/name page-name])]
            [repo :page/headings page-id])))))
+  {:did-mount handler/scroll-and-highlight!
+   :did-update handler/scroll-and-highlight!}
   [state {:keys [repo] :as option}]
   (let [repo (or repo (state/get-current-repo))
         encoded-page-name (get-page-name state)

@@ -293,18 +293,13 @@
   [elem-id]
   (when-not (re-find #"^/\d+$" elem-id)
     (when elem-id
-      (when-let [elem (.getElementById js/document elem-id)]
-        (let [hop-count (/ speed moving-frequency)
-              doc-top (cur-doc-top)
-              gap (/ (- (element-top elem 0) doc-top) hop-count)
-              main (gdom/getElement "main-content")]
-          (doseq [i (range 1 (inc hop-count))]
-            (let [hop-top-pos (* gap i)
-                  move-to (- hop-top-pos doc-top 68)
-                  timeout (* moving-frequency i)]
-              (js/setTimeout (fn []
-                               (.scrollTo main 0 move-to))
-                             timeout))))))))
+      (when-let [elem (gdom/getElement elem-id)]
+        (.scroll (gdom/getElement "main-content")
+                 #js {:top (let [top (element-top elem 0)]
+                             (if (> top 68)
+                               (- top 68)
+                               top))
+                      :behavior "smooth"})))))
 
 (defn scroll-to-top
   []
