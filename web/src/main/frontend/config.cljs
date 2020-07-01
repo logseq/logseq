@@ -90,3 +90,5 @@
   ([format n]
    (let [heading-pattern (get-heading-pattern format)]
      (apply str (repeat n heading-pattern)))))
+
+(defonce default-draw-directory "draw")

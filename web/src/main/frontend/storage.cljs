@@ -11,6 +11,15 @@
   [key value]
   (.setItem ^js js/localStorage (name key) (pr-str value)))
 
+(defn get-json
+  [key]
+  (when-let [value (.getItem js/localStorage (name key))]
+    (js/JSON.parse value)))
+
+(defn set-json
+  [key value]
+  (.setItem ^js js/localStorage (name key) (js/JSON.stringify value)))
+
 (defn remove
   [key]
   (.removeItem ^js js/localStorage (name key)))

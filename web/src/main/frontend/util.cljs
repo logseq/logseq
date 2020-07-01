@@ -655,13 +655,14 @@
                (compare [v1 k1] [v2 k2])))))
         m))
 
+(defn rand-str
+  [n]
+  (-> (.toString (js/Math.random) 36)
+      (.substr 2 n)))
+
 (defn unique-id
   []
-  (str
-   (-> (.toString (js/Math.random) 36)
-       (.substr 2 6))
-   (-> (.toString (js/Math.random) 36)
-       (.substr 2 3))))
+  (str (rand-str 6) (rand-str 3)))
 
 ;; Get this from XRegExp("^\\pL+$")
 (def valid-tag-pattern

@@ -1401,8 +1401,57 @@
         (history/redo! k re-render-root!))
       (default-redo))))
 
-(comment
+;; excalidraw
+(defn save-excalidraw!
+  [file data]
+  (let [path (str config/default-draw-directory "/" file)
+        repo (state/get-current-repo)]
+    (when repo
+      (let [repo-dir (util/get-repo-dir repo)]
+        (p/let [_ (-> (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
+                      (p/catch (fn [e])))]
+          (util/p-handle
+           (fs/write-file repo-dir path (js/JSON.stringify data))
+           (fn [_]
+             (util/p-handle
+              (git-add repo path)
+              (fn [_]
+                (git/commit repo (str "Save " file)))))
+           (fn [error]
+             (prn "Write file failed, path: " path ", data: " data)
+             (js/console.dir error))))))))
 
+(defn get-all-excalidraw-files
+  [ok-handler]
+  (when-let [repo (state/get-current-repo)]
+    (let [dir (str "/"
+                   (util/get-repo-dir repo)
+                   "/"
+                   config/default-draw-directory)]
+      (util/p-handle
+       (fs/readdir dir)
+       (fn [files]
+         (let [files (-> (filter #(and (string/starts-with? % "excalidraw-")
+                                       (string/ends-with? % ".json")) files)
+                         (distinct)
+                         (sort)
+                         (reverse))]
+           (ok-handler files)))
+       (fn [_error]
+         nil)))))
+
+(defn load-excalidraw-file
+  [file ok-handler]
+  (when-let [repo (state/get-current-repo)]
+    (util/p-handle
+     (load-file repo (str config/default-draw-directory "/" file))
+     (fn [content]
+       (ok-handler content))
+     (fn [error]
+       (prn "Error loading " file ": "
+            error)))))
+
+(comment
   (defn debug-latest-commits
     []
     (get-latest-commit (state/get-current-repo)
