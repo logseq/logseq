@@ -1349,13 +1349,14 @@
                  :val (get-connections p edges)
                  :autoColorBy "group"
                  :group (js/Math.ceil (* (js/Math.random) 12))
-                 :color "#222222"})
+                 :color "#222222"
+                 })
             dark?
             (assoc :color "#8abbbb")
             (= p current-page)
             (assoc :color (if dark?
                             "#ffffff"
-                            "#5850ec"))))
+                            "#045591"))))
         (set (flatten nodes))))
 
 (defn build-global-graph

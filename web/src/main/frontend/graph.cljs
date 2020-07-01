@@ -5,11 +5,21 @@
             [cljs-bean.core :as bean]
             [goog.object :as gobj]))
 
+(defonce static-num (js/Math.pow 2 24))
+(defn get-color
+  [n]
+  (str "#" (-> (mod (* n 1234567)
+                    static-num)
+               (.toString 16)
+               (.padStart 6 "0"))))
+
 (defn- build-graph-opts
   [graph dark? option]
+  (prn (first (:nodes graph)))
   (merge
    {:graphData (bean/->js graph)
 
+    :nodeLabel "id"
     :onNodeClick (fn [node]
                    (let [page-name (string/lower-case (gobj/get node "id"))]
                      (handler/redirect! {:to :page
@@ -17,31 +27,13 @@
     :nodeCanvasObject
     (fn [node ^CanvasRenderingContext2D ctx global-scale]
       (let [label (gobj/get node "id")
-            font-size (/ 14 global-scale)
-            _ (set! (.-font ctx)
-                    (str font-size "px Inter"))
-            text-width (gobj/get (.measureText ctx label) "width")
-            bg-dimensions (mapv
-                           (fn [n] (+ n (* font-size 0.2)))
-                           [text-width font-size])
-            x (- (gobj/get node "x") 1)
-            y (- (gobj/get node "y") 1)
-            [new-text-width new-font-size] bg-dimensions]
-        (set! (.-fillStyle ctx) "transparent")
-        (.fillRect ctx
-                   (- x (/ new-text-width 2))
-                   (- y (/ new-font-size 2))
-                   new-text-width
-                   new-font-size)
-        (set! (.-filltextAlign ctx)
-              "center")
-        (set! (.-textBaseLine ctx)
-              "middle")
-        (set! (.-fillStyle ctx)
-              (gobj/get node "color"))
-        (.fillText ctx label (gobj/get node "x") (gobj/get node "y"))
-        (.beginPath ctx)
-        (.arc ctx x y 0.5 0 (* 2 js/Math.PI) false)
-        (set! (.-fillStyle ctx) (if dark? "#aaa" "#222"))
-        (.fill ctx)))}
+            x (gobj/get node "x")
+            y (gobj/get node "y")
+            color (gobj/get node "color")
+            font-size (/ 14 global-scale)]
+        (set! (.-fillStyle ctx) color)
+        (set! (.-font ctx) (str font-size "px Inter"))
+        (set! (.-filltextAlign ctx) "center")
+        (set! (.-textBaseLine ctx) "middle")
+        (.fillText ctx label x y)))}
    option))
