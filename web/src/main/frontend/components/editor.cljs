@@ -358,6 +358,16 @@
      :value value
      :pos pos}))
 
+(defn- save-heading!
+  [{:keys [format heading id repo dummy?] :as state} value]
+  (when (or (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
+            dummy?)
+    (let [new-value (block/with-levels value format heading)]
+      (let [cache [(:heading/uuid heading) value]]
+        (when (not= @*last-edit-heading cache)
+          (handler/save-heading-if-changed! heading new-value)
+          (reset! *last-edit-heading cache))))))
+
 (defn on-up-down
   [state e up?]
   (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format]} (get-state state)
@@ -371,6 +381,12 @@
             sibling-heading (f (gdom/getElement heading-parent-id))]
         (when sibling-heading
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+            (let [state (get-state state)
+                  content (:heading/content heading)
+                  value (:value state)]
+              (when (not= (string/trim (handler/remove-level-spaces content format))
+                          (string/trim value))
+                (save-heading! state (:value state))))
             (handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))
 
 (defn delete-heading!
@@ -467,7 +483,7 @@
 
 (rum/defc image-uploader < rum/reactive
   [id format]
-  [:<>
+  [:div.image-uploader
    [:input
     {:id "upload-file"
      :type "file"
@@ -551,12 +567,11 @@
         state
         :on-hide
         (fn [state e event]
-          (let [{:keys [on-hide format value heading id]} (get-state state)
-                current-edit-id (state/get-edit-input-id)]
-            (state/set-edit-input-id! nil)
-            (when on-hide (on-hide value event))
-            (when (and heading (= current-edit-id id))
-              (state/set-edit-heading! nil)))))
+          (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
+            (when on-hide
+              (on-hide value event))
+            (save-heading! (get-state state) value)
+            (state/set-edit-input-id! nil))))
        (mixins/on-key-down
         state
         {
@@ -705,12 +720,12 @@
                     (reset! *matched-block-commands matched-block-commands))
                   (reset! *show-block-commands false))))))))))
   {:did-mount (fn [state]
-                (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)]
-                  (let [content (if heading
-                                  (handler/remove-level-spaces content format)
-                                  content)]
-                    (state/set-edit-content! id (string/trim (or content "")) true)
-                    (handler/restore-cursor-pos! id content dummy?))
+                (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)
+                      content (if heading
+                                (handler/remove-level-spaces content format)
+                                content)]
+                  (state/set-edit-content! id (string/trim (or content "")) true)
+                  (handler/restore-cursor-pos! id content dummy?)
                   (when-let [input (gdom/getElement id)]
                     (dnd/subscribe!
                      input
@@ -724,86 +739,79 @@
                        (dnd/unsubscribe!
                         input
                         :upload-images))
-                     (when (or (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
-                               dummy?)
-                       (let [new-value (block/with-levels value format heading)]
-                         (let [cache [(:heading/uuid heading) value]]
-                           (when (not= @*last-edit-heading cache)
-                             (handler/save-heading-if-changed! heading new-value)
-                             (reset! *last-edit-heading cache)))))
                      (clear-when-saved!))
                    state)}
   [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}
             :as option} id config]
-  (let [edit-content (state/sub [:editor/content id])
-        edit-content (and edit-content (string/triml edit-content))]
-    [:div.editor {:style {:position "relative"
-                          :display "flex"
-                          :flex "1 1 0%"}
-                  :class (if heading "heading-editor" "non-heading-editor")}
-     (ui/textarea
-      {:id id
-       :value (or edit-content content)
-       :on-change (fn [e]
-                    (let [value (util/evalue e)]
-                      (state/set-edit-content! id value false)
-                      (let [input (gdom/getElement id)]
-                        (case (last value)
-                          "/"
-                          (when-let [matched-commands (seq (get-matched-commands input))]
-                            (reset! *slash-caret-pos (util/get-caret-pos input))
-                            (reset! *show-commands true))
-                          "<"
-                          (when-let [matched-commands (seq (get-matched-block-commands input))]
-                            (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                            (reset! *show-block-commands true))
-                          nil))))
-       :auto-focus true})
-     (transition-cp
-      (commands id format)
-      true
-      *slash-caret-pos)
+  [:div.editor {:style {:position "relative"
+                        :display "flex"
+                        :flex "1 1 0%"}
+                :class (if heading "heading-editor" "non-heading-editor")}
+   (ui/textarea
+    {:id id
+     :default-value (string/triml content)
+     :on-change (fn [e]
+                  (let [value (util/evalue e)
+                        current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+                    (state/set-edit-content! id value false)
+                    (let [input (gdom/getElement id)
+                          last-input-char (nth value (dec current-pos))]
+                      (case last-input-char
+                        "/"
+                        (when-let [matched-commands (seq (get-matched-commands input))]
+                          (reset! *slash-caret-pos (util/get-caret-pos input))
+                          (reset! *show-commands true))
+                        "<"
+                        (when-let [matched-commands (seq (get-matched-block-commands input))]
+                          (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
+                          (reset! *show-block-commands true))
+                        nil))))
+     :auto-focus true})
+   (transition-cp
+    (commands id format)
+    true
+    *slash-caret-pos)
 
-     (transition-cp
-      (block-commands id format)
-      true
-      *angle-bracket-caret-pos)
+   (transition-cp
+    (block-commands id format)
+    true
+    *angle-bracket-caret-pos)
 
-     (transition-cp
-      (page-search id format)
-      true
-      *slash-caret-pos)
+   (transition-cp
+    (page-search id format)
+    true
+    *slash-caret-pos)
 
-     (transition-cp
-      (block-search id format)
-      true
-      *slash-caret-pos)
+   (transition-cp
+    (block-search id format)
+    true
+    *slash-caret-pos)
 
-     (transition-cp
-      (date-picker id format)
-      false
-      *slash-caret-pos)
+   (transition-cp
+    (date-picker id format)
+    false
+    *slash-caret-pos)
 
-     (transition-cp
-      (input id
-             (fn [{:keys [link label]} pos]
-               (if (and (string/blank? link)
-                        (string/blank? label))
-                 nil
-                 (insert-command! id
-                                  (util/format "[[%s][%s]]"
-                                               (or link "")
-                                               (or label ""))
-                                  format
-                                  {:last-pattern (str commands/slash "link")}))
-               (state/set-editor-show-input nil)
-               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-                 (when-let [input (gdom/getElement id)]
-                   (.focus input)
-                   (util/move-cursor-to input saved-cursor)))))
-      true
-      *slash-caret-pos)
+   (transition-cp
+    (input id
+           (fn [{:keys [link label]} pos]
+             (if (and (string/blank? link)
+                      (string/blank? label))
+               nil
+               (insert-command! id
+                                (util/format "[[%s][%s]]"
+                                             (or link "")
+                                             (or label ""))
+                                format
+                                {:last-pattern (str commands/slash "link")}))
+             (state/set-editor-show-input nil)
+             (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+               (when-let [input (gdom/getElement id)]
+                 (.focus input)
+                 (util/move-cursor-to input saved-cursor)))))
+    true
+    *slash-caret-pos)
 
-     (when format
-       (image-uploader id format))]))
+   (when format
+     (image-uploader id format))])

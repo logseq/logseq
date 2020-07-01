@@ -1,7 +1,8 @@
 {:paths ["src/main"]
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
-  rum {:mvn/version "0.12.0-SNAPSHOT"}
+  ;; rum {:mvn/version "0.12.2"}
+  rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   datascript-transit          {:mvn/version "0.3.0"
                                :exclusions [datascript]}
   datascript                  {:mvn/version "0.18.13"}

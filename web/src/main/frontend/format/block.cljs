@@ -1,5 +1,5 @@
 (ns frontend.format.block
-  (:require [frontend.util :as util]
+  (:require [frontend.util :as util :refer-macros [profile]]
             [clojure.walk :as walk]
             [clojure.string :as string]
             [frontend.format :as format]

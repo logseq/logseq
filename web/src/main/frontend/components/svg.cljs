@@ -275,8 +275,8 @@
    {:view-box "0 0 448 512",
     :preserve-aspect-ratio "xMidYMid meet",
     :style
-    {"-ms-transform" "rotate(360deg)"
-     "-webkit-transform" "rotate(360deg)"
+    {"msTransform" "rotate(360deg)"
+     "WebkitTransform" "rotate(360deg)"
      "transform" "rotate(360deg)"}
     :height "1em",
     :width "0.88em",

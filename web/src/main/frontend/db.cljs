@@ -343,7 +343,7 @@
            (util/concat-without-nil
             handler-keys
             refed-pages
-            custom-queries
+            ;; custom-queries
             heading-blocks)
            distinct)))
       [[key]])))

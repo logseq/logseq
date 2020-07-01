@@ -128,10 +128,6 @@
   []
   (set-state! :ui/cycle-collapse (next-collapse-mode)))
 
-(defn get-edit-heading
-  []
-  (:edit-heading @state))
-
 (defn set-edit-content!
   [input-id value set-input-value?]
   (when input-id
@@ -318,18 +314,14 @@
   (when db-id
     (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))
 
-(defn set-edit-heading!
-  [heading]
-  (set-state! :edit-heading heading))
-
 (defn set-editing!
-  [edit-input-id content heading]
+  [edit-input-id content heading cursor-range]
   (when edit-input-id
     (reset! state
             (-> @state
                 (assoc-in [:editor/content edit-input-id] content)
-                (assoc :edit-heading heading
-                       :editor/editing? {edit-input-id true})))))
+                (assoc :editor/editing? {edit-input-id true}
+                       :cursor-range cursor-range)))))
 
 (defn set-heading-content-and-last-pos!
   [edit-input-id content new-pos]

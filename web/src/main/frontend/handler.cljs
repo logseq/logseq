@@ -407,17 +407,18 @@
 
 (defn db-listen-to-tx!
   [repo db-conn]
-  (when-let [files-conn (db/get-files-conn repo)]
-    (d/listen! files-conn :persistence
-               (fn [tx-report]
-                 (when (seq (:tx-data tx-report))
-                   (when-let [db (:db-after tx-report)]
-                     (js/setTimeout #(db/persist repo db true) 0))))))
-  (d/listen! db-conn :persistence
-             (fn [tx-report]
-               (when (seq (:tx-data tx-report))
-                 (when-let [db (:db-after tx-report)]
-                   (js/setTimeout #(db/persist repo db false) 0))))))
+  ;; (when-let [files-conn (db/get-files-conn repo)]
+  ;;   (d/listen! files-conn :persistence
+  ;;              (fn [tx-report]
+  ;;                (when (seq (:tx-data tx-report))
+  ;;                  (when-let [db (:db-after tx-report)]
+  ;;                    (js/setTimeout #(db/persist repo db true) 0))))))
+  ;; (d/listen! db-conn :persistence
+  ;;            (fn [tx-report]
+  ;;              (when (seq (:tx-data tx-report))
+  ;;                (when-let [db (:db-after tx-report)]
+  ;;                  (js/setTimeout #(db/persist repo db false) 0)))))
+  )
 
 (defn clone
   [repo-url]
@@ -1195,8 +1196,7 @@
           text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
                        content
                        (subs content 0 prev-pos))]
-      (state/set-cursor-range! text-range)
-      (state/set-editing! edit-input-id content heading))))
+      (state/set-editing! edit-input-id content heading text-range))))
 
 (defn clear-selection!
   [e]

@@ -645,11 +645,12 @@
                                         (handler/clear-selection! nil)
                                         (handler/unhighlight-heading!)
                                         (util/stop e)
-                                        (handler/reset-cursor-range! (gdom/getElement heading-id))
-                                        (state/set-editing!
-                                         edit-input-id
-                                         (handler/remove-level-spaces content format)
-                                         heading))))
+                                        (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
+                                          (state/set-editing!
+                                          edit-input-id
+                                          (handler/remove-level-spaces content format)
+                                          heading
+                                          cursor-range)))))
                         :on-drag-over (fn [event]
                                         (util/stop event)
                                         (when-not (dnd-same-heading? uuid)
@@ -688,10 +689,9 @@
            [:div.heading-body {:style {:display (if collapsed? "none" "")}}
             ;; TODO: consistent id instead of the idx (since it could be changed later)
             (for [[idx child] (medley/indexed (:heading/body heading))]
-              (rum/with-key
-                (heading-child
-                 (block config child))
-                (str uuid "-" idx)))])]))))
+              (when-let [block (block config child)]
+                (rum/with-key (heading-child block)
+                 (str uuid "-" idx))))])]))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [heading slide? top?]
@@ -708,6 +708,7 @@
   {:did-update (fn [state]
                  (util/code-highlight!)
                  state)}
+  ;; (mixins/perf-measure-mixin "heading-container")
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-heading? idx] :as heading}]
   (let [ref? (boolean (:ref? config))
         sidebar? (boolean (:sidebar? config))
