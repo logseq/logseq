@@ -543,7 +543,6 @@
 (defn highlight-element!
   [fragment]
   (when-let [element (gdom/getElement fragment)]
-    (prn {:element element})
     (dom/add-class! element "block-highlight")
     (js/setTimeout #(dom/remove-class! element "block-highlight")
                    4000)))
