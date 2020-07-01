@@ -357,7 +357,7 @@
         [:div#main-content
          {:style {
                   :height "100%"
-                  :overflow-y "auto"
+                  :overflow-y "scroll"
                   :box-sizing "content-box"}}
          [:div.flex.justify-center
           ;; FIXME: overflow-x-hidden conflicts with heading collapsers

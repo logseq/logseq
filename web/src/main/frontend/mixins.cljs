@@ -168,7 +168,8 @@
       :will-unmount
       (fn [state]
         (when (enable-f state)
-          ((get state (str (name ::keyboard-listener) key))))
+          (when-let [f (get state (str (name ::keyboard-listener) key))]
+            (f)))
         state)})))
 
 ;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
