@@ -407,18 +407,17 @@
 
 (defn db-listen-to-tx!
   [repo db-conn]
-  ;; (when-let [files-conn (db/get-files-conn repo)]
-  ;;   (d/listen! files-conn :persistence
-  ;;              (fn [tx-report]
-  ;;                (when (seq (:tx-data tx-report))
-  ;;                  (when-let [db (:db-after tx-report)]
-  ;;                    (js/setTimeout #(db/persist repo db true) 0))))))
-  ;; (d/listen! db-conn :persistence
-  ;;            (fn [tx-report]
-  ;;              (when (seq (:tx-data tx-report))
-  ;;                (when-let [db (:db-after tx-report)]
-  ;;                  (js/setTimeout #(db/persist repo db false) 0)))))
-  )
+  (when-let [files-conn (db/get-files-conn repo)]
+    (d/listen! files-conn :persistence
+               (fn [tx-report]
+                 (when (seq (:tx-data tx-report))
+                   (when-let [db (:db-after tx-report)]
+                     (js/setTimeout #(db/persist repo db true) 0))))))
+  (d/listen! db-conn :persistence
+             (fn [tx-report]
+               (when (seq (:tx-data tx-report))
+                 (when-let [db (:db-after tx-report)]
+                   (js/setTimeout #(db/persist repo db false) 0))))))
 
 (defn clone
   [repo-url]
