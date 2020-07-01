@@ -501,11 +501,15 @@
                     heading)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     ;; save the current heading and insert a new heading
-    (let [value-with-levels (block/with-levels value format heading)
-          [_first-heading last-heading _new-heading-content] (handler/insert-new-heading! heading value-with-levels)
-          last-id (:heading/uuid last-heading)]
-      (handler/edit-heading! last-id :max format id)
-      (clear-when-saved!))))
+    (let [value-with-levels (block/with-levels value format heading)]
+      (handler/insert-new-heading!
+       heading
+       value-with-levels
+       true
+       (fn [[_first-heading last-heading _new-heading-content]]
+         (let [last-id (:heading/uuid last-heading)]
+           (handler/edit-heading! last-id :max format id)
+           (clear-when-saved!)))))))
 
 (defn get-previous-heading-level
   [current-id]
@@ -715,12 +719,13 @@
                               (upload-image id files format *image-uploading? true))})))
                 state)
    :will-unmount (fn [state]
-                   (let [{:keys [id value format heading repo]} (get-state state)]
+                   (let [{:keys [id value format heading repo dummy?]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
                        (dnd/unsubscribe!
                         input
                         :upload-images))
-                     (when (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
+                     (when (or (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
+                               dummy?)
                        (let [new-value (block/with-levels value format heading)]
                          (let [cache [(:heading/uuid heading) value]]
                            (when (not= @*last-edit-heading cache)

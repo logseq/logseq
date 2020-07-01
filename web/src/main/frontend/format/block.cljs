@@ -177,9 +177,10 @@
                 safe-headings)))]
     (let [first-heading (first headings)
           first-heading-start-pos (get-in first-heading [:heading/meta :pos])]
-      (if (or (empty? headings)
-              (<= first-heading-start-pos 1))
-        headings
+      (if (and
+           (not (string/blank? encoded-content))
+           (or (empty? headings)
+               (> first-heading-start-pos 1)))
         (cons
          (merge
           (let [content (utf8/substring encoded-content 0 first-heading-start-pos)
@@ -189,11 +190,13 @@
              :heading/anchor (str uuid)
              :heading/level 2
              :heading/meta {:pos 0
-                            :end-pos first-heading-start-pos}
+                            :end-pos (or first-heading-start-pos
+                                         (utf8/length encoded-content))}
              :heading/body (take-while (fn [block] (not (heading-block? block))) blocks)
              :heading/pre-heading? true})
           (select-keys first-heading [:heading/file :heading/format :heading/page]))
-         headings)))))
+         headings)
+        headings))))
 
 ;; marker: DOING | IN-PROGRESS > TODO > WAITING | WAIT > DONE > CANCELED | CANCELLED
 ;; priority: A > B > C

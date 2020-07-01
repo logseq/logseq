@@ -30,7 +30,8 @@
             (handler/insert-new-heading!
              (first headings)
              template
-             false))))))
+             false
+             nil))))))
   state)
 
 (rum/defc journal-cp < rum/reactive

@@ -799,9 +799,9 @@
   [format title]
   (case format
     "org"
-    (util/format "#+TITLE: %s\n#+TAGS:\n" title)
+    (util/format "#+TITLE: %s\n#+TAGS:\n\n" title)
     "markdown"
-    (util/format "---\ntitle: Blogging Like a Hacker\ntags:\n---\n")
+    (util/format "---\ntitle: %s\ntags:\n---\n\n" title)
     ""))
 
 (defn create-new-page!
@@ -945,37 +945,71 @@
           nil)))))
 
 (defn insert-new-heading!
-  ([heading value]
-   (insert-new-heading! heading value true))
-  ([{:heading/keys [uuid content meta file dummy? level repo page] :as heading} value create-new-heading?]
-   (let [repo (or repo (state/get-current-repo))
-         value (string/trim value)
-         heading (with-heading-meta repo heading)
-         format (:heading/format heading)
-         new-heading-content (config/default-empty-heading format level)]
-     (let [file (db/entity repo (:db/id file))
-           file-path (:file/path file)
-           file-content (db/get-file repo file-path)
-           value (if create-new-heading?
-                   (str value "\n" new-heading-content)
-                   value)
-           [new-content value] (new-file-content heading file-content value)
-           {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-           first-heading (first headings)
-           last-heading (last headings)
-           after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-       (profile
-        "Insert heading"
-        (transact-react-and-alter-file!
-         repo
-         (concat
-          pages
-          headings
-          after-headings)
-         {:key :heading/change
-          :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
-         [[file-path new-content]]))
-       [first-heading last-heading new-heading-content]))))
+  [{:heading/keys [uuid content meta file dummy? level repo page] :as heading} value create-new-heading? ok-handler]
+  (let [repo (or repo (state/get-current-repo))
+        value (string/trim value)
+        heading (with-heading-meta repo heading)
+        format (:heading/format heading)
+        new-heading-content (config/default-empty-heading format level)
+        page (db/entity repo (:db/id page))
+        file (db/entity repo (:db/id file))
+        insert-heading (fn [heading file-path file-content]
+                         (let [value (if create-new-heading?
+                                       (str value "\n" new-heading-content)
+                                       value)
+                               [new-content value] (new-file-content heading file-content value)
+                               {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+                               first-heading (first headings)
+                               last-heading (last headings)
+                               after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+                           (profile
+                            "Insert heading"
+                            (transact-react-and-alter-file!
+                             repo
+                             (concat
+                              pages
+                              headings
+                              after-headings)
+                             {:key :heading/change
+                              :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+                             [[file-path new-content]]))
+                           (when ok-handler
+                             (ok-handler [first-heading last-heading new-heading-content]))))]
+    (cond
+      (and (not file) page)
+      (let [format (name format)
+            path (str (-> (:page/name page)
+                          (string/replace #"\s+" "_")
+                          (util/url-encode)) "." format)
+            file-path (str "/" path)
+            dir (util/get-repo-dir repo)]
+        (p/let [exists? (fs/file-exists? dir file-path)]
+          (if exists?
+            (show-notification!
+             [:p.content
+              "File already exists!"]
+             :error)
+            ;; create the file
+            (let [content (default-content-with-title format (util/capitalize-all (:page/name page)))]
+              (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                (db/reset-file! repo path content)
+                (git-add repo path)
+                (let [file (db/entity repo [:file/path path])
+                      heading (assoc heading
+                                     :heading/page {:db/id (:db/id page)}
+                                     :heading/file {:db/id (:db/id file)}
+                                     :heading/meta
+                                     {:pos (utf8/length (utf8/encode content))
+                                      :end-pos nil})]
+                  (insert-heading heading path content)))))))
+
+      file
+      (let [file-path (:file/path file)
+            file-content (db/get-file repo file-path)]
+        (insert-heading heading file-path file-content))
+
+      :else
+      nil)))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -1322,6 +1356,13 @@
     (dom/add-class! sidebar "enter")
     (dom/add-class! (dom/by-id "main-content-container")
                     "right-sidebar-open")))
+
+(defn toggle-right-sidebar
+  []
+  (let [sidebar (dom/by-id "right-sidebar")]
+    (if (dom/has-class? sidebar "enter")
+      (hide-right-sidebar)
+      (show-right-sidebar))))
 
 ;; document.execCommand("undo", false, null);
 (defn default-undo

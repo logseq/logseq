@@ -236,6 +236,7 @@
   rum/reactive
   (mixins/keyboard-mixin "ctrl+z" handler/undo!)
   (mixins/keyboard-mixin "ctrl+y" handler/redo!)
+  (mixins/keyboard-mixin "ctrl+alt+r" handler/toggle-right-sidebar)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)

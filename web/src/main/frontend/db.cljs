@@ -500,7 +500,7 @@
         get-conn (fn [] (if files-db?
                           (get-files-conn repo-url)
                           (get-conn repo-url false)))]
-    (when (seq tx-data)
+    (when (and (seq tx-data) (get-conn))
       (d/transact! (get-conn) (vec tx-data))
       (let [handler-keys (get-handler-keys handler-opts)]
         (doseq [handler-key handler-keys]
