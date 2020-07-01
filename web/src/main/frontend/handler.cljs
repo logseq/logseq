@@ -548,10 +548,11 @@
                    4000)))
 
 (defn scroll-and-highlight!
-  []
+  [state]
   (when-let [fragment (util/get-fragment)]
     (util/scroll-to-element fragment)
-    (highlight-element! fragment)))
+    (highlight-element! fragment))
+  state)
 
 (defn get-title
   [name path-params]
@@ -591,7 +592,7 @@
   (let [{:keys [data path-params]} route
         title (get-title (:name data) path-params)]
     (util/set-title! title)
-    (scroll-and-highlight!)))
+    (scroll-and-highlight! nil)))
 
 (defn set-ref-component!
   [k ref]
