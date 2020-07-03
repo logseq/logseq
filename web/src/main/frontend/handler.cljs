@@ -374,6 +374,7 @@
     ;; auto commit if there are any un-committed changes
     (p/let [changed-files (git/get-status-matrix repo-url)]
       (when (seq (flatten (vals changed-files)))
+        (prn {:changed-files changed-files})
         (p/let [_commit-result (git/commit repo-url "Logseq auto save")]
           (set-git-status! repo-url :pushing)
           (let [token (get-github-token)]
@@ -1465,15 +1466,17 @@
 
 (defn git-remove-file!
   [repo file]
-  (->
-   (p/let [_ (git/remove-file repo file)]
-     (fs/unlink (str (util/get-repo-dir repo)
-                     "/"
-                     file)
-                nil)
-     (set-git-status! repo :should-push))
-   (p/catch (fn [err]
-              (prn "error: " err)))))
+  (when-not (string/blank? file)
+    (->
+     (p/let [_ (git/remove-file repo file)
+             result (fs/unlink (str (util/get-repo-dir repo)
+                                    "/"
+                                    file)
+                               nil)]
+       (println "Removed " file)
+       (set-git-status! repo :should-push))
+     (p/catch (fn [err]
+                (prn "error: " err))))))
 
 (comment
   (defn debug-latest-commits

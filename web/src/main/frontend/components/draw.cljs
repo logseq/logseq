@@ -124,7 +124,7 @@
   [title]
   (when (not (string/blank? title))
     (let [title (string/lower-case (string/replace title " " "-"))]
-      (str (date/get-date-time-string-2) "-" title "-" (util/rand-str 4) ".excalidraw"))))
+      (str (date/get-date-time-string-2) "-" title ".excalidraw"))))
 
 (defn get-file-title
   [file]
