@@ -101,6 +101,19 @@
                {:dir (util/get-repo-dir repo-url)
                 :filepath file})))
 
+(defn remove-file
+  [repo-url file]
+  (js/git.remove (clj->js
+               {:dir (util/get-repo-dir repo-url)
+                :filepath file})))
+
+(defn rename
+  [repo-url old-file new-file]
+  (util/p-handle
+   (add repo-url new-file)
+   (fn [_]
+     (remove-file repo-url old-file))))
+
 (defn commit
   [repo-url message]
   (let [{:keys [name email]} (:me @state/state)]

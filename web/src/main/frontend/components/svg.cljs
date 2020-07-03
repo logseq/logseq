@@ -64,6 +64,8 @@
 
 (def close (hero-icon "M6 18L18 6M6 6L18 18"))
 (def plus (hero-icon "M12 4v16m8-8H4"))
+(def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
+(def vertical-dots (hero-icon "M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"))
 
 (rum/defc note
   []

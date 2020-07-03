@@ -95,8 +95,8 @@
             (remove (fn [repo]
                       (= current-repo (:url repo)))
                     repos))
-           (util/hiccup->class
-            "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg "))
+           {:modal-class (util/hiccup->class
+                          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
           [:a
            {:href current-repo
             :target "_blank"}
@@ -341,7 +341,8 @@
                (when logged?
                  {:title "Sign out"
                   :options {:on-click handler/sign-out!}})]
-              (remove nil?))))
+              (remove nil?)))
+           {})
 
           [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
            {:on-click (fn []

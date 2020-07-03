@@ -45,8 +45,7 @@
             "The token will be encrypted and then only stored in the browser localstorage."
             [:br]
             "The server will not try to store or read your token."]
-           [:div.mt-2.mb-2.relative.rounded-md.shadow-sm.max-w-xs
-            [:div.font-bold.text-gray-600.mb-1 "Personal access token:"]
+           [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
             [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
              {:on-change (fn [e]
                            (reset! access-token (util/evalue e)))}]]

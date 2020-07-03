@@ -404,3 +404,7 @@
 (defn get-shortcut
   [repo key]
   (get-in @state [:config repo :shortcuts key]))
+
+(defn get-me
+  []
+  (:me @state))

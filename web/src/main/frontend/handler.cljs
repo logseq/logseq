@@ -1403,20 +1403,22 @@
 
 ;; excalidraw
 (defn save-excalidraw!
-  [file data]
+  [file data ok-handler]
   (let [path (str config/default-draw-directory "/" file)
         repo (state/get-current-repo)]
     (when repo
       (let [repo-dir (util/get-repo-dir repo)]
         (p/let [_ (-> (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
-                      (p/catch (fn [e])))]
+                      (p/catch (fn [_e]
+                                 nil)))]
           (util/p-handle
-           (fs/write-file repo-dir path (js/JSON.stringify data))
+           (fs/write-file repo-dir path data)
            (fn [_]
              (util/p-handle
               (git-add repo path)
               (fn [_]
-                (git/commit repo (str "Save " file)))))
+                (git/commit repo (str "Save " file))
+                (ok-handler file))))
            (fn [error]
              (prn "Write file failed, path: " path ", data: " data)
              (js/console.dir error))))))))
@@ -1424,21 +1426,19 @@
 (defn get-all-excalidraw-files
   [ok-handler]
   (when-let [repo (state/get-current-repo)]
-    (let [dir (str "/"
-                   (util/get-repo-dir repo)
+    (let [dir (str (util/get-repo-dir repo)
                    "/"
                    config/default-draw-directory)]
       (util/p-handle
        (fs/readdir dir)
        (fn [files]
-         (let [files (-> (filter #(and (string/starts-with? % "excalidraw-")
-                                       (string/ends-with? % ".json")) files)
+         (let [files (-> (filter #(string/ends-with? % ".excalidraw") files)
                          (distinct)
                          (sort)
                          (reverse))]
            (ok-handler files)))
-       (fn [_error]
-         nil)))))
+       (fn [error]
+         (js/console.dir error))))))
 
 (defn load-excalidraw-file
   [file ok-handler]
@@ -1450,6 +1450,18 @@
      (fn [error]
        (prn "Error loading " file ": "
             error)))))
+
+(defn git-remove-file!
+  [repo file]
+  (->
+   (p/let [_ (git/remove-file repo file)]
+     (fs/unlink (str (util/get-repo-dir repo)
+                     "/"
+                     file)
+                nil)
+     (git/commit repo (str "Removed " file)))
+   (p/catch (fn [err]
+              (prn "error: " err)))))
 
 (comment
   (defn debug-latest-commits

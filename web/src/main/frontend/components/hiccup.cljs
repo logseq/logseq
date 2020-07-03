@@ -88,6 +88,7 @@
 (defn image-link [url href label]
   [:img.rounded-sm.shadow-xs.mb-2.mt-2
    {:class "object-contain object-center"
+    :loading "lazy"
     :style {:max-height "24rem"}
     :src href
     :title (second (first label))}])

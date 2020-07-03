@@ -15,6 +15,10 @@
   [dir]
   (js/pfs.readdir dir))
 
+(defn unlink
+  [path opts]
+  (js/pfs.unlink path opts))
+
 (defn rmdir
   [dir]
   (git-ext/rimraf dir js/pfs))
