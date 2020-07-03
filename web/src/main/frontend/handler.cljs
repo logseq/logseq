@@ -1402,15 +1402,21 @@
       (default-redo))))
 
 ;; excalidraw
+(defn create-draws-directory!
+  [repo]
+  (let [repo-dir (util/get-repo-dir repo)]
+    (util/p-handle
+     (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
+     (fn [_result] nil)
+     (fn [_error] nil))))
+
 (defn save-excalidraw!
   [file data ok-handler]
   (let [path (str config/default-draw-directory "/" file)
         repo (state/get-current-repo)]
     (when repo
       (let [repo-dir (util/get-repo-dir repo)]
-        (p/let [_ (-> (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
-                      (p/catch (fn [_e]
-                                 nil)))]
+        (p/let [_ (create-draws-directory! repo)]
           (util/p-handle
            (fs/write-file repo-dir path data)
            (fn [_]
@@ -1426,19 +1432,20 @@
 (defn get-all-excalidraw-files
   [ok-handler]
   (when-let [repo (state/get-current-repo)]
-    (let [dir (str (util/get-repo-dir repo)
-                   "/"
-                   config/default-draw-directory)]
-      (util/p-handle
-       (fs/readdir dir)
-       (fn [files]
-         (let [files (-> (filter #(string/ends-with? % ".excalidraw") files)
-                         (distinct)
-                         (sort)
-                         (reverse))]
-           (ok-handler files)))
-       (fn [error]
-         (js/console.dir error))))))
+    (p/let [_ (create-draws-directory! repo)]
+      (let [dir (str (util/get-repo-dir repo)
+                     "/"
+                     config/default-draw-directory)]
+        (util/p-handle
+         (fs/readdir dir)
+         (fn [files]
+           (let [files (-> (filter #(string/ends-with? % ".excalidraw") files)
+                           (distinct)
+                           (sort)
+                           (reverse))]
+             (ok-handler files)))
+         (fn [error]
+           (js/console.dir error)))))))
 
 (defn load-excalidraw-file
   [file ok-handler]
