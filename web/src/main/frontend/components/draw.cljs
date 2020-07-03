@@ -130,7 +130,7 @@
   [file]
   (when file
     (let [s (subs file 20)
-          title (string/capitalize (subs s 0 (- (count s) 16)))]
+          title (string/replace s ".excalidraw" "")]
       (string/replace title "-" " "))))
 
 (defn save-excalidraw!
@@ -275,6 +275,7 @@
   (let [all-files (rum/react *files)
         search-files (rum/react *search-files)
         files (if (seq search-files) search-files all-files)
+        _ (prn "files: " files)
         current-file (rum/react *current-file)
         unsaved? (rum/react *unsaved?)]
     [:div.flex-row.flex.items-center
