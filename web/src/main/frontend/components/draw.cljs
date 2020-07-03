@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [goog.object :as gobj]
             [frontend.rum :as r]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [frontend.mixins :as mixins]
             [frontend.storage :as storage]
             [frontend.components.svg :as svg]
@@ -146,11 +146,12 @@
       (when-let [elements (get-last-elements)]
         (let [app-state (get-last-app-state)
               [option] (:rum/args state)
-              file (or
-                    file
-                    @*current-file
-                    (:file option)
-                    (title->file-name title))
+              file (util/trim-safe
+                    (or
+                     file
+                     @*current-file
+                     (:file option)
+                     (title->file-name title)))
               data (serialize-as-json elements app-state)]
           (when file
             (handler/save-excalidraw! file data
@@ -269,13 +270,8 @@
                               files
                               (search/fuzzy-search files value :limit 10)))))}]])
 
-(rum/defcs files < rum/reactive
-  {:init (fn [state]
-           (handler/get-all-excalidraw-files
-            (fn [files]
-              (reset! *files (distinct files))))
-           state)}
-  [state]
+(rum/defc files < rum/reactive
+  []
   (let [all-files (rum/react *files)
         search-files (rum/react *search-files)
         files (if (seq search-files) search-files all-files)
@@ -444,6 +440,11 @@
                 (fn []
                   (reset! *loaded? true)
                   (set-excalidraw-component!)))))
+
+           (handler/get-all-excalidraw-files
+            (fn [files]
+              (prn "files: " files)
+              (reset! *files (distinct files))))
            state)}
   [option]
   (let [loaded? (or (loaded?)
