@@ -13,6 +13,7 @@
             [frontend.expand :as expand]
             [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
+            [frontend.components.draw :as draw]
             [frontend.ui :as ui]
             [frontend.handler :as handler]
             [frontend.handler.dnd :as dnd]
@@ -290,7 +291,11 @@
           ;; page reference
           [:span.page-reference
            [:span.text-gray-500 "[["]
-           (page-cp s)
+           (if (string/ends-with? s ".excalidraw")
+             [:a.page-ref
+              {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))}
+              (str "Draw: " (string/capitalize (draw/get-file-title s)))]
+             (page-cp s))
            [:span.text-gray-500 "]]"]])
 
         :else
@@ -648,10 +653,10 @@
                                         (util/stop e)
                                         (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
                                           (state/set-editing!
-                                          edit-input-id
-                                          (handler/remove-level-spaces content format)
-                                          heading
-                                          cursor-range)))))
+                                           edit-input-id
+                                           (handler/remove-level-spaces content format)
+                                           heading
+                                           cursor-range)))))
                         :on-drag-over (fn [event]
                                         (util/stop event)
                                         (when-not (dnd-same-heading? uuid)
@@ -692,7 +697,7 @@
             (for [[idx child] (medley/indexed (:heading/body heading))]
               (when-let [block (block config child)]
                 (rum/with-key (heading-child block)
-                 (str uuid "-" idx))))])]))))
+                  (str uuid "-" idx))))])]))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [heading slide? top?]

@@ -1430,7 +1430,15 @@
              (util/p-handle
               (git-add repo path)
               (fn [_]
-                (ok-handler file))))
+                (ok-handler file)
+                (let [modified-at (tc/to-long (t/now))]
+                  (db/transact! repo
+                    [{:file/path path
+                      :file/last-modified-at modified-at}
+                     {:page/name file
+                      :page/file path
+                      :page/last-modified-at (tc/to-long (t/now))
+                      :page/journal? false}])))))
            (fn [error]
              (prn "Write file failed, path: " path ", data: " data)
              (js/console.dir error))))))))
@@ -1473,8 +1481,12 @@
                                     "/"
                                     file)
                                nil)]
-       (println "Removed " file)
-       (set-git-status! repo :should-push))
+       (set-git-status! repo :should-push)
+       (when-let [file (db/entity repo [:file/path file])]
+         (let [file-id (:db/id file)]
+           (db/transact! repo
+             [[:db.fn/retractEntity file-id]
+              [:db.fn/retractEntity [:page/file file-id]]]))))
      (p/catch (fn [err]
                 (prn "error: " err))))))
 

@@ -407,7 +407,7 @@
           (assoc :initial-data elements))))
      [:div.absolute.top-4.left-4.hidden.md:block
       [:div.flex.flex-row.items-center
-       [:a.mr-3 {:on-click (fn [] (.back (gobj/get js/window "history")))
+       [:a.mr-3 {:href "/"
                  :title "Back to logseq"}
         (svg/logo)]
        (files)
@@ -423,12 +423,15 @@
                         (fn [repo]
                           (reset! *current-file (get-last-file repo))))]])]))
 
-(rum/defc draw < rum/reactive
+(rum/defcs draw < rum/reactive
   {:init (fn [state]
            (let [repo (storage/get :git/current-repo)]
              (when-let [last-title (get-last-title repo)]
                (reset! *current-title last-title))
-             (when-let [last-file (get-last-file repo)]
+             (when-let [last-file (or
+                                   (get-in (first (:rum/args state))
+                                           [:query-params :file])
+                                   (get-last-file repo))]
                (reset! *current-file last-file)
                (reset! *current-title (get-file-title last-file))))
 
@@ -443,10 +446,9 @@
 
            (handler/get-all-excalidraw-files
             (fn [files]
-              (prn "files: " files)
               (reset! *files (distinct files))))
            state)}
-  [option]
+  [state option]
   (let [loaded? (or (loaded?)
                     (rum/react *loaded?))
         current-repo (state/sub :git/current-repo)]

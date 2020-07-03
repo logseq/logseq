@@ -128,7 +128,7 @@
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
-   :page/ido         {:db/unique      :db.unique/identity}
+   :page/id         {:db/unique      :db.unique/identity}
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
