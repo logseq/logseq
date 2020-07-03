@@ -275,7 +275,6 @@
   (let [all-files (rum/react *files)
         search-files (rum/react *search-files)
         files (if (seq search-files) search-files all-files)
-        _ (prn "files: " files)
         current-file (rum/react *current-file)
         unsaved? (rum/react *unsaved?)]
     [:div.flex-row.flex.items-center
