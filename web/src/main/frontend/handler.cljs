@@ -374,7 +374,7 @@
     ;; auto commit if there are any un-committed changes
     (p/let [changed-files (git/get-status-matrix repo-url)]
       (when (seq (flatten (vals changed-files)))
-        (prn {:changed-files changed-files})
+        ;; (prn {:changed-files changed-files})
         (p/let [_commit-result (git/commit repo-url "Logseq auto save")]
           (set-git-status! repo-url :pushing)
           (let [token (get-github-token)]
