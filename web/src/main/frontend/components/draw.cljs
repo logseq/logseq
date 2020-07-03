@@ -16,6 +16,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.search :as search]
+            [frontend.components.widgets :as widgets]
             [promesa.core :as p]))
 
 ;; TODO: delete not working yet
@@ -24,16 +25,64 @@
 
 (defonce *loaded? (atom false))
 
-(defonce last-file :draw/last-file)
-(defonce draw-title-key :draw/latest-title)
-(defonce draw-data-key :draw/latest-data)
-(defonce draw-app-state-key :draw/app-state)
+(defonce draw-state :draw-state)
+
+(defn get-draw-state []
+  (storage/get draw-state))
+(defn set-draw-state! [value]
+  (storage/set draw-state value))
+(defn get-k
+  ([k]
+   (get-k k (state/get-current-repo)))
+  ([repo k]
+   (when repo
+     (get-in (get-draw-state) [repo k]))))
+
+(defn set-k
+  [k v]
+  (when-let [repo (state/get-current-repo)]
+    (let [state (get-draw-state)]
+      (let [new-state (assoc-in state [repo k] v)]
+        (set-draw-state! new-state)))))
+
+(defn get-last-file
+  ([]
+   (get-k :last-file))
+  ([repo]
+   (get-k repo :last-file)))
+
+(defn get-last-title
+  ([]
+   (get-k :last-title))
+  ([repo]
+   (get-k repo :last-title)))
+
+(defn set-last-file!
+  [value]
+  (set-k :last-file value))
+(defn set-last-title!
+  [value]
+  (set-k :last-title value))
+
+(defn get-last-elements
+  []
+  (storage/get-json (str (state/get-current-repo) "-" "last-elements")))
+(defn get-last-app-state
+  []
+  (storage/get-json (str (state/get-current-repo) "-" "last-app-state")))
+
+(defn set-last-elements!
+  [value]
+  (storage/set-json (str (state/get-current-repo) "-" "last-elements") value))
+(defn set-last-app-state!
+  [value]
+  (storage/set-json (str (state/get-current-repo) "-" "last-app-state") value))
 
 (defonce *files (atom nil))
 (defonce *current-file (atom nil))
-(defonce *current-title (atom (or (storage/get draw-title-key) "")))
+(defonce *current-title (atom ""))
 (defonce *file-loading? (atom nil))
-(defonce *data (atom nil))
+(defonce *elements (atom nil))
 (defonce *unsaved? (atom false))
 (defonce *search-files (atom []))
 
@@ -55,20 +104,21 @@
 
 (defn from-json
   [text]
-  (try
-    (when-let [data (js/JSON.parse text)]
-      (if (not= "excalidraw" (gobj/get data "type"))
+  (when-not (string/blank? text)
+    (try
+      (when-let [data (js/JSON.parse text)]
+        (if (not= "excalidraw" (gobj/get data "type"))
+          (handler/show-notification!
+           (util/format "Could not load this invalid excalidraw file")
+           :error)
+          {:elements (gobj/get data "elements")
+           :app-state (gobj/get data "appState")}))
+      (catch js/Error e
+        (prn "from json error:")
+        (js/console.dir e)
         (handler/show-notification!
          (util/format "Could not load this invalid excalidraw file")
-         :error)
-        {:elements (gobj/get data "elements")
-         :app-state (gobj/get data "appState")}))
-    (catch js/Error e
-      (prn "from json error:")
-      (js/console.dir e)
-      (handler/show-notification!
-       (util/format "Could not load this invalid excalidraw file")
-       :error))))
+         :error)))))
 
 (defn title->file-name
   [title]
@@ -85,24 +135,32 @@
 
 (defn save-excalidraw!
   [state _event file ok-handler]
-  (when-let [elements (storage/get-json draw-data-key)]
-    (let [app-state (storage/get-json draw-app-state-key)
-          [option] (:rum/args state)
-          file (or
-                file
-                @*current-file
-                (:file option)
-                (let [title (storage/get draw-title-key)]
-                  (title->file-name title)))
-          data (serialize-as-json elements app-state)]
-      (when file
-        (handler/save-excalidraw! file data
-                                  (fn [file]
-                                    (reset! *files
-                                            (distinct (conj @*files file)))
-                                    (reset! *current-file file)
-                                    (reset! *unsaved? false)
-                                    (when ok-handler (ok-handler file))))))))
+  (let [title @*current-title]
+    (if (string/blank? title)
+      (do
+        (handler/show-notification!
+         "Please specify a title first!"
+         :error)
+        ;; TODO: focus the title input
+        )
+      (when-let [elements (get-last-elements)]
+        (let [app-state (get-last-app-state)
+              [option] (:rum/args state)
+              file (or
+                    file
+                    @*current-file
+                    (:file option)
+                    (title->file-name title))
+              data (serialize-as-json elements app-state)]
+          (when file
+            (handler/save-excalidraw! file data
+                                      (fn [file]
+                                        (reset! *files
+                                                (distinct (conj @*files file)))
+                                        (reset! *current-file file)
+                                        (reset! *unsaved? false)
+                                        (set-last-file! file)
+                                        (when ok-handler (ok-handler file))))))))))
 
 (defn- clear-canvas!
   []
@@ -117,10 +175,12 @@
   ;; TODO: save current firstly
   (clear-canvas!)
   (reset! *current-title "")
-  (storage/remove draw-data-key)
-  (storage/remove draw-title-key)
   (reset! *current-file nil)
-  (reset! *data nil))
+  (reset! *elements nil)
+  (set-last-elements! nil)
+  (set-last-title! nil)
+  (set-last-file! nil)
+  (set-last-app-state! nil))
 
 (defn- rename-file!
   [file new-title]
@@ -130,6 +190,7 @@
         (save-excalidraw!
          {} {} new-file
          (fn []
+           (set-last-file! new-file)
            (util/p-handle
             (handler/git-remove-file!
              (state/get-current-repo)
@@ -156,14 +217,16 @@
         :on-hide (fn [state e event]
                    (let [title (and @*current-title (string/trim @*current-title))
                          file @*current-file]
-                     (when-not (= (string/trim old-title) title)
+                     (when (or
+                            (string/blank? old-title)
+                            (not= (string/trim old-title) title))
                        (cond
                          (and file (not (string/blank? title)))
                          (rename-file! file title)
 
                          (and (not file)
                               (not (string/blank? title))
-                              (seq @*data)) ; new file
+                              (seq @*elements)) ; new file
                          (save-excalidraw! {} {} nil nil)
 
                          :else
@@ -178,7 +241,7 @@
       :auto-complete "off"
       :on-change (fn [e]
                    (when-let [value (util/evalue e)]
-                     (storage/set draw-title-key value)
+                     (set-last-title! value)
                      (reset! *current-title value)))
       :value (or (and current-title (string/capitalize current-title)) "")}]))
 
@@ -241,6 +304,7 @@
                     :on-click
                     (fn [e]
                       (util/stop e)
+                      (set-last-file! file)
                       (reset! *current-file file)
                       (reset! *current-title (get-file-title file))
                       (reset! *search-files []))}})
@@ -273,9 +337,7 @@
           {:modal-class (util/hiccup->class
                          "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.bg-white.w-48.dropdown-overflow-auto")})))
 
-     (draw-title)
-
-     ]))
+     (draw-title)]))
 
 (defn- set-canvas-actions-style!
   [state]
@@ -289,15 +351,13 @@
                                     (save-excalidraw! state e nil nil)))
   (mixins/keyboard-mixin "Alt+z" set-canvas-actions-style!)
   {:init (fn [state]
-           (reset! *data nil)
+           (reset! *elements nil)
            (let [[option] (:rum/args state)
                  file (or @*current-file
                           (:file option))]
-             (if file
-               (do
-                 (reset! *current-title (get-file-title file))
-                 (storage/set last-file file))
-               (storage/remove last-file))
+             (do
+               (reset! *current-title (get-file-title file))
+               (set-last-file! file))
              (cond
                file
                (do
@@ -306,48 +366,49 @@
                   file
                   (fn [data]
                     (let [{:keys [elements app-state]} (from-json data)]
-                      (reset! *data elements)
+                      (reset! *elements elements)
                       (reset! *file-loading? false)))))
 
                :else
-               (when-let [data (storage/get-json draw-data-key)]
+               (when-let [elements (get-last-elements)]
                  ;; TODO: keep this for history undo
-                 (reset! *data (remove #(gobj/get % "isDeleted") data))))
+                 (reset! *elements (remove #(gobj/get % "isDeleted") elements))))
              (assoc state
                     ::layout (atom [js/window.innerWidth js/window.innerHeight]))))
    :did-mount set-canvas-actions-style!
    :did-update set-canvas-actions-style!}
   [state option]
-  (let [data (rum/react *data)
+  (let [current-repo (state/sub :git/current-repo)
+        elements (rum/react *elements)
         loading? (rum/react *file-loading?)
-        file (:file option)
+        file (rum/react *current-file)
         layout (get state ::layout)
         [width height] (rum/react layout)
         options (bean/->js {:zenModeEnabled true
                             :viewBackgroundColor "#FFF"})
         excalidraw-component @*excalidraw]
     [:div.draw {:style {:background "#FFF"}}
-     (when (or (and file data)
+     (when (or (and file elements)
                (nil? file))
        (excalidraw-component
         (cond->
-          {:width (get option :width width)
-           :height (get option :height height)
-           :on-resize (fn []
-                        (reset! layout [js/window.innerWidth js/window.innerHeight]))
+            {:width (get option :width width)
+             :height (get option :height height)
+             :on-resize (fn []
+                          (reset! layout [js/window.innerWidth js/window.innerHeight]))
 
-           :on-change (or (:on-change option)
-                          (fn [elements state]
-                            (storage/set-json draw-data-key elements)
-                            (storage/set-json draw-app-state-key state)
-                            (reset! *data elements)))
-           :options options
-           :user (bean/->js {:name (or (:user-name option)
-                                       (:name (state/get-me))
-                                       (util/unique-id))})
-           :on-username-change (fn [])}
-          (seq data)
-          (assoc :initial-data data))))
+             :on-change (or (:on-change option)
+                            (fn [elements state]
+                              (set-last-elements! elements)
+                              (set-last-app-state! state)
+                              (reset! *elements elements)))
+             :options options
+             :user (bean/->js {:name (or (:user-name option)
+                                         (:name (state/get-me))
+                                         (util/unique-id))})
+             :on-username-change (fn [])}
+          (seq elements)
+          (assoc :initial-data elements))))
      [:div.absolute.top-4.left-4.hidden.md:block
       [:div.flex.flex-row.items-center
        [:a.mr-3 {:on-click (fn [] (.back (gobj/get js/window "history")))
@@ -356,12 +417,25 @@
        (files)
        (when loading?
          [:span.lds-dual-ring.ml-3])]]
-     (ui/notification)]))
+     (ui/notification)
+
+     (when current-repo
+       [:div.absolute.top-4.right-4.hidden.md:block
+        [:div.flex.flex-row.items-center
+         (widgets/sync-status current-repo)
+         (widgets/repos true
+                        (fn [repo]
+                          (reset! *current-file (get-last-file repo))))]])]))
 
 (rum/defc draw < rum/reactive
   {:init (fn [state]
-           (when-let [storage-file (storage/get last-file)]
-             (reset! *current-file storage-file))
+           (let [repo (storage/get :git/current-repo)]
+             (when-let [last-title (get-last-title repo)]
+               (reset! *current-title last-title))
+             (when-let [last-file (get-last-file repo)]
+               (reset! *current-file last-file)
+               (reset! *current-title (get-file-title last-file))))
+
            (if (loaded?)
              (set-excalidraw-component!)
              (do
@@ -373,12 +447,15 @@
            state)}
   [option]
   (let [loaded? (or (loaded?)
-                    (rum/react *loaded?))]
-    (if loaded?
+                    (rum/react *loaded?))
+        current-repo (state/sub :git/current-repo)]
+    (if (and loaded? current-repo)
       (let [current-file (rum/react *current-file)
-            key (or (and current-file (str "draw-" current-file))
-                    "draw-with-no-file")]
-        (rum/with-key (draw-inner (merge
-                                   {:file current-file}
-                                   option)) key))
-      "loading ...")))
+            current-file (or current-file
+                             (get-last-file current-repo))]
+        (let [key (str current-repo "-"
+                       (or (and current-file (str "draw-" current-file))
+                           "draw-with-no-file"))]
+          (rum/with-key (draw-inner option) key)))
+      [:div.center
+       [:span.lds-dual-ring.ml-3]])))

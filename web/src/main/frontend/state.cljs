@@ -61,6 +61,14 @@
     :sidebar/blocks '()
     }))
 
+(defn get-route-match
+  []
+  (:route-match @state))
+
+(defn get-current-route
+  []
+  (get-in (get-route-match) [:data :name]))
+
 (defn sub
   [ks]
   (if (coll? ks)

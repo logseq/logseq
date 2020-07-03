@@ -25,82 +25,6 @@
      {:alt "Logseq",
       :src "/static/img/white_logo.png"}]]])
 
-(rum/defc sync-status < rum/reactive
-  []
-  (let [repo (state/get-current-repo)
-        git-status (state/sub [:git/status repo])
-        pulling? (= :pulling git-status)
-        pushing? (= :pushing git-status)
-        status (state/sub [:repo/sync-status repo])
-        status (remove (fn [[_ files]]
-                         (empty? files))
-                       status)
-        synced? (empty? (apply concat (vals status)))
-        last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
-    (ui/dropdown
-     (fn [{:keys [toggle-fn]}]
-       [:div.cursor.w-2.h-2.sync-status.mr-2
-        {:class (if synced? "bg-green-600" "bg-orange-400")
-         :style {:border-radius "50%"}
-         :on-mouse-over toggle-fn}])
-     (fn [{:keys [toggle-fn]}]
-       [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-        (when synced?
-          [:p "All local changes are synced!"])
-        (when-not synced?
-          [:div
-           [:div.changes
-            (for [[k files] status]
-              [:div {:key (str "sync-" (name k))}
-               [:div.text-sm.font-bold (string/capitalize (name k))]
-               [:ul
-                (for [file files]
-                  [:li {:key (str "sync-" file)}
-                   file])]])]
-           [:div.flex.flex-row.justify-between.align-items.mt-2
-            (ui/button "Push now"
-              :on-click (fn [] (handler/push repo)))
-            (if pushing?
-              [:span.lds-dual-ring.mt-1])]])
-        [:hr]
-        [:div
-         [:p {:style {:font-size 12}} "Last pulled at: "
-          last-pulled-at]
-         [:div.flex.flex-row.justify-between.align-items
-          (ui/button "Pull now"
-            :on-click (fn [] (handler/pull-current-repo)))
-          (if pulling?
-            [:span.lds-dual-ring.mt-1])]]]))))
-
-(rum/defc repos < rum/reactive
-  [current-repo head?]
-  (let [get-repo-name-f (fn [repo]
-                          (if head?
-                            (db/get-repo-path repo)
-                            (util/take-at-most (db/get-repo-name repo) 20)))]
-    (if current-repo
-      (let [repos (state/sub [:me :repos])]
-        (if (> (count repos) 1)
-          (ui/dropdown-with-links
-           (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch {:on-click toggle-fn}
-              [:span (get-repo-name-f current-repo)]
-              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-           (mapv
-            (fn [{:keys [id url]}]
-              {:title (get-repo-name-f url)
-               :options {:on-click (fn []
-                                     (state/set-current-repo! url)
-                                     (handler/redirect! {:to :home}))}})
-            (remove (fn [repo]
-                      (= current-repo (:url repo)))
-                    repos))
-           {:modal-class (util/hiccup->class
-                          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
-          [:a
-           {:href current-repo
-            :target "_blank"}
-           (get-repo-name-f current-repo)])))))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -271,7 +195,7 @@
                :stroke-linejoin "round",
                :stroke-linecap "round"}]]]])
         [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
-         (repos current-repo false)]
+         (widgets/repos false)]
         [:div.flex-1.h-0.overflow-y-auto
          (sidebar-nav route-match close-fn)]]]
       [:div.flex.flex-col.w-0.flex-1.overflow-hidden
@@ -288,9 +212,9 @@
         [:div.flex-1.px-4.flex.justify-between
          (search/search)
          [:div.ml-4.flex.items-center.md:ml-6
-          (when current-repo (sync-status))
+          (when current-repo (widgets/sync-status))
           [:div.repos.hidden.md:block
-           (repos current-repo true)]
+           (widgets/repos true)]
           [:a {:title "Draw with Excalidraw"
                :href "/draw"
                :style {:margin-left 8
