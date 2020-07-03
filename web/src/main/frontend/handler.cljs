@@ -144,7 +144,7 @@
 
 (defn git-add
   [repo-url file]
-  (p/let [_ (git/add repo-url file)]
+  (p/let [result (git/add repo-url file)]
     (set-git-status! repo-url :should-push)))
 
 ;; journals
@@ -229,8 +229,13 @@
                                (re-render-root!))))))]
 
     (if first-clone?
-      (p/let [files (load-files repo-url)]
-        (load-contents files nil nil false))
+      (->
+       (p/let [files (load-files repo-url)]
+         (load-contents files nil nil false))
+       (p/catch (fn [error]
+                  (println "loading files failed: ")
+                  (js/console.dir error)
+                  (set-state-kv! :repo/loading-files? false))))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
@@ -347,8 +352,10 @@
                     (first commits)
                     commits)))
        (p/catch (fn [error]
-                  (prn "get latest commit failed: " error)
-                  (js/console.log (.-stack error)))))))
+                  (println "get latest commit failed: " error)
+                  (js/console.log (.-stack error))
+                  ;; TODO: safe check
+                  (println "It might be an empty repo"))))))
 
 (defn set-latest-commit-if-exists! [repo-url]
   (get-latest-commit
@@ -360,7 +367,6 @@
 ;; TODO: update latest commit
 (defn push
   [repo-url]
-  ;; TODO: find un-committed changes, and create a commit
   (when (and
          (db/get-key-value repo-url :git/write-permission?)
          (not (state/get-edit-input-id))
@@ -621,9 +627,9 @@
              :or {pull-now? true}}]
   (periodically-update-repo-status repo-url)
   (periodically-pull repo-url pull-now?)
-  ;; (periodically-push-tasks repo-url)
-  (when-not config/dev?
-    (periodically-push-tasks repo-url))
+  (periodically-push-tasks repo-url)
+  ;; (when-not config/dev?
+  ;;   (periodically-push-tasks repo-url))
   )
 
 (defn render-local-images!
@@ -1423,7 +1429,6 @@
              (util/p-handle
               (git-add repo path)
               (fn [_]
-                (git/commit repo (str "Save " file))
                 (ok-handler file))))
            (fn [error]
              (prn "Write file failed, path: " path ", data: " data)
@@ -1466,7 +1471,7 @@
                      "/"
                      file)
                 nil)
-     (git/commit repo (str "Removed " file)))
+     (set-git-status! repo :should-push))
    (p/catch (fn [err]
               (prn "error: " err)))))
 
