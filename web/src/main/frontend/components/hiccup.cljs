@@ -294,7 +294,10 @@
            (if (string/ends-with? s ".excalidraw")
              [:a.page-ref
               {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))}
-              (str "Draw: " (string/capitalize (draw/get-file-title s)))]
+              [:span
+               (svg/excalidraw-logo)
+               (string/capitalize (draw/get-file-title s))]
+              ]
              (page-cp s))
            [:span.text-gray-500 "]]"]])
 

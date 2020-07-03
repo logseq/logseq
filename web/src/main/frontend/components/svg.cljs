@@ -201,7 +201,8 @@
     :view-box "0 0 109.000000 269.000000",
     :height 24,
     :width 24,
-    :version "1.0"}
+    :version "1.0"
+    :style {:display "inline"}}
    [:g
     {:stroke "none",
      :fill "currentColor",
