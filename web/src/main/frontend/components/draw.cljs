@@ -84,7 +84,7 @@
       (string/replace title "-" " "))))
 
 (defn save-excalidraw!
-  [state _event file ok-hander]
+  [state _event file ok-handler]
   (when-let [elements (storage/get-json draw-data-key)]
     (let [app-state (storage/get-json draw-app-state-key)
           [option] (:rum/args state)
@@ -102,7 +102,7 @@
                                             (distinct (conj @*files file)))
                                     (reset! *current-file file)
                                     (reset! *unsaved? false)
-                                    (ok-hander file)))))))
+                                    (when ok-handler (ok-handler file))))))))
 
 (defn- clear-canvas!
   []
