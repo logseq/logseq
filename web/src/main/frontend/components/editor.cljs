@@ -181,7 +181,7 @@
     (let [value (gobj/get input "value")]
       (when (and (>= (count value) pos)
                  (>= pos 1))
-        (nth value (- pos 1))))))
+        (util/nth-safe value (- pos 1))))))
 
 (defn get-previous-input-chars
   [input length]
@@ -197,7 +197,7 @@
     (let [value (gobj/get input "value")]
       (when (and (>= (count value) (inc pos))
                  (>= pos 1))
-        (nth value pos)))))
+        (util/nth-safe value pos)))))
 
 (rum/defc page-search < rum/reactive
   [id format]
@@ -425,7 +425,7 @@
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
-         (and (= \/ (nth edit-content (dec pos)))
+         (and (= \/ (util/nth-safe edit-content (dec pos)))
               (commands/commands-map))
          (and last-command
               (commands/get-matched-commands last-command)))))
@@ -442,7 +442,7 @@
                              pos)]
       (when (> pos 0)
         (or
-         (and (= \< (nth edit-content (dec pos)))
+         (and (= \< (util/nth-safe edit-content (dec pos)))
               (commands/block-commands-map))
          (and last-command
               (commands/get-matched-commands
@@ -624,19 +624,24 @@
                    current-pos (:pos (util/get-caret-pos node))
                    value (gobj/get node "value")
                    deleted (and (> current-pos 0)
-                                (nth value (dec current-pos)))]
+                                (util/nth-safe value (dec current-pos)))
+                   selected-start (gobj/get node "selectionStart")
+                   selected-end (gobj/get node "selectionEnd")]
                (cond
+                 (not= selected-start selected-end)
+                 nil
+
                  (zero? current-pos)
                  (delete-heading! state repo e)
 
                  (and (> current-pos 1)
-                      (= (nth value (dec current-pos)) commands/slash))
+                      (= (util/nth-safe value (dec current-pos)) commands/slash))
                  (do
                    (reset! *slash-caret-pos nil)
                    (reset! *show-commands false))
 
                  (and (> current-pos 1)
-                      (= (nth value (dec current-pos)) commands/angle-bracket))
+                      (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
                  (do
                    (reset! *angle-bracket-caret-pos nil)
                    (reset! *show-block-commands false))
@@ -648,7 +653,7 @@
                    (set (keys autopair-map))
                    deleted)
                   (>= (count value) (inc current-pos))
-                  (= (nth value current-pos)
+                  (= (util/nth-safe value current-pos)
                      (get autopair-map deleted)))
 
                  (do
@@ -770,7 +775,7 @@
                         current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
                     (state/set-edit-content! id value false)
                     (let [input (gdom/getElement id)
-                          last-input-char (nth value (dec current-pos))]
+                          last-input-char (util/nth-safe value (dec current-pos))]
                       (case last-input-char
                         "/"
                         (when-let [matched-commands (seq (get-matched-commands input))]
