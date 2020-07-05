@@ -19,7 +19,6 @@
             [frontend.components.widgets :as widgets]
             [promesa.core :as p]))
 
-;; TODO: delete not working yet
 (defn loaded? []
   js/window.Excalidraw)
 
@@ -280,6 +279,18 @@
                               files
                               (search/fuzzy-search files value :limit 10)))))}]])
 
+(rum/defcs save-button < rum/reactive
+  [state]
+  (let [unsaved? (rum/react *unsaved?)]
+    [:a.ml-2 {:title (if unsaved? "Save changes" "Save")
+              :on-click (fn [e]
+                          (save-excalidraw! state e nil nil))}
+     [:div.ToolIcon__icon {:class (if unsaved? "bg-orange-400" "bg-gray-200")
+                           :style {:width "2rem"
+                                   :height "2rem"
+                                   }}
+      svg/save]]))
+
 (rum/defcs files < rum/reactive
   [state]
   (let [all-files (rum/react *files)
@@ -290,18 +301,16 @@
     [:div.flex-row.flex.items-center
      [:a.ml-2 {:title "New file"
                :on-click new-file!}
-      [:div.ToolIcon__icon {:style {:width "2rem"
-                                    :height "2rem"
-                                    :background "var(--button-gray-1)"}}
+      [:div.ToolIcon__icon.bg-gray-200 {:style {:width "2rem"
+                                                :height "2rem"}}
        svg/plus]]
 
      (ui/dropdown-with-links
       (fn [{:keys [toggle-fn]}]
-        [:div.ToolIcon__icon.ml-2.cursor {:title "List files"
-                                          :on-click toggle-fn
-                                          :style {:width "2rem"
-                                                  :height "2rem"
-                                                  :background "var(--button-gray-1)"}}
+        [:div.ToolIcon__icon.ml-2.cursor.bg-gray-200 {:title "List files"
+                                                      :on-click toggle-fn
+                                                      :style {:width "2rem"
+                                                              :height "2rem"}}
          svg/folder])
       (mapv
        (fn [file]
@@ -320,13 +329,7 @@
        :links-header (when (>= (count all-files) 5)
                        (files-search))})
 
-     [:a.ml-2 {:title "Save"
-               :on-click (fn [e]
-                           (save-excalidraw! state e nil nil))}
-      [:div.ToolIcon__icon {:style {:width "2rem"
-                                    :height "2rem"
-                                    :background "var(--button-gray-1)"}}
-       svg/save]]
+     (save-button)
 
      (let [links (->> [(when @*current-file
                          {:title "Delete"
@@ -342,11 +345,11 @@
        (when (seq links)
          (ui/dropdown-with-links
           (fn [{:keys [toggle-fn]}]
-            [:div.ToolIcon__icon.ml-2.cursor {:title "More options"
-                                              :on-click toggle-fn
-                                              :style {:width "2rem"
-                                                      :height "2rem"
-                                                      :background "var(--button-gray-1)"}}
+            [:div.ToolIcon__icon.ml-2.cursor.bg-gray-200
+             {:title "More options"
+              :on-click toggle-fn
+              :style {:width "2rem"
+                      :height "2rem"}}
              svg/vertical-dots])
           links
           {:modal-class (util/hiccup->class
@@ -414,6 +417,9 @@
 
              :on-change (or (:on-change option)
                             (fn [elements state]
+                              (when (not= (bean/->clj elements)
+                                          (bean/->clj @*elements))
+                                (reset! *unsaved? true))
                               (set-last-elements! elements)
                               (set-last-app-state! state)
                               (reset! *elements elements)))
