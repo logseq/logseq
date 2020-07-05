@@ -63,6 +63,11 @@
          ;; (prn "load file failed, " e)
          ))))
 
+(defn load-multiple-files
+  [repo-url paths]
+  (let [repo-dir (util/get-repo-dir repo-url)]
+    (doall (mapv #(fs/read-file repo-dir %) paths))))
+
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
   [{:keys [to path-params query-params push]
@@ -114,7 +119,8 @@
   [repo-url]
   (state/set-cloning? false)
   (set-state-kv! :repo/loading-files? true)
-  (p/let [files (bean/->clj (git/list-files repo-url))
+  (p/let [files (git/list-files repo-url)
+          files (bean/->clj files)
           config-content (load-file repo-url config/config-file)
           files (if config-content
                   (let [config (db/reset-config! repo-url config-content)]
@@ -200,11 +206,13 @@
 (defn load-files-contents!
   [repo-url files ok-handler]
   (let [files (only-text-formats files)]
-    (p/let [contents (p/all (doall
-                             (for [file files]
-                               (load-file repo-url file))))]
-      (ok-handler
-       (zipmap files contents)))))
+    (-> (p/all (load-multiple-files repo-url files))
+        (p/then (fn [contents]
+                  (ok-handler
+                   (zipmap files contents))))
+        (p/catch (fn [error]
+                   (println "load files failed: ")
+                   (js/console.dir error))))))
 
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]
@@ -227,7 +235,6 @@
                              (set-state-kv! :repo/importing-to-db? false)
                              (when re-render?
                                (re-render-root!))))))]
-
     (if first-clone?
       (->
        (p/let [files (load-files repo-url)]
@@ -633,7 +640,7 @@
       (or (not config/dev?)
           (and config/dev?
                (= repo-url "https://github.com/tiensonqin/empty-repo")))
-      (periodically-push-tasks repo-url)))
+    (periodically-push-tasks repo-url)))
 
 (defn render-local-images!
   []
@@ -1152,12 +1159,10 @@
                         (util/distinct-by :url (conj repos result)))))
              (fn [error]
                (prn "Something wrong!")))
-  (p/then (clone repo-url)
-          (fn []
-            (git-set-username-email! repo-url (:me @state/state))
-            (load-db-and-journals! repo-url nil true)
-
-            (periodically-pull-and-push repo-url {:pull-now? false}))))
+  (p/let [_ (clone repo-url)
+          _ (git-set-username-email! repo-url (:me @state/state))]
+    (load-db-and-journals! repo-url nil true)
+    (periodically-pull-and-push repo-url {:pull-now? false})))
 
 (defn star-page!
   [page-name starred?]
@@ -1261,17 +1266,21 @@
 
 (defn clone-and-pull-repos
   [me]
-  (doseq [{:keys [id url]} (:repos me)]
-    (let [repo url]
-      (p/let [config-exists? (fs/file-exists?
-                              (util/get-repo-dir url)
-                              ".git/config")]
-        (if (and config-exists?
-                 (db/cloned? repo))
-          (do
-            (git-set-username-email! repo me)
-            (periodically-pull-and-push repo {:pull-now? true}))
-          (clone-and-pull repo))))))
+  (if (and js/window.git js/window.pfs)
+    (doseq [{:keys [id url]} (:repos me)]
+      (let [repo url]
+        (p/let [config-exists? (fs/file-exists?
+                                (util/get-repo-dir url)
+                                ".git/config")]
+          (if (and config-exists?
+                   (db/cloned? repo))
+            (do
+              (git-set-username-email! repo me)
+              (periodically-pull-and-push repo {:pull-now? true}))
+            (clone-and-pull repo)))))
+    (js/setTimeout (fn []
+                     (clone-and-pull-repos me))
+                   500)))
 
 (defn set-github-token!
   [token]
@@ -1485,10 +1494,14 @@
                                nil)]
        (set-git-status! repo :should-push)
        (when-let [file (db/entity repo [:file/path file])]
-         (let [file-id (:db/id file)]
-           (db/transact! repo
-             [[:db.fn/retractEntity file-id]
-              [:db.fn/retractEntity [:page/file file-id]]]))))
+         (let [file-id (:db/id file)
+               page-id (db/get-file-page-id (:file/path file))
+               tx-data (map
+                         (fn [db-id]
+                           [:db.fn/retractEntity db-id])
+                         (remove nil? [file-id page-id]))]
+           (when (seq tx-data)
+             (db/transact! repo tx-data)))))
      (p/catch (fn [err]
                 (prn "error: " err))))))
 

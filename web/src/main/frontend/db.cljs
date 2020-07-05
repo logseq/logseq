@@ -848,6 +848,21 @@
        seq-flatten
        first))))
 
+(defn get-file-page-id
+  [file-path]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (get-conn repo)]
+      (some->
+       (d/q
+         '[:find ?page
+           :in $ ?path
+           :where
+           [?file :file/path ?path]
+           [?page :page/file ?file]]
+         conn file-path)
+       seq-flatten
+       first))))
+
 (defn get-page-name
   [file ast]
   ;; headline

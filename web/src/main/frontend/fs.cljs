@@ -3,43 +3,39 @@
             [promesa.core :as p]
             ["/frontend/git_ext" :as git-ext]))
 
-(set! (.-fs js/window) (js/LightningFS. "logseq"))
-(js/git.plugins.set "fs" js/window.fs)
-(set! (.-pfs js/window) js/window.fs.promises)
-
 (defn mkdir
   [dir]
-  (js/pfs.mkdir dir))
+  (js/window.pfs.mkdir dir))
 
 (defn readdir
   [dir]
-  (js/pfs.readdir dir))
+  (js/window.pfs.readdir dir))
 
 (defn unlink
   [path opts]
-  (js/pfs.unlink path opts))
+  (js/window.pfs.unlink path opts))
 
 (defn rmdir
   [dir]
-  (git-ext/rimraf dir js/pfs))
+  (git-ext/rimraf dir js/window.pfs))
 
 (defn read-file
   [dir path]
-  (js/pfs.readFile (str dir "/" path)
+  (js/window.pfs.readFile (str dir "/" path)
                    (clj->js {:encoding "utf8"})))
 
 (defn read-file-2
   [dir path]
-  (js/pfs.readFile (str dir "/" path)
+  (js/window.pfs.readFile (str dir "/" path)
                    (clj->js {})))
 
 (defn write-file
   [dir path content]
-  (js/pfs.writeFile (str dir "/" path) content))
+  (js/window.pfs.writeFile (str dir "/" path) content))
 
 (defn stat
   [dir path]
-  (js/pfs.stat (str dir "/" path)))
+  (js/window.pfs.stat (str dir "/" path)))
 
 (defn create-if-not-exists
   ([dir path]
