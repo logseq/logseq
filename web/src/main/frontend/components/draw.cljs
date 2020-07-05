@@ -85,6 +85,7 @@
 (defonce *elements (atom nil))
 (defonce *unsaved? (atom false))
 (defonce *search-files (atom []))
+(defonce *saving-title (atom nil))
 
 ;; TODO: lazy loading
 (defonce *excalidraw (atom nil))
@@ -136,14 +137,22 @@
 (defn save-excalidraw!
   [state _event file ok-handler]
   (let [title @*current-title]
-    (if (string/blank? title)
+    (cond
+      (string/blank? title)
       (do
+        (reset! *saving-title nil)
         (handler/show-notification!
          "Please specify a title first!"
          :error)
         ;; TODO: focus the title input
         )
+
+      (= title @*saving-title)
+      nil
+
+      :else
       (when-let [elements (get-last-elements)]
+        (reset! *saving-title title)
         (let [app-state (get-last-app-state)
               [option] (:rum/args state)
               file (util/trim-safe
@@ -161,7 +170,8 @@
                                         (reset! *current-file file)
                                         (reset! *unsaved? false)
                                         (set-last-file! file)
-                                        (when ok-handler (ok-handler file))))))))))
+                                        (when ok-handler (ok-handler file))
+                                        (reset! *saving-title nil)))))))))
 
 (defn- clear-canvas!
   []

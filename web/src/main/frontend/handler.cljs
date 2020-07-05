@@ -628,10 +628,11 @@
              :or {pull-now? true}}]
   (periodically-update-repo-status repo-url)
   (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url)
-  ;; (when-not config/dev?
-  ;;   (periodically-push-tasks repo-url))
-  )
+  (when
+      (or (not config/dev?)
+          (and config/dev?
+               (= repo-url "https://github.com/tiensonqin/empty-repo")))
+      (periodically-push-tasks repo-url)))
 
 (defn render-local-images!
   []
