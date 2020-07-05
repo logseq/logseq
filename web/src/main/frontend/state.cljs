@@ -146,6 +146,25 @@
     (update-state! :editor/content (fn [m]
                                      (assoc m input-id value)))))
 
+(defn get-edit-input-id
+  []
+  (ffirst (:editor/editing? @state)))
+
+(defn append-current-edit-content!
+  [append-text]
+  (when-not (string/blank? append-text)
+    (when-let [input-id (get-edit-input-id)]
+      (when-let [input (gdom/getElement input-id)]
+        (let [value (gobj/get input "value")
+              new-value (str value append-text)
+              new-value (if (or (= (last value) " ")
+                                (= (last value) "\n"))
+                          new-value
+                          (str "\n" new-value))]
+          (js/document.execCommand "insertText" false append-text)
+          (update-state! :editor/content (fn [m]
+                                           (assoc m input-id new-value))))))))
+
 (defn get-cursor-range
   []
   (:cursor-range @state))
@@ -235,10 +254,6 @@
   (swap! state update :editor/editing?
          (fn [m]
            (and input-id {input-id true}))))
-
-(defn get-edit-input-id
-  []
-  (ffirst (:editor/editing? @state)))
 
 (defn sub-edit-input-id
   []

@@ -84,6 +84,76 @@
 
       "")))
 
+(defn get-hr
+  [format]
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "-----"
+      :markdown
+      "---"
+      "")))
+
+(defn get-bold
+  [format]
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "*"
+      :markdown
+      "**"
+      "")))
+
+(defn get-italic
+  [format]
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "/"
+      :markdown
+      "__"
+      "")))
+(defn get-underline
+  [format]
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "/"
+      :markdown
+      "__"
+      "")))
+(defn get-strike-through
+  [format]
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "+"
+      :markdown
+      "~~"
+      "")))
+
+(defn get-highlight
+  [format]
+  "^^")
+
+(defn get-code
+  [format]
+  (let [format (or format (keyword (state/get-preferred-format)))]
+    (case format
+      :org
+      "~"
+      :markdown
+      "`"
+      "")))
+
+(defn get-subscript
+  [format]
+  "_")
+
+(defn get-superscript
+  [format]
+  "^")
+
 (defn default-empty-heading
   ([format]
    (default-empty-heading format 2))

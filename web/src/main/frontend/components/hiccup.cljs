@@ -282,12 +282,18 @@
     (let [{:keys [url label title]} link]
       (match url
         ["Search" s]
-        (case (first s)
-          \#
+        (cond
+          (= \# (first s))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
-          \*
+          (= \* (first s))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
+
+          (re-find #"^https://" s)
+          (->elem :a {:href s}
+                  (map-inline config label))
+
+          :else
           ;; page reference
           [:span.page-reference
            [:span.text-gray-500 "[["]
@@ -1110,6 +1116,7 @@
   [:div.headings-container {:style {:margin-left -24}}
    (build-headings headings config)])
 
+;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive
   ;; (mixins/perf-measure-mixin "hiccup")
   [headings config option]

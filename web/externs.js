@@ -28,3 +28,4 @@ dummy.fillText = function() {};
 dummy.beginPath = function() {};
 dummy.arc = function() {};
 dummy.fill = function() {};
+dummy.getData = function() {};

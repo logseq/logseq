@@ -27,7 +27,8 @@
             [cljs-time.coerce :as tc]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.search :as search]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.extensions.html-parser :as html-parser]))
 
 ;; TODO: refactor the state, it is already too complex.
 (defonce *last-edit-heading (atom nil))
@@ -556,6 +557,14 @@
     (set-last-edit-heading! (:heading/uuid heading) value)
     (handler/save-heading-if-changed! heading new-value)))
 
+(defn- append-paste-doc!
+  [format event]
+  (when-let [html (util/get-clipboard-as-html event)]
+    (let [doc-text (html-parser/parse format html)]
+      (when-not (string/blank? doc-text)
+        (util/stop event)
+        (state/append-current-edit-content! doc-text)))))
+
 (rum/defc box < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -563,6 +572,8 @@
            input-id id
            input (gdom/getElement input-id)
            repo (:heading/repo heading)]
+       (.addEventListener input "paste" (fn [event]
+                                          (append-paste-doc! format event)))
        (mixins/hide-when-esc-or-outside
         state
         :on-hide
@@ -736,9 +747,12 @@
    :will-unmount (fn [state]
                    (let [{:keys [id value format heading repo dummy?]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
+                       (.removeEventListener input "paste" (fn [event]
+                                                          (append-paste-doc! format event)))
                        (dnd/unsubscribe!
                         input
-                        :upload-images))
+                        :upload-images)
+                       )
                      (clear-when-saved!))
                    state)}
   [content {:keys [on-hide dummy? node format heading]
