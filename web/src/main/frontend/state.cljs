@@ -22,6 +22,7 @@
     :git/current-repo (storage/get :git/current-repo)
     :git/status {}
     :format/loading {}
+    :draw? false
 
     :journals-length 1
 
@@ -416,3 +417,11 @@
 (defn get-me
   []
   (:me @state))
+
+(defn set-draw!
+  [value]
+  (set-state! :draw? value))
+
+(defn in-draw-mode?
+  []
+  (:draw? @state))

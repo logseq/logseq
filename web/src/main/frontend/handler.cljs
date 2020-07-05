@@ -296,7 +296,8 @@
   [repo-url token]
   (when (db/get-conn repo-url true)
     (let [status (db/get-key-value repo-url :git/status)]
-      (when (not (state/get-edit-input-id))
+      (when (and (not (state/get-edit-input-id))
+                 (not (state/in-draw-mode?)))
         (set-git-status! repo-url :pulling)
         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
           (p/let [result (git/fetch repo-url token)

@@ -280,8 +280,8 @@
                               files
                               (search/fuzzy-search files value :limit 10)))))}]])
 
-(rum/defc files < rum/reactive
-  []
+(rum/defcs files < rum/reactive
+  [state]
   (let [all-files (rum/react *files)
         search-files (rum/react *search-files)
         files (if (seq search-files) search-files all-files)
@@ -319,6 +319,15 @@
                      "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.bg-white.w-48.dropdown-overflow-auto")
        :links-header (when (>= (count all-files) 5)
                        (files-search))})
+
+     [:a.ml-2 {:title "Save"
+               :on-click (fn [e]
+                           (save-excalidraw! state e nil nil))}
+      [:div.ToolIcon__icon {:style {:width "2rem"
+                                    :height "2rem"
+                                    :background "var(--button-gray-1)"}}
+       svg/save]]
+
      (let [links (->> [(when @*current-file
                          {:title "Delete"
                           :options {:style {:color "#db1111"}
@@ -457,7 +466,12 @@
            (handler/get-all-excalidraw-files
             (fn [files]
               (reset! *files (distinct files))))
-           state)}
+
+           (state/set-draw! true)
+           state)
+   :will-unmount (fn [state]
+                   (state/set-draw! false)
+                   state)}
   [state option]
   (let [loaded? (or (loaded?)
                     (rum/react *loaded?))
