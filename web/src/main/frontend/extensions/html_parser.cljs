@@ -55,7 +55,7 @@
                                  :header} tag)
                     (str "\n\n" content "\n\n")
 
-                    (contains? #{:thead :tr :li :dt :dd :dl} tag)
+                    (contains? #{:thead :tr :li} tag)
                     (str content "\n")
 
                     :else
@@ -135,7 +135,7 @@
                              :dt
                              (case format
                                :org (str "- " (map-join children) " ")
-                               :markdown (map-join children)
+                               :markdown (str (map-join children) "\n")
                                nil)
 
                              :dd
