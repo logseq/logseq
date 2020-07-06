@@ -15,17 +15,20 @@
             [frontend.components.svg :as svg]
             [frontend.components.draw :as draw]
             [frontend.ui :as ui]
+            [frontend.components.widgets :as widgets]
             [frontend.handler :as handler]
             [frontend.handler.dnd :as dnd]
             [goog.object :as gobj]
             [medley.core :as medley]
             [cljs.reader :as reader]
-            [frontend.extensions.sci :as sci]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.mixins :as mixins]
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [shadow.lazy :as lazy]))
+
+(def sci-eval-string (lazy/loadable frontend.extensions.sci/eval-string))
 
 ;; local state
 (defonce *heading-children
@@ -968,6 +971,29 @@
      [:div.ml-4.text-lg
       (blocks config result)]]))
 
+(defn sci-clojure-eval-inner
+  [code]
+  [:div
+   [:code "Results:"]
+   [:div.results.mt-1
+    [:pre.pre-wrap-white-space.code
+     (try
+       (let [result (@sci-eval-string code)]
+         (str result))
+       (catch js/Error e
+         (str "Error: " (gobj/get e "message"))))]]])
+
+(def sci-loading? (atom true))
+
+(rum/defc sci-clojure-eval < rum/reactive
+  [code]
+  (let [loading? (rum/react sci-loading?)]
+    (if (lazy/ready? sci-eval-string)
+      (sci-clojure-eval-inner code)
+      (do
+        (lazy/load sci-eval-string (fn [_] (reset! sci-loading? false)))
+        (widgets/loading "loading @borkdude/sci")))))
+
 (defn block
   [config item]
   (try
@@ -999,15 +1025,7 @@
           [:div
            [:pre.pre-wrap-white-space.code
             [:code attr code]]
-           [:div
-            [:code "Results:"]
-            [:div.results.mt-1
-             [:pre.pre-wrap-white-space.code
-              (try
-                (let [result (sci/eval-string code)]
-                  (str result))
-                (catch js/Error e
-                  (str "Error: " (gobj/get e "message"))))]]]]
+           (sci-clojure-eval code)]
           [:pre.pre-wrap-white-space.code
            [:code attr code]]))
       ["Quote" l]

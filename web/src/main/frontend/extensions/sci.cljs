@@ -7,4 +7,6 @@
 
 ;; TODO: lazy load extensions
 
-(def eval-string sci/eval-string)
+(defn ^:export eval-string
+  [code]
+  (sci/eval-string code))

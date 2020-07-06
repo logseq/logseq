@@ -18,6 +18,7 @@
         "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ../resources/static/js/compiled; /usr/bin/rm -rf ../resources/static/js/cljs-runtime;"
     },
     "dependencies": {
+        "@sentry/react": "^5.19.0",
         "diff": "^4.0.2",
         "localforage": "^1.7.3",
         "react": "^16.12.0",

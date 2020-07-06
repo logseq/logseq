@@ -83,13 +83,6 @@
        "Starred"]]
      (starred-pages page-active? close-modal-fn)]))
 
-(rum/defc loading
-  [content]
-  [:div.flex.flex-row.align-center
-   [:span.lds-dual-ring.mr-2]
-   [:span {:style {:margin-top 2}}
-    content]])
-
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   (mixins/keyboard-mixin "ctrl+alt+d" state/toggle-document-mode!)
@@ -120,16 +113,16 @@
        (widgets/set-personal-access-token)
 
        cloning?
-       (loading "Cloning ")
+       (widgets/loading "Cloning ")
 
        (seq latest-journals)
        (journal/journals latest-journals)
 
        importing-to-db?
-       (loading "Parsing files")
+       (widgets/loading "Parsing files")
 
        loading-files?
-       (loading "Loading files")
+       (widgets/loading "Loading files")
 
        (empty? (:repos me))
        (widgets/add-repo))]))
