@@ -315,7 +315,6 @@
                   (p/then (fn [result]
                             (-> (git/checkout repo-url)
                                 (p/then (fn [result]
-                                          (create-default-files! repo-url)
                                           (set-git-status! repo-url nil)
                                           (set-git-last-pulled-at! repo-url)
                                           (when (and latest-commit fetchHead
