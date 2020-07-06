@@ -46,7 +46,7 @@
         repo (state/get-current-repo)
         raw-headings (db/get-page-headings repo page)
         headings (db/with-dummy-heading raw-headings format nil true)
-        encoded-page-name (util/url-encode page)
+        encoded-page-name (util/encode-str page)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))]
     [:div.flex-1

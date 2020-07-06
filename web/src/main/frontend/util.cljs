@@ -669,10 +669,11 @@
   [tag-name]
   (re-find regex/valid-tag-pattern tag-name))
 
-;; TODO: emoji, unicode alphanum, spaces, _, -
-;; (defn page-title-valid?
-;;   [page-title]
-;;   )
+(defn encode-str
+  [s]
+  (if (tag-valid? s)
+    s
+    (url-encode s)))
 
 (defn- get-clipboard-as-html
   [event]

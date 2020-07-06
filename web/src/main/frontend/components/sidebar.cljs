@@ -47,7 +47,7 @@
     [:div.cursor-pointer.flex.flex-col.overflow-hidden
      (if (seq starred)
        (for [page starred]
-         (let [encoded-page (util/url-encode page)]
+         (let [encoded-page (util/encode-str page)]
            [:a.mt-1.group.flex.items-center.pl-5.py-2.text-base.leading-6.hover:text-gray-200.transition.ease-in-out.duration-150.star-page
             {:key encoded-page
              :class (if (page-active? encoded-page) "text-gray-200" "text-gray-500")
@@ -224,10 +224,10 @@
                 [:div.h-7.w-7.rounded-full.bg-base-3])])
            (let [logged? (:name me)]
              (->>
-              [(when logged?
+              [(when current-repo
                  {:title "New page"
                   :options {:href "/new-page"}})
-               (when logged?
+               (when current-repo
                  {:title "Graph"
                   :options {:href "/graph"}})
                (when logged?
@@ -239,8 +239,9 @@
                (when logged?
                  {:title "All files"
                   :options {:href "/all-files"}})
-               {:title "Settings"
-                :options {:href (str "/file/" (util/url-encode config/config-file))}}
+               (when current-repo
+                 {:title "Settings"
+                  :options {:href (str "/file/" (util/encode-str config/config-file))}})
                {:title "Bug report"
                 :options {:href "https://github.com/logseq/logseq/issues/new"
                           :target "_blank"}}

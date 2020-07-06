@@ -829,11 +829,11 @@
 (defn create-new-page!
   [title]
   (let [format (name (state/get-preferred-format))
-        page (util/url-encode title)
-        path (str (-> title
-                      (string/lower-case)
-                      (string/replace #"\s+" "_")
-                      (util/url-encode)) "." format)
+        page (-> title
+                 (string/lower-case)
+                 (string/replace #"\s+" "_"))
+        page (util/encode-str page)
+        path (str page "." format)
         file-path (str "/" path)
         repo (state/get-current-repo)
         dir (util/get-repo-dir repo)]
@@ -936,7 +936,7 @@
           (let [format (name format)
                 path (str (-> (:page/name page)
                               (string/replace #"\s+" "_")
-                              (util/url-encode)) "." format)
+                              (util/encode-str)) "." format)
                 file-path (str "/" path)
                 dir (util/get-repo-dir repo)]
             (p/let [exists? (fs/file-exists? dir file-path)]
@@ -1002,7 +1002,7 @@
       (let [format (name format)
             path (str (-> (:page/name page)
                           (string/replace #"\s+" "_")
-                          (util/url-encode)) "." format)
+                          (util/encode-str)) "." format)
             file-path (str "/" path)
             dir (util/get-repo-dir repo)]
         (p/let [exists? (fs/file-exists? dir file-path)]

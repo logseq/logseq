@@ -173,7 +173,7 @@
   [page]
   (let [page (string/lower-case page)]
     [:a.page-ref
-     {:href (str "/page/" (util/url-encode page))
+     {:href (str "/page/" (util/encode-str page))
       :on-click (fn [e]
                   (util/stop e)
                   (when (gobj/get e "shiftKey")

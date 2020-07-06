@@ -171,7 +171,7 @@
                [:div.alias.ml-1.mb-1.content {:key "page-alias"}
                 [:span.font-bold.mr-1 "Page aliases: "]
                 (for [item alias]
-                  [:a {:href (str "/page/" (util/url-encode item))}
+                  [:a {:href (str "/page/" (util/encode-str item))}
                    [:span.mr-1 (util/capitalize-all item)]])])))
 
          ;; headings
@@ -216,9 +216,9 @@
             [:th "Last modified at"]]]
           [:tbody
            (for [[page modified-at] pages]
-             (let [page-id (util/url-encode page)]
-               [:tr {:key page-id}
-                [:td [:a.text-gray-700 {:href (str "/page/" page-id)}
+             (let [encoded-page (util/encode-str page)]
+               [:tr {:key encoded-page}
+                [:td [:a.text-gray-700 {:href (str "/page/" encoded-page)}
                       (util/capitalize-all page)]]
                 [:td [:span.text-gray-500.text-sm
                       (if (zero? modified-at)

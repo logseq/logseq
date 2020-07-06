@@ -40,10 +40,10 @@
           [:h1.title
            "Set Github personal access token"]
           [:div.pl-1
-           [:p.text-sm
+           [:p
             "The token will be encrypted and stored in the browser localstorage."
             [:br]
-            "The server will never try to store or read it."]
+            "The server will never store it."]
            [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
             [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
              {:on-change (fn [e]
@@ -145,7 +145,7 @@
        [:div
         [:h1.title.mb-1
          "Import your notes"]
-        [:p.text-sm.text-gray-500.pl-1 "You can import your notes from a repo on Github."]
+        [:p "You can import your notes from a repo on Github."]
         [:div.mt-4.mb-2.relative.rounded-md.shadow-sm.max-w-xs
          [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
           {:autoFocus true
