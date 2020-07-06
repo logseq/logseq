@@ -1015,11 +1015,11 @@
        :blockquote
        (blocks config l))
       ["Raw_Html" content]
-      [:div {:dangerouslySetInnerHTML
-             {:__html content}}]
+      [:div.raw_html {:dangerouslySetInnerHTML
+                      {:__html content}}]
       ["Export" "html" options content]
-      [:div {:dangerouslySetInnerHTML
-             {:__html content}}]
+      [:div.export_html {:dangerouslySetInnerHTML
+                         {:__html content}}]
       ["Export" "hiccup" options content]
       (reader/read-string content)
       ["Export" "latex" options content]
