@@ -320,7 +320,6 @@
                                           (when (and latest-commit fetchHead
                                                      (not= latest-commit fetchHead))
                                             (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                              (prn {:diffs diffs})
                                               (load-db-and-journals! repo-url diffs false)))))
                                 (p/catch (fn [error]
                                            (set-git-status! repo-url :checkout-failed)
