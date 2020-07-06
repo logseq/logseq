@@ -268,10 +268,10 @@
      repo-url
      name
      (fn [permission]
-       (create-month-journal-if-not-exists repo-url)
-       (create-config-file-if-not-exists repo-url)
        (let [permission (:permission permission)
              write-permission (contains? #{"admin" "write"} permission)]
+         (create-month-journal-if-not-exists repo-url)
+         (create-config-file-if-not-exists repo-url)
          (db/set-key-value repo-url :git/write-permission? write-permission)))
      (fn []))))
 
@@ -279,7 +279,8 @@
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
-      (create-default-files! repo-url)
+      (when first-clone?
+        (create-default-files! repo-url))
 
       (history/clear-specific-history! [:git/repo repo-url])
       (history/add-history!
