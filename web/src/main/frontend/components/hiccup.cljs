@@ -1014,6 +1014,9 @@
       (->elem
        :blockquote
        (blocks config l))
+      ["Raw_Html" content]
+      [:div {:dangerouslySetInnerHTML
+             {:__html content}}]
       ["Export" "html" options content]
       [:div {:dangerouslySetInnerHTML
              {:__html content}}]
