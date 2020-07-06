@@ -308,34 +308,35 @@
                  (not (state/in-draw-mode?)))
         (set-git-status! repo-url :pulling)
         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
-          (p/let [result (git/fetch repo-url token)
-                  {:keys [fetchHead]} (bean/->clj result)
-                  _ (set-latest-commit! repo-url fetchHead)]
-            (-> (git/merge repo-url)
-                (p/then (fn [result]
-                          (-> (git/checkout repo-url)
-                              (p/then (fn [result]
-                                        (create-default-files! repo-url)
-                                        (set-git-status! repo-url nil)
-                                        (set-git-last-pulled-at! repo-url)
-                                        (when (and latest-commit fetchHead
-                                                   (not= latest-commit fetchHead))
-                                          (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                            (load-db-and-journals! repo-url diffs false)))))
-                              (p/catch (fn [error]
-                                         (set-git-status! repo-url :checkout-failed)
-                                         (set-git-error! repo-url error))))))
-                (p/catch (fn [error]
-                           (set-git-status! repo-url :merge-failed)
-                           (set-git-error! repo-url error)
-                           (show-notification!
-                            [:p.content
-                             "Failed to merge, please "
-                             [:span.text-gray-700.font-bold
-                              "resolve any diffs first."]]
-                            :error)
-                           (redirect! {:to :diff})
-                           )))))))))
+          (p/let [result (git/fetch repo-url token)]
+            (let [{:keys [fetchHead]} (bean/->clj result)]
+              (set-latest-commit! repo-url fetchHead)
+              (-> (git/merge repo-url)
+                  (p/then (fn [result]
+                            (-> (git/checkout repo-url)
+                                (p/then (fn [result]
+                                          (create-default-files! repo-url)
+                                          (set-git-status! repo-url nil)
+                                          (set-git-last-pulled-at! repo-url)
+                                          (when (and latest-commit fetchHead
+                                                     (not= latest-commit fetchHead))
+                                            (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                              (prn {:diffs diffs})
+                                              (load-db-and-journals! repo-url diffs false)))))
+                                (p/catch (fn [error]
+                                           (set-git-status! repo-url :checkout-failed)
+                                           (set-git-error! repo-url error))))))
+                  (p/catch (fn [error]
+                             (set-git-status! repo-url :merge-failed)
+                             (set-git-error! repo-url error)
+                             (show-notification!
+                              [:p.content
+                               "Failed to merge, please "
+                               [:span.text-gray-700.font-bold
+                                "resolve any diffs first."]]
+                              :error)
+                             (redirect! {:to :diff})
+                             ))))))))))
 
 (defn pull-current-repo
   []

@@ -1,7 +1,7 @@
 (ns frontend.fs
   (:require [frontend.util :as util]
             [promesa.core :as p]
-            ["/frontend/git_ext" :as git-ext]))
+            ["/frontend/fs_ext" :as fs-ext]))
 
 (defn mkdir
   [dir]
@@ -17,7 +17,7 @@
 
 (defn rmdir
   [dir]
-  (git-ext/rimraf dir js/window.pfs))
+  (fs-ext/rimraf dir js/window.pfs))
 
 (defn read-file
   [dir path]

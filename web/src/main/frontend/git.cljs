@@ -8,8 +8,7 @@
             [goog.object :as gobj]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            ["/frontend/git_ext" :as git-ext]))
+            [cljs-time.core :as t]))
 
 ;; TODO: move to a js worker
 
@@ -154,7 +153,7 @@
 (defn get-diffs
   [repo-url hash-1 hash-2]
   (let [dir (util/get-repo-dir repo-url)]
-    (p/let [diffs (git-ext/getFileStateChanges hash-1 hash-2 dir)
+    (p/let [diffs (js/window.workerThread.getFileStateChanges hash-1 hash-2 dir)
             diffs (cljs-bean.core/->clj diffs)
             diffs (remove #(= (:type %) "equal") diffs)
             diffs (map (fn [diff]
