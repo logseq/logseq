@@ -37,15 +37,13 @@
        [:div.w-full.mx-auto
         [:div
          [:div
-          [:h1.title.mb-1
+          [:h1.title
            "Set Github personal access token"]
           [:div.pl-1
-           [:p.text-sm.text-gray-500
-            "Git clone and push require the token to work."
+           [:p.text-sm
+            "The token will be encrypted and stored in the browser localstorage."
             [:br]
-            "The token will be encrypted and then only stored in the browser localstorage."
-            [:br]
-            "The server will not try to store or read your token."]
+            "The server will never try to store or read it."]
            [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
             [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
              {:on-change (fn [e]
