@@ -409,27 +409,25 @@
      (when (or (and file elements)
                (nil? file))
        (excalidraw-component
-        (cond->
-            {:width (get option :width width)
-             :height (get option :height height)
-             :on-resize (fn []
-                          (reset! layout [js/window.innerWidth js/window.innerHeight]))
+        {:width (get option :width width)
+         :height (get option :height height)
+         :on-resize (fn []
+                      (reset! layout [js/window.innerWidth js/window.innerHeight]))
 
-             :on-change (or (:on-change option)
-                            (fn [elements state]
-                              (when (not= (bean/->clj elements)
-                                          (bean/->clj @*elements))
-                                (reset! *unsaved? true))
-                              (set-last-elements! elements)
-                              (set-last-app-state! state)
-                              (reset! *elements elements)))
-             :options options
-             :user (bean/->js {:name (or (:user-name option)
-                                         (:name (state/get-me))
-                                         (util/unique-id))})
-             :on-username-change (fn [])}
-          (seq elements)
-          (assoc :initial-data elements))))
+         :on-change (or (:on-change option)
+                        (fn [elements state]
+                          (when (not= (bean/->clj elements)
+                                      (bean/->clj @*elements))
+                            (reset! *unsaved? true))
+                          (set-last-elements! elements)
+                          (set-last-app-state! state)
+                          (reset! *elements elements)))
+         :options options
+         :user (bean/->js {:name (or (:user-name option)
+                                     (:name (state/get-me))
+                                     (util/unique-id))})
+         :on-username-change (fn [])
+         :initial-data (or elements #js [])}))
      [:div.absolute.top-4.left-4.hidden.md:block
       [:div.flex.flex-row.items-center
        [:a.mr-3 {:href "/"
@@ -482,13 +480,16 @@
   (let [loaded? (or (loaded?)
                     (rum/react *loaded?))
         current-repo (state/sub :git/current-repo)]
-    (if (and loaded? current-repo)
+    (if loaded?
       (let [current-file (rum/react *current-file)
             current-file (or current-file
-                             (get-last-file current-repo))]
-        (let [key (str current-repo "-"
-                       (or (and current-file (str "draw-" current-file))
-                           "draw-with-no-file"))]
+                             (and current-repo
+                                  (get-last-file current-repo)))]
+        (let [key (if current-repo
+                    (str current-repo "-"
+                        (or (and current-file (str "draw-" current-file))
+                            "draw-with-no-file"))
+                    "draw-with-no-file")]
           (rum/with-key (draw-inner option) key)))
       [:div.center
        [:span.lds-dual-ring.ml-3]])))

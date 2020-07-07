@@ -39,3 +39,6 @@
 *** Or if you are using Emacs
     1. M-x cider-jack-in
     2. type ~(cljs-repl)~ in the repl
+*** Notes
+    1. deps should be synced between the two files: ~project.clj~ and ~deps.edn~.
+       ~project.clj~ is for dokku deployment.

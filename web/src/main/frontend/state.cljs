@@ -293,10 +293,6 @@
   (set-state! :git/clone-repo repo)
   (storage/set :git/clone-repo repo))
 
-(defn logged?
-  []
-  (get-in @state [:me :name]))
-
 (defn set-github-token!
   [token]
   (swap! state assoc-in [:me :access-token] token))
@@ -432,6 +428,10 @@
 (defn get-me
   []
   (:me @state))
+
+(defn logged?
+  []
+  (some? (:name (get-me))))
 
 (defn set-draw!
   [value]

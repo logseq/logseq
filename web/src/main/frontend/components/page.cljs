@@ -193,11 +193,11 @@
            [:div {:key "page-references"}
             (reference/references page-name false)])]))))
 
-(defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
+(defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 
 (defonce graph-ref (atom nil))
 (rum/defcs global-graph < rum/reactive
-  (rum/local false ::show-journal?)
+  (rum/local true ::show-journal?)
   [state]
   (let [show-journal? (get state ::show-journal?)
         theme (state/sub :ui/theme)

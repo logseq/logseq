@@ -162,3 +162,5 @@
      (apply str (repeat n heading-pattern)))))
 
 (defonce default-draw-directory "draws")
+
+(defonce local-repo "local")

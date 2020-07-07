@@ -5,8 +5,7 @@
             [frontend.components.file :as file]
             [frontend.components.page :as page]
             [frontend.components.diff :as diff]
-            [frontend.components.draw :as draw]
-            [frontend.components.docs :as docs]))
+            [frontend.components.draw :as draw]))
 
 (def routes
   [["/"
@@ -51,8 +50,4 @@
 
    ["/draw"
     {:name :draw
-     :view draw/draw}]
-
-   ["/docs"
-    {:name :doc
-     :view docs/docs}]])
+     :view draw/draw}]])

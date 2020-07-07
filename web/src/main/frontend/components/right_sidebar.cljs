@@ -108,10 +108,11 @@
         theme (:ui/theme @state/state)
         page (get-page match)
         graph (db/build-page-graph page theme)]
-    [:div.sidebar-item.flex-col.flex-1
-     (ui/force-graph-2d (graph/build-graph-opts graph dark?
-                                                {:width 600
-                                                 :height 600}))]))
+    (when (seq (:nodes graph))
+      [:div.sidebar-item.flex-col.flex-1
+       (ui/force-graph-2d (graph/build-graph-opts graph dark?
+                                                  {:width 600
+                                                   :height 600}))])))
 
 (rum/defcs starred-cp <
   (rum/local true ::show?)

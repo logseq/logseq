@@ -35,8 +35,10 @@
 
 (defn get-repo-path
   [url]
-  (->> (take-last 2 (string/split url #"/"))
-       (string/join "/")))
+  (if (string/starts-with? url "http")
+    (->> (take-last 2 (string/split url #"/"))
+         (string/join "/"))
+    url))
 
 (defn datascript-db
   [repo]
@@ -112,7 +114,11 @@
    :me/email {}
    :me/avatar {}
 
-   ;; repo
+   ;; local, github, dropbox, etc.
+   :db/type {}
+   :encrypted-token {}
+
+   ;; Git
    :repo/url        {:db/unique :db.unique/identity}
    :repo/cloned?    {}
    :git/latest-commit {}
@@ -1305,39 +1311,42 @@
     (swap! conns assoc files-db-name files-db-conn)
     (swap! conns assoc db-name db-conn)
     (listen-handler repo db-conn)
-    (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
+    (when me
+      (d/transact! db-conn [(me-tx (d/db db-conn) me)]))))
 
 (defn restore!
   [{:keys [repos] :as me} listen-handler restore-config-handler]
-  (doall
-   (for [{:keys [id url]} repos]
-     (let [repo url
-           db-name (datascript-files-db repo)
-           db-conn (d/create-conn files-db-schema)]
-       (swap! conns assoc db-name db-conn)
-       (->
-        (p/let [stored (-> (.getItem localforage-instance db-name)
-                           (p/then (fn [result]
-                                     result))
-                           (p/catch (fn [error]
-                                      nil)))
-                _ (when stored
-                    (let [stored-db (string->db stored)
-                          attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                      (when (= (:schema stored-db) files-db-schema) ;; check for code update
-                        (reset-conn! db-conn attached-db))))
-                db-name (datascript-db repo)
-                db-conn (d/create-conn schema)
-                _ (swap! conns assoc db-name db-conn)
-                stored (.getItem localforage-instance db-name)
-                _ (if stored
-                    (let [stored-db (string->db stored)
-                          attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                      (when (= (:schema stored-db) schema) ;; check for code update
-                        (reset-conn! db-conn attached-db)))
-                    (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-                _ (restore-config-handler repo)]
-          (listen-handler repo db-conn)))))))
+  (let [logged? (:name me)]
+    (doall
+     (for [{:keys [url]} repos]
+       (let [repo url
+             db-name (datascript-files-db repo)
+             db-conn (d/create-conn files-db-schema)]
+         (swap! conns assoc db-name db-conn)
+         (->
+          (p/let [stored (-> (.getItem localforage-instance db-name)
+                             (p/then (fn [result]
+                                       result))
+                             (p/catch (fn [error]
+                                        nil)))
+                  _ (when stored
+                      (let [stored-db (string->db stored)
+                            attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                        (when (= (:schema stored-db) files-db-schema) ;; check for code update
+                          (reset-conn! db-conn attached-db))))
+                  db-name (datascript-db repo)
+                  db-conn (d/create-conn schema)
+                  _ (swap! conns assoc db-name db-conn)
+                  stored (.getItem localforage-instance db-name)
+                  _ (if stored
+                      (let [stored-db (string->db stored)
+                            attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                        (when (= (:schema stored-db) schema) ;; check for code update
+                          (reset-conn! db-conn attached-db)))
+                      (when logged?
+                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
+                  _ (restore-config-handler repo)]
+            (listen-handler repo db-conn))))))))
 
 (defn- build-edges
   [edges]

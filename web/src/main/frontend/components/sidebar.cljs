@@ -20,7 +20,7 @@
 (rum/defc logo
   []
   [:div#logo.p-4
-   [:a.opacity-50.hover:opacity-100 {:href "/docs"}
+   [:a.opacity-50.hover:opacity-100 {:href "/"}
     [:img.h-6.w-auto
      {:alt "Logseq",
       :src "/static/img/white_logo.png"}]]])
@@ -99,7 +99,10 @@
         token (state/sub :encrypt/token)]
     [:div.max-w-7xl.mx-auto
      (cond
-       (not preferred-format)
+       (and (not logged?) (seq latest-journals))
+       (journal/journals latest-journals)
+
+       (and logged? (not preferred-format))
        (widgets/choose-preferred-format)
 
        ;; TODO: delay this
@@ -112,7 +115,7 @@
        (widgets/set-personal-access-token)
 
        cloning?
-       (widgets/loading "Cloning ")
+       (widgets/loading "Cloning")
 
        (seq latest-journals)
        (journal/journals latest-journals)
@@ -159,7 +162,8 @@
         current-repo (state/sub :git/current-repo)
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))
-        global-graph-pages? (= :graph (get-in route-match [:data :name]))]
+        global-graph-pages? (= :graph (get-in route-match [:data :name]))
+        logged? (:name me)]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
                        (handler/unhighlight-heading!))}
@@ -202,7 +206,9 @@
             :stroke-linejoin "round",
             :stroke-linecap "round"}]]]
         [:div.flex-1.px-4.flex.justify-between
-         (search/search)
+         (if current-repo
+           (search/search)
+           [:div.w-full.flex.md:ml-0])
          [:div.ml-4.flex.items-center.md:ml-6
           (when current-repo (widgets/sync-status))
           [:div.repos.hidden.md:block
@@ -220,7 +226,7 @@
               (if-let [avatar (:avatar me)]
                 [:img.h-7.w-7.rounded-full
                  {:src avatar}]
-                [:div.h-7.w-7.rounded-full.bg-base-3])])
+                [:div.h-7.w-7.rounded-full.bg-base-2])])
            (let [logged? (:name me)]
              (->>
               [(when current-repo
@@ -232,10 +238,10 @@
                (when logged?
                  {:title "All repos"
                   :options {:href "/repos"}})
-               (when logged?
+               (when current-repo
                  {:title "All pages"
                   :options {:href "/all-pages"}})
-               (when logged?
+               (when current-repo
                  {:title "All files"
                   :options {:href "/all-files"}})
                (when current-repo
@@ -247,8 +253,6 @@
                {:title "Feature request"
                 :options {:href "https://github.com/logseq/logseq/issues/new"
                           :target "_blank"}}
-               {:title "Logseq documentation"
-                :options {:href "/docs"}}
                {:title [:div.flex-row.flex.justify-between.items-center
                         [:span "Join the community"]
                         svg/discord]

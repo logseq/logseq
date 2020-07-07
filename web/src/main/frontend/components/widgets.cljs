@@ -12,8 +12,6 @@
   [:div
    [:h1.title {:style {:margin-bottom "0.25rem"}}
     "What's your preferred mode?"]
-   [:span.text-gray-500.text-sm.ml-1
-    "It'll be used for new pages."]
 
    [:div.mt-4.ml-1
     (ui/button

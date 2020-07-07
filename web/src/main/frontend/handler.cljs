@@ -184,6 +184,8 @@
         path (date/current-journal-path format)
         file-path (str "/" path)
         default-content (default-month-journal-content format)]
+    (prn {:repo-dir repo-dir
+          :dir (str repo-dir "/journals")})
     (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
                   (p/catch (fn [_e])))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
@@ -594,8 +596,6 @@
     "Git diff"
     :draw
     "Draw"
-    :docs
-    "Logseq documents"
     :else
     "Logseq"))
 
@@ -1302,17 +1302,37 @@
 (defn watch-for-date!
   []
   (js/setInterval #(state/set-today! (date/today))
-                  1000))
+                  10000))
+
+(defn setup-local-repo-if-not-exists!
+  []
+  (if js/window.pfs
+    (let [repo config/local-repo]
+      (p/let [result (-> (fs/mkdir (str "/" repo))
+                         (p/catch (fn [_e] nil)))]
+        (state/set-current-repo! repo)
+        (db/start-db-conn! nil
+                           repo
+                           db-listen-to-tx!)
+        (create-month-journal-if-not-exists repo)
+        (create-config-file-if-not-exists repo)))
+    (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn start!
   [render]
-  (let [me (and js/window.user (bean/->clj js/window.user))]
-    ;; async
-    (-> (p/all (db/restore! me db-listen-to-tx! restore-config!))
+  (let [me (and js/window.user (bean/->clj js/window.user))
+        logged? (:name me)
+        repos (if logged?
+                (:repos me)
+                [{:url config/local-repo}])]
+    (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! restore-config!))
         (p/then
          (fn []
            (when me (set-state-kv! :me me))
            (render)
+           (when (and (not logged?)
+                      (not (db/get-conn config/local-repo)))
+             (setup-local-repo-if-not-exists!))
            (watch-for-date!)
            (when me
              (when-let [object-key (:encrypt_object_key me)]
@@ -1326,8 +1346,7 @@
                   (p/catch
                       (fn [error]
                         (println "Token decrypted failed")
-                        (state/clear-encrypt-token!)))))))
-           )))))
+                        (state/clear-encrypt-token!))))))))))))
 
 (defn load-docs!
   []
