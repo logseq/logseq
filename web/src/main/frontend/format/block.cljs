@@ -28,8 +28,12 @@
       (or
        (and
         (= typ "Search")
-        (not (contains? #{\# \*} (first (second (:url (second block))))))
-        (second (:url (second block))))
+        (not (contains? #{\# \* \/ \( \[} (first (second (:url (second block))))))
+        (let [page (second (:url (second block)))]
+          (when (and (not (string/starts-with? page "http"))
+                     (not (string/starts-with? page "file"))
+                     (not (string/ends-with? page ".html")))
+            page)))
 
        (and
         (= typ "Complex")

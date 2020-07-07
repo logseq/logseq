@@ -25,7 +25,6 @@
      {:alt "Logseq",
       :src "/static/img/white_logo.png"}]]])
 
-
 (defn nav-item
   [title href svg-d active? close-modal-fn]
   [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.text-gray-500.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
@@ -280,14 +279,16 @@
                   :box-sizing "content-box"}}
          [:div.flex.justify-center
           ;; FIXME: overflow-x-hidden conflicts with heading collapsers
-          [:div.flex-1.m-6#main-content-container
+          [:div.flex-1.#main-content-container
            ;; .overflow-x-hidden
            {:style (if global-graph-pages?
                      {:position "relative"}
                      {:position "relative"
                       :max-width 700
                       :margin-bottom 200})}
-           main-content]]]
+           (if global-graph-pages?
+             main-content
+             [:div.m-6 main-content])]]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:href "/"

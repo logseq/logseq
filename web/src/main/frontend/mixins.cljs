@@ -68,6 +68,12 @@
                 27 (on-hide state e :esc)
                 nil)))))
 
+(defn resize-layout
+  [state ref]
+  (listen state js/window "resize"
+          (fn [e]
+            (reset! ref [js/window.innerWidth js/window.innerHeight]))))
+
 (defn on-enter
   [state & {:keys [on-enter node]}]
   (let [node (or node (rum/dom-node state))]

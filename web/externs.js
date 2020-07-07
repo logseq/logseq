@@ -29,3 +29,4 @@ dummy.beginPath = function() {};
 dummy.arc = function() {};
 dummy.fill = function() {};
 dummy.getData = function() {};
+dummy.zoomToFit = function() {};
