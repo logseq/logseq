@@ -678,8 +678,8 @@
 (defn- get-clipboard-as-html
   [event]
   (if-let [c (gobj/get event "clipboardData")]
-    (.getData c "text/html")
+    [(.getData c "text/html") (.getData c "text")]
     (if-let [c (gobj/getValueByKeys event "originalEvent" "clipboardData")]
-      (.getData c "text/html")
+      [(.getData c "text/html") (.getData c "text")]
       (if-let [c (gobj/get js/window "clipboardData")]
-        (.getData c "Text")))))
+        [(.getData c "Text") (.getData c "Text")]))))

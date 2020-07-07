@@ -559,11 +559,12 @@
 
 (defn- append-paste-doc!
   [format event]
-  (when-let [html (util/get-clipboard-as-html event)]
-    (let [doc-text (html-parser/parse format html)]
-      (when-not (string/blank? doc-text)
-        (util/stop event)
-        (state/append-current-edit-content! doc-text)))))
+  (let [[html text] (util/get-clipboard-as-html event)]
+    (when-not (string/starts-with? (string/trim text) "http")
+      (let [doc-text (html-parser/parse format html)]
+        (when-not (string/blank? doc-text)
+          (util/stop event)
+          (state/append-current-edit-content! doc-text))))))
 
 (rum/defc box < rum/reactive
   (mixins/event-mixin
