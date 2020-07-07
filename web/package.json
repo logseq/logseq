@@ -20,11 +20,13 @@
     "dependencies": {
         "@sentry/react": "^5.19.0",
         "diff": "^4.0.2",
+        "dropbox": "^5.2.0",
         "localforage": "^1.7.3",
         "react": "^16.12.0",
         "react-dom": "^16.12.0",
         "react-force-graph-2d": "^1.16.3",
         "react-textarea-autosize": "^8.0.1",
-        "react-transition-group": "^4.3.0"
+        "react-transition-group": "^4.3.0",
+        "webdav": "^3.3.0"
     }
 }
