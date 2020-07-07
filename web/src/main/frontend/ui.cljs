@@ -171,7 +171,7 @@
         full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) 700)]
+        bottom-reached? (<= (- full-height scroll-top client-height) 100)]
     (when bottom-reached?
       (on-load))))
 
