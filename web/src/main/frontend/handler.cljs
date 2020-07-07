@@ -504,9 +504,7 @@
 
 (defn restore-config!
   [repo-url]
-  (p/let [content (load-file repo-url config/config-file)]
-    (when content
-      (db/reset-config! repo-url content))))
+  (db/reset-config! repo-url))
 
 (defn alter-file
   [repo path content {:keys [reset? re-render-root?]
