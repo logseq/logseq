@@ -9,8 +9,7 @@
 
 ;; TODO: extracted to a rum mixin
 (defn loaded? []
-  js/window.ForceGraph
-  )
+  js/window.ForceGraph)
 
 (defonce graph-component
   (atom nil))
