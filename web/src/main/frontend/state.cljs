@@ -23,6 +23,7 @@
     :git/status {}
     :format/loading {}
     :draw? false
+    :db/restoring? nil
 
     :journals-length 1
 
@@ -104,7 +105,9 @@
 (defn set-current-repo!
   [repo]
   (swap! state assoc :git/current-repo repo)
-  (storage/set :git/current-repo repo))
+  (if repo
+    (storage/set :git/current-repo repo)
+    (storage/remove :git/current-repo)))
 
 (defn set-preferred-format!
   [format]
@@ -440,3 +443,7 @@
 (defn in-draw-mode?
   []
   (:draw? @state))
+
+(defn set-db-restoring!
+  [value]
+  (set-state! :db/restoring? value))

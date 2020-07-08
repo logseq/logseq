@@ -302,7 +302,8 @@
            [:span.text-gray-500 "[["]
            (if (string/ends-with? s ".excalidraw")
              [:a.page-ref
-              {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))}
+              {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))
+               :on-click (fn [e] (util/stop e))}
               [:span
                (svg/excalidraw-logo)
                (string/capitalize (draw/get-file-title s))]
@@ -721,7 +722,6 @@
       :else
       nil)))
 
-;; TODO: performance improvement: don't re-render the who parent when there's any changes.
 (rum/defc heading-container < rum/static
   {:did-update (fn [state]
                  (util/code-highlight!)

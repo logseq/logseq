@@ -205,7 +205,7 @@
         dark? (= theme "dark")
         graph (db/build-global-graph theme @show-journal?)]
     (ui/force-graph-2d (graph/build-graph-opts graph dark? {:width (- width 24)
-                                                            :height (- height 68)
+                                                            :height (- height 100)
                                                             :ref (fn [v] (reset! graph-ref v))
                                                             :ref-atom graph-ref}))))
 

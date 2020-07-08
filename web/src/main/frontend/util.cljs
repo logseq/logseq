@@ -613,8 +613,8 @@
 (defn d
   [k f]
   (let [result (atom nil)]
-    (prn k)
-    (time (reset! result (f)))
+    (println (str "Debug " k))
+    (time (reset! result (doall (f))))
     @result))
 
 (defn concat-without-nil

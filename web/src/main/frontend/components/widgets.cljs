@@ -3,6 +3,7 @@
             [frontend.util :as util]
             [frontend.handler :as handler]
             [frontend.state :as state]
+            [frontend.config :as config]
             [clojure.string :as string]
             [frontend.ui :as ui]
             [frontend.db :as db]))
@@ -55,84 +56,90 @@
 
 (rum/defc sync-status < rum/reactive
   []
-  (let [repo (state/get-current-repo)
-        git-status (state/sub [:git/status repo])
-        pulling? (= :pulling git-status)
-        pushing? (= :pushing git-status)
-        status (state/sub [:repo/sync-status repo])
-        status (remove (fn [[_ files]]
-                         (empty? files))
-                       status)
-        synced? (empty? (apply concat (vals status)))
-        last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
-    (ui/dropdown
-     (fn [{:keys [toggle-fn]}]
-       [:div.cursor.w-2.h-2.sync-status.mr-2
-        {:class (if synced? "bg-green-600" "bg-orange-400")
-         :style {:border-radius "50%"}
-         :on-mouse-over toggle-fn}])
-     (fn [{:keys [toggle-fn]}]
-       [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-        (when synced?
-          [:p "All local changes are synced!"])
-        (when-not synced?
-          [:div
-           [:div.changes
-            (for [[k files] status]
-              [:div {:key (str "sync-" (name k))}
-               [:div.text-sm.font-bold (string/capitalize (name k))]
-               [:ul
-                (for [file files]
-                  [:li {:key (str "sync-" file)}
-                   file])]])]
-           [:div.flex.flex-row.justify-between.align-items.mt-2
-            (ui/button "Push now"
-              :on-click (fn [] (handler/push repo)))
-            (if pushing?
-              [:span.lds-dual-ring.mt-1])]])
-        [:hr]
-        [:div
-         [:p {:style {:font-size 12}} "Last pulled at: "
-          last-pulled-at]
-         [:div.flex.flex-row.justify-between.align-items
-          (ui/button "Pull now"
-            :on-click (fn [] (handler/pull-current-repo)))
-          (if pulling?
-            [:span.lds-dual-ring.mt-1])]]]))))
+  (let [repo (state/get-current-repo)]
+    (when-not (= repo config/local-repo)
+      (let [git-status (state/sub [:git/status repo])
+            pulling? (= :pulling git-status)
+            pushing? (= :pushing git-status)
+            status (state/sub [:repo/sync-status repo])
+            status (remove (fn [[_ files]]
+                             (empty? files))
+                           status)
+            synced? (empty? (apply concat (vals status)))
+            last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
+        (ui/dropdown
+         (fn [{:keys [toggle-fn]}]
+           [:div.cursor.w-2.h-2.sync-status.mr-2
+            {:class (if synced? "bg-green-600" "bg-orange-400")
+             :style {:border-radius "50%"}
+             :on-mouse-over toggle-fn}])
+         (fn [{:keys [toggle-fn]}]
+           [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
+            (when synced?
+              [:p "All local changes are synced!"])
+            (when-not synced?
+              [:div
+               [:div.changes
+                (for [[k files] status]
+                  [:div {:key (str "sync-" (name k))}
+                   [:div.text-sm.font-bold (string/capitalize (name k))]
+                   [:ul
+                    (for [file files]
+                      [:li {:key (str "sync-" file)}
+                       file])]])]
+               [:div.flex.flex-row.justify-between.align-items.mt-2
+                (ui/button "Push now"
+                  :on-click (fn [] (handler/push repo)))
+                (if pushing?
+                  [:span.lds-dual-ring.mt-1])]])
+            [:hr]
+            [:div
+             [:p {:style {:font-size 12}} "Last pulled at: "
+              last-pulled-at]
+             [:div.flex.flex-row.justify-between.align-items
+              (ui/button "Pull now"
+                :on-click (fn [] (handler/pull-current-repo)))
+              (if pulling?
+                [:span.lds-dual-ring.mt-1])]]]))))))
 
 (rum/defc repos < rum/reactive
   [head? on-click]
   (let [current-repo (state/sub :git/current-repo)
+        logged? (state/logged?)
+        local-repo? (= current-repo config/local-repo)
         get-repo-name-f (fn [repo]
                           (if head?
                             (db/get-repo-path repo)
                             (util/take-at-most (db/get-repo-name repo) 20)))]
-    (if current-repo
-      (let [repos (state/sub [:me :repos])]
-        (if (> (count repos) 1)
-          (ui/dropdown-with-links
-           (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch {:on-click toggle-fn}
-              [:span (get-repo-name-f current-repo)]
-              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-           (mapv
-            (fn [{:keys [id url]}]
-              {:title (get-repo-name-f url)
-               :options {:on-click (fn []
-                                     (state/set-current-repo! url)
-                                     (when-not (= :draw (state/get-current-route))
-                                       (handler/redirect! {:to :home}))
-                                     (when on-click
-                                       (on-click url)))}})
-            (remove (fn [repo]
-                      (= current-repo (:url repo)))
-                    repos))
-           {:modal-class (util/hiccup->class
-                          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
-          [:a
-           {:href current-repo
-            :target "_blank"}
-           (get-repo-name-f current-repo)])))))
+    (when logged?
+      (if current-repo
+       (let [repos (state/sub [:me :repos])]
+         (if (> (count repos) 1)
+           (ui/dropdown-with-links
+            (fn [{:keys [toggle-fn]}]
+              [:a#repo-switch {:on-click toggle-fn}
+               [:span (get-repo-name-f current-repo)]
+               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+            (mapv
+             (fn [{:keys [id url]}]
+               {:title (get-repo-name-f url)
+                :options {:on-click (fn []
+                                      (state/set-current-repo! url)
+                                      (when-not (= :draw (state/get-current-route))
+                                        (handler/redirect! {:to :home}))
+                                      (when on-click
+                                        (on-click url)))}})
+             (remove (fn [repo]
+                       (= current-repo (:url repo)))
+                     repos))
+            {:modal-class (util/hiccup->class
+                           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
+           (if local-repo?
+             [:span (get-repo-name-f current-repo)]
+             [:a
+              {:href current-repo
+               :target "_blank"}
+              (get-repo-name-f current-repo)])))))))
 
 (rum/defc add-repo < rum/reactive
   []

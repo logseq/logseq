@@ -19,8 +19,8 @@
 
 (defn start []
   (when-let [node (.getElementById js/document "root")]
-    (rum/mount (page/current-page) node))
-  (set-router!))
+    (rum/mount (page/current-page) node)
+    (set-router!)))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

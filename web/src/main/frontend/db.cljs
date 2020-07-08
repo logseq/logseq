@@ -50,13 +50,6 @@
   (when repo
     (str "logseq-files-db/" (get-repo-path repo))))
 
-(defn clear-store!
-  []
-  (p/let [_ (.clear localforage)
-          dbs (js/window.indexedDB.databases)]
-    (doseq [db dbs]
-      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
-
 (defn remove-db!
   [repo]
   (.removeItem localforage-instance (datascript-db repo)))
@@ -205,10 +198,11 @@
   (reset! query-state {}))
 
 (defn add-q!
-  [k query inputs result-atom transform-fn]
+  [k query inputs result-atom transform-fn query-fn]
   (swap! query-state assoc k {:query query
                               :inputs inputs
                               :result result-atom
+                              :query-fn query-fn
                               :transform-fn transform-fn})
   result-atom)
 
@@ -355,7 +349,7 @@
       [[key]])))
 
 (defn q
-  [repo k {:keys [use-cache? files-db? transform-fn]
+  [repo k {:keys [use-cache? files-db? transform-fn query-fn]
            :or {use-cache? true
                 files-db? false
                 transform-fn identity}} query & inputs]
@@ -368,6 +362,9 @@
         (if (and use-cache? result-atom)
           result-atom
           (let [result (cond
+                         query-fn
+                         (query-fn conn)
+
                          kv?
                          (d/entity conn (last k))
 
@@ -380,7 +377,7 @@
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
-            (add-q! k query inputs result-atom transform-fn)))))))
+            (add-q! k query inputs result-atom transform-fn query-fn)))))))
 
 (defn seq-flatten [col]
   (flatten (seq col)))
@@ -424,6 +421,16 @@
   (sort-by
    #(get-in % [:heading/meta :pos])
    headings))
+
+(comment
+  (def headings [{:heading/meta {:pos 0}}
+                 {:heading/meta {:pos 10}}
+                 {:heading/meta {:pos 7}}
+                 {:heading/meta {:pos 5}}
+                 {:heading/meta {:pos 3}}
+                 {:heading/meta {:pos 2}}
+                 {:heading/meta {:pos 8}}])
+  )
 
 (defn group-by-page
   [headings]
@@ -496,6 +503,8 @@
          react
          key))))
 
+(defonce debug-db (atom nil))
+
 (defn transact-react!
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
                      :or {files-db? false}}]
@@ -507,26 +516,29 @@
                           (get-files-conn repo-url)
                           (get-conn repo-url false)))]
     (when (and (seq tx-data) (get-conn))
-      (d/transact! (get-conn) (vec tx-data))
-      (let [handler-keys (get-handler-keys handler-opts)]
+      (let [tx-result (d/transact! (get-conn) (vec tx-data))
+            db (:db-after tx-result)
+            handler-keys (get-handler-keys handler-opts)]
+        (reset! debug-db db)
         (doseq [handler-key handler-keys]
           (let [handler-key (vec (cons repo-url handler-key))]
             (when-let [cache (get @query-state handler-key)]
-              (let [{:keys [query inputs transform-fn]} cache]
-                (when (and query inputs)
+              (let [{:keys [query inputs transform-fn query-fn]} cache]
+                (when (or (and query inputs) query-fn)
                   (let [new-result (->
-                                    (if (keyword? query)
+                                    (cond
+                                      query-fn
+                                      (profile
+                                       "Query:"
+                                       (doall (query-fn db)))
+
+                                      (keyword? query)
                                       (get-key-value repo-url query)
-                                      ;; TODO: Improve Datascript query performance
-                                      (if files-db?
-                                        (apply d/q query (d/db (get-conn)) inputs)
-                                        (profile
-                                         "Query"
-                                         (doall (apply d/q query (d/db (get-conn)) inputs)))))
+
+                                      :else
+                                      (apply d/q query db inputs))
                                     transform-fn)]
-                    (profile
-                     (str "set new result " handler-key)
-                     (set-new-result! handler-key new-result))))))))))))
+                    (set-new-result! handler-key new-result)))))))))))
 
 (defn pull-heading
   [id]
@@ -611,15 +623,16 @@
 
 (defn get-files
   [repo]
-  (->> (q repo [:files] {}
-         '[:find ?path ?modified-at
-           :where
-           [?file :file/path ?path]
-           [(get-else $ ?file :file/last-modified-at 0) ?modified-at]])
-       (react)
-       (seq)
-       (sort-by last)
-       (reverse)))
+  (when-let [conn (get-conn repo)]
+    (->> (q repo [:files] {:use-cache? false}
+          '[:find ?path ?modified-at
+            :where
+            [?file :file/path ?path]
+            [(get-else $ ?file :file/last-modified-at 0) ?modified-at]])
+        (react)
+        (seq)
+        (sort-by last)
+        (reverse))))
 
 (defn get-files-headings
   [repo-url paths]
@@ -790,20 +803,59 @@
      (with-repo repo-url)
      (group-by-page))))
 
+(defn get-page-headings-old
+  [repo-url page]
+  (let [page (string/lower-case page)
+        page-id (:db/id (entity repo-url [:page/name page]))]
+    (some->
+     (q repo-url [:page/headings page-id]
+       {:use-cache? false
+        :transform-fn #(page-headings-transform repo-url %)}
+       '[:find (pull ?heading [*])
+         :in $ ?page-id
+         :where
+         [?heading :heading/page ?page-id]]
+       page-id)
+     react)))
+
 (defn get-page-headings
   [repo-url page]
-  (let [page (string/lower-case page)]
-    (let [page-id (:db/id (entity repo-url [:page/name page]))]
-      (some->
-       (q repo-url [:page/headings page-id]
-         {:use-cache? true
-          :transform-fn #(page-headings-transform repo-url %)}
-         '[:find (pull ?heading [*])
-           :in $ ?page-id
-           :where
-           [?heading :heading/page ?page-id]]
-         page-id)
-       react))))
+  (let [page (string/lower-case page)
+        page-id (:db/id (entity repo-url [:page/name page]))
+        db (get-conn repo-url)]
+    (some->
+     (q repo-url [:page/headings page-id]
+       {:use-cache? true
+        :transform-fn #(page-headings-transform repo-url %)
+        :query-fn (fn [db]
+                    (let [datoms (d/datoms db :avet :heading/page page-id)
+                          heading-eids (mapv :e datoms)]
+                      (d/pull-many db '[*] heading-eids)))}
+       nil)
+     react)))
+
+(comment
+
+
+  (defn filter-brands-and-products-by-token [db token-pred]
+    (->>
+     (d/datoms db :avet :token)
+     (filter (fn [{:keys [v]}] (token-pred v)))
+     (mapv :e)
+     (d/pull-many db
+                  '[:db/id
+                    :token
+                    {:token/sources [:db/id
+                                     :brand/name
+                                     :product/title
+                                     {:brand/tags [*]}
+                                     {:product/tags [*]}]}])
+     (mapcat :token/sources)
+     (filter (some-fn :brand/name :product/title))))
+
+  (d/datoms (get-conn (state/get-current-repo))
+            :avet :page/heading)
+  )
 
 (defn heading-and-children-transform
   [result repo-url heading-uuid level]

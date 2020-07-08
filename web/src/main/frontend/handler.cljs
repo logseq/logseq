@@ -184,8 +184,6 @@
         path (date/current-journal-path format)
         file-path (str "/" path)
         default-content (default-month-journal-content format)]
-    (prn {:repo-dir repo-dir
-          :dir (str repo-dir "/journals")})
     (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
                   (p/catch (fn [_e])))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
@@ -723,16 +721,31 @@
                    (reset! uploading? false))))))
 
 
+(defn clear-store!
+  []
+  (p/let [ks (.keys db/localforage-instance)
+          _ (doseq [k ks]
+              (when-not (string/ends-with? k (str "/" config/local-repo))
+                (prn "delete k: " k)
+                (.removeItem db/localforage-instance k)))
+          dirs (fs/readdir "/")]
+    (doseq [dir dirs]
+      (when (not= dir config/local-repo)
+        (prn {:dir dir})
+        (fs/rmdir (str "/" dir))))))
+
 ;; clear localforage
 (defn sign-out!
   [e]
   (->
-   (p/let [_idb-clear (js/window.pfs._idb.wipe)
-           _ (db/clear-store!)]
+   (do
      ;; remember not to remove the encrypted token
-     (storage/remove :git/current-repo)
-     (storage/remove :git/clone-repo))
-   (p/catch (fn [e]))
+     (storage/set :git/current-repo config/local-repo)
+     (storage/remove :git/clone-repo)
+     (clear-store!))
+   (p/catch (fn [e]
+              (println "sign out error: ")
+              (js/console.dir e)))
    (p/finally (fn []
                 (set! (.-href js/window.location) "/logout")))))
 
@@ -818,9 +831,9 @@
   [format title]
   (case format
     "org"
-    (util/format "#+TITLE: %s\n#+TAGS:\n\n" title)
+    (util/format "#+TITLE: %s\n#+TAGS:\n\n** " title)
     "markdown"
-    (util/format "---\ntitle: %s\ntags:\n---\n\n" title)
+    (util/format "---\ntitle: %s\ntags:\n---\n\n## " title)
     ""))
 
 (defn create-new-page!
@@ -830,7 +843,7 @@
                  (string/lower-case)
                  (string/replace #"\s+" "_"))
         page (util/encode-str page)
-        path (str page "." format)
+        path (str page "." (if (= format "markdown") "md" format))
         file-path (str "/" path)
         repo (state/get-current-repo)
         dir (util/get-repo-dir repo)]
@@ -1309,13 +1322,14 @@
   (if js/window.pfs
     (let [repo config/local-repo]
       (p/let [result (-> (fs/mkdir (str "/" repo))
-                         (p/catch (fn [_e] nil)))]
-        (state/set-current-repo! repo)
-        (db/start-db-conn! nil
-                           repo
-                           db-listen-to-tx!)
-        (create-month-journal-if-not-exists repo)
-        (create-config-file-if-not-exists repo)))
+                         (p/catch (fn [_e] nil)))
+              _ (state/set-current-repo! repo)
+              _ (db/start-db-conn! nil
+                                   repo
+                                   db-listen-to-tx!)
+              _ (create-month-journal-if-not-exists repo)
+              _ (create-config-file-if-not-exists repo)]
+        (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn start!
@@ -1325,14 +1339,16 @@
         repos (if logged?
                 (:repos me)
                 [{:url config/local-repo}])]
+    (when me (set-state-kv! :me me))
+    (state/set-db-restoring! true)
     (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! restore-config!))
         (p/then
          (fn []
-           (when me (set-state-kv! :me me))
            (render)
-           (when (and (not logged?)
-                      (not (db/get-conn config/local-repo)))
-             (setup-local-repo-if-not-exists!))
+           (if (and (not logged?)
+                      (not (seq (db/get-files config/local-repo))))
+             (setup-local-repo-if-not-exists!)
+             (state/set-db-restoring! false))
            (watch-for-date!)
            (when me
              (when-let [object-key (:encrypt_object_key me)]

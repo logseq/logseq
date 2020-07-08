@@ -9,6 +9,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.components.right-sidebar :as right-sidebar]
+            [frontend.storage :as storage]
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]
@@ -16,14 +17,6 @@
             [frontend.config :as config]
             [dommy.core :as d]
             [clojure.string :as string]))
-
-(rum/defc logo
-  []
-  [:div#logo.p-4
-   [:a.opacity-50.hover:opacity-100 {:href "/"}
-    [:img.h-6.w-auto
-     {:alt "Logseq",
-      :src "/static/img/white_logo.png"}]]])
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -78,7 +71,7 @@
      ;; shortcuts
      [:div.flex {:class "mt-1 flex items-center px-4 pt-1 text-base leading-6 rounded-md text-gray-200 transition ease-in-out duration-150"}
       (svg/star-solid (util/hiccup->class "mr-4.text-gray-500 transition.ease-in-out.duration-150"))
-      [:span.font-bold.text-gray-500
+      [:span.font-bold.text-gray-600
        "Starred"]]
      (starred-pages page-active? close-modal-fn)]))
 
@@ -96,9 +89,13 @@
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)
-        token (state/sub :encrypt/token)]
+        token (state/sub :encrypt/token)
+        db-restoring? (state/sub :db/restoring?)]
     [:div.max-w-7xl.mx-auto
      (cond
+       db-restoring?
+       (widgets/loading "Loading")
+
        (and (not logged?) (seq latest-journals))
        (journal/journals latest-journals)
 
@@ -210,7 +207,13 @@
            (search/search)
            [:div.w-full.flex.md:ml-0])
          [:div.ml-4.flex.items-center.md:ml-6
-          (when current-repo (widgets/sync-status))
+          (when-not logged?
+            [:a.text-sm.font-medium.login
+             {:href "/login/github"
+              :on-click (fn []
+                          (storage/remove :git/current-repo))}
+             "Login with Github"])
+          (widgets/sync-status)
           [:div.repos.hidden.md:block
            (widgets/repos true)]
           [:a {:title "Draw with Excalidraw"
@@ -295,7 +298,8 @@
              [:div.m-6 main-content])]]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
-        {:href "/"
+        {:title "Logseq"
+         :href "/"
          :on-click (fn []
                      (util/scroll-to-top)
                      (state/set-journals-length! 1)

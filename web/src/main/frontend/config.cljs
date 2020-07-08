@@ -1,5 +1,6 @@
 (ns frontend.config
   (:require [clojure.set :as set]
+            [clojure.string :as string]
             [frontend.state :as state]))
 
 (defonce dev? ^boolean goog.DEBUG)
@@ -162,5 +163,9 @@
      (apply str (repeat n heading-pattern)))))
 
 (defonce default-draw-directory "draws")
+
+(defn draw?
+  [path]
+  (string/starts-with? path default-draw-directory))
 
 (defonce local-repo "local")

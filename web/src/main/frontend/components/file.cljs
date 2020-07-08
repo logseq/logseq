@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler :as handler]
+            [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -40,8 +41,12 @@
          (for [[file modified-at] files]
            (let [file-id (util/url-encode file)]
              [:tr {:key file-id}
-              [:td [:a.text-gray-700 {:href (str "/file/" file-id)}
-                    file]]
+              [:td
+               (let [href (if (config/draw? file)
+                            (str "/draw?file=" (string/replace file (str config/default-draw-directory "/") ""))
+                            (str "/file/" file-id))]
+                 [:a.text-gray-700 {:href href}
+                 file])]
               [:td [:span.text-gray-500.text-sm
                     (if (zero? modified-at)
                       "No data"
@@ -58,10 +63,11 @@
                                 (handler/alter-file (state/get-current-repo) path (string/trim value)
                                                     {:re-render-root? true}))))
         edit-raw-handler (fn []
-                           (let [content (string/trim (db/get-file path))]
-                             (content/content encoded-path {:content content
-                                                            :format format
-                                                            :on-hide (save-file-handler content)})))
+                           (when-let [file-content (db/get-file path)]
+                             (let [content (string/trim file-content)]
+                              (content/content encoded-path {:content content
+                                                             :format format
+                                                             :on-hide (save-file-handler content)}))))
         page (db/get-file-page path)]
     [:div.file
      [:h1.title

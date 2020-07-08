@@ -48,10 +48,10 @@
   []
   (->>
    (concat
-    [["NOW" (->marker "NOW")]
-     ["LATER" (->marker "LATER")]
+    [["LATER" (->marker "LATER")]
+     ["NOW" (->marker "NOW")]
      ["DONE" (->marker "DONE")]
-     ;; ["TODO" (->marker "TODO")]
+     ["TODO" (->marker "TODO")]
      ;; ["DOING" (->marker "DOING")]
      ;; ["WAIT" (->marker "WAIT")]
      ;; ["WAITING" (->marker "WAITING")]
