@@ -597,7 +597,7 @@
                                    (string/lower-case (string/trim v)))
                         insert? (cond
                                   config/mobile?
-                                  false
+                                  true
 
                                   (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
                                   false
