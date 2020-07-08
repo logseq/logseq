@@ -32,3 +32,4 @@ node_modules/
 .DS_Store
 report.html
 /resources/static/css/tailwind.min.css
+resources/static/style.css
