@@ -1,21 +1,18 @@
-const purgecss = require('@fullhuman/postcss-purgecss')({
-
-  // Specify the paths to all of the template files in your project
-  content: [
-    '../resources/static/js/main.js',
-    // etc.
-  ],
-
-  // Include any special characters you're using in this regular expression
-  defaultExtractor: content => content.match(/[\w-/:]+(?<!:)/g) || []
-});
-
-module.exports = {
+module.exports = (ctx) => ({
   plugins: [
-    require('tailwindcss'),
-    require('autoprefixer'),
-    ...process.env.NODE_ENV === 'production'
-      ? [purgecss]
-      : []
-  ]
-};
+    require("autoprefixer"),
+    require("tailwindcss")("tailwind.config.js"),
+    ctx.env === "production" ? require("cssnano")({ preset: "default" }) : null,
+    ctx.env === "production"
+      ? require("@fullhuman/postcss-purgecss")({
+        content: [
+          '../resources/static/js/main.js',
+          // etc.
+        ],
+        // https://tailwindcss.com/docs/controlling-file-size#setting-up-purgecss
+        // without this we miss keeping eg. `w-1/2`
+        defaultExtractor: (content) => content.match(/[\w-/:]+(?<!:)/g) || [],
+      })
+      : null,
+  ],
+});

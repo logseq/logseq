@@ -31,3 +31,4 @@ node_modules/
 .nrepl-*
 .DS_Store
 report.html
+/resources/static/css/tailwind.min.css
