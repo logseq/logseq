@@ -732,13 +732,6 @@
 ;;       (when (not= dir config/local-repo)
 ;;         (fs/rmdir (str "/" dir))))))
 
-(defn clear-store!
-  []
-  (p/let [_ (.clear localforage)
-          dbs (js/window.indexedDB.databases)]
-    (doseq [db dbs]
-      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
-
 ;; clear localforage
 (defn sign-out!
   [e]
@@ -747,7 +740,7 @@
      ;; remember not to remove the encrypted token
      (storage/set :git/current-repo config/local-repo)
      (storage/remove :git/clone-repo)
-     (clear-store!))
+     (db/clear-store!))
    (p/catch (fn [e]
               (println "sign out error: ")
               (js/console.dir e)))
