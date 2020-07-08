@@ -4,7 +4,6 @@
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.util :as util]
-            [frontend.sentry :as sentry]
             [reitit.frontend :as rf]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]))
@@ -26,9 +25,6 @@
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
-
-  (when-not config/dev?
-    (sentry/init!))
 
   (handler/start! start)
 
