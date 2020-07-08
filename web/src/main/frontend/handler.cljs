@@ -726,12 +726,10 @@
   (p/let [ks (.keys db/localforage-instance)
           _ (doseq [k ks]
               (when-not (string/ends-with? k (str "/" config/local-repo))
-                (prn "delete k: " k)
                 (.removeItem db/localforage-instance k)))
           dirs (fs/readdir "/")]
     (doseq [dir dirs]
       (when (not= dir config/local-repo)
-        (prn {:dir dir})
         (fs/rmdir (str "/" dir))))))
 
 ;; clear localforage
