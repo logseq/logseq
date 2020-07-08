@@ -721,16 +721,23 @@
                    (reset! uploading? false))))))
 
 
+;; (defn clear-store!
+;;   []
+;;   (p/let [ks (.keys db/localforage-instance)
+;;           _ (doseq [k ks]
+;;               (when-not (string/ends-with? k (str "/" config/local-repo))
+;;                 (.removeItem db/localforage-instance k)))
+;;           dirs (fs/readdir "/")]
+;;     (doseq [dir dirs]
+;;       (when (not= dir config/local-repo)
+;;         (fs/rmdir (str "/" dir))))))
+
 (defn clear-store!
   []
-  (p/let [ks (.keys db/localforage-instance)
-          _ (doseq [k ks]
-              (when-not (string/ends-with? k (str "/" config/local-repo))
-                (.removeItem db/localforage-instance k)))
-          dirs (fs/readdir "/")]
-    (doseq [dir dirs]
-      (when (not= dir config/local-repo)
-        (fs/rmdir (str "/" dir))))))
+  (p/let [_ (.clear localforage)
+          dbs (js/window.indexedDB.databases)]
+    (doseq [db dbs]
+      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
 
 ;; clear localforage
 (defn sign-out!
