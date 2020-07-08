@@ -721,16 +721,16 @@
                    (reset! uploading? false))))))
 
 
-;; (defn clear-store!
-;;   []
-;;   (p/let [ks (.keys db/localforage-instance)
-;;           _ (doseq [k ks]
-;;               (when-not (string/ends-with? k (str "/" config/local-repo))
-;;                 (.removeItem db/localforage-instance k)))
-;;           dirs (fs/readdir "/")]
-;;     (doseq [dir dirs]
-;;       (when (not= dir config/local-repo)
-;;         (fs/rmdir (str "/" dir))))))
+(defn clear-store!
+  []
+  (p/let [ks (.keys db/localforage-instance)
+          _ (doseq [k ks]
+              (when-not (string/ends-with? k (str "/" config/local-repo))
+                (.removeItem db/localforage-instance k)))
+          dirs (fs/readdir "/")]
+    (doseq [dir dirs]
+      (when (not= dir config/local-repo)
+        (fs/rmdir (str "/" dir))))))
 
 ;; clear localforage
 (defn sign-out!
@@ -740,7 +740,7 @@
      ;; remember not to remove the encrypted token
      (storage/set :git/current-repo config/local-repo)
      (storage/remove :git/clone-repo)
-     (db/clear-store!))
+     (clear-store!))
    (p/catch (fn [e]
               (println "sign out error: ")
               (js/console.dir e)))

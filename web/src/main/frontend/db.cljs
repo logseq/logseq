@@ -33,12 +33,12 @@
 
 (defonce localforage-instance (.createInstance localforage store-name))
 
-(defn clear-store!
-  []
-  (p/let [_ (.clear localforage)
-          dbs (js/window.indexedDB.databases)]
-    (doseq [db dbs]
-      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
+;; (defn clear-store!
+;;   []
+;;   (p/let [_ (.clear localforage)
+;;           dbs (js/window.indexedDB.databases)]
+;;     (doseq [db dbs]
+;;       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
 
 (defn get-repo-path
   [url]

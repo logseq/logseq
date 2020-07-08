@@ -1,7 +1,6 @@
 (ns frontend.fs
   (:require [frontend.util :as util]
-            [promesa.core :as p]
-            ["/frontend/fs_ext" :as fs-ext]))
+            [promesa.core :as p]))
 
 (defn mkdir
   [dir]
@@ -17,7 +16,7 @@
 
 (defn rmdir
   [dir]
-  (fs-ext/rimraf dir js/window.pfs))
+  (js/window.workerThread.rimraf dir))
 
 (defn read-file
   [dir path]
