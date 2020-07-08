@@ -139,11 +139,9 @@
                  (lazy-load-js state)
                  state)
    :did-mount (fn [state]
-                (util/code-highlight!)
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
-                 (util/code-highlight!)
                  (handler/render-local-images!)
                  (lazy-load-js state)
                  state)}

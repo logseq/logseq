@@ -3,7 +3,6 @@
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-force-graph-2d" :as ForceGraph2D]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
@@ -16,7 +15,6 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
-(defonce force-graph-2d (r/adapt-class ForceGraph2D))
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg"))]

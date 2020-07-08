@@ -8,6 +8,7 @@
             [frontend.components.hiccup :as hiccup]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
+            [frontend.extensions.graph-2d :as graph-2d]
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.components.content :as content]
@@ -204,10 +205,13 @@
         [width height] (rum/react layout)
         dark? (= theme "dark")
         graph (db/build-global-graph theme @show-journal?)]
-    (ui/force-graph-2d (graph/build-graph-opts graph dark? {:width (- width 24)
-                                                            :height (- height 100)
-                                                            :ref (fn [v] (reset! graph-ref v))
-                                                            :ref-atom graph-ref}))))
+    (graph-2d/graph
+     (graph/build-graph-opts
+      graph dark?
+      {:width (- width 24)
+       :height (- height 100)
+       :ref (fn [v] (reset! graph-ref v))
+       :ref-atom graph-ref}))))
 
 (rum/defc all-pages < rum/reactive
   []

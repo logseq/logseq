@@ -23,6 +23,8 @@
             [cljs.reader :as reader]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.mixins :as mixins]
+            [frontend.extensions.latex :as latex]
+            [frontend.extensions.code :as code]
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
             [clojure.walk :as walk]
@@ -195,22 +197,6 @@
                  content
                  name)))
 
-(rum/defc latex <
-  {:did-mount (fn [state]
-                (let [[id s display?] (:rum/args state)
-                      component (:rum/react-component state)]
-                  (when js/window.katex
-                    (js/katex.render s (gdom/getElement id)
-                                     #js {:displayMode display?
-                                          :throwOnError false})))
-                state)}
-  [id s block? display?]
-  (let [element (if block?
-                  :div.latex
-                  :span.latex-inline)]
-    [element {:id id}
-     s]))
-
 (declare headings-container)
 
 (defn inline
@@ -243,10 +229,10 @@
             {:__html (:html e)}}]
 
     ["Latex_Fragment" ["Displayed" s]]
-    (latex (str (dc/squuid)) s false true)
+    (latex/latex (str (dc/squuid)) s false true)
 
     ["Latex_Fragment" ["Inline" s]]
-    (latex (str (dc/squuid)) s false false)
+    (latex/latex (str (dc/squuid)) s false false)
 
     ["Target" s]
     [:a {:id s} s]
@@ -723,9 +709,6 @@
       nil)))
 
 (rum/defc heading-container < rum/static
-  {:did-update (fn [state]
-                 (util/code-highlight!)
-                 state)}
   ;; (mixins/perf-measure-mixin "heading-container")
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-heading? idx] :as heading}]
   (let [ref? (boolean (:ref? config))
@@ -1015,7 +998,7 @@
       ["Table" t]
       (table config t)
       ["Math" s]
-      (latex (str (dc/squuid)) s true true)
+      (latex/latex (str (dc/squuid)) s true true)
       ["Example" l]
       [:pre.pre-wrap-white-space
        (join-lines l)]
@@ -1026,11 +1009,9 @@
             code (join-lines lines)]
         (if (and (= language "clojure") (contains? (set options) ":results"))
           [:div
-           [:pre.pre-wrap-white-space.code
-            [:code attr code]]
+           (code/highlight (str (dc/squuid)) attr code)
            (sci-clojure-eval code)]
-          [:pre.pre-wrap-white-space.code
-           [:code attr code]]))
+          (code/highlight (str (dc/squuid)) attr code)))
       ["Quote" l]
       (->elem
        :blockquote
@@ -1044,7 +1025,7 @@
       ["Export" "hiccup" options content]
       (reader/read-string content)
       ["Export" "latex" options content]
-      (latex (str (dc/squuid)) content true false)
+      (latex/latex (str (dc/squuid)) content true false)
 
       ["Custom" "query" options result content]
       (custom-query config options content)
@@ -1075,7 +1056,7 @@
 
       ["Latex_Environment" name option content]
       (let [content (latex-environment-content name option content)]
-        (latex (str (dc/squuid)) content true true))
+        (latex/latex (str (dc/squuid)) content true true))
       ["Footnote_Definition" name definition]
       (let [id (util/url-encode name)]
         [:div.footdef
