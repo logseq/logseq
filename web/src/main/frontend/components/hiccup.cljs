@@ -25,12 +25,10 @@
             [frontend.mixins :as mixins]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.code :as code]
+            [frontend.extensions.sci :as sci]
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
-            [clojure.walk :as walk]
-            [shadow.lazy :as lazy]))
-
-(def sci-eval-string (lazy/loadable frontend.extensions.sci/eval-string))
+            [clojure.walk :as walk]))
 
 ;; local state
 (defonce *heading-children
@@ -954,29 +952,6 @@
      [:div.ml-4.text-lg
       (blocks config result)]]))
 
-(defn sci-clojure-eval-inner
-  [code]
-  [:div
-   [:code "Results:"]
-   [:div.results.mt-1
-    [:pre.pre-wrap-white-space.code
-     (try
-       (let [result (@sci-eval-string code)]
-         (str result))
-       (catch js/Error e
-         (str "Error: " (gobj/get e "message"))))]]])
-
-(def sci-loading? (atom true))
-
-(rum/defc sci-clojure-eval < rum/reactive
-  [code]
-  (let [loading? (rum/react sci-loading?)]
-    (if (lazy/ready? sci-eval-string)
-      (sci-clojure-eval-inner code)
-      (do
-        (lazy/load sci-eval-string (fn [_] (reset! sci-loading? false)))
-        (widgets/loading "loading @borkdude/sci")))))
-
 (defn block
   [config item]
   (try
@@ -1010,7 +985,7 @@
         (if (and (= language "clojure") (contains? (set options) ":results"))
           [:div
            (code/highlight (str (dc/squuid)) attr code)
-           (sci-clojure-eval code)]
+           (sci/eval-result code)]
           (code/highlight (str (dc/squuid)) attr code)))
       ["Quote" l]
       (->elem

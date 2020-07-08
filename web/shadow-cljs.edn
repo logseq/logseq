@@ -5,10 +5,7 @@
  :builds
  {:app
   {:target :browser
-   :module-loader true
-   :modules {:main {:init-fn frontend.core/init}
-             :sci {:entries [frontend.extensions.sci]
-                   :depends-on #{:main}}}
+   :modules {:main {:init-fn frontend.core/init}}
 
    :output-dir "../resources/static/js"
    :asset-path "/static/js"

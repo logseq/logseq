@@ -4,7 +4,6 @@
             [frontend.state :as state]))
 
 (defonce dev? ^boolean goog.DEBUG)
-;; (defonce dev? true)
 
 (def website
   (if dev?
