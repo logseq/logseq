@@ -5,6 +5,9 @@
 
 (defonce dev? ^boolean goog.DEBUG)
 
+;; :TODO: How to do this?
+;; (defonce desktop? ^boolean goog.DESKTOP)
+
 (def website
   (if dev?
     "http://localhost:3000"

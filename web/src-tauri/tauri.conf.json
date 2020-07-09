@@ -1,6 +1,6 @@
 {
   "build": {
-    "distDir": "../../resources/static",
+    "distDir": "../tauri-release/public",
     "devPath": "http://localhost:3000",
     "beforeDevCommand": "",
     "beforeBuildCommand": ""

@@ -103,7 +103,7 @@
         search-q (state/sub :search/q)
         show-result? (boolean (seq search-result))]
     [:div#search.flex-1.flex.ml-0.md:ml-12
-     [:div.w-full.flex.md:ml-0
+     [:div.flex.md:ml-0
        [:label.sr-only {:for "search_field"} "Search"]
        [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
         [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0

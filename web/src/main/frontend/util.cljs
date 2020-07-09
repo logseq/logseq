@@ -118,9 +118,9 @@
 
 (defn fetch-raw
   ([url on-ok on-failed]
-   (fetch-raw url #js {} on-ok on-failed))
+   (fetch-raw url {} on-ok on-failed))
   ([url opts on-ok on-failed]
-   (-> (js/fetch url opts)
+   (-> (js/fetch url (bean/->js (merge {:mode "cors"} opts)))
        (.then (fn [resp]
                 (if (>= (.-status resp) 400)
                   (on-failed resp)
@@ -132,9 +132,9 @@
 
 (defn fetch
   ([url on-ok on-failed]
-   (fetch url #js {} on-ok on-failed))
+   (fetch url {} on-ok on-failed))
   ([url opts on-ok on-failed]
-   (-> (js/fetch url (merge {:mode "cors"} opts))
+   (-> (js/fetch url (bean/->js (merge {:mode "cors"} opts)))
        (.then (fn [resp]
                 (if (>= (.-status resp) 400)
                   (on-failed resp)
@@ -159,16 +159,16 @@
 
 (defn post
   [url body on-ok on-failed]
-  (fetch url (clj->js {:method "post"
-                       :headers {:Content-Type "application/json"}
-                       :body (js/JSON.stringify (clj->js body))})
+  (fetch url {:method "post"
+              :headers {:Content-Type "application/json"}
+              :body (js/JSON.stringify (clj->js body))}
          on-ok
          on-failed))
 
 (defn delete
   [url on-ok on-failed]
-  (fetch url (clj->js {:method "delete"
-                       :headers {:Content-Type "application/json"}})
+  (fetch url {:method "delete"
+              :headers {:Content-Type "application/json"}}
          on-ok
          on-failed))
 

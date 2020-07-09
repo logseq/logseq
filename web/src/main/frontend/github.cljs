@@ -18,10 +18,10 @@
                          path
                          ref)]
     (util/fetch-raw url
-                    (bean/->js {:method "get"
-                                :headers {:Accept "application/vnd.github.v3.raw"
-                                          :Content-Type "application/json"
-                                          :Authorization token}})
+                    {:method "get"
+                     :headers {:Accept "application/vnd.github.v3.raw"
+                               :Content-Type "application/json"
+                               :Authorization token}}
                     (fn [content]
                       (ok-handler
                        {:repo-url repo-url

@@ -205,7 +205,7 @@
         [:div.flex-1.px-4.flex.justify-between
          (if current-repo
            (search/search)
-           [:div.w-full.flex.md:ml-0])
+           [:div.flex.md:ml-0])
          [:div.ml-4.flex.items-center.md:ml-6
           (when-not logged?
             [:a.text-sm.font-medium.login
@@ -224,7 +224,7 @@
             (svg/excalidraw-logo)]]
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline
+             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7
               {:on-click toggle-fn}
               (if-let [avatar (:avatar me)]
                 [:img.h-7.w-7.rounded-full
@@ -264,6 +264,7 @@
                           :target "_blank"}}
                (when logged?
                  {:title "Sign out"
+                  :href "/logout"
                   :options {:on-click handler/sign-out!}})]
               (remove nil?)))
            {})

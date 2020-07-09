@@ -745,7 +745,8 @@
               (println "sign out error: ")
               (js/console.dir e)))
    (p/finally (fn []
-                (set! (.-href js/window.location) "/logout")))))
+                (set! (.-href js/window.location)
+                      (str config/website "/logout"))))))
 
 (defn set-format-js-loading!
   [format value]
