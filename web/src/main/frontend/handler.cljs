@@ -746,7 +746,7 @@
               (js/console.dir e)))
    (p/finally (fn []
                 (set! (.-href js/window.location)
-                      (str config/website "/logout"))))))
+                      "/logout")))))
 
 (defn set-format-js-loading!
   [format value]

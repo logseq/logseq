@@ -120,7 +120,7 @@
   ([url on-ok on-failed]
    (fetch-raw url {} on-ok on-failed))
   ([url opts on-ok on-failed]
-   (-> (js/fetch url (bean/->js (merge {:mode "cors"} opts)))
+   (-> (js/fetch url (bean/->js opts))
        (.then (fn [resp]
                 (if (>= (.-status resp) 400)
                   (on-failed resp)
@@ -134,7 +134,7 @@
   ([url on-ok on-failed]
    (fetch url {} on-ok on-failed))
   ([url opts on-ok on-failed]
-   (-> (js/fetch url (bean/->js (merge {:mode "cors"} opts)))
+   (-> (js/fetch url (bean/->js opts))
        (.then (fn [resp]
                 (if (>= (.-status resp) 400)
                   (on-failed resp)

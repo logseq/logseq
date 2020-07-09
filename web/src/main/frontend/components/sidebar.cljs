@@ -261,7 +261,6 @@
                           :target "_blank"}}
                (when logged?
                  {:title "Sign out"
-                  :href "/logout"
                   :options {:on-click handler/sign-out!}})]
               (remove nil?)))
            {})
