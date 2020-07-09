@@ -17,6 +17,7 @@ node_modules/
 /resources/static/js/cljs-runtime
 /resources/static/js/manifest.edn
 /resources/static/style.css
+tauri-release/
 
 .cpcache/
 /target

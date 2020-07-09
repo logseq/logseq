@@ -134,7 +134,7 @@
   ([url on-ok on-failed]
    (fetch url #js {} on-ok on-failed))
   ([url opts on-ok on-failed]
-   (-> (js/fetch url opts)
+   (-> (js/fetch url (merge {:mode "cors"} opts))
        (.then (fn [resp]
                 (if (>= (.-status resp) 400)
                   (on-failed resp)
