@@ -1094,8 +1094,9 @@
 
 (rum/defc headings-container < rum/static
   [headings config]
-  [:div.headings-container {:style {:margin-left -24}}
-   (build-headings headings config)])
+  (let [headings (map #(dissoc % :heading/children) headings)]
+    [:div.headings-container {:style {:margin-left -24}}
+    (build-headings headings config)]))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

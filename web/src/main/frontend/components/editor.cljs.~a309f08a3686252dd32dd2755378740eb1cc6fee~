@@ -9,7 +9,6 @@
             [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.config :as config]
-            [frontend.utf8 :as utf8]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -21,14 +20,12 @@
                      *angle-bracket-caret-pos
                      *matched-block-commands
                      *show-block-commands]]
-            [frontend.format.block :as block]
             [medley.core :as medley]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.search :as search]
-            ["/frontend/utils" :as utils]
-            [frontend.extensions.html-parser :as html-parser]))
+            ["/frontend/utils" :as utils]))
 
 ;; TODO: refactor the state, it is already too complex.
 (defonce *last-edit-heading (atom nil))
@@ -58,11 +55,7 @@
     nil)
 
   (when restore?
-    (let [restore-slash-caret-pos? (if (= :editor/click-hidden-file-input
-                                          (ffirst command-output))
-                                     false
-                                     true)]
-      (commands/restore-state restore-slash-caret-pos?))))
+    (commands/restore-state restore?)))
 
 (def autopair-map
   {"[" "]"
@@ -121,8 +114,7 @@
                                       signed-url
                                       file-name)
                          format
-                         {:last-pattern (if drop? "" commands/slash)
-                          :restore? false})
+                         {:last-pattern (if drop? "" commands/slash)})
 
         (reset! *image-uploading-process 0))
       (fn [e]
@@ -130,6 +122,13 @@
                             (gobj/get e "total"))
                          100)]
           (reset! *image-uploading-process process)))))))
+
+(defn with-levels
+  [text format level]
+  (let [pattern (config/get-heading-pattern format)]
+    (str (apply str (repeat level pattern))
+         " "
+         (string/triml text))))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -142,7 +141,6 @@
       (ui/auto-complete
        (map first matched)
        {:on-chosen (fn [chosen]
-                     (reset! commands/*current-command chosen)
                      (let [restore-slash? (not (contains? #{"Page Reference"
                                                             "Link"
                                                             "Image Link"
@@ -181,7 +179,7 @@
     (let [value (gobj/get input "value")]
       (when (and (>= (count value) pos)
                  (>= pos 1))
-        (util/nth-safe value (- pos 1))))))
+        (nth value (- pos 1))))))
 
 (defn get-previous-input-chars
   [input length]
@@ -197,7 +195,7 @@
     (let [value (gobj/get input "value")]
       (when (and (>= (count value) (inc pos))
                  (>= pos 1))
-        (util/nth-safe value pos)))))
+        (nth value pos)))))
 
 (rum/defc page-search < rum/reactive
   [id format]
@@ -249,17 +247,11 @@
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search false)
                                (let [uuid-string (str (:heading/uuid chosen))]
-                                 ;; block reference
                                  (insert-command! id
                                                   (util/format "((%s))" uuid-string)
                                                   format
                                                   {:last-pattern (str "((" q)
                                                    :postfix-fn (fn [s] (util/replace-first "))" s ""))})
-                                 ;; block embed
-                                 (insert-command! id
-                                                  (str "@@embed: " uuid-string)
-                                                  format
-                                                  {:last-pattern "@@embed: "})
                                  ;; Save it so it'll be remembered when next time it got parsing
                                  (handler/set-heading-property! (:heading/uuid chosen)
                                                                 "CUSTOM_ID"
@@ -348,12 +340,11 @@
 ;; TODO: refactor
 (defn get-state
   [state]
-  (let [[content {:keys [on-hide heading heading-id heading-parent-id dummy? format sidebar?]} id config] (:rum/args state)
+  (let [[content {:keys [on-hide heading heading-id heading-parent-id dummy? format sidebar?]} id] (:rum/args state)
         node (gdom/getElement id)
         value (gobj/get node "value")
         pos (gobj/get node "selectionStart")]
-    {:config config
-     :on-hide on-hide
+    {:on-hide on-hide
      :content content
      :dummy? dummy?
      :sidebar? sidebar?
@@ -365,16 +356,6 @@
      :node node
      :value value
      :pos pos}))
-
-(defn- save-heading!
-  [{:keys [format heading id repo dummy?] :as state} value]
-  (when (or (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
-            dummy?)
-    (let [new-value (block/with-levels value format heading)]
-      (let [cache [(:heading/uuid heading) value]]
-        (when (not= @*last-edit-heading cache)
-          (handler/save-heading-if-changed! heading new-value)
-          (reset! *last-edit-heading cache))))))
 
 (defn on-up-down
   [state e up?]
@@ -389,18 +370,12 @@
             sibling-heading (f (gdom/getElement heading-parent-id))]
         (when sibling-heading
           (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-            (let [state (get-state state)
-                  content (:heading/content heading)
-                  value (:value state)]
-              (when (not= (string/trim (handler/remove-level-spaces content format))
-                          (string/trim value))
-                (save-heading! state (:value state))))
             (handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))
 
 (defn delete-heading!
-  [state repo e]
-  (let [{:keys [id heading-id heading-parent-id dummy? value pos format]} (get-state state)]
-    (when heading-id
+  [state e]
+  (let [{:keys [id heading-id heading-parent-id dummy? value  pos format]} (get-state state)]
+    (when (and heading-id (= value ""))
       (do
         (util/stop e)
         ;; delete heading, edit previous heading
@@ -410,18 +385,7 @@
           (handler/delete-heading! heading dummy?)
           (when sibling-heading
             (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-              (when repo
-                (when-let [heading (db/pull repo '[*] [:heading/uuid (uuid sibling-heading-id)])]
-                  (let [original-content (util/trim-safe (:heading/content heading))
-                        new-value (str original-content value)
-                        pos (max
-                             (if original-content
-                               (utf8/length (utf8/encode (handler/remove-level-spaces original-content format)))
-                               0)
-                             0)]
-                    (handler/save-heading-if-changed! heading new-value)
-                    (handler/edit-heading! (uuid sibling-heading-id)
-                                           pos format id)))))))))))
+              (handler/edit-heading! (uuid sibling-heading-id) :max format id))))))))
 
 (defn get-matched-commands
   [input]
@@ -432,7 +396,7 @@
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
-         (and (= \/ (util/nth-safe edit-content (dec pos)))
+         (and (= \/ (nth edit-content (dec pos)))
               (commands/commands-map))
          (and last-command
               (commands/get-matched-commands last-command)))))
@@ -449,7 +413,7 @@
                              pos)]
       (when (> pos 0)
         (or
-         (and (= \< (util/nth-safe edit-content (dec pos)))
+         (and (= \< (nth edit-content (dec pos)))
               (commands/block-commands-map))
          (and last-command
               (commands/get-matched-commands
@@ -461,25 +425,22 @@
 (defn in-auto-complete?
   [input]
   (or (seq (get-matched-commands input))
-      @*show-block-commands
-      (state/get-editor-show-input)
       (state/get-editor-show-page-search)
       (state/get-editor-show-block-search)
       (state/get-editor-show-date-picker)))
 
 (rum/defc absolute-modal < rum/reactive
   [cp set-default-width? pos]
-  (when pos
-    (let [{:keys [top left pos]} (rum/react pos)]
-      [:div.absolute.rounded-md.shadow-lg
-       {:style (merge
-                {:top (+ top 24)
-                 :left left
-                 :max-height 600
-                 :z-index 11}
-                (if set-default-width?
-                  {:width 400}))}
-       cp])))
+  (let [{:keys [top left pos]} (rum/react pos)]
+    [:div.absolute.rounded-md.shadow-lg
+     {:style (merge
+              {:top (+ top 24)
+               :left left
+               :max-height 600
+               :z-index 11}
+              (if set-default-width?
+                {:width 400}))}
+     cp]))
 
 (rum/defc transition-cp
   [cp set-default-width? pos]
@@ -491,7 +452,7 @@
 
 (rum/defc image-uploader < rum/reactive
   [id format]
-  [:div.image-uploader
+  [:<>
    [:input
     {:id "upload-file"
      :type "file"
@@ -506,7 +467,6 @@
          [:span.lds-dual-ring.mr-2]
          [:span {:style {:margin-top 2}}
           (util/format "Uploading %s%" (util/format "%2d" processing))]]
-        false
         *slash-caret-pos)))])
 
 (defn- clear-when-saved!
@@ -525,15 +485,11 @@
                     heading)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     ;; save the current heading and insert a new heading
-    (let [value-with-levels (block/with-levels value format heading)]
-      (handler/insert-new-heading!
-       heading
-       value-with-levels
-       true
-       (fn [[_first-heading last-heading _new-heading-content]]
-         (let [last-id (:heading/uuid last-heading)]
-           (handler/edit-heading! last-id :max format id)
-           (clear-when-saved!)))))))
+    (let [value-with-levels (with-levels value format (:heading/level heading))
+          [_first-heading last-heading _new-heading-content] (handler/insert-new-heading! heading value-with-levels)
+          last-id (:heading/uuid last-heading)]
+      (handler/edit-heading! last-id :max format id)
+      (clear-when-saved!))))
 
 (defn get-previous-heading-level
   [current-id]
@@ -560,64 +516,41 @@
                                 (dec level)
                                 level)
                       :else level)
-        new-value (block/with-levels value format (assoc heading :heading/level final-level))]
+        new-value (with-levels value format final-level)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     (handler/save-heading-if-changed! heading new-value)))
 
-(defn- append-paste-doc!
-  [format event]
-  (let [[html text] (util/get-clipboard-as-html event)]
-    (when-not (string/starts-with? (string/trim text) "http")
-      (let [doc-text (html-parser/parse format html)]
-        (when-not (string/blank? doc-text)
-          (util/stop event)
-          (state/append-current-edit-content! doc-text))))))
+(defn- get-input
+  [state]
+  (when-let [input-id (last (:rum/args state))]
+    (gdom/getElement input-id)))
+
+(defn edit-heading?
+  [state]
+  (some? (:heading (nth (:rum/args state) 1))))
 
 (rum/defc box < rum/reactive
+  ;; TODO: Overwritten by user's configuration
+  (mixins/keyboard-mixin "alt+enter" insert-new-heading! edit-heading? get-input)
   (mixins/event-mixin
    (fn [state]
-     (let [{:keys [id format heading]} (get-state state)
+     (let [{:keys [id format]} (get-state state)
            input-id id
-           input (gdom/getElement input-id)
-           repo (:heading/repo heading)]
-       (.addEventListener input "paste" (fn [event]
-                                          (append-paste-doc! format event)))
-       (mixins/hide-when-esc-or-outside
-        state
-        :on-hide
-        (fn [state e event]
-          (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
-            (when on-hide
-              (on-hide value event))
-            (save-heading! (get-state state) value)
-            (state/set-edit-input-id! nil))))
+           input (gdom/getElement input-id)]
+       (let [{:keys [format heading]} (get-state state)]
+         (mixins/hide-when-esc-or-outside
+          state
+          :on-hide
+          (fn [state e event]
+            (let [{:keys [on-hide format value heading id]} (get-state state)
+                  current-edit-id (state/get-edit-input-id)]
+              (state/set-edit-input-id! nil)
+              (when on-hide (on-hide value event))
+              (when (and heading (= current-edit-id id))
+                (state/set-edit-heading! nil))))))
        (mixins/on-key-down
         state
         {
-         ;; enter
-         13 (fn [state e]
-              (let [{:keys [heading config]} (get-state state)]
-                (when (and heading
-                           (not (:ref? config))
-                           (not (:custom-query? config))) ; in reference section
-                  (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
-                                   (string/lower-case (string/trim v)))
-                        insert? (cond
-                                  config/mobile?
-                                  true
-
-                                  (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                                  false
-
-                                  (gobj/get e "shiftKey")
-                                  false
-
-                                  :else
-                                  true)]
-                    (when (and
-                           insert?
-                           (not (in-auto-complete? input)))
-                      (insert-new-heading! state))))))
          ;; up
          38 (fn [state e]
               (when-not (in-auto-complete? input)
@@ -632,24 +565,19 @@
                    current-pos (:pos (util/get-caret-pos node))
                    value (gobj/get node "value")
                    deleted (and (> current-pos 0)
-                                (util/nth-safe value (dec current-pos)))
-                   selected-start (gobj/get node "selectionStart")
-                   selected-end (gobj/get node "selectionEnd")]
+                                (nth value (dec current-pos)))]
                (cond
-                 (not= selected-start selected-end)
-                 nil
-
-                 (zero? current-pos)
-                 (delete-heading! state repo e)
+                 (= value "")
+                 (delete-heading! state e)
 
                  (and (> current-pos 1)
-                      (= (util/nth-safe value (dec current-pos)) commands/slash))
+                      (= (nth value (dec current-pos)) commands/slash))
                  (do
                    (reset! *slash-caret-pos nil)
                    (reset! *show-commands false))
 
                  (and (> current-pos 1)
-                      (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
+                      (= (nth value (dec current-pos)) commands/angle-bracket))
                  (do
                    (reset! *angle-bracket-caret-pos nil)
                    (reset! *show-block-commands false))
@@ -661,7 +589,7 @@
                    (set (keys autopair-map))
                    deleted)
                   (>= (count value) (inc current-pos))
-                  (= (util/nth-safe value current-pos)
+                  (= (nth value current-pos)
                      (get autopair-map deleted)))
 
                  (do
@@ -707,7 +635,18 @@
           ))
        (mixins/on-key-up
         state
-        {}
+        {
+         ;; /
+         191 (fn [state e]
+               (when-let [matched-commands (seq (get-matched-commands input))]
+                 (reset! *slash-caret-pos (util/get-caret-pos input))
+                 (reset! *show-commands true)))
+
+         ;; <
+         188 (fn [state e]
+               (when-let [matched-commands (seq (get-matched-block-commands input))]
+                 (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
+                 (reset! *show-block-commands true)))}
         (fn [e key-code]
           (let [format (:format (get-state state))]
             (when (not= key-code 191)     ; not /
@@ -744,12 +683,10 @@
                     (reset! *matched-block-commands matched-block-commands))
                   (reset! *show-block-commands false))))))))))
   {:did-mount (fn [state]
-                (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)
-                      content (if heading
-                                (handler/remove-level-spaces content format)
-                                content)]
-                  (state/set-edit-content! id (string/trim (or content "")) true)
-                  (handler/restore-cursor-pos! id content dummy?)
+                (let [[content {:keys [heading format dummy? format]} id] (:rum/args state)]
+                  (let [content (handler/remove-level-spaces content format)]
+                    (state/set-edit-content! id (string/trim (or content "")) true)
+                    (handler/restore-cursor-pos! id content dummy?))
                   (when-let [input (gdom/getElement id)]
                     (dnd/subscribe!
                      input
@@ -758,87 +695,81 @@
                               (upload-image id files format *image-uploading? true))})))
                 state)
    :will-unmount (fn [state]
-                   (let [{:keys [id value format heading repo dummy?]} (get-state state)]
+                   (let [{:keys [id value format heading]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
-                       (.removeEventListener input "paste" (fn [event]
-                                                          (append-paste-doc! format event)))
                        (dnd/unsubscribe!
                         input
-                        :upload-images)
-                       )
+                        :upload-images))
+                     (when (and heading (not= value ""))
+                       (let [new-value (with-levels
+                                         value
+                                         format
+                                         (:heading/level heading))]
+                         (let [cache [(:heading/uuid heading) value]]
+                           (when (not= @*last-edit-heading cache)
+                             (handler/save-heading-if-changed! heading new-value)
+                             (reset! *last-edit-heading cache)))))
                      (clear-when-saved!))
                    state)}
   [content {:keys [on-hide dummy? node format heading]
             :or {dummy? false}
-            :as option} id config]
-  [:div.editor {:style {:position "relative"
-                        :display "flex"
-                        :flex "1 1 0%"}
-                :class (if heading "heading-editor" "non-heading-editor")}
-   (ui/textarea
-    {:id id
-     :default-value (string/triml content)
-     :on-change (fn [e]
-                  (let [value (util/evalue e)
-                        current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                    (state/set-edit-content! id value false)
-                    (let [input (gdom/getElement id)
-                          last-input-char (util/nth-safe value (dec current-pos))]
-                      (case last-input-char
-                        "/"
-                        (when-let [matched-commands (seq (get-matched-commands input))]
-                          (reset! *slash-caret-pos (util/get-caret-pos input))
-                          (reset! *show-commands true))
-                        "<"
-                        (when-let [matched-commands (seq (get-matched-block-commands input))]
-                          (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                          (reset! *show-block-commands true))
-                        nil))))
-     :auto-focus true})
-   (transition-cp
-    (commands id format)
-    true
-    *slash-caret-pos)
+            :as option} id]
+  (let [edit-content (state/sub [:editor/content id])]
+    [:div.editor {:style {:position "relative"
+                          :display "flex"
+                          :flex "1 1 0%"}
+                  :class (if heading "heading-editor" "non-heading-editor")}
+     (ui/textarea
+      {:id id
+       :value (or edit-content content)
+       :on-change (fn [e]
+                    (let [value (util/evalue e)]
+                      (state/set-edit-content! id value false)))
+       :auto-focus true})
+     (transition-cp
+      (commands id format)
+      true
+      *slash-caret-pos)
 
-   (transition-cp
-    (block-commands id format)
-    true
-    *angle-bracket-caret-pos)
+     (transition-cp
+      (block-commands id format)
+      true
+      *angle-bracket-caret-pos)
 
-   (transition-cp
-    (page-search id format)
-    true
-    *slash-caret-pos)
+     (transition-cp
+      (page-search id format)
+      true
+      *slash-caret-pos)
 
-   (transition-cp
-    (block-search id format)
-    true
-    *slash-caret-pos)
+     (transition-cp
+      (block-search id format)
+      true
+      *slash-caret-pos)
 
-   (transition-cp
-    (date-picker id format)
-    false
-    *slash-caret-pos)
+     (transition-cp
+      (date-picker id format)
+      false
+      *slash-caret-pos)
 
-   (transition-cp
-    (input id
-           (fn [{:keys [link label]} pos]
-             (if (and (string/blank? link)
-                      (string/blank? label))
-               nil
-               (insert-command! id
-                                (util/format "[[%s][%s]]"
-                                             (or link "")
-                                             (or label ""))
-                                format
-                                {:last-pattern (str commands/slash "link")}))
-             (state/set-editor-show-input nil)
-             (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-               (when-let [input (gdom/getElement id)]
-                 (.focus input)
-                 (util/move-cursor-to input saved-cursor)))))
-    true
-    *slash-caret-pos)
+     (transition-cp
+      (input id
+             (fn [{:keys [link label]} pos]
+               (if (and (string/blank? link)
+                        (string/blank? label))
+                 nil
+                 (insert-command! id
+                                  (util/format "[[%s][%s]]"
+                                               (or link "")
+                                               (or label ""))
+                                  format
+                                  {:last-pattern (str commands/slash "link")}))
+               (state/set-editor-show-input nil)
+               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+                 (when-let [input (gdom/getElement id)]
+                   (.focus input)
+                   (util/move-cursor-to input saved-cursor)))))
+      true
+      *slash-caret-pos)
 
-   (when format
-     (image-uploader id format))])
+     (when format
+       (image-uploader id format))]))

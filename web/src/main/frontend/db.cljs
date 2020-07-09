@@ -174,8 +174,8 @@
    :heading/body {}
    :heading/pre-heading? {}
    :heading/collapsed? {}
-   ;; :heading/children {:db/valueType   :db.type/ref
-   ;;                    :db/cardinality :db.cardinality/many}})
+   :heading/children {:db/cardinality :db.cardinality/many}
+
    :tag/name       {:db/unique :db.unique/identity}})
 
 ;; transit serialization
@@ -632,14 +632,14 @@
   [repo]
   (when-let [conn (get-conn repo)]
     (->> (q repo [:files] {:use-cache? false}
-          '[:find ?path ?modified-at
-            :where
-            [?file :file/path ?path]
-            [(get-else $ ?file :file/last-modified-at 0) ?modified-at]])
-        (react)
-        (seq)
-        (sort-by last)
-        (reverse))))
+           '[:find ?path ?modified-at
+             :where
+             [?file :file/path ?path]
+             [(get-else $ ?file :file/last-modified-at 0) ?modified-at]])
+         (react)
+         (seq)
+         (sort-by last)
+         (reverse))))
 
 (defn get-files-headings
   [repo-url paths]
@@ -1607,6 +1607,54 @@
       [?h :heading/content ?content]
       [?h :heading/collapsed? true]]
     (get-conn)))
+
+;; recursive query might be slow, need benchmarks
+;; Could replace this with a recursive call, see below
+;; (defn get-heading-parents
+;;   [repo heading-id depth]
+;;   (when-let [conn (get-conn repo)]
+;;     (let [ids (->> (d/q
+;;                      '[:find ?e2
+;;                        :in $ ?e1 %
+;;                        :where (parent ?e2 ?e1)]
+;;                      conn
+;;                      heading-id
+;;                      ;; recursive rules
+;;                      '[[(parent ?e2 ?e1)
+;;                         [?e2 :heading/children ?e1]]
+;;                        [(parent ?e2 ?e1)
+;;                         [?t :heading/children ?e1]
+;;                         [?t :heading/uuid ?tid]
+;;                         (parent ?e2 ?tid)]])
+;;                    (seq-flatten))]
+;;       (when (seq ids)
+;;         (d/pull-many conn '[:heading/uuid :heading/title] ids)))))
+
+(defn get-heading-parent
+  [conn heading-id]
+  (-> (d/q
+        '[:find ?e2-id ?e2-content
+          :in $ ?e1 %
+          :where
+          [?e2 :heading/children ?e1]
+          [?e2 :heading/content ?e2-content]
+          [?e2 :heading/uuid ?e2-id]]
+        conn
+        heading-id)
+      first))
+
+;; non recursive query
+(defn get-heading-parents
+  [repo heading-id depth]
+  (when-let [conn (get-conn repo)]
+    (loop [heading-id heading-id
+           parents (list)
+           d 1]
+      (if (> d depth)
+        parents
+        (if-let [parent (get-heading-parent conn heading-id)]
+          (recur (first parent) (conj parents parent) (inc d))
+          parents)))))
 
 (comment
 

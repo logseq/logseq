@@ -120,14 +120,7 @@
 (defn safe-headings
   [headings]
   (map (fn [heading]
-         (let [id (or (when-let [custom-id (get-in heading [:properties "CUSTOM_ID"])]
-                        (when (util/uuid-string? custom-id)
-                          (uuid custom-id)))
-                      ;; editing old headings
-                      (:heading/uuid heading)
-                      (d/squuid))
-               heading (util/remove-nils heading)
-               heading (assoc heading :heading/uuid id)]
+         (let [heading (util/remove-nils heading)]
            (medley/map-keys
             (fn [k] (keyword "heading" k))
             heading)))
@@ -147,7 +140,9 @@
                blocks (reverse blocks)
                timestamps {}
                properties {}
-               last-pos last-pos]
+               last-pos last-pos
+               last-level 1000
+               children []]
           (if (seq blocks)
             (let [block (first blocks)
                   level (:level (second block))]
@@ -155,28 +150,47 @@
                 (paragraph-timestamp-block? block)
                 (let [timestamp (extract-timestamp block)
                       timestamps' (conj timestamps timestamp)]
-                  (recur headings heading-body (rest blocks) timestamps' properties last-pos))
+                  (recur headings heading-body (rest blocks) timestamps' properties last-pos last-level children))
 
                 (properties-block? block)
                 (let [properties (extract-properties block)]
-                  (recur headings heading-body (rest blocks) timestamps properties last-pos))
+                  (recur headings heading-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
+                (let [id (or (when-let [custom-id (get-in properties [:properties "CUSTOM_ID"])]
+                               (when (util/uuid-string? custom-id)
+                                 (uuid custom-id)))
+                             (d/squuid))
+                      heading (second block)
+                      level (:level heading)
+                      [children current-heading-children]
+                      (cond
+                        (>= level last-level)
+                        [(conj children [id level])
+                         #{}]
 
-                (let [heading (-> (assoc (second block)
+                        (< level last-level)
+                        (let [current-heading-children (set (->> (filter #(< level (second %)) children)
+                                                                 (map first)))
+                              others (vec (remove #(< level (second %)) children))]
+                          [(conj others [id level])
+                           current-heading-children]))
+                      heading (-> (assoc heading
+                                         :uuid id
                                          :body (vec (reverse heading-body))
                                          :timestamps timestamps
                                          :properties (:properties properties)
-                                         :properties-meta (dissoc properties :properties))
+                                         :properties-meta (dissoc properties :properties)
+                                         :children (or current-heading-children []))
                                   (assoc-in [:meta :end-pos] last-pos))
                       heading (collect-heading-tags heading)
                       heading (with-refs heading)
                       last-pos' (get-in heading [:meta :pos])]
-                  (recur (conj headings heading) [] (rest blocks) {} {} last-pos'))
+                  (recur (conj headings heading) [] (rest blocks) {} {} last-pos' (:level heading) children))
 
                 :else
                 (let [heading-body' (conj heading-body block)]
-                  (recur headings heading-body' (rest blocks) timestamps properties last-pos))))
+                  (recur headings heading-body' (rest blocks) timestamps properties last-pos last-level children))))
             (-> (reverse headings)
                 safe-headings)))]
     (let [first-heading (first headings)
@@ -201,31 +215,6 @@
           (select-keys first-heading [:heading/file :heading/format :heading/page]))
          headings)
         headings))))
-
-;; marker: DOING | IN-PROGRESS > TODO > WAITING | WAIT > DONE > CANCELED | CANCELLED
-;; priority: A > B > C
-(defn sort-tasks
-  [headings]
-  (let [markers ["NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAITING" "WAIT" "DONE" "CANCELED" "CANCELLED"]
-        markers (zipmap markers (reverse (range 1 (count markers))))
-        priorities ["A" "B" "C" "D" "E" "F" "G"]
-        priorities (zipmap priorities (reverse (range 1 (count priorities))))]
-    (sort (fn [t1 t2]
-            (let [m1 (get markers (:heading/marker t1) 0)
-                  m2 (get markers (:heading/marker t2) 0)
-                  p1 (get priorities (:heading/priority t1) 0)
-                  p2 (get priorities (:heading/priority t2) 0)]
-              (cond
-                (and (= m1 m2)
-                     (= p1 p2))
-                (compare (str (:heading/title t1))
-                         (str (:heading/title t2)))
-
-                (= m1 m2)
-                (> p1 p2)
-                :else
-                (> m1 m2))))
-          headings)))
 
 (defn parse-heading
   [{:heading/keys [uuid content meta file page] :as heading} format]
@@ -281,3 +270,27 @@
   (let [pattern (config/get-heading-pattern format)
         prefix (if pre-heading? "" (str (apply str (repeat level pattern)) " "))]
     (str prefix (string/triml text))))
+
+(comment
+  (defn sort-tasks
+    [headings]
+    (let [markers ["NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAITING" "WAIT" "DONE" "CANCELED" "CANCELLED"]
+          markers (zipmap markers (reverse (range 1 (count markers))))
+          priorities ["A" "B" "C" "D" "E" "F" "G"]
+          priorities (zipmap priorities (reverse (range 1 (count priorities))))]
+      (sort (fn [t1 t2]
+              (let [m1 (get markers (:heading/marker t1) 0)
+                    m2 (get markers (:heading/marker t2) 0)
+                    p1 (get priorities (:heading/priority t1) 0)
+                    p2 (get priorities (:heading/priority t2) 0)]
+                (cond
+                  (and (= m1 m2)
+                       (= p1 p2))
+                  (compare (str (:heading/title t1))
+                           (str (:heading/title t2)))
+
+                  (= m1 m2)
+                  (> p1 p2)
+                  :else
+                  (> m1 m2))))
+            headings))))

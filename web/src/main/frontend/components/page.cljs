@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.components.hiccup :as hiccup]
+            [frontend.components.heading :as heading]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.extensions.graph-2d :as graph-2d]
@@ -174,6 +175,9 @@
                 (for [item alias]
                   [:a {:href (str "/page/" (util/encode-str item))}
                    [:span.mr-1 (util/capitalize-all item)]])])))
+
+         (when heading?
+           (heading/heading-parents repo heading-id format))
 
          ;; headings
          (rum/with-key

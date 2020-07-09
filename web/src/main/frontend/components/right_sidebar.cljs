@@ -34,9 +34,13 @@
       (heading-cp repo idx (:heading block-data))]]
 
     :heading
-    ["Block"
-     [:div.ml-2
-      (heading-cp repo idx block-data)]]
+    (let [page-name (:page/name
+                     (db/entity repo
+                                (get-in block-data [:heading/page :db/id])))]
+      [[:a {:href (str "/page/" (util/url-encode page-name))}
+        (util/capitalize-all page-name)]
+      [:div.ml-2
+       (heading-cp repo idx block-data)]])
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
