@@ -89,13 +89,9 @@
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)
-        token (state/sub :encrypt/token)
-        db-restoring? (state/sub :db/restoring?)]
+        token (state/sub :encrypt/token)]
     [:div.max-w-7xl.mx-auto
      (cond
-       db-restoring?
-       (widgets/loading "Loading")
-
        (and (not logged?) (seq latest-journals))
        (journal/journals latest-journals)
 
@@ -160,7 +156,8 @@
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))
         global-graph-pages? (= :graph (get-in route-match [:data :name]))
-        logged? (:name me)]
+        logged? (:name me)
+        db-restoring? (state/sub :db/restoring?)]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
                        (handler/unhighlight-heading!))}
@@ -294,9 +291,18 @@
                      {:position "relative"
                       :max-width 700
                       :margin-bottom 200})}
-           (if global-graph-pages?
+           (cond
+             db-restoring?
+             [:div.mt-20
+              [:div.ls-center
+               (widgets/loading "Loading")]]
+
+             global-graph-pages?
              main-content
-             [:div.m-6 main-content])]]]
+
+             :else
+             [:div.m-6
+              main-content])]]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:title "Logseq"

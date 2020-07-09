@@ -53,7 +53,7 @@
   (let [loading? (rum/react *loading?)]
     [:div.reveal {:style {:height 400}}
      (when loading?
-       (widgets/loading "Loading"))
+       [:div.ls-center (widgets/loading "")])
      [:div.slides
       (for [[idx sections] (medley/indexed sections)]
         (if (> (count sections) 1)       ; nested

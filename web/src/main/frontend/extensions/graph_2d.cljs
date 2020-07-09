@@ -30,8 +30,6 @@
                 state)}
   [opts]
   (let [loading? (rum/react *loading?)]
-    (if loading?
-      (widgets/loading "Loading")
-      (when @graph-component
-        (@graph-component
-         opts)))))
+    (when @graph-component
+      (@graph-component
+       opts))))

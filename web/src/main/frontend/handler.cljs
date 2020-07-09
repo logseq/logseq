@@ -1340,10 +1340,10 @@
                 [{:url config/local-repo}])]
     (when me (set-state-kv! :me me))
     (state/set-db-restoring! true)
+    (render)
     (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! restore-config!))
         (p/then
          (fn []
-           (render)
            (if (and (not logged?)
                       (not (seq (db/get-files config/local-repo))))
              (setup-local-repo-if-not-exists!)
