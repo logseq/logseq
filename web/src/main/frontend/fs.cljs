@@ -4,11 +4,13 @@
 
 (defn mkdir
   [dir]
-  (js/window.pfs.mkdir dir))
+  (when (and dir js/window.pfs)
+    (js/window.pfs.mkdir dir)))
 
 (defn readdir
   [dir]
-  (js/window.pfs.readdir dir))
+  (when (and dir js/window.pfs)
+    (js/window.pfs.readdir dir)))
 
 (defn unlink
   [path opts]

@@ -446,7 +446,7 @@
                         (fn [repo]
                           (reset! *current-file (get-last-file repo))))]])]))
 
-(rum/defcs draw < rum/reactive
+(rum/defcs draw-2 < rum/reactive
   {:init (fn [state]
            (let [repo (storage/get :git/current-repo)]
              (when-let [last-title (get-last-title repo)]
@@ -493,3 +493,11 @@
           (rum/with-key (draw-inner option) key)))
       [:div.center
        [:span.lds-dual-ring.ml-3]])))
+
+(rum/defc draw < rum/reactive
+  [option]
+  (let [db-restoring? (state/sub :db/restoring?)]
+    (if db-restoring?
+      [:div.ls-center
+       (widgets/loading "Loading")]
+      (draw-2 option))))
