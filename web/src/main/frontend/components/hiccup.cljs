@@ -338,7 +338,7 @@
             {:__html s}}]
 
     ;; String to hiccup
-    ["Export_Snippet" "hiccup" s]
+    ["Inline_Hiccup" s]
     (reader/read-string s)
 
     ["Export_Snippet" "embed" s]
@@ -997,8 +997,9 @@
       ["Export" "html" options content]
       [:div.export_html {:dangerouslySetInnerHTML
                          {:__html content}}]
-      ["Export" "hiccup" options content]
+      ["Hiccup" content]
       (reader/read-string content)
+
       ["Export" "latex" options content]
       (latex/latex (str (dc/squuid)) content true false)
 
