@@ -727,10 +727,9 @@
           _ (doseq [k ks]
               (when-not (string/ends-with? k (str "/" config/local-repo))
                 (.removeItem db/localforage-instance k)))
-          dirs (fs/readdir "/")]
-    (doseq [dir dirs]
-      (when (not= dir config/local-repo)
-        (fs/rmdir (str "/" dir))))))
+          dirs (fs/readdir "/")
+          dirs (remove #(= % config/local-repo) dirs)]
+    (p/all (doall (map #(fs/rmdir (str "/" %)) dirs)))))
 
 ;; clear localforage
 (defn sign-out!
@@ -746,7 +745,7 @@
               (js/console.dir e)))
    (p/finally (fn []
                 (set! (.-href js/window.location)
-                      "/logout")))))
+                       "/logout")))))
 
 (defn set-format-js-loading!
   [format value]
