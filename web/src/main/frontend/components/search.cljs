@@ -119,7 +119,7 @@
          {:style {:padding-left "2rem"}
           :placeholder "Search"
           :auto-complete "off"
-          :value search-q
+          :default-value ""
           :on-change (fn [e]
                        (let [value (util/evalue e)]
                          (if (string/blank? value)
