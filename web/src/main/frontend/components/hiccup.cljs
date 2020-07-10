@@ -571,8 +571,8 @@
   (ui/tooltip
    [:ul
     (for [p (remove #(= priority %) ["A" "B" "C"])]
-      [:a.mr-2.text-base {:on-click (fn [] (handler/set-priority heading p))}
-       p])]
+      [:a.mr-2.text-base.tooltip-priority {:priority p
+                                           :on-click (fn [] (handler/set-priority heading p))}])]
    [:a.opacity-50.hover:opacity-100
     {:class "priority"
      :href (str "/page/" priority)
