@@ -101,7 +101,7 @@
 
           "(("
           (do
-            (commands/handle-step [:editor/search-block])
+            (commands/handle-step [:editor/search-block :reference])
             (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
           nil))
@@ -136,6 +136,7 @@
   (when (and (util/react *show-commands)
              @*slash-caret-pos
              (not (state/sub :editor/show-page-search?))
+             (not (state/sub :editor/show-block-search?))
              (not (state/sub :editor/show-input))
              (not (state/sub :editor/show-date-picker?)))
     (let [matched (util/react *matched-commands)]
