@@ -576,7 +576,7 @@
                         (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
                           (marker-switch t marker)))
         marker-cp (when-not pre-heading?
-                    (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
+                    (if (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
                       [:span {:class (str "task-status " (string/lower-case marker))
                               :style {:margin-right 3.5}}
                        (string/upper-case marker)]))
