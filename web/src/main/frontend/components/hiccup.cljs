@@ -543,23 +543,23 @@
                           (handler/set-marker heading marker)))]
     (case marker
      "NOW"
-     [:a.marker-switch.m-switch-now
+     [:a.marker-switch
       {:title "Change from NOW to LATER"
        :on-click (set-marker-fn "LATER")}
       [:span "N"]]
      "LATER"
-     [:a.marker-switch.m-switch-later
+     [:a.marker-switch
       {:title "Change from LATER to NOW"
        :on-click (set-marker-fn "NOW")}
       "L"]
 
      "TODO"
-     [:a.marker-switch.m-switch-doing
+     [:a.marker-switch
       {:title "Change from TODO to DOING"
        :on-click (set-marker-fn "DOING")}
       "T"]
      "DOING"
-     [:a.marker-switch.m-switch-todo
+     [:a.marker-switch
       {:title "Change from DOING to TODO"
        :on-click (set-marker-fn "TODO")}
       "D"]
