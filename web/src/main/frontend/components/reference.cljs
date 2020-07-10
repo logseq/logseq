@@ -13,13 +13,16 @@
             [frontend.db :as db]))
 
 (rum/defc references < rum/reactive
-  [page-name marker?]
+  [page-name marker? priority?]
   (when page-name
     (let [heading? (util/uuid-string? page-name)
           heading-id (and heading? (uuid page-name))
           page-name (string/lower-case page-name)
           encoded-page-name (util/url-encode page-name)
           ref-headings (cond
+                         priority?
+                         (db/get-headings-by-priority (state/get-current-repo) page-name)
+
                          marker?
                          (db/get-marker-headings (state/get-current-repo) page-name)
                          heading-id

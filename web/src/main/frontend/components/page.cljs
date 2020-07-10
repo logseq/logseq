@@ -93,6 +93,7 @@
         encoded-page-name (get-page-name state)
         page-name (string/lower-case (util/url-decode encoded-page-name))
         marker-page? (db/marker-page? page-name)
+        priority-page? (contains? #{"a" "b" "c"} page-name)
         format (db/get-page-format page-name)
         journal? (db/journal-page? page-name)
         heading? (util/uuid-string? page-name)
@@ -100,12 +101,19 @@
         sidebar? (:sidebar? option)
         raw-page-headings (get-headings repo page-name heading?)]
     (cond
+      priority-page?
+      [:div
+       [:h1.title
+        (str "Priority \"" (string/upper-case page-name) "\"")]
+       [:div.ml-2
+        (reference/references page-name false true)]]
+
       marker-page?
       [:div
        [:h1.title
         (string/upper-case page-name)]
        [:div.ml-2
-        (reference/references page-name true)]]
+        (reference/references page-name true false)]]
 
       :else
       (let [page (if heading?

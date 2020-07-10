@@ -1059,6 +1059,13 @@
   (let [new-content (string/replace-first content marker new-marker)]
     (save-heading-if-changed! heading new-content)))
 
+(defn set-priority
+  [{:heading/keys [uuid marker priority content meta file dummy?] :as heading} new-priority]
+  (let [new-content (string/replace-first content
+                                          (util/format "[#%s]" priority)
+                                          (util/format "[#%s]" new-priority))]
+    (save-heading-if-changed! heading new-content)))
+
 (defn delete-heading!
   [{:heading/keys [uuid meta content file repo] :as heading} dummy?]
   (when-not dummy?

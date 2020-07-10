@@ -63,14 +63,16 @@
                           score))))))
 
 (defn fuzzy-search
-  [data query & {:keys [limit] :or {limit 20}}]
+  [data query & {:keys [limit extract-fn]
+                 :or {limit 20}}]
   (let [query (string/lower-case query)]
     (->> (take limit
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
-                                (for [s data]
-                                  {:data s
-                                   :score (score query (.toLowerCase s))}))))
+                                (for [item data]
+                                  (let [s (if extract-fn (extract-fn item) item)]
+                                    {:data item
+                                     :score (score query (.toLowerCase s))})))))
          (map :data))))
 
 (defn search

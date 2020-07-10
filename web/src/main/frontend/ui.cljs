@@ -257,3 +257,10 @@
     [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
      {:class (if on? "translate-x-5" "translate-x-0")
       :aria-hidden "true"}]]])
+
+(rum/defc tooltip
+  [label children]
+  [:div.Tooltip {:style {:display "inline"}}
+   [:div {:class "Tooltip__label"}
+    label]
+   children])

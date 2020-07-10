@@ -2,6 +2,7 @@
   (:require [frontend.util :as util]
             [frontend.date :as date]
             [frontend.state :as state]
+            [frontend.search :as search]
             [clojure.string :as string]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
@@ -31,6 +32,12 @@
    [:editor/set-marker marker]
    [:editor/move-cursor-to-end]])
 
+(defn ->priority
+  [priority]
+  [[:editor/clear-current-slash]
+   [:editor/set-priority priority]
+   [:editor/move-cursor-to-end]])
+
 (defn ->inline
   [type]
   (let [template (util/format "@@%s: @@"
@@ -53,6 +60,9 @@
      ["NOW" (->marker "NOW")]
      ["DONE" (->marker "DONE")]
      ["TODO" (->marker "TODO")]
+     ["A" (->priority "A")]
+     ["B" (->priority "B")]
+     ["C" (->priority "C")]
      ;; ["DOING" (->marker "DOING")]
      ;; ["WAIT" (->marker "WAIT")]
      ;; ["WAITING" (->marker "WAITING")]
@@ -208,10 +218,9 @@
   ([text]
    (get-matched-commands text (commands-map)))
   ([text commands]
-   (filter
-    (fn [[command _]]
-      (string/index-of (string/lower-case command) (string/lower-case text)))
-    commands)))
+   (search/fuzzy-search commands text
+                        :extract-fn first
+                        :limit 50)))
 
 (defn get-command-input
   [edit-content]
@@ -256,7 +265,7 @@
                                                  (count prefix))))))
 
 (def marker-pattern
-  #"(NOW|LATER|TODO|DOING|DONE|WAIT|WAITING|CANCELED|STARTED|IN-PROGRESS)?\s?")
+  #"^(NOW|LATER|TODO|DOING|DONE|WAIT|WAITING|CANCELED|STARTED|IN-PROGRESS)?\s?")
 
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]
@@ -275,6 +284,29 @@
                            (string/replace-first (subs edit-content pos)
                                                  marker-pattern
                                                  (str marker " ")))]
+        (state/set-edit-content! input-id new-value true)))))
+
+(defmethod handle-step :editor/set-priority [[_ priority] format]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [edit-content (gobj/get current-input "value")
+            slash-pos (:pos @*slash-caret-pos)
+            priority-pattern  #"\[#[A|B|C]{1}\]"
+            prefix (subs edit-content 0 (dec slash-pos))
+            pos (count (re-find priority-pattern prefix))
+            new-priority (util/format "[#%s]" priority)
+            new-value (cond
+                        (re-find priority-pattern prefix)
+                        (str (subs edit-content 0 pos)
+                             (string/replace-first (subs edit-content pos)
+                                                   priority-pattern
+                                                   new-priority))
+                        (re-find marker-pattern edit-content)
+                        (string/replace-first edit-content marker-pattern
+                                              (fn [marker] (str marker new-priority " ")))
+
+                        :else
+                        (str new-priority " " (string/triml edit-content)))]
         (state/set-edit-content! input-id new-value true)))))
 
 (defmethod handle-step :editor/search-page [[_]]

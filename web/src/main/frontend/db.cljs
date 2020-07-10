@@ -1714,9 +1714,21 @@
 
   (recompute-heading-children (state/get-current-repo)
                               heading
-                              headings)
+                              headings))
 
-  )
+(defn get-headings-by-priority
+  [repo priority]
+  (let [priority (string/capitalize priority)]
+    (when (get-conn repo)
+     (->> (q repo [:priority/tags priority] {}
+            '[:find (pull ?h [*])
+              :in $ ?priority
+              :where
+              [?h :heading/priority ?priority]]
+            priority)
+          react
+          seq-flatten
+          group-by-page))))
 
 (comment
 

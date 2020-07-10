@@ -542,28 +542,42 @@
                           (util/stop e)
                           (handler/set-marker heading marker)))]
     (case marker
-     "NOW"
-     [:a.marker-switch
-      {:title "Change from NOW to LATER"
-       :on-click (set-marker-fn "LATER")}
-      [:span "N"]]
-     "LATER"
-     [:a.marker-switch
-      {:title "Change from LATER to NOW"
-       :on-click (set-marker-fn "NOW")}
-      "L"]
+      "NOW"
+      [:a.marker-switch
+       {:title "Change from NOW to LATER"
+        :on-click (set-marker-fn "LATER")}
+       [:span "N"]]
+      "LATER"
+      [:a.marker-switch
+       {:title "Change from LATER to NOW"
+        :on-click (set-marker-fn "NOW")}
+       "L"]
 
-     "TODO"
-     [:a.marker-switch
-      {:title "Change from TODO to DOING"
-       :on-click (set-marker-fn "DOING")}
-      "T"]
-     "DOING"
-     [:a.marker-switch
-      {:title "Change from DOING to TODO"
-       :on-click (set-marker-fn "TODO")}
-      "D"]
-     nil)))
+      "TODO"
+      [:a.marker-switch
+       {:title "Change from TODO to DOING"
+        :on-click (set-marker-fn "DOING")}
+       "T"]
+      "DOING"
+      [:a.marker-switch
+       {:title "Change from DOING to TODO"
+        :on-click (set-marker-fn "TODO")}
+       "D"]
+      nil)))
+
+(rum/defcs priority-cp <
+  (rum/local false ::hover?)
+  [state heading priority]
+  (ui/tooltip
+   [:ul
+    (for [p (remove #(= priority %) ["A" "B" "C"])]
+      [:a.mr-2.text-base {:on-click (fn [] (handler/set-priority heading p))}
+       p])]
+   [:a.opacity-50.hover:opacity-100
+    {:class "priority"
+     :href (str "/page/" priority)
+     :style {:margin-right 3.5}}
+    (util/format "[#%s]" (str priority))]))
 
 (defn build-heading-part
   [config {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading?]
@@ -582,9 +596,7 @@
                        (string/upper-case marker)]))
         priority (when-not pre-heading?
                    (if priority
-                     [:span {:class "priority"
-                             :style {:margin-right 3.5}}
-                      (util/format "[#%s]" (str priority))]))
+                     (priority-cp t priority)))
         tags (when-not pre-heading?
                (when-not (empty? tags)
                  (->elem
