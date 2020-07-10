@@ -516,25 +516,54 @@
 (declare heading-container)
 (rum/defc heading-checkbox
   [heading class]
-  (case (:heading/marker heading)
-    (list "NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING")
-    (ui/checkbox {:class class
-                  :style {:margin-top -3
-                          :margin-right 6}
-                  :on-change (fn [_e]
-                               ;; FIXME: Log timestamp
-                               (handler/check heading))})
+  (let [marker (:heading/marker heading)
+        [class checked?] (cond
+                           (nil? marker)
+                           nil
+                           (contains? #{"NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING"} marker)
+                           [class false]
+                           (= "DONE" marker)
+                           [(str class " checked") true])]
+    (when class
+      (ui/checkbox {:class class
+                    :style {:margin-top -1
+                            :margin-right 6}
+                    :checked checked?
+                    :on-change (fn [_e]
+                                 ;; FIXME: Log timestamp
+                                 (if checked?
+                                   (handler/uncheck heading)
+                                   (handler/check heading)))}))))
 
-    "DONE"
-    (ui/checkbox {:checked true
-                  :class (str class " checked")
-                  :style {:margin-top -3
-                          :margin-right 6}
-                  :on-change (fn [_e]
-                               ;; FIXME: Log timestamp
-                               (handler/uncheck heading))})
+(rum/defc marker-switch
+  [heading marker]
+  (let [set-marker-fn (fn [marker]
+                        (fn [e]
+                          (util/stop e)
+                          (handler/set-marker heading marker)))]
+    (case marker
+     "NOW"
+     [:a.marker-switch.m-switch-now
+      {:title "Change from NOW to LATER"
+       :on-click (set-marker-fn "LATER")}
+      [:span "N"]]
+     "LATER"
+     [:a.marker-switch.m-switch-later
+      {:title "Change from LATER to NOW"
+       :on-click (set-marker-fn "NOW")}
+      "L"]
 
-    nil))
+     "TODO"
+     [:a.marker-switch.m-switch-doing
+      {:title "Change from TODO to DOING"
+       :on-click (set-marker-fn "DOING")}
+      "T"]
+     "DOING"
+     [:a.marker-switch.m-switch-todo
+      {:title "Change from DOING to TODO"
+       :on-click (set-marker-fn "TODO")}
+      "D"]
+     nil)))
 
 (defn build-heading-part
   [config {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading?]
@@ -543,6 +572,9 @@
         slide? (boolean (:slide? config))
         checkbox (when-not pre-heading?
                    (heading-checkbox t (str "mr-1 cursor")))
+        marker-switch (when-not pre-heading?
+                        (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
+                          (marker-switch t marker)))
         marker-cp (when-not pre-heading?
                     (if (contains? #{"DOING" "IN-PROGRESS" "WAIT" "WAITING"} marker)
                       [:span {:class (str "task-status " (string/lower-case marker))
@@ -578,6 +610,7 @@
                 (remove-nils
                  (concat
                   [(when-not slide? checkbox)
+                   (when-not slide? marker-switch)
                    marker-cp
                    priority]
                   (map-inline config title)
@@ -1097,7 +1130,7 @@
   [headings config]
   (let [headings (map #(dissoc % :heading/children) headings)]
     [:div.headings-container {:style {:margin-left -24}}
-    (build-headings headings config)]))
+     (build-headings headings config)]))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

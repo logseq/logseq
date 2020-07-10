@@ -922,7 +922,6 @@
                                                                                    :end-pos new-end-pos})
                                                                                 (block/parse-heading (assoc heading :heading/content value) format))
                                    headings (db/recompute-heading-children repo heading headings)
-                                   _ (prn {:headings headings})
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
                                    modified-time (let [modified-at (tc/to-long (t/now))]
                                                    [[:db/add (:db/id page) :page/last-modified-at modified-at]
@@ -1053,6 +1052,11 @@
 (defn uncheck
   [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
   (let [new-content (string/replace-first content "DONE" "NOW")]
+    (save-heading-if-changed! heading new-content)))
+
+(defn set-marker
+  [{:heading/keys [uuid marker content meta file dummy?] :as heading} new-marker]
+  (let [new-content (string/replace-first content marker new-marker)]
     (save-heading-if-changed! heading new-content)))
 
 (defn delete-heading!

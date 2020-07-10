@@ -166,10 +166,6 @@
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (prn {:id id
-          :new-value new-value
-          :value value
-          :new-pos new-pos})
     (state/set-heading-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input
                          (if (or backward-pos forward-pos)
