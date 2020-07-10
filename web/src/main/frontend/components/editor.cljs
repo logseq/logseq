@@ -234,6 +234,9 @@
   (search/search q 5))
 
 (rum/defc block-search < rum/reactive
+  {:will-unmount (fn [state]
+                   (reset! commands/*block-type nil)
+                   state)}
   [id format]
   (when (state/sub :editor/show-block-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -248,19 +251,26 @@
                                (get-matched-blocks q))
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search false)
-                               (let [uuid-string (str (:heading/uuid chosen))]
+                               (let [uuid-string (str (:heading/uuid chosen))
+                                     block-type @commands/*block-type]
+                                 (prn "block-type: " block-type)
                                  ;; block reference
-                                 (insert-command! id
-                                                  (util/format "((%s))" uuid-string)
-                                                  format
-                                                  {:last-pattern (str "((" q)
-                                                   :postfix-fn (fn [s] (util/replace-first "))" s ""))})
-                                 ;; block embed
-                                 (insert-command! id
-                                                  (str "@@embed: " uuid-string)
-                                                  format
-                                                  {:last-pattern "@@embed: "})
-                                 ;; Save it so it'll be remembered when next time it got parsing
+                                 (case block-type
+                                   :embed
+                                   ;; block embed
+                                   (insert-command! id
+                                                    (str "@@embed: " uuid-string)
+                                                    format
+                                                    {:last-pattern "@@embed: "})
+                                   :reference
+                                   (insert-command! id
+                                                   (util/format "((%s))" uuid-string)
+                                                   format
+                                                   {:last-pattern (str "((" q)
+                                                    :postfix-fn (fn [s] (util/replace-first "))" s ""))})
+                                   nil)
+
+                                 ;; Save it so it'll be parsed correctly in the future
                                  (handler/set-heading-property! (:heading/uuid chosen)
                                                                 "CUSTOM_ID"
                                                                 uuid-string)))

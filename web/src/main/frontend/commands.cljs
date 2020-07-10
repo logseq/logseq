@@ -13,6 +13,7 @@
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
 (defonce *current-command (atom nil))
+(defonce *block-type (atom nil))
 
 (defn ->page-reference
   [page]
@@ -41,7 +42,7 @@
   []
   (conj
    (->inline "embed")
-   [:editor/search-block]))
+   [:editor/search-block :embed]))
 
 ;; Credits to roamresearch.com
 (defn commands-map
@@ -65,7 +66,7 @@
      ["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
                         [:editor/search-page]]]
      ["Block Reference" [[:editor/input "(())" {:backward-pos 2}]
-                         [:editor/search-block]]]
+                         [:editor/search-block :reference]]]
      ["Block Embed" (embed-block)]
      ["Link" link-steps]
      ;; same as link
@@ -145,8 +146,7 @@
   (reset! *matched-commands (commands-map))
   (reset! *angle-bracket-caret-pos nil)
   (reset! *show-block-commands false)
-  (reset! *matched-block-commands (block-commands-map))
-  )
+  (reset! *matched-block-commands (block-commands-map)))
 
 (defn insert!
   [id value
@@ -284,7 +284,8 @@
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
 
-(defmethod handle-step :editor/search-block [[_]]
+(defmethod handle-step :editor/search-block [[_ type]]
+  (reset! *block-type type)
   (state/set-editor-show-block-search true))
 
 (defmethod handle-step :editor/show-input [[_ option]]
