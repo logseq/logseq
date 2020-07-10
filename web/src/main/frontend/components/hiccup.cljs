@@ -1074,7 +1074,8 @@
 (defn build-slide-sections
   [headings config]
   (when (seq headings)
-    (let [first-heading-level (:heading/level (first headings))
+    (let [headings (map #(dissoc % :heading/children) headings)
+          first-heading-level (:heading/level (first headings))
           sections (reduce
                     (fn [acc heading]
                       (let [heading (dissoc heading :heading/meta)

@@ -123,7 +123,7 @@
                     journal?
                     (= page-name (string/lower-case (date/journal-name))))]
         [:div.flex-1.page
-         (when-not sidebar?
+         (when (and (not sidebar?) (not heading?))
            [:div.flex.flex-row.justify-between.items-center {:key "page-title"}
             [:div.flex.flex-row
              [:a {:on-click (fn [e]
@@ -137,29 +137,47 @@
                                    {:page page}))
                                 (handler/show-right-sidebar)))}
               [:h1.title
-               (util/capitalize-all page-name)]]
+               (util/capitalize-all page-name)]]]
 
-             [:a.ml-1.text-gray-500.hover:text-gray-700
+            [:div.flex-row.flex.items-center {:style {:margin-bottom "1.5rem"}}
+             [:a.mr-3.opacity-50.hover:opacity-100
               {:class (if starred? "text-gray-800")
                :on-click (fn []
                            ;; TODO: save to config file
                            (handler/star-page! page-name starred?))}
               (if starred?
                 (svg/star-solid "stroke-current")
-                (svg/star-outline "stroke-current h-5 w-5"))]]
+                (svg/star-outline "stroke-current h-5 w-5"))]
 
-            [:a {:title "Presentation mode (Powered by Reveal.js)"
-                 :on-click (fn []
-                             (state/sidebar-add-block!
-                              repo
-                              (:db/id page)
-                              :page-presentation
-                              {:page page
-                               :journal? journal?})
-                             (handler/show-right-sidebar))}
-             svg/slideshow]])
+             [:a.opacity-50.hover:opacity-100 {:title "Presentation mode (Powered by Reveal.js)"
+                  :style {:margin-right 1}
+                  :on-click (fn []
+                              (state/sidebar-add-block!
+                               repo
+                               (:db/id page)
+                               :page-presentation
+                               {:page page
+                                :journal? journal?})
+                              (handler/show-right-sidebar))}
+              svg/slideshow]
 
-         (when (and file-path (not sidebar?) (not journal?))
+             (let [links (->>
+                          [(when file
+                             {:title "Re-index the page"
+                              :options {:on-click (fn []
+                                                    (handler/re-index-file! file))}})]
+                          (remove nil?))]
+               (when (seq links)
+                 (ui/dropdown-with-links
+                  (fn [{:keys [toggle-fn]}]
+                    [:a {:title "More options"
+                         :on-click toggle-fn}
+                     (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100")})])
+                  links
+                  {:modal-class (util/hiccup->class
+                                 "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.w-48.dropdown-overflow-auto")})))]])
+
+         (when (and file-path (not sidebar?) (not journal?) (not heading?))
            [:div.text-sm.ml-1.mb-2 {:key "page-file"}
             "File: "
             [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
@@ -176,7 +194,7 @@
                   [:a {:href (str "/page/" (util/encode-str item))}
                    [:span.mr-1 (util/capitalize-all item)]])])))
 
-         (when heading?
+         (when (and heading? (not sidebar?))
            (heading/heading-parents repo heading-id format))
 
          ;; headings

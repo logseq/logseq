@@ -4,6 +4,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
             [frontend.components.hiccup :as hiccup]
+            [frontend.components.heading :as heading]
             [frontend.extensions.graph-2d :as graph-2d]
             [frontend.handler :as handler]
             [frontend.state :as state]
@@ -30,15 +31,18 @@
   (case block-type
     :heading-ref
     ["Block reference"
-     [:div.ml-2
-      (heading-cp repo idx (:heading block-data))]]
+     (let [heading (:heading block-data)
+           heading-id (:heading/uuid heading)
+           format (:heading/format heading)]
+       [[:div.ml-2.mt-1
+         (heading/heading-parents repo heading-id format)]
+        [:div.ml-2
+         (heading-cp repo idx heading)]])]
 
     :heading
-    (let [page-name (:page/name
-                     (db/entity repo
-                                (get-in block-data [:heading/page :db/id])))]
-      [[:a {:href (str "/page/" (util/url-encode page-name))}
-        (util/capitalize-all page-name)]
+    (let [heading-id (:heading/uuid block-data)
+          format (:heading/format block-data)]
+      [(heading/heading-parents repo heading-id format)
       [:div.ml-2
        (heading-cp repo idx block-data)]])
 

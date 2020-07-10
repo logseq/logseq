@@ -826,20 +826,22 @@
      react)))
 
 (defn get-page-headings
-  [repo-url page]
-  (let [page (string/lower-case page)
-        page-id (:db/id (entity repo-url [:page/name page]))
-        db (get-conn repo-url)]
-    (some->
-     (q repo-url [:page/headings page-id]
-       {:use-cache? true
-        :transform-fn #(page-headings-transform repo-url %)
-        :query-fn (fn [db]
-                    (let [datoms (d/datoms db :avet :heading/page page-id)
-                          heading-eids (mapv :e datoms)]
-                      (d/pull-many db '[*] heading-eids)))}
-       nil)
-     react)))
+  ([page]
+   (get-page-headings (state/get-current-repo) page))
+  ([repo-url page]
+   (let [page (string/lower-case page)
+         page-id (:db/id (entity repo-url [:page/name page]))
+         db (get-conn repo-url)]
+     (some->
+      (q repo-url [:page/headings page-id]
+        {:use-cache? true
+         :transform-fn #(page-headings-transform repo-url %)
+         :query-fn (fn [db]
+                     (let [datoms (d/datoms db :avet :heading/page page-id)
+                           heading-eids (mapv :e datoms)]
+                       (d/pull-many db '[*] heading-eids)))}
+        nil)
+      react))))
 
 (comment
 
@@ -1631,17 +1633,18 @@
 ;;         (d/pull-many conn '[:heading/uuid :heading/title] ids)))))
 
 (defn get-heading-parent
-  [conn heading-id]
-  (-> (d/q
-        '[:find ?e2-id ?e2-content
-          :in $ ?e1 %
-          :where
-          [?e2 :heading/children ?e1]
-          [?e2 :heading/content ?e2-content]
-          [?e2 :heading/uuid ?e2-id]]
-        conn
-        heading-id)
-      first))
+  [repo heading-id]
+  (when-let [conn (get-conn repo)]
+    (-> (d/q
+          '[:find ?e2-id ?e2-content
+            :in $ ?e1 %
+            :where
+            [?e2 :heading/children ?e1]
+            [?e2 :heading/content ?e2-content]
+            [?e2 :heading/uuid ?e2-id]]
+          conn
+          heading-id)
+        first)))
 
 ;; non recursive query
 (defn get-heading-parents
@@ -1652,9 +1655,68 @@
            d 1]
       (if (> d depth)
         parents
-        (if-let [parent (get-heading-parent conn heading-id)]
+        (if-let [parent (get-heading-parent repo heading-id)]
           (recur (first parent) (conj parents parent) (inc d))
           parents)))))
+
+(defn get-heading-page
+  [repo heading-id]
+  (when-let [heading (entity repo [:heading/uuid heading-id])]
+    (entity repo (:db/id (:heading/page heading)))))
+
+(defn recompute-heading-children
+  [repo heading headings]
+  (if (> (count headings) 1)
+    (when-let [conn (get-conn repo)]
+      (let [top-parent (first (get-heading-parent repo (:heading/uuid heading)))
+            level (:heading/level heading)
+            result (loop [result []
+                            headings (reverse headings)
+                            last-level 1000
+                            children []]
+                       (if-let [h (first headings)]
+                         (let [id (:heading/uuid h)
+                               level (:heading/level h)
+                               [children current-heading-children]
+                               (cond
+                                 (>= level last-level)
+                                 [(conj children [id level])
+                                  #{}]
+
+                                 (< level last-level)
+                                 (let [current-heading-children (set (->> (filter #(< level (second %)) children)
+                                                                          (map first)))
+                                       others (vec (remove #(< level (second %)) children))]
+                                   [(conj others [id level])
+                                    current-heading-children]))
+                               h (assoc h :heading/children current-heading-children)]
+                           (recur (conj result h)
+                                  (rest headings)
+                                  level
+                                  children))
+                         (reverse result)))
+            result (vec result)]
+        (if top-parent
+          (let [top-parent-children (filter (fn [h] (= (:heading/level h) level)) headings)
+                top-parent-children-ids (map :heading/uuid top-parent-children)]
+            (if (= 1 (count top-parent-children)) ; no children count changed
+              result
+              (let [old-top-parent-children (:heading/children (entity repo [:heading/uuid top-parent]))
+                    new-children (set/union (set old-top-parent-children) (set top-parent-children-ids))]
+                (conj result {:heading/uuid top-parent
+                              :heading/children new-children}))))
+          result)))
+    headings))
+
+(comment
+  (def heading {:heading/properties-meta [], :heading/meta {:pos 885, :end-pos 894}, :heading/format :markdown, :heading/title [["Plain" "world"]], :heading/level 2, :heading/marker "nil", :heading/file {:db/id 1}, :heading/page {:db/id 10}, :db/id 195, :heading/body [], :heading/content "## world\n### cool\n### nice\n#### nested nice\n", :heading/uuid #uuid "5f07d298-16ff-4036-b625-d5885db5f7ea", :heading/properties [], :heading/anchor "world"})
+  (def headings (:headings (block/parse-heading heading :markdown)))
+
+  (recompute-heading-children (state/get-current-repo)
+                              heading
+                              headings)
+
+  )
 
 (comment
 

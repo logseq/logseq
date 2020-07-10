@@ -350,7 +350,7 @@
               :on-click toggle-fn
               :style {:width "2rem"
                       :height "2rem"}}
-             svg/vertical-dots])
+             (svg/vertical-dots nil)])
           links
           {:modal-class (util/hiccup->class
                          "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.bg-white.w-48.dropdown-overflow-auto")})))

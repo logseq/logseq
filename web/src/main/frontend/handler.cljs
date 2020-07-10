@@ -921,6 +921,8 @@
                                                                                    :start-pos 0
                                                                                    :end-pos new-end-pos})
                                                                                 (block/parse-heading (assoc heading :heading/content value) format))
+                                   headings (db/recompute-heading-children repo heading headings)
+                                   _ (prn {:headings headings})
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
                                    modified-time (let [modified-at (tc/to-long (t/now))]
                                                    [[:db/add (:db/id page) :page/last-modified-at modified-at]
@@ -991,6 +993,7 @@
                                {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
                                first-heading (first headings)
                                last-heading (last headings)
+                               headings (db/recompute-heading-children repo heading headings)
                                after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
                            (profile
                             "Insert heading"
@@ -1535,6 +1538,16 @@
              (db/transact! repo tx-data)))))
      (p/catch (fn [err]
                 (prn "error: " err))))))
+
+(defn re-index-file!
+  [file]
+  (prn "re-index-file!" file)
+  (when-let [repo (state/get-current-repo)]
+    (let [path (:file/path file)
+          content (db/get-file path)]
+      (prn {:path path
+            :content content})
+      (alter-file repo path content {:re-render-root? true}))))
 
 (comment
   (defn debug-latest-commits

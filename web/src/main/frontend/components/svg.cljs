@@ -52,20 +52,24 @@
      :d "M10 19L3 12M3 12L10 5M3 12L21 12"}]])
 
 (defn- hero-icon
-  [d]
-  [:svg
-   {:fill "none", :view-box "0 0 24 24", :height "24", :width "24"}
-   [:path
-    {:stroke-linejoin "round"
-     :stroke-linecap "round"
-     :stroke-width "2"
-     :stroke "currentColor"
-     :d d}]])
+  ([d]
+   (hero-icon d {}))
+  ([d options]
+   [:svg (merge {:fill "currentColor", :view-box "0 0 24 24", :height "24", :width "24"}
+                options)
+    [:path
+     {:stroke-linejoin "round"
+      :stroke-linecap "round"
+      :stroke-width "2"
+      :stroke "currentColor"
+      :d d}]]))
 
 (def close (hero-icon "M6 18L18 6M6 6L18 18"))
 (def plus (hero-icon "M12 4v16m8-8H4"))
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
-(def vertical-dots (hero-icon "M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"))
+(defn vertical-dots
+  [options]
+  (hero-icon "M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" options))
 
 (def save
   [:svg
@@ -227,7 +231,7 @@
     [:path
      {:d
       "M1050 2180 c0 -5 -6 -10 -13 -10 -6 0 -23 -28 -36 -62 -40 -104 -440 -895 -441 -870 0 13 -6 22 -16 22 -14 0 -16 -8 -10 -47 6 -45 2 -55 -140 -331 -80 -157 -166 -321 -191 -365 -26 -46 -46 -96 -48 -117 -3 -36 1 -41 88 -116 50 -44 114 -99 142 -124 126 -115 185 -161 201 -158 24 4 395 393 396 415 0 10 -18 162 -40 338 -38 300 -74 651 -70 685 3 21 -12 127 -23 173 -9 36 -5 51 67 215 42 97 97 216 121 264 23 48 43 90 43 93 0 3 -7 5 -15 5 -8 0 -15 -4 -15 -10z m-230 -747 c11 -70 33 -238 49 -373 31 -248 67 -523 77 -593 6 -35 2 -42 -63 -114 -113 -127 -233 -252 -274 -284 l-38 -30 -195 182 c-180 166 -195 183 -184 203 6 11 57 104 113 206 56 102 130 238 164 302 35 65 67 121 73 124 7 4 9 -97 7 -312 -4 -321 -3 -322 29 -315 4 0 7 162 7 359 l0 358 105 210 c58 116 106 209 108 208 2 -1 12 -60 22 -131z"}]]]
-)
+  )
 
 (rum/defc logo
   []
