@@ -122,7 +122,7 @@
   (set-state-kv! :repo/loading-files? true)
   (p/let [files (git/list-files repo-url)
           files (bean/->clj files)
-          config-content (load-file repo-url config/config-file)
+          config-content (load-file repo-url (str config/app-name "/" config/config-file))
           files (if config-content
                   (let [config (db/reset-config! repo-url config-content)]
                     (if-let [patterns (seq (:hidden config))]
@@ -532,7 +532,7 @@
    (fs/write-file (util/get-repo-dir repo) path content)
    (fn [_]
      (git-add repo path)
-     (when (= path config/config-file)
+     (when (= path (str config/app-name "/" config/config-file))
        (restore-config! repo))
      (when re-render-root? (re-render-root!))
      (history/add-history!

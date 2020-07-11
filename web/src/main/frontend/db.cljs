@@ -1399,7 +1399,7 @@
 
 (defn reset-config!
   ([repo-url]
-   (reset-config! repo-url (get-file repo-url config/config-file)))
+   (reset-config! repo-url (get-file repo-url (str config/app-name "/" config/config-file))))
   ([repo-url content]
    (when content
      (let [config (reader/read-string content)]

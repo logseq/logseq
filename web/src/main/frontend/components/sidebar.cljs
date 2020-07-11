@@ -246,7 +246,7 @@
                   :options {:href "/all-files"}})
                (when current-repo
                  {:title "Settings"
-                  :options {:href (str "/file/" (util/encode-str config/config-file))}})
+                  :options {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}})
                {:title "Bug report"
                 :options {:href "https://github.com/logseq/logseq/issues/new"
                           :target "_blank"}}
