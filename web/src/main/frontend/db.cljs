@@ -532,7 +532,6 @@
       (let [tx-result (d/transact! (get-conn) (vec tx-data))
             db (:db-after tx-result)
             handler-keys (get-handler-keys handler-opts)]
-        (reset! debug-db db)
         (doseq [handler-key handler-keys]
           (let [handler-key (vec (cons repo-url handler-key))]
             (when-let [cache (get @query-state handler-key)]
