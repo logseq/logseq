@@ -1,24 +1,27 @@
 (ns frontend.config
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defonce dev? ^boolean goog.DEBUG)
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
 
+(def app-name "logseq")
 (def website
   (if dev?
     "http://localhost:3000"
-    "https://logseq.com"))
+    (util/format "https://%s.com" app-name)))
 
 (def api
   (if dev?
     "http://localhost:3000/api/v1/"
     (str website "/api/v1/")))
 
-(def asset-domain "https://asset.logseq.com")
+(def asset-domain (util/format "https://asset.%s.com"
+                               app-name))
 
 (defn asset-uri
   [path]
@@ -69,12 +72,10 @@
 (defonce hiccup-support-formats
   #{:org :markdown})
 
-(def config-file "logseq.edn")
-
 (def mobile?
   (re-find #"Mobi" js/navigator.userAgent))
 
-;; Format
+;; TODO: move to format ns
 
 (defn get-heading-pattern
   [format]
@@ -164,6 +165,7 @@
    (let [heading-pattern (get-heading-pattern format)]
      (apply str (repeat n heading-pattern)))))
 
+(defonce default-pages-directory "pages")
 (defonce default-draw-directory "draws")
 
 (defn draw?
@@ -171,3 +173,5 @@
   (string/starts-with? path default-draw-directory))
 
 (defonce local-repo "local")
+(def config-file "config.edn")
+(def metadata-file "metadata.edn")

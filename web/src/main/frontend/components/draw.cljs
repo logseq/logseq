@@ -249,11 +249,11 @@
                   (util/stop e))
       :placeholder "Untitled"
       :auto-complete "off"
+      :default-value (or (and current-title (string/capitalize current-title)) "")
       :on-change (fn [e]
                    (when-let [value (util/evalue e)]
                      (set-last-title! value)
-                     (reset! *current-title value)))
-      :value (or (and current-title (string/capitalize current-title)) "")}]))
+                     (reset! *current-title value)))}]))
 
 (rum/defc files-search < rum/reactive
   [state]

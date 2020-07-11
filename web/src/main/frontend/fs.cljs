@@ -1,6 +1,7 @@
 (ns frontend.fs
   (:require [frontend.util :as util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.string :as string]))
 
 (defn mkdir
   [dir]
@@ -42,12 +43,15 @@
   ([dir path]
    (create-if-not-exists dir path ""))
   ([dir path initial-content]
-   (util/p-handle
-    (stat dir path)
-    (fn [_stat] true)
-    (fn [error]
-      (write-file dir path initial-content)
-      false))))
+   (let [path (if (string/starts-with? path "/")
+                path
+                (str "/" path))]
+     (util/p-handle
+     (stat dir path)
+     (fn [_stat] true)
+     (fn [error]
+       (write-file dir path initial-content)
+       false)))))
 
 (defn file-exists?
   [dir path]

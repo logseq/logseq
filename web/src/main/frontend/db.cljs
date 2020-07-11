@@ -19,6 +19,7 @@
             [promesa.core :as p]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
             [clojure.walk :as walk]
             [frontend.util :as util :refer-macros [profile]]
             [goog.array :as garray]))
@@ -130,6 +131,7 @@
 
    ;; file
    :file/path       {:db/unique :db.unique/identity}
+   :file/created-at {}
    :file/last-modified-at {}
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
@@ -142,7 +144,9 @@
                      :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
+   :page/created-at {}
    :page/last-modified-at {}
+   :page/contributors {}
    :page/journal?   {}
    :page/journal-day {}
 
@@ -169,8 +173,12 @@
    :heading/meta {}
    :heading/properties {}
    :heading/properties-meta {}
+
+   ;; TODO: To make this really working, every heading needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
+   ;; Any suggestions?
    :heading/created-at {}
    :heading/last-modified-at {}
+
    :heading/body {}
    :heading/pre-heading? {}
    :heading/collapsed? {}
@@ -510,8 +518,6 @@
          react
          key))))
 
-(defonce debug-db (atom nil))
-
 (defn transact-react!
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
                      :or {files-db? false}}]
@@ -584,6 +590,30 @@
            [?page :page/name ?page-name]])
        (react)
        (map first)))
+
+(defn get-sync-metadata
+  [repo]
+  (if-let [conn (get-conn repo)]
+    (let [pages (->>
+                 (d/q
+                   '[:find (pull ?page [:page/name :page/created-at
+                                        :page/last-modified-at :page/contributors])
+                     :where [?page :page/name]]
+                   conn)
+                 (seq-flatten)
+                 (sort-by :page/last-modified-at)
+                 (reverse))
+          files (->>
+                 (d/q
+                   '[:find (pull ?file [:file/path :file/created-at
+                                        :file/last-modified-at])
+                     :where [?file :file/path]]
+                   conn)
+                 (seq-flatten)
+                 (sort-by :file/last-modified-at)
+                 (reverse))]
+      (concat pages files))
+    {:tx-data []}))
 
 (defn get-pages-with-modified-at
   [repo]
@@ -965,11 +995,11 @@
                       (:pos meta)))))
 
 ;; file
-
 (defn extract-pages-and-headings
   [format ast directives file content utf8-content journal? pages-fn]
   (try
-    (let [headings (block/extract-headings ast (utf8/length utf8-content) utf8-content)
+    (let [now (tc/to-long (t/now))
+          headings (block/extract-headings ast (utf8/length utf8-content) utf8-content)
           pages (pages-fn headings ast)
           ref-pages (atom #{})
           headings (doall
@@ -1002,14 +1032,19 @@
                                        (->> (if page-file?
                                               other-alias
                                               (conj other-alias (string/lower-case file)))
-                                            (remove nil?)))]
+                                            (remove nil?)))
+                          journal-date-long (if journal?
+                                              (date/journal-title->long (string/capitalize page)))]
                       (cond->
-                          {:page/name page
-                           :page/file [:file/path file]
-                           :page/journal? journal?
-                           :page/journal-day (if journal?
-                                               (date/journal-title->int (string/capitalize page))
-                                               0)}
+                        (util/remove-nils
+                         {:page/name page
+                          :page/file [:file/path file]
+                          :page/journal? journal?
+                          :page/journal-day (if journal?
+                                              (date/journal-title->int (string/capitalize page))
+                                              0)
+                          :page/created-at journal-date-long
+                          :page/last-modified-at journal-date-long})
                         (seq directives)
                         (assoc :page/directives directives)
 
@@ -1112,16 +1147,23 @@
 ;; TODO: compare headings
 (defn reset-file!
   [repo-url file content]
-  (set-file-content! repo-url file content)
-  (let [format (format/get-format file)
-        utf8-content (utf8/encode content)
-        file-content [{:file/path file}]
-        tx (if (contains? config/hiccup-support-formats format)
-             (let [delete-headings (delete-file-headings! repo-url file)
-                   headings-pages (extract-headings-pages file content utf8-content)]
-               (concat file-content delete-headings headings-pages))
-             file-content)]
-    (transact! repo-url tx)))
+  (let [new? (nil? (entity [:file/path file]))]
+    (set-file-content! repo-url file content)
+    (let [format (format/get-format file)
+          utf8-content (utf8/encode content)
+          file-content [{:file/path file}]
+          tx (if (contains? config/hiccup-support-formats format)
+               (let [delete-headings (delete-file-headings! repo-url file)
+                     headings-pages (extract-headings-pages file content utf8-content)]
+                 (concat file-content delete-headings headings-pages))
+               file-content)
+          tx (concat tx [(let [t (tc/to-long (t/now))]
+                           (cond->
+                              {:file/path file
+                               :file/last-modified-at t}
+                            new?
+                            (assoc :file/created-at t)))])]
+      (transact! repo-url tx))))
 
 (defn get-current-journal-path
   []
@@ -1249,7 +1291,7 @@
         [?p :page/journal? ?with-journal]
         [?heading :heading/page ?p]
         [(get-else $ ?heading :heading/ref-pages 100000000) ?ref-page]
-        [(get-else $ ?ref-page :page/name "logseq") ?ref-page-name]]
+        [(get-else $ ?ref-page :page/name "Start") ?ref-page-name]]
       conn
       with-journal?)))
 
@@ -1671,30 +1713,30 @@
       (let [top-parent (first (get-heading-parent repo (:heading/uuid heading)))
             level (:heading/level heading)
             result (loop [result []
-                            headings (reverse headings)
-                            last-level 1000
-                            children []]
-                       (if-let [h (first headings)]
-                         (let [id (:heading/uuid h)
-                               level (:heading/level h)
-                               [children current-heading-children]
-                               (cond
-                                 (>= level last-level)
-                                 [(conj children [id level])
-                                  #{}]
+                          headings (reverse headings)
+                          last-level 1000
+                          children []]
+                     (if-let [h (first headings)]
+                       (let [id (:heading/uuid h)
+                             level (:heading/level h)
+                             [children current-heading-children]
+                             (cond
+                               (>= level last-level)
+                               [(conj children [id level])
+                                #{}]
 
-                                 (< level last-level)
-                                 (let [current-heading-children (set (->> (filter #(< level (second %)) children)
-                                                                          (map first)))
-                                       others (vec (remove #(< level (second %)) children))]
-                                   [(conj others [id level])
-                                    current-heading-children]))
-                               h (assoc h :heading/children current-heading-children)]
-                           (recur (conj result h)
-                                  (rest headings)
-                                  level
-                                  children))
-                         (reverse result)))
+                               (< level last-level)
+                               (let [current-heading-children (set (->> (filter #(< level (second %)) children)
+                                                                        (map first)))
+                                     others (vec (remove #(< level (second %)) children))]
+                                 [(conj others [id level])
+                                  current-heading-children]))
+                             h (assoc h :heading/children current-heading-children)]
+                         (recur (conj result h)
+                                (rest headings)
+                                level
+                                children))
+                       (reverse result)))
             result (vec result)]
         (if top-parent
           (let [top-parent-children (filter (fn [h] (= (:heading/level h) level)) headings)
@@ -1720,15 +1762,15 @@
   [repo priority]
   (let [priority (string/capitalize priority)]
     (when (get-conn repo)
-     (->> (q repo [:priority/tags priority] {}
-            '[:find (pull ?h [*])
-              :in $ ?priority
-              :where
-              [?h :heading/priority ?priority]]
-            priority)
-          react
-          seq-flatten
-          group-by-page))))
+      (->> (q repo [:priority/headings priority] {}
+             '[:find (pull ?h [*])
+               :in $ ?priority
+               :where
+               [?h :heading/priority ?priority]]
+             priority)
+           react
+           seq-flatten
+           group-by-page))))
 
 (comment
 

@@ -156,6 +156,20 @@
                     first)]
       (util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") time)))))
 
+(defn journal-title->long
+  [journal-title]
+  (when-not (string/blank? journal-title)
+    (let [time (->> (map
+                      (fn [formatter]
+                        (try
+                          (tf/parse (tf/formatter formatter) journal-title)
+                          (catch js/Error _e
+                            nil)))
+                      (journal-title-formatters))
+                    (filter some?)
+                    first)]
+      (tc/to-long time))))
+
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))

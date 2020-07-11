@@ -37,7 +37,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.history :as history]
-            ["/frontend/utils" :as utils])
+            ["/frontend/utils" :as utils]
+            [cljs.reader :as reader])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -192,16 +193,25 @@
         (re-render-root!)
         (git-add repo-url path)))))
 
+;; And metadata file
 (defn create-config-file-if-not-exists
   [repo-url]
   (let [repo-dir (util/get-repo-dir repo-url)
-        path config/config-file
-        file-path (str "/" path)
-        default-content "{}"]
-    (p/let [file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
-      (when-not file-exists?
-        (db/reset-file! repo-url path default-content)
-        (git-add repo-url path)))))
+        app-dir config/app-name
+        dir (str repo-dir "/" app-dir)]
+    (p/let [_ (-> (fs/mkdir dir)
+                  (p/catch (fn [_e])))]
+      (let [default-content "{}"]
+        (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
+          (let [path (str app-dir "/" config/config-file)]
+            (when-not file-exists?
+              (db/reset-file! repo-url path default-content)
+              (git-add repo-url path))))
+        (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
+          (let [path (str app-dir "/" config/metadata-file)]
+            (when-not file-exists?
+              (db/reset-file! repo-url path "{:tx-data []}")
+              (git-add repo-url path))))))))
 
 (defn load-files-contents!
   [repo-url files ok-handler]
@@ -232,6 +242,11 @@
                                                   (db/extract-all-headings-pages parsed-files)
                                                   [])]
                              (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
+                             (let [metadata-file (str config/app-name "/" config/metadata-file)]
+                               (when (contains? (set files) metadata-file)
+                                 (when-let [content (get contents metadata-file)]
+                                   (let [{:keys [tx-data]} (reader/read-string content)]
+                                     (db/transact! repo-url tx-data)))))
                              (set-state-kv! :repo/importing-to-db? false)
                              (when re-render?
                                (re-render-root!))))))]
@@ -638,6 +653,22 @@
                (= repo-url "https://github.com/tiensonqin/empty-repo")))
     (periodically-push-tasks repo-url)))
 
+(defn persist-repo-metadata!
+  [repo]
+  (let [files (db/get-files repo)]
+    (when (seq files)
+      (let [data (db/get-sync-metadata repo)
+            data-str (pr-str data)]
+        (alter-file repo
+                    (str config/app-name "/" config/metadata-file)
+                    data-str
+                    {:reset? false})))))
+
+(defn periodically-persist-app-metadata
+  [repo-url]
+  (js/setInterval #(persist-repo-metadata! repo-url)
+                  (* 5 60 1000)))
+
 (defn render-local-images!
   []
   (when-let [content-node (gdom/getElement "content")]
@@ -729,7 +760,11 @@
                 (.removeItem db/localforage-instance k)))
           dirs (fs/readdir "/")
           dirs (remove #(= % config/local-repo) dirs)]
-    (p/all (doall (map #(fs/rmdir (str "/" %)) dirs)))))
+    (-> (p/all (doall (map (fn [dir]
+                             (fs/rmdir (str "/" dir)))
+                        dirs)))
+        (p/then (fn []
+                  (prn "Cleared store!"))))))
 
 ;; clear localforage
 (defn sign-out!
@@ -744,8 +779,7 @@
               (println "sign out error: ")
               (js/console.dir e)))
    (p/finally (fn []
-                (set! (.-href js/window.location)
-                       "/logout")))))
+                (set! (.-href js/window.location) "/logout")))))
 
 (defn set-format-js-loading!
   [format value]
@@ -836,28 +870,31 @@
 
 (defn create-new-page!
   [title]
-  (let [format (name (state/get-preferred-format))
-        page (-> title
-                 (string/lower-case)
-                 (string/replace #"\s+" "_"))
-        page (util/encode-str page)
-        path (str page "." (if (= format "markdown") "md" format))
-        file-path (str "/" path)
-        repo (state/get-current-repo)
+  (let [repo (state/get-current-repo)
         dir (util/get-repo-dir repo)]
-    (p/let [exists? (fs/file-exists? dir file-path)]
-      (if exists?
-        (show-notification!
-         [:p.content
-          "File already exists!"]
-         :error)
-        ;; create the file
-        (let [content (default-content-with-title format (util/capitalize-all title))]
-          (p/let [_ (fs/create-if-not-exists dir file-path content)]
-            (db/reset-file! repo path content)
-            (git-add repo path)
-            (redirect! {:to :page
-                        :path-params {:name page}})))))))
+    (when dir
+      (p/let [_ (-> (fs/mkdir (str dir "/" config/default-pages-directory))
+                    (p/catch (fn [_e])))]
+        (let [format (name (state/get-preferred-format))
+              page (-> title
+                       (string/lower-case)
+                       (string/replace #"\s+" "_"))
+              page (util/encode-str page)
+              path (str config/default-pages-directory "/" page "." (if (= format "markdown") "md" format))
+              file-path (str "/" path)]
+          (p/let [exists? (fs/file-exists? dir file-path)]
+            (if exists?
+              (show-notification!
+               [:p.content
+                "File already exists!"]
+               :error)
+              ;; create the file
+              (let [content (default-content-with-title format (util/capitalize-all title))]
+                (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                  (db/reset-file! repo path content)
+                  (git-add repo path)
+                  (redirect! {:to :page
+                              :path-params {:name page}}))))))))))
 
 (defn- with-heading-meta
   [repo heading]
@@ -1185,7 +1222,8 @@
   (p/let [_ (clone repo-url)
           _ (git-set-username-email! repo-url (:me @state/state))]
     (load-db-and-journals! repo-url nil true)
-    (periodically-pull-and-push repo-url {:pull-now? false})))
+    (periodically-pull-and-push repo-url {:pull-now? false})
+    (periodically-persist-app-metadata repo-url)))
 
 (defn star-page!
   [page-name starred?]
@@ -1299,7 +1337,8 @@
                    (db/cloned? repo))
             (do
               (git-set-username-email! repo me)
-              (periodically-pull-and-push repo {:pull-now? true}))
+              (periodically-pull-and-push repo {:pull-now? true})
+              (periodically-persist-app-metadata repo))
             (clone-and-pull repo)))))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
@@ -1358,7 +1397,7 @@
         (p/then
          (fn []
            (if (and (not logged?)
-                      (not (seq (db/get-files config/local-repo))))
+                    (not (seq (db/get-files config/local-repo))))
              (setup-local-repo-if-not-exists!)
              (state/set-db-restoring! false))
            (watch-for-date!)
@@ -1552,12 +1591,9 @@
 
 (defn re-index-file!
   [file]
-  (prn "re-index-file!" file)
   (when-let [repo (state/get-current-repo)]
     (let [path (:file/path file)
           content (db/get-file path)]
-      (prn {:path path
-            :content content})
       (alter-file repo path content {:re-render-root? true}))))
 
 (comment

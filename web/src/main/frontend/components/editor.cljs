@@ -344,7 +344,6 @@
             (merge
              {:key (str "modal-input-" (name id))
               :id (str "modal-input-" (name id))
-              :value (get @input-value id "")
               :on-change (fn [e]
                            (swap! input-value assoc id (util/evalue e)))
               :auto-complete "off"}

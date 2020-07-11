@@ -155,7 +155,6 @@
          [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
           {:autoFocus true
            :placeholder "https://github.com/username/repo"
-           :value repo-url
            :on-change (fn [e]
                         (state/set-git-clone-repo! (util/evalue e)))}]]]]
 

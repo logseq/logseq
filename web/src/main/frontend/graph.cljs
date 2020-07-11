@@ -34,6 +34,8 @@
                          (handler/show-right-sidebar))
                        (handler/redirect! {:to :page
                                            :path-params {:name (util/url-encode page-name)}}))))
+    :linkDirectionalArrowLength 2
+    :linkDirectionalArrowRelPos 0.6
     :cooldownTicks 100
     :onEngineStop (fn []
                     (when-let [ref (:ref-atom option)]
