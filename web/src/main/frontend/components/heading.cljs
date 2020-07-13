@@ -8,17 +8,19 @@
   [repo heading-id format]
   (let [parents (db/get-heading-parents repo heading-id 3)
         page (db/get-heading-page repo heading-id)
-        page-name (:page/name page)]
+        page-name (:page/name page)
+        caped-page-name (util/capitalize-all page-name)]
     [:div.heading-parents.flex-row.flex
      [:a {:href (str "/page/" (util/encode-str page-name))}
-      (util/capitalize-all page-name)]
+      caped-page-name]
      (for [[id content] parents]
        (let [title (->> (take 24
                               (-> (string/split content #"\n")
                                   first
                                   (handler/remove-level-spaces format)))
                         (apply str))]
-         (when-not (string/blank? title)
+         (when (and (not (string/blank? title))
+                    (not= caped-page-name title))
            [:div
             [:span.mx-2.opacity-50 "⮞"]
             [:a {:href (str "/page/" id)}
