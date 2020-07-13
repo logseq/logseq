@@ -447,11 +447,23 @@
                  {:heading/meta {:pos 8}}])
   )
 
+(defn sort-headings
+  [headings]
+  (let [pages-ids (map (comp :db/id :heading/page) headings)
+        pages (pull-many '[:db/id :page/last-modified-at :page/name] pages-ids)
+        pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
+        headings (map
+                   (fn [heading]
+                     (assoc heading :heading/page
+                            (get pages-map (:db/id (:heading/page heading)))))
+                   headings)]
+    (sort-by-pos headings)))
+
 (defn group-by-page
   [headings]
   (some->> headings
-           (sort-by-pos)
-           (group-by :heading/page)))
+           (group-by :heading/page)
+           (sort-by (fn [[p headings]] (:page/last-modified-at p)) >)))
 
 (defn- with-repo
   [repo headings]
@@ -488,6 +500,7 @@
                      result)]
         (some->> result
                  (with-repo repo)
+                 (sort-headings)
                  (group-by-page)))
       result)))
 
@@ -839,6 +852,7 @@
      seq-flatten
      sort-by-pos
      (with-repo repo-url)
+     (sort-headings)
      (group-by-page))))
 
 (defn get-page-headings-old
@@ -1333,6 +1347,7 @@
                pages)
              react
              seq-flatten
+             sort-headings
              group-by-page)))))
 
 (defn get-heading-referenced-headings
@@ -1348,6 +1363,7 @@
              heading-uuid)
            react
            seq-flatten
+           sort-headings
            group-by-page))))
 
 (defn get-matched-headings
@@ -1771,6 +1787,7 @@
              priority)
            react
            seq-flatten
+           sort-headings
            group-by-page))))
 
 (comment

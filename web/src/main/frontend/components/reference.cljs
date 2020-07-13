@@ -38,7 +38,7 @@
       [:div.references
        (let [n-ref (count ref-headings)]
          (if (> n-ref 0)
-           [:h2.font-medium.mt-6 (let []
+           [:h2.font-bold.mt-6.opacity-50 (let []
                                  (str n-ref " Linked References"))]))
        (content/content encoded-page-name
                         {:hiccup ref-hiccup})])))
