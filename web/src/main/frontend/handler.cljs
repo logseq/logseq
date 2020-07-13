@@ -821,7 +821,9 @@
   []
   (swap! state/state assoc
          :search/result nil
-         :search/q ""))
+         :search/q "")
+  (when-let [input (gdom/getElement "search_field")]
+    (gobj/set input "value" "")))
 
 (defn email? [v]
   (and v
