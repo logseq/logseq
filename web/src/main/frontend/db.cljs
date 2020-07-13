@@ -264,12 +264,23 @@
                   [:page/name page-name]
                   [:tag/name page-name]))))))
 
-(defn get-current-tag
+(defn get-current-priority
   []
   (let [match (:route-match @state/state)
         route-name (get-in match [:data :name])]
-    (when (= route-name :tag)
-      (get-in match [:path-params :name]))))
+    (when (= route-name :page)
+      (when-let [page-name (get-in match [:path-params :name])]
+        (and (contains? #{"a" "b" "c"} (string/lower-case page-name))
+             (string/upper-case page-name))))))
+
+(defn get-current-marker
+  []
+  (let [match (:route-match @state/state)
+        route-name (get-in match [:data :name])]
+    (when (= route-name :page)
+      (when-let [page-name (get-in match [:path-params :name])]
+        (and (util/marker? page-name)
+             (string/upper-case page-name))))))
 
 (defn pull
   ([eid]
@@ -305,7 +316,8 @@
       :heading/change
       (when (seq data)
         (let [headings data
-              current-tag (get-current-tag)
+              current-priority (get-current-priority)
+              current-marker (get-current-marker)
               current-page-id (:page/id (get-current-page))
               {:heading/keys [page]} (first headings)
               handler-keys (->>
@@ -318,9 +330,12 @@
                                    [:page/ref-pages page-id]]))
                               headings)
 
-                             ;; affected tag
-                             (when current-tag
-                               [[:tag/ref-headings current-tag]])
+                             ;; affected priority
+                             (when current-priority
+                               [[:priority/headings current-priority]])
+
+                             (when current-marker
+                               [[:marker/headings current-marker]])
 
                              (when current-page-id
                                [[:page/ref-pages current-page-id]
@@ -828,13 +843,6 @@
   (let [result (seq-flatten result)
         sorted (sort-by-pos result)]
     (with-repo repo-url sorted)))
-
-(defn marker-page?
-  [page]
-  (contains?
-   #{"NOW" "LATER" "TODO" "DOING"
-     "DONE" "WAIT" "WAITING" "CANCELED" "STARTED" "IN-PROGRESS"}
-   (string/upper-case page)))
 
 (defn get-marker-headings
   [repo-url marker]

@@ -677,3 +677,10 @@
       [(.getData c "text/html") (.getData c "text")]
       (if-let [c (gobj/get js/window "clipboardData")]
         [(.getData c "Text") (.getData c "Text")]))))
+
+(defn marker?
+  [s]
+  (contains?
+   #{"NOW" "LATER" "TODO" "DOING"
+     "DONE" "WAIT" "WAITING" "CANCELED" "CANCELLED" "STARTED" "IN-PROGRESS"}
+   (string/upper-case s)))

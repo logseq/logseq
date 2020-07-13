@@ -92,7 +92,7 @@
   (let [repo (or repo (state/get-current-repo))
         encoded-page-name (get-page-name state)
         page-name (string/lower-case (util/url-decode encoded-page-name))
-        marker-page? (db/marker-page? page-name)
+        marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
         format (db/get-page-format page-name)
         journal? (db/journal-page? page-name)
