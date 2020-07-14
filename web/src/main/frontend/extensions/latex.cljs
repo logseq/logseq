@@ -3,6 +3,7 @@
             [frontend.loader :as loader]
             [frontend.components.widgets :as widgets]
             [frontend.config :as config]
+            [frontend.util :as util]
             [goog.dom :as gdom]))
 
 ;; TODO: extracted to a rum mixin
@@ -42,3 +43,19 @@
       [element {:id id
                 :class (if loading? "hidden" "initial")}
        s])))
+
+(defn html-export
+  [s block? display?]
+  (let [element (if block?
+                  :div.latex
+                  :span.latex-inline)]
+    [element (cond
+               block?
+               (util/format "$$%s$$" s)
+
+               :display?
+               (util/format "$$%s$$" s)
+
+               :else
+               ;; inline
+               (util/format "$%s$" s))]))

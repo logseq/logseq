@@ -33,4 +33,10 @@
   (let [loading? (rum/react *loading?)]
     [:pre.pre-wrap-white-space.code
      [:code (assoc attr :id id)
-       code]]))
+      code]]))
+
+(defn html-export
+  [attr code]
+  [:pre
+   [:code attr
+    code]])

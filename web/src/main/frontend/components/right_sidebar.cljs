@@ -62,7 +62,7 @@
           headings (if journal?
                      (rest headings)
                      headings)
-          sections (hiccup/build-slide-sections headings {:id "bingo"
+          sections (hiccup/build-slide-sections headings {:id "slide-reveal-js"
                                                           :start-level 2
                                                           :slide? true
                                                           :sidebar? true})]

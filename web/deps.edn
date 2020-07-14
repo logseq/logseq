@@ -17,6 +17,7 @@
   cljs-drag-n-drop            {:mvn/version "0.1.0"}
   borkdude/sci                {:mvn/version "0.0.13-alpha.27"}
   hickory                     {:mvn/version "0.7.1"}
+  hiccups                     {:mvn/version "0.3.0"}
   }
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/"]

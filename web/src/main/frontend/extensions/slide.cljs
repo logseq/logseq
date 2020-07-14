@@ -35,6 +35,24 @@
                 :transition "slide"}))]
     (.initialize deck)))
 
+(defn slide-content
+  [loading? style sections]
+  [:div.reveal {:style style}
+   (when loading?
+     [:div.ls-center (widgets/loading "")])
+   [:div.slides
+    (for [[idx sections] (medley/indexed sections)]
+      (if (> (count sections) 1)       ; nested
+        [:section {:key (str "slide-section-" idx)}
+         (for [[idx2 [heading heading-cp]] (medley/indexed sections)]
+           [:section (-> {:key (str "slide-section-" idx "-" idx2)}
+                         (with-properties heading))
+            heading-cp])]
+        (let [[heading heading-cp] (first sections)]
+          [:section (-> {:key (str "slide-section-" idx)}
+                        (with-properties heading))
+           heading-cp])))]])
+
 (rum/defc slide < rum/reactive
   {:did-mount (fn [state]
                 (if (loaded?)
@@ -51,18 +69,4 @@
                 state)}
   [sections]
   (let [loading? (rum/react *loading?)]
-    [:div.reveal {:style {:height 400}}
-     (when loading?
-       [:div.ls-center (widgets/loading "")])
-     [:div.slides
-      (for [[idx sections] (medley/indexed sections)]
-        (if (> (count sections) 1)       ; nested
-          [:section {:key (str "slide-section-" idx)}
-           (for [[idx2 [heading heading-cp]] (medley/indexed sections)]
-             [:section (-> {:key (str "slide-section-" idx "-" idx2)}
-                           (with-properties heading))
-              heading-cp])]
-          (let [[heading heading-cp] (first sections)]
-            [:section (-> {:key (str "slide-section-" idx)}
-                          (with-properties heading))
-             heading-cp])))]]))
+    (slide-content loading? {:height 400} sections)))

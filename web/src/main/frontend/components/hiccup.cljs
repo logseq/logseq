@@ -170,10 +170,13 @@
 (declare block)
 
 (defn page-cp
-  [page]
-  (let [page (string/lower-case page)]
+  [{:keys [html-export?] :as config} page]
+  (let [page (string/lower-case page)
+        href (if html-export?
+               (util/encode-str page)
+               (str "/page/" (util/encode-str page)))]
     [:a.page-ref
-     {:href (str "/page/" (util/encode-str page))
+     {:href href
       :on-click (fn [e]
                   (util/stop e)
                   (when (gobj/get e "shiftKey")
@@ -198,7 +201,7 @@
 (declare headings-container)
 
 (defn inline
-  [config item]
+  [{:keys [html-export?] :as config} item]
   (match item
     ["Plain" s]
     s
@@ -227,10 +230,14 @@
             {:__html (:html e)}}]
 
     ["Latex_Fragment" ["Displayed" s]]
-    (latex/latex (str (dc/squuid)) s false true)
+    (if html-export?
+      (latex/html-export s false true)
+      (latex/latex (str (dc/squuid)) s false true))
 
     ["Latex_Fragment" ["Inline" s]]
-    (latex/latex (str (dc/squuid)) s false false)
+    (if html-export?
+      (latex/html-export s false true)
+      (latex/latex (str (dc/squuid)) s false false))
 
     ["Target" s]
     [:a {:id s} s]
@@ -261,8 +268,9 @@
                                :heading-ref
                                {:heading heading})
                               (handler/show-right-sidebar)))}
-            (->elem :span.block-ref
-                    (map-inline config (:heading/title heading)))]
+            (->elem
+             :span.block-ref
+             (map-inline config (:heading/title heading)))]
            [:span.text-gray-500 "))"]])))
 
     ["Link" link]
@@ -275,7 +283,6 @@
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
           (= \* (first s))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
-
           (re-find #"^https://" s)
           (->elem :a {:href s}
                   (map-inline config label))
@@ -283,17 +290,16 @@
           :else
           ;; page reference
           [:span.page-reference
-           [:span.text-gray-500 "[["]
+           (when-not html-export? [:span.text-gray-500 "[["])
            (if (string/ends-with? s ".excalidraw")
              [:a.page-ref
               {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))
                :on-click (fn [e] (util/stop e))}
               [:span
                (svg/excalidraw-logo)
-               (string/capitalize (draw/get-file-title s))]
-              ]
-             (page-cp s))
-           [:span.text-gray-500 "]]"]])
+               (string/capitalize (draw/get-file-title s))]]
+             (page-cp config s))
+           (when-not html-export? [:span.text-gray-500 "]]"])])
 
         :else
         (let [href (string-of-url url)
@@ -514,7 +520,7 @@
                 {:bottom bottom}))}]))
 
 (declare heading-container)
-(rum/defc heading-checkbox
+(defn heading-checkbox
   [heading class]
   (let [marker (:heading/marker heading)
         [class checked?] (cond
@@ -535,98 +541,105 @@
                                    (handler/uncheck heading)
                                    (handler/check heading)))}))))
 
-(rum/defc marker-switch
-  [heading marker]
-  (let [set-marker-fn (fn [marker]
-                        (fn [e]
-                          (util/stop e)
-                          (handler/set-marker heading marker)))]
-    (case marker
-      "NOW"
-      [:a.marker-switch
-       {:title "Change from NOW to LATER"
-        :on-click (set-marker-fn "LATER")}
-       [:span "N"]]
-      "LATER"
-      [:a.marker-switch
-       {:title "Change from LATER to NOW"
-        :on-click (set-marker-fn "NOW")}
-       "L"]
+(defn marker-switch
+  [{:heading/keys [pre-heading? marker] :as heading}]
+  (when-not pre-heading?
+    (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
+      (let [set-marker-fn (fn [marker]
+                            (fn [e]
+                              (util/stop e)
+                              (handler/set-marker heading marker)))]
+        (case marker
+          "NOW"
+          [:a.marker-switch
+           {:title "Change from NOW to LATER"
+            :on-click (set-marker-fn "LATER")}
+           [:span "N"]]
+          "LATER"
+          [:a.marker-switch
+           {:title "Change from LATER to NOW"
+            :on-click (set-marker-fn "NOW")}
+           "L"]
 
-      "TODO"
-      [:a.marker-switch
-       {:title "Change from TODO to DOING"
-        :on-click (set-marker-fn "DOING")}
-       "T"]
-      "DOING"
-      [:a.marker-switch
-       {:title "Change from DOING to TODO"
-        :on-click (set-marker-fn "TODO")}
-       "D"]
-      nil)))
+          "TODO"
+          [:a.marker-switch
+           {:title "Change from TODO to DOING"
+            :on-click (set-marker-fn "DOING")}
+           "T"]
+          "DOING"
+          [:a.marker-switch
+           {:title "Change from DOING to TODO"
+            :on-click (set-marker-fn "TODO")}
+           "D"]
+          nil)))))
 
-(rum/defcs priority-cp <
-  (rum/local false ::hover?)
-  [state heading priority]
-  (ui/tooltip
-   [:ul
-    (for [p (remove #(= priority %) ["A" "B" "C"])]
-      [:a.mr-2.text-base.tooltip-priority {:priority p
-                                           :on-click (fn [] (handler/set-priority heading p))}])]
-   [:a.opacity-50.hover:opacity-100
-    {:class "priority"
-     :href (str "/page/" priority)
-     :style {:margin-right 3.5}}
-    (util/format "[#%s]" (str priority))]))
+(defn marker-cp
+  [{:heading/keys [pre-heading? marker] :as heading}]
+  (when-not pre-heading?
+    (if (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
+      [:span {:class (str "task-status " (string/lower-case marker))
+              :style {:margin-right 3.5}}
+       (string/upper-case marker)])))
+
+(defn priority-cp
+  [{:headings/keys [pre-heading? priority] :as heading}]
+  (when (and (not pre-heading?) priority)
+    (ui/tooltip
+     [:ul
+      (for [p (remove #(= priority %) ["A" "B" "C"])]
+        [:a.mr-2.text-base.tooltip-priority {:priority p
+                                             :on-click (fn [] (handler/set-priority heading p))}])]
+     [:a.opacity-50.hover:opacity-100
+      {:class "priority"
+       :href (str "/page/" priority)
+       :style {:margin-right 3.5}}
+      (util/format "[#%s]" (str priority))])))
+
+(defn heading-tags-cp
+  [{:headings/keys [pre-heading? tags] :as heading}]
+  (when (and (not pre-heading?)
+             (seq tags))
+    (->elem
+     :span
+     {:class "heading-tags"}
+     (mapv (fn [{:keys [db/id tag/name]}]
+             (if (util/tag-valid? name)
+               [:a.tag.mx-1 {:key (str "tag-" id)
+                             :href (str "/page/" name)}
+                (str "#" name)]
+               [:span.warning.mx-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
+                (str "#" name)]))
+           tags))))
 
 (defn build-heading-part
-  [config {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading?]
-           :as t}]
+  [{:keys [slide?] :as config} {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading?]
+                                             :as t}]
   (let [config (assoc config :heading t)
         slide? (boolean (:slide? config))
         checkbox (when-not pre-heading?
                    (heading-checkbox t (str "mr-1 cursor")))
-        marker-switch (when-not pre-heading?
-                        (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
-                          (marker-switch t marker)))
-        marker-cp (when-not pre-heading?
-                    (if (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
-                      [:span {:class (str "task-status " (string/lower-case marker))
-                              :style {:margin-right 3.5}}
-                       (string/upper-case marker)]))
-        priority (when-not pre-heading?
-                   (if priority
-                     (priority-cp t priority)))
-        tags (when-not pre-heading?
-               (when-not (empty? tags)
-                 (->elem
-                  :span
-                  {:class "heading-tags"}
-                  (mapv (fn [{:keys [db/id tag/name]}]
-                          (if (util/tag-valid? name)
-                            [:a.tag.mx-1 {:key (str "tag-" id)
-                                          :href (str "/page/" name)}
-                             (str "#" name)]
-                            [:span.warning.mx-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
-                             (str "#" name)]))
-                        tags))))]
+        marker-switch (marker-switch t)
+        marker-cp (marker-cp t)
+        priority (priority-cp t)
+        tags (heading-tags-cp t)]
     (when level
       (let [element (if (<= level 6)
                       (keyword (str "h" level))
                       :div)]
-        (->elem element
-                (merge
-                 {:id anchor}
-                 (when marker
-                   {:class (string/lower-case marker)}))
-                (remove-nils
-                 (concat
-                  [(when-not slide? checkbox)
-                   (when-not slide? marker-switch)
-                   marker-cp
-                   priority]
-                  (map-inline config title)
-                  [tags])))))))
+        (->elem
+         element
+         (merge
+          {:id anchor}
+          (when marker
+            {:class (string/lower-case marker)}))
+         (remove-nils
+          (concat
+           [(when-not slide? checkbox)
+            (when-not slide? marker-switch)
+            marker-cp
+            priority]
+           (map-inline config title)
+           [tags])))))))
 
 (defn dnd-same-heading?
   [uuid]
@@ -998,7 +1011,7 @@
       (blocks config result)]]))
 
 (defn block
-  [config item]
+  [{:keys [html-export?] :as config} item]
   (try
     (match item
       ["Paragraph" l]
@@ -1018,7 +1031,9 @@
       ["Table" t]
       (table config t)
       ["Math" s]
-      (latex/latex (str (dc/squuid)) s true true)
+      (if html-export?
+        (latex/html-export s true true)
+        (latex/latex (str (dc/squuid)) s true true))
       ["Example" l]
       [:pre.pre-wrap-white-space
        (join-lines l)]
@@ -1027,10 +1042,16 @@
             attr (if language
                    {:data-lang language})
             code (join-lines lines)]
-        (if (and (= language "clojure") (contains? (set options) ":results"))
+        (cond
+          html-export?
+          (code/html-export attr code)
+
+          (and (= language "clojure") (contains? (set options) ":results"))
           [:div
            (code/highlight (str (dc/squuid)) attr code)
            (sci/eval-result code)]
+
+          :else
           (code/highlight (str (dc/squuid)) attr code)))
       ["Quote" l]
       (->elem
@@ -1046,7 +1067,9 @@
       (reader/read-string content)
 
       ["Export" "latex" options content]
-      (latex/latex (str (dc/squuid)) content true false)
+      (if html-export?
+        (latex/html-export content true false)
+        (latex/latex (str (dc/squuid)) content true false))
 
       ["Custom" "query" options result content]
       (custom-query config options content)
@@ -1071,13 +1094,16 @@
        :div
        {:class name}
        (blocks config l))
+
       ["Latex_Fragment" l]
       [:p.latex-fragment
        (inline config ["Latex_Fragment" l])]
 
       ["Latex_Environment" name option content]
       (let [content (latex-environment-content name option content)]
-        (latex/latex (str (dc/squuid)) content true true))
+        (if html-export?
+          (latex/html-export content true true)
+          (latex/latex (str (dc/squuid)) content true true)))
       ["Footnote_Definition" name definition]
       (let [id (util/url-encode name)]
         [:div.footdef
@@ -1117,26 +1143,30 @@
               (:heading/uuid item))))))))
 
 (defn build-slide-sections
-  [headings config]
-  (when (seq headings)
-    (let [headings (map #(dissoc % :heading/children) headings)
-          first-heading-level (:heading/level (first headings))
-          sections (reduce
-                    (fn [acc heading]
-                      (let [heading (dissoc heading :heading/meta)
-                            level (:heading/level heading)
-                            heading-cp (rum/with-key
-                                         (heading-container config heading)
-                                         (str "slide-" (:heading/uuid heading)))]
-                        (if (= first-heading-level level)
-                          ;; new slide
-                          (conj acc [[heading heading-cp]])
-                          (update acc (dec (count acc))
-                                  (fn [sections]
-                                    (conj sections [heading heading-cp]))))))
-                    []
-                    headings)]
-      sections)))
+  ([headings config]
+   (build-slide-sections headings config nil))
+  ([headings config build-heading-fn]
+   (when (seq headings)
+     (let [headings (map #(dissoc % :heading/children) headings)
+           first-heading-level (:heading/level (first headings))
+           sections (reduce
+                     (fn [acc heading]
+                       (let [heading (dissoc heading :heading/meta)
+                             level (:heading/level heading)
+                             heading-cp (if build-heading-fn
+                                          (build-heading-fn config heading)
+                                          (rum/with-key
+                                            (heading-container config heading)
+                                            (str "slide-" (:heading/uuid heading))))]
+                         (if (= first-heading-level level)
+                           ;; new slide
+                           (conj acc [[heading heading-cp]])
+                           (update acc (dec (count acc))
+                                   (fn [sections]
+                                     (conj sections [heading heading-cp]))))))
+                     []
+                     headings)]
+       sections))))
 
 (rum/defc headings-container < rum/static
   [headings config]
@@ -1157,7 +1187,7 @@
        (for [[page headings] headings]
          (let [page (db/entity (:db/id page))]
            [:div.my-2 {:key (str "page-" (:db/id page))}
-            (page-cp (:page/name page))
+            (page-cp config (:page/name page))
             (headings-container headings config)]))
        (headings-container headings config))]))
 

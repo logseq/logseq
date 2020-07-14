@@ -863,20 +863,59 @@
      (sort-headings)
      (group-by-page))))
 
-(defn get-page-headings-old
-  [repo-url page]
-  (let [page (string/lower-case page)
-        page-id (:db/id (entity repo-url [:page/name page]))]
-    (some->
-     (q repo-url [:page/headings page-id]
-       {:use-cache? false
-        :transform-fn #(page-headings-transform repo-url %)}
-       '[:find (pull ?heading [*])
-         :in $ ?page-id
-         :where
-         [?heading :heading/page ?page-id]]
-       page-id)
-     react)))
+;; (defn get-page-headings-old
+;;   [repo-url page]
+;;   (let [page (string/lower-case page)
+;;         page-id (:db/id (entity repo-url [:page/name page]))]
+;;     (some->
+;;      (q repo-url [:page/headings page-id]
+;;        {:use-cache? false
+;;         :transform-fn #(page-headings-transform repo-url %)}
+;;        '[:find (pull ?heading [*])
+;;          :in $ ?page-id
+;;          :where
+;;          [?heading :heading/page ?page-id]]
+;;        page-id)
+;;      react)))
+
+(defn get-page-directives
+  [page]
+  (when-let [page (entity [:page/name page])]
+    (:page/directives page)))
+
+(defn add-directives!
+  [page-format directives-content directives]
+  (let [directives (medley/map-keys name directives)
+        lines (string/split-lines directives-content)
+        directive-keys (keys directives)
+        prefix-f (case page-format
+                   :org (fn [k]
+                          (str "#+" (string/upper-case k) ": "))
+                   :markdown (fn [k]
+                               (str (string/lower-case k) ": "))
+                   identity)
+        exists? (atom #{})
+        lines (doall
+               (mapv (fn [line]
+                       (let [result (filter #(and (string/starts-with? line (prefix-f %))
+                                                  %)
+                                            directive-keys)]
+                         (if (seq result)
+                           (let [k (first result)]
+                             (swap! exists? conj k)
+                             (str (prefix-f k) (get directives k)))
+                           line))) lines))
+        lines (concat
+               lines
+               (let [not-exists (remove
+                                 (fn [[k _]]
+                                   (contains? @exists? k))
+                                 directives)]
+                 (when (seq not-exists)
+                   (mapv
+                    (fn [[k v]] (str (prefix-f k) v))
+                    not-exists))))]
+    (string/join "\n" lines)))
 
 (defn get-page-headings
   ([page]
@@ -895,6 +934,12 @@
                        (d/pull-many db '[*] heading-eids)))}
         nil)
       react))))
+
+(defn get-page-directives-content
+  [page]
+  (let [headings (get-page-headings page)]
+    (and (:heading/pre-heading? (first headings))
+         (:heading/content (first headings)))))
 
 (comment
 
@@ -1114,6 +1159,17 @@
             (remove nil?))))
     (catch js/Error e
       (js/console.log e))))
+
+(defn parse-directives
+  [content format]
+  (let [ast (mldoc/->edn content
+                         (mldoc/default-config format))
+        directives (let [directives (and (seq ast)
+                                         (= "Directives" (ffirst ast))
+                                         (last (first ast)))]
+                     (if (and directives (seq directives))
+                       directives))]
+    (into {} directives)))
 
 ;; check journal formats and report errors
 (defn extract-headings-pages

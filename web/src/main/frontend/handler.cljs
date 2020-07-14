@@ -50,6 +50,18 @@
   [key value]
   (swap! state/state assoc key value))
 
+(defn show-notification!
+  [content status]
+  (swap! state/state assoc
+         :notification/show? true
+         :notification/content content
+         :notification/status status)
+  (js/setTimeout #(swap! state/state assoc
+                         :notification/show? false
+                         :notification/content nil
+                         :notification/status nil)
+                 5000))
+
 (defn get-github-token
   []
   (get-in @state/state [:me :access-token]))
@@ -303,17 +315,7 @@
        {:db (d/db (db/get-conn repo-url false))
         :files-db (d/db (db/get-files-conn repo-url))}))))
 
-(defn show-notification!
-  [content status]
-  (swap! state/state assoc
-         :notification/show? true
-         :notification/content content
-         :notification/status status)
-  (js/setTimeout #(swap! state/state assoc
-                         :notification/show? false
-                         :notification/content nil
-                         :notification/status nil)
-                 5000))
+
 
 (defn pull
   [repo-url token]
@@ -751,7 +753,6 @@
                    ;; (prn "Get token failed, error: " error)
                    (reset! uploading? false))))))
 
-
 (defn clear-store!
   []
   (p/let [ks (.keys db/localforage-instance)
@@ -938,10 +939,21 @@
      after-headings)))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading?] :as heading} value]
+  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content] :as heading} value]
   (let [repo (or repo (state/get-current-repo))
         heading (with-heading-meta repo heading)
-        format (or format (state/get-preferred-format))]
+        format (or format (state/get-preferred-format))
+        [old-directives new-directives] (when pre-heading?
+                                          [(:page/directives (db/entity (:db/id page)))
+                                           (db/parse-directives value format)])
+        permalink-changed? (when (and pre-heading? (:permalink old-directives))
+                             (not= (:permalink old-directives)
+                                   (:permalink new-directives)))
+        value (if permalink-changed?
+                (db/add-directives! format value {:old_permalink (:permalink old-directives)})
+                value)
+        new-directives (if permalink-changed?
+                         (assoc new-directives :old_permalink (:permalink old-directives)))]
     (when (not= (string/trim content) value) ; heading content changed
       (let [file (db/entity repo (:db/id file))
             page (db/entity repo (:db/id page))
@@ -964,7 +976,9 @@
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
                                    modified-time (let [modified-at (tc/to-long (t/now))]
                                                    [[:db/add (:db/id page) :page/last-modified-at modified-at]
-                                                    [:db/add (:db/id file) :file/last-modified-at modified-at]])]
+                                                    [:db/add (:db/id file) :file/last-modified-at modified-at]])
+                                   page-directives (when pre-heading?
+                                                     [(assoc page :page/directives new-directives)])]
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -972,6 +986,7 @@
                                  (concat
                                   pages
                                   headings
+                                  page-directives
                                   after-headings
                                   modified-time)
                                  {:key :heading/change
@@ -1597,6 +1612,7 @@
     (let [path (:file/path file)
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
+
 
 (comment
   (defn debug-latest-commits

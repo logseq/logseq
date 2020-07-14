@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler :as handler]
+            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -170,10 +171,19 @@
               svg/slideshow]
 
              (let [links (->>
-                          [(when file
-                             {:title "Re-index the page"
+                          (when file
+                            [{:title "Publish this page on Logseq"
                               :options {:on-click (fn []
-                                                    (handler/re-index-file! file))}})]
+                                                    (page-handler/publish-page! page-name))}}
+                             {:title "Publish this page as a slide on Logseq"
+                              :options {:on-click (fn []
+                                                    (page-handler/publish-page-as-slide! page-name))}}
+                             {:title "Un-publish this page on Logseq"
+                              :options {:on-click (fn []
+                                                    (page-handler/unpublish-page! page-name))}}
+                             {:title "Re-index this page"
+                              :options {:on-click (fn []
+                                                    (handler/re-index-file! file))}}])
                           (remove nil?))]
                (when (seq links)
                  (ui/dropdown-with-links
@@ -183,7 +193,7 @@
                      (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100")})])
                   links
                   {:modal-class (util/hiccup->class
-                                 "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.w-48.dropdown-overflow-auto")})))]])
+                                 "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.w-96.dropdown-overflow-auto")})))]])
 
          (when (and file-path (not sidebar?) (not journal?) (not heading?))
            [:div.text-sm.ml-1.mb-2 {:key "page-file"}

@@ -66,7 +66,7 @@
             (cljs.core/random-uuid))))])
    modal-class))
 
-(rum/defc button
+(defn button
   [text & {:keys [background on-click href]
            :as option}]
   (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-700.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
@@ -144,12 +144,12 @@
      (fn [state]
        (notification-content state content status)))))
 
-(rum/defc checkbox
+(defn checkbox
   [option]
   [:input.form-checkbox.h-4.w-4.transition.duration-150.ease-in-out
    (merge {:type "checkbox"} option)])
 
-(rum/defc badge
+(defn badge
   [text option]
   [:span.inline-flex.items-center.px-2.5.py-0.5.rounded-full.text-xs.font-medium.leading-4.bg-purple-100.text-purple-800
    option
@@ -248,7 +248,7 @@
 
 (def datepicker frontend.ui.date-picker/date-picker)
 
-(rum/defc toggle
+(defn toggle
   [on? on-click]
   [:a {:on-click on-click}
    [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
@@ -258,7 +258,7 @@
      {:class (if on? "translate-x-5" "translate-x-0")
       :aria-hidden "true"}]]])
 
-(rum/defc tooltip
+(defn tooltip
   [label children]
   [:div.Tooltip {:style {:display "inline"}}
    [:div {:class "Tooltip__label"}
