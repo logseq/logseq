@@ -577,8 +577,7 @@
                                       :else
                                       (apply d/q query db inputs))
                                     transform-fn)]
-                    (profile (str "Set new result! " handler-key)
-                             (set-new-result! handler-key new-result))))))))))))
+                    (set-new-result! handler-key new-result)))))))))))
 
 (defn pull-heading
   [id]

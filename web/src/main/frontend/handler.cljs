@@ -1040,17 +1040,11 @@
                                        (str value "\n" new-heading-content)
                                        value)
                                [new-content value] (new-file-content heading file-content value)
-                               {:keys [headings pages start-pos end-pos]} (profile "Parse heading"
-                                                                                   (block/parse-heading (assoc heading :heading/content value) format))
+                               {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
                                first-heading (first headings)
                                last-heading (last headings)
-                               headings (profile
-                                         "Recompute-heading-children"
-                                         (db/recompute-heading-children repo heading headings))
-                               after-headings (profile
-                                               "Rebuild-after-headings"
-                                               (rebuild-after-headings repo file (:end-pos meta) end-pos))]
-
+                               headings (db/recompute-heading-children repo heading headings)
+                               after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
                            (transact-react-and-alter-file!
                             repo
                             (concat
@@ -1294,9 +1288,7 @@
         text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
                      content
                      (subs content 0 prev-pos))]
-    (profile "Set editing"
-             (state/set-editing! edit-input-id content heading text-range))))
-
+    (state/set-editing! edit-input-id content heading text-range)))
 (defn clear-selection!
   [e]
   (when (state/in-selection-mode?)

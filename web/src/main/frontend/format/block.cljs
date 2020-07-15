@@ -219,7 +219,7 @@
 (defn parse-heading
   [{:heading/keys [uuid content meta file page] :as heading} format]
   (when-not (string/blank? content)
-    (let [ast (profile "Mldoc parsing to ast:" (format/to-edn content format nil))
+    (let [ast (format/to-edn content format nil)
           start-pos (:pos meta)
           encoded-content (utf8/encode content)
           content-length (utf8/length encoded-content)
