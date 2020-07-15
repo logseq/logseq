@@ -38,8 +38,9 @@
     (db/get-page-headings repo page-name)))
 
 (rum/defc page-headings-cp < rum/reactive
-  [repo page raw-page-headings file-path page-name encoded-page-name sidebar? journal? heading? format]
-  (let [page-headings (db/with-dummy-heading raw-page-headings format
+  [repo page file-path page-name encoded-page-name sidebar? journal? heading? format]
+  (let [raw-page-headings (get-headings repo page-name heading?)
+        page-headings (db/with-dummy-heading raw-page-headings format
                         (if (empty? raw-page-headings)
                           (let [content (db/get-file repo file-path)]
                             {:heading/page {:db/id (:db/id page)}
@@ -61,8 +62,35 @@
                         :sidebar? sidebar?})
       (str encoded-page-name "-hiccup"))))
 
+(rum/defc star < rum/reactive
+  [repo page-name]
+  (let [starred? (contains?
+                  (set
+                   (some->> (state/sub [:config repo :starred])
+                            (map string/lower-case)))
+                  page-name)]
+    [:a.mr-3.opacity-50.hover:opacity-100
+     {:class (if starred? "text-gray-800")
+      :on-click (fn []
+                  ;; TODO: save to config file
+                  (handler/star-page! page-name starred?))}
+     (if starred?
+       (svg/star-solid "stroke-current")
+       (svg/star-outline "stroke-current h-5 w-5"))]))
+
+(rum/defc today-queries < rum/reactive
+  [repo today? sidebar?]
+  (when (and today? (not sidebar?))
+    (let [queries (state/sub [:config repo :default-queries :journals])]
+      (when (seq queries)
+        [:div#today-queries
+         (for [{:keys [title query]} queries]
+           [:div {:key (str "query-" title)}
+            (hiccup/custom-query {:start-level 2} {:query-title title}
+                                 query)])]))))
+
 ;; A page is just a logical heading
-(rum/defcs page < rum/reactive
+(rum/defcs page < rum/static
   (mixins/keyboard-mixin "ctrl+alt+d" state/toggle-document-mode!)
   (mixins/keyboard-mixin
    "tab"
@@ -84,7 +112,7 @@
          (let [page-name (string/lower-case (util/url-decode encoded-page-name))
                heading? (util/uuid-string? page-name)]
            (if heading?
-             [repo :heading/page (uuid page-name)]
+             [repo :heading/block (uuid page-name)]
              (when-let [page-id (db/entity repo [:page/name page-name])]
                [repo :page/headings page-id])))))))
   {:did-mount handler/scroll-and-highlight!
@@ -99,8 +127,7 @@
         journal? (db/journal-page? page-name)
         heading? (util/uuid-string? page-name)
         heading-id (and heading? (uuid page-name))
-        sidebar? (:sidebar? option)
-        raw-page-headings (get-headings repo page-name heading?)]
+        sidebar? (:sidebar? option)]
     (cond
       priority-page?
       [:div
@@ -124,10 +151,6 @@
             page-name (:page/name page)
             file (:page/file page)
             file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
-            starred? (contains? (set
-                                 (some->> (state/sub [:config repo :starred])
-                                          (map string/lower-case)))
-                                page-name)
             today? (and
                     journal?
                     (= page-name (string/lower-case (date/journal-name))))]
@@ -149,25 +172,19 @@
                (util/capitalize-all page-name)]]]
 
             [:div.flex-row.flex.items-center {:style {:margin-bottom "1.5rem"}}
-             [:a.mr-3.opacity-50.hover:opacity-100
-              {:class (if starred? "text-gray-800")
-               :on-click (fn []
-                           ;; TODO: save to config file
-                           (handler/star-page! page-name starred?))}
-              (if starred?
-                (svg/star-solid "stroke-current")
-                (svg/star-outline "stroke-current h-5 w-5"))]
+
+             (star repo page-name)
 
              [:a.opacity-50.hover:opacity-100 {:title "Presentation mode (Powered by Reveal.js)"
-                  :style {:margin-right 1}
-                  :on-click (fn []
-                              (state/sidebar-add-block!
-                               repo
-                               (:db/id page)
-                               :page-presentation
-                               {:page page
-                                :journal? journal?})
-                              (handler/show-right-sidebar))}
+                                               :style {:margin-right 1}
+                                               :on-click (fn []
+                                                           (state/sidebar-add-block!
+                                                            repo
+                                                            (:db/id page)
+                                                            :page-presentation
+                                                            {:page page
+                                                             :journal? journal?})
+                                                           (handler/show-right-sidebar))}
               svg/slideshow]
 
              (let [links (->>
@@ -216,18 +233,10 @@
            (heading/heading-parents repo heading-id format))
 
          ;; headings
-         (rum/with-key
-           (page-headings-cp repo page raw-page-headings file-path page-name encoded-page-name sidebar? journal? heading? format)
-           "page-headings")
+         (page-headings-cp repo page file-path page-name encoded-page-name sidebar? journal? heading? format)
 
-         (when (and today? (not sidebar?))
-           (let [queries (state/sub [:config repo :default-queries :journals])]
-             (when (seq queries)
-               [:div#today-queries {:keys "page-today-queries"}
-                (for [{:keys [title query]} queries]
-                  [:div {:key (str "query-" title)}
-                   (hiccup/custom-query {:start-level 2} {:query-title title}
-                                        query)])])))
+
+         (today-queries repo today? sidebar?)
 
          ;; referenced headings
          (when-not sidebar?

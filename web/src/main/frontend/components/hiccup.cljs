@@ -200,6 +200,17 @@
 
 (declare headings-container)
 
+(rum/defc block-embed <
+  (mixins/clear-query-cache
+   (fn [state]
+     (let [repo (state/get-current-repo)
+           heading-id (last (:rum/args state))]
+       [repo :heading/block heading-id])))
+  [config id]
+  (let [headings (db/get-heading-and-children (state/get-current-repo) id)]
+    [:div.embed-block.pt-2.px-3.bg-base-2
+     (headings-container headings (assoc config :embed? true))]))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -348,13 +359,11 @@
     (reader/read-string s)
 
     ["Export_Snippet" "embed" s]
-    (when s
-      (let [s (string/trim s)]
-        (if (util/uuid-string? s)
-          (let [id (uuid s)
-                headings (db/get-heading-and-children (state/get-current-repo) id)]
-            [:div.embed-block.pt-2.px-3.bg-base-2
-             (headings-container headings (assoc config :embed? true))]))))
+    (when-let [id (and s
+                       (let [s (string/trim s)]
+                         (and (util/uuid-string? s)
+                              (uuid s))))]
+      (block-embed config id))
 
     ["Break_Line"]
     [:br]
@@ -613,7 +622,7 @@
 
 (defn build-heading-part
   [{:keys [slide?] :as config} {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading?]
-                                             :as t}]
+                                :as t}]
   (let [config (assoc config :heading t)
         slide? (boolean (:slide? config))
         checkbox (when-not pre-heading?
@@ -665,28 +674,10 @@
 
 (rum/defc heading-content-or-editor < rum/reactive
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
-  (let [current-edit-input-id (state/sub-edit-input-id)
-        edit? (= current-edit-input-id edit-input-id)
-        follower? (and (not edit?)
-                       current-edit-input-id
-                       (when-let [s (util/extract-uuid current-edit-input-id)]
-                         (= (cljs.core/uuid s) uuid)))
-        heading (if follower?
-                  (let [content (state/sub [:editor/content current-edit-input-id])
-                        content (block/with-levels content format heading)
-                        new-heading (first (second (first (block/parse-heading
-                                                           (assoc heading :heading/content content) format))))]
-                    (merge new-heading
-                           {:heading/level level
-                            :heading/meta meta
-                            :heading/dummy? dummy?
-                            :heading/children children
-                            :heading/pre-heading? pre-heading?}))
-                  heading)]
+  (let [edit? (state/sub [:editor/editing? edit-input-id])]
     (if edit?
       [:div {:id (str "editor-" edit-input-id)}
-       (editor/box (string/trim content)
-                   {:heading heading
+       (editor/box {:heading heading
                     :heading-id uuid
                     :heading-parent-id heading-id
                     :format format
@@ -707,6 +698,7 @@
                                         (handler/unhighlight-heading!)
                                         (util/stop e)
                                         (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
+                                          (state/set-edit-input-id! edit-input-id)
                                           (state/set-editing!
                                            edit-input-id
                                            (handler/remove-level-spaces content format)
@@ -765,7 +757,6 @@
       nil)))
 
 (rum/defc heading-container < rum/static
-  ;; (mixins/perf-measure-mixin "heading-container")
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-heading? idx] :as heading}]
   (let [ref? (boolean (:ref? config))
         sidebar? (boolean (:sidebar? config))
@@ -1176,7 +1167,6 @@
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive
-  ;; (mixins/perf-measure-mixin "hiccup")
   [headings config option]
   (let [document-mode? (state/sub [:document/mode?])
         config (assoc config :document/mode? document-mode?)]

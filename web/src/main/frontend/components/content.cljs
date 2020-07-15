@@ -94,11 +94,10 @@
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
-  (let [edit? (= (state/sub-edit-input-id) id)
+  (let [edit? (state/sub [:editor/editing? id])
         loading (state/sub :format/loading)]
     (if edit?
-      (editor/box (string/trim content)
-                  {:on-hide on-hide
+      (editor/box {:on-hide on-hide
                    :format format} id)
       (let [format (format/normalize format)
             loading? (get loading format)

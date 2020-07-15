@@ -549,7 +549,6 @@
 (defn transact-react!
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
                      :or {files-db? false}}]
-  ;; (prn "transact-react! data: " tx-data)
   (let [repo-url (or repo-url (state/get-current-repo))
         tx-data (->> (util/remove-nils tx-data)
                      (remove nil?))
@@ -557,7 +556,7 @@
                           (get-files-conn repo-url)
                           (get-conn repo-url false)))]
     (when (and (seq tx-data) (get-conn))
-      (let [tx-result (d/transact! (get-conn) (vec tx-data))
+      (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
             db (:db-after tx-result)
             handler-keys (get-handler-keys handler-opts)]
         (doseq [handler-key handler-keys]
@@ -578,7 +577,8 @@
                                       :else
                                       (apply d/q query db inputs))
                                     transform-fn)]
-                    (set-new-result! handler-key new-result)))))))))))
+                    (profile (str "Set new result! " handler-key)
+                             (set-new-result! handler-key new-result))))))))))))
 
 (defn pull-heading
   [id]
@@ -748,6 +748,16 @@
             (get-conn repo-url) file-id pred)
           seq-flatten
           sort-by-pos))))
+
+(defn get-file-after-headings-meta
+  [repo-url file-id end-pos]
+  (let [db (get-conn repo-url)
+        headings (d/datoms db :avet :heading/file file-id)
+        eids (mapv :e headings)
+        headings (d/pull-many db '[:heading/uuid :heading/meta] eids)]
+    (->> (filter (fn [{:heading/keys [meta]}]
+                   (>= (:pos meta) end-pos)) headings)
+         sort-by-pos)))
 
 (defn delete-file-headings!
   [repo-url path]
@@ -1329,7 +1339,7 @@
                              :heading/priority nil
                              :heading/anchor (str uuid)
                              :heading/meta {:pos end-pos
-                                            :end-pos nil}
+                                            :end-pos end-pos}
                              :heading/body nil
                              :heading/dummy? true
                              :heading/marker nil})

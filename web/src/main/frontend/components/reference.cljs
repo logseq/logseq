@@ -29,16 +29,17 @@
                          (db/get-heading-referenced-headings heading-id)
                          :else
                          (db/get-page-referenced-headings page-name))
-          ref-hiccup (hiccup/->hiccup ref-headings
-                                      {:id encoded-page-name
-                                       :start-level 2
-                                       :ref? true
-                                       :group-by-page? true}
-                                      {})]
+          n-ref (count ref-headings)]
       [:div.references
-       (let [n-ref (count ref-headings)]
-         (if (> n-ref 0)
-           [:h2.font-bold.mt-6.opacity-50 (let []
-                                 (str n-ref " Linked References"))]))
-       (content/content encoded-page-name
-                        {:hiccup ref-hiccup})])))
+       (when (> n-ref 0)
+         [:h2.font-bold.mt-6.opacity-50 (let []
+                                          (str n-ref " Linked References"))])
+       (when (> n-ref 0)
+         (let [ref-hiccup (hiccup/->hiccup ref-headings
+                                           {:id encoded-page-name
+                                            :start-level 2
+                                            :ref? true
+                                            :group-by-page? true}
+                                           {})]
+           (content/content encoded-page-name
+                            {:hiccup ref-hiccup})))])))

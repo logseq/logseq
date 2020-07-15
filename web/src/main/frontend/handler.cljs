@@ -315,8 +315,6 @@
        {:db (d/db (db/get-conn repo-url false))
         :files-db (d/db (db/get-files-conn repo-url))}))))
 
-
-
 (defn pull
   [repo-url token]
   (when (db/get-conn repo-url true)
@@ -923,7 +921,7 @@
 (defn rebuild-after-headings
   [repo file before-end-pos new-end-pos]
   (let [file-id (:db/id file)
-        after-headings (db/get-file-after-headings repo file-id before-end-pos)
+        after-headings (db/get-file-after-headings-meta repo file-id before-end-pos)
         last-start-pos (atom new-end-pos)]
     (mapv
      (fn [{:heading/keys [uuid meta] :as heading}]
@@ -954,7 +952,7 @@
                 value)
         new-directives (if permalink-changed?
                          (assoc new-directives :old_permalink (:permalink old-directives)))]
-    (when (not= (string/trim content) value) ; heading content changed
+    (when (not= (string/trim content) (string/trim value)) ; heading content changed
       (let [file (db/entity repo (:db/id file))
             page (db/entity repo (:db/id page))
             save-heading (fn [file {:heading/keys [uuid content meta page file dummy? format] :as heading}]
@@ -991,8 +989,7 @@
                                   modified-time)
                                  {:key :heading/change
                                   :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
-                                 [[file-path new-content]]
-                                 )))))]
+                                 [[file-path new-content]])))))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -1043,22 +1040,27 @@
                                        (str value "\n" new-heading-content)
                                        value)
                                [new-content value] (new-file-content heading file-content value)
-                               {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
+                               {:keys [headings pages start-pos end-pos]} (profile "Parse heading"
+                                                                                   (block/parse-heading (assoc heading :heading/content value) format))
                                first-heading (first headings)
                                last-heading (last headings)
-                               headings (db/recompute-heading-children repo heading headings)
-                               after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
-                           (profile
-                            "Insert heading"
-                            (transact-react-and-alter-file!
-                             repo
-                             (concat
-                              pages
-                              headings
-                              after-headings)
-                             {:key :heading/change
-                              :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
-                             [[file-path new-content]]))
+                               headings (profile
+                                         "Recompute-heading-children"
+                                         (db/recompute-heading-children repo heading headings))
+                               after-headings (profile
+                                               "Rebuild-after-headings"
+                                               (rebuild-after-headings repo file (:end-pos meta) end-pos))]
+
+                           (transact-react-and-alter-file!
+                            repo
+                            (concat
+                             pages
+                             headings
+                             after-headings)
+                            {:key :heading/change
+                             :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+                            [[file-path new-content]])
+
                            (when ok-handler
                              (ok-handler [first-heading last-heading new-heading-content]))))]
     (cond
@@ -1280,19 +1282,20 @@
 
 (defn edit-heading!
   [heading-id prev-pos format id]
-  (let [heading (or
+  (let [edit-input-id (str (subs id 0 (- (count id) 36)) heading-id)
+        heading (or
                  (db/pull [:heading/uuid heading-id])
                  ;; dummy?
                  {:heading/uuid heading-id
-                  :heading/content ""})]
-    (let [{:heading/keys [content]} heading
-          content (remove-level-spaces content format)
-          edit-input-id (str (subs id 0 (- (count id) 36)) heading-id)
-          content-length (count content)
-          text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
-                       content
-                       (subs content 0 prev-pos))]
-      (state/set-editing! edit-input-id content heading text-range))))
+                  :heading/content ""})
+        {:heading/keys [content]} heading
+        content (string/trim (remove-level-spaces content format))
+        content-length (count content)
+        text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
+                     content
+                     (subs content 0 prev-pos))]
+    (profile "Set editing"
+             (state/set-editing! edit-input-id content heading text-range))))
 
 (defn clear-selection!
   [e]

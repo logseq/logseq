@@ -1,7 +1,7 @@
 (ns frontend.state
   (:require [frontend.storage :as storage]
             [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [clojure.string :as string]
             [medley.core :as medley]
             [goog.object :as gobj]
@@ -141,17 +141,27 @@
   (set-state! :ui/cycle-collapse (next-collapse-mode)))
 
 (defn set-edit-content!
-  [input-id value set-input-value?]
+  [input-id value]
   (when input-id
-    (when set-input-value?
-      (when-let [input (gdom/getElement input-id)]
-        (gobj/set input "value" value)))
     (update-state! :editor/content (fn [m]
-                                     (assoc m input-id value)))))
+                                     (assoc m input-id value)))
+    ;; followers
+    ;; (when-let [s (util/extract-uuid input-id)]
+    ;;   (let [input (gdom/getElement input-id)
+    ;;         leader-parent (util/rec-get-heading-node input)
+    ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
+    ;;                        (remove #(= leader-parent %)))]
+    ;;     (prn "followers: " (count followers))
+    ;;     ))
+    ))
 
 (defn get-edit-input-id
   []
   (ffirst (:editor/editing? @state)))
+
+(defn get-edit-content
+  []
+  (get (:editor/content @state) (get-edit-input-id)))
 
 (defn append-current-edit-content!
   [append-text]
@@ -262,10 +272,6 @@
   []
   (swap! state assoc :editor/editing? nil))
 
-(defn sub-edit-input-id
-  []
-  (ffirst (util/react (rum/cursor state :editor/editing?))))
-
 (defn set-selection-headings!
   [headings]
   (when (seq headings)
@@ -299,8 +305,8 @@
   []
   (let [[first-heading & others] (:selection/headings @state)]
     (swap! state assoc
-          :selection/mode true
-          :selection/headings others)
+           :selection/mode true
+           :selection/headings others)
     first-heading))
 
 (defn selection-up?
@@ -368,16 +374,25 @@
 (defn set-editing!
   [edit-input-id content heading cursor-range]
   (when edit-input-id
-    (reset! state
-            (-> @state
-                (assoc-in [:editor/content edit-input-id] content)
-                (assoc :editor/editing? {edit-input-id true}
-                       :cursor-range cursor-range)))))
+    (swap! state
+           (fn [state]
+             (-> state
+                 (assoc-in [:editor/content edit-input-id] (string/trim content))
+                 (assoc
+                  :editor/editing? {edit-input-id true}
+                  :cursor-range cursor-range))))))
+
+(defn clear-edit!
+  []
+  (swap! state merge {:editor/content {}
+                      :editor/editing? nil
+                      :editor/heading nil
+                      :cursor-range nil}))
 
 (defn set-heading-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
-    (set-edit-content! edit-input-id content true)
+    (set-edit-content! edit-input-id content)
     (reset! state (assoc @state :editor/last-saved-cursor new-pos))))
 
 (defn set-theme!

@@ -284,7 +284,7 @@
                            (string/replace-first (subs edit-content pos)
                                                  marker-pattern
                                                  (str marker " ")))]
-        (state/set-edit-content! input-id new-value true)))))
+        (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] format]
   (when-let [input-id (state/get-edit-input-id)]
@@ -307,7 +307,7 @@
 
                         :else
                         (str new-priority " " (string/triml edit-content)))]
-        (state/set-edit-content! input-id new-value true)))))
+        (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))

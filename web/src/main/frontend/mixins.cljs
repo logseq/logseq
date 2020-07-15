@@ -118,7 +118,11 @@
      :did-remount (fn [old-state new-state]
                     (detach old-state)
                     (attach-listeners new-state)
-                    new-state)})))
+                    new-state)
+     ;; :will-unmount (fn [state]
+     ;;                 (detach state)
+     ;;                 state)
+     })))
 
 ;; TODO: is it possible that multiple nested components using the same key `:open?`?
 (defn modal

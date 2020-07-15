@@ -11,6 +11,7 @@
             [frontend.components.content :as content]
             [frontend.components.hiccup :as hiccup]
             [frontend.components.reference :as reference]
+            [frontend.components.page :as page]
             [frontend.utf8 :as utf8]
             [goog.object :as gobj]
             [clojure.string :as string]))
@@ -34,15 +35,24 @@
              nil))))))
   state)
 
-(rum/defc journal-cp < rum/reactive
+(rum/defc headings-cp < rum/reactive
+  [repo page encoded-page-name format]
+  (let [raw-headings (db/get-page-headings repo page)
+        headings (db/with-dummy-heading raw-headings format nil true)]
+    (content/content
+     encoded-page-name
+     {:hiccup (hiccup/->hiccup headings
+                               {:id encoded-page-name
+                                :start-level 2}
+                               {})})))
+
+(rum/defc journal-cp < rum/static
   {:init journal-include-template!
    :did-update journal-include-template!}
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
         repo (state/get-current-repo)
-        raw-headings (db/get-page-headings repo page)
-        headings (db/with-dummy-heading raw-headings format nil true)
         encoded-page-name (util/encode-str page)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))]
@@ -61,21 +71,10 @@
                                       (handler/show-right-sidebar)))}
       [:h1.title
        (util/capitalize-all title)]]
-     (content/content encoded-page-name
-                      {:hiccup (hiccup/->hiccup headings
-                                                {:id encoded-page-name
-                                                 :start-level 2}
-                                                {})})
 
-     (when today?
-       (when-let [repo (state/get-current-repo)]
-         (let [queries (state/sub [:config repo :default-queries :journals])]
-           (when (seq queries)
-             [:div#today-queries
-              (for [{:keys [title query]} queries]
-                [:div {:key (str "query-" title)}
-                 (hiccup/custom-query {:start-level 2} {:query-title title}
-                                      query)])]))))
+     (headings-cp repo page encoded-page-name format)
+
+     (page/today-queries repo today? false)
 
      (reference/references title false)]))
 
