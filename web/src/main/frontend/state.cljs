@@ -53,7 +53,7 @@
     :cursor-pos nil
 
     :selection/mode false
-    :selection/headings nil
+    :selection/headings []
     :custom-context-menu/show? false
 
     ;; encrypted github token
@@ -258,6 +258,10 @@
          (fn [m]
            (and input-id {input-id true}))))
 
+(defn disable-edit!
+  []
+  (swap! state assoc :editor/editing? nil))
+
 (defn sub-edit-input-id
   []
   (ffirst (util/react (rum/cursor state :editor/editing?))))
@@ -273,7 +277,8 @@
   []
   (swap! state assoc
          :selection/mode false
-         :selection/headings nil))
+         :selection/headings nil
+         :selection/up? nil))
 
 (defn get-selection-headings
   []
@@ -282,6 +287,29 @@
 (defn in-selection-mode?
   []
   (:selection/mode @state))
+
+(defn conj-selection-heading!
+  [heading up?]
+  (swap! state assoc
+         :selection/mode true
+         :selection/headings (conj (:selection/headings @state) heading)
+         :selection/up? up?))
+
+(defn pop-selection-heading!
+  []
+  (let [[first-heading & others] (:selection/headings @state)]
+    (swap! state assoc
+          :selection/mode true
+          :selection/headings others)
+    first-heading))
+
+(defn selection-up?
+  []
+  (:selection/up? @state))
+
+(defn set-selection-up?
+  [value]
+  (swap! state assoc :selection/up? value))
 
 (defn show-custom-context-menu!
   []

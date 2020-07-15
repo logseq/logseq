@@ -1305,6 +1305,16 @@
     (when-not (util/input? (gobj/get e "target"))
       (util/clear-selection!))))
 
+(defn select-all-headings!
+  []
+  (when-let [current-input-id (state/get-edit-input-id)]
+    (let [input (gdom/getElement current-input-id)
+          headings-container (util/rec-get-headings-container input)
+          headings (dom/by-class headings-container "ls-heading")]
+      (doseq [heading headings]
+        (dom/add-class! heading "selected noselect"))
+      (state/set-selection-headings! headings))))
+
 (defn- get-selected-headings-with-children
   []
   (when-let [headings (seq (get @state/state :selection/headings))]
@@ -1318,9 +1328,11 @@
   (when-let [headings (seq (get-selected-headings-with-children))]
     (let [repo (dom/attr (first headings) "repo")
           ids (distinct (map #(uuid (dom/attr % "headingid")) headings))
+          up? (state/selection-up?)
           content (some->> (db/get-headings-contents repo ids)
-                           (map :heading/content)
-                           (string/join ""))]
+                           (map :heading/content))
+          content (if (false? up?) (reverse content) content)
+          content (string/join "" content)]
       (when-not (string/blank? content)
         (util/copy-to-clipboard! content)))))
 

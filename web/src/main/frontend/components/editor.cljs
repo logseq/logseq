@@ -265,10 +265,10 @@
                                                     {:last-pattern "@@embed: "})
                                    :reference
                                    (insert-command! id
-                                                   (util/format "((%s))" uuid-string)
-                                                   format
-                                                   {:last-pattern (str "((" q)
-                                                    :postfix-fn (fn [s] (util/replace-first "))" s ""))})
+                                                    (util/format "((%s))" uuid-string)
+                                                    format
+                                                    {:last-pattern (str "((" q)
+                                                     :postfix-fn (fn [s] (util/replace-first "))" s ""))})
                                    nil)
 
                                  ;; Save it so it'll be parsed correctly in the future
@@ -386,26 +386,61 @@
           (handler/save-heading-if-changed! heading new-value)
           (reset! *last-edit-heading cache))))))
 
-(defn on-up-down
+(defn clear-last-selected-heading!
+  []
+  (let [first-heading (state/pop-selection-heading!)]
+    (d/remove-class! first-heading "selected")
+    (d/remove-class! first-heading "noselect")))
+
+(defn on-select-heading
   [state e up?]
   (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format]} (get-state state)
-        element (gdom/getElement id)
-        line-height (util/get-textarea-line-height element)]
-    (when (and heading-id
-               (or (and up? (util/textarea-cursor-first-row? element line-height))
-                   (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+        element (gdom/getElement heading-parent-id)
+        selected-headings (state/get-selection-headings)
+        selected-headings-count (count selected-headings)
+        first-heading (first selected-headings)
+        selection-up? (state/selection-up?)]
+    (when heading-id
       (util/stop e)
-      (let [f (if up? util/get-prev-heading util/get-next-heading)
-            sibling-heading (f (gdom/getElement heading-parent-id))]
-        (when sibling-heading
-          (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-            (let [state (get-state state)
-                  content (:heading/content heading)
-                  value (:value state)]
-              (when (not= (string/trim (handler/remove-level-spaces content format))
-                          (string/trim value))
-                (save-heading! state (:value state))))
-            (handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))
+      (when-let [element (if-not (state/in-selection-mode?)
+                           element
+                           (let [f (if up? util/get-prev-heading util/get-next-heading)]
+                             (f first-heading)))]
+        (if (and (not (nil? selection-up?)) (not= up? selection-up?))
+          (cond
+            (>= selected-headings-count 2) ; back to the start heading
+            (do
+              (when (= 2 selected-headings-count) (state/set-selection-up? nil))
+              (clear-last-selected-heading!))
+
+            :else
+            nil)
+          (do
+            (d/add-class! element "selected noselect")
+            (state/conj-selection-heading! element up?)))))))
+
+(defn on-up-down
+  [state e up?]
+  (if (gobj/get e "shiftKey")
+    (on-select-heading state e up?)
+    (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format]} (get-state state)
+          element (gdom/getElement id)
+          line-height (util/get-textarea-line-height element)]
+      (when (and heading-id
+                 (or (and up? (util/textarea-cursor-first-row? element line-height))
+                     (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+        (util/stop e)
+        (let [f (if up? util/get-prev-heading util/get-next-heading)
+              sibling-heading (f (gdom/getElement heading-parent-id))]
+          (when sibling-heading
+            (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+              (let [state (get-state state)
+                    content (:heading/content heading)
+                    value (:value state)]
+                (when (not= (string/trim (handler/remove-level-spaces content format))
+                            (string/trim value))
+                  (save-heading! state (:value state))))
+              (handler/edit-heading! (uuid sibling-heading-id) pos format id))))))))
 
 (defn delete-heading!
   [state repo e]
@@ -584,6 +619,7 @@
           (state/append-current-edit-content! doc-text))))))
 
 (rum/defc box < rum/reactive
+  (mixins/keyboard-mixin "ctrl+shift+a" handler/select-all-headings!)
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [id format heading]} (get-state state)
@@ -771,7 +807,7 @@
                    (let [{:keys [id value format heading repo dummy?]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
                        (.removeEventListener input "paste" (fn [event]
-                                                          (append-paste-doc! format event)))
+                                                             (append-paste-doc! format event)))
                        (dnd/unsubscribe!
                         input
                         :upload-images)

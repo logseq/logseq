@@ -517,7 +517,7 @@
     (and node
          (rec-get-heading-node (gobj/get node "parentNode")))))
 
-(defn- rec-get-headings-container
+(defn rec-get-headings-container
   [node]
   (if (and node (d/has-class? node "headings-container"))
     node
