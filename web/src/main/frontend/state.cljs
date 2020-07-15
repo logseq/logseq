@@ -226,6 +226,12 @@
   [repo-url value]
   (set-state! [:config repo-url] value))
 
+(defn get-config
+  ([]
+   (get-config (get-current-repo)))
+  ([repo-url]
+   (get-in @state [:config repo-url])))
+
 (defn star-page!
   [repo-url page starred?]
   (update-state! [:config repo-url :starred]

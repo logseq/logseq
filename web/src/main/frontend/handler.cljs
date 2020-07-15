@@ -46,10 +46,6 @@
 ;; TODO: separate git status for push-failed, pull-failed, etc
 ;; TODO: Support more storage options (dropbox, google drive), git logic should be
 ;; moved to another namespace, better there should be a `protocol`.
-(defn set-state-kv!
-  [key value]
-  (swap! state/state assoc key value))
-
 (defn show-notification!
   [content status]
   (swap! state/state assoc
@@ -131,7 +127,7 @@
 (defn load-files
   [repo-url]
   (state/set-cloning? false)
-  (set-state-kv! :repo/loading-files? true)
+  (state/set-state! :repo/loading-files? true)
   (p/let [files (git/list-files repo-url)
           files (bean/->clj files)
           config-content (load-file repo-url (str config/app-name "/" config/config-file))
@@ -243,8 +239,8 @@
                          repo-url
                          files
                          (fn [contents]
-                           (set-state-kv! :repo/loading-files? false)
-                           (set-state-kv! :repo/importing-to-db? true)
+                           (state/set-state! :repo/loading-files? false)
+                           (state/set-state! :repo/importing-to-db? true)
                            (let [parsed-files (filter
                                                (fn [[file _]]
                                                  (let [format (format/get-format file)]
@@ -259,7 +255,7 @@
                                  (when-let [content (get contents metadata-file)]
                                    (let [{:keys [tx-data]} (reader/read-string content)]
                                      (db/transact! repo-url tx-data)))))
-                             (set-state-kv! :repo/importing-to-db? false)
+                             (state/set-state! :repo/importing-to-db? false)
                              (when re-render?
                                (re-render-root!))))))]
     (if first-clone?
@@ -269,7 +265,7 @@
        (p/catch (fn [error]
                   (println "loading files failed: ")
                   (js/console.dir error)
-                  (set-state-kv! :repo/loading-files? false))))
+                  (state/set-state! :repo/loading-files? false))))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
@@ -1223,6 +1219,7 @@
 
 (defn clone-and-pull
   [repo-url]
+  (prn "me:" (:me @state/state))
   (util/post (str config/api "repos")
              {:url repo-url}
              (fn [result]
@@ -1414,7 +1411,7 @@
         repos (if logged?
                 (:repos me)
                 [{:url config/local-repo}])]
-    (when me (set-state-kv! :me me))
+    (when me (state/set-state! :me me))
     (state/set-db-restoring! true)
     (render)
     (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! restore-config!))
@@ -1619,7 +1616,6 @@
     (let [path (:file/path file)
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
-
 
 (comment
   (defn debug-latest-commits

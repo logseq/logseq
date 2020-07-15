@@ -6,6 +6,7 @@
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler :as handler]
+            [frontend.handler.project :as project]
             [clojure.walk :as walk]))
 
 (defn page-add-directives!
@@ -95,45 +96,51 @@
   ([page-name]
    (publish-page-as-slide! page-name (db/get-page-headings page-name)))
   ([page-name headings]
-   (page-add-directives! page-name {"published" true
-                                    "slide" true})
-   (let [directives (db/get-page-directives page-name)
-         plugins (get-plugins headings)
-         data {:title page-name
-               :permalink (:permalink directives)
-               :html (html-export/export-page page-name headings handler/show-notification!)
-               :tags (:tags directives)
-               :settings (merge
-                          (assoc directives
-                                 :slide true
-                                 :published true)
-                          plugins)}]
-     (util/post (str config/api "pages")
-                data
-                (published-success-handler page-name)
-                published-failed-handler))))
+   (project/exists-or-create!
+    (fn [project]
+      (page-add-directives! page-name {"published" true
+                                       "slide" true})
+      (let [directives (db/get-page-directives page-name)
+            plugins (get-plugins headings)
+            data {:project project
+                  :title page-name
+                  :permalink (:permalink directives)
+                  :html (html-export/export-page page-name headings handler/show-notification!)
+                  :tags (:tags directives)
+                  :settings (merge
+                             (assoc directives
+                                    :slide true
+                                    :published true)
+                             plugins)}]
+        (util/post (str config/api "pages")
+                   data
+                   (published-success-handler page-name)
+                   published-failed-handler))))))
 
 (defn publish-page!
   [page-name]
-  (let [directives (db/get-page-directives page-name)
-        slide? (let [slide (:slide directives)]
-                 (or (true? slide)
-                     (= "true" slide)))
-        headings (db/get-page-headings page-name)
-        plugins (get-plugins headings)]
-    (if slide?
-      (publish-page-as-slide! page-name headings)
-      (do
-        (page-add-directives! page-name {"published" true})
-        (let [data {:title page-name
-                    :permalink (:permalink directives)
-                    :html (html-export/export-page page-name headings handler/show-notification!)
-                    :tags (:tags directives)
-                    :settings (merge directives plugins)}]
-          (util/post (str config/api "pages")
-                     data
-                     (published-success-handler page-name)
-                     published-failed-handler))))))
+  (project/exists-or-create!
+   (fn [project]
+     (let [directives (db/get-page-directives page-name)
+           slide? (let [slide (:slide directives)]
+                    (or (true? slide)
+                        (= "true" slide)))
+           headings (db/get-page-headings page-name)
+           plugins (get-plugins headings)]
+       (if slide?
+         (publish-page-as-slide! page-name headings)
+         (do
+           (page-add-directives! page-name {"published" true})
+           (let [data {:project project
+                       :title page-name
+                       :permalink (:permalink directives)
+                       :html (html-export/export-page page-name headings handler/show-notification!)
+                       :tags (:tags directives)
+                       :settings (merge directives plugins)}]
+             (util/post (str config/api "pages")
+                        data
+                        (published-success-handler page-name)
+                        published-failed-handler))))))))
 
 (defn unpublished-success-handler
   [page-name]
