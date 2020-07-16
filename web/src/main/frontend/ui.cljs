@@ -335,7 +335,7 @@
         close-fn #(state/set-state! sub-path false)]
     (prn {:show? show?})
     [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
-     {:style {:z-index 10}}
+     {:style {:z-index (if show? 10 0)}}
      ;; Background overlay, show/hide based on modal state.
 
      ;; Entering: "ease-out duration-300"
