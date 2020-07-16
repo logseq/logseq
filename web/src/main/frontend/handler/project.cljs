@@ -14,23 +14,24 @@
     (and (seq projects) (contains? projects project))))
 
 (defn create!
-  [ok-handler]
-  (let [config (state/get-config)
-        project (:project config)]
-    (let [data {:name project
-                :description (get config :description "")
-                :repo (state/get-current-repo)}]
-      (util/post (str config/api "projects")
-                 data
-                 (fn [result]
-                   (swap! state/state
-                          update-in [:me :projects]
-                          (fn [projects]
-                            (util/distinct-by :name (conj projects result))))
-                   (ok-handler project))
-                 (fn [error]
-                   (js/console.dir error)
-                   (handler/show-notification! (util/format "Project \"%s\" already exists, please change another name." project) :error))))))
+  ([ok-handler]
+   (create! (state/get-current-project) ok-handler))
+  ([project ok-handler]
+   (let [config (state/get-config)]
+     (let [data {:name project
+                 :description (get config :description "")
+                 :repo (state/get-current-repo)}]
+       (util/post (str config/api "projects")
+                  data
+                  (fn [result]
+                    (swap! state/state
+                           update-in [:me :projects]
+                           (fn [projects]
+                             (util/distinct-by :name (conj projects result))))
+                    (ok-handler project))
+                  (fn [error]
+                    (js/console.dir error)
+                    (handler/show-notification! (util/format "Project \"%s\" already taken, please change to another name." project) :error)))))))
 
 (defn exists-or-create!
   [ok-handler]
@@ -38,4 +39,12 @@
     (if (project-exists? project)
       (ok-handler project)
       (create! ok-handler))
-    (handler/show-notification! "Please add a project name like `:project \"your-project-name\"` in the file logseq/config.edn." :error)))
+    (state/set-state! :modal/input-project true)))
+
+(defn add-project!
+  [project]
+  (handler/set-config! :project project)
+  (create! project
+           (fn []
+             (handler/show-notification! (util/format "Project \"%s\" was created successfully." project) :success)
+             (state/set-state! :modal/input-project false))))

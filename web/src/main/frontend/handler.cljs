@@ -1219,7 +1219,6 @@
 
 (defn clone-and-pull
   [repo-url]
-  (prn "me:" (:me @state/state))
   (util/post (str config/api "repos")
              {:url repo-url}
              (fn [result]
@@ -1235,9 +1234,30 @@
     (periodically-pull-and-push repo-url {:pull-now? false})
     (periodically-persist-app-metadata repo-url)))
 
+(defn set-config-content!
+  [repo path new-config]
+  (let [new-content (util/pp-str new-config)]
+    (alter-file repo path new-content {:reset? false
+                                       :re-render-root? false})))
+
+(defn set-config!
+  [k v]
+  (when-let [repo (state/get-current-repo)]
+    (let [path (str config/app-name "/" config/config-file)]
+      (when-let [config (db/get-file path)]
+        (let [config (reader/read-string config)
+              ks (if (vector? k) k [k])
+              new-config (assoc-in config ks v)]
+          (state/set-config! repo new-config)
+          (set-config-content! repo path new-config))))))
+
 (defn star-page!
   [page-name starred?]
-  (state/star-page! (state/get-current-repo) page-name starred?))
+  (let [repo (state/get-current-repo)]
+    (state/star-page! repo page-name starred?)
+    (let [config (state/get-config repo)
+          path (str config/app-name "/" config/config-file)]
+      (set-config-content! repo path config))))
 
 (defn remove-repo!
   [{:keys [id url] :as repo}]

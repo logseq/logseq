@@ -100,13 +100,15 @@
                 :stroke-linecap "round"}]]]
             ["text-red-500"
              [:svg.h-6.w-6.text-red-500
-              {:viewBox "0 0 20 20", :fill "currentColor"}
+              {:view-box "0 0 20 20", :fill "currentColor"}
               [:path
                {:clip-rule "evenodd",
                 :d
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z",
                 :fill-rule "evenodd"}]]])]
-      [:div.fixed.inset-0.flex.items-end.justify-center.px-4.py-6.pointer-events-none.sm:p-6.sm:items-start.sm:justify-end {:style {:top "3.2em"}}
+      [:div.fixed.inset-0.flex.items-end.justify-center.px-4.py-6.pointer-events-none.sm:p-6.sm:items-start.sm:justify-end
+       {:style {:z-index 99
+                :top "3.2em"}}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
@@ -127,7 +129,7 @@
              {:on-click (fn []
                           (swap! state/state assoc :notification/show? false))}
              [:svg.h-5.w-5
-              {:fill "currentColor", :viewBox "0 0 20 20"}
+              {:fill "currentColor", :view-Box "0 0 20 20"}
               [:path
                {:clip-rule "evenodd",
                 :d
@@ -265,36 +267,6 @@
     label]
    children])
 
-(comment
-  ;; panel content
-  [:div.sm:flex.sm:items-start
-   [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-    [:svg.h-6.w-6.text-red-600
-     {:stroke "currentColor", :viewbox "0 0 24 24", :fill "none"}
-     [:path
-      {:d
-       "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
-       :stroke-width "2",
-       :stroke-linejoin "round",
-       :stroke-linecap "round"}]]]
-   [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-    [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
-     "Deactivate account"]
-    [:div.mt-2
-     [:p.text-sm.leading-5.text-gray-500
-      "Are you sure you want to deactivate your account? All of your data will be permanently removed from our servers forever. This action cannot be undone."]]]]
-
-  [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-   [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-    [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-red-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-red-500.focus:outline-none.focus:border-red-700.focus:shadow-outline-red.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-     {:type "button"}
-     "Deactivate"]]
-   [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-    [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-     {:type "button"
-      :on-click close-fn}
-     "Cancel"]]]
-  )
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state]
@@ -320,7 +292,7 @@
       :type "button"
       :on-click close-fn}
      [:svg.h-6.w-6
-      {:stroke "currentColor", :viewbox "0 0 24 24", :fill "none"}
+      {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
       [:path
        {:d "M6 18L18 6M6 6l12 12",
         :stroke-width "2",
@@ -333,31 +305,12 @@
   [sub-path panel-content]
   (let [show? (state/sub sub-path)
         close-fn #(state/set-state! sub-path false)]
-    (prn {:show? show?})
     [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
      {:style {:z-index (if show? 10 0)}}
-     ;; Background overlay, show/hide based on modal state.
-
-     ;; Entering: "ease-out duration-300"
-     ;; From: "opacity-0"
-     ;; To: "opacity-100"
-     ;; Leaving: "ease-in duration-200"
-     ;; From: "opacity-100"
-     ;; To: "opacity-0"
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
         (modal-overlay state)))
-
-
-     ;; Modal panel, show/hide based on modal state.
-
-     ;; Entering: "ease-out duration-300"
-     ;; From: "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-     ;; To: "opacity-100 translate-y-0 sm:scale-100"
-     ;; Leaving: "ease-in duration-200"
-     ;; From: "opacity-100 translate-y-0 sm:scale-100"
-     ;; To: "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
      (css-transition
       {:in show? :timeout 0}
       (fn [state]

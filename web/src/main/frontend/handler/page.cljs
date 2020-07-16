@@ -111,7 +111,8 @@
                              (assoc directives
                                     :slide true
                                     :published true)
-                             plugins)}]
+                             plugins)
+                  :repo (state/get-current-repo)}]
         (util/post (str config/api "pages")
                    data
                    (published-success-handler page-name)
@@ -136,7 +137,8 @@
                        :permalink (:permalink directives)
                        :html (html-export/export-page page-name headings handler/show-notification!)
                        :tags (:tags directives)
-                       :settings (merge directives plugins)}]
+                       :settings (merge directives plugins)
+                       :repo (state/get-current-repo)}]
              (util/post (str config/api "pages")
                         data
                         (published-success-handler page-name)

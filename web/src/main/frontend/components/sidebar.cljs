@@ -8,6 +8,7 @@
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
+            [frontend.components.project :as project]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.storage :as storage]
             [goog.crypt.base64 :as b64]
@@ -217,6 +218,7 @@
 
           (when-let [project (and current-repo (state/get-current-project))]
             [:a {:style {:margin-left 8}
+                 :title (str "Go to /" project)
                  :href (str config/website "/" project)
                  :target "_blank"}
              svg/external-link])
@@ -283,7 +285,8 @@
        [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-hidden
         {:tabIndex "0"
          :style {:width "100%"
-                 :height "100%"}}
+                 :height "100%"
+                 :z-index 1}}
         [:div#main-content
          {:style {
                   :height "100%"
@@ -324,7 +327,7 @@
                  :z-index 111}                                                }
         (svg/logo)]
        (ui/notification)
-       (ui/modal :modal/input-project (fn [close-fn]
-                                        [:div "Input project"]))
+       (ui/modal :modal/input-project
+                 project/add-project)
        (custom-context-menu)
        ]]]))

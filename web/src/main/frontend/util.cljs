@@ -14,7 +14,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs-time.format :as format]
-            [frontend.regex :as regex]))
+            [frontend.regex :as regex]
+            [clojure.pprint :refer [pprint]]))
 
 (defn format
   [fmt & args]
@@ -684,3 +685,6 @@
    #{"NOW" "LATER" "TODO" "DOING"
      "DONE" "WAIT" "WAITING" "CANCELED" "CANCELLED" "STARTED" "IN-PROGRESS"}
    (string/upper-case s)))
+
+(defn pp-str [x]
+  (with-out-str (pprint x)))

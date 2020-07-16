@@ -499,7 +499,7 @@
 
 (defn get-current-project
   []
-  (when-let [repo (:git/current-repo @state)]
+  (when-let [repo (get-current-repo)]
     (let [projects (:projects (get-me))
           project (:name (first (filter (fn [p] (= (:repo p) repo)) projects)))]
       (when-not (string/blank? project)
