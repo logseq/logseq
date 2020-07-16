@@ -211,8 +211,16 @@
                           (storage/remove :git/current-repo))}
              "Login with Github"])
           (widgets/sync-status)
+
           [:div.repos.hidden.md:block
            (widgets/repos true)]
+
+          (when-let [project (and current-repo (state/get-current-project))]
+            [:a {:style {:margin-left 8}
+                 :href (str config/website "/" project)
+                 :target "_blank"}
+             svg/external-link])
+
           [:a {:title "Draw with Excalidraw"
                :href "/draw"
                :style {:margin-left 8
@@ -316,4 +324,7 @@
                  :z-index 111}                                                }
         (svg/logo)]
        (ui/notification)
-       (custom-context-menu)]]]))
+       (ui/modal :modal/input-project (fn [close-fn]
+                                        [:div "Input project"]))
+       (custom-context-menu)
+       ]]]))

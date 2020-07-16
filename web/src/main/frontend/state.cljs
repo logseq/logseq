@@ -496,3 +496,11 @@
 (defn set-db-restoring!
   [value]
   (set-state! :db/restoring? value))
+
+(defn get-current-project
+  []
+  (when-let [repo (:git/current-repo @state)]
+    (let [projects (:projects (get-me))
+          project (:name (first (filter (fn [p] (= (:repo p) repo)) projects)))]
+      (when-not (string/blank? project)
+        project))))
