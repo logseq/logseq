@@ -57,8 +57,8 @@
       (page-add-directives! page-name {"permalink" permalink})
       (let [win (js/window.open (str
                                  config/website
-                                 "/@"
-                                 (:name (state/get-me))
+                                 "/"
+                                 (:project (state/get-config))
                                  "/"
                                  permalink))]
         (.focus win)))))

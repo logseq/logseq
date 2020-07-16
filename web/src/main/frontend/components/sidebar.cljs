@@ -236,10 +236,6 @@
                  {:title "Graph"
                   :options {:href "/graph"}})
                (when logged?
-                 {:title "Your website"
-                  :options {:href (str "/" (:name me))
-                            :target "_blank"}})
-               (when logged?
                  {:title "All repos"
                   :options {:href "/repos"}})
                (when current-repo

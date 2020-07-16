@@ -106,6 +106,7 @@
                        (when-not (util/link? (gobj/get e "target"))
                          (util/stop e)
                          (handler/reset-cursor-range! (gdom/getElement (str id)))
+                         (state/set-edit-content! id content)
                          (state/set-edit-input-id! id)
                          (when on-click
                            (on-click e))))]

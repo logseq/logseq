@@ -13,7 +13,8 @@
   (let [projects (set (map :name (:projects (state/get-me))))]
     (when-let [project (:project (state/get-config))]
       (when-not (string/blank? project)
-        (and (seq projects) (contains? projects project))))))
+        (and (seq projects) (contains? projects project))
+        project))))
 
 (defn create!
   [ok-handler]
@@ -37,6 +38,7 @@
       (handler/show-notification! "Please add a project name like `:project \"your-project-name\"` in the file logseq/config.edn." :error))))
 
 (defn exists-or-create!
-  [create-ok-handler]
-  (when-not (project-exists?)
-    (create! create-ok-handler)))
+  [ok-handler]
+  (if-let [project (project-exists?)]
+    (ok-handler project)
+    (create! ok-handler)))
