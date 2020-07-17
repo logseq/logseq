@@ -51,7 +51,7 @@
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
-     [:div.py-1.rounded-md.shadow-xs.bg-base-3
+     [:div.py-1.rounded-md.shadow-xs.dropdown-modal
       (when links-header links-header)
       (for [{:keys [options title]} links]
         (let [new-options
@@ -229,8 +229,8 @@
                          item-render
                          class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-3.overflow-y-auto {:class class
-                                                               :style {:max-height 450}}
+    [:div.py-1.rounded-md.shadow-xs.overflow-y-auto.dropdown-modal {:class class
+                                                                    :style {:max-height 450}}
      (if (seq matched)
        (for [[idx item] (medley/indexed matched)]
          (rum/with-key

@@ -210,7 +210,7 @@
                      (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100")})])
                   links
                   {:modal-class (util/hiccup->class
-                                 "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.w-96.dropdown-overflow-auto")})))]])
+                                 "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")})))]])
 
          (when (and file-path (not sidebar?) (not journal?) (not heading?))
            [:div.text-sm.ml-1.mb-2 {:key "page-file"}
