@@ -70,7 +70,15 @@
 (defn vertical-dots
   [options]
   (hero-icon "M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" options))
-(def external-link (hero-icon "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"))
+(def external-link
+  [:svg {:fill "none", :view-box "0 0 24 24", :height "21", :width "21"
+         :stroke "currentColor"}
+   [:path
+    {:stroke-linejoin "round"
+     :stroke-linecap "round"
+     :stroke-width "2"
+     :d "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"}]]
+  )
 
 (def save
   [:svg
@@ -307,8 +315,10 @@
   )
 
 (def slideshow
-  [:svg.h-6.w-6
+  [:svg
    {:view-box "0 0 24 24"
+    :height 23
+    :width 23
     :fill "currentColor"
     :display "inline-block"}
    [:path

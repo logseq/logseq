@@ -62,6 +62,20 @@
                         :sidebar? sidebar?})
       (str encoded-page-name "-hiccup"))))
 
+(defn presentation
+  [repo page journal?]
+  [:a.opacity-50.hover:opacity-100.ml-4
+   {:title "Presentation mode (Powered by Reveal.js)"
+    :on-click (fn []
+                (state/sidebar-add-block!
+                 repo
+                 (:db/id page)
+                 :page-presentation
+                 {:page page
+                  :journal? journal?})
+                (handler/show-right-sidebar))}
+   svg/slideshow])
+
 (rum/defc star < rum/reactive
   [repo page-name]
   (let [starred? (contains?
@@ -69,8 +83,9 @@
                    (some->> (state/sub [:config repo :starred])
                             (map string/lower-case)))
                   page-name)]
-    [:a.mr-3.opacity-50.hover:opacity-100
+    [:a.ml-4.opacity-50.hover:opacity-100
      {:class (if starred? "text-gray-800")
+      :title (if starred? "Unstar this page" "Star this page")
       :on-click (fn []
                   ;; TODO: save to config file
                   (handler/star-page! page-name starred?))}
@@ -172,32 +187,20 @@
                (util/capitalize-all page-name)]]]
 
             [:div.flex-row.flex.items-center {:style {:margin-bottom "1.5rem"}}
-
-             (star repo page-name)
-
-             [:a.opacity-50.hover:opacity-100 {:title "Presentation mode (Powered by Reveal.js)"
-                                               :style {:margin-right 1}
-                                               :on-click (fn []
-                                                           (state/sidebar-add-block!
-                                                            repo
-                                                            (:db/id page)
-                                                            :page-presentation
-                                                            {:page page
-                                                             :journal? journal?})
-                                                           (handler/show-right-sidebar))}
-              svg/slideshow]
-
              (let [links (->>
                           (when file
-                            [{:title "Publish this page on Logseq"
-                              :options {:on-click (fn []
-                                                    (page-handler/publish-page! page-name))}}
-                             {:title "Publish this page as a slide on Logseq"
-                              :options {:on-click (fn []
-                                                    (page-handler/publish-page-as-slide! page-name))}}
-                             {:title "Un-publish this page on Logseq"
-                              :options {:on-click (fn []
-                                                    (page-handler/unpublish-page! page-name))}}
+                            [(when-not journal?
+                               {:title "Publish this page on Logseq"
+                               :options {:on-click (fn []
+                                                     (page-handler/publish-page! page-name))}})
+                             (when-not journal?
+                               {:title "Publish this page as a slide on Logseq"
+                               :options {:on-click (fn []
+                                                     (page-handler/publish-page-as-slide! page-name))}})
+                             (when-not journal?
+                               {:title "Un-publish this page on Logseq"
+                               :options {:on-click (fn []
+                                                     (page-handler/unpublish-page! page-name))}})
                              {:title "Re-index this page"
                               :options {:on-click (fn []
                                                     (handler/re-index-file! file))}}])

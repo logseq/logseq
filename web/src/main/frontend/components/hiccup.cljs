@@ -553,35 +553,34 @@
 
 (defn marker-switch
   [{:heading/keys [pre-heading? marker] :as heading}]
-  (when-not pre-heading?
-    (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
-      (let [set-marker-fn (fn [marker]
-                            (fn [e]
-                              (util/stop e)
-                              (handler/set-marker heading marker)))]
-        (case marker
-          "NOW"
-          [:a.marker-switch
-           {:title "Change from NOW to LATER"
-            :on-click (set-marker-fn "LATER")}
-           [:span "N"]]
-          "LATER"
-          [:a.marker-switch
-           {:title "Change from LATER to NOW"
-            :on-click (set-marker-fn "NOW")}
-           "L"]
+  (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
+    (let [set-marker-fn (fn [marker]
+                          (fn [e]
+                            (util/stop e)
+                            (handler/set-marker heading marker)))]
+      (case marker
+        "NOW"
+        [:a.marker-switch
+         {:title "Change from NOW to LATER"
+          :on-click (set-marker-fn "LATER")}
+         [:span "N"]]
+        "LATER"
+        [:a.marker-switch
+         {:title "Change from LATER to NOW"
+          :on-click (set-marker-fn "NOW")}
+         "L"]
 
-          "TODO"
-          [:a.marker-switch
-           {:title "Change from TODO to DOING"
-            :on-click (set-marker-fn "DOING")}
-           "T"]
-          "DOING"
-          [:a.marker-switch
-           {:title "Change from DOING to TODO"
-            :on-click (set-marker-fn "TODO")}
-           "D"]
-          nil)))))
+        "TODO"
+        [:a.marker-switch
+         {:title "Change from TODO to DOING"
+          :on-click (set-marker-fn "DOING")}
+         "T"]
+        "DOING"
+        [:a.marker-switch
+         {:title "Change from DOING to TODO"
+          :on-click (set-marker-fn "TODO")}
+         "D"]
+        nil))))
 
 (defn marker-cp
   [{:heading/keys [pre-heading? marker] :as heading}]
@@ -627,9 +626,13 @@
                                 :as t}]
   (let [config (assoc config :heading t)
         slide? (boolean (:slide? config))
-        checkbox (when-not pre-heading?
+        html-export? (:html-export? config)
+        checkbox (when (and (not pre-heading?)
+                            (not html-export?))
                    (heading-checkbox t (str "mr-1 cursor")))
-        marker-switch (marker-switch t)
+        marker-switch (when (and (not pre-heading?)
+                                 (not html-export?))
+                          (marker-switch t))
         marker-cp (marker-cp t)
         priority (priority-cp t)
         tags (heading-tags-cp t)]

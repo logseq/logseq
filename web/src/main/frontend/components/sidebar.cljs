@@ -6,6 +6,7 @@
             [frontend.components.widgets :as widgets]
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
+            [frontend.components.page :as page]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.components.project :as project]
@@ -156,9 +157,11 @@
         current-repo (state/sub :git/current-repo)
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))
-        global-graph-pages? (= :graph (get-in route-match [:data :name]))
+        route-name (get-in route-match [:data :name])
+        global-graph-pages? (= :graph route-name)
         logged? (:name me)
-        db-restoring? (state/sub :db/restoring?)]
+        db-restoring? (state/sub :db/restoring?)
+        page? (= :page route-name)]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
                        (handler/unhighlight-heading!))}
@@ -211,17 +214,28 @@
               :on-click (fn []
                           (storage/remove :git/current-repo))}
              "Login with Github"])
+
           (widgets/sync-status)
 
           [:div.repos.hidden.md:block
            (widgets/repos true)]
 
           (when-let [project (and current-repo (state/get-current-project))]
-            [:a {:style {:margin-left 8}
-                 :title (str "Go to /" project)
-                 :href (str config/website "/" project)
-                 :target "_blank"}
+            [:a.opacity-50.hover:opacity-100.ml-4
+             {:title (str "Go to /" project)
+              :href (str config/website "/" project)
+              :target "_blank"}
              svg/external-link])
+
+          (when (and page? current-repo)
+            (let [page (get-in route-match [:path-params :name])]
+              (page/star current-repo page)))
+
+          (when (and page? current-repo)
+            (let [page (get-in route-match [:path-params :name])
+                  page (string/lower-case (util/url-decode page))
+                  page (db/entity [:page/name page])]
+              (page/presentation current-repo page (:journal? page))))
 
           [:a {:title "Draw with Excalidraw"
                :href "/draw"

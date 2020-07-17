@@ -71,7 +71,8 @@
          (fn [{:keys [toggle-fn]}]
            [:div.cursor.w-2.h-2.sync-status.mr-2
             {:class (if synced? "bg-green-600" "bg-orange-400")
-             :style {:border-radius "50%"}
+             :style {:border-radius "50%"
+                     :margin-top 2}
              :on-mouse-over toggle-fn}])
          (fn [{:keys [toggle-fn]}]
            [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
