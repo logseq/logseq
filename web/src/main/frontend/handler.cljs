@@ -175,7 +175,8 @@
    (when-let [repo (state/get-current-repo)]
      (if (project-exists? project-name)
        (util/post (str config/api "projects/" project-name)
-                  {:settings settings
+                  {:name project-name
+                   :settings settings
                    :repo repo}
                   (fn [response]
                     (show-notification! "Project settings changed successfully!" :success))
