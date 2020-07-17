@@ -32,14 +32,14 @@
     (get-in route-match [:parameters :path :name])))
 
 (defn- get-headings
-  [repo page-name heading?]
+  [repo page-name heading? heading-id]
   (if heading?
-    (db/get-heading-and-children repo (uuid page-name))
+    (db/get-heading-and-children repo heading-id)
     (db/get-page-headings repo page-name)))
 
 (rum/defc page-headings-cp < rum/reactive
-  [repo page file-path page-name encoded-page-name sidebar? journal? heading? format]
-  (let [raw-page-headings (get-headings repo page-name heading?)
+  [repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format]
+  (let [raw-page-headings (get-headings repo page-name heading? heading-id)
         page-headings (db/with-dummy-heading raw-page-headings format
                         (if (empty? raw-page-headings)
                           (let [content (db/get-file repo file-path)]
@@ -233,7 +233,7 @@
            (heading/heading-parents repo heading-id format))
 
          ;; headings
-         (page-headings-cp repo page file-path page-name encoded-page-name sidebar? journal? heading? format)
+         (page-headings-cp repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format)
 
 
          (today-queries repo today? sidebar?)

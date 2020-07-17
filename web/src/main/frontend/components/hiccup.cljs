@@ -592,7 +592,8 @@
        (string/upper-case marker)])))
 
 (defn priority-cp
-  [{:headings/keys [pre-heading? priority] :as heading}]
+  [{:heading/keys [pre-heading? priority] :as heading}]
+
   (when (and (not pre-heading?) priority)
     (ui/tooltip
      [:ul
@@ -606,7 +607,7 @@
       (util/format "[#%s]" (str priority))])))
 
 (defn heading-tags-cp
-  [{:headings/keys [pre-heading? tags] :as heading}]
+  [{:heading/keys [pre-heading? tags] :as heading}]
   (when (and (not pre-heading?)
              (seq tags))
     (->elem
