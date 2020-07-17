@@ -406,8 +406,9 @@
                             :viewBackgroundColor "#FFF"})
         excalidraw-component @*excalidraw]
     [:div.draw {:style {:background "#FFF"}}
-     (when (or (and file elements)
-               (nil? file))
+     (when (and (or (and file elements)
+                    (nil? file))
+                excalidraw-component)
        (excalidraw-component
         {:width (get option :width width)
          :height (get option :height height)
@@ -430,9 +431,9 @@
          :initial-data (or elements #js [])}))
      [:div.absolute.top-4.left-4.hidden.md:block
       [:div.flex.flex-row.items-center
-       [:a.mr-3 {:href "/"
+       [:a.mr-3.opacity-70.hover:opacity-100 {:href "/"
                  :title "Back to logseq"}
-        (svg/logo)]
+        (svg/logo false)]
        (files)
        (when loading?
          [:span.lds-dual-ring.ml-3])]]
@@ -480,6 +481,7 @@
   (let [loaded? (or (loaded?)
                     (rum/react *loaded?))
         current-repo (state/sub :git/current-repo)]
+    (prn  "loaded? " loaded?)
     (if loaded?
       (let [current-file (rum/react *current-file)
             current-file (or current-file

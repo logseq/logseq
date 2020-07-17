@@ -6,7 +6,6 @@
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler :as handler]
-            [frontend.handler.project :as project]
             [clojure.walk :as walk]))
 
 (defn page-add-directives!
@@ -96,7 +95,7 @@
   ([page-name]
    (publish-page-as-slide! page-name (db/get-page-headings page-name)))
   ([page-name headings]
-   (project/exists-or-create!
+   (handler/exists-or-create!
     (fn [project]
       (page-add-directives! page-name {"published" true
                                        "slide" true})
@@ -120,7 +119,7 @@
 
 (defn publish-page!
   [page-name]
-  (project/exists-or-create!
+  (handler/exists-or-create!
    (fn [project]
      (let [directives (db/get-page-directives page-name)
            slide? (let [slide (:slide directives)]

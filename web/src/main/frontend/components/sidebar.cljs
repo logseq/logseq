@@ -329,17 +329,15 @@
               main-content])]]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
-        {:title "Logseq"
-         :href "/"
+        {:href "/"
          :on-click (fn []
                      (util/scroll-to-top)
-                     (state/set-journals-length! 1)
-                     )
+                     (state/set-journals-length! 1))
          :style {:position "absolute"
                  :top 12
                  :left 16
-                 :z-index 111}                                                }
-        (svg/logo)]
+                 :z-index 111}}
+        (svg/logo (not white?))]
        (ui/notification)
        (ui/modal :modal/input-project
                  project/add-project)

@@ -123,19 +123,70 @@
   [files]
   (keep-formats files config/hiccup-support-formats))
 
+;; project exists and current user owns it
+;; if project not exists, the server will create it
+(defn project-exists?
+  [project]
+  (let [projects (set (map :name (:projects (state/get-me))))]
+    (and (seq projects) (contains? projects project))))
+
+(defn create-project!
+  ([ok-handler]
+   (create-project! (state/get-current-project) ok-handler))
+  ([project ok-handler]
+   (let [config (state/get-config)
+         data {:name project
+               :repo (state/get-current-repo)
+               :settings (or (get config :project)
+                             {:name project})}]
+     (util/post (str config/api "projects")
+                data
+                (fn [result]
+                  (swap! state/state
+                         update-in [:me :projects]
+                         (fn [projects]
+                           (util/distinct-by :name (conj projects result))))
+                  (ok-handler project))
+                (fn [error]
+                  (js/console.dir error)
+                  (show-notification! (util/format "Project \"%s\" already taken, please change to another name." project) :error))))))
+
+(defn exists-or-create!
+  [ok-handler]
+  (if-let [project (state/get-current-project)]
+    (if (project-exists? project)
+      (ok-handler project)
+      (create-project! ok-handler))
+    (state/set-state! :modal/input-project true)))
+
+(defn add-project!
+  [project]
+  (create-project! project
+           (fn []
+             (show-notification! (util/format "Project \"%s\" was created successfully." project) :success)
+             (state/set-state! :modal/input-project false))))
+
 (defn sync-project-settings!
   ([]
    (when-let [project-name (state/get-current-project)]
      (let [settings (:project (state/get-config))]
        (sync-project-settings! project-name settings))))
   ([project-name settings]
-   (util/patch (str config/api "projects/" project-name)
-               settings
-               (fn [response]
-                 (show-notification! "Project settings changed successfully!" :success))
-               (fn [error]
-                 (println "Project settings updated failed, reason: ")
-                 (js/console.dir error)))))
+   (when-let [repo (state/get-current-repo)]
+     (if (project-exists? project-name)
+      (util/patch (str config/api "projects/" project-name)
+                  {:settings settings
+                   :repo repo}
+                  (fn [response]
+                    (prn {:response response})
+                    (show-notification! "Project settings changed successfully!" :success))
+                  (fn [error]
+                    (println "Project settings updated failed, reason: ")
+                    (js/console.dir error)))
+      (when (and settings
+                 (not (string/blank? (:name settings)))
+                 (>= (count (string/trim (:name settings))) 2))
+        (add-project! (:name settings)))))))
 
 ;; Project settings should be checked in two conditions:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
