@@ -11,11 +11,15 @@
 
 (defn highlight!
   [state]
-  (let [id (first (:rum/args state))]
-    (when-let [element (js/document.getElementById id)]
-      (js/hljs.highlightBlock element))))
+  (let [[id attr] (:rum/args state)
+        done? (get state ::done?)]
+    (when (:data-lang attr)
+      (when-let [element (js/document.getElementById id)]
+        (js/hljs.highlightBlock element)))
+    (reset! done? true)))
 
-(rum/defc highlight < rum/reactive
+(rum/defcs highlight < rum/reactive
+  (rum/local false ::done?)
   {:did-mount (fn [state]
                 (if (loaded?)
                   (do
@@ -29,10 +33,13 @@
                        (reset! *loading? false)
                        (highlight! state)))))
                 state)}
-  [id attr code]
-  (let [loading? (rum/react *loading?)]
+  [state id attr code]
+  (let [loading? (rum/react *loading?)
+        done? @(get state ::done?)]
     [:pre.pre-wrap-white-space.code
-     [:code (assoc attr :id id)
+     [:code (assoc attr
+                   :id id
+                   :style {:opacity (if done? 1 0)})
       code]]))
 
 (defn html-export
