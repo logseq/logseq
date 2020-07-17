@@ -162,9 +162,9 @@
 (defn add-project!
   [project]
   (create-project! project
-           (fn []
-             (show-notification! (util/format "Project \"%s\" was created successfully." project) :success)
-             (state/set-state! :modal/input-project false))))
+                   (fn []
+                     (show-notification! (util/format "Project \"%s\" was created successfully." project) :success)
+                     (state/set-state! :modal/input-project false))))
 
 (defn sync-project-settings!
   ([]
@@ -174,19 +174,18 @@
   ([project-name settings]
    (when-let [repo (state/get-current-repo)]
      (if (project-exists? project-name)
-      (util/patch (str config/api "projects/" project-name)
+       (util/post (str config/api "projects/" project-name)
                   {:settings settings
                    :repo repo}
                   (fn [response]
-                    (prn {:response response})
                     (show-notification! "Project settings changed successfully!" :success))
                   (fn [error]
                     (println "Project settings updated failed, reason: ")
                     (js/console.dir error)))
-      (when (and settings
-                 (not (string/blank? (:name settings)))
-                 (>= (count (string/trim (:name settings))) 2))
-        (add-project! (:name settings)))))))
+       (when (and settings
+                  (not (string/blank? (:name settings)))
+                  (>= (count (string/trim (:name settings))) 2))
+         (add-project! (:name settings)))))))
 
 ;; Project settings should be checked in two conditions:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
