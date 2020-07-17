@@ -123,7 +123,40 @@
   [files]
   (keep-formats files config/hiccup-support-formats))
 
-;; TODO: no atom version
+(defn sync-project-settings!
+  ([]
+   (when-let [project-name (state/get-current-project)]
+     (let [settings (:project (state/get-config))]
+       (sync-project-settings! project-name settings))))
+  ([project-name settings]
+   (util/patch (str config/api "projects/" project-name)
+               settings
+               (fn [response]
+                 (show-notification! "Project settings changed successfully!" :success))
+               (fn [error]
+                 (println "Project settings updated failed, reason: ")
+                 (js/console.dir error)))))
+
+;; Project settings should be checked in two conditions:
+;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
+;; 2. Git pulls the new change (fn: load-files)
+(defn restore-config!
+  ([repo-url project-changed-check?]
+   (restore-config! repo-url nil project-changed-check?))
+  ([repo-url config-content project-changed-check?]
+   (let [old-project (:project (state/get-config))
+         new-config (db/reset-config! repo-url config-content)]
+     (prn "new-config: " new-config
+          "check? " project-changed-check?)
+     (when project-changed-check?
+       (let [new-project (:project new-config)
+             project-name (:name old-project)]
+         (prn {:new-project new-project
+               :old-project old-project
+               :changed? (not= new-project old-project)})
+         (when-not (= new-project old-project)
+           (sync-project-settings! project-name new-project)))))))
+
 (defn load-files
   [repo-url]
   (state/set-cloning? false)
@@ -132,7 +165,7 @@
           files (bean/->clj files)
           config-content (load-file repo-url (str config/app-name "/" config/config-file))
           files (if config-content
-                  (let [config (db/reset-config! repo-url config-content)]
+                  (let [config (restore-config! repo-url config-content true)]
                     (if-let [patterns (seq (:hidden config))]
                       (remove (fn [path] (hidden? path patterns)) files)
                       files))
@@ -250,6 +283,10 @@
                                                   (db/extract-all-headings-pages parsed-files)
                                                   [])]
                              (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
+                             (let [config-file (str config/app-name "/" config/config-file)]
+                               (when (contains? (set files) config-file)
+                                 (when-let [content (get contents config-file)]
+                                   (restore-config! repo-url content true))))
                              (let [metadata-file (str config/app-name "/" config/metadata-file)]
                                (when (contains? (set files) metadata-file)
                                  (when-let [content (get contents metadata-file)]
@@ -513,10 +550,6 @@
       (notify-fn)
       (js/setInterval notify-fn (* 1000 60)))))
 
-(defn restore-config!
-  [repo-url]
-  (db/reset-config! repo-url))
-
 (defn alter-file
   [repo path content {:keys [reset? re-render-root?]
                       :or {reset? true
@@ -529,7 +562,7 @@
    (fn [_]
      (git-add repo path)
      (when (= path (str config/app-name "/" config/config-file))
-       (restore-config! repo))
+       (restore-config! repo true))
      (when re-render-root? (re-render-root!))
      (history/add-history!
       [:git/repo repo]
@@ -1434,7 +1467,7 @@
     (when me (state/set-state! :me me))
     (state/set-db-restoring! true)
     (render)
-    (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! restore-config!))
+    (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! #(restore-config! % false)))
         (p/then
          (fn []
            (if (and (not logged?)

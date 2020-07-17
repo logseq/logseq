@@ -19,8 +19,8 @@
   ([project ok-handler]
    (let [config (state/get-config)]
      (let [data {:name project
-                 :description (get config :description "")
-                 :repo (state/get-current-repo)}]
+                 :repo (state/get-current-repo)
+                 :settings (get config :project)}]
        (util/post (str config/api "projects")
                   data
                   (fn [result]

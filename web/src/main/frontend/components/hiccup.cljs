@@ -94,6 +94,7 @@
    {:class "object-contain object-center"
     :loading "lazy"
     :style {:max-height "24rem"}
+    :onerror "this.style.display='none'"
     :src href
     :title (second (first label))}])
 

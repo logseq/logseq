@@ -58,7 +58,7 @@
       (let [win (js/window.open (str
                                  config/website
                                  "/"
-                                 (:project (state/get-config))
+                                 (state/get-current-project)
                                  "/"
                                  permalink))]
         (.focus win)))))

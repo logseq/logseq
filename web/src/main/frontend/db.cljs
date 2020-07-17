@@ -1487,13 +1487,11 @@
    ffirst))
 
 (defn reset-config!
-  ([repo-url]
-   (reset-config! repo-url (get-file repo-url (str config/app-name "/" config/config-file))))
-  ([repo-url content]
-   (when content
-     (let [config (reader/read-string content)]
-       (state/set-config! repo-url config)
-       config))))
+  [repo-url content]
+  (when-let [content (or content (get-file repo-url (str config/app-name "/" config/config-file)))]
+    (let [config (reader/read-string content)]
+      (state/set-config! repo-url config)
+      config)))
 
 (defn start-db-conn!
   [me repo listen-handler]

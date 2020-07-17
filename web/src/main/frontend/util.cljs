@@ -166,6 +166,14 @@
          on-ok
          on-failed))
 
+(defn patch
+  [url body on-ok on-failed]
+  (fetch url {:method "patch"
+              :headers {:Content-Type "application/json"}
+              :body (js/JSON.stringify (clj->js body))}
+         on-ok
+         on-failed))
+
 (defn delete
   [url on-ok on-failed]
   (fetch url {:method "delete"

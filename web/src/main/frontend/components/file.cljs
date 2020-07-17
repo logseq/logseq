@@ -68,7 +68,8 @@
                               (content/content encoded-path {:content content
                                                              :format format
                                                              :on-hide (save-file-handler content)}))))
-        page (db/get-file-page path)]
+        page (db/get-file-page path)
+        config? (= path (str config/app-name "/" config/config-file))]
     [:div.file
      [:h1.title
       path]
@@ -87,6 +88,11 @@
                                                  {:page page}))
                                               (handler/show-right-sidebar)))}
          (util/capitalize-all page)]])
+
+     (when config?
+       [:a.mb-8.block {:on-click (fn [_e] (handler/sync-project-settings!))}
+        "Sync project settings"])
+
      (cond
        ;; image type
        (and format (contains? (config/img-formats) format))
