@@ -46,13 +46,13 @@
                                 :start-level 2}
                                {})})))
 
-(rum/defc journal-cp < rum/static
+(rum/defc journal-cp < rum/reactive
   {:init journal-include-template!
    :did-update journal-include-template!}
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)
-        repo (state/get-current-repo)
+        repo (state/sub :git/current-repo)
         encoded-page-name (util/encode-str page)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))]

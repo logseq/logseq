@@ -105,7 +105,7 @@
                                  query)])]))))
 
 ;; A page is just a logical heading
-(rum/defcs page < rum/static
+(rum/defcs page < rum/reactive
   (mixins/keyboard-mixin
    "tab"
    (fn [state e]
@@ -132,7 +132,8 @@
   {:did-mount handler/scroll-and-highlight!
    :did-update handler/scroll-and-highlight!}
   [state {:keys [repo] :as option}]
-  (let [repo (or repo (state/get-current-repo))
+  (let [current-repo (state/sub :git/current-repo)
+        repo (or repo current-repo)
         encoded-page-name (get-page-name state)
         page-name (string/lower-case (util/url-decode encoded-page-name))
         marker-page? (util/marker? page-name)
