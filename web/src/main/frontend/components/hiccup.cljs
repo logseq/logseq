@@ -406,13 +406,16 @@
     ["Macro" options]
     (let [{:keys [name arguments]} options]
       (when-let [heading-uuid (:heading/uuid config)]
-        (let [macro-content (-> (db/entity [:heading/uuid heading-uuid])
-                             (:heading/page)
-                             (:db/id)
-                             (db/entity)
-                             :page/directives
-                             :macros
-                             (get name))]
+        (let [macro-content (or
+                             (-> (db/entity [:heading/uuid heading-uuid])
+                                 (:heading/page)
+                                 (:db/id)
+                                 (db/entity)
+                                 :page/directives
+                                 :macros
+                                 (get name))
+                             (get-in (state/get-config) [:macros name])
+                             (get-in (state/get-config) [:macros (keyword name)]))]
           [:span
            (if (seq arguments)
              (block/macro-subs macro-content arguments)
