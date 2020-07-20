@@ -19,7 +19,8 @@
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [goog.object :as gobj]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -148,6 +149,16 @@
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
+  ;; TODO: move this to keyboards
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-key-down
+      state
+      {191 (fn [state e]
+             (when-not (util/input? (gobj/get e "target"))
+               (handler/toggle-help!)))}
+      (fn [e key-code]
+        nil))))
   (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
@@ -269,12 +280,6 @@
                (when current-repo
                  {:title "Settings"
                   :options {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}})
-               {:title "Bug report"
-                :options {:href "https://github.com/logseq/logseq/issues/new"
-                          :target "_blank"}}
-               {:title "Feature request"
-                :options {:href "https://github.com/logseq/logseq/issues/new"
-                          :target "_blank"}}
                {:title [:div.flex-row.flex.justify-between.items-center
                         [:span "Join the community"]
                         svg/discord]

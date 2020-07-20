@@ -1,6 +1,9 @@
 (ns frontend.keyboards
   (:require [frontend.handler :as handler]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [goog.events.KeyCodes :as codes]))
+
+;; KeyCodes.QUESTION_MARK
 
 ;; Credits to roamresearch
 
@@ -41,7 +44,8 @@
 ;; Block
 
 (defonce keyboards
-  {"ctrl+alt+d" state/toggle-document-mode!
+  {
+   "ctrl+alt+d" state/toggle-document-mode!
    "ctrl+z" handler/undo!
    "ctrl+y" handler/redo!
    "ctrl+alt+r" handler/toggle-right-sidebar!

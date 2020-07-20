@@ -1851,6 +1851,11 @@
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
 
+(defn toggle-help!
+  []
+  (state/toggle-help!)
+  (show-right-sidebar))
+
 (comment
   (defn debug-latest-commits
     []

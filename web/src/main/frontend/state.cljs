@@ -37,6 +37,7 @@
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
     :ui/custom-query-components {}
+    :ui/show-help? false
     :document/mode? (or (storage/get :document/mode?) false)
 
     :github/contents {}
@@ -509,3 +510,12 @@
           project (:name (first (filter (fn [p] (= (:repo p) repo)) projects)))]
       (when-not (string/blank? project)
         project))))
+
+(defn toggle-help!
+  []
+  (let [v (get @state :ui/show-help?)]
+    (set-state! :ui/show-help? (not v))))
+
+(defn open-help!
+  []
+  (set-state! :ui/show-help? true))

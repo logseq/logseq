@@ -106,7 +106,6 @@
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/static
-  (mixins/keyboard-mixin "ctrl+alt+d" state/toggle-document-mode!)
   (mixins/keyboard-mixin
    "tab"
    (fn [state e]
