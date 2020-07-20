@@ -1037,6 +1037,12 @@
        seq-flatten
        first))))
 
+(defn get-page
+  [page-name]
+  (if (util/uuid-string? page-name)
+    (entity [:heading/uuid (uuid page-name)])
+    (entity [:page/name page-name])))
+
 (defn get-page-name
   [file ast]
   ;; headline

@@ -17,6 +17,7 @@
             [frontend.state :as state]
             [frontend.handler :as handler]
             [frontend.config :as config]
+            [frontend.keyboards :as keyboards]
             [dommy.core :as d]
             [clojure.string :as string]))
 
@@ -79,7 +80,6 @@
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
-  (mixins/keyboard-mixin "ctrl+alt+d" state/toggle-document-mode!)
   []
   (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
@@ -148,9 +148,7 @@
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive
-  (mixins/keyboard-mixin "ctrl+z" handler/undo!)
-  (mixins/keyboard-mixin "ctrl+y" handler/redo!)
-  (mixins/keyboard-mixin "ctrl+alt+r" handler/toggle-right-sidebar)
+  (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)

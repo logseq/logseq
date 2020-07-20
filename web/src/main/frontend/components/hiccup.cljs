@@ -403,10 +403,20 @@
             :href (str "#fn." encode-name)}
         name]])
 
-    ;; TODO:
     ["Macro" options]
     (let [{:keys [name arguments]} options]
-      "")
+      (when-let [heading-uuid (:heading/uuid config)]
+        (let [macro-content (-> (db/entity [:heading/uuid heading-uuid])
+                             (:heading/page)
+                             (:db/id)
+                             (db/entity)
+                             :page/directives
+                             :macros
+                             (get name))]
+          [:span
+           (if (seq arguments)
+             (block/macro-subs macro-content arguments)
+             macro-content)])))
 
     :else
     ""))
@@ -1133,7 +1143,8 @@
                            (dissoc item :heading/meta)))
                 item (if (= first-id (:heading/uuid item))
                        (assoc item :heading/idx 0)
-                       item)]
+                       item)
+                config (assoc config :heading/uuid (:heading/uuid item))]
             (rum/with-key
               (heading-container config item)
               (:heading/uuid item))))))))

@@ -49,6 +49,20 @@
                                  [(keyword (string/lower-case k))
                                   v]))
                           (into {}))
+          macro-directives (filter (fn [x] (= :macro (first x))) directives)
+          macros (if (seq macro-directives)
+                   (->>
+                    (map
+                      (fn [[_ v]]
+                        (let [[k v] (util/split-first " " v)]
+                          (mapv
+                           string/trim
+                           [k v])))
+                      macro-directives)
+                    (into {}))
+                   {})
+          directives (->> (remove (fn [x] (= :macro (first x))) directives)
+                          (into {}))
           directives (if (seq directives)
                        (let [directives (->
                                          (cond-> directives
@@ -63,6 +77,7 @@
                              (update :alias sep-by-quote-or-space)
                              (update :tags sep-by-quote-or-space)))
                        directives)
+          directives (assoc directives :macros macros)
           other-ast (drop-while directive? ast)]
       (if (seq directives)
         (cons ["Directives" directives] other-ast)

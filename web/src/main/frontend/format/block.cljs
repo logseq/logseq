@@ -271,6 +271,18 @@
         prefix (if pre-heading? "" (str (apply str (repeat level pattern)) " "))]
     (str prefix (string/triml text))))
 
+(defn macro-subs
+  [macro-content arguments]
+  (loop [s macro-content
+         args arguments
+         n 1]
+    (if (seq args)
+      (recur
+       (string/replace s (str "$" n) (first args))
+       (rest args)
+       (inc n))
+      s)))
+
 (comment
   (defn sort-tasks
     [headings]

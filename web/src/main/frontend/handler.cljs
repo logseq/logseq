@@ -1019,6 +1019,11 @@
         [old-directives new-directives] (when pre-heading?
                                           [(:page/directives (db/entity (:db/id page)))
                                            (db/parse-directives value format)])
+        _ (prn {:pre-heading? pre-heading?
+                :value value
+                :format format
+                :result (db/parse-directives value format)
+                :new-directives new-directives})
         permalink-changed? (when (and pre-heading? (:permalink old-directives))
                              (not= (:permalink old-directives)
                                    (:permalink new-directives)))
@@ -1026,7 +1031,8 @@
                 (db/add-directives! format value {:old_permalink (:permalink old-directives)})
                 value)
         new-directives (if permalink-changed?
-                         (assoc new-directives :old_permalink (:permalink old-directives)))]
+                         (assoc new-directives :old_permalink (:permalink old-directives))
+                         new-directives)]
     (when (not= (string/trim content) (string/trim value)) ; heading content changed
       (let [file (db/entity repo (:db/id file))
             page (db/entity repo (:db/id page))
@@ -1052,6 +1058,7 @@
                                                     [:db/add (:db/id file) :file/last-modified-at modified-at]])
                                    page-directives (when pre-heading?
                                                      [(assoc page :page/directives new-directives)])]
+                               (prn "new-directives: " new-directives)
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -1583,12 +1590,91 @@
     (dom/add-class! (dom/by-id "main-content-container")
                     "right-sidebar-open")))
 
-(defn toggle-right-sidebar
+(defn toggle-right-sidebar!
   []
   (let [sidebar (dom/by-id "right-sidebar")]
     (if (dom/has-class? sidebar "enter")
       (hide-right-sidebar)
       (show-right-sidebar))))
+
+(defn go-to-search!
+  []
+  (when-let [element (gdom/getElement "search_field")]
+    (.focus element)))
+
+(defn go-to-journals!
+  []
+  (state/set-journals-length! 1)
+  (redirect! {:to :home})
+  (util/scroll-to-top))
+
+(defn zoom-in! []
+  (when-let [heading (state/get-edit-heading)]
+    (when-let [id (:heading/uuid heading)]
+      (redirect! {:to :page
+                  :path-params {:name (str id)}}))))
+
+(defn- get-nearest-page
+  []
+  (when-let [heading (state/get-edit-heading)]
+    (when-let [id (:heading/uuid heading)]
+      (when-let [edit-id (state/get-edit-input-id)]
+        (when-let [input (gdom/getElement edit-id)]
+          (when-let [pos (:pos (util/get-caret-pos input))]
+            (prn {:pos pos})
+            (let [value (gobj/get input "value")
+                  page-pattern #"\[\[([^\]]+)]]"
+                  block-pattern #"\(\(([^\)]+)\)\)"
+                  page-matches (util/re-pos page-pattern value)
+                  block-matches (util/re-pos block-pattern value)
+                  matches (->> (concat page-matches block-matches)
+                               (remove nil?))
+                  [_ page] (first (sort-by
+                                   (fn [[start-pos content]]
+                                     (let [end-pos (+ start-pos (count content))]
+                                       (cond
+                                         (< pos start-pos)
+                                         (- pos start-pos)
+
+                                         (> pos end-pos)
+                                         (- end-pos pos)
+
+                                         :else
+                                         0)))
+                                   >
+                                   matches))]
+              (subs page 2 (- (count page) 2)))))))))
+
+(defn follow-link-under-cursor!
+  []
+  (when-let [page (get-nearest-page)]
+    (let [page-name (string/lower-case page)]
+      (redirect! {:to :page
+                  :path-params {:name page-name}}))))
+
+(defn open-link-in-sidebar!
+  []
+  (when-let [page (get-nearest-page)]
+    (let [page-name (string/lower-case page)
+          heading? (util/uuid-string? page-name)]
+      (when-let [page (db/get-page page-name)]
+        (if heading?
+          (state/sidebar-add-block!
+           (state/get-current-repo)
+           (:db/id page)
+           :heading
+           page)
+          (state/sidebar-add-block!
+           (state/get-current-repo)
+           (:db/id page)
+           :page
+           {:page page}))
+        (show-right-sidebar)))))
+
+(defn bold-format! [])
+(defn italics-format! [])
+(defn html-link-format! [])
+(defn highlight-format! [])
 
 ;; document.execCommand("undo", false, null);
 (defn default-undo

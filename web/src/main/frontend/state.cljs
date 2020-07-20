@@ -385,6 +385,7 @@
              (-> state
                  (assoc-in [:editor/content edit-input-id] (string/trim content))
                  (assoc
+                  :editor/heading heading
                   :editor/editing? {edit-input-id true}
                   :cursor-range cursor-range))))))
 
@@ -394,6 +395,10 @@
                       :editor/editing? nil
                       :editor/heading nil
                       :cursor-range nil}))
+
+(defn get-edit-heading
+  []
+  (get @state :editor/heading))
 
 (defn set-heading-content-and-last-pos!
   [edit-input-id content new-pos]

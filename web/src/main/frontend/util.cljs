@@ -414,6 +414,11 @@
   (> (+ (:top (get-caret-pos input)) line-height)
      (get-textarea-height input)))
 
+(defn split-first [pattern s]
+  (when-let [first-index (string/index-of s pattern)]
+    [(subs s 0 first-index)
+     (subs s (+ first-index (count pattern)) (count s))]))
+
 (defn split-last [pattern s]
   (when-let [last-index (string/last-index-of s pattern)]
     [(subs s 0 last-index)

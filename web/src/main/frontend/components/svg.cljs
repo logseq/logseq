@@ -245,7 +245,7 @@
 (rum/defc logo
   [dark?]
   [:svg.svg-shadow
-   {:fill (if dark? "currentColor" "#8215E8"), :viewbox "0 0 21 21", :height "21", :width "21"
+   {:fill (if dark? "currentColor" "#8215E8"), :view-box "0 0 21 21", :height "21", :width "21"
     :style {:margin-top 2}}
    [:ellipse
     {:transform

@@ -84,7 +84,6 @@
      (when (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
      ["Html Inline " (->inline "html")]
-     ["Hiccup Inline" (->inline "hiccup")]
 
      ;; TODO:
      ;; ["Upload a file" nil]
@@ -130,8 +129,6 @@
     [["Quote" (->block "quote")]
      ["Src" (->block "src" "")]
      ["Query" (->block "query")]
-     ["Hiccup" (->block "export" "hiccup")]
-     ["Html export" (->block "export" "html")]
      ["Latex export" (->block "export" "latex")]
      ["Properties" (->properties)]
      ["Example" (->block "example")]
