@@ -33,7 +33,7 @@
       [:div
        [:code "Results:"]
        [:div.results.mt-1
-        [:pre.pre-wrap-white-space.code
+        [:pre.code
          (try
            (let [result (eval-string code)]
              (str result))

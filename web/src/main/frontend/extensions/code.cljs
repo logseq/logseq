@@ -36,7 +36,7 @@
   [state id attr code]
   (let [loading? (rum/react *loading?)
         done? @(get state ::done?)]
-    [:pre.pre-wrap-white-space.code
+    [:pre.code
      [:code (assoc attr
                    :id id
                    :style {:opacity (if done? 1 0)})
