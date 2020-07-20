@@ -952,11 +952,9 @@
       (p/let [_ (-> (fs/mkdir (str dir "/" config/default-pages-directory))
                     (p/catch (fn [_e])))]
         (let [format (name (state/get-preferred-format))
-              page (-> title
-                       (string/lower-case)
-                       (string/replace #"\s+" "_"))
-              page (util/encode-str page)
-              path (str config/default-pages-directory "/" page "." (if (= format "markdown") "md" format))
+              page (string/lower-case title)
+              path (str (string/replace page #"\s+" "_") "." (if (= format "markdown") "md" format))
+              path (str config/default-pages-directory "/" path)
               file-path (str "/" path)]
           (p/let [exists? (fs/file-exists? dir file-path)]
             (if exists?
@@ -1019,11 +1017,6 @@
         [old-directives new-directives] (when pre-heading?
                                           [(:page/directives (db/entity (:db/id page)))
                                            (db/parse-directives value format)])
-        _ (prn {:pre-heading? pre-heading?
-                :value value
-                :format format
-                :result (db/parse-directives value format)
-                :new-directives new-directives})
         permalink-changed? (when (and pre-heading? (:permalink old-directives))
                              (not= (:permalink old-directives)
                                    (:permalink new-directives)))
@@ -1058,7 +1051,6 @@
                                                     [:db/add (:db/id file) :file/last-modified-at modified-at]])
                                    page-directives (when pre-heading?
                                                      [(assoc page :page/directives new-directives)])]
-                               (prn "new-directives: " new-directives)
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -1671,10 +1663,67 @@
            {:page page}))
         (show-right-sidebar)))))
 
-(defn bold-format! [])
-(defn italics-format! [])
-(defn html-link-format! [])
-(defn highlight-format! [])
+(defn- get-selection-and-format
+  []
+  (when-let [heading (state/get-edit-heading)]
+    (when-let [id (:heading/uuid heading)]
+      (when-let [edit-id (state/get-edit-input-id)]
+        (when-let [input (gdom/getElement edit-id)]
+          {:selection-start (gobj/get input "selectionStart")
+           :selection-end (gobj/get input "selectionEnd")
+           :format (:heading/format heading)
+           :value (gobj/get input "value")
+           :heading heading
+           :edit-id edit-id
+           :input input})))))
+
+(defn format-text!
+  [pattern-fn]
+  (when-let [m (get-selection-and-format)]
+    (let [{:keys [selection-start selection-end format value heading edit-id input]} m
+          empty-selection? (= selection-start selection-end)
+          pattern (pattern-fn format)
+          new-value (str
+                     (subs value 0 selection-start)
+                     pattern
+                     (subs value selection-start selection-end)
+                     pattern
+                     (subs value selection-end))]
+      (state/set-edit-content! edit-id new-value)
+      (when empty-selection?
+        (util/cursor-move-back input (count pattern))))))
+
+(defn bold-format! []
+  (format-text! config/get-bold))
+
+(defn italics-format! []
+  (format-text! config/get-italic))
+
+(defn highlight-format! []
+  (format-text! config/get-highlight))
+
+(defn html-link-format! []
+  (when-let [m (get-selection-and-format)]
+    (let [{:keys [selection-start selection-end format value heading edit-id input]} m
+          empty-selection? (= selection-start selection-end)
+          selection (subs value selection-start selection-end)
+          selection-link? (and selection (or (string/starts-with? selection "http://")
+                                             (string/starts-with? selection "https://")))
+          [content back-pos] (cond
+                                  empty-selection?
+                                  (config/get-empty-link-and-back-pos format)
+
+                                  selection-link?
+                                  (config/with-default-link format selection)
+
+                                  :else
+                                  (config/with-default-label format selection))
+          new-value (str
+                     (subs value 0 selection-start)
+                     content
+                     (subs value selection-end))]
+      (state/set-edit-content! edit-id new-value)
+      (util/cursor-move-back input back-pos))))
 
 ;; document.execCommand("undo", false, null);
 (defn default-undo

@@ -158,6 +158,37 @@
   [format]
   "^")
 
+(defn get-empty-link-and-back-pos
+  [format]
+  (case format
+    :org
+    ["[[][]]" 4]
+    :markdown
+    ["[]()" 3]
+    ["" 0]))
+
+(defn with-default-link
+  [format link]
+  (case format
+    :org
+    [(util/format "[[%s][]]" link)
+     2]
+    :markdown
+    [(util/format "[](%s)" link)
+     (+ 3 (count link))]
+    ["" 0]))
+
+(defn with-default-label
+  [format label]
+  (case format
+    :org
+    [(util/format "[[][%s]]" label)
+     (+ 4 (count label))]
+    :markdown
+    [(util/format "[%s]()" label)
+     1]
+    ["" 0]))
+
 (defn default-empty-heading
   ([format]
    (default-empty-heading format 2))
