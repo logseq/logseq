@@ -1024,7 +1024,7 @@
         pred (fn [data meta]
                (>= (:pos meta) pos))]
     (some-> (q repo [:heading/block heading-uuid]
-              {:use-cache? false
+              {:use-cache? true
                :transform-fn #(heading-and-children-transform % repo heading-uuid level)}
               '[:find (pull ?heading [*])
                 :in $ ?page ?pred

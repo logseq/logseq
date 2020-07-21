@@ -266,20 +266,12 @@
                                (let [uuid-string (str (:heading/uuid chosen))
                                      block-type @commands/*block-type]
                                  ;; block reference
-                                 (case block-type
-                                   :embed
-                                   ;; block embed
-                                   (insert-command! id
-                                                    (str "@@embed: " uuid-string)
-                                                    format
-                                                    {:last-pattern "@@embed: "})
-                                   :reference
+                                 (when (= block-type :reference)
                                    (insert-command! id
                                                     (util/format "((%s))" uuid-string)
                                                     format
                                                     {:last-pattern (str "((" q)
-                                                     :postfix-fn (fn [s] (util/replace-first "))" s ""))})
-                                   nil)
+                                                     :postfix-fn (fn [s] (util/replace-first "))" s ""))})                                   )
 
                                  ;; Save it so it'll be parsed correctly in the future
                                  (handler/set-heading-property! (:heading/uuid chosen)

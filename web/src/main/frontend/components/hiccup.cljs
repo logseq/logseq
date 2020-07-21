@@ -201,7 +201,7 @@
 
 (declare headings-container)
 
-(rum/defc block-embed <
+(rum/defc block-embed < rum/reactive
   (mixins/clear-query-cache
    (fn [state]
      (let [repo (state/get-current-repo)
@@ -209,7 +209,26 @@
        [repo :heading/block heading-id])))
   [config id]
   (let [headings (db/get-heading-and-children (state/get-current-repo) id)]
-    [:div.embed-block.pt-2.px-3.bg-base-2
+    [:div.embed-block.py-2.my-2.px-3.bg-base-2
+     [:p
+      [:code "Embed block:"]]
+     (headings-container headings (assoc config :embed? true))]))
+
+(rum/defc page-embed < rum/reactive
+  (mixins/clear-query-cache
+   (fn [state]
+     (let [repo (state/get-current-repo)
+           page-name (last (:rum/args state))
+           page-id (:db/id (db/entity [:page/name page-name]))]
+       [repo :page/headings page-id])))
+  [config page-name]
+  (let [page-name (string/lower-case page-name)
+        headings (db/get-page-headings (state/get-current-repo) page-name)]
+    [:div.embed-page.py-2.my-2.px-3.bg-base-2
+     [:p
+      [:code "Embed page:"]
+      [:a.ml-2 {:href (str "/page/" (util/encode-str page-name))}
+       (util/capitalize-all page-name)]]
      (headings-container headings (assoc config :embed? true))]))
 
 (defn inline
@@ -359,13 +378,6 @@
     ["Inline_Hiccup" s]
     (reader/read-string s)
 
-    ["Export_Snippet" "embed" s]
-    (when-let [id (and s
-                       (let [s (string/trim s)]
-                         (and (util/uuid-string? s)
-                              (uuid s))))]
-      (block-embed config id))
-
     ["Break_Line"]
     [:br]
     ["Hard_Break_Line"]
@@ -405,21 +417,48 @@
 
     ["Macro" options]
     (let [{:keys [name arguments]} options]
-      (when-let [heading-uuid (:heading/uuid config)]
-        (let [macro-content (or
-                             (-> (db/entity [:heading/uuid heading-uuid])
-                                 (:heading/page)
-                                 (:db/id)
-                                 (db/entity)
-                                 :page/directives
-                                 :macros
-                                 (get name))
-                             (get-in (state/get-config) [:macros name])
-                             (get-in (state/get-config) [:macros (keyword name)]))]
-          [:span
-           (if (seq arguments)
-             (block/macro-subs macro-content arguments)
-             macro-content)])))
+      (cond
+        (= name "embed")
+        (let [a (first arguments)]
+          (cond
+            (and (string/starts-with? a "[[")
+                 (string/ends-with? a "]]"))
+            (let [page-name (-> (string/replace a "[[" "")
+                                (string/replace "]]" "")
+                                string/trim)]
+              (when-not (string/blank? page-name)
+                (page-embed config page-name)))
+
+            (and (string/starts-with? a "((")
+                 (string/ends-with? a "))"))
+            (when-let [s (-> (string/replace a "((" "")
+                             (string/replace "))" "")
+                             string/trim)]
+              (when-let [id (and s
+                                 (let [s (string/trim s)]
+                                   (and (util/uuid-string? s)
+                                        (uuid s))))]
+                (block-embed config id)))
+
+            :else                       ;TODO: maybe collections?
+            nil))
+
+        :else
+        (when-let [heading-uuid (:heading/uuid config)]
+          (let [macro-content (or
+                               (-> (db/entity [:heading/uuid heading-uuid])
+                                   (:heading/page)
+                                   (:db/id)
+                                   (db/entity)
+                                   :page/directives
+                                   :macros
+                                   (get name))
+                               (get-in (state/get-config) [:macros name])
+                               (get-in (state/get-config) [:macros (keyword name)]))]
+            [:span
+             (if (and (seq arguments) macro-content)
+               (block/macro-subs macro-content arguments)
+               macro-content)]))))
 
     :else
     ""))
@@ -645,7 +684,7 @@
                    (heading-checkbox t (str "mr-1 cursor")))
         marker-switch (when (and (not pre-heading?)
                                  (not html-export?))
-                          (marker-switch t))
+                        (marker-switch t))
         marker-cp (marker-cp t)
         priority (priority-cp t)
         tags (heading-tags-cp t)]

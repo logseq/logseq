@@ -45,10 +45,18 @@
     [[:editor/input template {:last-pattern slash
                               :backward-pos 2}]]))
 
+(defn embed-page
+  []
+  (conj
+   [[:editor/input "{{{embed [[]]}}}" {:last-pattern slash
+                                       :backward-pos 5}]]
+   [:editor/search-page :embed]))
+
 (defn embed-block
   []
   (conj
-   (->inline "embed")
+   [[:editor/input "{{{embed (())}}}" {:last-pattern slash
+                                       :backward-pos 5}]]
    [:editor/search-block :embed]))
 
 ;; Credits to roamresearch.com
@@ -75,6 +83,7 @@
      ["Date Picker" [[:editor/show-date-picker]]]
      ["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
                         [:editor/search-page]]]
+     ["Page Embed" (embed-page)]
      ["Block Reference" [[:editor/input "(())" {:backward-pos 2}]
                          [:editor/search-block :reference]]]
      ["Block Embed" (embed-block)]

@@ -144,6 +144,8 @@
 (defn set-edit-content!
   [input-id value]
   (when input-id
+    (when-let [input (gdom/getElement input-id)]
+      (gobj/set input "value" value))
     (update-state! :editor/content (fn [m]
                                      (assoc m input-id value)))
     ;; followers
