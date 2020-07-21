@@ -35,7 +35,9 @@
   [repo page-name heading? heading-id]
   (if heading?
     (db/get-heading-and-children repo heading-id)
-    (db/get-page-headings repo page-name)))
+    (do
+      (db/add-page-to-recent! repo page-name)
+      (db/get-page-headings repo page-name))))
 
 (rum/defc page-headings-cp < rum/reactive
   [repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format]
@@ -75,23 +77,6 @@
                   :journal? journal?})
                 (handler/show-right-sidebar))}
    svg/slideshow])
-
-(rum/defc star < rum/reactive
-  [repo page-name]
-  (let [starred? (contains?
-                  (set
-                   (some->> (state/sub [:config repo :starred])
-                            (map string/lower-case)))
-                  page-name)]
-    [:a.ml-4.opacity-50.hover:opacity-100
-     {:class (if starred? "text-gray-800")
-      :title (if starred? "Unstar this page" "Star this page")
-      :on-click (fn []
-                  ;; TODO: save to config file
-                  (handler/star-page! page-name starred?))}
-     (if starred?
-       (svg/star-solid "stroke-current")
-       (svg/star-outline "stroke-current h-5 w-5"))]))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]

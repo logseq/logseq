@@ -37,7 +37,7 @@
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
     :ui/custom-query-components {}
-    :ui/show-help? false
+    :ui/show-recent? false
     :document/mode? (or (storage/get :document/mode?) false)
 
     :github/contents {}
@@ -232,17 +232,6 @@
    (get-config (get-current-repo)))
   ([repo-url]
    (get-in @state [:config repo-url])))
-
-(defn star-page!
-  [repo-url page starred?]
-  (update-state! [:config repo-url :starred]
-                 (fn [pages]
-                   (if starred?
-                     (vec
-                      (remove
-                       #(= (string/lower-case page) (string/lower-case %))
-                       pages))
-                     (vec (distinct (conj pages page)))))))
 
 (defn set-editor-show-page-search
   [value]
@@ -510,12 +499,3 @@
           project (:name (first (filter (fn [p] (= (:repo p) repo)) projects)))]
       (when-not (string/blank? project)
         project))))
-
-(defn toggle-help!
-  []
-  (let [v (get @state :ui/show-help?)]
-    (set-state! :ui/show-help? (not v))))
-
-(defn open-help!
-  []
-  (set-state! :ui/show-help? true))

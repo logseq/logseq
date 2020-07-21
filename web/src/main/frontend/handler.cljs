@@ -1329,14 +1329,6 @@
           (state/set-config! repo new-config)
           (set-config-content! repo path new-config))))))
 
-(defn star-page!
-  [page-name starred?]
-  (let [repo (state/get-current-repo)]
-    (state/star-page! repo page-name starred?)
-    (let [config (state/get-config repo)
-          path (str config/app-name "/" config/config-file)]
-      (set-config-content! repo path config))))
-
 (defn remove-repo!
   [{:keys [id url] :as repo}]
   (util/delete (str config/api "repos/" id)
@@ -1850,11 +1842,6 @@
     (let [path (:file/path file)
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
-
-(defn toggle-help!
-  []
-  (state/toggle-help!)
-  (show-right-sidebar))
 
 (comment
   (defn debug-latest-commits

@@ -36,21 +36,6 @@
       :stroke-linecap "round"}]]
    title])
 
-(rum/defc starred-pages < rum/reactive
-  [page-active? close-modal-fn]
-  (let [repo (state/get-current-repo)
-        starred (state/sub [:config repo :starred])]
-    [:div.cursor-pointer.flex.flex-col.overflow-hidden
-     (if (seq starred)
-       (for [page starred]
-         (let [encoded-page (util/encode-str page)]
-           [:a.mt-1.group.flex.items-center.pl-5.py-2.text-base.leading-6.hover:text-gray-200.transition.ease-in-out.duration-150.star-page
-            {:key encoded-page
-             :class (if (page-active? encoded-page) "text-gray-200" "text-gray-500")
-             :href (str "/page/" encoded-page)
-             :on-click close-modal-fn}
-            (util/capitalize-all page)])))]))
-
 (rum/defc sidebar-nav
   [route-match close-modal-fn]
   (let [active? (fn [route] (= route (get-in route-match [:data :name])))
@@ -71,13 +56,7 @@
                close-modal-fn)
      [:div.pl-4.pr-4 {:style {:height 1
                               :background-color "rgb(57, 75, 89)"
-                              :margin 12}}]
-     ;; shortcuts
-     [:div.flex {:class "mt-1 flex items-center px-4 pt-1 text-base leading-6 rounded-md text-gray-200 transition ease-in-out duration-150"}
-      (svg/star-solid (util/hiccup->class "mr-4.text-gray-500 transition.ease-in-out.duration-150"))
-      [:span.font-bold.text-gray-600
-       "Starred"]]
-     (starred-pages page-active? close-modal-fn)]))
+                              :margin 12}}]]))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
@@ -156,7 +135,7 @@
       state
       {191 (fn [state e]
              (when-not (util/input? (gobj/get e "target"))
-               (handler/toggle-help!)))}
+               (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))}
       (fn [e key-code]
         nil))))
   (mixins/keyboards-mixin keyboards/keyboards)
@@ -235,10 +214,6 @@
               :href (str config/website "/" project)
               :target "_blank"}
              svg/external-link])
-
-          (when (and page? current-repo)
-            (let [page (get-in route-match [:path-params :name])]
-              (page/star current-repo page)))
 
           (when (and page? current-repo)
             (let [page (get-in route-match [:path-params :name])

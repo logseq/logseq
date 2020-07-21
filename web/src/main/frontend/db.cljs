@@ -136,6 +136,8 @@
    ;; TODO: calculate memory/disk usage
    ;; :file/size       {}
 
+   :recent/pages    {}
+
    :page/id         {:db/unique      :db.unique/identity}
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
@@ -1866,6 +1868,13 @@
            seq-flatten
            sort-headings
            group-by-page))))
+
+(defn add-page-to-recent!
+  [repo page]
+  (let [pages (or (get-key-value repo :recent/pages)
+                  '())
+        new-pages (take 12 (distinct (cons page pages)))]
+    (set-key-value repo :recent/pages new-pages)))
 
 (comment
 
