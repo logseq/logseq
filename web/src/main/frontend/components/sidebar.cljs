@@ -317,6 +317,7 @@
                      {:position "relative"}
                      {:position "relative"
                       :max-width 700
+                      :width "100%"
                       :margin-bottom 200})}
            (cond
              db-restoring?
