@@ -33,11 +33,12 @@
 
 (defn- get-headings
   [repo page-name heading? heading-id]
-  (if heading?
-    (db/get-heading-and-children repo heading-id)
-    (do
-      (db/add-page-to-recent! repo page-name)
-      (db/get-page-headings repo page-name))))
+  (when page-name
+    (if heading?
+      (db/get-heading-and-children repo heading-id)
+      (do
+        (db/add-page-to-recent! repo page-name)
+        (db/get-page-headings repo page-name)))))
 
 (rum/defc page-headings-cp < rum/reactive
   [repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format]
@@ -114,7 +115,21 @@
              [repo :heading/block (uuid page-name)]
              (when-let [page-id (db/entity repo [:page/name page-name])]
                [repo :page/headings page-id])))))))
-  {:did-mount handler/scroll-and-highlight!
+  {:did-mount (fn [state]
+                (handler/scroll-and-highlight! state)
+                (let [page-name (get-page-name state)]
+                  (when (= (string/lower-case page-name) "contents")
+                    (when-let [first-heading (first (db/get-page-headings "contents"))]
+                      (let [edit-id (str "edit-heading-" (:heading/uuid first-heading))]
+                        (handler/edit-heading!
+                         (:heading/uuid first-heading)
+                         :max
+                         (:heading/format first-heading)
+                         edit-id)
+                        (when (string/ends-with? (:heading/content first-heading) "[[]]" )
+                          (js/setTimeout #(util/cursor-move-back (gdom/getElement edit-id) 2)
+                                         50))))))
+                state)
    :did-update handler/scroll-and-highlight!}
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
@@ -176,16 +191,16 @@
                           (when file
                             [(when-not journal?
                                {:title "Publish this page on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page! page-name))}})
+                                :options {:on-click (fn []
+                                                      (page-handler/publish-page! page-name))}})
                              (when-not journal?
                                {:title "Publish this page as a slide on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page-as-slide! page-name))}})
+                                :options {:on-click (fn []
+                                                      (page-handler/publish-page-as-slide! page-name))}})
                              (when-not journal?
                                {:title "Un-publish this page on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/unpublish-page! page-name))}})
+                                :options {:on-click (fn []
+                                                      (page-handler/unpublish-page! page-name))}})
                              {:title "Re-index this page"
                               :options {:on-click (fn []
                                                     (handler/re-index-file! file))}}])

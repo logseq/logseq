@@ -937,12 +937,17 @@
 
 (defn- default-content-with-title
   [format title]
-  (case format
-    "org"
-    (util/format "#+TITLE: %s\n#+TAGS:\n\n** " title)
-    "markdown"
-    (util/format "---\ntitle: %s\ntags:\n---\n\n## " title)
-    ""))
+  (let [contents? (= (string/lower-case title) "contents")]
+    (case format
+     "org"
+     (if contents?
+       (util/format "#+TITLE: %s\n#+LIST: [[]]" title)
+       (util/format "#+TITLE: %s\n#+TAGS:\n\n** " title))
+     "markdown"
+     (if contents?
+       (util/format "---\ntitle: %s\nlist: [[]]" title)
+       (util/format "---\ntitle: %s\ntags:\n---\n\n## " title))
+     "")))
 
 (defn create-new-page!
   [title]
@@ -1017,6 +1022,8 @@
         [old-directives new-directives] (when pre-heading?
                                           [(:page/directives (db/entity (:db/id page)))
                                            (db/parse-directives value format)])
+        page-list (when-let [content (:list new-directives)]
+                    (db/extract-page-list content))
         permalink-changed? (when (and pre-heading? (:permalink old-directives))
                              (not= (:permalink old-directives)
                                    (:permalink new-directives)))
@@ -1050,7 +1057,9 @@
                                                    [[:db/add (:db/id page) :page/last-modified-at modified-at]
                                                     [:db/add (:db/id file) :file/last-modified-at modified-at]])
                                    page-directives (when pre-heading?
-                                                     [(assoc page :page/directives new-directives)])]
+                                                     [(assoc page :page/directives new-directives)])
+                                   page-list (when pre-heading?
+                                                [(assoc page :page/list page-list)])]
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -1059,6 +1068,7 @@
                                   pages
                                   headings
                                   page-directives
+                                  page-list
                                   after-headings
                                   modified-time)
                                  {:key :heading/change
@@ -1376,6 +1386,7 @@
                      content
                      (subs content 0 prev-pos))]
     (state/set-editing! edit-input-id content heading text-range)))
+
 (defn clear-selection!
   [e]
   (when (state/in-selection-mode?)
@@ -1605,7 +1616,6 @@
       (when-let [edit-id (state/get-edit-input-id)]
         (when-let [input (gdom/getElement edit-id)]
           (when-let [pos (:pos (util/get-caret-pos input))]
-            (prn {:pos pos})
             (let [value (gobj/get input "value")
                   page-pattern #"\[\[([^\]]+)]]"
                   block-pattern #"\(\(([^\)]+)\)\)"

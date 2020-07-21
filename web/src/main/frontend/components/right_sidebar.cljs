@@ -196,9 +196,78 @@
                    :href (str "/page/" page)}
           (util/capitalize-all page)]))]))
 
+(rum/defcs foldable-list <
+  (rum/local false ::fold?)
+  [state page l]
+  (let [fold? (get state ::fold?)]
+    [:div
+     [:div.flex.flex-row.items-center.mb-1
+      [:a.control {:on-click #(swap! fold? not)
+                   :style {:width "0.75rem"}}
+       (when (seq l)
+         [:svg.h-3.w-3
+          {:version "1.1",
+           :view-box "0 0 128 128"
+           :fill "currentColor"
+           :display "inline-block"
+           :style {:margin-top -3}}
+          [:path
+           {:d
+            (if @fold?
+              "M64.177 100.069a7.889 7.889 0 01-5.6-2.316l-55.98-55.98a7.92 7.92 0 010-11.196c3.086-3.085 8.105-3.092 11.196 0l50.382 50.382 50.382-50.382a7.92 7.92 0 0111.195 0c3.086 3.086 3.092 8.104 0 11.196l-55.98 55.98a7.892 7.892 0 01-5.595 2.316z"
+              "M99.069 64.173c0 2.027-.77 4.054-2.316 5.6l-55.98 55.98a7.92 7.92 0 01-11.196 0c-3.085-3.086-3.092-8.105 0-11.196l50.382-50.382-50.382-50.382a7.92 7.92 0 010-11.195c3.086-3.085 8.104-3.092 11.196 0l55.98 55.98a7.892 7.892 0 012.316 5.595z")}]])]
+
+      [:a.ml-2 {:key (str "contents-" page)
+                     :href (str "/page/" page)}
+       (util/capitalize-all page)]]
+     (when (and (seq l) (not @fold?))
+       [:div.contents-list.ml-4
+        (for [{:keys [page list]} l]
+          (rum/with-key
+            (foldable-list page list)
+            (str "toc-item-" page)))])]))
+
+(rum/defc contents < rum/reactive
+  []
+  (let [l (db/get-contents)]
+    [:div.contents.text-sm.flex-col.flex.ml-3.mt-2
+     (if (seq l)
+       (for [{:keys [page list]} l]
+         (rum/with-key
+           (foldable-list page list)
+           (str "toc-item-" page)))
+       (let [page (db/entity [:page/name "contents"])]
+         (if page
+           [:div
+            [:p.text-base "No contents yet, you can click the button below to edit it."]
+            (ui/button
+              "Edit the contents"
+              :on-click (fn [e]
+                          (util/stop e)
+                          (handler/redirect! {:to :page
+                                              :path-params {:name "contents"}})))]
+           [:div
+           [:p.text-base
+            [:i.font-medium "Contents"] " (similar to book contents) is a way to structure your pages, please click the button below to start!"]
+           (ui/button
+             "Create the contents"
+             :on-click (fn [e]
+                         (util/stop e)
+                         (handler/create-new-page! "contents")))])))]))
+
 (defn build-sidebar-item
   [repo idx db-id block-type block-data]
   (case block-type
+    :contents
+    [[:a {:on-click (fn [e]
+                      (util/stop e)
+                      (if-not (db/entity [:page/name "contents"])
+                        (handler/create-new-page! "contents")
+                        (handler/redirect! {:to :page
+                                            :path-params {:name "contents"}})))}
+      "Contents (edit)"]
+     (contents)]
+
     :recent
     ["Recent" (recent-pages)]
 
@@ -314,14 +383,14 @@
       [:div.flex.flex-row
        [:div.flex.flex-row {:key "right-sidebar-settings"}
         [:div.mr-4.text-sm
+         [:a {:on-click (fn [e]
+                          (state/sidebar-add-block! repo "contents" :contents nil))}
+          "Contents"]]
+
+        [:div.mr-4.text-sm
          [:a {:on-click (fn [_e]
                           (state/sidebar-add-block! repo "recent" :recent nil))}
           "Recent"]]
-
-        [:div.mr-4.text-sm
-         [:a {:on-click (fn [e]
-                          (prn "Clicked Contents"))}
-          "Contents"]]
 
         [:div.mr-4.text-sm
          [:a {:on-click (fn []

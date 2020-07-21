@@ -142,6 +142,7 @@
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
+   :page/links      {}
    :page/alias      {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref
@@ -318,6 +319,7 @@
       :heading/change
       (when (seq data)
         (let [headings data
+              pre-heading? (:heading/pre-heading? (first headings))
               current-priority (get-current-priority)
               current-marker (get-current-marker)
               current-page-id (:page/id (get-current-page))
@@ -331,6 +333,9 @@
                                    [:page/headings page-id]
                                    [:page/ref-pages page-id]]))
                               headings)
+
+                             (when pre-heading?
+                               [[:contents]])
 
                              ;; affected priority
                              (when current-priority
@@ -565,7 +570,7 @@
           (let [handler-key (vec (cons repo-url handler-key))]
             (when-let [cache (get @query-state handler-key)]
               (let [{:keys [query inputs transform-fn query-fn]} cache]
-                (when (or (and query inputs) query-fn)
+                (when (or query query-fn)
                   (let [new-result (->
                                     (cond
                                       query-fn
@@ -576,8 +581,11 @@
                                       (keyword? query)
                                       (get-key-value repo-url query)
 
+                                      (seq inputs)
+                                      (apply d/q query db inputs)
+
                                       :else
-                                      (apply d/q query db inputs))
+                                      (d/q query db))
                                     transform-fn)]
                     (set-new-result! handler-key new-result)))))))))))
 
@@ -647,31 +655,31 @@
   [repo]
   (let [now-long (tc/to-long (t/now))]
     (->> (q repo [:pages] {:use-cache? false}
-          '[:find ?page-name ?modified-at
-            :where
-            [?page :page/name ?page-name]
-            [(get-else $ ?page :page/journal? false) ?journal]
-            [(get-else $ ?page :page/last-modified-at 0) ?modified-at]
-            ;; (or
-            ;;  ;; journal pages, can't be empty
-            ;;  (and [(true? ?journal)]
-            ;;       [?h :heading/page ?page]
-            ;;       [?h :heading/level ?level]
-            ;;       [(> ?level 1)])
-            ;;  ;; non-journals, might be empty pages
-            ;;  (and [(false? ?journal)]
-            ;;       [?h :heading/page]
-            ;;       [?h :heading/level ?level]))
-            ])
-        (react)
-        (seq)
-        (sort-by (fn [[page modified-at]]
-                   [modified-at page]))
-        (reverse)
-        (remove (fn [[page modified-at]]
-                  (or (util/file-page? page)
-                      (and modified-at
-                           (> modified-at now-long))))))))
+           '[:find ?page-name ?modified-at
+             :where
+             [?page :page/name ?page-name]
+             [(get-else $ ?page :page/journal? false) ?journal]
+             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]
+             ;; (or
+             ;;  ;; journal pages, can't be empty
+             ;;  (and [(true? ?journal)]
+             ;;       [?h :heading/page ?page]
+             ;;       [?h :heading/level ?level]
+             ;;       [(> ?level 1)])
+             ;;  ;; non-journals, might be empty pages
+             ;;  (and [(false? ?journal)]
+             ;;       [?h :heading/page]
+             ;;       [?h :heading/level ?level]))
+             ])
+         (react)
+         (seq)
+         (sort-by (fn [[page modified-at]]
+                    [modified-at page]))
+         (reverse)
+         (remove (fn [[page modified-at]]
+                   (or (util/file-page? page)
+                       (and modified-at
+                            (> modified-at now-long))))))))
 
 (defn get-page-alias
   [repo page-name]
@@ -1079,6 +1087,15 @@
       (utf8/substring utf8-content
                       (:pos meta)))))
 
+(defn extract-page-list
+  [content]
+  (when-not (string/blank? content)
+    (->> (re-seq #"\[\[([^\]]+)]]" content)
+         (map last)
+         (remove nil?)
+         (map string/lower-case)
+         (distinct))))
+
 ;; file
 (defn extract-pages-and-headings
   [format ast directives file content utf8-content journal? pages-fn]
@@ -1119,19 +1136,24 @@
                                               (conj other-alias (string/lower-case file)))
                                             (remove nil?)))
                           journal-date-long (if journal?
-                                              (date/journal-title->long (string/capitalize page)))]
+                                              (date/journal-title->long (string/capitalize page)))
+                          page-list (when-let [list-content (:list directives)]
+                                      (extract-page-list list-content))]
                       (cond->
-                        (util/remove-nils
-                         {:page/name page
-                          :page/file [:file/path file]
-                          :page/journal? journal?
-                          :page/journal-day (if journal?
-                                              (date/journal-title->int (string/capitalize page))
-                                              0)
-                          :page/created-at journal-date-long
-                          :page/last-modified-at journal-date-long})
+                          (util/remove-nils
+                           {:page/name page
+                            :page/file [:file/path file]
+                            :page/journal? journal?
+                            :page/journal-day (if journal?
+                                                (date/journal-title->int (string/capitalize page))
+                                                0)
+                            :page/created-at journal-date-long
+                            :page/last-modified-at journal-date-long})
                         (seq directives)
                         (assoc :page/directives directives)
+
+                        (seq page-list)
+                        (assoc :page/list page-list)
 
                         other-alias
                         (assoc :page/alias
@@ -1255,10 +1277,10 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                              {:file/path file
-                               :file/last-modified-at t}
-                            new?
-                            (assoc :file/created-at t)))])]
+                               {:file/path file
+                                :file/last-modified-at t}
+                             new?
+                             (assoc :file/created-at t)))])]
       (transact! repo-url tx))))
 
 (defn get-current-journal-path
@@ -1876,9 +1898,34 @@
         new-pages (take 12 (distinct (cons page pages)))]
     (set-key-value repo :recent/pages new-pages)))
 
+(defn build-content-list
+  [m l]
+  (map
+    (fn [page]
+      (if-let [page-list (get m page)]
+        {:page page
+         :list (build-content-list m page-list)}
+        {:page page}))
+    l))
+
+(defn get-contents
+  ([]
+   (get-contents (state/get-current-repo)))
+  ([repo]
+   (when-let [conn (get-conn repo)]
+     (let [lists (some->>
+                  (q repo [:contents] {}
+                    '[:find ?page-name ?list
+                      :where
+                      [?page :page/list ?list]
+                      [?page :page/name ?page-name]])
+                  react
+                  (into {}))]
+       (when (seq lists)
+         (when-let [l (get lists "contents")]
+           (build-content-list lists l)))))))
+
 (comment
-
-
   (defn debug!
     []
     (let [repos (->> (get-in @state/state [:me :repos])

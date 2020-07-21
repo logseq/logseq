@@ -107,6 +107,17 @@
           nil))
       )))
 
+(defn surround-by?
+  [input before after]
+  (when input
+    (let [value (gobj/get input "value")
+          pos (:pos (util/get-caret-pos input))
+          start-pos (- pos (count before))
+          end-pos (+ pos (count after))]
+      (when (>= (count value) end-pos)
+        (= (str before after)
+           (subs value start-pos end-pos))))))
+
 (defn- upload-image
   [id files format uploading? drop?]
   (image/upload
@@ -683,6 +694,7 @@
                    selected-start (gobj/get node "selectionStart")
                    selected-end (gobj/get node "selectionEnd")]
                (cond
+
                  (not= selected-start selected-end)
                  nil
 
@@ -713,7 +725,16 @@
 
                  (do
                    (util/stop e)
-                   (commands/delete-pair! id))
+                   (commands/delete-pair! id)
+                   (cond
+                     (and (= deleted "[") (state/get-editor-show-page-search))
+                     (state/set-editor-show-page-search false)
+
+                     (and (= deleted "(") (state/get-editor-show-block-search))
+                     (state/set-editor-show-block-search false)
+
+                     :else
+                     nil))
 
                  :else
                  nil)))
@@ -728,6 +749,16 @@
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
+              (surround-by? input "[[" "]]")
+              (do
+                (commands/handle-step [:editor/search-page])
+                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+              (surround-by? input "((" "))")
+              (do
+                (commands/handle-step [:editor/search-block :reference])
+                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
               (and
                (contains? (set (keys reversed-autopair-map)) key)
                (= (get-previous-input-chars input 2) (str key key)))
@@ -753,7 +784,8 @@
         state
         {}
         (fn [e key-code]
-          (let [format (:format (get-state state))]
+          (let [k (gobj/get e "key")
+                format (:format (get-state state))]
             (when (and @*show-commands (not= key-code 191))     ; not /
               (let [matched-commands (get-matched-commands input)]
                 (if (seq matched-commands)

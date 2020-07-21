@@ -749,7 +749,7 @@
            (merge drag-attrs))
 
          (if pre-heading?
-           [:div.pre-heading.pre-white-space
+           [:div.pre-heading.pre-line-white-space
             (string/trim content)]
            (build-heading-part config heading))
 

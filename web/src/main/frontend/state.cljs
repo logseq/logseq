@@ -264,10 +264,6 @@
          (fn [m]
            (and input-id {input-id true}))))
 
-(defn disable-edit!
-  []
-  (swap! state assoc :editor/editing? nil))
-
 (defn set-selection-headings!
   [headings]
   (when (seq headings)
