@@ -701,3 +701,21 @@
 
 (defn pp-str [x]
   (with-out-str (pprint x)))
+
+(defn ->tags
+  [tags]
+  (->> (map (fn [tag]
+              (let [tag (-> (string/trim tag)
+                            (string/lower-case)
+                            (string/replace #"\s+" "-"))]
+                (if (tag-valid? tag)
+                  {:db/id tag
+                   :tag/name tag})))
+         (remove nil? tags))
+       (remove nil?)
+       vec))
+
+(defn ->page-tags
+  [s]
+  (let [tags (string/split s #",")]
+    (->tags tags)))

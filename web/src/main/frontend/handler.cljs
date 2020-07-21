@@ -1022,6 +1022,8 @@
         [old-directives new-directives] (when pre-heading?
                                           [(:page/directives (db/entity (:db/id page)))
                                            (db/parse-directives value format)])
+        page-tags (when-let [tags (:tags new-directives)]
+                    (util/->tags tags))
         page-list (when-let [content (:list new-directives)]
                     (db/extract-page-list content))
         permalink-changed? (when (and pre-heading? (:permalink old-directives))
@@ -1053,13 +1055,28 @@
                                                                                 (block/parse-heading (assoc heading :heading/content value) format))
                                    headings (db/recompute-heading-children repo heading headings)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
+                                   page-id (:db/id page)
                                    modified-time (let [modified-at (tc/to-long (t/now))]
-                                                   [[:db/add (:db/id page) :page/last-modified-at modified-at]
+                                                   [[:db/add page-id :page/last-modified-at modified-at]
                                                     [:db/add (:db/id file) :file/last-modified-at modified-at]])
                                    page-directives (when pre-heading?
-                                                     [(assoc page :page/directives new-directives)])
+                                                     (if (seq new-directives)
+                                                       [[:db/retract page-id :page/directives]
+                                                        {:db/id page-id
+                                                         :page/directives new-directives}]
+                                                       [[:db/retract page-id :page/directives]]))
                                    page-list (when pre-heading?
-                                                [(assoc page :page/list page-list)])]
+                                               (if (seq page-list)
+                                                 [[:db/retract page-id :page/list]
+                                                  {:db/id page-id
+                                                   :page/list page-list}]
+                                                 [[:db/retract page-id :page/list]]))
+                                   page-tags (when (and pre-heading? (seq page-tags))
+                                               (if (seq page-tags)
+                                                 [[:db/retract page-id :page/tags]
+                                                  {:db/id page-id
+                                                   :page/tags page-tags}]
+                                                 [[:db/retract page-id :page/tags]]))]
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -1069,6 +1086,7 @@
                                   headings
                                   page-directives
                                   page-list
+                                  page-tags
                                   after-headings
                                   modified-time)
                                  {:key :heading/change

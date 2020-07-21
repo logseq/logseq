@@ -89,21 +89,9 @@
       first
       second))
 
-(defn ->tags
-  [tags]
-  (->> (map (fn [tag]
-              (let [tag (-> (string/lower-case tag)
-                            (string/replace #"\s+" "-"))]
-                (if (util/tag-valid? tag)
-                  {:db/id tag
-                   :tag/name tag})))
-         (remove nil? tags))
-       (remove nil?)
-       vec))
-
 (defn with-refs
   [{:keys [title body tags] :as heading}]
-  (let [tags (mapv :tag/name (->tags (map :tag/name tags)))
+  (let [tags (mapv :tag/name (util/->tags (map :tag/name tags)))
         ref-pages (atom tags)]
     (walk/postwalk
      (fn [form]
@@ -130,7 +118,7 @@
   [{:keys [title body tags] :as heading}]
   (cond-> heading
     (seq tags)
-    (assoc :tags (->tags tags))))
+    (assoc :tags (util/->tags tags))))
 
 (defn extract-headings
   [blocks last-pos encoded-content]

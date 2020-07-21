@@ -481,7 +481,6 @@
   (let [loaded? (or (loaded?)
                     (rum/react *loaded?))
         current-repo (state/sub :git/current-repo)]
-    (prn  "loaded? " loaded?)
     (if loaded?
       (let [current-file (rum/react *current-file)
             current-file (or current-file

@@ -991,11 +991,11 @@
   (let [current-heading-uuid (:heading/uuid (:heading config))
         ;; exclude the current one, otherwise it'll loop forever
         remove-headings (if current-heading-uuid [current-heading-uuid] nil)
-        query-result (rum/react (:query-atom state))
-        result (db/custom-query-result-transform query-result remove-headings)]
+        query-result (if-let [a (:query-atom state)]
+                       (rum/react a))
+        result (if query-result
+                 (db/custom-query-result-transform query-result remove-headings))]
     [:div.custom-query.my-2
-     [:code (or (:query-title options)
-                "Query result: ")]
      (if (seq result)
        (->hiccup result (assoc config
                                :custom-query? true

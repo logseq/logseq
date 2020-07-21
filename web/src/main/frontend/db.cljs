@@ -142,7 +142,7 @@
    :page/name       {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
-   :page/links      {}
+   :page/list {}
    :page/alias      {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref
@@ -495,18 +495,19 @@
 
 (defn custom-query
   [query-string]
-  (try
-    (let [query (reader/read-string query-string)
-          [query inputs] (if (vector? (first query))
-                           [`~(first query) (rest query)]
-                           [`~query nil])
-          inputs (map resolve-input inputs)
-          repo (state/get-current-repo)
-          k [:custom query-string]]
-      (apply q repo k {} query inputs))
-    (catch js/Error e
-      (println "Query parsing failed: ")
-      (js/console.dir e))))
+  (when-not (string/blank? query-string)
+    (try
+      (let [query (reader/read-string query-string)
+            [query inputs] (if (vector? (first query))
+                             [`~(first query) (rest query)]
+                             [`~query nil])
+            inputs (map resolve-input inputs)
+            repo (state/get-current-repo)
+            k [:custom query-string]]
+        (apply q repo k {} query inputs))
+      (catch js/Error e
+        (println "Query parsing failed: ")
+        (js/console.dir e)))))
 
 (defn custom-query-result-transform
   [query-result remove-headings]
@@ -610,6 +611,25 @@
    key value})
 
 ;; queries
+
+(defn get-all-tags
+  []
+  (let [repo (state/get-current-repo)]
+    (when (get-conn repo)
+      (some->>
+       (q repo [:tags] {}
+         '[:find ?name ?h ?p
+           :where
+           [?t :tag/name ?name]
+           (or
+            [?h :heading/tags ?t]
+            [?p :page/tags ?t])])
+       react
+       (seq)
+       ;; (map first)
+       ;; frequencies
+       ;; (util/sort-by-value :desc)
+       ))))
 
 (defn- remove-journal-files
   [files]
@@ -1177,12 +1197,16 @@
                                        {:page/name alias})))
                                  other-alias))
 
-                        (:tags directives)
-                        (assoc :page/tags
-                               (map
-                                 (fn [tag]
-                                   {:tag/name (string/lower-case tag)})
-                                 (:tags directives))))))
+                        (or (:tags directives) (:roam_tags directives))
+                        (assoc :page/tags (let [tags (:tags directives)
+                                                roam-tags (:roam_tags directives)
+                                                tags (if (string? tags)
+                                                       (string/split tags #",")
+                                                       tags)
+                                                tags (->> (concat tags roam-tags)
+                                                          (remove nil?)
+                                                          (distinct))]
+                                            (util/->tags tags))))))
                   (->> (map first pages)
                        (remove nil?)))
           pages (concat

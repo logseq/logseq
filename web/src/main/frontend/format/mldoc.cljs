@@ -26,19 +26,22 @@
     (.parseJson js/window.Mldoc content (or config default-config))))
 
 ;; E.g "Foo Bar \"Bar Baz\""
-(defn- sep-by-quote-or-space
+(defn- sep-by-quote-or-space-or-comma
   [s]
-  (some->>
-   (string/split s #"\"")
-   (remove string/blank?)
-   (map (fn [s]
-          (if (or (= " " (first s)) (= " " (last s)))
-            ;; space separated tags
-            (string/split (string/trim s) #" ")
-            s)))
-   flatten
-   distinct
-   (map string/lower-case)))
+  (when s
+    (let [comma? (re-find #"," s)]
+     (some->>
+      (string/split s #"[\"|\,]{1}")
+      (remove string/blank?)
+      (map (fn [s]
+             (if (and (not comma?)
+                      (or (= " " (first s)) (= " " (last s))))
+               ;; space separated tags
+               (string/split (string/trim s) #" ")
+               s)))
+      flatten
+      distinct
+      (map string/lower-case)))))
 
 (defn collect-page-directives
   [ast]
@@ -64,18 +67,17 @@
           directives (->> (remove (fn [x] (= :macro (first x))) directives)
                           (into {}))
           directives (if (seq directives)
-                       (let [directives (->
-                                         (cond-> directives
-                                           (:roam_alias directives)
-                                           (assoc :alias (:roam_alias directives))
-                                           (:roam_tags directives)
-                                           (assoc :tags (:roam_tags directives))
-                                           (:roam_key directives)
-                                           (assoc :key (:roam_key directives)))
-                                         (dissoc :roam_alias :roam_tags :roam_key))]
-                         (-> directives
-                             (update :alias sep-by-quote-or-space)
-                             (update :tags sep-by-quote-or-space)))
+                       (cond-> directives
+                         (:roam_alias directives)
+                         (assoc :alias (:roam_alias directives))
+                         (:roam_key directives)
+                         (assoc :key (:roam_key directives))
+                         (:alias directives)
+                         (update :alias sep-by-quote-or-space-or-comma)
+                         (:tags directives)
+                         (update :tags sep-by-quote-or-space-or-comma)
+                         (:roam_tags directives)
+                         (update :roam_tags sep-by-quote-or-space-or-comma))
                        directives)
           directives (assoc directives :macros macros)
           other-ast (drop-while directive? ast)]
