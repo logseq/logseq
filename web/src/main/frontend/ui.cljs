@@ -315,3 +315,10 @@
       {:in show? :timeout 0}
       (fn [state]
         (modal-panel panel-content state close-fn)))]))
+
+(defn loading
+  [content]
+  [:div.flex.flex-row.align-center
+   [:span.lds-dual-ring.mr-2]
+   [:span {:style {:margin-top 2}}
+    content]])

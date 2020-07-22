@@ -38,7 +38,8 @@
             [cljs-time.coerce :as tc]
             [frontend.history :as history]
             ["/frontend/utils" :as utils]
-            [cljs.reader :as reader])
+            [cljs.reader :as reader]
+            [frontend.expand :as expand])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -1870,6 +1871,16 @@
     (let [path (:file/path file)
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
+
+(defn cycle-collapse!
+  [_state e]
+  (when (and
+         ;; not input, t
+         (nil? (state/get-edit-input-id))
+         (string/blank? (:search/q @state/state)))
+    (util/stop e)
+    (expand/cycle!)
+    (re-render-root!)))
 
 (comment
   (defn debug-latest-commits

@@ -45,6 +45,7 @@
 
 (defonce keyboards
   {
+   "tab" handler/cycle-collapse!
    "ctrl+alt+d" state/toggle-document-mode!
    "ctrl+z" handler/undo!
    "ctrl+y" handler/redo!

@@ -23,6 +23,7 @@
             [cljs.reader :as reader]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.mixins :as mixins]
+            [frontend.db-mixins :as db-mixins]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.code :as code]
             [frontend.extensions.sci :as sci]
@@ -203,7 +204,7 @@
 (declare headings-container)
 
 (rum/defc block-embed < rum/reactive
-  (mixins/clear-query-cache
+  (db-mixins/clear-query-cache
    (fn [state]
      (let [repo (state/get-current-repo)
            heading-id (last (:rum/args state))]
@@ -216,7 +217,7 @@
      (headings-container headings (assoc config :embed? true))]))
 
 (rum/defc page-embed < rum/reactive
-  (mixins/clear-query-cache
+  (db-mixins/clear-query-cache
    (fn [state]
      (let [repo (state/get-current-repo)
            page-name (last (:rum/args state))
@@ -1016,8 +1017,6 @@
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
                  (let [[config query] (:rum/args state)]
-                   (when (and (not (sci/loaded?)) (:view query))
-                     (sci/load!))
                    (let [query-atom (db/custom-query query)]
                      (assoc state :query-atom query-atom))))
    :did-mount (fn [state]
@@ -1030,42 +1029,46 @@
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
   [state config {:keys [title query inputs view] :as q}]
-  (let [loading? (rum/react sci/*loading?)]
-    (if (and loading? view)
-      (widgets/loading "loading @borkdude/sci")
-      (let [current-heading-uuid (:heading/uuid (:heading config))
-           ;; exclude the current one, otherwise it'll loop forever
-           remove-headings (if current-heading-uuid [current-heading-uuid] nil)
-           query-result (if-let [a (:query-atom state)]
-                          (rum/react a))
-           result (if query-result
-                    (db/custom-query-result-transform query-result remove-headings))
-           view-f (try
-                    (sci/eval-string (pr-str view))
-                    (catch js/Error e
-                      (println "Query: sci eval failed:")
-                      (js/console.error e)))]
-       [:div.custom-query.my-2
-        (when title
-          [:p [:code title]])
-        (cond
-          (and (seq result) view-f)
-          (let [result (sci/call-fn view-f result)]
-            (util/hiccup-keywordize result))
+  (let [query-atom (:query-atom state)]
+    (let [current-heading-uuid (:heading/uuid (:heading config))
+          ;; exclude the current one, otherwise it'll loop forever
+          remove-headings (if current-heading-uuid [current-heading-uuid] nil)
+          query-result (and query-atom (rum/react query-atom))
+          result (if query-result
+                   (db/custom-query-result-transform query-result remove-headings q))
+          view-f (sci/eval-string (pr-str view))
+          only-headings? (:heading/uuid (first result))
+          headings-grouped-by-page? (and (seq result)
+                                         (:page/name (ffirst result))
+                                         (:heading/uuid (first (second (first result))))
+                                         true)]
+      [:div.custom-query.my-2
+       (when title
+         (if (string? title)
+           [:p [:code title]]
+           title))
+       (cond
+         (and (seq result) view-f)
+         (let [result (sci/call-fn view-f result)]
+           (util/hiccup-keywordize result))
 
-          (and (seq result)
-               (:heading/uuid (first result)))
-          (->hiccup result (assoc config
-                                  :custom-query? true
-                                  :group-by-page? true)
-                    {:style {:margin-top "0.25rem"
-                             :margin-left "0.25rem"}})
+         (and (seq result)
+              (or only-headings? headings-grouped-by-page?))
+         (->hiccup result (assoc config
+                                 :custom-query? true
+                                 :group-by-page? headings-grouped-by-page?)
+                   {:style {:margin-top "0.25rem"
+                            :margin-left "0.25rem"}})
 
-          (seq result)                     ;TODO: table
-          (str result)
+         (seq result)                     ;TODO: table
+         [:pre
+          (for [record result]
+            (if (map? record)
+              (str (util/pp-str record) "\n")
+              record))]
 
-          :else
-          [:div.text-sm.mt-2 "Empty"])]))))
+         :else
+         [:div.text-sm.mt-2.ml-2.font-medium "Empty"])])))
 
 (defn admonition
   [config type options result]

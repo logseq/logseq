@@ -3,8 +3,8 @@
             [medley.core :as medley]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
-            [frontend.components.widgets :as widgets]
             [frontend.loader :as loader]
+            [frontend.ui :as ui]
             [frontend.config :as config]))
 
 (defn loaded? []
@@ -39,7 +39,7 @@
   [loading? style sections]
   [:div.reveal {:style style}
    (when loading?
-     [:div.ls-center (widgets/loading "")])
+     [:div.ls-center (ui/loading "")])
    [:div.slides
     (for [[idx sections] (medley/indexed sections)]
       (if (> (count sections) 1)       ; nested

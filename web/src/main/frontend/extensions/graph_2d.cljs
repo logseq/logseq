@@ -1,7 +1,6 @@
 (ns frontend.extensions.graph-2d
   (:require [rum.core :as rum]
             [frontend.loader :as loader]
-            [frontend.components.widgets :as widgets]
             [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]

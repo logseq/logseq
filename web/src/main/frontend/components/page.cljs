@@ -17,11 +17,11 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.mixins :as mixins]
+            [frontend.db-mixins :as db-mixins]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
-            [frontend.expand :as expand]
             [frontend.graph :as graph]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
@@ -91,19 +91,7 @@
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
-  (mixins/keyboard-mixin
-   "tab"
-   (fn [state e]
-     (when (and
-            ;; not input, t
-            (nil? (state/get-edit-input-id))
-            (string/blank? (:search/q @state/state)))
-       (util/stop e)
-       (let [encoded-page-name (get-page-name state)
-             id encoded-page-name]
-         (expand/cycle!)
-         (handler/re-render-root!)))))
-  (mixins/clear-query-cache
+  (db-mixins/clear-query-cache
    (fn [state]
      (let [repo (or (:repo (first (:rum/args state))) (state/get-current-repo))
            encoded-page-name (get-page-name state)]

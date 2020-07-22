@@ -186,10 +186,3 @@
       ;;       [:a {:href "/auth/github_ask_repo_permission"}
       ;;        (ui/button "Grant us your private repo permission")]]]]])
       ]]))
-
-(rum/defc loading
-  [content]
-  [:div.flex.flex-row.align-center
-   [:span.lds-dual-ring.mr-2]
-   [:span {:style {:margin-top 2}}
-    content]])

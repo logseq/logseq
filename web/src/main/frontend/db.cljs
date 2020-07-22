@@ -22,6 +22,7 @@
             [cljs-time.coerce :as tc]
             [clojure.walk :as walk]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.extensions.sci :as sci]
             [goog.array :as garray]))
 
 ;; offline db
@@ -494,29 +495,31 @@
     headings))
 
 (defn custom-query
-  [query]
-  (when-let [query (cond
-                (and (string? query)
-                       (not (string/blank? query)))
-                (reader/read-string query)
+  ([query]
+   (custom-query query {}))
+  ([query query-opts]
+   (when-let [query (cond
+                      (and (string? query)
+                           (not (string/blank? query)))
+                      (reader/read-string query)
 
-                (map? query)
-                query
+                      (map? query)
+                      query
 
-                :else
-                nil)]
-    (try
-      (let [{:keys [query inputs]} query
-            inputs (map resolve-input inputs)
-            repo (state/get-current-repo)
-            k [:custom query]]
-        (apply q repo k {} query inputs))
-      (catch js/Error e
-        (println "Query parsing failed: ")
-        (js/console.dir e)))))
+                      :else
+                      nil)]
+     (try
+       (let [{:keys [query inputs result-transform]} query
+             inputs (map resolve-input inputs)
+             repo (state/get-current-repo)
+             k [:custom query]]
+         (apply q repo k query-opts query inputs))
+       (catch js/Error e
+         (println "Query parsing failed: ")
+         (js/console.dir e))))))
 
 (defn custom-query-result-transform
-  [query-result remove-headings]
+  [query-result remove-headings q]
   (let [repo (state/get-current-repo)
         result (seq-flatten query-result)
         heading? (:heading/uuid (first result))]
@@ -526,11 +529,15 @@
                        (remove (fn [h]
                                  (contains? remove-headings (:heading/uuid h)))
                                result))
-                     result)]
-        (some->> result
-                 (with-repo repo)
-                 (sort-headings)
-                 (group-by-page)))
+                     result)
+            result (some->> result
+                            (with-repo repo)
+                            (sort-headings))]
+        (if-let [result-transform (:result-transform q)]
+          (if-let [f (sci/eval-string (pr-str result-transform))]
+            (sci/call-fn f result)
+            result)
+          (group-by-page result)))
       result)))
 
 (defn transact!

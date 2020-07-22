@@ -3,8 +3,7 @@
             [goog.dom :as dom]
             [goog.object :as gobj]
             [frontend.keyboard :as keyboard]
-            [frontend.util :refer-macros [profile]]
-            [frontend.db :as db])
+            [frontend.util :refer-macros [profile]])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -219,10 +218,3 @@
        (profile
         (str "Render " desc)
         (render-fn state))))})
-
-(defn clear-query-cache
-  [key-f]
-  {:will-unmount (fn [state]
-                   (when-let [key (key-f state)]
-                     (db/remove-q! key))
-                   state)})

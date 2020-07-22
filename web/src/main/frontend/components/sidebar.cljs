@@ -90,16 +90,16 @@
        (widgets/set-personal-access-token)
 
        cloning?
-       (widgets/loading "Cloning")
+       (ui/loading "Cloning")
 
        (seq latest-journals)
        (journal/journals latest-journals)
 
        importing-to-db?
-       (widgets/loading "Parsing files")
+       (ui/loading "Parsing files")
 
        loading-files?
-       (widgets/loading "Loading files")
+       (ui/loading "Loading files")
 
        (empty? (:repos me))
        (widgets/add-repo))]))
@@ -298,7 +298,7 @@
              db-restoring?
              [:div.mt-20
               [:div.ls-center
-               (widgets/loading "Loading")]]
+               (ui/loading "Loading")]]
 
              global-graph-pages?
              main-content

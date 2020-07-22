@@ -500,5 +500,5 @@
   (let [db-restoring? (state/sub :db/restoring?)]
     (if db-restoring?
       [:div.ls-center
-       (widgets/loading "Loading")]
+       (ui/loading "Loading")]
       (draw-2 option))))

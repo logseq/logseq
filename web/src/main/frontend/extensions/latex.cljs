@@ -1,7 +1,7 @@
 (ns frontend.extensions.latex
   (:require [rum.core :as rum]
             [frontend.loader :as loader]
-            [frontend.components.widgets :as widgets]
+            [frontend.ui :as ui]
             [frontend.config :as config]
             [frontend.util :as util]
             [goog.dom :as gdom]))
@@ -36,7 +36,7 @@
   [id s block? display?]
   (let [loading? (rum/react *loading?)]
     (when loading?
-      (widgets/loading "Loading"))
+      (ui/loading "Loading"))
     (let [element (if block?
                     :div.latex
                     :span.latex-inline)]
