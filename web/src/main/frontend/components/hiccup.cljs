@@ -1016,7 +1016,7 @@
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
                  (let [[config query] (:rum/args state)]
-                   (when (not (sci/loaded?))
+                   (when (and (not (sci/loaded?)) (:view query))
                      (sci/load!))
                    (let [query-atom (db/custom-query query)]
                      (assoc state :query-atom query-atom))))
@@ -1031,7 +1031,7 @@
                    state)}
   [state config {:keys [title query inputs view] :as q}]
   (let [loading? (rum/react sci/*loading?)]
-    (if loading?
+    (if (and loading? view)
       (widgets/loading "loading @borkdude/sci")
       (let [current-heading-uuid (:heading/uuid (:heading config))
            ;; exclude the current one, otherwise it'll loop forever
