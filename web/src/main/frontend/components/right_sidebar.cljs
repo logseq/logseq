@@ -205,23 +205,15 @@
       [:a.control {:on-click #(swap! fold? not)
                    :style {:width "0.75rem"}}
        (when (seq l)
-         [:svg.h-3.w-3
-          {:version "1.1",
-           :view-box "0 0 128 128"
-           :fill "currentColor"
-           :display "inline-block"
-           :style {:margin-top -3}}
-          [:path
-           {:d
-            (if @fold?
-              "M64.177 100.069a7.889 7.889 0 01-5.6-2.316l-55.98-55.98a7.92 7.92 0 010-11.196c3.086-3.085 8.105-3.092 11.196 0l50.382 50.382 50.382-50.382a7.92 7.92 0 0111.195 0c3.086 3.086 3.092 8.104 0 11.196l-55.98 55.98a7.892 7.892 0 01-5.595 2.316z"
-              "M99.069 64.173c0 2.027-.77 4.054-2.316 5.6l-55.98 55.98a7.92 7.92 0 01-11.196 0c-3.085-3.086-3.092-8.105 0-11.196l50.382-50.382-50.382-50.382a7.92 7.92 0 010-11.195c3.086-3.085 8.104-3.092 11.196 0l55.98 55.98a7.892 7.892 0 012.316 5.595z")}]])]
+         (if @fold?
+           svg/arrow-down-v2
+           svg/arrow-right-v2))]
 
       [:a.ml-2 {:key (str "contents-" page)
                      :href (str "/page/" page)}
        (util/capitalize-all page)]]
-     (when (and (seq l) (not @fold?))
-       [:div.contents-list.ml-4
+     (when (seq l)
+       [:div.contents-list.ml-4 {:class (if @fold? "hidden" "initial")}
         (for [{:keys [page list]} l]
           (rum/with-key
             (foldable-list page list)

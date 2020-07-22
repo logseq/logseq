@@ -6,6 +6,7 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
+            [frontend.components.svg :as svg]
             [clojure.string :as string]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -322,3 +323,36 @@
    [:span.lds-dual-ring.mr-2]
    [:span {:style {:margin-top 2}}
     content]])
+
+(rum/defcs foldable <
+  (rum/local false ::collapsed?)
+  (rum/local false ::control?)
+  [state header content]
+  (let [control? (get state ::control?)
+        collapsed? (get state ::collapsed?)]
+    [:div.flex.flex-col
+     [:div.flex.flex-row {:style {:margin-left -25}
+                          :on-mouse-over #(reset! control? true)
+                          :on-mouse-out #(reset! control? false)}
+      [:div.hd-control.flex.flex-row.items-center.mr-2
+       [:a.heading-control
+        {:id (str "control-" uuid)
+         :style {:width 14
+                 :height 16
+                 :margin-right 2}
+         :on-click (fn [_e]
+                     (swap! collapsed? not))}
+        (cond
+          @collapsed?
+          (svg/caret-right)
+
+          @control?
+          (svg/caret-down)
+
+          :else
+          [:span ""])]]
+      header]
+     [:div {:class (if @collapsed?
+                     "hidden"
+                     "initial")}
+      content]]))

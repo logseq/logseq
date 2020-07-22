@@ -30,16 +30,16 @@
                          :else
                          (db/get-page-referenced-headings page-name))
           n-ref (count ref-headings)]
-      [:div.references
-       (when (> n-ref 0)
-         [:h2.font-bold.mt-6.opacity-50 (let []
-                                          (str n-ref " Linked References"))])
-       (when (> n-ref 0)
-         (let [ref-hiccup (hiccup/->hiccup ref-headings
-                                           {:id encoded-page-name
-                                            :start-level 2
-                                            :ref? true
-                                            :group-by-page? true}
-                                           {})]
-           (content/content encoded-page-name
-                            {:hiccup ref-hiccup})))])))
+      (when (> n-ref 0)
+        [:div.references.mt-6
+         (ui/foldable
+          [:h2.font-bold.opacity-50 (let []
+                                           (str n-ref " Linked References"))]
+          (let [ref-hiccup (hiccup/->hiccup ref-headings
+                                            {:id encoded-page-name
+                                             :start-level 2
+                                             :ref? true
+                                             :group-by-page? true}
+                                            {})]
+            (content/content encoded-page-name
+                             {:hiccup ref-hiccup})))]))))

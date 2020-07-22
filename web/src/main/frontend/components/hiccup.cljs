@@ -1042,33 +1042,34 @@
                                          (:page/name (ffirst result))
                                          (:heading/uuid (first (second (first result))))
                                          true)]
-      [:div.custom-query.my-2
-       (when title
-         (if (string? title)
-           [:p [:code title]]
-           title))
-       (cond
-         (and (seq result) view-f)
-         (let [result (sci/call-fn view-f result)]
-           (util/hiccup-keywordize result))
+      [:div.custom-query.mt-2
+       (ui/foldable
+        (when title
+          (if (string? title)
+            [:p [:code title]]
+            title))
+        (cond
+          (and (seq result) view-f)
+          (let [result (sci/call-fn view-f result)]
+            (util/hiccup-keywordize result))
 
-         (and (seq result)
-              (or only-headings? headings-grouped-by-page?))
-         (->hiccup result (assoc config
-                                 :custom-query? true
-                                 :group-by-page? headings-grouped-by-page?)
-                   {:style {:margin-top "0.25rem"
-                            :margin-left "0.25rem"}})
+          (and (seq result)
+               (or only-headings? headings-grouped-by-page?))
+          (->hiccup result (assoc config
+                                  :custom-query? true
+                                  :group-by-page? headings-grouped-by-page?)
+                    {:style {:margin-top "0.25rem"
+                             :margin-left "0.25rem"}})
 
-         (seq result)                     ;TODO: table
-         [:pre
-          (for [record result]
-            (if (map? record)
-              (str (util/pp-str record) "\n")
-              record))]
+          (seq result)                     ;TODO: table
+          [:pre
+           (for [record result]
+             (if (map? record)
+               (str (util/pp-str record) "\n")
+               record))]
 
-         :else
-         [:div.text-sm.mt-2.ml-2.font-medium "Empty"])])))
+          :else
+          [:div.text-sm.mt-2.ml-2.font-medium "Empty"]))])))
 
 (defn admonition
   [config type options result]
@@ -1263,8 +1264,9 @@
        (for [[page headings] headings]
          (let [page (db/entity (:db/id page))]
            [:div.my-2 {:key (str "page-" (:db/id page))}
-            (page-cp config (:page/name page))
-            (headings-container headings config)]))
+            (ui/foldable
+             (page-cp config (:page/name page))
+             (headings-container headings config))]))
        (headings-container headings config))]))
 
 (comment
