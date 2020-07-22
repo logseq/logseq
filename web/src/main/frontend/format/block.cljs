@@ -7,7 +7,8 @@
             [medley.core :as medley]
             [frontend.config :as config]
             [datascript.core :as d]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.date :as date]))
 
 (defn heading-block?
   [block]
@@ -204,6 +205,16 @@
          headings)
         headings))))
 
+(defn- page-with-journal
+  [page-name]
+  (when page-name
+    (let [page-name (string/lower-case page-name)]
+      (if-let [d (date/journal-title->int (string/capitalize page-name))]
+       {:page/name page-name
+        :page/journal? true
+        :page/journal-day d}
+       {:page/name page-name}))))
+
 (defn parse-heading
   [{:heading/keys [uuid content meta file page] :as heading} format]
   (when-not (string/blank? content)
@@ -239,7 +250,7 @@
                                          (mapv
                                           (fn [page]
                                             (let [page-name (string/lower-case page)
-                                                  page {:page/name page-name}]
+                                                  page (page-with-journal page-name)]
                                               (swap! ref-pages-atom conj page)
                                               page))
                                           ref-pages)}))]

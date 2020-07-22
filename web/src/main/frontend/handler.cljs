@@ -289,7 +289,7 @@
         dir (str repo-dir "/" app-dir)]
     (p/let [_ (-> (fs/mkdir dir)
                   (p/catch (fn [_e])))]
-      (let [default-content "{}"]
+      (let [default-content config/config-default-content]
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)]
             (when-not file-exists?

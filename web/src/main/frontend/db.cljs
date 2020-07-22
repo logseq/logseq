@@ -1113,13 +1113,6 @@
                         first-heading-name
                         file))))
 
-(defn valid-journal-title?
-  [title]
-  (and title
-       (or
-        (date/valid? (string/capitalize title))
-        (not (js/isNaN (js/Date.parse title))))))
-
 (defn get-heading-content
   [utf8-content heading]
   (let [meta (:heading/meta heading)]
@@ -1163,7 +1156,7 @@
                                              :heading/page [:page/name (string/lower-case page)]
                                              :heading/ref-pages (mapv
                                                                  (fn [page]
-                                                                   {:page/name (string/lower-case page)})
+                                                                   (block/page-with-journal page))
                                                                  heading-ref-pages)))))
                            headings)))
                      (remove nil? pages)))
@@ -1283,7 +1276,7 @@
                (let [[{:heading/keys [level title] :as heading} & tl] headings]
                  (if (and (= level 1)
                           (when-let [title (last (first title))]
-                            (valid-journal-title? title)))
+                            (date/valid-journal-title? title)))
                    (let [page-name (let [title (last (first title))]
                                      (and title (string/lower-case title)))
                          new-pages (assoc pages page-name [heading])]
@@ -1518,9 +1511,11 @@
              seq-flatten
              (remove (fn [heading]
                        (let [ref-pages (set (map :db/id (:heading/ref-pages heading)))]
-                         (seq (set/intersection
-                               ref-pages
-                               pages)))))
+                         (or
+                          (= (get-in heading [:heading/page :db/id]) page-id)
+                          (seq (set/intersection
+                                ref-pages
+                                pages))))))
              sort-headings
              group-by-page)))))
 

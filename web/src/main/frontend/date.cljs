@@ -142,10 +142,17 @@
          false)))
    (journal-title-formatters)))
 
+(defn valid-journal-title?
+  [title]
+  (and title
+       (or
+        (valid? (string/capitalize title))
+        (not (js/isNaN (js/Date.parse title))))))
+
 (defn journal-title->int
   [journal-title]
   (when-not (string/blank? journal-title)
-    (let [time (->> (map
+    (when-let [time (->> (map
                       (fn [formatter]
                         (try
                           (tf/parse (tf/formatter formatter) journal-title)
@@ -159,7 +166,7 @@
 (defn journal-title->long
   [journal-title]
   (when-not (string/blank? journal-title)
-    (let [time (->> (map
+    (when-let [time (->> (map
                       (fn [formatter]
                         (try
                           (tf/parse (tf/formatter formatter) journal-title)
