@@ -1016,7 +1016,7 @@
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
                  (let [[config query] (:rum/args state)]
-                   (when (and (not (sci/loaded?)) (:view query))
+                   (when (not (sci/loaded?))
                      (sci/load!))
                    (let [query-atom (db/custom-query query)]
                      (assoc state :query-atom query-atom))))
