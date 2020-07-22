@@ -85,10 +85,9 @@
     (let [queries (state/sub [:config repo :default-queries :journals])]
       (when (seq queries)
         [:div#today-queries
-         (for [{:keys [title query]} queries]
+         (for [{:keys [title] :as query} queries]
            [:div {:key (str "query-" title)}
-            (hiccup/custom-query {:start-level 2} {:query-title title}
-                                 query)])]))))
+            (hiccup/custom-query {:start-level 2} query)])]))))
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive

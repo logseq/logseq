@@ -719,3 +719,12 @@
   [s]
   (let [tags (string/split s #",")]
     (->tags tags)))
+
+(defn hiccup-keywordize
+  [hiccup]
+  (walk/postwalk
+   (fn [f]
+     (if (and (vector? f) (string? (first f)))
+       (update f 0 keyword)
+       f))
+   hiccup))

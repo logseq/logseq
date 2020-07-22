@@ -28,7 +28,8 @@
             [frontend.extensions.sci :as sci]
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [cljs-bean.core :as bean]))
 
 ;; local state
 (defonce *heading-children
@@ -1014,9 +1015,11 @@
 
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
-                 (let [[config _options content] (:rum/args state)
-                       query-atom (db/custom-query content)]
-                   (assoc state :query-atom query-atom)))
+                 (let [[config query] (:rum/args state)]
+                   (when (and (not (sci/loaded?)) (:view query))
+                     (sci/load!))
+                   (let [query-atom (db/custom-query query)]
+                     (assoc state :query-atom query-atom))))
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
@@ -1026,22 +1029,43 @@
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
-  [state config options content]
-  (let [current-heading-uuid (:heading/uuid (:heading config))
-        ;; exclude the current one, otherwise it'll loop forever
-        remove-headings (if current-heading-uuid [current-heading-uuid] nil)
-        query-result (if-let [a (:query-atom state)]
-                       (rum/react a))
-        result (if query-result
-                 (db/custom-query-result-transform query-result remove-headings))]
-    [:div.custom-query.my-2
-     (if (seq result)
-       (->hiccup result (assoc config
-                               :custom-query? true
-                               :group-by-page? true)
-                 {:style {:margin-top "0.25rem"
-                          :margin-left "0.25rem"}})
-       [:div.text-sm.mt-2 "Empty"])]))
+  [state config {:keys [title query inputs view] :as q}]
+  (let [loading? (rum/react sci/*loading?)]
+    (if loading?
+      (widgets/loading "loading @borkdude/sci")
+      (let [current-heading-uuid (:heading/uuid (:heading config))
+           ;; exclude the current one, otherwise it'll loop forever
+           remove-headings (if current-heading-uuid [current-heading-uuid] nil)
+           query-result (if-let [a (:query-atom state)]
+                          (rum/react a))
+           result (if query-result
+                    (db/custom-query-result-transform query-result remove-headings))
+           view-f (try
+                    (sci/eval-string (pr-str view))
+                    (catch js/Error e
+                      (println "Query: sci eval failed:")
+                      (js/console.error e)))]
+       [:div.custom-query.my-2
+        (when title
+          [:p [:code title]])
+        (cond
+          (and (seq result) view-f)
+          (let [result (sci/call-fn view-f result)]
+            (util/hiccup-keywordize result))
+
+          (and (seq result)
+               (:heading/uuid (first result)))
+          (->hiccup result (assoc config
+                                  :custom-query? true
+                                  :group-by-page? true)
+                    {:style {:margin-top "0.25rem"
+                             :margin-left "0.25rem"}})
+
+          (seq result)                     ;TODO: table
+          (str result)
+
+          :else
+          [:div.text-sm.mt-2 "Empty"])]))))
 
 (defn admonition
   [config type options result]
@@ -1119,8 +1143,9 @@
         (latex/html-export content true false)
         (latex/latex (str (dc/squuid)) content true false))
 
-      ["Custom" "query" options result content]
-      (custom-query config options content)
+      ["Custom" "query" _options result content]
+      (let [query (reader/read-string content)]
+        (custom-query config query))
 
       ["Custom" "note" options result content]
       (admonition config "note" options result)

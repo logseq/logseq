@@ -230,8 +230,8 @@
 
 ;; TODO: rename :custom to :query/custom
 (defn remove-custom-query!
-  [repo query-string]
-  (remove-q! [repo :custom query-string]))
+  [repo query]
+  (remove-q! [repo :custom query]))
 
 (defn set-new-result!
   [k new-result]
@@ -494,16 +494,22 @@
     headings))
 
 (defn custom-query
-  [query-string]
-  (when-not (string/blank? query-string)
+  [query]
+  (when-let [query (cond
+                (and (string? query)
+                       (not (string/blank? query)))
+                (reader/read-string query)
+
+                (map? query)
+                query
+
+                :else
+                nil)]
     (try
-      (let [query (reader/read-string query-string)
-            [query inputs] (if (vector? (first query))
-                             [`~(first query) (rest query)]
-                             [`~query nil])
+      (let [{:keys [query inputs]} query
             inputs (map resolve-input inputs)
             repo (state/get-current-repo)
-            k [:custom query-string]]
+            k [:custom query]]
         (apply q repo k {} query inputs))
       (catch js/Error e
         (println "Query parsing failed: ")
