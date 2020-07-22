@@ -598,7 +598,7 @@
 
 (defn file-page?
   [page-name]
-  (re-find #"\." page-name))
+  (when page-name (re-find #"\." page-name)))
 
 ;; Remove rum *reactions* assert
 (defn react

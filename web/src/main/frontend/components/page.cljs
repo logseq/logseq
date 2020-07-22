@@ -210,8 +210,7 @@
              file-path]])
 
          (when (and repo (not journal?) (not heading?))
-           (let [alias (some->> (db/get-page-alias repo page-name)
-                                (remove util/file-page?))]
+           (let [alias (db/get-page-alias-names repo page-name)]
              (when (seq alias)
                [:div.alias.ml-1.mb-1.content {:key "page-alias"}
                 [:span.font-bold.mr-1 "Page aliases: "]
@@ -231,7 +230,11 @@
          ;; referenced headings
          (when-not sidebar?
            [:div {:key "page-references"}
-            (reference/references page-name false)])]))))
+            (reference/references page-name false)])
+
+         (when-not sidebar?
+           [:div {:key "page-unlinked-references"}
+            (reference/unlinked-references page-name)])]))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 

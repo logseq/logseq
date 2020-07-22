@@ -43,3 +43,24 @@
                                             {})]
             (content/content encoded-page-name
                              {:hiccup ref-hiccup})))]))))
+
+(rum/defc unlinked-references < rum/reactive
+  [page-name]
+  (when page-name
+    (let [page-name (string/lower-case page-name)
+          encoded-page-name (util/url-encode page-name)
+          ref-headings (db/get-page-unlinked-references page-name)
+          n-ref (count ref-headings)]
+      (when (> n-ref 0)
+        [:div.references.mt-6
+         (ui/foldable
+          [:h2.font-bold.opacity-50 (let []
+                                           (str n-ref " Unlinked References"))]
+          (let [ref-hiccup (hiccup/->hiccup ref-headings
+                                            {:id (str encoded-page-name "-unlinked-")
+                                             :start-level 2
+                                             :ref? true
+                                             :group-by-page? true}
+                                            {})]
+            (content/content encoded-page-name
+                             {:hiccup ref-hiccup})))]))))

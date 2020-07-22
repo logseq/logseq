@@ -717,17 +717,26 @@
 (defn get-page-alias
   [repo page-name]
   (when-let [conn (and repo (get-conn repo))]
-    (some->> (d/q '[:find ?alias-name
+    (some->> (d/q '[:find ?alias
                     :in $ ?page-name
                     :where
                     [?page :page/name ?page-name]
                     [?page :page/alias ?alias]
-                    [?alias :page/name ?alias-name]]
+                    [?page :page/journal? false]]
                conn
                page-name)
              seq-flatten
-             distinct
-             remove-journal-files)))
+             distinct)))
+
+(defn get-page-alias-names
+  [repo page-name]
+  (let [alias-ids (get-page-alias repo page-name)]
+    (when (seq alias-ids)
+      (->> (d/pull-many (get-conn repo)
+                    '[:page/name]
+                    alias-ids)
+           (map :page/name)
+           distinct))))
 
 (defn get-files
   [repo]
@@ -887,8 +896,9 @@
 
 (defn page-alias-set
   [repo-url page]
-  (let [aliases (get-page-alias repo-url page)]
-    (set (conj aliases page))))
+  (when-let [page-id (:db/id (entity [:page/name page]))]
+    (let [aliases (get-page-alias repo-url page)]
+      (set (conj aliases page-id)))))
 
 (defn page-headings-transform
   [repo-url result]
@@ -1425,11 +1435,10 @@
                            '[:find ?ref-page-name
                              :in $ ?pages
                              :where
-                             [?p :page/name ?page]
                              [?heading :heading/page ?p]
+                             [(contains? ?pages ?p)]
                              [?heading :heading/ref-pages ?ref-page]
-                             [?ref-page :page/name ?ref-page-name]
-                             [(contains? ?pages ?page)]]
+                             [?ref-page :page/name ?ref-page-name]]
                            pages)
                          react
                          seq-flatten)]
@@ -1461,8 +1470,7 @@
                                    :in $ ?pages ?page-name
                                    :where
                                    [?heading :heading/ref-pages ?p]
-                                   [?p :page/name ?page]
-                                   [(contains? ?pages ?page)]
+                                   [(contains? ?pages ?p)]
                                    [?heading :heading/page ?mentioned-page]
                                    [?mentioned-page :page/name ?mentioned-page-name]]
                                  pages
@@ -1481,12 +1489,42 @@
                '[:find (pull ?heading [*])
                  :in $ ?pages
                  :where
-                 [?ref-page :page/name ?page]
                  [?heading :heading/ref-pages ?ref-page]
-                 [(contains? ?pages ?page)]]
+                 [(contains? ?pages ?ref-page)]]
                pages)
              react
              seq-flatten
+             (remove (fn [heading]
+                       (let [exclude-pages (conj pages page-id)]
+                         (contains? exclude-pages (:db/id (:heading/page heading))))))
+             sort-headings
+             group-by-page)))))
+
+(defn get-page-unlinked-references
+  [page]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (get-conn repo)]
+      (let [page-id (:db/id (entity [:page/name page]))
+            pages (page-alias-set repo page)
+            pattern (re-pattern (str "(?i)" page))]
+        (->> (d/q
+               '[:find (pull ?heading [*])
+                 :in $ ?pages ?pattern
+                 :where
+                 [?heading :heading/ref-pages ?p]
+                 (not [(contains? ?pages ?p)])
+                 [?heading :heading/content ?content]
+                 [(re-find ?pattern ?content)]]
+               conn
+               pages
+               pattern)
+             seq-flatten
+             (remove (fn [heading]
+                       (let [ref-pages (-> (set (map :db/id (:heading/ref-pages heading)))
+                                           (conj page-id))]
+                         (seq (set/intersection
+                               ref-pages
+                               pages)))))
              sort-headings
              group-by-page)))))
 
