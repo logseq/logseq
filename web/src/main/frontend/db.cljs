@@ -1495,7 +1495,7 @@
              react
              seq-flatten
              (remove (fn [heading]
-                       (let [exclude-pages (conj pages page-id)]
+                       (let [exclude-pages pages]
                          (contains? exclude-pages (:db/id (:heading/page heading))))))
              sort-headings
              group-by-page)))))
@@ -1509,19 +1509,15 @@
             pattern (re-pattern (str "(?i)" page))]
         (->> (d/q
                '[:find (pull ?heading [*])
-                 :in $ ?pages ?pattern
+                 :in $ ?pattern
                  :where
-                 [?heading :heading/ref-pages ?p]
-                 (not [(contains? ?pages ?p)])
                  [?heading :heading/content ?content]
                  [(re-find ?pattern ?content)]]
                conn
-               pages
                pattern)
              seq-flatten
              (remove (fn [heading]
-                       (let [ref-pages (-> (set (map :db/id (:heading/ref-pages heading)))
-                                           (conj page-id))]
+                       (let [ref-pages (set (map :db/id (:heading/ref-pages heading)))]
                          (seq (set/intersection
                                ref-pages
                                pages)))))
