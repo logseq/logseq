@@ -62,6 +62,14 @@
           :target "_blank"}
       "Logseq Blog"]]
     [:li
+     [:a {:href "/blog/privacy-policy"
+          :target "_blank"}
+      "Privacy policy"]]
+    [:li
+     [:a {:href "/blog/terms"
+          :target "_blank"}
+      "Terms"]]
+    [:li
      [:a {:href "https://discord.gg/KpN4eHY"
           :target "_blank"}
       [:div.flex-row.flex.items-center
