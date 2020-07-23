@@ -294,6 +294,7 @@
           (let [path (str app-dir "/" config/config-file)]
             (when-not file-exists?
               (db/reset-file! repo-url path default-content)
+              (db/reset-config! repo-url default-content)
               (git-add repo-url path))))
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
           (let [path (str app-dir "/" config/metadata-file)]
