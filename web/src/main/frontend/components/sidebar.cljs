@@ -304,7 +304,7 @@
              main-content
 
              :else
-             [:div.m-6
+             [:div.mx-6.my-12
               main-content])]]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block

@@ -325,9 +325,13 @@
     content]])
 
 (rum/defcs foldable <
-  (rum/local false ::collapsed?)
   (rum/local false ::control?)
-  [state header content]
+  (rum/local false ::collapsed?)
+  {:will-mount (fn [state]
+                 (when (boolean (last (:rum/args state)))
+                   (reset! (get state ::collapsed?) true))
+                 state)}
+  [state header content default-collapsed?]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)]
     [:div.flex.flex-col
@@ -335,12 +339,13 @@
                           :on-mouse-over #(reset! control? true)
                           :on-mouse-out #(reset! control? false)}
       [:div.hd-control.flex.flex-row.items-center.mr-2
-       [:a.heading-control
+       [:a.heading-control.opacity-50.hover:opacity-100
         {:id (str "control-" uuid)
          :style {:width 14
                  :height 16
                  :margin-right 2}
-         :on-click (fn [_e]
+         :on-click (fn [e]
+                     (util/stop e)
                      (swap! collapsed? not))}
         (cond
           @collapsed?

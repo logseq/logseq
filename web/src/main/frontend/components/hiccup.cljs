@@ -1028,7 +1028,7 @@
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
-  [state config {:keys [title query inputs view] :as q}]
+  [state config {:keys [title query inputs view collapsed?] :as q}]
   (let [query-atom (:query-atom state)]
     (let [current-heading-uuid (:heading/uuid (:heading config))
           ;; exclude the current one, otherwise it'll loop forever
@@ -1042,12 +1042,10 @@
                                          (:page/name (ffirst result))
                                          (:heading/uuid (first (second (first result))))
                                          true)]
-      [:div.custom-query.mt-2
+      [:div.custom-query.mt-8
        (ui/foldable
-        (when title
-          (if (string? title)
-            [:p [:code title]]
-            title))
+        [:div.opacity-70
+         title]
         (cond
           (and (seq result) view-f)
           (let [result (sci/call-fn view-f result)]
@@ -1069,7 +1067,8 @@
                record))]
 
           :else
-          [:div.text-sm.mt-2.ml-2.font-medium "Empty"]))])))
+          [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])
+        collapsed?)])))
 
 (defn admonition
   [config type options result]

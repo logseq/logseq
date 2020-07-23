@@ -84,10 +84,11 @@
   (when (and today? (not sidebar?))
     (let [queries (state/sub [:config repo :default-queries :journals])]
       (when (seq queries)
-        [:div#today-queries
+        [:div#today-queries.mt-10.ml-2
          (for [{:keys [title] :as query} queries]
-           [:div {:key (str "query-" title)}
-            (hiccup/custom-query {:start-level 2} query)])]))))
+           (rum/with-key
+             (hiccup/custom-query {:start-level 2} query)
+             (str repo "-custom-query-" (cljs.core/random-uuid))))]))))
 
 ;; A page is just a logical heading
 (rum/defcs page < rum/reactive
