@@ -1029,7 +1029,7 @@
      (remove nil?))))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content] :as heading} value]
+  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content ref-pages] :as heading} value]
   (let [repo (or repo (state/get-current-repo))
         e (db/entity repo [:heading/uuid uuid])
         heading (with-heading-meta repo heading)
@@ -1108,7 +1108,9 @@
                                   modified-time)
                                  {:key :heading/change
                                   :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
-                                 [[file-path new-content]])))))]
+                                 [[file-path new-content]]))
+                               (when (seq retract-refs)
+                                 (re-render-root!)))))]
         (cond
           ;; Page was referenced but no related file
           (and page (not file))
@@ -1236,7 +1238,7 @@
     (save-heading-if-changed! heading new-content)))
 
 (defn delete-heading!
-  [{:heading/keys [uuid meta content file repo] :as heading} dummy?]
+  [{:heading/keys [uuid meta content file repo ref-pages ref-headings] :as heading} dummy?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
           heading (db/pull repo '[*] [:heading/uuid uuid])]
@@ -1252,7 +1254,9 @@
             after-headings)
            {:key :heading/change
             :data [heading]}
-           [[file-path new-content]]))))))
+           [[file-path new-content]])
+          (when (or (seq ref-pages) (seq ref-headings))
+            (re-render-root!)))))))
 
 (defn delete-headings!
   [repo heading-uuids]
@@ -1281,7 +1285,8 @@
        tx-data
        {:key :heading/change
         :data headings}
-       [[file-path new-content]]))))
+       [[file-path new-content]])
+      (re-render-root!))))
 
 (defn set-heading-property!
   [heading-id key value]
