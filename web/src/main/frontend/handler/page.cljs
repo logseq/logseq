@@ -160,9 +160,10 @@
   [page-name]
   (page-add-directives! page-name {"published" false})
   (let [directives (db/get-page-directives page-name)
-        permalink (:permalink directives)]
-    (if permalink
-      (util/delete (str config/api "pages/" permalink)
+        permalink (:permalink directives)
+        project (state/get-current-project)]
+    (if (and project permalink)
+      (util/delete (str config/api project "/" permalink)
                    (unpublished-success-handler page-name)
                    unpublished-failed-handler)
       (handler/show-notification!

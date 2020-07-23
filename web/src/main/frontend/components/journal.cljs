@@ -57,22 +57,23 @@
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))]
     [:div.flex-1
-     [:a.initial-color {:href (str "/page/" encoded-page-name)
-                        :on-click (fn [e]
-                                    (util/stop e)
-                                    (when (gobj/get e "shiftKey")
-                                      (when-let [page (db/pull [:page/name title])]
-                                        (state/sidebar-add-block!
-                                         (state/get-current-repo)
-                                         (:db/id page)
-                                         :page
-                                         {:page page
-                                          :journal? true}))
-                                      (handler/show-right-sidebar)))}
-      [:h1.title
-       (util/capitalize-all title)]]
+     (ui/foldable
+      [:a.initial-color {:href (str "/page/" encoded-page-name)
+                         :on-click (fn [e]
+                                     (util/stop e)
+                                     (when (gobj/get e "shiftKey")
+                                       (when-let [page (db/pull [:page/name title])]
+                                         (state/sidebar-add-block!
+                                          (state/get-current-repo)
+                                          (:db/id page)
+                                          :page
+                                          {:page page
+                                           :journal? true}))
+                                       (handler/show-right-sidebar)))}
+       [:h1.title
+        (util/capitalize-all title)]]
 
-     (headings-cp repo page encoded-page-name format)
+      (headings-cp repo page encoded-page-name format))
 
      (page/today-queries repo today? false)
 

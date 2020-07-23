@@ -63,4 +63,5 @@
                                              :group-by-page? true}
                                             {})]
             (content/content encoded-page-name
-                             {:hiccup ref-hiccup})))]))))
+                             {:hiccup ref-hiccup}))
+          true)]))))
