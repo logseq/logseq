@@ -733,8 +733,8 @@
   (let [alias-ids (get-page-alias repo page-name)]
     (when (seq alias-ids)
       (->> (d/pull-many (get-conn repo)
-                    '[:page/name]
-                    alias-ids)
+                        '[:page/name]
+                        alias-ids)
            (map :page/name)
            distinct))))
 
@@ -986,16 +986,17 @@
    (let [page (string/lower-case page)
          page-id (:db/id (entity repo-url [:page/name page]))
          db (get-conn repo-url)]
-     (some->
-      (q repo-url [:page/headings page-id]
-        {:use-cache? true
-         :transform-fn #(page-headings-transform repo-url %)
-         :query-fn (fn [db]
-                     (let [datoms (d/datoms db :avet :heading/page page-id)
-                           heading-eids (mapv :e datoms)]
-                       (d/pull-many db '[*] heading-eids)))}
-        nil)
-      react))))
+     (when page-id
+       (some->
+        (q repo-url [:page/headings page-id]
+          {:use-cache? true
+           :transform-fn #(page-headings-transform repo-url %)
+           :query-fn (fn [db]
+                       (let [datoms (d/datoms db :avet :heading/page page-id)
+                             heading-eids (mapv :e datoms)]
+                         (d/pull-many db '[*] heading-eids)))}
+          nil)
+        react)))))
 
 (defn get-page-directives-content
   [page]

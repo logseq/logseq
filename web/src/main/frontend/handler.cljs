@@ -947,7 +947,7 @@
        (util/format "#+TITLE: %s\n#+TAGS:\n\n** " title))
      "markdown"
      (if contents?
-       (util/format "---\ntitle: %s\nlist: [[]]" title)
+       (util/format "---\ntitle: %s\nlist: [[]]\n---" title)
        (util/format "---\ntitle: %s\ntags:\n---\n\n## " title))
      "")))
 

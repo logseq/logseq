@@ -116,6 +116,9 @@
                          edit-id)
                         (when (string/ends-with? (:heading/content first-heading) "[[]]" )
                           (js/setTimeout #(util/cursor-move-back (gdom/getElement edit-id) 2)
+                                         50))
+                        (when (string/ends-with? (:heading/content first-heading) "[[]]\n---" )
+                          (js/setTimeout #(util/cursor-move-back (gdom/getElement edit-id) 6)
                                          50))))))
                 state)
    :did-update handler/scroll-and-highlight!}
