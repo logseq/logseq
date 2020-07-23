@@ -77,7 +77,7 @@
 
 (defn search
   ([q]
-   (search q 5))
+   (search q 20))
   ([q limit]
    (when-not (string/blank? q)
      (let [q (clean q)]
@@ -88,8 +88,7 @@
               (re-find (re-pattern (str "(?i)" q)) content)))
           ;; (fn [content]
           ;;   (> (score q (.toLowerCase content)) 0))
-          limit))
-       ))))
+          limit))))))
 
 (defn page-search
   ([q]

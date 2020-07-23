@@ -33,7 +33,7 @@
 
 (defn write-file
   [dir path content]
-  (js/window.pfs.writeFile (str dir "/" path) content))
+  (and js/window.pfs (js/window.pfs.writeFile (str dir "/" path) content)))
 
 (defn stat
   [dir path]
