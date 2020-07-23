@@ -328,8 +328,9 @@
   (rum/local false ::control?)
   (rum/local false ::collapsed?)
   {:will-mount (fn [state]
-                 (when (boolean (last (:rum/args state)))
-                   (reset! (get state ::collapsed?) true))
+                 (let [args (:rum/args state)]
+                   (when (true? (last args))
+                    (reset! (get state ::collapsed?) true)))
                  state)}
   [state header content default-collapsed?]
   (let [control? (get state ::control?)

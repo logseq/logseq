@@ -92,7 +92,7 @@
     :fill "none",
     :stroke "currentColor",
     :stroke-width "2",
-    :viewbox "0 0 24 24",
+    :view-box "0 0 24 24",
     :height "24",
     :width "24"}
    [:path {:d "M0 0h24v24H0z", :stroke "none"}]
