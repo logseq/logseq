@@ -96,9 +96,10 @@
                   :fast true})))
 (defn add
   [repo-url file]
-  (js/window.git.add (clj->js
-               {:dir (util/get-repo-dir repo-url)
-                :filepath file})))
+  (when js/window.git
+    (js/window.git.add (clj->js
+                       {:dir (util/get-repo-dir repo-url)
+                        :filepath file}))))
 
 (defn remove-file
   [repo-url file]
