@@ -6,7 +6,8 @@
             [frontend.config :as config]
             [clojure.string :as string]
             [frontend.ui :as ui]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.version :as version]))
 
 (rum/defcs choose-preferred-format
   []
@@ -101,7 +102,9 @@
               (ui/button "Pull now"
                 :on-click (fn [] (handler/pull-current-repo)))
               (if pulling?
-                [:span.lds-dual-ring.mt-1])]]]))))))
+                [:span.lds-dual-ring.mt-1])]
+             [:p.pt-2.text-sm.opacity-50
+              "Version: " version/version]]]))))))
 
 (rum/defc repos < rum/reactive
   [head? on-click]
