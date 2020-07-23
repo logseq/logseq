@@ -164,8 +164,9 @@
         :on-click
         (fn []
           (when (string/starts-with? repo-url "https://github.com/")
-            (handler/clone-and-pull repo-url)
-            (handler/redirect! {:to :home}))))
+            (let [repo-url (string/replace repo-url ".git" "")]
+              (handler/clone-and-pull repo-url)
+              (handler/redirect! {:to :home})))))
 
       ;; (when git-ask-private-grant?
       ;;   [:div

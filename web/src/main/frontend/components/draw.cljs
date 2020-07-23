@@ -405,7 +405,7 @@
         options (bean/->js {:zenModeEnabled true
                             :viewBackgroundColor "#FFF"})
         excalidraw-component @*excalidraw]
-    [:div.draw {:style {:background "#FFF"}}
+    [:div.draw.white-theme {:style {:background "#FFF"}}
      (when (and (or (and file elements)
                     (nil? file))
                 excalidraw-component)
