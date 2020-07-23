@@ -1352,7 +1352,12 @@
   (when-let [repo (state/get-current-repo)]
     (let [path (str config/app-name "/" config/config-file)]
       (when-let [config (db/get-file path)]
-        (let [config (reader/read-string config)
+        (let [config (try
+                       (reader/read-string config)
+                       (catch js/Error e
+                         (println "Parsing config file failed: ")
+                         (js/console.dir e)
+                         {}))
               ks (if (vector? k) k [k])
               new-config (assoc-in config ks v)]
           (state/set-config! repo new-config)
