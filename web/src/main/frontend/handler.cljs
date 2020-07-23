@@ -941,15 +941,15 @@
   [format title]
   (let [contents? (= (string/lower-case title) "contents")]
     (case format
-     "org"
-     (if contents?
-       (util/format "#+TITLE: %s\n#+LIST: [[]]" title)
-       (util/format "#+TITLE: %s\n#+TAGS:\n\n** " title))
-     "markdown"
-     (if contents?
-       (util/format "---\ntitle: %s\nlist: [[]]\n---" title)
-       (util/format "---\ntitle: %s\ntags:\n---\n\n## " title))
-     "")))
+      "org"
+      (if contents?
+        (util/format "#+TITLE: %s\n#+LIST: [[]]" title)
+        (util/format "#+TITLE: %s\n#+TAGS:\n\n** " title))
+      "markdown"
+      (if contents?
+        (util/format "---\ntitle: %s\nlist: [[]]\n---" title)
+        (util/format "---\ntitle: %s\ntags:\n---\n\n## " title))
+      "")))
 
 (defn create-new-page!
   [title]
@@ -1016,9 +1016,22 @@
           :heading/meta new-meta}))
      after-headings)))
 
+(defn compute-retract-refs
+  [eid {:heading/keys [ref-pages ref-headings]}]
+  (when eid
+    (->>
+     (map
+       (fn [[refs refs-k]]
+         (when (and refs (empty? refs))
+           [:db/retract eid refs-k]))
+       [[ref-pages :heading/ref-pages]
+        [ref-headings :heading/ref-headings]])
+     (remove nil?))))
+
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content] :as heading} value]
   (let [repo (or repo (state/get-current-repo))
+        e (db/entity repo [:heading/uuid uuid])
         heading (with-heading-meta repo heading)
         format (or format (state/get-preferred-format))
         [old-directives new-directives] (when pre-heading?
@@ -1055,6 +1068,7 @@
                                                                                    :start-pos 0
                                                                                    :end-pos new-end-pos})
                                                                                 (block/parse-heading (assoc heading :heading/content value) format))
+                                   retract-refs (compute-retract-refs (:db/id e) (first headings))
                                    headings (db/recompute-heading-children repo heading headings)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
                                    page-id (:db/id page)
@@ -1086,6 +1100,7 @@
                                  (concat
                                   pages
                                   headings
+                                  retract-refs
                                   page-directives
                                   page-list
                                   page-tags
@@ -1737,14 +1752,14 @@
           selection-link? (and selection (or (string/starts-with? selection "http://")
                                              (string/starts-with? selection "https://")))
           [content back-pos] (cond
-                                  empty-selection?
-                                  (config/get-empty-link-and-back-pos format)
+                               empty-selection?
+                               (config/get-empty-link-and-back-pos format)
 
-                                  selection-link?
-                                  (config/with-default-link format selection)
+                               selection-link?
+                               (config/with-default-link format selection)
 
-                                  :else
-                                  (config/with-default-label format selection))
+                               :else
+                               (config/with-default-label format selection))
           new-value (str
                      (subs value 0 selection-start)
                      content

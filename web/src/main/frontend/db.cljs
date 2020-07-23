@@ -1869,7 +1869,7 @@
   (when-let [conn (get-conn repo)]
     (-> (d/q
           '[:find ?e2-id ?e2-content
-            :in $ ?e1 %
+            :in $ ?e1
             :where
             [?e2 :heading/children ?e1]
             [?e2 :heading/content ?e2-content]
