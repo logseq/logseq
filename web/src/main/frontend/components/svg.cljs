@@ -85,6 +85,20 @@
       :stroke "currentColor"
       :d d}]]))
 
+(def user
+  [:svg
+   {:stroke-linejoin "round",
+    :stroke-linecap "round",
+    :fill "none",
+    :stroke "currentColor",
+    :stroke-width "2",
+    :viewbox "0 0 24 24",
+    :height "24",
+    :width "24"}
+   [:path {:d "M0 0h24v24H0z", :stroke "none"}]
+   [:circle {:r "4", :cy "7", :cx "12"}]
+   [:path {:d "M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"}]])
+
 (def close (hero-icon "M6 18L18 6M6 6L18 18"))
 (def plus (hero-icon "M12 4v16m8-8H4"))
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))

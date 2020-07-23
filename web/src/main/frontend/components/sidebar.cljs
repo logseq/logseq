@@ -234,7 +234,8 @@
               (if-let [avatar (:avatar me)]
                 [:img.h-7.w-7.rounded-full
                  {:src avatar}]
-                [:div.h-7.w-7.rounded-full.bg-base-2])])
+                [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
+                 [:a svg/user]])])
            (let [logged? (:name me)]
              (->>
               [(when current-repo
