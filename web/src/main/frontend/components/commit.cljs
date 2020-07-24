@@ -12,7 +12,7 @@
 
 (rum/defcs add-commit-message <
   {:did-update (fn [state]
-                 (let [input (gdom/getElement "commit-message")]
+                 (when-let [input (gdom/getElement "commit-message")]
                    (.focus input)
                    (util/move-cursor-to-end input))
                 state)}
