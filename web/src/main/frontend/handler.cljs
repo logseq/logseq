@@ -1129,7 +1129,8 @@
           (let [format (name format)
                 path (str (-> (:page/name page)
                               (string/replace #"\s+" "_")
-                              (util/encode-str)) "." format)
+                              (util/encode-str)) "."
+                          (if (= format "markdown") "md" format))
                 file-path (str "/" path)
                 dir (util/get-repo-dir repo)]
             (p/let [exists? (fs/file-exists? dir file-path)]
@@ -1188,7 +1189,9 @@
       (let [format (name format)
             path (str (-> (:page/name page)
                           (string/replace #"\s+" "_")
-                          (util/encode-str)) "." format)
+                          (util/encode-str))
+                      "."
+                      (if (= format "markdown") "md" format))
             file-path (str "/" path)
             dir (util/get-repo-dir repo)]
         (p/let [exists? (fs/file-exists? dir file-path)]
