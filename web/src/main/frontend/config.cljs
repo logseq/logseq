@@ -79,7 +79,8 @@
 
 (defn get-heading-pattern
   [format]
-  (let [format (or format (keyword (state/get-preferred-format)))]
+  (let [format (or format (state/get-preferred-format))
+        format (keyword format)]
     (case format
       :org
       "*"

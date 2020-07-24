@@ -104,6 +104,14 @@
                 (= (str "/" (first (string/split path #"/")))
                    pattern)))) patterns))
 
+(defn remove-level-spaces
+  [text format]
+  (if-not (string/blank? text)
+    (let [pattern (util/format
+                   "^[%s]+\\s?"
+                   (config/get-heading-pattern format))]
+      (string/replace-first text (re-pattern pattern) ""))))
+
 (defn- keep-formats
   [files formats]
   (filter
@@ -1133,17 +1141,10 @@
                 ;; create the file
                 (let [content (default-content-with-title format (util/capitalize-all (:page/name page)))]
                   (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                    (db/reset-file! repo path content)
+                    (db/reset-file! repo path (str content
+                                                   (remove-level-spaces value (keyword format))))
                     (git-add repo path)
-                    ;; save heading
-                    (let [file (db/entity repo [:file/path path])
-                          heading (assoc heading
-                                         :heading/page {:db/id (:db/id page)}
-                                         :heading/file {:db/id (:db/id file)}
-                                         :heading/meta
-                                         {:pos (utf8/length (utf8/encode content))
-                                          :end-pos nil})]
-                      (save-heading file heading)))))))
+                    (re-render-root!))))))
 
           (and file page)
           (save-heading file heading)
@@ -1199,16 +1200,13 @@
             ;; create the file
             (let [content (default-content-with-title format (util/capitalize-all (:page/name page)))]
               (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                (db/reset-file! repo path content)
+                (db/reset-file! repo path
+                                (str content
+                                     (remove-level-spaces value (keyword format))
+                                     "\n"
+                                     new-heading-content))
                 (git-add repo path)
-                (let [file (db/entity repo [:file/path path])
-                      heading (assoc heading
-                                     :heading/page {:db/id (:db/id page)}
-                                     :heading/file {:db/id (:db/id file)}
-                                     :heading/meta
-                                     {:pos (utf8/length (utf8/encode content))
-                                      :end-pos nil})]
-                  (insert-heading heading path content)))))))
+                (re-render-root!))))))
 
       file
       (let [file-path (:file/path file)
@@ -1411,14 +1409,6 @@
                  (prn "Delete repo failed, error: " error)))
       (p/finally (fn []
                    (clone-and-pull url)))))
-
-(defn remove-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?"
-                   (config/get-heading-pattern format))]
-      (string/replace-first text (re-pattern pattern) ""))))
 
 (defn edit-heading!
   [heading-id prev-pos format id]
