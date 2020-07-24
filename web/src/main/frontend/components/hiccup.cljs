@@ -344,7 +344,7 @@
             (->elem
              :a
              (cond->
-                 {:href href}
+               {:href href}
                title
                (assoc :title title))
              (map-inline config label))
@@ -357,8 +357,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -888,16 +888,16 @@
                                           (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-heading.flex.flex-col.pt-1
      (cond->
-         {:id heading-id
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-heading? " pre-heading"))
-          :headingid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
+       {:id heading-id
+        :style {:position "relative"}
+        :class (str uuid
+                    (when dummy? " dummy")
+                    (when (and collapsed? has-child?) " collapsed")
+                    (when pre-heading? " pre-heading"))
+        :headingid (str uuid)
+        :repo repo
+        :level level
+        :haschild (str has-child?)}
        (not slide?)
        (merge drag-attrs))
 
@@ -1016,6 +1016,11 @@
 
 (declare ->hiccup)
 
+(defn built-in-custom-query?
+  [title]
+  (contains? #{"🔨 NOW" "📅 NEXT"}
+             title))
+
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
                  (let [[config query] (:rum/args state)]
@@ -1043,34 +1048,36 @@
           headings-grouped-by-page? (and (seq result)
                                          (:page/name (ffirst result))
                                          (:heading/uuid (first (second (first result))))
-                                         true)]
+                                         true)
+          built-in? (built-in-custom-query? title)]
       [:div.custom-query.mt-8
-       (ui/foldable
-        [:div.opacity-70
-         title]
-        (cond
-          (and (seq result) view-f)
-          (let [result (sci/call-fn view-f result)]
-            (util/hiccup-keywordize result))
+       (when-not (and built-in? (empty? result))
+         (ui/foldable
+          [:div.opacity-70
+           title]
+          (cond
+            (and (seq result) view-f)
+            (let [result (sci/call-fn view-f result)]
+              (util/hiccup-keywordize result))
 
-          (and (seq result)
-               (or only-headings? headings-grouped-by-page?))
-          (->hiccup result (assoc config
-                                  :custom-query? true
-                                  :group-by-page? headings-grouped-by-page?)
-                    {:style {:margin-top "0.25rem"
-                             :margin-left "0.25rem"}})
+            (and (seq result)
+                 (or only-headings? headings-grouped-by-page?))
+            (->hiccup result (assoc config
+                                    :custom-query? true
+                                    :group-by-page? headings-grouped-by-page?)
+                      {:style {:margin-top "0.25rem"
+                               :margin-left "0.25rem"}})
 
-          (seq result)                     ;TODO: table
-          [:pre
-           (for [record result]
-             (if (map? record)
-               (str (util/pp-str record) "\n")
-               record))]
+            (seq result)                     ;TODO: table
+            [:pre
+             (for [record result]
+               (if (map? record)
+                 (str (util/pp-str record) "\n")
+                 record))]
 
-          :else
-          [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])
-        collapsed?)])))
+            :else
+            [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])
+          collapsed?))])))
 
 (defn admonition
   [config type options result]
