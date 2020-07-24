@@ -246,9 +246,6 @@
   (search/search q 5))
 
 (rum/defc block-search < rum/reactive
-  {:will-unmount (fn [state]
-                   (reset! commands/*block-type nil)
-                   state)}
   [id format]
   (when (state/sub :editor/show-block-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -263,20 +260,22 @@
                                (get-matched-blocks q))
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search false)
-                               (let [uuid-string (str (:heading/uuid chosen))
-                                     block-type @commands/*block-type]
+                               (let [uuid-string (str (:heading/uuid chosen))]
+
                                  ;; block reference
-                                 (when (= block-type :reference)
-                                   (insert-command! id
-                                                    (util/format "((%s))" uuid-string)
-                                                    format
-                                                    {:last-pattern (str "((" q)
-                                                     :postfix-fn (fn [s] (util/replace-first "))" s ""))})                                   )
+                                 (insert-command! id
+                                                  (util/format "((%s))" uuid-string)
+                                                  format
+                                                  {:last-pattern (str "((" q)
+                                                   :postfix-fn (fn [s] (util/replace-first "))" s ""))})
 
                                  ;; Save it so it'll be parsed correctly in the future
                                  (handler/set-heading-property! (:heading/uuid chosen)
                                                                 "CUSTOM_ID"
-                                                                uuid-string)))
+                                                                uuid-string)
+
+                                 (when-let [input (gdom/getElement id)]
+                                   (.focus input))))
               non-exist-block-handler (fn [_state]
                                         (state/set-editor-show-block-search false)
                                         (util/cursor-move-forward input 2))]

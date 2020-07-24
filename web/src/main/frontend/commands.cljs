@@ -14,7 +14,6 @@
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
 (defonce *current-command (atom nil))
-(defonce *block-type (atom nil))
 
 (defn ->page-reference
   [page]
@@ -54,10 +53,9 @@
 
 (defn embed-block
   []
-  (conj
-   [[:editor/input "{{{embed (())}}}" {:last-pattern slash
-                                       :backward-pos 5}]]
-   [:editor/search-block :embed]))
+  [[:editor/input "{{{embed (())}}}" {:last-pattern slash
+                                      :backward-pos 5}]
+   [:editor/search-block :embed]])
 
 ;; Credits to roamresearch.com
 (defn commands-map
@@ -319,7 +317,6 @@
   (state/set-editor-show-page-search true))
 
 (defmethod handle-step :editor/search-block [[_ type]]
-  (reset! *block-type type)
   (state/set-editor-show-block-search true))
 
 (defmethod handle-step :editor/show-input [[_ option]]
