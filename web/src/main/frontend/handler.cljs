@@ -1037,19 +1037,21 @@
      after-headings)))
 
 (defn compute-retract-refs
-  [eid {:heading/keys [ref-pages ref-headings]}]
-  (when eid
-    (->>
-     (map
-       (fn [[refs refs-k]]
-         (when (and refs (empty? refs))
-           [:db/retract eid refs-k]))
-       [[ref-pages :heading/ref-pages]
-        [ref-headings :heading/ref-headings]])
-     (remove nil?))))
+  [eid {:heading/keys [ref-pages ref-headings]} old-ref-pages old-ref-headings]
+  (let [retracted? (or (and (empty? ref-pages) (seq old-ref-pages))
+                       (and (empty? ref-headings) (seq old-ref-headings)))]
+    (when (and eid retracted?)
+     (->>
+      (map
+        (fn [[refs refs-k]]
+          (when (and refs (empty? refs))
+            [:db/retract eid refs-k]))
+        [[ref-pages :heading/ref-pages]
+         [ref-headings :heading/ref-headings]])
+      (remove nil?)))))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content ref-pages] :as heading} value]
+  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content ref-pages ref-headings] :as heading} value]
   (let [repo (or repo (state/get-current-repo))
         e (db/entity repo [:heading/uuid uuid])
         heading (with-heading-meta repo heading)
@@ -1093,7 +1095,7 @@
                                                                                    :start-pos 0
                                                                                    :end-pos new-end-pos})
                                                                                 (block/parse-heading (assoc heading :heading/content value) format))
-                                   retract-refs (compute-retract-refs (:db/id e) (first headings))
+                                   retract-refs (compute-retract-refs (:db/id e) (first headings) ref-pages ref-headings)
                                    headings (db/recompute-heading-children repo heading headings)
                                    after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
                                    page-id (:db/id page)
