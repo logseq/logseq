@@ -201,7 +201,7 @@
                   (fn [{:keys [toggle-fn]}]
                     [:a {:title "More options"
                          :on-click toggle-fn}
-                     (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100")})])
+                     (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
                   links
                   {:modal-class (util/hiccup->class
                                  "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")})))]])
