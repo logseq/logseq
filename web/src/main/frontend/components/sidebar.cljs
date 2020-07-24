@@ -10,6 +10,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.components.project :as project]
+            [frontend.components.commit :as commit]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.storage :as storage]
             [goog.crypt.base64 :as b64]
@@ -133,9 +134,21 @@
    (fn [state]
      (mixins/on-key-down
       state
-      {191 (fn [state e]
+      {
+       ;; ?
+       191 (fn [state e]
              (when-not (util/input? (gobj/get e "target"))
-               (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))}
+               (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))
+       ;; c
+       67 (fn [state e]
+            (when-not (util/input? (gobj/get e "target"))
+              (when-let [repo-url (state/get-current-repo)]
+                (if (and
+                      (db/get-key-value repo-url :git/write-permission?)
+                      (not (state/get-edit-input-id))
+                      (= :should-push (db/get-key-value repo-url :git/status)))
+                  (state/set-state! :modal/git-commit-message true)
+                  (handler/show-notification! "No changed files yet!" :warning)))))}
       (fn [e key-code]
         nil))))
   (mixins/keyboards-mixin keyboards/keyboards)
@@ -325,5 +338,7 @@
        (ui/notification)
        (ui/modal :modal/input-project
                  project/add-project)
+       (ui/modal :modal/git-commit-message
+                 commit/add-commit-message)
        (custom-context-menu)
        ]]]))

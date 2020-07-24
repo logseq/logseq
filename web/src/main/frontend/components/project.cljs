@@ -35,7 +35,8 @@
          "."]]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:style {:color "#000"}
+      {:auto-focus true
+       :style {:color "#000"}
        :on-change (fn [e]
                     (reset! project (util/evalue e)))}]
 

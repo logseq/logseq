@@ -99,6 +99,16 @@
                 :stroke-width "2",
                 :stroke-linejoin "round",
                 :stroke-linecap "round"}]]]
+            :warning
+            ["text-gray-900"
+             [:svg.h-6.w-6.text-yellow-500
+              {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
+              [:path
+               {:d "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+                :stroke-width "2",
+                :stroke-linejoin "round",
+                :stroke-linecap "round"}]]]
+
             ["text-red-500"
              [:svg.h-6.w-6.text-red-500
               {:view-box "0 0 20 20", :fill "currentColor"}
