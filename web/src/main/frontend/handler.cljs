@@ -1041,14 +1041,14 @@
   (let [retracted? (or (and (empty? ref-pages) (seq old-ref-pages))
                        (and (empty? ref-headings) (seq old-ref-headings)))]
     (when (and eid retracted?)
-     (->>
-      (map
-        (fn [[refs refs-k]]
-          (when (and refs (empty? refs))
-            [:db/retract eid refs-k]))
-        [[ref-pages :heading/ref-pages]
-         [ref-headings :heading/ref-headings]])
-      (remove nil?)))))
+      (->>
+       (map
+         (fn [[refs refs-k]]
+           (when (and refs (empty? refs))
+             [:db/retract eid refs-k]))
+         [[ref-pages :heading/ref-pages]
+          [ref-headings :heading/ref-headings]])
+       (remove nil?)))))
 
 (defn save-heading-if-changed!
   [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content ref-pages ref-headings] :as heading} value]
@@ -1121,11 +1121,11 @@
                                                    :page/tags page-tags}]
                                                  [[:db/retract page-id :page/tags]]))
                                    page-alias (when (and pre-heading? (seq page-alias))
-                                               (if (seq page-alias)
-                                                 [[:db/retract page-id :page/alias]
-                                                  {:db/id page-id
-                                                   :page/alias page-alias}]
-                                                 [[:db/retract page-id :page/alias]]))
+                                                (if (seq page-alias)
+                                                  [[:db/retract page-id :page/alias]
+                                                   {:db/id page-id
+                                                    :page/alias page-alias}]
+                                                  [[:db/retract page-id :page/alias]]))
                                    ]
                                (profile
                                 "Save heading: "
@@ -1933,6 +1933,40 @@
          (string/blank? (:search/q @state/state)))
     (util/stop e)
     (expand/cycle!)))
+
+(defn copy-block-ref!
+  [heading-id]
+  (util/copy-to-clipboard! (str heading-id)))
+
+(defn focus-on-block!
+  [heading-id]
+  (when heading-id
+    (redirect! {:to :page
+                :path-params {:name (str heading-id)}})))
+
+(defn open-heading-in-sidebar!
+  [heading-id]
+  (when heading-id
+    (when-let [heading (db/pull [:heading/uuid heading-id])]
+     (state/sidebar-add-block!
+      (state/get-current-repo)
+      (:db/id heading)
+      :heading
+      heading)
+     (show-right-sidebar))))
+
+(defn cut-heading!
+  [heading-id]
+  (when-let [heading (db/pull [:heading/uuid heading-id])]
+    (let [content (:heading/content heading)]
+      (util/copy-to-clipboard! content)
+      (delete-heading! heading false))))
+
+(defn copy-heading!
+  [heading-id]
+  (when-let [heading (db/pull [:heading/uuid heading-id])]
+    (let [content (:heading/content heading)]
+      (util/copy-to-clipboard! content))))
 
 (comment
   (defn debug-latest-commits

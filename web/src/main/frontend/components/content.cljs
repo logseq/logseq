@@ -21,6 +21,49 @@
         (when-not (format/loaded? format)
           (handler/lazy-load format))))))
 
+(rum/defc custom-context-menu-content
+  []
+  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
+   [:div.py-1.rounded-md.bg-base-3.shadow-xs
+    (ui/menu-link
+     {:key "cut"
+      :on-click handler/cut-selection-headings}
+     "Cut")
+    (ui/menu-link
+     {:key "copy"
+      :on-click handler/copy-selection-headings}
+     "Copy")]])
+
+(rum/defc heading-context-menu-content
+  [heading-id]
+  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
+   [:div.py-1.rounded-md.bg-base-3.shadow-xs
+    (ui/menu-link
+     {:key "Copy block ref"
+      :on-click (fn [_e]
+                  (handler/copy-block-ref! heading-id))}
+     "Copy block ref")
+    (ui/menu-link
+     {:key "Focus on block"
+      :on-click (fn [_e]
+                  (handler/focus-on-block! heading-id))}
+     "Focus on block")
+    (ui/menu-link
+     {:key "Open in sidebar"
+      :on-click (fn [_e]
+                  (handler/open-heading-in-sidebar! heading-id))}
+     "Open in sidebar")
+    (ui/menu-link
+     {:key "Cut"
+      :on-click (fn [_e]
+                  (handler/cut-heading! heading-id))}
+     "Cut")
+    (ui/menu-link
+     {:key "Copy"
+      :on-click (fn [_e]
+                  (handler/copy-heading! heading-id))}
+     "Copy")]])
+
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; headings were already selected.
@@ -72,20 +115,43 @@
 
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
-                      (when (state/in-selection-mode?)
-                        (util/stop e)
-                        (let [client-x (gobj/get e "clientX")
-                              client-y (gobj/get e "clientY")]
-                          (let [main (d/by-id "main-content")]
-                            ;; disable scroll
-                            (d/remove-class! main "overflow-y-auto")
-                            (d/add-class! main "overflow-hidden"))
+                      (let [target (gobj/get e "target")
+                            heading-id (d/attr target "headingid")]
+                        (cond
+                          (and heading-id (util/uuid-string? heading-id))
+                          (do
+                            (util/stop e)
+                            (let [client-x (gobj/get e "clientX")
+                                  client-y (gobj/get e "clientY")]
+                              (let [main (d/by-id "main-content")]
+                                ;; disable scroll
+                                (d/remove-class! main "overflow-y-auto")
+                                (d/add-class! main "overflow-hidden"))
 
-                          (state/show-custom-context-menu!)
-                          (when-let [context-menu (d/by-id "custom-context-menu")]
-                            (d/set-style! context-menu
-                                          :left (str client-x "px")
-                                          :top (str client-y "px")))))))))
+                              (state/show-custom-context-menu! (heading-context-menu-content (cljs.core/uuid heading-id)))
+                              (when-let [context-menu (d/by-id "custom-context-menu")]
+                                (d/set-style! context-menu
+                                              :left (str client-x "px")
+                                              :top (str client-y "px")))))
+
+                          (state/in-selection-mode?)
+                          (do
+                            (util/stop e)
+                            (let [client-x (gobj/get e "clientX")
+                                  client-y (gobj/get e "clientY")]
+                              (let [main (d/by-id "main-content")]
+                                ;; disable scroll
+                                (d/remove-class! main "overflow-y-auto")
+                                (d/add-class! main "overflow-hidden"))
+
+                              (state/show-custom-context-menu! (custom-context-menu-content))
+                              (when-let [context-menu (d/by-id "custom-context-menu")]
+                                (d/set-style! context-menu
+                                              :left (str client-x "px")
+                                              :top (str client-y "px")))))
+
+                          :else
+                          nil))))))
   [id {:keys [hiccup] :as option}]
   [:div {:id id}
    (if hiccup

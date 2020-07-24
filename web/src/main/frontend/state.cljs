@@ -57,6 +57,7 @@
     :selection/mode false
     :selection/headings []
     :custom-context-menu/show? false
+    :custom-context-menu/links nil
 
     ;; encrypted github token
     :encrypt/token (storage/get :encrypt/token)
@@ -313,12 +314,16 @@
   (swap! state assoc :selection/up? value))
 
 (defn show-custom-context-menu!
-  []
-  (swap! state assoc :custom-context-menu/show? true))
+  [links]
+  (swap! state assoc
+         :custom-context-menu/show? true
+         :custom-context-menu/links links))
 
 (defn hide-custom-context-menu!
   []
-  (swap! state assoc :custom-context-menu/show? false))
+  (swap! state assoc
+         :custom-context-menu/show? false
+         :custom-context-menu/links nil))
 
 (defn set-git-clone-repo!
   [repo]

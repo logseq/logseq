@@ -105,27 +105,17 @@
        (empty? (:repos me))
        (widgets/add-repo))]))
 
-(rum/defc custom-context-menu-content
-  []
-  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
-   [:div.py-1.rounded-md.bg-base-3.shadow-xs
-    (ui/menu-link
-     {:key "cut"
-      :on-click handler/cut-selection-headings}
-     "Cut")
-    (ui/menu-link
-     {:key "copy"
-      :on-click handler/copy-selection-headings}
-     "Copy")]])
-
 (rum/defc custom-context-menu < rum/reactive
   []
   (when (state/sub :custom-context-menu/show?)
-    (ui/css-transition
-     {:class-names "fade"
-      :timeout {:enter 500
-                :exit 300}}
-     (custom-context-menu-content))))
+    (when-let [links (state/sub :custom-context-menu/links)]
+      (ui/css-transition
+      {:class-names "fade"
+       :timeout {:enter 500
+                 :exit 300}}
+      links
+      ;; (custom-context-menu-content)
+      ))))
 
 (rum/defcs sidebar < (mixins/modal)
   rum/reactive

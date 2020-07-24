@@ -546,7 +546,7 @@
                     (when (and (:document/mode? config)
                                (not collapsed?))
                       "hide-inner-bullet"))}
-       [:span.bullet]]]]))
+       [:span.bullet {:headingid (str uuid)}]]]]))
 
 (defn- build-id
   [config ref? sidebar? embed?]
