@@ -676,7 +676,7 @@
            tags))))
 
 (defn build-heading-part
-  [{:keys [slide?] :as config} {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading?]
+  [{:keys [slide?] :as config} {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading? dummy?]
                                 :as t}]
   (let [config (assoc config :heading t)
         slide? (boolean (:slide? config))
@@ -706,7 +706,9 @@
             (when-not slide? marker-switch)
             marker-cp
             priority]
-           (map-inline config title)
+           (if dummy?
+             [[:span.opacity-50 "Click here to start writing"]]
+             (map-inline config title))
            [tags])))))))
 
 (defn dnd-same-heading?

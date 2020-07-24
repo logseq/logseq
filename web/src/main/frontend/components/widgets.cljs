@@ -7,7 +7,8 @@
             [clojure.string :as string]
             [frontend.ui :as ui]
             [frontend.db :as db]
-            [frontend.version :as version]))
+            [frontend.version :as version]
+            [frontend.components.svg :as svg]))
 
 (rum/defcs choose-preferred-format
   []
@@ -53,7 +54,18 @@
              :on-click
              (fn []
                (when-not (string/blank? access-token)
-                 (handler/set-github-token! @access-token))))]]]]])))
+                 (handler/set-github-token! @access-token))))]
+
+          [:hr]
+
+          [:div.flex.flex-row.admonitionblock.align-items {:class "tip"}
+           [:div.pr-4.admonition-icon.flex.flex-col.justify-center
+            {:title "Tip"}
+            (svg/tip)]
+           [:div.ml-4.text-lg
+            [:a {:href "https://logseq.com/blog/faq"
+                 :target "_blank"}
+             "How to create a Github personal access token?"]]]]]]])))
 
 (rum/defc sync-status < rum/reactive
   []
