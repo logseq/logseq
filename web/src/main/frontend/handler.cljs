@@ -1054,11 +1054,17 @@
         e (db/entity repo [:heading/uuid uuid])
         heading (with-heading-meta repo heading)
         format (or format (state/get-preferred-format))
+        page (db/entity repo (:db/id page))
         [old-directives new-directives] (when pre-heading?
                                           [(:page/directives (db/entity (:db/id page)))
                                            (db/parse-directives value format)])
         page-tags (when-let [tags (:tags new-directives)]
                     (util/->tags tags))
+        page-alias (when-let [alias (:alias new-directives)]
+                     (map
+                       (fn [alias]
+                         {:page/name (string/lower-case alias)})
+                       (remove #{(:page/name page)} alias)))
         page-list (when-let [content (:list new-directives)]
                     (db/extract-page-list content))
         permalink-changed? (when (and pre-heading? (:permalink old-directives))
@@ -1072,7 +1078,6 @@
                          new-directives)]
     (when (not= (string/trim content) (string/trim value)) ; heading content changed
       (let [file (db/entity repo (:db/id file))
-            page (db/entity repo (:db/id page))
             save-heading (fn [file {:heading/keys [uuid content meta page file dummy? format] :as heading}]
                            (let [file (db/entity repo (:db/id file))
                                  file-path (:file/path file)
@@ -1112,7 +1117,14 @@
                                                  [[:db/retract page-id :page/tags]
                                                   {:db/id page-id
                                                    :page/tags page-tags}]
-                                                 [[:db/retract page-id :page/tags]]))]
+                                                 [[:db/retract page-id :page/tags]]))
+                                   page-alias (when (and pre-heading? (seq page-alias))
+                                               (if (seq page-alias)
+                                                 [[:db/retract page-id :page/alias]
+                                                  {:db/id page-id
+                                                   :page/alias page-alias}]
+                                                 [[:db/retract page-id :page/alias]]))
+                                   ]
                                (profile
                                 "Save heading: "
                                 (transact-react-and-alter-file!
@@ -1124,12 +1136,13 @@
                                   page-directives
                                   page-list
                                   page-tags
+                                  page-alias
                                   after-headings
                                   modified-time)
                                  {:key :heading/change
                                   :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
                                  [[file-path new-content]]))
-                               (when (seq retract-refs)
+                               (when (or (seq retract-refs) pre-heading?)
                                  (re-render-root!)))))]
         (cond
           ;; Page was referenced but no related file

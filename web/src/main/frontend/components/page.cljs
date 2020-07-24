@@ -207,8 +207,8 @@
                                  "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")})))]])
 
          (when (and file-path (not sidebar?) (not journal?) (not heading?))
-           [:div.text-sm.ml-1.mb-2 {:key "page-file"}
-            "File: "
+           [:div.text-sm.ml-1.mb-4 {:key "page-file"}
+            [:span.opacity-50 "File: "]
             [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
                                     :href (str "/file/" (util/url-encode file-path))}
              file-path]])
@@ -216,11 +216,11 @@
          (when (and repo (not journal?) (not heading?))
            (let [alias (db/get-page-alias-names repo page-name)]
              (when (seq alias)
-               [:div.alias.ml-1.mb-1.content {:key "page-alias"}
-                [:span.font-bold.mr-1 "Page aliases: "]
+               [:div.text-sm.ml-1.mb-4 {:key "page-file"}
+                [:span.opacity-50 "Alias: "]
                 (for [item alias]
-                  [:a {:href (str "/page/" (util/encode-str item))}
-                   [:span.mr-1 (util/capitalize-all item)]])])))
+                  [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
+                   (util/capitalize-all item)])])))
 
          (when (and heading? (not sidebar?))
            (heading/heading-parents repo heading-id format))

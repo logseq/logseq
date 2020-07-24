@@ -1168,10 +1168,7 @@
                                            (seq (remove #(= page %)
                                                         (:alias directives))))
                           other-alias (distinct
-                                       (->> (if page-file?
-                                              other-alias
-                                              (conj other-alias (string/lower-case file)))
-                                            (remove nil?)))
+                                       (remove nil? other-alias))
                           journal-date-long (if journal?
                                               (date/journal-title->long (string/capitalize page)))
                           page-list (when-let [list-content (:list directives)]

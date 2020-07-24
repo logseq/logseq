@@ -41,7 +41,8 @@
                s)))
       flatten
       distinct
-      (map string/lower-case)))))
+      (map string/lower-case)
+      (map string/trim)))))
 
 (defn collect-page-directives
   [ast]
