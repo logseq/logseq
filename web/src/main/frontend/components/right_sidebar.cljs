@@ -94,7 +94,6 @@
               " (working with lists)"]]
         [:th "Shortcut"]]]
       [:tbody
-       [:tr [:td "Git commit message"] [:td "c"]]
        [:tr [:td "Indent Block Tab"] [:td "Tab"]]
        [:tr [:td "Unindent Block"] [:td "Shift-Tab"]]
        [:tr [:td "Create New Block"] [:td "Enter"]]
@@ -115,6 +114,7 @@
         [:th "Shortcut"]]]
       [:tbody
        [:tr [:td "Toggle help"] [:td "?"]]
+       [:tr [:td "Git commit message"] [:td "c"]]
        [:tr [:td "Full Text Search"] [:td "Ctrl-u"]]
        [:tr [:td "Open Link in Sidebar"] [:td "Shift-Click"]]
        [:tr [:td "Context Menu"] [:td "Right Click"]]
