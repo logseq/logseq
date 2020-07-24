@@ -94,6 +94,7 @@
               " (working with lists)"]]
         [:th "Shortcut"]]]
       [:tbody
+       [:tr [:td "Git commit message"] [:td "c"]]
        [:tr [:td "Indent Block Tab"] [:td "Tab"]]
        [:tr [:td "Unindent Block"] [:td "Shift-Tab"]]
        [:tr [:td "Create New Block"] [:td "Enter"]]
