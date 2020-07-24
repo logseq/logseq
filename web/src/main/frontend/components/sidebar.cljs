@@ -149,6 +149,7 @@
         global-graph-pages? (= :graph route-name)
         logged? (:name me)
         db-restoring? (state/sub :db/restoring?)
+        indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
@@ -296,6 +297,9 @@
                       :width "100%"
                       :margin-bottom 200})}
            (cond
+             (not indexeddb-support?)
+             nil
+
              db-restoring?
              [:div.mt-20
               [:div.ls-center

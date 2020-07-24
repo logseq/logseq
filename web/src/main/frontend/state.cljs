@@ -17,6 +17,7 @@
     :repo/loading-files? nil
     :repo/importing-to-db? nil
     :repo/sync-status {}
+    :indexeddb/support? true
     :me nil
     :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
@@ -497,3 +498,7 @@
           project (:name (first (filter (fn [p] (= (:repo p) repo)) projects)))]
       (when-not (string/blank? project)
         project))))
+
+(defn set-indexedb-support?
+  [value]
+  (set-state! :indexeddb/support? value))

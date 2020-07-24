@@ -728,3 +728,21 @@
        (update f 0 keyword)
        f))
    hiccup))
+
+(defn chrome?
+  []
+  (let [user-agent js/navigator.userAgent
+        vendor js/navigator.vendor]
+    (and (re-find #"Chrome" user-agent)
+         (re-find #"Google Inc" user-agent))))
+
+(defn indexeddb-check?
+  [error-handler]
+  (let [test-db "logseq-test-db-foo-bar-baz"
+        db (and js/window.indexedDB
+                (js/window.indexedDB.open test-db))]
+    (when (and db (not (chrome?)))
+      (gobj/set db "onerror" error-handler)
+      (gobj/set db "onsuccess"
+                (fn []
+                  (js/window.indexedDB.deleteDatabase test-db))))))

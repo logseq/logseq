@@ -48,16 +48,20 @@
 ;; TODO: Support more storage options (dropbox, google drive), git logic should be
 ;; moved to another namespace, better there should be a `protocol`.
 (defn show-notification!
-  [content status]
-  (swap! state/state assoc
-         :notification/show? true
-         :notification/content content
-         :notification/status status)
-  (js/setTimeout #(swap! state/state assoc
-                         :notification/show? false
-                         :notification/content nil
-                         :notification/status nil)
-                 5000))
+  ([content status]
+   (show-notification! content status true))
+  ([content status clear?]
+   (swap! state/state assoc
+          :notification/show? true
+          :notification/content content
+          :notification/status status)
+
+   (when clear?
+     (js/setTimeout #(swap! state/state assoc
+                            :notification/show? false
+                            :notification/content nil
+                            :notification/status nil)
+                    5000))))
 
 (defn get-github-token
   []
@@ -1560,6 +1564,11 @@
     (when me (state/set-state! :me me))
     (state/set-db-restoring! true)
     (render)
+    (util/indexeddb-check?
+     (fn [_error]
+       (show-notification! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
+       (state/set-indexedb-support? false)))
+
     (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! #(restore-config! % false)))
         (p/then
          (fn []
