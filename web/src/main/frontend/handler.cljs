@@ -1913,6 +1913,7 @@
   (when (and
          ;; not input, t
          (nil? (state/get-edit-input-id))
+         (not (state/get-editor-show-input))
          (string/blank? (:search/q @state/state)))
     (util/stop e)
     (expand/cycle!)

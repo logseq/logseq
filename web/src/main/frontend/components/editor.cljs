@@ -342,14 +342,15 @@
       (when (seq input-option)
         [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
          (for [{:keys [id] :as input-item} input-option]
-           [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5.mb-2
-            (merge
-             {:key (str "modal-input-" (name id))
-              :id (str "modal-input-" (name id))
-              :on-change (fn [e]
-                           (swap! input-value assoc id (util/evalue e)))
-              :auto-complete "off"}
-             (dissoc input-item :id))])
+           [:div.my-3
+            [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
+             (merge
+              {:key (str "modal-input-" (name id))
+               :id (str "modal-input-" (name id))
+               :on-change (fn [e]
+                            (swap! input-value assoc id (util/evalue e)))
+               :auto-complete "off"}
+              (dissoc input-item :id))]])
          (ui/button
            "Submit"
            :on-click
@@ -778,39 +779,41 @@
         (fn [e key-code]
           (let [k (gobj/get e "key")
                 format (:format (get-state state))]
-            (when (and @*show-commands (not= key-code 191))     ; not /
-              (let [matched-commands (get-matched-commands input)]
-                (if (seq matched-commands)
-                  (do
+            (when-not (state/get-editor-show-input)
+              (when (and @*show-commands (not= key-code 191))     ; not /
+                (let [matched-commands (get-matched-commands input)]
+                  (if (seq matched-commands)
+                    (do
+                      (cond
+                        (= key-code 9)      ;tab
+                        (when @*show-commands
+                          (util/stop e)
+                          (insert-command! input-id
+                                           (last (first matched-commands))
+                                           format
+                                           nil))
+
+                        :else
+                        (do
+                          (reset! *show-commands true)
+                          (reset! *matched-commands matched-commands))))
+                    (reset! *show-commands false))))
+              (when (and @*show-block-commands (not= key-code 188))     ; not <
+                (let [matched-block-commands (get-matched-block-commands input)]
+                  (if (seq matched-block-commands)
                     (cond
                       (= key-code 9)      ;tab
-                      (when @*show-commands
+                      (when @*show-block-commands
                         (util/stop e)
                         (insert-command! input-id
-                                         (last (first matched-commands))
+                                         (last (first matched-block-commands))
                                          format
-                                         nil))
+                                         {:last-pattern commands/angle-bracket}))
 
                       :else
-                      (do
-                        (reset! *show-commands true)
-                        (reset! *matched-commands matched-commands))))
-                  (reset! *show-commands false))))
-            (when (and @*show-block-commands (not= key-code 188))     ; not <
-              (let [matched-block-commands (get-matched-block-commands input)]
-                (if (seq matched-block-commands)
-                  (cond
-                    (= key-code 9)      ;tab
-                    (when @*show-block-commands
-                      (util/stop e)
-                      (insert-command! input-id
-                                       (last (first matched-block-commands))
-                                       format
-                                       {:last-pattern commands/angle-bracket}))
-
-                    :else
-                    (reset! *matched-block-commands matched-block-commands))
-                  (reset! *show-block-commands false))))))))))
+                      (reset! *matched-block-commands matched-block-commands))
+                    (reset! *show-block-commands false)))))
+            ))))))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
