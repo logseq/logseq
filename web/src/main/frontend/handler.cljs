@@ -1931,8 +1931,7 @@
          (not (state/get-editor-show-input))
          (string/blank? (:search/q @state/state)))
     (util/stop e)
-    (expand/cycle!)
-    (re-render-root!)))
+    (expand/cycle!)))
 
 (comment
   (defn debug-latest-commits
