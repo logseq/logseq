@@ -120,7 +120,6 @@
 
 (rum/defc custom-context-menu < rum/reactive
   []
-  (prn "show? " (state/sub :custom-context-menu/show?))
   (when (state/sub :custom-context-menu/show?)
     (ui/css-transition
      {:class-names "fade"

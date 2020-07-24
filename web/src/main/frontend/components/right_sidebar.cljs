@@ -138,7 +138,7 @@
      [:table
       [:tbody
        [:tr [:td "**Bold**"] [:td.text-right [:b "Bold"]]]
-       [:tr [:td "__Italics__"] [:td.text-right [:i "Italics"]]]
+       [:tr [:td "_Italics_"] [:td.text-right [:i "Italics"]]]
        [:tr [:td "~~Strikethrough~~"] [:td.text-right [:del "Strikethrough"]]]
        [:tr [:td "^^highlight^^"] [:td.text-right [:mark "highlight"]]]
        [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex

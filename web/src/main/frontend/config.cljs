@@ -116,7 +116,7 @@
       :org
       "/"
       :markdown
-      "__"
+      "_"
       "")))
 (defn get-underline
   [format]
