@@ -107,7 +107,7 @@
 
 (rum/defc custom-context-menu-content
   []
-  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute
+  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
    [:div.py-1.rounded-md.bg-base-3.shadow-xs
     (ui/menu-link
      {:key "cut"
@@ -120,6 +120,7 @@
 
 (rum/defc custom-context-menu < rum/reactive
   []
+  (prn "show? " (state/sub :custom-context-menu/show?))
   (when (state/sub :custom-context-menu/show?)
     (ui/css-transition
      {:class-names "fade"
