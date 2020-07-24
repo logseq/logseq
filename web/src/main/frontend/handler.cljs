@@ -1674,10 +1674,11 @@
   (util/scroll-to-top))
 
 (defn zoom-in! []
-  (when-let [heading (state/get-edit-heading)]
+  (if-let [heading (state/get-edit-heading)]
     (when-let [id (:heading/uuid heading)]
       (redirect! {:to :page
-                  :path-params {:name (str id)}}))))
+                  :path-params {:name (str id)}}))
+    (js/window.history.forward)))
 
 (defn- get-nearest-page
   []
