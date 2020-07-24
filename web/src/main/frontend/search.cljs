@@ -24,11 +24,11 @@
 
 (defn clean-str
   [s]
-  (string/replace (string/lower-case s) #"[\[ \\/_\]]+" ""))
+  (string/replace (string/lower-case s) #"[\[ \\/_\]\(\)]+" ""))
 
 (defn clean
   [s]
-  (string/replace (string/lower-case s) #"[\[\\/\]]+" ""))
+  (string/replace (string/lower-case s) #"[\[\\/\]\(\)]+" ""))
 
 (defn char-array
   [s]
@@ -84,8 +84,7 @@
        (when-not (string/blank? q)
          (db/get-matched-headings
           (fn [content]
-            (let []
-              (re-find (re-pattern (str "(?i)" q)) content)))
+            (re-find (re-pattern (str "(?i)" q)) content))
           ;; (fn [content]
           ;;   (> (score q (.toLowerCase content)) 0))
           limit))))))
