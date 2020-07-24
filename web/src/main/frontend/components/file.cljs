@@ -89,7 +89,7 @@
                                               (handler/show-right-sidebar)))}
          (util/capitalize-all page)]])
 
-     (when config?
+     (when (and config? (state/logged?))
        [:a.mb-8.block {:on-click (fn [_e] (handler/sync-project-settings!))}
         "Sync project settings"])
 
