@@ -86,7 +86,6 @@
 (defonce *search-files (atom []))
 (defonce *saving-title (atom nil))
 
-;; TODO: lazy loading
 (defonce *excalidraw (atom nil))
 
 (defn set-excalidraw-component!
@@ -461,12 +460,11 @@
 
            (if (loaded?)
              (set-excalidraw-component!)
-             (do
-               (loader/load
-                (config/asset-uri "/static/js/excalidraw.min.js")
-                (fn []
-                  (reset! *loaded? true)
-                  (set-excalidraw-component!)))))
+             (loader/load
+              (config/asset-uri "/static/js/excalidraw.min.js")
+              (fn []
+                (reset! *loaded? true)
+                (set-excalidraw-component!))))
 
            (handler/get-all-excalidraw-files
             (fn [files]
@@ -480,8 +478,9 @@
   [state option]
   (let [loaded? (or (loaded?)
                     (rum/react *loaded?))
-        current-repo (state/sub :git/current-repo)]
-    (if loaded?
+        current-repo (state/sub :git/current-repo)
+        component (rum/react *excalidraw)]
+    (if component
       (let [current-file (rum/react *current-file)
             current-file (or current-file
                              (and current-repo
