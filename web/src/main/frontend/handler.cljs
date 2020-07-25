@@ -260,13 +260,23 @@
 (defn default-month-journal-content
   [format]
   (let [{:keys [year month day]} (date/get-date)
-        last-day (date/get-month-last-day)]
+        last-day (date/get-month-last-day)
+        logged? (state/logged?)]
     (->> (map
            (fn [day]
-             (util/format
-              "%s %s\n"
-              (config/get-heading-pattern format)
-              (date/format (t/date-time year month day))))
+             (let [d (date/format (t/date-time year month day))
+                   today? (= d (date/journal-name))]
+               (if (and (not logged?)
+                        today?)
+                 (util/format
+                  "%s %s\n%s\n"
+                  (config/get-heading-pattern format)
+                  d
+                  config/default-intro-content)
+                 (util/format
+                  "%s %s\n"
+                  (config/get-heading-pattern format)
+                  d))))
            (range 1 (inc last-day)))
          (apply str))))
 
@@ -1948,12 +1958,12 @@
   [heading-id]
   (when heading-id
     (when-let [heading (db/pull [:heading/uuid heading-id])]
-     (state/sidebar-add-block!
-      (state/get-current-repo)
-      (:db/id heading)
-      :heading
-      heading)
-     (show-right-sidebar))))
+      (state/sidebar-add-block!
+       (state/get-current-repo)
+       (:db/id heading)
+       :heading
+       heading)
+      (show-right-sidebar))))
 
 (defn cut-heading!
   [heading-id]
