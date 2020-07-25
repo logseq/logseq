@@ -35,14 +35,15 @@
          (ui/foldable
           [:h2.font-bold.opacity-50 (let []
                                            (str n-ref " Linked References"))]
-          (let [ref-hiccup (hiccup/->hiccup ref-headings
-                                            {:id encoded-page-name
-                                             :start-level 2
-                                             :ref? true
-                                             :group-by-page? true}
-                                            {})]
-            (content/content encoded-page-name
-                             {:hiccup ref-hiccup})))]))))
+          [:div.references-blocks
+           (let [ref-hiccup (hiccup/->hiccup ref-headings
+                                             {:id encoded-page-name
+                                              :start-level 2
+                                              :ref? true
+                                              :group-by-page? true}
+                                             {})]
+             (content/content encoded-page-name
+                              {:hiccup ref-hiccup}))])]))))
 
 (rum/defc unlinked-references < rum/reactive
   [page-name]
@@ -56,12 +57,13 @@
          (ui/foldable
           [:h2.font-bold.opacity-50 (let []
                                            (str n-ref " Unlinked References"))]
-          (let [ref-hiccup (hiccup/->hiccup ref-headings
-                                            {:id (str encoded-page-name "-unlinked-")
-                                             :start-level 2
-                                             :ref? true
-                                             :group-by-page? true}
-                                            {})]
-            (content/content encoded-page-name
-                             {:hiccup ref-hiccup}))
+          [:div.references-blocks
+           (let [ref-hiccup (hiccup/->hiccup ref-headings
+                                             {:id (str encoded-page-name "-unlinked-")
+                                              :start-level 2
+                                              :ref? true
+                                              :group-by-page? true}
+                                             {})]
+             (content/content encoded-page-name
+                              {:hiccup ref-hiccup}))]
           true)]))))
