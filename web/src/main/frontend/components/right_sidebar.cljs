@@ -46,6 +46,10 @@
   [:div.help.ml-2.mt-1
    [:ul
     [:li
+     [:a {:href "https://logseq.com/blog/about"
+          :target "_blank"}
+      "About Logseq"]]
+    [:li
      [:a {:href "https://github.com/logseq/logseq/issues/new"
           :target "_blank"}
       "Bug report"]]
