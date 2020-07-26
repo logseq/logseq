@@ -70,6 +70,7 @@
          [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
           [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
            {:default-value github-token
+            :type "password"
             :on-blur (fn [event]
                        (when-let [token (util/evalue event)]
                          (when-not (string/blank? token)
