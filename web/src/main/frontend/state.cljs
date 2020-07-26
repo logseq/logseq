@@ -96,10 +96,18 @@
   []
   (:git/current-repo @state))
 
+(defn get-config
+  ([]
+   (get-config (get-current-repo)))
+  ([repo-url]
+   (get-in @state [:config repo-url])))
+
 (defn get-preferred-format
   []
   (keyword
-   (get-in @state [:me :preferred_format] "markdown")))
+   (or
+    (:preferred-format (get-config))
+    (get-in @state [:me :preferred_format] "markdown"))))
 
 (defn get-repos
   []
@@ -230,12 +238,6 @@
 (defn set-config!
   [repo-url value]
   (set-state! [:config repo-url] value))
-
-(defn get-config
-  ([]
-   (get-config (get-current-repo)))
-  ([repo-url]
-   (get-in @state [:config repo-url])))
 
 (defn set-editor-show-page-search
   [value]

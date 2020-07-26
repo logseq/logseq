@@ -690,6 +690,7 @@
     (highlight-element! fragment))
   state)
 
+;; TOOD: move to routes.cljs
 (defn get-title
   [name path-params]
   (case name
@@ -717,6 +718,8 @@
     "Git diff"
     :draw
     "Draw"
+    :settings
+    "Settings"
     :else
     "Logseq"))
 
@@ -1519,7 +1522,8 @@
     (when (:name (:me @state/state))
       (util/post (str config/api "set_preferred_format")
                  {:preferred_format (name format)}
-                 (fn [])
+                 (fn [_result]
+                   (show-notification! "Format set successfully!" :success))
                  (fn [_e])))))
 
 (defn clone-and-pull-repos
@@ -1542,23 +1546,26 @@
                    500)))
 
 (defn set-github-token!
-  [token]
-  (state/set-github-token! token)
-  (let [object-key (get-in @state/state [:me :encrypt_object_key])]
-    (p/let [key (if object-key
-                  (encrypt/get-key-from-object-key object-key)
-                  (encrypt/generate-key))
-            encrypted (encrypt/encrypt key token)
-            object-key (or object-key
-                           (encrypt/base64-key key))]
-      (state/set-encrypt-token! encrypted)
-      (util/post (str config/api "encrypt_object_key")
-                 {:object-key object-key}
-                 (fn []
-                   (let [me (:me @state/state)]
-                     (when (:repos me)
-                       (clone-and-pull-repos me))))
-                 (fn [_e])))))
+  ([token]
+   (set-github-token! token true))
+  ([token update-server-object-key?]
+   (state/set-github-token! token)
+   (let [object-key (get-in @state/state [:me :encrypt_object_key])]
+     (p/let [key (if object-key
+                   (encrypt/get-key-from-object-key object-key)
+                   (encrypt/generate-key))
+             encrypted (encrypt/encrypt key token)
+             object-key (or object-key
+                            (encrypt/base64-key key))]
+       (state/set-encrypt-token! encrypted)
+       (when update-server-object-key?
+         (util/post (str config/api "encrypt_object_key")
+                    {:object-key object-key}
+                    (fn []
+                      (let [me (:me @state/state)]
+                        (when (:repos me)
+                          (clone-and-pull-repos me))))
+                    (fn [_e])))))))
 
 (defn watch-for-date!
   []

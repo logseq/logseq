@@ -259,7 +259,7 @@
                   :options {:href "/all-files"}})
                (when current-repo
                  {:title "Settings"
-                  :options {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}})
+                  :options {:href "/settings"}})
                {:title [:div.flex-row.flex.justify-between.items-center
                         [:span "Join the community"]
                         svg/discord]
