@@ -749,7 +749,8 @@
                    edit-input-id
                    config)]
       (let [dragging? (rum/react *dragging?)
-            drag-attrs {:on-click (fn [e]
+            drag-attrs {:headingId (str uuid)
+                        :on-click (fn [e]
                                     (let [target (gobj/get e "target")]
                                       (when-not (or (util/link? target)
                                                     (util/input? target)

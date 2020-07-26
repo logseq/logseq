@@ -560,6 +560,16 @@
     (catch js/Error _e
       nil)))
 
+(defn get-selection
+  []
+  (when (gobj/get js/window "getSelection")
+    (js/window.getSelection)))
+
+(defn get-selected-text
+  []
+  (some-> (get-selection)
+          (.toString)))
+
 (def clear-selection! selection/clearSelection)
 
 (defn copy-to-clipboard! [s]

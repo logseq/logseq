@@ -206,6 +206,32 @@
     (when check-fn
       (check-fn new-value (dec (count prefix))))))
 
+(defn simple-replace!
+  [id value selected
+   {:keys [backward-pos forward-pos check-fn]
+    :as option}]
+  (let [selected? (not (string/blank? selected))
+        input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        current-pos (:pos (util/get-caret-pos input))
+        prefix (subs edit-content 0 current-pos)
+        postfix (if selected?
+                  (string/replace-first (subs edit-content current-pos)
+                                        selected
+                                        "")
+                  (subs edit-content current-pos))
+        new-value (str prefix value postfix)
+        new-pos (- (+ (count prefix)
+                      (count value)
+                      (or forward-pos 0))
+                   (or backward-pos 0))]
+    (state/set-heading-content-and-last-pos! id new-value new-pos)
+    (util/move-cursor-to input new-pos)
+    (when selected?
+      (.setSelectionRange input new-pos (+ new-pos (count selected))))
+    (when check-fn
+      (check-fn new-value (dec (count prefix))))))
+
 (defn delete-pair!
   [id]
   (let [input (gdom/getElement id)

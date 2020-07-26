@@ -36,6 +36,7 @@
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
+(defonce *selected-text (atom nil))
 
 (defn set-last-edit-heading!
   [id value]
@@ -84,11 +85,14 @@
                            :or {restore? true}
                            :as option}]
   (let [value (get autopair-map prefix)
-        value (str prefix value)
+        selected (util/get-selected-text)
+        postfix (str selected value)
+        value (str prefix postfix)
         input (gdom/getElement input-id)]
     (when value
-      (let [[prefix pos] (commands/simple-insert! input-id value
-                                                  {:backward-pos 1
+      (when-not (string/blank? selected) (reset! *selected-text selected))
+      (let [[prefix pos] (commands/simple-replace! input-id value selected
+                                                  {:backward-pos (count postfix)
                                                    :check-fn (fn [new-value prefix-pos]
                                                                (when (>= prefix-pos 0)
                                                                  [(subs new-value prefix-pos (+ prefix-pos 2))
@@ -104,8 +108,7 @@
             (commands/handle-step [:editor/search-block :reference])
             (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
-          nil))
-      )))
+          nil)))))
 
 (defn surround-by?
   [input before after]
@@ -212,6 +215,7 @@
         (util/nth-safe value pos)))))
 
 (rum/defc page-search < rum/reactive
+  {:will-unmount (fn [state] (reset! *selected-text nil) state)}
   [id format]
   (when (state/sub :editor/show-page-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -219,9 +223,10 @@
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
               edit-content (state/sub [:editor/content id])
-              q (when (> (count edit-content)
-                         (+ current-pos))
-                  (subs edit-content pos current-pos))
+              q (or
+                 @*selected-text
+                 (when (> (count edit-content) current-pos)
+                   (subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
                               (map util/capitalize-all (get-matched-pages q)))
               chosen-handler (fn [chosen _click?]
@@ -229,7 +234,7 @@
                                (insert-command! id
                                                 (util/format "[[%s]]" chosen)
                                                 format
-                                                {:last-pattern (str "[[" q)
+                                                {:last-pattern (str "[[" (if @*selected-text "" q))
                                                  :postfix-fn (fn [s] (util/replace-first "]]" s ""))}))
               non-exist-page-handler (fn [_state]
                                        (state/set-editor-show-page-search false)
@@ -246,6 +251,7 @@
   (search/search q 5))
 
 (rum/defc block-search < rum/reactive
+  {:will-unmount (fn [state] (reset! *selected-text nil) state)}
   [id format]
   (when (state/sub :editor/show-block-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
@@ -253,9 +259,10 @@
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
               edit-content (state/sub [:editor/content id])
-              q (when (> (count edit-content)
-                         (+ current-pos))
-                  (subs edit-content pos current-pos))
+              q (or
+                 @*selected-text
+                 (when (> (count edit-content) current-pos)
+                   (subs edit-content pos current-pos)))
               matched-blocks (when-not (string/blank? q)
                                (get-matched-blocks q))
               chosen-handler (fn [chosen _click?]
@@ -266,7 +273,7 @@
                                  (insert-command! id
                                                   (util/format "((%s))" uuid-string)
                                                   format
-                                                  {:last-pattern (str "((" q)
+                                                  {:last-pattern (str "((" (if @*selected-text "" q))
                                                    :postfix-fn (fn [s] (util/replace-first "))" s ""))})
 
                                  ;; Save it so it'll be parsed correctly in the future
@@ -806,7 +813,7 @@
             )))
        )))
   {:did-mount (fn [state]
-                (let [[{:keys [dummy? format]} id] (:rum/args state)
+                (let [[{:keys [dummy? format heading-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
                   (handler/restore-cursor-pos! id content dummy?)
 
@@ -817,16 +824,19 @@
                      {:drop (fn [e files]
                               (upload-image id files format *image-uploading? true))}))
 
-                  (mixins/hide-when-esc-or-outside
-                   state
-                   :on-hide
-                   (fn [state e event]
-                     (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
-                       (when on-hide
-                         (on-hide value event))
-                       (when (= event :esc)
-                         (state/clear-edit!))))
-                   :node (gdom/getElement id))
+                  ;; Here we delay this listener, otherwise the click to edit event will trigger outside click too.
+                  (js/setTimeout
+                   (fn []
+                     (mixins/hide-when-esc-or-outside
+                      state
+                      :on-hide
+                      (fn [state e event]
+                        (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
+                          (when on-hide
+                            (on-hide value event))
+                          (state/clear-edit!)))
+                      :node (gdom/getElement id)))
+                   100)
 
                   (when-let [element (gdom/getElement id)]
                     (.focus element)))
