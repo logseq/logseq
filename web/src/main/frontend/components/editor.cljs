@@ -629,15 +629,6 @@
            repo (:heading/repo heading)]
        (.addEventListener input "paste" (fn [event]
                                           (append-paste-doc! format event)))
-       (mixins/hide-when-esc-or-outside
-        state
-        :on-hide
-        (fn [state e event]
-          (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
-            (when on-hide
-              (on-hide value event))
-            (save-heading! (get-state state) value)
-            (state/clear-edit!))))
        (mixins/on-key-down
         state
         {
@@ -812,17 +803,31 @@
                       :else
                       (reset! *matched-block-commands matched-block-commands))
                     (reset! *show-block-commands false)))))
-            ))))))
+            )))
+       )))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
                   (handler/restore-cursor-pos! id content dummy?)
+
                   (when-let [input (gdom/getElement id)]
                     (dnd/subscribe!
                      input
                      :upload-images
                      {:drop (fn [e files]
-                              (upload-image id files format *image-uploading? true))})))
+                              (upload-image id files format *image-uploading? true))}))
+
+                  (mixins/hide-when-esc-or-outside
+                   state
+                   :on-hide
+                   (fn [state e event]
+                     (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
+                       (when on-hide
+                         (on-hide value event))))
+                   :node (gdom/getElement id))
+
+                  (when-let [element (gdom/getElement id)]
+                    (.focus element)))
                 state)
    :will-unmount (fn [state]
                    (let [{:keys [id value format heading repo dummy?]} (get-state state)]
@@ -831,9 +836,9 @@
                                                              (append-paste-doc! format event)))
                        (dnd/unsubscribe!
                         input
-                        :upload-images)
-                       )
-                     (clear-when-saved!))
+                        :upload-images))
+                     (clear-when-saved!)
+                     (save-heading! (get-state state) value))
                    state)}
   [{:keys [on-hide dummy? node format heading]
     :or {dummy? false}

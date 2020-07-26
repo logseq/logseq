@@ -1472,9 +1472,10 @@
       (dom/remove-class! heading "selected")
       (dom/remove-class! heading "noselect"))
     (state/clear-selection!))
-  (when e
-    (when-not (util/input? (gobj/get e "target"))
-      (util/clear-selection!))))
+  ;; (when e
+  ;;   (when-not (util/input? (gobj/get e "target"))
+  ;;     (util/clear-selection!)))
+  )
 
 (defn select-all-headings!
   []

@@ -29,7 +29,7 @@
      content]))
 
 ;; public exports
-(rum/defcs dropdown < (mixins/modal)
+(rum/defcs dropdown < (mixins/modal :open?)
   [state content-fn modal-content-fn modal-class]
   (let [{:keys [open? toggle-fn]} state
         modal-content (modal-content-fn state)]

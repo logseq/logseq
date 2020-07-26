@@ -89,17 +89,16 @@
      (mixins/listen state js/window "mouseup"
                     (fn [e]
                       (when-not (state/in-selection-mode?)
-                        (when-not false
-                          (when-let [headings (seq (util/get-selected-nodes "ls-heading"))]
-                            (let [headings (remove nil? headings)
-                                  headings (remove #(d/has-class? % "dummy") headings)]
-                              (when (seq headings)
-                                (doseq [heading headings]
-                                  (d/add-class! heading "selected noselect"))
-                                ;; TODO: We delay this so the following "click" event won't clear the selections.
-                                ;; Needs more thinking.
-                                (js/setTimeout #(state/set-selection-headings! headings)
-                                               200))))))))
+                        (when-let [headings (seq (util/get-selected-nodes "ls-heading"))]
+                          (let [headings (remove nil? headings)
+                                headings (remove #(d/has-class? % "dummy") headings)]
+                            (when (seq headings)
+                              (doseq [heading headings]
+                                (d/add-class! heading "selected noselect"))
+                              ;; TODO: We delay this so the following "click" event won't clear the selections.
+                              ;; Needs more thinking.
+                              (js/setTimeout #(state/set-selection-headings! headings)
+                                             200)))))))
 
      (mixins/listen state js/window "click"
                     (fn [e]

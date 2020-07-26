@@ -53,14 +53,13 @@
 
 (defn hide-when-esc-or-outside
   [state & {:keys [on-hide node]}]
-  (let [node (or node (rum/dom-node state))]
-    (listen state js/window "click"
+  (let [dom-node (or node (rum/dom-node state))]
+    (listen state (or node js/window) "click"
             (fn [e]
               ;; If the click target is outside of current node
-              (when-not (dom/contains node (.. e -target))
+              (when-not (dom/contains dom-node (.. e -target))
                 (on-hide state e :click))))
-
-    (listen state node "keydown"
+    (listen state dom-node "keydown"
             (fn [e]
               (case (.-keyCode e)
                 ;; Esc
@@ -125,28 +124,28 @@
 
 ;; TODO: is it possible that multiple nested components using the same key `:open?`?
 (defn modal
-  []
-  (let [k :open?]
-    (event-mixin
-     (fn [state]
-       (let [open? (get state k)]
-         (hide-when-esc-or-outside
-          state
-          :on-hide (fn [] (reset! open? false)))))
-     (fn [state]
-       (let [open? (atom false)
-             component (:rum/react-component state)]
-         (add-watch open? ::open
-                    (fn [_ _ _ _]
-                      (rum/request-render component)))
-         (assoc state
-                k open?
-                :close-fn (fn []
-                            (reset! open? false))
-                :open-fn (fn []
-                           (reset! open? true))
-                :toggle-fn (fn []
-                             (swap! open? not))))))))
+  [k]
+  (event-mixin
+   (fn [state]
+     (let [open? (get state k)]
+       (hide-when-esc-or-outside
+        state
+        :on-hide (fn []
+                   (and open? (reset! open? false))))))
+   (fn [state]
+     (let [open? (atom false)
+           component (:rum/react-component state)]
+       (add-watch open? ::open
+                  (fn [_ _ _ _]
+                    (rum/request-render component)))
+       (assoc state
+              :open? open?
+              :close-fn (fn []
+                          (reset! open? false))
+              :open-fn (fn []
+                         (reset! open? true))
+              :toggle-fn (fn []
+                           (swap! open? not)))))))
 
 (defn will-mount-effect
   [handler]
@@ -187,26 +186,26 @@
   ([m enable-f target]
    (when (seq m)
      (let [target-fn (if (fn? target) target (fn [_] target))]
-      {:did-mount
-       (fn [state]
-         (if (enable-f state)
-           (let [keyboards (doall
-                            (map
-                              (fn [[key f]]
-                                [key
-                                 (keyboard/install-shortcut! key
-                                                             (fn [e] (f state e))
-                                                             false
-                                                             (target-fn state))])
-                              m))]
-             (assoc state ::keyboards-listener keyboards))
-           state))
-       :will-unmount
-       (fn [state]
-         (when (enable-f state)
-           (doseq [[_k f] (get state ::keyboards-listener)]
-             (f)))
-         state)}))))
+       {:did-mount
+        (fn [state]
+          (if (enable-f state)
+            (let [keyboards (doall
+                             (map
+                               (fn [[key f]]
+                                 [key
+                                  (keyboard/install-shortcut! key
+                                                              (fn [e] (f state e))
+                                                              false
+                                                              (target-fn state))])
+                               m))]
+              (assoc state ::keyboards-listener keyboards))
+            state))
+        :will-unmount
+        (fn [state]
+          (when (enable-f state)
+            (doseq [[_k f] (get state ::keyboards-listener)]
+              (f)))
+          state)}))))
 
 ;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
 (defn perf-measure-mixin

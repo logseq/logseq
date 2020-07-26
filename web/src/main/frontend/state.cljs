@@ -385,12 +385,12 @@
                   :editor/editing? {edit-input-id true}
                   :cursor-range cursor-range))))))
 
-(defn clear-edit!
-  []
-  (swap! state merge {:editor/content {}
-                      :editor/editing? nil
-                      :editor/heading nil
-                      :cursor-range nil}))
+;; (defn clear-edit!
+;;   []
+;;   (swap! state merge {:editor/content {}
+;;                       :editor/editing? nil
+;;                       :editor/heading nil
+;;                       :cursor-range nil}))
 
 (defn get-edit-heading
   []

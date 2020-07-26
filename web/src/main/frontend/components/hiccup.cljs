@@ -344,7 +344,7 @@
             (->elem
              :a
              (cond->
-               {:href href}
+                 {:href href}
                title
                (assoc :title title))
              (map-inline config label))
@@ -357,8 +357,8 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -757,9 +757,7 @@
                                                          (d/has-class? target "fn")))
                                         (handler/clear-selection! nil)
                                         (handler/unhighlight-heading!)
-                                        (util/stop e)
                                         (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
-                                          (state/set-edit-input-id! edit-input-id)
                                           (state/set-editing!
                                            edit-input-id
                                            (handler/remove-level-spaces content format)
@@ -888,16 +886,16 @@
                                           (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-heading.flex.flex-col.pt-1
      (cond->
-       {:id heading-id
-        :style {:position "relative"}
-        :class (str uuid
-                    (when dummy? " dummy")
-                    (when (and collapsed? has-child?) " collapsed")
-                    (when pre-heading? " pre-heading"))
-        :headingid (str uuid)
-        :repo repo
-        :level level
-        :haschild (str has-child?)}
+         {:id heading-id
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-heading? " pre-heading"))
+          :headingid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
        (not slide?)
        (merge drag-attrs))
 

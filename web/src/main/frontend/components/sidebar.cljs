@@ -117,7 +117,9 @@
       ;; (custom-context-menu-content)
       ))))
 
-(rum/defcs sidebar < (mixins/modal)
+(rum/defcs sidebar <
+  (mixins/modal :modal/input-project)
+  (mixins/modal :modal/git-commit-message)
   rum/reactive
   ;; TODO: move this to keyboards
   (mixins/event-mixin
@@ -330,5 +332,4 @@
                  project/add-project)
        (ui/modal :modal/git-commit-message
                  commit/add-commit-message)
-       (custom-context-menu)
-       ]]]))
+       (custom-context-menu)]]]))
