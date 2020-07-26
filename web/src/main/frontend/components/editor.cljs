@@ -823,7 +823,9 @@
                    (fn [state e event]
                      (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
                        (when on-hide
-                         (on-hide value event))))
+                         (on-hide value event))
+                       (when (= event :esc)
+                         (state/clear-edit!))))
                    :node (gdom/getElement id))
 
                   (when-let [element (gdom/getElement id)]

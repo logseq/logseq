@@ -133,12 +133,15 @@
                (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))
        ;; c
        67 (fn [state e]
-            (when-not (util/input? (gobj/get e "target"))
+            (when (and (not (util/input? (gobj/get e "target")))
+                       (not (gobj/get e "shiftKey"))
+                       (not (gobj/get e "ctrlKey"))
+                       (not (gobj/get e "altKey")))
               (when-let [repo-url (state/get-current-repo)]
                 (if (and
-                      (db/get-key-value repo-url :git/write-permission?)
-                      (not (state/get-edit-input-id))
-                      (= :should-push (db/get-key-value repo-url :git/status)))
+                     (db/get-key-value repo-url :git/write-permission?)
+                     (not (state/get-edit-input-id))
+                     (= :should-push (db/get-key-value repo-url :git/status)))
                   (state/set-state! :modal/git-commit-message true)
                   (handler/show-notification! "No changed files yet!" :warning)))))}
       (fn [e key-code]

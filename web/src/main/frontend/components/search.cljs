@@ -118,7 +118,7 @@
 
          {:style {:padding-left "2rem"}
           :placeholder "Search"
-          :auto-complete "new-password" ; off not working here
+          :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
           :default-value ""
           :on-change (fn [e]
                        (let [value (util/evalue e)]
