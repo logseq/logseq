@@ -1190,17 +1190,21 @@
           nil)))))
 
 (defn insert-new-heading!
-  [{:heading/keys [uuid content meta file dummy? level repo page] :as heading} value create-new-heading? ok-handler]
-  (let [repo (or repo (state/get-current-repo))
-        value (string/trim value)
+  [{:heading/keys [uuid content meta file dummy? level repo page format] :as heading} value create-new-heading? ok-handler with-level?]
+  (let [input (gdom/getElement (state/get-edit-input-id))
+        pos (:pos (util/get-caret-pos input))
+        repo (or repo (state/get-current-repo))
+        v1 (subs value 0 pos)
+        v2 (string/triml (subs value pos))
+        v1 (string/trim (if with-level? v1 (block/with-levels v1 format heading)))
+        v2 (str (config/default-empty-heading format level) " " v2)
         heading (with-heading-meta repo heading)
         format (:heading/format heading)
-        new-heading-content (config/default-empty-heading format level)
         page (db/entity repo (:db/id page))
         file (db/entity repo (:db/id file))
         insert-heading (fn [heading file-path file-content]
                          (let [value (if create-new-heading?
-                                       (str value "\n" new-heading-content)
+                                       (str v1 "\n" v2)
                                        value)
                                [new-content value] (new-file-content heading file-content value)
                                {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
@@ -1219,7 +1223,7 @@
                             [[file-path new-content]])
 
                            (when ok-handler
-                             (ok-handler [first-heading last-heading new-heading-content]))))]
+                             (ok-handler [first-heading last-heading v2]))))]
     (cond
       (and (not file) page)
       (let [format (name format)
@@ -1243,7 +1247,7 @@
                                 (str content
                                      (remove-level-spaces value (keyword format))
                                      "\n"
-                                     new-heading-content))
+                                     v2))
                 (git-add repo path)
                 (re-render-root!))))))
 

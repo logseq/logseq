@@ -571,15 +571,15 @@
                     heading)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     ;; save the current heading and insert a new heading
-    (let [value-with-levels (block/with-levels value format heading)]
-      (handler/insert-new-heading!
-       heading
-       value-with-levels
-       true
-       (fn [[_first-heading last-heading _new-heading-content]]
-         (let [last-id (:heading/uuid last-heading)]
-           (handler/edit-heading! last-id :max format id)
-           (clear-when-saved!)))))))
+    (handler/insert-new-heading!
+     heading
+     value
+     true
+     (fn [[_first-heading last-heading _new-heading-content]]
+       (let [last-id (:heading/uuid last-heading)]
+         (handler/edit-heading! last-id 0 format id)
+         (clear-when-saved!)))
+     false)))
 
 (defn get-previous-heading-level
   [current-id]

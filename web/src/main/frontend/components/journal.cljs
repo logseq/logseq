@@ -32,7 +32,8 @@
              (first headings)
              template
              false
-             nil))))))
+             nil
+             true))))))
   state)
 
 (rum/defc headings-cp < rum/reactive
