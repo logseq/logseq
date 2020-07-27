@@ -7,7 +7,7 @@ Hello 👋, and welcome to Logseq!
 
 # Logseq - What is it?
 
-Logseq is a local-only, non-linear, outliner notebook for organizing and sharing your personal knowledge base.
+Logseq is a local-first, non-linear, outliner notebook for organizing and sharing your personal knowledge base.
 
 Use it to organize your todo list, to write your journals, or to record your unique life.
 
