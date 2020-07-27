@@ -5,6 +5,8 @@ Hello 👋, and welcome to Logseq!
 
 ***This project is in its early days and under quick development. To be kept up to date, be sure to follow [@logseq](https://twitter.com/logseq) on Twitter, or join  our community [Discord](https://discord.gg/AxbyKJ)!***
 
+**Notice that it is alpha and data may be lost!**
+
 # Logseq - What is it?
 
 Logseq is a local-first, non-linear, outliner notebook for organizing and sharing your personal knowledge base.
