@@ -755,7 +755,7 @@
              :or {pull-now? true}}]
   (periodically-pull repo-url pull-now?)
   (when (and
-         ;; (not config/dev?)
+         (not config/dev?)
          (not (false? (:git-auto-push (state/get-config repo-url)))))
     (periodically-push-tasks repo-url)))
 
