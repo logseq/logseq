@@ -214,7 +214,7 @@
 (def default-intro-content
   "## Hi, welcome to [Logseq](https://logseq.com/).
 
-**Logseq** is a _local-only_, _non-linear_, _outliner_ notebook for organizing and [sharing](https://logseq.com/blog) your personal knowledge base.
+**Logseq** is a _local-first_, _non-linear_, _outliner_ notebook for organizing and [sharing](https://logseq.com/blog) your personal knowledge base.
 
 Use it to organize your todo list, to write your journals, or to record your unique life.
 
