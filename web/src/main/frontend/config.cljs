@@ -216,6 +216,8 @@
 
 **Logseq** is a _local-first_, _non-linear_, _outliner_ notebook for organizing and [sharing](https://logseq.com/blog) your personal knowledge base.
 
+***Notice that this project is in its early days and under quick development, data might be lost.***
+
 Use it to organize your todo list, to write your journals, or to record your unique life.
 
 The server will never store or analyze your private notes. Your data are plain text files, we support both Markdown and Emacs Org mode for the time being. Even if the website is down or can't be maintained, your data is always yours.
