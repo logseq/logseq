@@ -197,7 +197,7 @@
            :on-change (fn [e]
                         (reset! commit-message (util/evalue e)))})
          (if pushing?
-           [:span "Pushing ..."]
+           [:span (ui/loading "Pushing")]
            (ui/button "Commit and force pushing"
              :on-click
              (fn []

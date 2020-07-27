@@ -47,6 +47,14 @@
 ;; TODO: separate git status for push-failed, pull-failed, etc
 ;; TODO: Support more storage options (dropbox, google drive), git logic should be
 ;; moved to another namespace, better there should be a `protocol`.
+
+(defn clear-notification!
+  [e]
+  (swap! state/state assoc
+         :notification/show? false
+         :notification/content nil
+         :notification/status nil))
+
 (defn show-notification!
   ([content status]
    (show-notification! content status true))
@@ -57,11 +65,7 @@
           :notification/status status)
 
    (when clear?
-     (js/setTimeout #(swap! state/state assoc
-                            :notification/show? false
-                            :notification/content nil
-                            :notification/status nil)
-                    5000))))
+     (js/setTimeout clear-notification! 5000))))
 
 (defn get-github-token
   []
@@ -252,7 +256,7 @@
 (defn git-add
   [repo-url file]
   (p/let [result (git/add repo-url file)]
-    (set-git-status! repo-url :should-push)))
+    (state/git-add! repo-url file)))
 
 ;; journals
 
@@ -422,8 +426,11 @@
   [repo-url token]
   (when (db/get-conn repo-url true)
     (let [status (db/get-key-value repo-url :git/status)]
-      (when (and (not (state/get-edit-input-id))
-                 (not (state/in-draw-mode?)))
+      (when (and
+             (not= status :push-failed)
+             (empty? (state/get-changed-files repo-url))
+             (not (state/get-edit-input-id))
+             (not (state/in-draw-mode?)))
         (set-git-status! repo-url :pulling)
         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
           (p/let [result (git/fetch repo-url token)]
@@ -494,40 +501,40 @@
   ([repo-url]
    (push repo-url "Logseq auto save"))
   ([repo-url commit-message]
-   (when (and
-          (db/get-key-value repo-url :git/write-permission?)
-          (not (state/get-edit-input-id))
-          (= :should-push (db/get-key-value repo-url :git/status)))
-     ;; auto commit if there are any un-committed changes
-     (p/let [changed-files (git/get-status-matrix repo-url)]
-       (when (seq (flatten (vals changed-files)))
-         ;; (prn {:changed-files changed-files})
-         (let [commit-message (if (string/blank? commit-message)
-                                "Logseq auto save"
-                                commit-message)]
-           (p/let [_commit-result (git/commit repo-url commit-message)]
-             (set-git-status! repo-url :pushing)
-             (let [token (get-github-token)]
-               (util/p-handle
-                (git/push repo-url token)
-                (fn []
-                  (set-git-status! repo-url nil)
-                  (set-git-error! repo-url nil)
-                  (set-latest-commit-if-exists! repo-url))
-                (fn [error]
-                  (println "Failed to push, error: " error)
-                  (set-git-status! repo-url :push-failed)
-                  (set-git-error! repo-url error)
-                  (show-notification!
-                   [:p.content
-                    "Failed to push, please "
-                    [:span.text-gray-700.font-bold
-                     "resolve any diffs first."]]
-                   :error)
-                  (p/let [result (git/fetch repo-url (get-github-token))
-                          {:keys [fetchHead]} (bean/->clj result)
-                          _ (set-latest-commit! repo-url fetchHead)]
-                    (redirect! {:to :diff}))))))))))))
+   (let [status (db/get-key-value repo-url :git/status)]
+     (when (and
+           (not= status :push-failed)
+           (db/get-key-value repo-url :git/write-permission?)
+           (not (state/get-edit-input-id))
+           (seq (state/get-changed-files repo-url)))
+      ;; auto commit if there are any un-committed changes
+      (let [commit-message (if (string/blank? commit-message)
+                             "Logseq auto save"
+                             commit-message)]
+        (p/let [_ (git/commit repo-url commit-message)]
+          (set-git-status! repo-url :pushing)
+          (let [token (get-github-token)]
+            (util/p-handle
+             (git/push repo-url token)
+             (fn []
+               (set-git-status! repo-url nil)
+               (set-git-error! repo-url nil)
+               (set-latest-commit-if-exists! repo-url)
+               (state/clear-changed-files! repo-url))
+             (fn [error]
+               (println "Failed to push, error: " error)
+               (set-git-status! repo-url :push-failed)
+               (set-git-error! repo-url error)
+               (show-notification!
+                [:p.content
+                 "Failed to push, please "
+                 [:span.text-gray-700.font-bold
+                  "resolve any diffs first."]]
+                :error)
+               (p/let [result (git/fetch repo-url (get-github-token))
+                       {:keys [fetchHead]} (bean/->clj result)
+                       _ (set-latest-commit! repo-url fetchHead)]
+                 (redirect! {:to :diff})))))))))))
 
 (defn git-commit-and-push!
   [commit-message]
@@ -536,16 +543,16 @@
 
 (defn commit-and-force-push!
   [commit-message pushing?]
-  (let [repo (frontend.state/get-current-repo)]
-    (p/let [changes (git/get-status-matrix repo)]
-      (let [changes (seq (flatten (concat (vals changes))))]
-        (p/let [commit-oid (if changes (git/commit repo commit-message))
-                _ (if changes (git/write-ref! repo commit-oid))
-                _ (git/push repo
-                            (get-github-token)
-                            true)]
-          (reset! pushing? false)
-          (redirect! {:to :home}))))))
+  (when-let [repo (frontend.state/get-current-repo)]
+    (when (seq (state/get-changed-files repo))
+      (p/let [commit-oid (git/commit repo commit-message)
+              result (git/write-ref! repo commit-oid)
+              push-result (git/push repo
+                                    (get-github-token)
+                                    true)]
+        (reset! pushing? false)
+        (state/clear-changed-files! repo)
+        (redirect! {:to :home})))))
 
 (defn db-listen-to-tx!
   [repo db-conn]
@@ -743,23 +750,12 @@
     (js/setInterval push
                     (* (config/git-push-secs) 1000))))
 
-(defn update-repo-sync-status!
-  []
-  (p/let [changes (git/get-status-matrix (state/get-current-repo))]
-    (state/update-sync-status! changes)))
-
-(defn periodically-update-repo-status
-  [repo-url]
-  (js/setInterval update-repo-sync-status!
-                  (* (config/git-repo-status-secs) 1000)))
-
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
-  (periodically-update-repo-status repo-url)
   (periodically-pull repo-url pull-now?)
   (when (and
-         (not config/dev?)
+         ;; (not config/dev?)
          (not (false? (:git-auto-push (state/get-config repo-url)))))
     (periodically-push-tasks repo-url)))
 
@@ -863,24 +859,31 @@
 
 (defn clear-store!
   []
-  (p/let [ks (.keys db/localforage-instance)
-          _ (doseq [k ks]
-              (when-not (string/ends-with? k (str "/" config/local-repo))
-                (.removeItem db/localforage-instance k)))
-          dirs (fs/readdir "/")
-          dirs (remove #(= % config/local-repo) dirs)]
-    (-> (p/all (doall (map (fn [dir]
-                             (fs/rmdir (str "/" dir)))
-                        dirs)))
-        (p/then (fn []
-                  (prn "Cleared store!"))))))
+  (p/let [_ (.clear db/localforage-instance)
+          dbs (js/window.indexedDB.databases)]
+    (doseq [db dbs]
+      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
+
+;; (defn clear-store!
+;;   []
+;;   (p/let [ks (.keys db/localforage-instance)
+;;           _ (doseq [k ks]
+;;               (when-not (string/ends-with? k (str "/" config/local-repo))
+;;                 (.removeItem db/localforage-instance k)))
+;;           dirs (fs/readdir "/")
+;;           dirs (remove #(= % config/local-repo) dirs)]
+;;     (-> (p/all (doall (map (fn [dir]
+;;                              (fs/rmdir (str "/" dir)))
+;;                         dirs)))
+;;         (p/then (fn []
+;;                   (prn "Cleared store!"))))))
 
 ;; clear localforage
 (defn sign-out!
   [e]
   (->
    (do
-     ;; remember not to remove the encrypted token
+     ;; remember to not to remove the encrypted token
      (storage/set :git/current-repo config/local-repo)
      (storage/remove :git/clone-repo)
      (clear-store!))
@@ -1437,7 +1440,8 @@
                  (db/remove-db! url)
                  (db/remove-files-db! url)
                  (fs/rmdir (util/get-repo-dir url))
-                 (state/delete-repo! repo))
+                 (state/delete-repo! repo)
+                 (state/clear-changed-files! repo))
                (fn [error]
                  (prn "Delete repo failed, error: " error))))
 
@@ -1445,6 +1449,7 @@
   [{:keys [id url] :as repo}]
   (db/remove-conn! url)
   (db/clear-query-state!)
+  (state/clear-changed-files! url)
   (-> (p/let [_ (db/remove-db! url)
               _ (db/remove-files-db! url)]
         (fs/rmdir (util/get-repo-dir url)))
@@ -1926,7 +1931,7 @@
                                     "/"
                                     file)
                                nil)]
-       (set-git-status! repo :should-push)
+       (state/git-add! repo (str "- " file))
        (when-let [file (db/entity repo [:file/path file])]
          (let [file-id (:db/id file)
                page-id (db/get-file-page-id (:file/path file))
@@ -1997,11 +2002,6 @@
                        (fn [commits]
                          (prn (mapv :oid (bean/->clj commits))))
                        10))
-
-  (defn debug-matrix
-    []
-    (p/let [changes (git/get-status-matrix (state/get-current-repo))]
-      (prn changes)))
 
   (defn debug-file
     [path]

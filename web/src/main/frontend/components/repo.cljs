@@ -41,5 +41,5 @@
              "Re-index"]
             [:a.text-gray-400.ml-4 {:on-click (fn []
                                                 (handler/remove-repo! repo))}
-             "Remove"]]])]]
+             "Unlink"]]])]]
       (widgets/add-repo))))

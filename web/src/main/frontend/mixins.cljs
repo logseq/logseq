@@ -122,7 +122,6 @@
      ;;                 state)
      })))
 
-;; TODO: is it possible that multiple nested components using the same key `:open?`?
 (defn modal
   [k]
   (event-mixin

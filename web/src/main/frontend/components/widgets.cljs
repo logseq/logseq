@@ -8,7 +8,8 @@
             [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.version :as version]
-            [frontend.components.svg :as svg]))
+            [frontend.components.svg :as svg]
+            [clojure.set :as set]))
 
 (rum/defcs choose-preferred-format
   []
@@ -74,41 +75,35 @@
       (let [git-status (state/sub [:git/status repo])
             pulling? (= :pulling git-status)
             pushing? (= :pushing git-status)
-            status (state/sub [:repo/sync-status repo])
-            status (remove (fn [[_ files]]
-                             (empty? files))
-                           status)
-            synced? (empty? (apply concat (vals status)))
-            last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
+            last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
+            changed-files (state/sub [:repo/changed-files repo])
+            should-push? (seq changed-files)]
         [:div.flex-row.flex.items-center
          (when pushing?
            [:span.lds-dual-ring.mt-1])
          (ui/dropdown
           (fn [{:keys [toggle-fn]}]
             [:div.cursor.w-2.h-2.sync-status.mr-2
-             {:class (if synced? "bg-green-600" "bg-orange-400")
+             {:class (if (or should-push? pushing?) "bg-orange-400" "bg-green-600")
               :style {:border-radius "50%"
                       :margin-top 2}
               :on-mouse-over toggle-fn}])
           (fn [{:keys [toggle-fn]}]
             [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-             (when synced?
-               [:p "All local changes are synced!"])
-             (when-not synced?
+             (if (and should-push? (seq changed-files))
                [:div
                 [:div.changes
-                 (for [[k files] status]
-                   [:div {:key (str "sync-" (name k))}
-                    [:div.text-sm.font-bold (string/capitalize (name k))]
-                    [:ul
-                     (for [file files]
-                       [:li {:key (str "sync-" file)}
-                        file])]])]
+                 [:ul
+                  (for [file changed-files]
+                    [:li {:key (str "sync-" file)}
+                     file])]]
+                ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
                 [:div.flex.flex-row.justify-between.align-items.mt-2
                  (ui/button "Push now"
                    :on-click (fn [] (state/set-state! :modal/git-commit-message true)))
                  (if pushing?
-                   [:span.lds-dual-ring.mt-1])]])
+                   [:span.lds-dual-ring.mt-1])]]
+               [:p "All local changes are synced!"])
              [:hr]
              [:div
               [:p {:style {:font-size 12}} "Last pulled at: "

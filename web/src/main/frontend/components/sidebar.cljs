@@ -141,7 +141,7 @@
                 (if (and
                      (db/get-key-value repo-url :git/write-permission?)
                      (not (state/get-edit-input-id))
-                     (= :should-push (db/get-key-value repo-url :git/status)))
+                     (seq (state/get-changed-files repo-url)))
                   (state/set-state! :modal/git-commit-message true)
                   (handler/show-notification! "No changed files yet!" :warning)))))}
       (fn [e key-code]

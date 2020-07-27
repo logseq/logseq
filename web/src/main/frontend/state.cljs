@@ -17,6 +17,9 @@
     :repo/loading-files? nil
     :repo/importing-to-db? nil
     :repo/sync-status {}
+    :repo/changed-files (or
+                         (storage/get "git-changed-files")
+                         {})
     :indexeddb/support? true
     :me nil
     :git/clone-repo (or (storage/get :git/clone-repo) "")
@@ -508,3 +511,19 @@
 (defn set-indexedb-support?
   [value]
   (set-state! :indexeddb/support? value))
+
+(defn git-add!
+  [repo file]
+  (update-state! [:repo/changed-files repo]
+                 (fn [files] (distinct (conj files file))))
+  (storage/set "git-changed-files" (:repo/changed-files @state)))
+
+(defn clear-changed-files!
+  [repo]
+  (set-state! [:repo/changed-files repo] nil)
+  (set-state! [:git/status repo] nil)
+  (storage/set "git-changed-files" (:repo/changed-files @state)))
+
+(defn get-changed-files
+  [repo]
+  (get-in @state [:repo/changed-files repo]))

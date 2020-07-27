@@ -1387,11 +1387,11 @@
   ([headings format default-option journal?]
    (let [format (or format (state/get-preferred-format) :markdown)]
      (cond
-       (or (and (not journal?) (seq headings))
-           (and journal? (> (count headings) 1)))
-       (if journal?
-         (rest headings)
-         headings)
+       (and journal? (> (count headings) 1))
+       (rest headings)                  ; remove journal titles
+
+       (and (not journal?) (seq headings))
+       headings
 
        :else
        (let [last-heading (last headings)

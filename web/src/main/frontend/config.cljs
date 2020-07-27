@@ -69,6 +69,7 @@
   (set/union (text-formats)
              (img-formats)))
 
+;; TODO: rename
 (defonce hiccup-support-formats
   #{:org :markdown})
 

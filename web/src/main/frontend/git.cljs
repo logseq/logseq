@@ -22,16 +22,16 @@
 (defn set-username-email
   [dir username email]
   (util/p-handle (js/window.git.config (clj->js
-                                 {:global true
-                                  :dir dir
-                                  :path "user.name"
-                                  :value username}))
+                                        {:global true
+                                         :dir dir
+                                         :path "user.name"
+                                         :value username}))
                  (fn [result]
                    (js/window.git.config (clj->js
-                                   {:global true
-                                    :dir dir
-                                    :path "user.email"
-                                    :value email})))
+                                          {:global true
+                                           :dir dir
+                                           :path "user.email"
+                                           :value email})))
                  (fn [error]
                    (prn "error:" error))))
 
@@ -44,68 +44,69 @@
 (defn clone
   [repo-url token]
   (js/window.git.clone (with-auth token
-                  {:dir (util/get-repo-dir repo-url)
-                   :url repo-url
-                   :corsProxy "https://cors.isomorphic-git.org"
-                   :singleBranch true
-                   :depth 1})))
+                         {:dir (util/get-repo-dir repo-url)
+                          :url repo-url
+                          :corsProxy "https://cors.isomorphic-git.org"
+                          :singleBranch true
+                          :depth 1})))
 
 (defn list-files
   [repo-url]
   (js/window.git.listFiles (clj->js
-                     {:dir (util/get-repo-dir repo-url)
-                      :ref "HEAD"})))
+                            {:dir (util/get-repo-dir repo-url)
+                             :ref "HEAD"})))
 
 (defn fetch
   [repo-url token]
   (js/window.git.fetch (with-auth token
-                  {:dir (util/get-repo-dir repo-url)
-                   :ref default-branch
-                   :singleBranch true
-                   :depth 100
-                   :tags false})))
+                         {:dir (util/get-repo-dir repo-url)
+                          :ref default-branch
+                          :singleBranch true
+                          :depth 100
+                          :tags false})))
 
 (defn merge
   [repo-url]
   (js/window.git.merge (clj->js
-                 {:dir (util/get-repo-dir repo-url)
-                  :ours default-branch
-                  :theirs (str "remotes/origin/" default-branch)
-                  :fastForwardOnly true})))
+                        {:dir (util/get-repo-dir repo-url)
+                         :ours default-branch
+                         :theirs (str "remotes/origin/" default-branch)
+                         :fastForwardOnly true})))
 
 (defn checkout
   [repo-url]
   (js/window.git.checkout (clj->js
-                    {:dir (util/get-repo-dir repo-url)
-                     :ref default-branch})))
+                           {:dir (util/get-repo-dir repo-url)
+                            :ref default-branch})))
 
 (defn log
   [repo-url token depth]
-  (js/window.git.log (with-auth token
-                {:dir (util/get-repo-dir repo-url)
-                 :ref default-branch
-                 :depth depth
-                 :singleBranch true})))
+  (and js/window.git
+       (js/window.git.log (with-auth token
+                            {:dir (util/get-repo-dir repo-url)
+                             :ref default-branch
+                             :depth depth
+                             :singleBranch true}))))
 
 (defn pull
   [repo-url token]
   (js/window.git.pull (with-auth token
-                 {:dir (util/get-repo-dir repo-url)
-                  :ref default-branch
-                  :singleBranch true
-                  :fast true})))
+                        {:dir (util/get-repo-dir repo-url)
+                         :ref default-branch
+                         :singleBranch true
+                         :fast true})))
 (defn add
   [repo-url file]
   (when js/window.git
     (js/window.git.add (clj->js
-                       {:dir (util/get-repo-dir repo-url)
-                        :filepath file}))))
+                        {:dir (util/get-repo-dir repo-url)
+                         :filepath file}))))
 
 (defn remove-file
   [repo-url file]
   (js/window.git.remove (clj->js
-               {:dir (util/get-repo-dir repo-url)
-                :filepath file})))
+                         {:dir (util/get-repo-dir repo-url)
+                          :filepath file})))
 
 (defn rename
   [repo-url old-file new-file]
@@ -118,26 +119,26 @@
   [repo-url message]
   (let [{:keys [name email]} (:me @state/state)]
     (js/window.git.commit (clj->js
-                    {:dir (util/get-repo-dir repo-url)
-                     :message message
-                     :author {:name name
-                              :email email}}))))
+                           {:dir (util/get-repo-dir repo-url)
+                            :message message
+                            :author {:name name
+                                     :email email}}))))
 
 (defn read-commit
   [repo-url oid]
   (js/window.git.readCommit (clj->js
-                      {:dir (util/get-repo-dir repo-url)
-                       :oid oid})))
+                             {:dir (util/get-repo-dir repo-url)
+                              :oid oid})))
 
 (defn push
   ([repo-url token]
    (push repo-url token false))
   ([repo-url token force?]
    (js/window.git.push (with-auth token
-                  {:dir (util/get-repo-dir repo-url)
-                   :remote "origin"
-                   :ref default-branch
-                   :force force?}))))
+                         {:dir (util/get-repo-dir repo-url)
+                          :remote "origin"
+                          :ref default-branch
+                          :force force?}))))
 
 (defn add-commit
   [repo-url file message commit-ok-handler commit-error-handler]
@@ -153,38 +154,39 @@
 
 (defn get-diffs
   [repo-url hash-1 hash-2]
-  (let [dir (util/get-repo-dir repo-url)]
-    (p/let [diffs (js/window.workerThread.getFileStateChanges hash-1 hash-2 dir)
-            diffs (cljs-bean.core/->clj diffs)
-            diffs (remove #(= (:type %) "equal") diffs)
-            diffs (map (fn [diff]
-                         (update diff :path #(subs % 1))) diffs)]
-      diffs)))
+  (and js/window.git
+       (let [dir (util/get-repo-dir repo-url)]
+         (p/let [diffs (js/window.workerThread.getFileStateChanges hash-1 hash-2 dir)
+                 diffs (cljs-bean.core/->clj diffs)
+                 diffs (remove #(= (:type %) "equal") diffs)
+                 diffs (map (fn [diff]
+                              (update diff :path #(subs % 1))) diffs)]
+           diffs))))
 
 ;; https://isomorphic-git.org/docs/en/statusMatrix
 ;; TODO: status should not be `pulling`, otherwise the `:deleted` part is weird.
-(defn get-status-matrix
-  ([repo-url]
-   (get-status-matrix repo-url "master"))
-  ([repo-url branch]
-   (p/let [matrix (js/window.git.statusMatrix
-                   (clj->js
-                    {:dir (util/get-repo-dir repo-url)
-                     :ref "HEAD"}))]
-     (let [matrix (bean/->clj matrix)]
-       ;; added, modified, deleted
-       {:added (->> (filter (fn [[_file head-status _workdir-status _stage-status]]
-                              (= head-status 0))
-                            matrix)
-                    (map first))
-        :modified (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
-                                 (= workdir-status 2))
-                               matrix)
-                       (map first))
-        :deleted (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
-                                (= workdir-status 0))
-                              matrix)
-                      (map first))}))))
+;; (defn get-status-matrix
+;;   ([repo-url]
+;;    (get-status-matrix repo-url "master"))
+;;   ([repo-url branch]
+;;    (p/let [matrix (js/window.git.statusMatrix
+;;                    (clj->js
+;;                     {:dir (util/get-repo-dir repo-url)
+;;                      :ref "HEAD"}))]
+;;      (let [matrix (bean/->clj matrix)]
+;;        ;; added, modified, deleted
+;;        {:added (->> (filter (fn [[_file head-status _workdir-status _stage-status]]
+;;                               (= head-status 0))
+;;                             matrix)
+;;                     (map first))
+;;         :modified (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
+;;                                  (= workdir-status 2))
+;;                                matrix)
+;;                        (map first))
+;;         :deleted (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
+;;                                 (= workdir-status 0))
+;;                               matrix)
+;;                       (map first))}))))
 
 (defn find-common-base
   ([repo-url remote-id local-id]
@@ -212,10 +214,10 @@
 (defn read-blob
   [repo-url oid path]
   (js/window.git.readBlob (clj->js
-                    {:dir (util/get-repo-dir repo-url)
-                     :gitdir (str (util/get-repo-dir repo-url) ".git")
-                     :oid oid
-                     :path path})))
+                           {:dir (util/get-repo-dir repo-url)
+                            :gitdir (str (util/get-repo-dir repo-url) ".git")
+                            :oid oid
+                            :path path})))
 
 ;; * await git.writeRef({
 ;;                       *   fs,
@@ -226,10 +228,10 @@
 (defn write-ref!
   [repo-url oid]
   (js/window.git.writeRef (clj->js
-                    {:dir (util/get-repo-dir repo-url)
-                     :ref (str "refs/heads/" default-branch)
-                     :value oid
-                     :force true})))
+                           {:dir (util/get-repo-dir repo-url)
+                            :ref (str "refs/heads/" default-branch)
+                            :value oid
+                            :force true})))
 
 ;; "git log -1 --pretty=\"format:%cI\""
 ;; FIXME: Uncaught (in promise) ObjectTypeAssertionFail: Object 0698e8812d6f7b37dc98aea28de2d04714cead80 was anticipated to be a commit but it is a blob. This is probably a bug deep in isomorphic-git!

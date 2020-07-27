@@ -36,16 +36,38 @@
              true))))))
   state)
 
+(rum/defc headings-inner < rum/static
+  {:did-mount (fn [state]
+                (let [[headings _ page] (:rum/args state)
+                      first-title (second (first (:heading/title (first headings))))
+                      journal? (and (string? first-title)
+                                    (date/valid-journal-title? first-title))]
+                  (when (and journal?
+                             (= (string/lower-case first-title) (string/lower-case page)))
+                    (handler/show-notification!
+                     [:div
+                      [:p
+                       "It seems that you have multiple journal files (with different formats) for the same month, please only keep one journal file for each month."]
+                      (ui/button "Go to files"
+                        :href "/all-files"
+                        :on-click handler/clear-notification!)]
+                     :error
+                     false)))
+                state)}
+  [headings encoded-page-name page]
+  (content/content
+   encoded-page-name
+   {:hiccup (hiccup/->hiccup headings
+                             {:id encoded-page-name
+                              :start-level 2}
+                             {})}))
+
 (rum/defc headings-cp < rum/reactive
+  {}
   [repo page encoded-page-name format]
   (let [raw-headings (db/get-page-headings repo page)
         headings (db/with-dummy-heading raw-headings format nil true)]
-    (content/content
-     encoded-page-name
-     {:hiccup (hiccup/->hiccup headings
-                               {:id encoded-page-name
-                                :start-level 2}
-                               {})})))
+    (headings-inner headings encoded-page-name page)))
 
 (rum/defc journal-cp < rum/reactive
   {:init journal-include-template!

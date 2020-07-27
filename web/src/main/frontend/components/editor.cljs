@@ -809,9 +809,7 @@
 
                       :else
                       (reset! *matched-block-commands matched-block-commands))
-                    (reset! *show-block-commands false)))))
-            )))
-       )))
+                    (reset! *show-block-commands false)))))))))))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format heading-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
@@ -824,7 +822,8 @@
                      {:drop (fn [e files]
                               (upload-image id files format *image-uploading? true))}))
 
-                  ;; Here we delay this listener, otherwise the click to edit event will trigger outside click too.
+                  ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
+                  ;; which will hide the editor so no way for editing.
                   (js/setTimeout
                    (fn []
                      (mixins/hide-when-esc-or-outside
