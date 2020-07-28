@@ -1446,7 +1446,7 @@
         [?p :page/journal? ?with-journal]
         [?heading :heading/page ?p]
         [(get-else $ ?heading :heading/ref-pages 100000000) ?ref-page]
-        [(get-else $ ?ref-page :page/name "Start") ?ref-page-name]]
+        [(get-else $ ?ref-page :page/name "logseq-start-page") ?ref-page-name]]
       conn
       with-journal?)))
 
@@ -1679,8 +1679,13 @@
         current-page (:page/name (get-current-page))]
     (when-let [repo (state/get-current-repo)]
       (let [relation (get-pages-relation repo show-journal?)
-            nodes (seq relation)
+            start-page "logseq-start-page"
+            nodes (remove (fn [[source target]]
+                            (or (= source start-page)
+                                (= target start-page)))
+                          (seq relation))
             edges (build-edges nodes)
+
             nodes (build-nodes dark? current-page edges nodes)]
         {:nodes nodes
          :links edges}))))

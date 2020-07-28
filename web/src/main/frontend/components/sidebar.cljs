@@ -303,7 +303,7 @@
                      {:position "relative"}
                      (cond->
                          {:position "relative"
-                          :max-width 700
+                          :max-width 740
                           :width "100%"
                           :margin-bottom 200}
                        home?

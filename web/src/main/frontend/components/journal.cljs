@@ -40,8 +40,8 @@
 (rum/defc intro
   []
   [:div#intro.pl-1
-   [:div.content.flex-1
-    [:div.flex.flex-col.pl-1
+   [:div.flex-1
+    [:div.flex.flex-col.pl-1.ls-heading
      [:hr {:style {:margin-top 200}}]
      [:h1.title.welcome-title {:style {:margin-left -6}}
       "Hi, welcome to Logseq!"]
@@ -99,7 +99,7 @@
       :alt "screentshot"}
      ]
 
-    [:div.flex.flex-col
+    [:div.flex.flex-col.ls-heading
 
      [:h2 {} "Where are my notes saved?"]
      [:p

@@ -199,14 +199,26 @@
              [:div.text-gray-500.cursor "Click to edit"]
              content)])))))
 
+(defn- set-fixed-width!
+  []
+  (when (> (gobj/get js/window "innerWidth") 1024)
+    (let [headings (d/by-class "ls-heading")]
+      (doseq [heading headings]
+        (if (and (not (d/sel1 heading "img"))
+                 (not (d/sel1 heading "iframe")))
+          (d/add-class! heading "fixed-width")
+          (d/remove-class! heading "fixed-width"))))))
+
 (rum/defcs content < rum/reactive
   {:will-mount (fn [state]
                  (lazy-load-js state)
                  state)
    :did-mount (fn [state]
+                (set-fixed-width!)
                 (handler/render-local-images!)
                 state)
    :did-update (fn [state]
+                 (set-fixed-width!)
                  (handler/render-local-images!)
                  (lazy-load-js state)
                  state)}

@@ -92,7 +92,7 @@
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [url href label]
-  [:img.rounded-sm.shadow-xs.mb-2.mt-2
+  [:img.rounded-sm.shadow-xl.mb-2.mt-2
    {:class "object-contain object-center"
     :loading "lazy"
     :style {:max-height "24rem"}
@@ -737,7 +737,7 @@
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
   (let [edit? (state/sub [:editor/editing? edit-input-id])]
     (if edit?
-      [:div {:id (str "editor-" edit-input-id)}
+      [:div.editor-wrapper {:id (str "editor-" edit-input-id)}
        (editor/box {:heading heading
                     :heading-id uuid
                     :heading-parent-id heading-id
@@ -784,7 +784,7 @@
                                    (reset! *dragging? false)
                                    (reset! *dragging-heading nil)
                                    (handler/unhighlight-heading!))}]
-        [:div.flex.flex-col.relative
+        [:div.flex.flex-col.relative.heading-content
          (cond-> {:style {:cursor "text"
                           :min-height 24}}
            (not slide?)
@@ -1146,6 +1146,7 @@
       ["Export" "html" options content]
       [:div.export_html {:dangerouslySetInnerHTML
                          {:__html content}}]
+      ;; TODO: hiccup element check
       ["Hiccup" content]
       (reader/read-string content)
 

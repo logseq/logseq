@@ -137,19 +137,17 @@
     (cond
       priority-page?
       [:div.page
-       (ui/foldable
-        [:h1.title
-         (str "Priority \"" (string/upper-case page-name) "\"")]
-        [:div.ml-2
-         (reference/references page-name false true)])]
+       [:h1.title
+        (str "Priority \"" (string/upper-case page-name) "\"")]
+       [:div.ml-2
+        (reference/references page-name false true)]]
 
       marker-page?
       [:div.page
-       (ui/foldable
-        [:h1.title
-         (string/upper-case page-name)]
-        [:div.ml-2
-         (reference/references page-name true false)])]
+       [:h1.title
+        (string/upper-case page-name)]
+       [:div.ml-2
+        (reference/references page-name true false)]]
 
       :else
       (let [page (if heading?
@@ -163,39 +161,39 @@
                     journal?
                     (= page-name (string/lower-case (date/journal-name))))]
         [:div.flex-1.page.relative
-         (when (and (not sidebar?) (not heading?))
-           [:div.relative
+         [:div.relative
+          (when-not sidebar?
             (let [links (->>
-                          (when file
-                            [(when-not journal?
-                               {:title "Publish this page on Logseq"
-                                :options {:on-click (fn []
-                                                      (page-handler/publish-page! page-name))}})
-                             (when-not journal?
-                               {:title "Publish this page as a slide on Logseq"
-                                :options {:on-click (fn []
-                                                      (page-handler/publish-page-as-slide! page-name))}})
-                             (when-not journal?
-                               {:title "Un-publish this page on Logseq"
-                                :options {:on-click (fn []
-                                                      (page-handler/unpublish-page! page-name))}})
-                             {:title "Re-index this page"
-                              :options {:on-click (fn []
-                                                    (handler/re-index-file! file))}}])
-                          (remove nil?))]
-               (when (seq links)
-                 (ui/dropdown-with-links
-                  (fn [{:keys [toggle-fn]}]
-                    [:a {:style {:position "absolute"
-                                 :right 0
-                                 :top 20}
-                         :title "More options"
-                         :on-click toggle-fn}
-                     (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
-                  links
-                  {:modal-class (util/hiccup->class
-                                 "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")})))
-            (ui/foldable
+                         (when file
+                           [(when-not journal?
+                              {:title "Publish this page on Logseq"
+                               :options {:on-click (fn []
+                                                     (page-handler/publish-page! page-name))}})
+                            (when-not journal?
+                              {:title "Publish this page as a slide on Logseq"
+                               :options {:on-click (fn []
+                                                     (page-handler/publish-page-as-slide! page-name))}})
+                            (when-not journal?
+                              {:title "Un-publish this page on Logseq"
+                               :options {:on-click (fn []
+                                                     (page-handler/unpublish-page! page-name))}})
+                            {:title "Re-index this page"
+                             :options {:on-click (fn []
+                                                   (handler/re-index-file! file))}}])
+                         (remove nil?))]
+              (when (seq links)
+                (ui/dropdown-with-links
+                 (fn [{:keys [toggle-fn]}]
+                   [:a {:style {:position "absolute"
+                                :right 0
+                                :top 20}
+                        :title "More options"
+                        :on-click toggle-fn}
+                    (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
+                 links
+                 {:modal-class (util/hiccup->class
+                                "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")}))))
+          (when-not sidebar?
             [:a {:on-click (fn [e]
                              (util/stop e)
                              (when (gobj/get e "shiftKey")
@@ -207,34 +205,34 @@
                                   {:page page}))
                                (handler/show-right-sidebar)))}
              [:h1.title
-              (util/capitalize-all page-name)]]
+              (util/capitalize-all page-name)]])
+          [:div
+           [:div.content
+            (when (and file-path (not sidebar?) (not journal?) (not heading?))
+              [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
+               [:span.opacity-50 "File: "]
+               [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
+                                       :href (str "/file/" (util/url-encode file-path))}
+                file-path]])]
 
-            [:div
-             [:div.content
-              (when (and file-path (not sidebar?) (not journal?) (not heading?))
-                [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
-                 [:span.opacity-50 "File: "]
-                 [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                         :href (str "/file/" (util/url-encode file-path))}
-                  file-path]])]
-
-             (when (and repo (not journal?) (not heading?))
-               (let [alias (db/get-page-alias-names repo page-name)]
-                 (when (seq alias)
-                   [:div.text-sm.ml-1.mb-4 {:key "page-file"}
-                    [:span.opacity-50 "Alias: "]
-                    (for [item alias]
-                      [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
-                       (util/capitalize-all item)])])))
+           (when (and repo (not journal?) (not heading?))
+             (let [alias (db/get-page-alias-names repo page-name)]
+               (when (seq alias)
+                 [:div.text-sm.ml-1.mb-4 {:key "page-file"}
+                  [:span.opacity-50 "Alias: "]
+                  (for [item alias]
+                    [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
+                     (util/capitalize-all item)])])))
 
 
-             (when (and heading? (not sidebar?))
-               (heading/heading-parents repo heading-id format))
+           (when (and heading? (not sidebar?))
+             (heading/heading-parents repo heading-id format))
 
-             ;; headings
-             (page-headings-cp repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format)])])
+           ;; headings
+           (page-headings-cp repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format)]]
 
-         (today-queries repo today? sidebar?)
+         (when-not heading?
+           (today-queries repo today? sidebar?))
 
          ;; referenced headings
          (when-not sidebar?
@@ -249,20 +247,23 @@
 
 (defonce graph-ref (atom nil))
 (rum/defcs global-graph < rum/reactive
-  (rum/local true ::show-journal?)
+  (rum/local false ::show-journal?)
   [state]
   (let [show-journal? (get state ::show-journal?)
         theme (state/sub :ui/theme)
         [width height] (rum/react layout)
         dark? (= theme "dark")
         graph (db/build-global-graph theme @show-journal?)]
-    (graph-2d/graph
-     (graph/build-graph-opts
-      graph dark?
-      {:width (- width 24)
-       :height (- height 100)
-       :ref (fn [v] (reset! graph-ref v))
-       :ref-atom graph-ref}))))
+    (if (seq (:nodes graph))
+      (graph-2d/graph
+       (graph/build-graph-opts
+        graph dark?
+        {:width (- width 24)
+         :height (- height 100)
+         :ref (fn [v] (reset! graph-ref v))
+         :ref-atom graph-ref}))
+      [:div.ls-center.mt-20
+       [:p.opacity-70.font-medium "Empty"]])))
 
 (rum/defc all-pages < rum/reactive
   []

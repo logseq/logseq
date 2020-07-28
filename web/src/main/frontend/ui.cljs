@@ -347,13 +347,13 @@
         collapsed? (get state ::collapsed?)]
     [:div.flex.flex-col
      [:div.content
-      [:div.flex-1.flex-row.foldable-title {:style {:margin-left -40}
-                                            :on-mouse-over #(reset! control? true)
+      [:div.flex-1.flex-row.foldable-title {:on-mouse-over #(reset! control? true)
                                             :on-mouse-out #(reset! control? false)}
        [:div.hd-control.flex.flex-row.items-center
         [:a.heading-control.opacity-50.hover:opacity-100.mr-2
          {:style {:width 14
-                  :height 16}
+                  :height 16
+                  :margin-left -24}
           :on-click (fn [e]
                       (util/stop e)
                       (swap! collapsed? not))}
