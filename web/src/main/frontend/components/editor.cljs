@@ -641,7 +641,6 @@
         {
          ;; enter
          13 (fn [state e]
-              (js/console.dir (.. e -target))
               (let [{:keys [heading config]} (get-state state)]
                 (when (and heading
                            (not (:ref? config))
