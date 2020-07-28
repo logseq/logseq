@@ -92,11 +92,11 @@
     (when value
       (when-not (string/blank? selected) (reset! *selected-text selected))
       (let [[prefix pos] (commands/simple-replace! input-id value selected
-                                                  {:backward-pos (count postfix)
-                                                   :check-fn (fn [new-value prefix-pos]
-                                                               (when (>= prefix-pos 0)
-                                                                 [(subs new-value prefix-pos (+ prefix-pos 2))
-                                                                  (+ prefix-pos 2)]))})]
+                                                   {:backward-pos (count postfix)
+                                                    :check-fn (fn [new-value prefix-pos]
+                                                                (when (>= prefix-pos 0)
+                                                                  [(subs new-value prefix-pos (+ prefix-pos 2))
+                                                                   (+ prefix-pos 2)]))})]
         (case prefix
           "[["
           (do
@@ -641,6 +641,7 @@
         {
          ;; enter
          13 (fn [state e]
+              (js/console.dir (.. e -target))
               (let [{:keys [heading config]} (get-state state)]
                 (when (and heading
                            (not (:ref? config))
@@ -833,7 +834,11 @@
                         (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
                           (when on-hide
                             (on-hide value event))
-                          (state/clear-edit!)))
+                          (when
+                              (or (= event :esc)
+                                  (and (= event :click)
+                                       (not (in-auto-complete? (gdom/getElement id)))))
+                            (state/clear-edit!))))
                       :node (gdom/getElement id)))
                    100)
 

@@ -136,18 +136,20 @@
         sidebar? (:sidebar? option)]
     (cond
       priority-page?
-      [:div
-       [:h1.title
-        (str "Priority \"" (string/upper-case page-name) "\"")]
-       [:div.ml-2
-        (reference/references page-name false true)]]
+      [:div.page
+       (ui/foldable
+        [:h1.title
+         (str "Priority \"" (string/upper-case page-name) "\"")]
+        [:div.ml-2
+         (reference/references page-name false true)])]
 
       marker-page?
-      [:div
-       [:h1.title
-        (string/upper-case page-name)]
-       [:div.ml-2
-        (reference/references page-name true false)]]
+      [:div.page
+       (ui/foldable
+        [:h1.title
+         (string/upper-case page-name)]
+        [:div.ml-2
+         (reference/references page-name true false)])]
 
       :else
       (let [page (if heading?
@@ -160,25 +162,10 @@
             today? (and
                     journal?
                     (= page-name (string/lower-case (date/journal-name))))]
-        [:div.flex-1.page
+        [:div.flex-1.page.relative
          (when (and (not sidebar?) (not heading?))
-           [:div.flex.flex-row.justify-between.items-center {:key "page-title"}
-            [:div.flex.flex-row
-             [:a {:on-click (fn [e]
-                              (util/stop e)
-                              (when (gobj/get e "shiftKey")
-                                (when-let [page (db/pull repo '[*] [:page/name page-name])]
-                                  (state/sidebar-add-block!
-                                   repo
-                                   (:db/id page)
-                                   :page
-                                   {:page page}))
-                                (handler/show-right-sidebar)))}
-              [:h1.title
-               (util/capitalize-all page-name)]]]
-
-            [:div.flex-row.flex.items-center {:style {:margin-bottom "1.5rem"}}
-             (let [links (->>
+           [:div.relative
+            (let [links (->>
                           (when file
                             [(when-not journal?
                                {:title "Publish this page on Logseq"
@@ -199,35 +186,53 @@
                (when (seq links)
                  (ui/dropdown-with-links
                   (fn [{:keys [toggle-fn]}]
-                    [:a {:title "More options"
+                    [:a {:style {:position "absolute"
+                                 :right 0
+                                 :top 20}
+                         :title "More options"
                          :on-click toggle-fn}
                      (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
                   links
                   {:modal-class (util/hiccup->class
-                                 "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")})))]])
+                                 "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")})))
+            (ui/foldable
+            [:a {:on-click (fn [e]
+                             (util/stop e)
+                             (when (gobj/get e "shiftKey")
+                               (when-let [page (db/pull repo '[*] [:page/name page-name])]
+                                 (state/sidebar-add-block!
+                                  repo
+                                  (:db/id page)
+                                  :page
+                                  {:page page}))
+                               (handler/show-right-sidebar)))}
+             [:h1.title
+              (util/capitalize-all page-name)]]
 
-         (when (and file-path (not sidebar?) (not journal?) (not heading?))
-           [:div.text-sm.ml-1.mb-4 {:key "page-file"}
-            [:span.opacity-50 "File: "]
-            [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                    :href (str "/file/" (util/url-encode file-path))}
-             file-path]])
+            [:div
+             [:div.content
+              (when (and file-path (not sidebar?) (not journal?) (not heading?))
+                [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
+                 [:span.opacity-50 "File: "]
+                 [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
+                                         :href (str "/file/" (util/url-encode file-path))}
+                  file-path]])]
 
-         (when (and repo (not journal?) (not heading?))
-           (let [alias (db/get-page-alias-names repo page-name)]
-             (when (seq alias)
-               [:div.text-sm.ml-1.mb-4 {:key "page-file"}
-                [:span.opacity-50 "Alias: "]
-                (for [item alias]
-                  [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
-                   (util/capitalize-all item)])])))
+             (when (and repo (not journal?) (not heading?))
+               (let [alias (db/get-page-alias-names repo page-name)]
+                 (when (seq alias)
+                   [:div.text-sm.ml-1.mb-4 {:key "page-file"}
+                    [:span.opacity-50 "Alias: "]
+                    (for [item alias]
+                      [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
+                       (util/capitalize-all item)])])))
 
-         (when (and heading? (not sidebar?))
-           (heading/heading-parents repo heading-id format))
 
-         ;; headings
-         (page-headings-cp repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format)
+             (when (and heading? (not sidebar?))
+               (heading/heading-parents repo heading-id format))
 
+             ;; headings
+             (page-headings-cp repo page file-path page-name encoded-page-name sidebar? journal? heading? heading-id format)])])
 
          (today-queries repo today? sidebar?)
 

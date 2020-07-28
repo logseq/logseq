@@ -110,12 +110,12 @@
   (when (state/sub :custom-context-menu/show?)
     (when-let [links (state/sub :custom-context-menu/links)]
       (ui/css-transition
-      {:class-names "fade"
-       :timeout {:enter 500
-                 :exit 300}}
-      links
-      ;; (custom-context-menu-content)
-      ))))
+       {:class-names "fade"
+        :timeout {:enter 500
+                  :exit 300}}
+       links
+       ;; (custom-context-menu-content)
+       ))))
 
 (rum/defcs sidebar <
   (mixins/modal :modal/input-project)
@@ -158,7 +158,8 @@
         logged? (:name me)
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
-        page? (= :page route-name)]
+        page? (= :page route-name)
+        home? (= :home route-name)]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
                        (handler/unhighlight-heading!))}
@@ -300,10 +301,13 @@
            ;; .overflow-x-hidden
            {:style (if global-graph-pages?
                      {:position "relative"}
-                     {:position "relative"
-                      :max-width 700
-                      :width "100%"
-                      :margin-bottom 200})}
+                     (cond->
+                         {:position "relative"
+                          :max-width 700
+                          :width "100%"
+                          :margin-bottom 200}
+                       home?
+                       (dissoc :max-width)))}
            (cond
              (not indexeddb-support?)
              nil

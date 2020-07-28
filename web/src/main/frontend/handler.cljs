@@ -270,17 +270,10 @@
            (fn [day]
              (let [d (date/format (t/date-time year month day))
                    today? (= d (date/journal-name))]
-               (if (and (not logged?)
-                        today?)
-                 (util/format
-                  "%s %s\n%s\n"
-                  (config/get-heading-pattern format)
-                  d
-                  config/default-intro-content)
-                 (util/format
-                  "%s %s\n"
-                  (config/get-heading-pattern format)
-                  d))))
+               (util/format
+                "%s %s\n"
+                (config/get-heading-pattern format)
+                d)))
            (range 1 (inc last-day)))
          (apply str))))
 

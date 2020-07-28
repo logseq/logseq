@@ -749,7 +749,7 @@
                    edit-input-id
                    config)]
       (let [dragging? (rum/react *dragging?)
-            drag-attrs {:headingId (str uuid)
+            drag-attrs {:headingid (str uuid)
                         :on-click (fn [e]
                                     (let [target (gobj/get e "target")]
                                       (when-not (or (util/link? target)
@@ -1256,7 +1256,7 @@
 (rum/defc headings-container < rum/static
   [headings config]
   (let [headings (map #(dissoc % :heading/children) headings)]
-    [:div.headings-container {:style {:margin-left -24}}
+    [:div.headings-container.flex-1 {:style {:margin-left -24}}
      (build-headings headings config)]))
 
 ;; headers to hiccup
@@ -1268,12 +1268,13 @@
                     document-mode?
                     (assoc :class "doc-mode"))
      (if (:group-by-page? config)
-       (for [[page headings] headings]
-         (let [page (db/entity (:db/id page))]
-           [:div.my-2 {:key (str "page-" (:db/id page))}
-            (ui/foldable
-             (page-cp config (:page/name page))
-             (headings-container headings config))]))
+       [:div.flex.flex-col
+        (for [[page headings] headings]
+          (let [page (db/entity (:db/id page))]
+            [:div.my-2 {:key (str "page-" (:db/id page))}
+             (ui/foldable
+              (page-cp config (:page/name page))
+              (headings-container headings config))]))]
        (headings-container headings config))]))
 
 (comment

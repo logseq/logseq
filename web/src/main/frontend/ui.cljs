@@ -346,28 +346,27 @@
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)]
     [:div.flex.flex-col
-     [:div.flex.flex-row {:style {:margin-left -25}
-                          :on-mouse-over #(reset! control? true)
-                          :on-mouse-out #(reset! control? false)}
-      [:div.hd-control.flex.flex-row.items-center.mr-2
-       [:a.heading-control.opacity-50.hover:opacity-100
-        {:id (str "control-" uuid)
-         :style {:width 14
-                 :height 16
-                 :margin-right 2}
-         :on-click (fn [e]
-                     (util/stop e)
-                     (swap! collapsed? not))}
-        (cond
-          @collapsed?
-          (svg/caret-right)
+     [:div.content
+      [:div.flex-1.flex-row.foldable-title {:style {:margin-left -40}
+                                            :on-mouse-over #(reset! control? true)
+                                            :on-mouse-out #(reset! control? false)}
+       [:div.hd-control.flex.flex-row.items-center
+        [:a.heading-control.opacity-50.hover:opacity-100.mr-2
+         {:style {:width 14
+                  :height 16}
+          :on-click (fn [e]
+                      (util/stop e)
+                      (swap! collapsed? not))}
+         (cond
+           @collapsed?
+           (svg/caret-right)
 
-          @control?
-          (svg/caret-down)
+           @control?
+           (svg/caret-down)
 
-          :else
-          [:span ""])]]
-      header]
+           :else
+           [:span ""])]
+        header]]]
      [:div {:class (if @collapsed?
                      "hidden"
                      "initial")}
