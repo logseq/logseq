@@ -1009,9 +1009,15 @@
 (defn- with-heading-meta
   [repo heading]
   (if (:heading/dummy? heading)
-    heading
-    (assoc heading :heading/meta
-           (:heading/meta (db/entity repo [:heading/uuid (:heading/uuid heading)])))))
+    (if-let [page-id (:db/id (:heading/page heading))]
+      (let [page-name (:page/name (db/entity repo page-id))
+            end-pos (db/get-heading-page-end-pos repo page-name)]
+        (assoc heading :heading/meta {:pos end-pos
+                                      :end-pos end-pos}))
+      heading)
+    (if-let [meta (:heading/meta (db/entity repo [:heading/uuid (:heading/uuid heading)]))]
+     (assoc heading :heading/meta meta)
+     heading)))
 
 (defn highlight-heading!
   [heading-uuid]

@@ -29,12 +29,13 @@
             headings (db/with-dummy-heading raw-headings format nil true)]
         (when (= 1 (count raw-headings))
           (when-let [template (state/get-journal-template)]
-            (handler/insert-new-heading!
-             (first headings)
-             template
-             false
-             nil
-             true))))))
+            (when-not (string/blank? template)
+              (handler/insert-new-heading!
+               (first headings)
+               template
+               false
+               nil
+               true)))))))
   state)
 
 (rum/defc intro

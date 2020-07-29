@@ -153,6 +153,8 @@
    :page/contributors {}
    :page/journal?   {}
    :page/journal-day {}
+   ;; TODO: page meta like :page/start-pos and :page/end-pos to improve the performance for month journal pages.
+   ;; Maybe we should add daily journal or weekly journal later.
 
    ;; heading
    :heading/uuid   {:db/unique      :db.unique/identity}
@@ -1897,6 +1899,20 @@
   [repo heading-id]
   (when-let [heading (entity repo [:heading/uuid heading-id])]
     (entity repo (:db/id (:heading/page heading)))))
+
+(defn get-heading-page-end-pos
+  [repo page-name]
+  (or
+   (when-let [page-id (:db/id (entity repo [:page/name (string/lower-case page-name)]))]
+     (when-let [db (get-conn repo)]
+       (let [heading-eids (->> (d/datoms db :avet :heading/page page-id)
+                               (mapv :e))]
+         (when (seq heading-eids)
+           (let [headings (d/pull-many db '[:heading/meta] heading-eids)]
+             (-> (last (sort-by-pos headings))
+                 (get-in [:heading/meta :end-pos])))))))
+   ;; TODO: need more thoughts
+   0))
 
 (defn recompute-heading-children
   [repo heading headings]
