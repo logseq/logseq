@@ -7,6 +7,8 @@ Hello 👋, and welcome to Logseq!
 
 **Notice that it is alpha and data may be lost!**
 
+Logseq is going to be open source in the following 2 ~ 3 months, so it needs a lot of help from the community! We're looking for some people who can contribute to the programming, design, logos, docs or anything, dm me in the discord group if anyone is interested!
+
 # Logseq - What is it?
 
 Logseq is a local-first, non-linear, outliner notebook for organizing and sharing your personal knowledge base.
