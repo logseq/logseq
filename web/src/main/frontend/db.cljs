@@ -25,6 +25,8 @@
             [frontend.extensions.sci :as sci]
             [goog.array :as garray]))
 
+(defonce brain "🧠")
+(defonce brain-text "logseq-second-brain")
 ;; offline db
 (def store-name "dbs")
 (.config localforage
@@ -1111,11 +1113,11 @@
         first-heading-name (and first-heading
                                 ;; FIXME:
                                 (str (last (first (:title first-heading)))))]
-    (string/lower-case (or
-                        directive-name
-                        file-page-name
-                        first-heading-name
-                        file))))
+    (or
+     directive-name
+     file-page-name
+     first-heading-name
+     file)))
 
 (defn get-heading-content
   [utf8-content heading]
@@ -1439,20 +1441,36 @@
                          seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
+;; Ignore files with empty headings for now
+(defn get-empty-pages
+  [repo]
+  (when-let [conn (get-conn repo)]
+    (->
+     (d/q
+       '[:find ?page
+         :in $ ?with-journal ?brain-text
+         :where
+         [?p :page/name ?page]
+         (not [?p :page/file])]
+       conn)
+     (seq-flatten)
+     (distinct))))
+
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (get-conn repo)]
     (d/q
       '[:find ?page ?ref-page-name
-        :in $ ?with-journal
+        :in $ ?with-journal ?brain-text
         :where
         [?p :page/name ?page]
         [?p :page/journal? ?with-journal]
         [?heading :heading/page ?p]
         [(get-else $ ?heading :heading/ref-pages 100000000) ?ref-page]
-        [(get-else $ ?ref-page :page/name "logseq-start-page") ?ref-page-name]]
+        [(get-else $ ?ref-page :page/name ?brain-text) ?ref-page-name]]
       conn
-      with-journal?)))
+      with-journal?
+      brain-text)))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
@@ -1659,31 +1677,35 @@
 (defn- build-nodes
   [dark? current-page edges nodes]
   (mapv (fn [p]
-          (cond->
-              {:id p
-               :name p
-               :val (get-connections p edges)
-               :autoColorBy "group"
-               :group (js/Math.ceil (* (js/Math.random) 12))
-               :color "#222222"
-               }
-            dark?
-            (assoc :color "#8abbbb")
-            (= p current-page)
-            (assoc :color (if dark?
-                            "#ffffff"
-                            "#045591"))))
+          (let [brain? (= brain-text p)]
+            (cond->
+                {:id (if brain? brain-text p)
+                 :name (if brain? brain p)
+                 :val (if brain? 0 (get-connections p edges))
+                 :autoColorBy "group"
+                 :group (js/Math.ceil (* (js/Math.random) 12))
+                 :color "#222222"
+                 }
+              dark?
+              (assoc :color "#8abbbb")
+              (= p current-page)
+              (assoc :color (if dark?
+                              "#ffffff"
+                              "#045591")))))
         (set (flatten nodes))))
 
 (defn normalize-page-name
   [{:keys [nodes links] :as g}]
-  (let [all-pages (set (apply concat
-                         [(map :id nodes)
-                          (map :source links)
-                          (map :target links)]))
+  (let [all-pages (->> (set (apply concat
+                              [(map :id nodes)
+                               (map :source links)
+                               (map :target links)]))
+                       (remove (fn [x] (= x brain-text)))
+                       (map string/lower-case))
         names (pull-many '[:page/name :page/original-name] (mapv (fn [page] [:page/name page]) all-pages))
         names (zipmap (map :page/name names)
                       (map (fn [x] (get x :page/original-name (util/capitalize-all (:page/name x)))) names))
+        names (assoc names brain-text brain)
         nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
         links (mapv (fn [{:keys [source target]}]
                       {:source (get names source)
@@ -1698,13 +1720,9 @@
         current-page (:page/name (get-current-page))]
     (when-let [repo (state/get-current-repo)]
       (let [relation (get-pages-relation repo show-journal?)
-            start-page "logseq-start-page"
-            nodes (remove (fn [[source target]]
-                            (or (= source start-page)
-                                (= target start-page)))
-                          (seq relation))
+            empty-pages (get-empty-pages repo)
+            nodes (concat (seq relation) (mapv (fn [p] [p brain-text]) empty-pages))
             edges (build-edges nodes)
-
             nodes (build-nodes dark? current-page edges nodes)]
         (normalize-page-name
          {:nodes nodes
