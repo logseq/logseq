@@ -39,7 +39,13 @@
                                         (handler/redirect! {:to :home}))
                                       500))}
              "Re-index"]
+            [:a.control.ml-4 {:title "Clone again and re-index the db"
+                         :on-click (fn []
+                                     (handler/export-repo-as-json! (:url repo)))}
+             "Export as JSON"]
             [:a.text-gray-400.ml-4 {:on-click (fn []
                                                 (handler/remove-repo! repo))}
-             "Unlink"]]])]]
+             "Unlink"]]])]
+
+       [:a#download-as-json.hidden]]
       (widgets/add-repo))))

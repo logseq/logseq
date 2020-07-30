@@ -62,7 +62,12 @@
      {:key "Copy"
       :on-click (fn [_e]
                   (handler/copy-heading! heading-id))}
-     "Copy")]])
+     "Copy")
+    (ui/menu-link
+     {:key "Copy as JSON"
+      :on-click (fn [_e]
+                  (handler/copy-heading-as-json! heading-id))}
+     "Copy as JSON")]])
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after

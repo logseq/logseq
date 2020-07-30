@@ -200,6 +200,12 @@
 (defn db->string [db]
   (dt/write-transit-str db))
 
+(defn db->json [db]
+  (js/JSON.stringify
+   (into-array
+    (for [d (d/datoms db :eavt)]
+      #js [(:e d) (name (:a d)) (:v d)]))))
+
 (defn string->db [s]
   (dt/read-transit-str s))
 
@@ -1179,16 +1185,16 @@
                           page-list (when-let [list-content (:list directives)]
                                       (extract-page-list list-content))]
                       (cond->
-                          (util/remove-nils
-                           {:page/name (string/lower-case page)
-                            :page/original-name page
-                            :page/file [:file/path file]
-                            :page/journal? journal?
-                            :page/journal-day (if journal?
-                                                (date/journal-title->int (string/capitalize page))
-                                                0)
-                            :page/created-at journal-date-long
-                            :page/last-modified-at journal-date-long})
+                        (util/remove-nils
+                         {:page/name (string/lower-case page)
+                          :page/original-name page
+                          :page/file [:file/path file]
+                          :page/journal? journal?
+                          :page/journal-day (if journal?
+                                              (date/journal-title->int (string/capitalize page))
+                                              0)
+                          :page/created-at journal-date-long
+                          :page/last-modified-at journal-date-long})
                         (seq directives)
                         (assoc :page/directives directives)
 
@@ -1321,8 +1327,8 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                               {:file/path file
-                                :file/last-modified-at t}
+                             {:file/path file
+                              :file/last-modified-at t}
                              new?
                              (assoc :file/created-at t)))])]
       (transact! repo-url tx))))
@@ -1679,13 +1685,13 @@
   (mapv (fn [p]
           (let [brain? (= brain-text p)]
             (cond->
-                {:id (if brain? brain-text p)
-                 :name (if brain? brain p)
-                 :val (if brain? 0 (get-connections p edges))
-                 :autoColorBy "group"
-                 :group (js/Math.ceil (* (js/Math.random) 12))
-                 :color "#222222"
-                 }
+              {:id (if brain? brain-text p)
+               :name (if brain? brain p)
+               :val (if brain? 0 (get-connections p edges))
+               :autoColorBy "group"
+               :group (js/Math.ceil (* (js/Math.random) 12))
+               :color "#222222"
+               }
               dark?
               (assoc :color "#8abbbb")
               (= p current-page)
@@ -1774,7 +1780,7 @@
 
 (defn headings->vec-tree [col]
   (let [col (map (fn [h] (cond->
-                             h
+                           h
                            (not (:heading/dummy? h))
                            (dissoc h :heading/meta))) col)
         parent? (fn [item children]

@@ -496,38 +496,38 @@
   ([repo-url commit-message]
    (let [status (db/get-key-value repo-url :git/status)]
      (when (and
-           (not= status :push-failed)
-           (db/get-key-value repo-url :git/write-permission?)
-           (not (state/get-edit-input-id))
-           (seq (state/get-changed-files repo-url)))
-      ;; auto commit if there are any un-committed changes
-      (let [commit-message (if (string/blank? commit-message)
-                             "Logseq auto save"
-                             commit-message)]
-        (p/let [_ (git/commit repo-url commit-message)]
-          (set-git-status! repo-url :pushing)
-          (let [token (get-github-token)]
-            (util/p-handle
-             (git/push repo-url token)
-             (fn []
-               (set-git-status! repo-url nil)
-               (set-git-error! repo-url nil)
-               (set-latest-commit-if-exists! repo-url)
-               (state/clear-changed-files! repo-url))
-             (fn [error]
-               (println "Failed to push, error: " error)
-               (set-git-status! repo-url :push-failed)
-               (set-git-error! repo-url error)
-               (show-notification!
-                [:p.content
-                 "Failed to push, please "
-                 [:span.text-gray-700.font-bold
-                  "resolve any diffs first."]]
-                :error)
-               (p/let [result (git/fetch repo-url (get-github-token))
-                       {:keys [fetchHead]} (bean/->clj result)
-                       _ (set-latest-commit! repo-url fetchHead)]
-                 (redirect! {:to :diff})))))))))))
+            (not= status :push-failed)
+            (db/get-key-value repo-url :git/write-permission?)
+            (not (state/get-edit-input-id))
+            (seq (state/get-changed-files repo-url)))
+       ;; auto commit if there are any un-committed changes
+       (let [commit-message (if (string/blank? commit-message)
+                              "Logseq auto save"
+                              commit-message)]
+         (p/let [_ (git/commit repo-url commit-message)]
+           (set-git-status! repo-url :pushing)
+           (let [token (get-github-token)]
+             (util/p-handle
+              (git/push repo-url token)
+              (fn []
+                (set-git-status! repo-url nil)
+                (set-git-error! repo-url nil)
+                (set-latest-commit-if-exists! repo-url)
+                (state/clear-changed-files! repo-url))
+              (fn [error]
+                (println "Failed to push, error: " error)
+                (set-git-status! repo-url :push-failed)
+                (set-git-error! repo-url error)
+                (show-notification!
+                 [:p.content
+                  "Failed to push, please "
+                  [:span.text-gray-700.font-bold
+                   "resolve any diffs first."]]
+                 :error)
+                (p/let [result (git/fetch repo-url (get-github-token))
+                        {:keys [fetchHead]} (bean/->clj result)
+                        _ (set-latest-commit! repo-url fetchHead)]
+                  (redirect! {:to :diff})))))))))))
 
 (defn git-commit-and-push!
   [commit-message]
@@ -1017,8 +1017,8 @@
                                       :end-pos end-pos}))
       heading)
     (if-let [meta (:heading/meta (db/entity repo [:heading/uuid (:heading/uuid heading)]))]
-     (assoc heading :heading/meta meta)
-     heading)))
+      (assoc heading :heading/meta meta)
+      heading)))
 
 (defn highlight-heading!
   [heading-uuid]
@@ -1994,6 +1994,33 @@
   (when-let [heading (db/pull [:heading/uuid heading-id])]
     (let [content (:heading/content heading)]
       (util/copy-to-clipboard! content))))
+
+(defn copy-heading-as-json!
+  [heading-id]
+  (when-let [repo (state/get-current-repo)]
+    (let [heading-children (db/get-heading-and-children repo heading-id)]
+      (util/copy-to-clipboard! (js/JSON.stringify (bean/->js heading-children))))))
+
+(defn copy-page-as-json!
+  [page-name]
+  (when-let [repo (state/get-current-repo)]
+    (let [directives (db/get-page-directives page-name)
+          headings (db/get-page-headings repo page-name)]
+      (util/copy-to-clipboard!
+       (js/JSON.stringify
+        (bean/->js
+         {:directives directives
+          :headings headings}))))))
+
+(defn export-repo-as-json!
+  [repo]
+  (when-let [db (db/get-conn repo)]
+    (let [db-json (db/db->json db)
+          data-str (str "data:text/json;charset=utf-8," (js/encodeURIComponent db-json))]
+      (when-let [anchor (gdom/getElement "download-as-json")]
+        (.setAttribute anchor "href" data-str)
+        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".json"))
+        (.click anchor)))))
 
 (comment
   (defn debug-latest-commits

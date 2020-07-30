@@ -180,7 +180,10 @@
                                                      (page-handler/unpublish-page! page-name))}})
                             {:title "Re-index this page"
                              :options {:on-click (fn []
-                                                   (handler/re-index-file! file))}}])
+                                                   (handler/re-index-file! file))}}
+                            {:title "Copy the whole page as JSON"
+                             :options {:on-click (fn []
+                                                   (handler/copy-page-as-json! page-name))}}])
                          (remove nil?))]
               (when (seq links)
                 (ui/dropdown-with-links

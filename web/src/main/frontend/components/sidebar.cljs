@@ -105,8 +105,9 @@
        (and logged? (empty? (:repos me)))
        (widgets/add-repo)
 
+       ;; FIXME: why will this happen?
        :else
-       [:div "Something wrong"])]))
+       [:div])]))
 
 (rum/defc custom-context-menu < rum/reactive
   []
