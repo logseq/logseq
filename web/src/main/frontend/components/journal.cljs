@@ -170,6 +170,11 @@
        " integration"]
       [:li
        {}
+       [:a {:href "https://revealjs.com/"
+            :target "_blank"} "reveal.js"]
+       " slide support"]
+      [:li
+       {}
        "Document built-in supports:"
        [:ul
         {}
