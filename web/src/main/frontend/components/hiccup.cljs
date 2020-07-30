@@ -174,7 +174,8 @@
 
 (defn page-cp
   [{:keys [html-export?] :as config} page]
-  (let [page (string/lower-case page)
+  (let [original-page-name page
+        page (string/lower-case page)
         href (if html-export?
                (util/encode-str page)
                (str "/page/" (util/encode-str page)))]
@@ -190,7 +191,7 @@
                        :page
                        {:page page}))
                     (handler/show-right-sidebar)))}
-     (util/capitalize-all page)]))
+     original-page-name]))
 
 (defn- latex-environment-content
   [name option content]
@@ -225,12 +226,13 @@
        [repo :page/headings page-id])))
   [config page-name]
   (let [page-name (string/lower-case page-name)
+        page-original-name (:page/original-name (db/entity [:page/name page-name]))
         headings (db/get-page-headings (state/get-current-repo) page-name)]
     [:div.embed-page.py-2.my-2.px-3.bg-base-2
      [:p
       [:code "Embed page:"]
       [:a.ml-2 {:href (str "/page/" (util/encode-str page-name))}
-       (util/capitalize-all page-name)]]
+       page-original-name]]
      (headings-container headings (assoc config :embed? true))]))
 
 (defn inline

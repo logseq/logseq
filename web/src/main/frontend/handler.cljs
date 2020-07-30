@@ -879,6 +879,7 @@
      ;; remember to not to remove the encrypted token
      (storage/set :git/current-repo config/local-repo)
      (storage/remove :git/clone-repo)
+     (storage/remove "git-changed-files")
      (clear-store!))
    (p/catch (fn [e]
               (println "sign out error: ")
@@ -999,7 +1000,7 @@
                 "File already exists!"]
                :error)
               ;; create the file
-              (let [content (default-content-with-title format (util/capitalize-all title))]
+              (let [content (default-content-with-title format title)]
                 (p/let [_ (fs/create-if-not-exists dir file-path content)]
                   (db/reset-file! repo path content)
                   (git-add repo path)
@@ -1178,7 +1179,7 @@
                   "File already exists!"]
                  :error)
                 ;; create the file
-                (let [content (default-content-with-title format (util/capitalize-all (:page/name page)))]
+                (let [content (default-content-with-title format (:page/original-name page))]
                   (p/let [_ (fs/create-if-not-exists dir file-path content)]
                     (db/reset-file! repo path (str content
                                                    (remove-level-spaces value (keyword format))))
@@ -1243,7 +1244,7 @@
               "File already exists!"]
              :error)
             ;; create the file
-            (let [content (default-content-with-title format (util/capitalize-all (:page/name page)))]
+            (let [content (default-content-with-title format (:page/original-name page))]
               (p/let [_ (fs/create-if-not-exists dir file-path content)]
                 (db/reset-file! repo path
                                 (str content

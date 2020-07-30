@@ -207,7 +207,7 @@
        (for [page pages]
          [:a.mb-1 {:key (str "recent-page-" page)
                    :href (str "/page/" page)}
-          (util/capitalize-all page)]))]))
+          page]))]))
 
 (rum/defcs foldable-list <
   (rum/local false ::fold?)

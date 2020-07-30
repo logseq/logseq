@@ -102,8 +102,11 @@
        loading-files?
        (ui/loading "Loading files")
 
-       (empty? (:repos me))
-       (widgets/add-repo))]))
+       (and logged? (empty? (:repos me)))
+       (widgets/add-repo)
+
+       :else
+       [:div "Something wrong"])]))
 
 (rum/defc custom-context-menu < rum/reactive
   []
@@ -211,7 +214,7 @@
              {:href "/login/github"
               :on-click (fn []
                           (storage/remove :git/current-repo))}
-             "Login with Github"])
+             "Login with GitHub"])
 
           (widgets/sync-status)
 

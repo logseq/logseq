@@ -53,18 +53,23 @@
 
 (defn hide-when-esc-or-outside
   [state & {:keys [on-hide node]}]
-  (let [dom-node (or node (rum/dom-node state))]
-    (listen state js/window "click"
-            (fn [e]
-              ;; If the click target is outside of current node
-              (when-not (dom/contains dom-node (.. e -target))
-                (on-hide state e :click))))
-    (listen state dom-node "keydown"
-            (fn [e]
-              (case (.-keyCode e)
-                ;; Esc
-                27 (on-hide state e :esc)
-                nil)))))
+  (try
+    (let [dom-node (rum/dom-node state)]
+      (when-let [dom-node (or node dom-node)]
+       (listen state js/window "click"
+               (fn [e]
+                 ;; If the click target is outside of current node
+                 (when-not (dom/contains dom-node (.. e -target))
+                   (on-hide state e :click))))
+       (listen state dom-node "keydown"
+               (fn [e]
+                 (case (.-keyCode e)
+                   ;; Esc
+                   27 (on-hide state e :esc)
+                   nil)))))
+    (catch js/Error e
+      ;; TODO: Unable to find node on an unmounted component.
+      nil)))
 
 (defn resize-layout
   [state ref]

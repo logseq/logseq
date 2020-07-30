@@ -141,6 +141,7 @@
 
    :page/id         {:db/unique      :db.unique/identity}
    :page/name       {:db/unique      :db.unique/identity}
+   :page/original-name {}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
    :page/list {}
@@ -658,7 +659,7 @@
   (->> (q repo [:pages] {:use-cache? false}
          '[:find ?page-name
            :where
-           [?page :page/name ?page-name]])
+           [?page :page/original-name ?page-name]])
        (react)
        (map first)))
 
@@ -692,7 +693,7 @@
     (->> (q repo [:pages] {:use-cache? false}
            '[:find ?page-name ?modified-at
              :where
-             [?page :page/name ?page-name]
+             [?page :page/original-name ?page-name]
              [(get-else $ ?page :page/journal? false) ?journal]
              [(get-else $ ?page :page/last-modified-at 0) ?modified-at]
              ;; (or
@@ -1073,7 +1074,7 @@
            :where
            [?file :file/path ?path]
            [?page :page/file ?file]
-           [?page :page/name ?page-name]]
+           [?page :page/original-name ?page-name]]
          conn file-path)
        seq-flatten
        first))))
@@ -1177,7 +1178,8 @@
                                       (extract-page-list list-content))]
                       (cond->
                           (util/remove-nils
-                           {:page/name page
+                           {:page/name (string/lower-case page)
+                            :page/original-name page
                             :page/file [:file/path file]
                             :page/journal? journal?
                             :page/journal-day (if journal?
@@ -1229,7 +1231,8 @@
                  pages
                  (map
                    (fn [page]
-                     {:page/name (string/lower-case page)})
+                     {:page/original-name page
+                      :page/name (string/lower-case page)})
                    @ref-pages))]
       (vec
        (->> (concat
@@ -1277,8 +1280,7 @@
                  (if (and (= level 1)
                           (when-let [title (last (first title))]
                             (date/valid-journal-title? title)))
-                   (let [page-name (let [title (last (first title))]
-                                     (and title (string/lower-case title)))
+                   (let [page-name (last (first title))
                          new-pages (assoc pages page-name [heading])]
                      (recur new-pages page-name tl))
                    (let [new-pages (update pages last-page-name (fn [headings]
@@ -1643,30 +1645,28 @@
 (defn- build-edges
   [edges]
   (map (fn [[from to]]
-         {:source (util/capitalize-all from)
-          :target (util/capitalize-all to)})
+         {:source from
+          :target to})
     edges))
 
 (defn- get-connections
   [page edges]
-  (let [page (util/capitalize-all page)]
-    (count (filter (fn [{:keys [source target]}]
-                     (or (= source page)
-                         (= target page)))
-                   edges))))
+  (count (filter (fn [{:keys [source target]}]
+                   (or (= source page)
+                       (= target page)))
+                 edges)))
 
 (defn- build-nodes
   [dark? current-page edges nodes]
   (mapv (fn [p]
           (cond->
-              (let [p (util/capitalize-all p)]
-                {:id p
-                 :name p
-                 :val (get-connections p edges)
-                 :autoColorBy "group"
-                 :group (js/Math.ceil (* (js/Math.random) 12))
-                 :color "#222222"
-                 })
+              {:id p
+               :name p
+               :val (get-connections p edges)
+               :autoColorBy "group"
+               :group (js/Math.ceil (* (js/Math.random) 12))
+               :color "#222222"
+               }
             dark?
             (assoc :color "#8abbbb")
             (= p current-page)
@@ -1674,6 +1674,23 @@
                             "#ffffff"
                             "#045591"))))
         (set (flatten nodes))))
+
+(defn normalize-page-name
+  [{:keys [nodes links] :as g}]
+  (let [all-pages (set (apply concat
+                         [(map :id nodes)
+                          (map :source links)
+                          (map :target links)]))
+        names (pull-many '[:page/name :page/original-name] (mapv (fn [page] [:page/name page]) all-pages))
+        names (zipmap (map :page/name names)
+                      (map (fn [x] (get x :page/original-name (util/capitalize-all (:page/name x)))) names))
+        nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
+        links (mapv (fn [{:keys [source target]}]
+                      {:source (get names source)
+                       :target (get names target)})
+                    links)]
+    {:nodes nodes
+     :links links}))
 
 (defn build-global-graph
   [theme show-journal?]
@@ -1689,14 +1706,16 @@
             edges (build-edges nodes)
 
             nodes (build-nodes dark? current-page edges nodes)]
-        {:nodes nodes
-         :links edges}))))
+        (normalize-page-name
+         {:nodes nodes
+          :links edges})))))
 
 (defn build-page-graph
   [page theme]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [page (string/lower-case page)
+            original-page-name (:page/original-name (entity [:page/name page]))
             ref-pages (get-page-referenced-pages repo page)
             mentioned-pages (get-pages-that-mentioned-page repo page)
             edges (concat
@@ -1731,8 +1750,9 @@
                        (remove nil?)
                        (distinct)
                        (build-nodes dark? page edges))]
-        {:nodes nodes
-         :links edges}))))
+        (normalize-page-name
+         {:nodes nodes
+          :links edges})))))
 
 (defn headings->vec-tree [col]
   (let [col (map (fn [h] (cond->

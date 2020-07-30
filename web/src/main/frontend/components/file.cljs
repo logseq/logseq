@@ -80,14 +80,14 @@
                                 :on-click (fn [e]
                                             (util/stop e)
                                             (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/entity [:page/name page])]
+                                              (when-let [page (db/entity [:page/name (string/lower-case page)])]
                                                 (state/sidebar-add-block!
                                                  (state/get-current-repo)
                                                  (:db/id page)
                                                  :page
                                                  {:page page}))
                                               (handler/show-right-sidebar)))}
-         (util/capitalize-all page)]])
+         page]])
 
      (when (and config? (state/logged?))
        [:a.mb-8.block {:on-click (fn [_e] (handler/sync-project-settings!))}

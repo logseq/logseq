@@ -97,10 +97,10 @@
     (walk/postwalk
      (fn [form]
        (when-let [page (get-page-reference form)]
-         (swap! ref-pages conj (string/lower-case page)))
+         (swap! ref-pages conj page))
        (when-let [tag (get-tag form)]
          (when (util/tag-valid? tag)
-           (swap! ref-pages conj (string/lower-case tag))))
+           (swap! ref-pages conj tag)))
        form)
      (concat title body))
     (let [ref-pages (remove string/blank? @ref-pages)]
@@ -206,14 +206,16 @@
         headings))))
 
 (defn- page-with-journal
-  [page-name]
-  (when page-name
-    (let [page-name (string/lower-case page-name)]
+  [original-page-name]
+  (when original-page-name
+    (let [page-name (string/lower-case original-page-name)]
       (if-let [d (date/journal-title->int (string/capitalize page-name))]
-       {:page/name page-name
-        :page/journal? true
-        :page/journal-day d}
-       {:page/name page-name}))))
+        {:page/name page-name
+         :page/original-name original-page-name
+         :page/journal? true
+         :page/journal-day d}
+        {:page/name page-name
+         :page/original-name original-page-name}))))
 
 (defn parse-heading
   [{:heading/keys [uuid content meta file page] :as heading} format]
@@ -249,8 +251,7 @@
                                         {:heading/ref-pages
                                          (mapv
                                           (fn [page]
-                                            (let [page-name (string/lower-case page)
-                                                  page (page-with-journal page-name)]
+                                            (let [page (page-with-journal page)]
                                               (swap! ref-pages-atom conj page)
                                               page))
                                           ref-pages)}))]
