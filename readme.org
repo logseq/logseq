@@ -1,44 +1,52 @@
 * Logseq
-  A client-only note app which syncs with your github repo.
+   Logseq is a local-first, non-linear, outliner notebook for organizing and sharing your personal knowledge base.
 
 ** Website
    https://logseq.com
 
-** Setup
+** Setup development environment
+
+*** 1. Requirements
+
+**** Java && Clojure
+
+**** Postgresql
+
+**** Nodejs
+
+*** 2. Add environment variables
+       #+BEGIN_SRC sh
+         export GITHUB_APP_KEY="ecaceddfdb7158c4e384"
+         export GITHUB_APP_SECRET="3e337d07f61585576362c95dcb8cd98756e43f65"
+         export GITHUB_REDIRECT_URI="http://localhost:3000/auth/github"
+         export JWT_SECRET="4fa183cf1d28460498b13330835e80ad"
+         export COOKIE_SECRET="10a42ca724e34f4db6086a772d787034"
+         export DATABASE_URL="postgres://localhost:5432/logseq"
+       #+END_SRC
+
+*** 3. Start the clojure server
+
+**** Using in Emacs
+     #+BEGIN_EXAMPLE
+        1. C-c M-j and select "clojure-cli"
+        2. input "(go)" in the clojure repl
+     #+END_EXAMPLE
+
+**** Using in Cli
+     #+BEGIN_EXAMPLE
+        1. clj -A:dev
+        2. input "(go)" in the clojure repl
+     #+END_EXAMPLE
 
 
-** File directory example
-   #+BEGIN_SRC shell
-     tasks.org                       # the app will extract todos from this file
-     other_notes.org
-     other_notes.markdown
-     ...
-   #+END_SRC
+*** 4. Compile javascript
+    #+BEGIN_SRC sh
+      cd web
+      yarn
+      yarn watch
+      open http://localhost:3000
+    #+END_SRC
 
-** Hidden directories or files
-   #+BEGIN_SRC shell
-     touch .hidden                   # root directory
-     # add directories or files like:
-     # /directory
-     # file
-     # /directory/file
-   #+END_SRC
-
-** Deploy to your now.sh instance
-   #+BEGIN_SRC shell
-     ./deploy.sh
-   #+END_SRC
-
-** Develop
-   #+BEGIN_SRC shell
-     yarn install
-     yarn watch
-     open http://localhost:3000
-   #+END_SRC
-
-*** Or if you are using Emacs
-    1. M-x cider-jack-in
-    2. type ~(cljs-repl)~ in the repl
 *** Notes
-    1. deps should be synced between the two files: ~project.clj~ and ~deps.edn~.
-       ~project.clj~ is for dokku deployment.
+    1. The clojure deps should be synced between the two files: ~project.clj~ and ~deps.edn~.
+       We need the ~project.clj~ because it's used for dokku deployment.
