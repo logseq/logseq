@@ -46,7 +46,9 @@
   (js/window.git.clone (with-auth token
                          {:dir (util/get-repo-dir repo-url)
                           :url repo-url
-                          :corsProxy "https://cors.isomorphic-git.org"
+                          :corsProxy (or
+                                      (:cors-proxy (state/get-config repo-url))
+                                      "https://cors.isomorphic-git.org")
                           :singleBranch true
                           :depth 1})))
 
