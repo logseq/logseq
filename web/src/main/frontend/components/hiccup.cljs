@@ -174,8 +174,9 @@
 
 (defn page-cp
   [{:keys [html-export?] :as config} page]
-  (let [original-page-name page
-        page (string/lower-case page)
+  (let [page-name (:page/name page)
+        original-page-name (get page :page/original-name page-name)
+        page (string/lower-case page-name)
         href (if html-export?
                (util/encode-str page)
                (str "/page/" (util/encode-str page)))]
@@ -333,7 +334,7 @@
               [:span
                (svg/excalidraw-logo)
                (string/capitalize (draw/get-file-title s))]]
-             (page-cp config s))
+             (page-cp config {:page/name s}))
            (when-not html-export? [:span.text-gray-500 "]]"])])
 
         :else
@@ -1276,7 +1277,7 @@
           (let [page (db/entity (:db/id page))]
             [:div.my-2 {:key (str "page-" (:db/id page))}
              (ui/foldable
-              (page-cp config (:page/name page))
+              (page-cp config page)
               (headings-container headings config))]))]
        (headings-container headings config))]))
 

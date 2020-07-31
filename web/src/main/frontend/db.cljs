@@ -484,7 +484,7 @@
 (defn sort-headings
   [headings]
   (let [pages-ids (map (comp :db/id :heading/page) headings)
-        pages (pull-many '[:db/id :page/last-modified-at :page/name] pages-ids)
+        pages (pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         headings (map
                    (fn [heading]
