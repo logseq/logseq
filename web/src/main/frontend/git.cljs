@@ -48,7 +48,7 @@
                           :url repo-url
                           :corsProxy (or
                                       (:cors-proxy (state/get-config repo-url))
-                                      "https://cors.isomorphic-git.org")
+                                      "https://cors-proxy-logseq.vercel.app")
                           :singleBranch true
                           :depth 1})))
 
