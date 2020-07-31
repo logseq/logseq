@@ -158,11 +158,11 @@
        (map first matched)
        {:on-chosen (fn [chosen]
                      (reset! commands/*current-command chosen)
-                     (let [restore-slash? (not (contains? #{"Page Reference"
-                                                            "Link"
-                                                            "Image Link"
-                                                            "Date Picker"} chosen))]
-                       (insert-command! id (get (into {} matched) chosen)
+                     (let [command-steps (get (into {} matched) chosen)
+                           restore-slash? (and
+                                           (not (contains? (set (map first command-steps)) :editor/input))
+                                           (not (contains? #{"Date Picker"} chosen)))]
+                       (insert-command! id command-steps
                                         format
                                         {:restore? restore-slash?})))
         :class "black"}))))
@@ -347,15 +347,19 @@
           input-value (get state ::input-value)]
       (when (seq input-option)
         [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
-         (for [{:keys [id] :as input-item} input-option]
+         (for [{:keys [id placeholder type] :as input-item} input-option]
            [:div.my-3
             [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
              (merge
-              {:key (str "modal-input-" (name id))
-               :id (str "modal-input-" (name id))
-               :on-change (fn [e]
-                            (swap! input-value assoc id (util/evalue e)))
-               :auto-complete "off"}
+              (cond->
+                  {:key (str "modal-input-" (name id))
+                   :id (str "modal-input-" (name id))
+                   :type (or type "text")
+                   :on-change (fn [e]
+                                (swap! input-value assoc id (util/evalue e)))
+                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                placeholder
+                (assoc :placeholder placeholder))
               (dissoc input-item :id))]])
          (ui/button
            "Submit"

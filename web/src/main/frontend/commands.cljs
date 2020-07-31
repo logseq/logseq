@@ -57,6 +57,18 @@
                                       :backward-pos 5}]
    [:editor/search-block :embed]])
 
+;; Stop now!!
+;; (def commands-plugins
+;;   {"Encrypt text" {:steps [[:editor/input (str slash "encrypt")]
+;;                            [:editor/show-input [{:id :hint
+;;                                                  :placeholder "Hint"}
+;;                                                 {:id :password
+;;                                                  :type "password"}]]]
+;;                    :insert-fn (fn [hint password]
+;;                                 (util/format "{{{encrypt %s}}}"
+;;                                              (pr-str {:hint hint
+;;                                                       :content content})))}})
+
 ;; Credits to roamresearch.com
 (defn commands-map
   []
