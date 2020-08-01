@@ -8,11 +8,11 @@
 
 *** 1. Requirements
 
-**** Java && Clojure
+**** [[https://clojure.org/guides/getting_started][Java && Clojure]]
 
-**** Postgresql
+**** [[https://www.postgresql.org/download/][Postgresql]]
 
-**** Nodejs
+**** [[https://nodejs.org/en/][Nodejs]]
 
 *** 2. Add environment variables
        #+BEGIN_SRC sh
@@ -39,6 +39,12 @@
         2. input "(go)" in the clojure repl
      #+END_EXAMPLE
 
+**** Using in Calva (Visual Studio Code )
+     #+BEGIN_EXAMPLE
+         1. Issue the command Start a REPL server and Connect: ctrl+alt+c ctrl+alt+j
+         2. Select clojure-cli
+         3. input "(go)" in the clojure repl
+     #+END_EXAMPLE
 
 *** 4. Compile javascript
     #+BEGIN_SRC sh
