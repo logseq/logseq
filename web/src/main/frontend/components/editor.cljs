@@ -228,7 +228,7 @@
                  (when (> (count edit-content) current-pos)
                    (subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
-                              (map util/capitalize-all (get-matched-pages q)))
+                              (get-matched-pages q))
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-page-search false)
                                (insert-command! id
