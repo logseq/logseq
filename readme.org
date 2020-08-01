@@ -23,7 +23,6 @@
          export JWT_SECRET="4fa183cf1d28460498b13330835e80ad"
          export COOKIE_SECRET="10a42ca724e34f4db6086a772d787034"
          export DATABASE_URL="postgres://localhost:5432/logseq"
-         export ENVIRONMENT="dev"
        #+END_SRC
 
 *** 3. Start the clojure server
