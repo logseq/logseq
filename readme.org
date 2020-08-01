@@ -16,6 +16,7 @@
 
 *** 2. Add environment variables
        #+BEGIN_SRC sh
+         export ENVIRONMENT="dev"
          export GITHUB_APP_KEY="ecaceddfdb7158c4e384"
          export GITHUB_APP_SECRET="3e337d07f61585576362c95dcb8cd98756e43f65"
          export GITHUB_REDIRECT_URI="http://localhost:3000/auth/github"
