@@ -180,31 +180,65 @@
   (when-not (date/valid-journal-title? page-name)
     (when-let [repo (state/get-current-repo)]
       (let [page-name (string/lower-case page-name)]
-       (when-let [file (db/get-page-file page-name)]
-         (let [file-path (:file/path file)]
-           ;; delete file
-           (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-           (when-let [files-conn (db/get-files-conn repo)]
-             (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
+        (when-let [file (db/get-page-file page-name)]
+          (let [file-path (:file/path file)]
+            ;; delete file
+            (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+            (when-let [files-conn (db/get-files-conn repo)]
+              (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
-           ;; delete headings
-           (let [headings (db/get-page-headings page-name)
-                 tx-data (mapv
-                          (fn [heading]
-                            [:db.fn/retractEntity [:heading/uuid (:heading/uuid heading)]])
-                          headings)]
-             (db/transact! tx-data)
-             ;; remove file
-             (->
-              (p/let [_ (git/remove-file repo file-path)
-                      _result (fs/unlink (str (util/get-repo-dir repo)
-                                             "/"
-                                             file-path)
-                                        nil)]
-                (state/git-add! repo (str "- " file-path)))
-              (p/catch (fn [err]
-                         (prn "error: " err))))
+            ;; delete headings
+            (let [headings (db/get-page-headings page-name)
+                  tx-data (mapv
+                           (fn [heading]
+                             [:db.fn/retractEntity [:heading/uuid (:heading/uuid heading)]])
+                           headings)]
+              (db/transact! tx-data)
+              ;; remove file
+              (->
+               (p/let [_ (git/remove-file repo file-path)
+                       _result (fs/unlink (str (util/get-repo-dir repo)
+                                               "/"
+                                               file-path)
+                                          nil)]
+                 (state/git-add! repo (str "- " file-path)))
+               (p/catch (fn [err]
+                          (prn "error: " err))))
 
-             (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+              (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
-             (ok-handler))))))))
+              (ok-handler))))))))
+
+(defn rename!
+  [old-name new-name]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
+      (let [old-original-name (:page/original-name page)]
+        (d/transact! (db/get-conn repo false)
+          [{:db/id (:db/id page)
+            :page/name (string/lower-case new-name)
+            :page/original-name new-name}])
+
+        (page-add-directives! (string/lower-case new-name) {:title new-name})
+
+        ;; update all files which have references to this page
+        (let [files (db/get-files-that-referenced-page (:db/id page))]
+          (doseq [file-path files]
+            (let [file-content (db/get-file file-path)
+                  ;; FIXME: not safe
+                  new-content (string/replace file-content
+                                              (util/format "[[%s]]" old-original-name)
+                                              (util/format "[[%s]]" new-name))]
+              (handler/alter-file repo
+                                  file-path
+                                  new-content
+                                  {:reset? true
+                                   :re-render-root? false})))))
+
+      ;; TODO: update browser history, remove the current one
+
+      ;; Redirect to the new page
+      (handler/redirect! {:to :page
+                          :path-params {:name (util/encode-str (string/lower-case new-name))}})
+
+      (handler/show-notification! "Page renamed successfully!" :success))))

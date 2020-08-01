@@ -1527,6 +1527,23 @@
              sort-headings
              group-by-page)))))
 
+(defn get-files-that-referenced-page
+  [page-id]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [db (get-conn repo)]
+      (->> (d/q
+             '[:find ?path
+               :in $ ?page-id
+               :where
+               [?heading :heading/ref-pages ?page-id]
+               [?heading :heading/page ?p]
+               [?p :page/file ?f]
+               [?f :file/path ?path]
+               ]
+             db
+             page-id)
+           (seq-flatten)))))
+
 (defn get-page-unlinked-references
   [page]
   (when-let [repo (state/get-current-repo)]

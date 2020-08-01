@@ -317,7 +317,7 @@
   (let [show? (state/sub sub-path)
         close-fn #(state/set-state! sub-path false)]
     [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
-     {:style {:z-index (if show? 10 -10)}}
+     {:style {:z-index (if show? 10 -1)}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
