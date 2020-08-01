@@ -57,3 +57,4 @@
 *** Notes
     1. The clojure deps should be synced between the two files: ~project.clj~ and ~deps.edn~.
        We need the ~project.clj~ because it's used for dokku deployment.
+    2. To use github push, comment this line https://github.com/tiensonqin/logseq/blob/master/web/src/main/frontend/handler.cljs#L751
