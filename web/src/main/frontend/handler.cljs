@@ -94,6 +94,10 @@
     (rfe/push-state to path-params query-params)
     (rfe/replace-state to path-params query-params)))
 
+(defn redirect-to-home!
+  []
+  (redirect! {:to :home}))
+
 (defn redirect-with-fragment!
   [path]
   (.pushState js/window.history nil "" path)

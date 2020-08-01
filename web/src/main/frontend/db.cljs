@@ -157,7 +157,10 @@
    :page/journal?   {}
    :page/journal-day {}
    ;; TODO: page meta like :page/start-pos and :page/end-pos to improve the performance for month journal pages.
-   ;; Maybe we should add daily journal or weekly journal later.
+   ;; ;; Maybe we should add daily journal or weekly journal later.
+   ;; :page/headings {:db/valueType   :db.type/ref
+   ;;                 :db/cardinality :db.cardinality/many
+   ;;                 :db/isComponent true}
 
    ;; heading
    :heading/uuid   {:db/unique      :db.unique/identity}
@@ -1086,6 +1089,11 @@
          conn file-path)
        seq-flatten
        first))))
+
+(defn get-page-file
+  [page-name]
+  (some-> (entity [:page/name page-name])
+          :page/file))
 
 (defn get-file-page-id
   [file-path]

@@ -1,12 +1,17 @@
 (ns frontend.handler.page
   (:require [clojure.string :as string]
             [frontend.db :as db]
+            [datascript.core :as d]
             [frontend.state :as state]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler :as handler]
-            [clojure.walk :as walk]))
+            [frontend.date :as date]
+            [clojure.walk :as walk]
+            [frontend.git :as git]
+            [frontend.fs :as fs]
+            [promesa.core :as p]))
 
 (defn page-add-directives!
   [page-name directives]
@@ -169,3 +174,37 @@
       (handler/show-notification!
        "Can't find the permalink of this page!"
        :error))))
+
+(defn delete!
+  [page-name ok-handler]
+  (when-not (date/valid-journal-title? page-name)
+    (when-let [repo (state/get-current-repo)]
+      (let [page-name (string/lower-case page-name)]
+       (when-let [file (db/get-page-file page-name)]
+         (let [file-path (:file/path file)]
+           ;; delete file
+           (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+           (when-let [files-conn (db/get-files-conn repo)]
+             (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
+
+           ;; delete headings
+           (let [headings (db/get-page-headings page-name)
+                 tx-data (mapv
+                          (fn [heading]
+                            [:db.fn/retractEntity [:heading/uuid (:heading/uuid heading)]])
+                          headings)]
+             (db/transact! tx-data)
+             ;; remove file
+             (->
+              (p/let [_ (git/remove-file repo file-path)
+                      _result (fs/unlink (str (util/get-repo-dir repo)
+                                             "/"
+                                             file-path)
+                                        nil)]
+                (state/git-add! repo (str "- " file-path)))
+              (p/catch (fn [err]
+                         (prn "error: " err))))
+
+             (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+
+             (ok-handler))))))))
