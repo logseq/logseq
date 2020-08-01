@@ -307,10 +307,10 @@
                      {:position "relative"}
                      (cond->
                          {:position "relative"
-                          :max-width 740
+                          :max-width 700
                           :width "100%"
                           :margin-bottom 200}
-                       home?
+                       (and (not logged?) home?)
                        (dissoc :max-width)))}
            (cond
              (not indexeddb-support?)
