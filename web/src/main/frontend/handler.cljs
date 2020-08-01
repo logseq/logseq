@@ -451,8 +451,7 @@
                                [:span.text-gray-700.font-bold
                                 "resolve any diffs first."]]
                               :error)
-                             (redirect! {:to :diff})
-                             ))))))))))
+                             (redirect! {:to :diff})))))))))))
 
 (defn pull-current-repo
   []
@@ -577,15 +576,20 @@
        (db/mark-repo-as-cloned repo-url)
        (set-latest-commit-if-exists! repo-url))
      (fn [e]
-       (prn "Clone failed, reason: " e)
+       (println "Clone failed, error: ")
+       (js/console.dir e)
        (state/set-cloning? false)
        (set-git-status! repo-url :clone-failed)
        (set-git-error! repo-url e)
-       (let [status-code (some-> (gobj/get e "data")
-                                 (gobj/get "statusCode"))]
-         (when (contains? #{401 404} status-code)
-           ;; TODO: notification
-           ))))))
+
+       (show-notification!
+        [:p
+         "Please make sure that your Github Personal Token has the right scopes. Follow this link to learn how to set the scopes: "
+         [:a {:href "https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-"
+              :target "_blank"}
+          "How to create a Github personal access token?"]]
+        :error
+        false)))))
 
 (defn new-notification
   [text]
