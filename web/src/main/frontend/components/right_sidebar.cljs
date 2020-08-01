@@ -50,11 +50,11 @@
           :target "_blank"}
       "About Logseq"]]
     [:li
-     [:a {:href "https://github.com/logseq/logseq/issues/new"
+     [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
           :target "_blank"}
       "Bug report"]]
     [:li
-     [:a {:href "https://github.com/logseq/logseq/issues/new"
+     [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="
           :target "_blank"}
       "Feature request"]]
     [:li
