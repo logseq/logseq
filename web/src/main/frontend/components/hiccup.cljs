@@ -921,6 +921,25 @@
 
      (dnd-separator-wrapper heading slide? false)]))
 
+(defn divide-lists
+  [[f & l]]
+  (loop [l l
+         ordered? (:ordered f)
+         result [[f]]]
+    (if (seq l)
+      (let [cur (first l)
+            cur-ordered? (:ordered cur)]
+        (if (= ordered? cur-ordered?)
+          (recur
+           (rest l)
+           cur-ordered?
+           (update result (dec (count result)) conj cur))
+          (recur
+           (rest l)
+           cur-ordered?
+           (conj result [cur]))))
+      result)))
+
 (defn list-element
   [l]
   (match l
@@ -1111,9 +1130,17 @@
       ["Heading" h]
       (heading-container config h)
       ["List" l]
-      (->elem
-       (list-element l)
-       (map #(list-item config %) l))
+      (let [lists (divide-lists l)]
+        (if (= 1 (count lists))
+          (let [l (first lists)]
+            (->elem
+             (list-element l)
+             (map #(list-item config %) l)))
+          [:div.list-group
+           (for [l lists]
+             (->elem
+              (list-element l)
+              (map #(list-item config %) l)))]))
       ["Table" t]
       (table config t)
       ["Math" s]
