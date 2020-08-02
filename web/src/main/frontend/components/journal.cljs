@@ -72,7 +72,7 @@
       [:div.pr-4.admonition-icon.flex.flex-col.justify-center
        {:title "Warning"} (svg/warning)]
       [:div.ml-4.text-lg
-       "Notice that this project is in its early days and under quick development, data might be lost."]]
+       "Notice that this project is in its early days and under quick development, files might be corrupted."]]
      [:p
       {}
       "Use it to organize your todo list, to write your journals, or to record your unique life."]
