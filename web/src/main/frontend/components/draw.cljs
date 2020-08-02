@@ -11,6 +11,7 @@
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.handler :as handler]
+            [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.loader :as loader]
             [frontend.config :as config]
@@ -107,7 +108,7 @@
     (try
       (when-let [data (js/JSON.parse text)]
         (if (not= "excalidraw" (gobj/get data "type"))
-          (handler/show-notification!
+          (notification/show!
            (util/format "Could not load this invalid excalidraw file")
            :error)
           {:elements (gobj/get data "elements")
@@ -115,7 +116,7 @@
       (catch js/Error e
         (prn "from json error:")
         (js/console.dir e)
-        (handler/show-notification!
+        (notification/show!
          (util/format "Could not load this invalid excalidraw file")
          :error)))))
 
@@ -139,7 +140,7 @@
       (string/blank? title)
       (do
         (reset! *saving-title nil)
-        (handler/show-notification!
+        (notification/show!
          "Please specify a title first!"
          :error)
         ;; TODO: focus the title input
@@ -210,7 +211,7 @@
                                   distinct
                                   (vec)))
               (reset! *current-file new-file)
-              (handler/show-notification!
+              (notification/show!
                "File was renamed successfully!"
                :success))
             (fn [error]

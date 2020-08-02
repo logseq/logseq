@@ -3,6 +3,7 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler :as handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -94,7 +95,7 @@
   [page-name]
   (page-handler/delete! page-name
                         (fn []
-                          (handler/show-notification! (str "Page " page-name " was deleted successfully!")
+                          (notification/show! (str "Page " page-name " was deleted successfully!")
                                                       :success)))
   (state/set-state! :modal/delete-page false)
   (handler/redirect-to-home!))

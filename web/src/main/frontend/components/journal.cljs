@@ -3,6 +3,7 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.date :as date]
             [frontend.handler :as handler]
+            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -273,13 +274,13 @@
                                     (date/valid-journal-title? first-title))]
                   (when (and journal?
                              (= (string/lower-case first-title) (string/lower-case page)))
-                    (handler/show-notification!
+                    (notification/show!
                      [:div
                       [:p
                        "It seems that you have multiple journal files (with different formats) for the same month, please only keep one journal file for each month."]
                       (ui/button "Go to files"
                         :href "/all-files"
-                        :on-click handler/clear-notification!)]
+                        :on-click notification/clear!)]
                      :error
                      false)))
                 state)}

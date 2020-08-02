@@ -153,7 +153,7 @@
                 (when (contains? #{"add" "modify"}
                                  type)
                   (github/get-content
-                   (handler/get-github-token)
+                   (state/get-github-token)
                    repo
                    path
                    remote-oid

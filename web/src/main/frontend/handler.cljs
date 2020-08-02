@@ -39,7 +39,8 @@
             [frontend.history :as history]
             ["/frontend/utils" :as utils]
             [cljs.reader :as reader]
-            [frontend.expand :as expand])
+            [frontend.expand :as expand]
+            [frontend.handler.notification :as notification])
   (:import [goog.events EventHandler]
            [goog.format EmailAddress]))
 
@@ -47,29 +48,6 @@
 ;; TODO: separate git status for push-failed, pull-failed, etc
 ;; TODO: Support more storage options (dropbox, google drive), git logic should be
 ;; moved to another namespace, better there should be a `protocol`.
-
-(defn clear-notification!
-  [e]
-  (swap! state/state assoc
-         :notification/show? false
-         :notification/content nil
-         :notification/status nil))
-
-(defn show-notification!
-  ([content status]
-   (show-notification! content status true))
-  ([content status clear?]
-   (swap! state/state assoc
-          :notification/show? true
-          :notification/content content
-          :notification/status status)
-
-   (when clear?
-     (js/setTimeout clear-notification! 5000))))
-
-(defn get-github-token
-  []
-  (get-in @state/state [:me :access-token]))
 
 (defn load-file
   [repo-url path]
@@ -170,7 +148,7 @@
                   (ok-handler project))
                 (fn [error]
                   (js/console.dir error)
-                  (show-notification! (util/format "Project \"%s\" already taken, please change to another name." project) :error))))))
+                  (notification/show! (util/format "Project \"%s\" already taken, please change to another name." project) :error))))))
 
 (defn exists-or-create!
   [ok-handler]
@@ -184,7 +162,7 @@
   [project]
   (create-project! project
                    (fn []
-                     (show-notification! (util/format "Project \"%s\" was created successfully." project) :success)
+                     (notification/show! (util/format "Project \"%s\" was created successfully." project) :success)
                      (state/set-state! :modal/input-project false))))
 
 (defn sync-project-settings!
@@ -200,7 +178,7 @@
                    :settings settings
                    :repo repo}
                   (fn [response]
-                    (show-notification! "Project settings changed successfully!" :success))
+                    (notification/show! "Project settings changed successfully!" :success))
                   (fn [error]
                     (println "Project settings updated failed, reason: ")
                     (js/console.dir error)))
@@ -395,7 +373,7 @@
   [repo-url]
   (when-let [name (get-in @state/state [:me :name])]
     (github/get-repo-permission
-     (get-github-token)
+     (state/get-github-token)
      repo-url
      name
      (fn [permission]
@@ -449,7 +427,7 @@
                   (p/catch (fn [error]
                              (set-git-status! repo-url :merge-failed)
                              (set-git-error! repo-url error)
-                             (show-notification!
+                             (notification/show!
                               [:p.content
                                "Failed to merge, please "
                                [:span.text-gray-700.font-bold
@@ -460,12 +438,12 @@
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [token (get-github-token)]
+    (when-let [token (state/get-github-token)]
       (pull repo token))))
 
 (defn periodically-pull
   [repo-url pull-now?]
-  (when-let [token (get-github-token)]
+  (when-let [token (state/get-github-token)]
     (when pull-now? (pull repo-url token))
     (js/setInterval #(pull repo-url token)
                     (* (config/git-pull-secs) 1000))))
@@ -475,7 +453,7 @@
    (get-latest-commit repo-url handler 1))
   ([repo-url handler length]
    (-> (p/let [commits (git/log repo-url
-                                (get-github-token)
+                                (state/get-github-token)
                                 length)]
          (handler (if (= length 1)
                     (first commits)
@@ -509,7 +487,7 @@
                               commit-message)]
          (p/let [_ (git/commit repo-url commit-message)]
            (set-git-status! repo-url :pushing)
-           (let [token (get-github-token)]
+           (let [token (state/get-github-token)]
              (util/p-handle
               (git/push repo-url token)
               (fn []
@@ -521,13 +499,13 @@
                 (println "Failed to push, error: " error)
                 (set-git-status! repo-url :push-failed)
                 (set-git-error! repo-url error)
-                (show-notification!
+                (notification/show!
                  [:p.content
                   "Failed to push, please "
                   [:span.text-gray-700.font-bold
                    "resolve any diffs first."]]
                  :error)
-                (p/let [result (git/fetch repo-url (get-github-token))
+                (p/let [result (git/fetch repo-url (state/get-github-token))
                         {:keys [fetchHead]} (bean/->clj result)
                         _ (set-latest-commit! repo-url fetchHead)]
                   (redirect! {:to :diff})))))))))))
@@ -544,7 +522,7 @@
       (p/let [commit-oid (git/commit repo commit-message)
               result (git/write-ref! repo commit-oid)
               push-result (git/push repo
-                                    (get-github-token)
+                                    (state/get-github-token)
                                     true)]
         (reset! pushing? false)
         (state/clear-changed-files! repo)
@@ -566,7 +544,7 @@
 
 (defn clone
   [repo-url]
-  (let [token (get-github-token)]
+  (let [token (state/get-github-token)]
     (util/p-handle
      (do
        (state/set-cloning? true)
@@ -586,7 +564,7 @@
        (set-git-status! repo-url :clone-failed)
        (set-git-error! repo-url e)
 
-       (show-notification!
+       (notification/show!
         [:p
          "Please make sure that your Github Personal Token has the right scopes. Follow this link to learn how to set the scopes: "
          [:a {:href "https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-"
@@ -745,7 +723,7 @@
 
 (defn periodically-push-tasks
   [repo-url]
-  (let [token (get-github-token)
+  (let [token (state/get-github-token)
         push (fn []
                (push repo-url))]
     (js/setInterval push
@@ -818,7 +796,7 @@
   [file filename mime-type uploading? url-handler on-processing]
   (cond
     (> (gobj/get file "size") (* 12 1024 1024))
-    (show-notification! [:p "Sorry, we don't support any file that's larger than 12MB."] :error)
+    (notification/show! [:p "Sorry, we don't support any file that's larger than 12MB."] :error)
 
     :else
     (do
@@ -864,20 +842,6 @@
           dbs (js/window.indexedDB.databases)]
     (doseq [db dbs]
       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
-
-;; (defn clear-store!
-;;   []
-;;   (p/let [ks (.keys db/localforage-instance)
-;;           _ (doseq [k ks]
-;;               (when-not (string/ends-with? k (str "/" config/local-repo))
-;;                 (.removeItem db/localforage-instance k)))
-;;           dirs (fs/readdir "/")
-;;           dirs (remove #(= % config/local-repo) dirs)]
-;;     (-> (p/all (doall (map (fn [dir]
-;;                              (fs/rmdir (str "/" dir)))
-;;                         dirs)))
-;;         (p/then (fn []
-;;                   (prn "Cleared store!"))))))
 
 ;; clear localforage
 (defn sign-out!
@@ -952,7 +916,7 @@
                  (db/transact! [{:me/email email}])
                  (swap! state/state assoc-in [:me :email] email))
                (fn [error]
-                 (show-notification! "Email already exists!"
+                 (notification/show! "Email already exists!"
                                      :error)))))
 
 
@@ -1003,7 +967,7 @@
               file-path (str "/" path)]
           (p/let [exists? (fs/file-exists? dir file-path)]
             (if exists?
-              (show-notification!
+              (notification/show!
                [:p.content
                 "File already exists!"]
                :error)
@@ -1182,7 +1146,7 @@
                 dir (util/get-repo-dir repo)]
             (p/let [exists? (fs/file-exists? dir file-path)]
               (if exists?
-                (show-notification!
+                (notification/show!
                  [:p.content
                   "File already exists!"]
                  :error)
@@ -1247,7 +1211,7 @@
             dir (util/get-repo-dir repo)]
         (p/let [exists? (fs/file-exists? dir file-path)]
           (if exists?
-            (show-notification!
+            (notification/show!
              [:p.content
               "File already exists!"]
              :error)
@@ -1541,7 +1505,7 @@
       (util/post (str config/api "set_preferred_format")
                  {:preferred_format (name format)}
                  (fn [_result]
-                   (show-notification! "Format set successfully!" :success))
+                   (notification/show! "Format set successfully!" :success))
                  (fn [_e])))))
 
 (defn clone-and-pull-repos
@@ -1617,7 +1581,7 @@
     (render)
     (util/indexeddb-check?
      (fn [_error]
-       (show-notification! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
+       (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support? false)))
 
     (-> (p/all (db/restore! (assoc me :repos repos) db-listen-to-tx! #(restore-config! % false)))

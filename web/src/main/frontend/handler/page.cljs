@@ -7,6 +7,7 @@
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler :as handler]
+            [frontend.handler.notification :as notification]
             [frontend.date :as date]
             [clojure.walk :as walk]
             [frontend.git :as git]
@@ -69,7 +70,7 @@
 
 (defn published-failed-handler
   [error]
-  (handler/show-notification!
+  (notification/show!
    "Publish failed, please give it another try."
    :error))
 
@@ -109,7 +110,7 @@
             data {:project project
                   :title page-name
                   :permalink (:permalink directives)
-                  :html (html-export/export-page page-name headings handler/show-notification!)
+                  :html (html-export/export-page page-name headings notification/show!)
                   :tags (:tags directives)
                   :settings (merge
                              (assoc directives
@@ -139,7 +140,7 @@
            (let [data {:project project
                        :title page-name
                        :permalink (:permalink directives)
-                       :html (html-export/export-page page-name headings handler/show-notification!)
+                       :html (html-export/export-page page-name headings notification/show!)
                        :tags (:tags directives)
                        :settings (merge directives plugins)
                        :repo (state/get-current-repo)}]
@@ -151,13 +152,13 @@
 (defn unpublished-success-handler
   [page-name]
   (fn [result]
-    (handler/show-notification!
+    (notification/show!
      "Un-publish successfully!"
      :success)))
 
 (defn unpublished-failed-handler
   [error]
-  (handler/show-notification!
+  (notification/show!
    "Un-publish failed, please give it another try."
    :error))
 
@@ -171,7 +172,7 @@
       (util/delete (str config/api project "/" permalink)
                    (unpublished-success-handler page-name)
                    unpublished-failed-handler)
-      (handler/show-notification!
+      (notification/show!
        "Can't find the permalink of this page!"
        :error))))
 
@@ -241,4 +242,4 @@
       (handler/redirect! {:to :page
                           :path-params {:name (util/encode-str (string/lower-case new-name))}})
 
-      (handler/show-notification! "Page renamed successfully!" :success))))
+      (notification/show! "Page renamed successfully!" :success))))

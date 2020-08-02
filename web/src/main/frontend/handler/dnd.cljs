@@ -1,5 +1,6 @@
 (ns frontend.handler.dnd
   (:require [frontend.handler :as handler]
+            [frontend.handler.notification :as notification]
             [frontend.config :as config]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.db :as db]
@@ -462,7 +463,7 @@
     (cond
       (not= (:heading/format target-heading)
             (:heading/format to-heading))
-      (handler/show-notification!
+      (notification/show!
        (util/format "Sorry, you can't move a block of format %s to another file of format %s."
                     (:heading/format target-heading)
                     (:heading/format to-heading))

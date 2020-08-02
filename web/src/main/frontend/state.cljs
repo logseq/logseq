@@ -527,3 +527,7 @@
 (defn get-changed-files
   [repo]
   (get-in @state [:repo/changed-files repo]))
+
+(defn get-github-token
+  []
+  (get-in @state [:me :access-token]))

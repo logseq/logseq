@@ -17,6 +17,7 @@
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.handler :as handler]
+            [frontend.handler.notification :as notification]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
@@ -147,7 +148,7 @@
                      (not (state/get-edit-input-id))
                      (seq (state/get-changed-files repo-url)))
                   (state/set-state! :modal/git-commit-message true)
-                  (handler/show-notification! "No changed files yet!" :warning)))))}
+                  (notification/show! "No changed files yet!" :warning)))))}
       (fn [e key-code]
         nil))))
   (mixins/keyboards-mixin keyboards/keyboards)

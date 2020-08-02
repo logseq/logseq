@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
             [frontend.handler :as handler]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -75,11 +76,11 @@
                        (when-let [token (util/evalue event)]
                          (when-not (string/blank? token)
                            (handler/set-github-token! token false)
-                           (handler/show-notification! "Github personal access token updated successfully!" :success))))
+                           (notification/show! "Github personal access token updated successfully!" :success))))
             :on-key-press (fn [event]
                             (let [k (gobj/get event "key")]
                               (if (= "Enter" k)
                                 (when-let [token (util/evalue event)]
                                   (when-not (string/blank? token)
                                     (handler/set-github-token! token false)
-                                    (handler/show-notification! "Github personal access token updated successfully!" :success))))))}]]]]]]]))
+                                    (notification/show! "Github personal access token updated successfully!" :success))))))}]]]]]]]))
