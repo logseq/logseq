@@ -291,7 +291,7 @@
 
 (defn clone
   [repo-url]
-  (let [token (state/get-github-token)]
+  (when-let [token (state/get-github-token)]
     (util/p-handle
      (do
        (state/set-cloning? true)
