@@ -5,7 +5,7 @@ Hello 👋, and welcome to Logseq!
 
 ***This project is in its early days and under quick development. To be kept up to date, be sure to follow [@logseq](https://twitter.com/logseq) on Twitter, or join  our community [Discord](https://discord.gg/AxbyKJ)!***
 
-**Notice that it is alpha and data may be lost!**
+**Notice that it is alpha and files may be corrupted!**
 
 Logseq is going to be open source in the following 2 ~ 3 months, so it needs a lot of help from the community! We're looking for some people who can contribute to the programming, design, logos, docs or anything, dm me in the discord group if anyone is interested!
 
