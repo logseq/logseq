@@ -12,6 +12,8 @@
             [frontend.date :as date]
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.draw :as draw]
+            [frontend.handler.file :as file]
             [frontend.ui :as ui]
             [frontend.loader :as loader]
             [frontend.config :as config]
@@ -162,15 +164,15 @@
                      (title->file-name title)))
               data (serialize-as-json elements app-state)]
           (when file
-            (handler/save-excalidraw! file data
-                                      (fn [file]
-                                        (reset! *files
-                                                (distinct (conj @*files file)))
-                                        (reset! *current-file file)
-                                        (reset! *unsaved? false)
-                                        (set-last-file! file)
-                                        (when ok-handler (ok-handler file))
-                                        (reset! *saving-title nil)))))))))
+            (draw/save-excalidraw! file data
+                                   (fn [file]
+                                     (reset! *files
+                                             (distinct (conj @*files file)))
+                                     (reset! *current-file file)
+                                     (reset! *unsaved? false)
+                                     (set-last-file! file)
+                                     (when ok-handler (ok-handler file))
+                                     (reset! *saving-title nil)))))))))
 
 (defn- clear-canvas!
   []
@@ -202,7 +204,7 @@
          (fn []
            (set-last-file! new-file)
            (util/p-handle
-            (handler/git-remove-file!
+            (file/remove-file!
              (state/get-current-repo)
              (str config/default-draw-directory "/" file))
             (fn [_]
@@ -337,8 +339,8 @@
                                     :on-click (fn [e]
                                                 (util/stop e)
                                                 (when-let [current-file @*current-file]
-                                                  (p/let [_ (handler/git-remove-file! (state/get-current-repo)
-                                                                                      (str config/default-draw-directory "/" current-file))]
+                                                  (p/let [_ (file/remove-file! (state/get-current-repo)
+                                                                               (str config/default-draw-directory "/" current-file))]
                                                     (reset! *files (remove #(= current-file %) @*files))
                                                     (new-file!))))}})]
                       (remove nil?))]
@@ -380,7 +382,7 @@
                file
                (do
                  (reset! *file-loading? true)
-                 (handler/load-excalidraw-file
+                 (draw/load-excalidraw-file
                   file
                   (fn [data]
                     (let [{:keys [elements app-state]} (from-json data)]
@@ -432,7 +434,7 @@
      [:div.absolute.top-4.left-4.hidden.md:block
       [:div.flex.flex-row.items-center
        [:a.mr-3.opacity-70.hover:opacity-100 {:href "/"
-                 :title "Back to logseq"}
+                                              :title "Back to logseq"}
         (svg/logo false)]
        (files)
        (when loading?
@@ -467,7 +469,7 @@
                 (reset! *loaded? true)
                 (set-excalidraw-component!))))
 
-           (handler/get-all-excalidraw-files
+           (draw/get-all-excalidraw-files
             (fn [files]
               (reset! *files (distinct files))))
 
@@ -488,8 +490,8 @@
                                   (get-last-file current-repo)))]
         (let [key (if current-repo
                     (str current-repo "-"
-                        (or (and current-file (str "draw-" current-file))
-                            "draw-with-no-file"))
+                         (or (and current-file (str "draw-" current-file))
+                             "draw-with-no-file"))
                     "draw-with-no-file")]
           (rum/with-key (draw-inner option) key)))
       [:div.center

@@ -1,6 +1,6 @@
 (ns frontend.components.heading
   (:require [frontend.db :as db]
-            [frontend.handler :as handler]
+            [frontend.handler.editor :as editor]
             [frontend.util :as util]
             [clojure.string :as string]))
 
@@ -16,7 +16,7 @@
        (let [title (->> (take 24
                               (-> (string/split content #"\n")
                                   first
-                                  (handler/remove-level-spaces format)))
+                                  (editor/remove-level-spaces format)))
                         (apply str))]
          (when (and (not (string/blank? title))
                     (not= (util/capitalize-all page-name) title))

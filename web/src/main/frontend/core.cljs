@@ -1,6 +1,7 @@
 (ns frontend.core
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
+            [frontend.handler.route :as route]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.util :as util]
@@ -12,7 +13,7 @@
   []
   (rfe/start!
    (rf/router routes/routes {})
-   handler/set-route-match!
+   route/set-route-match!
    ;; set to false to enable HistoryAPI
    {:use-fragment false}))
 

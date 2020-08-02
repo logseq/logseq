@@ -1,7 +1,11 @@
 (ns frontend.components.content
   (:require [rum.core :as rum]
             [frontend.format :as format]
+            [frontend.format.protocol :as protocol]
             [frontend.handler :as handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export :as export-handler]
+            [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -13,13 +17,28 @@
             [clojure.string :as string]
             [frontend.components.editor :as editor]))
 
+(defn- set-format-js-loading!
+  [format value]
+  (when format
+    (swap! state/state assoc-in [:format/loading format] value)))
+
+(defn- lazy-load
+  [format]
+  (let [format (format/normalize format)]
+    (when-let [record (format/get-format-record format)]
+      (when-not (protocol/loaded? record)
+        (set-format-js-loading! format true)
+        (protocol/lazyLoad record
+                           (fn [result]
+                             (set-format-js-loading! format false)))))))
+
 (defn lazy-load-js
   [state]
   (when-let [format (:format (last (:rum/args state)))]
     (let [loader? (contains? config/html-render-formats format)]
       (when loader?
         (when-not (format/loaded? format)
-          (handler/lazy-load format))))))
+          (lazy-load format))))))
 
 (rum/defc custom-context-menu-content
   []
@@ -27,11 +46,11 @@
    [:div.py-1.rounded-md.bg-base-3.shadow-xs
     (ui/menu-link
      {:key "cut"
-      :on-click handler/cut-selection-headings}
+      :on-click editor-handler/cut-selection-headings}
      "Cut")
     (ui/menu-link
      {:key "copy"
-      :on-click handler/copy-selection-headings}
+      :on-click editor-handler/copy-selection-headings}
      "Copy")]])
 
 (rum/defc heading-context-menu-content
@@ -41,32 +60,32 @@
     (ui/menu-link
      {:key "Copy block ref"
       :on-click (fn [_e]
-                  (handler/copy-block-ref! heading-id))}
+                  (editor-handler/copy-block-ref! heading-id))}
      "Copy block ref")
     (ui/menu-link
      {:key "Focus on block"
       :on-click (fn [_e]
-                  (handler/focus-on-block! heading-id))}
+                  (editor-handler/focus-on-block! heading-id))}
      "Focus on block")
     (ui/menu-link
      {:key "Open in sidebar"
       :on-click (fn [_e]
-                  (handler/open-heading-in-sidebar! heading-id))}
+                  (editor-handler/open-heading-in-sidebar! heading-id))}
      "Open in sidebar")
     (ui/menu-link
      {:key "Cut"
       :on-click (fn [_e]
-                  (handler/cut-heading! heading-id))}
+                  (editor-handler/cut-heading! heading-id))}
      "Cut")
     (ui/menu-link
      {:key "Copy"
       :on-click (fn [_e]
-                  (handler/copy-heading! heading-id))}
+                  (export-handler/copy-heading! heading-id))}
      "Copy")
     (ui/menu-link
      {:key "Copy as JSON"
       :on-click (fn [_e]
-                  (handler/copy-heading-as-json! heading-id))}
+                  (export-handler/copy-heading-as-json! heading-id))}
      "Copy as JSON")]])
 
 ;; TODO: content could be changed
@@ -74,14 +93,14 @@
 ;; headings were already selected.
 (defn- cut-headings-and-clear-selections!
   [_]
-  (handler/cut-selection-headings)
-  (handler/clear-selection! nil))
+  (editor-handler/cut-selection-headings)
+  (editor-handler/clear-selection! nil))
 
 (rum/defc hidden-selection < rum/reactive
   (mixins/keyboard-mixin "ctrl+c"
                          (fn [_]
-                           (handler/copy-selection-headings)
-                           (handler/clear-selection! nil)))
+                           (editor-handler/copy-selection-headings)
+                           (editor-handler/clear-selection! nil)))
   (mixins/keyboard-mixin "ctrl+x" cut-headings-and-clear-selections!)
   (mixins/keyboard-mixin "backspace" cut-headings-and-clear-selections!)
   (mixins/keyboard-mixin "delete" cut-headings-and-clear-selections!)
@@ -115,7 +134,7 @@
                         (d/remove-class! main "overflow-hidden")
                         (d/add-class! main "overflow-y-auto"))
 
-                      (handler/clear-selection! e)))
+                      (editor-handler/clear-selection! e)))
 
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
@@ -175,7 +194,7 @@
             on-click (fn [e]
                        (when-not (util/link? (gobj/get e "target"))
                          (util/stop e)
-                         (handler/reset-cursor-range! (gdom/getElement (str id)))
+                         (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
                          (state/set-edit-content! id content)
                          (state/set-edit-input-id! id)
                          (when on-click
@@ -220,11 +239,11 @@
                  state)
    :did-mount (fn [state]
                 (set-fixed-width!)
-                (handler/render-local-images!)
+                (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-fixed-width!)
-                 (handler/render-local-images!)
+                 (image-handler/render-local-images!)
                  (lazy-load-js state)
                  state)}
   [state id {:keys [format

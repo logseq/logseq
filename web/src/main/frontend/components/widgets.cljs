@@ -2,6 +2,10 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler :as handler]
+            [frontend.handler.user :as user-handler]
+            [frontend.handler.git :as git-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.config :as config]
             [clojure.string :as string]
@@ -21,14 +25,14 @@
     (ui/button
       "Markdown"
       :on-click
-      #(handler/set-preferred-format! :markdown))
+      #(user-handler/set-preferred-format! :markdown))
 
     [:span.ml-2.mr-2 "-OR-"]
 
     (ui/button
       "Org Mode"
       :on-click
-      #(handler/set-preferred-format! :org))]])
+      #(user-handler/set-preferred-format! :org))]])
 
 (rum/defcs set-personal-access-token <
   (rum/local "" ::token)
@@ -55,7 +59,7 @@
              :on-click
              (fn []
                (when-not (string/blank? access-token)
-                 (handler/set-github-token! @access-token))))]
+                 (user-handler/set-github-token! @access-token))))]
 
           [:hr]
 
@@ -110,7 +114,7 @@
                last-pulled-at]
               [:div.flex.flex-row.justify-between.align-items
                (ui/button "Pull now"
-                 :on-click (fn [] (handler/pull-current-repo)))
+                 :on-click (fn [] (repo-handler/pull-current-repo)))
                (if pulling?
                  [:span.lds-dual-ring.mt-1])]
               [:p.pt-2.text-sm.opacity-50
@@ -140,7 +144,7 @@
                  :options {:on-click (fn []
                                        (state/set-current-repo! url)
                                        (when-not (= :draw (state/get-current-route))
-                                         (handler/redirect! {:to :home}))
+                                         (route-handler/redirect-to-home!))
                                        (when on-click
                                          (on-click url)))}})
               (remove (fn [repo]
@@ -178,8 +182,8 @@
         (fn []
           (when (string/starts-with? repo-url "https://github.com/")
             (let [repo-url (string/replace repo-url ".git" "")]
-              (handler/clone-and-pull repo-url)
-              (handler/redirect! {:to :home})))))
+              (repo-handler/clone-and-pull repo-url)
+              (route-handler/redirect-to-home!)))))
 
       ;; (when git-ask-private-grant?
       ;;   [:div

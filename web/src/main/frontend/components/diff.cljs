@@ -2,6 +2,8 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler :as handler]
+            [frontend.handler.git :as git-handler]
+            [frontend.handler.file :as file]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -94,7 +96,7 @@
                (fn []
                  (reset! *edit? false)
                  (let [new-content @*edit-content]
-                   (handler/alter-file repo path new-content
+                   (file/alter-file repo path new-content
                                        {:commit? false
                                         :re-render-root? true})
                    (swap! state/state
@@ -107,7 +109,7 @@
                :on-click
                (fn []
                  ;; overwrite the file
-                 (handler/alter-file repo path content
+                 (file/alter-file repo path content
                                      {:commit? false
                                       :re-render-root? true})
                  (mark-as-resolved path))
@@ -140,7 +142,7 @@
   {:will-mount
    (fn [state]
      (when-let [repo (state/get-current-repo)]
-       (handler/get-latest-commit
+       (git-handler/get-latest-commit
         repo
         (fn [commit]
           (let [local-oid (gobj/get commit "oid")
@@ -205,7 +207,7 @@
                                       "A force push"
                                       @commit-message)]
                  (reset! *pushing? true)
-                 (handler/commit-and-force-push! commit-message *pushing?)))))]]
+                 (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
 
        :else
        [:div "No diffs"])]))

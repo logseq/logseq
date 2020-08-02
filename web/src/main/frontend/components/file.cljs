@@ -2,6 +2,9 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler :as handler]
+            [frontend.handler.project :as project]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.file :as file]
             [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -60,7 +63,7 @@
         save-file-handler (fn [content]
                             (fn [value]
                               (when (not= (string/trim value) (string/trim content))
-                                (handler/alter-file (state/get-current-repo) path (string/trim value)
+                                (file/alter-file (state/get-current-repo) path (string/trim value)
                                                     {:re-render-root? true}))))
         edit-raw-handler (fn []
                            (when-let [file-content (db/get-file path)]
@@ -86,11 +89,11 @@
                                                  (:db/id page)
                                                  :page
                                                  {:page page}))
-                                              (handler/show-right-sidebar)))}
+                                              (ui-handler/show-right-sidebar)))}
          page]])
 
      (when (and config? (state/logged?))
-       [:a.mb-8.block {:on-click (fn [_e] (handler/sync-project-settings!))}
+       [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
         "Sync project settings"])
 
      (cond

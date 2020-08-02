@@ -5,6 +5,9 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.handler :as handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.util :as util]))
 
 (rum/defc add-repo
@@ -33,18 +36,18 @@
            [:div.controls
             [:a.control {:title "Clone again and re-index the db"
                          :on-click (fn []
-                                     (handler/rebuild-index! repo)
+                                     (repo-handler/rebuild-index! repo)
                                      (js/setTimeout
                                       (fn []
-                                        (handler/redirect! {:to :home}))
+                                        (route-handler/redirect! {:to :home}))
                                       500))}
              "Re-index"]
             [:a.control.ml-4 {:title "Clone again and re-index the db"
                          :on-click (fn []
-                                     (handler/export-repo-as-json! (:url repo)))}
+                                     (export-handler/export-repo-as-json! (:url repo)))}
              "Export as JSON"]
             [:a.text-gray-400.ml-4 {:on-click (fn []
-                                                (handler/remove-repo! repo))}
+                                                (repo-handler/remove-repo! repo))}
              "Unlink"]]])]
 
        [:a#download-as-json.hidden]]

@@ -2,6 +2,8 @@
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler :as handler]
+            [frontend.handler.git :as git-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -40,7 +42,7 @@
            :on-click (fn []
                        (let [value @commit]
                          (when (and value (>= (count value) 1))
-                           (handler/git-commit-and-push! value)
+                           (repo-handler/git-commit-and-push! value)
                            (state/set-state! :modal/git-commit-message false)
                            (reset! commit ""))))}
           "Commit and push!"]]

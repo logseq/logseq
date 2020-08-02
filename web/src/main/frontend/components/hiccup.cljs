@@ -17,6 +17,8 @@
             [frontend.ui :as ui]
             [frontend.components.widgets :as widgets]
             [frontend.handler :as handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as dnd]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -191,7 +193,7 @@
                        (:db/id page)
                        :page
                        {:page page}))
-                    (handler/show-right-sidebar)))}
+                    (ui-handler/show-right-sidebar)))}
      original-page-name]))
 
 (defn- latex-environment-content
@@ -303,7 +305,7 @@
                                (:db/id heading)
                                :heading-ref
                                {:heading heading})
-                              (handler/show-right-sidebar)))}
+                              (ui-handler/show-right-sidebar)))}
             (->elem
              :span.block-ref
              (map-inline config (:heading/title heading)))]
@@ -529,12 +531,12 @@
                            (:db/id heading)
                            :heading
                            heading)
-                          (handler/show-right-sidebar)))})
+                          (ui-handler/show-right-sidebar)))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
         :on-drag-start (fn [event]
-                         (handler/highlight-heading! uuid)
+                         (editor-handler/highlight-heading! uuid)
                          (.setData (gobj/get event "dataTransfer")
                                    "heading-uuid"
                                    uuid)
@@ -605,8 +607,8 @@
                     :on-change (fn [_e]
                                  ;; FIXME: Log timestamp
                                  (if checked?
-                                   (handler/uncheck heading)
-                                   (handler/check heading)))}))))
+                                   (editor-handler/uncheck heading)
+                                   (editor-handler/check heading)))}))))
 
 (defn marker-switch
   [{:heading/keys [pre-heading? marker] :as heading}]
@@ -614,7 +616,7 @@
     (let [set-marker-fn (fn [marker]
                           (fn [e]
                             (util/stop e)
-                            (handler/set-marker heading marker)))]
+                            (editor-handler/set-marker heading marker)))]
       (case marker
         "NOW"
         [:a.marker-switch
@@ -655,7 +657,7 @@
      [:ul
       (for [p (remove #(= priority %) ["A" "B" "C"])]
         [:a.mr-2.text-base.tooltip-priority {:priority p
-                                             :on-click (fn [] (handler/set-priority heading p))}])]
+                                             :on-click (fn [] (editor-handler/set-priority heading p))}])]
      [:a.opacity-50.hover:opacity-100
       {:class "priority"
        :href (str "/page/" priority)
@@ -748,7 +750,7 @@
                     :dummy? dummy?
                     :on-hide (fn [value event]
                                (when (= event :esc)
-                                 (handler/highlight-heading! uuid)))}
+                                 (editor-handler/highlight-heading! uuid)))}
                    edit-input-id
                    config)]
       (let [dragging? (rum/react *dragging?)
@@ -759,12 +761,12 @@
                                                     (util/input? target)
                                                     (and (util/sup? target)
                                                          (d/has-class? target "fn")))
-                                        (handler/clear-selection! nil)
-                                        (handler/unhighlight-heading!)
+                                        (editor-handler/clear-selection! nil)
+                                        (editor-handler/unhighlight-heading!)
                                         (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
                                           (state/set-editing!
                                            edit-input-id
-                                           (handler/remove-level-spaces content format)
+                                           (editor-handler/remove-level-spaces content format)
                                            heading
                                            cursor-range)))))
                         :on-drag-over (fn [event]
@@ -786,7 +788,7 @@
                                                          true)))
                                    (reset! *dragging? false)
                                    (reset! *dragging-heading nil)
-                                   (handler/unhighlight-heading!))}]
+                                   (editor-handler/unhighlight-heading!))}]
         [:div.flex.flex-col.relative.heading-content
          (cond-> {:style {:cursor "text"
                           :min-height 24}}
@@ -866,7 +868,7 @@
                                                      false)))
                                (reset! *dragging? false)
                                (reset! *dragging-heading nil)
-                               (handler/unhighlight-heading!))
+                               (editor-handler/unhighlight-heading!))
                     :on-mouse-over (fn [e]
                                      (util/stop e)
                                      (when has-child?

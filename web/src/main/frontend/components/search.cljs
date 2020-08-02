@@ -2,6 +2,9 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler :as handler]
+            [frontend.handler.route :as route]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -57,20 +60,20 @@
      (ui/auto-complete
       result
       {:on-chosen (fn [{:keys [type data]}]
-                    (handler/clear-search!)
+                    (search-handler/clear-search!)
                     (leave-focus)
                     (case type
                       :new-page
-                      (handler/create-new-page! search-q)
+                      (editor-handler/create-new-page! search-q)
 
                       :page
-                      (handler/redirect! {:to :page
+                      (route/redirect! {:to :page
                                           :path-params {:name (util/encode-str data)}})
 
                       :block
                       (let [page (:page/name (:heading/page data))
                             path (str "/page/" (util/encode-str page) "#ls-heading-" (:heading/uuid data))]
-                        (handler/redirect-with-fragment! path))
+                        (route/redirect-with-fragment! path))
                       nil))
        :item-render (fn [{:keys [type data]}]
                       (case type
@@ -96,7 +99,7 @@
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn []
-                 (handler/clear-search!)
+                 (search-handler/clear-search!)
                  (leave-focus)))))
   []
   (let [search-result (state/sub :search/result)
@@ -123,10 +126,10 @@
           :on-change (fn [e]
                        (let [value (util/evalue e)]
                          (if (string/blank? value)
-                           (handler/clear-search!)
+                           (search-handler/clear-search!)
                            (do
                              (state/set-q! value)
-                             (handler/search value)))))}]
+                             (search-handler/search value)))))}]
         (when-not (string/blank? search-q)
           (ui/css-transition
            {:class-names "fade"

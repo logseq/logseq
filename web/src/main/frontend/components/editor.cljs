@@ -1,6 +1,8 @@
 (ns frontend.components.editor
   (:require [rum.core :as rum]
             [frontend.handler :as handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.date :as date]
             [frontend.state :as state]
@@ -126,7 +128,7 @@
   (image/upload
    files
    (fn [file file-name file-type]
-     (handler/request-presigned-url
+     (image-handler/request-presigned-url
       file file-name file-type
       uploading?
       (fn [signed-url]
@@ -277,7 +279,7 @@
                                                    :postfix-fn (fn [s] (util/replace-first "))" s ""))})
 
                                  ;; Save it so it'll be parsed correctly in the future
-                                 (handler/set-heading-property! (:heading/uuid chosen)
+                                 (editor-handler/set-heading-property! (:heading/uuid chosen)
                                                                 "CUSTOM_ID"
                                                                 uuid-string)
 
@@ -395,7 +397,7 @@
     (let [new-value (block/with-levels value format heading)]
       (let [cache [(:heading/uuid heading) value]]
         (when (not= @*last-edit-heading cache)
-          (handler/save-heading-if-changed! heading new-value)
+          (editor-handler/save-heading-if-changed! heading new-value)
           (reset! *last-edit-heading cache))))))
 
 (defn clear-last-selected-heading!
@@ -449,10 +451,10 @@
               (let [state (get-state state)
                     content (:heading/content heading)
                     value (:value state)]
-                (when (not= (string/trim (handler/remove-level-spaces content format))
+                (when (not= (string/trim (editor-handler/remove-level-spaces content format))
                             (string/trim value))
                   (save-heading! state (:value state))))
-              (handler/edit-heading! (uuid sibling-heading-id) pos format id))))))))
+              (editor-handler/edit-heading! (uuid sibling-heading-id) pos format id))))))))
 
 (defn delete-heading!
   [state repo e]
@@ -464,7 +466,7 @@
         (let [heading (db/pull [:heading/uuid heading-id])
               heading-parent (gdom/getElement heading-parent-id)
               sibling-heading (util/get-prev-heading heading-parent)]
-          (handler/delete-heading! heading dummy?)
+          (editor-handler/delete-heading! heading dummy?)
           (when sibling-heading
             (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
               (when repo
@@ -473,11 +475,11 @@
                         new-value (str original-content value)
                         pos (max
                              (if original-content
-                               (utf8/length (utf8/encode (handler/remove-level-spaces original-content format)))
+                               (utf8/length (utf8/encode (editor-handler/remove-level-spaces original-content format)))
                                0)
                              0)]
-                    (handler/save-heading-if-changed! heading new-value)
-                    (handler/edit-heading! (uuid sibling-heading-id)
+                    (editor-handler/save-heading-if-changed! heading new-value)
+                    (editor-handler/edit-heading! (uuid sibling-heading-id)
                                            pos format id)))))))))))
 
 (defn get-matched-commands
@@ -582,13 +584,13 @@
                     heading)]
     (set-last-edit-heading! (:heading/uuid heading) value)
     ;; save the current heading and insert a new heading
-    (handler/insert-new-heading!
+    (editor-handler/insert-new-heading!
      heading
      value
      true
      (fn [[_first-heading last-heading _new-heading-content]]
        (let [last-id (:heading/uuid last-heading)]
-         (handler/edit-heading! last-id 0 format id)
+         (editor-handler/edit-heading! last-id 0 format id)
          (clear-when-saved!)))
      false)))
 
@@ -619,7 +621,7 @@
                       :else level)
         new-value (block/with-levels value format (assoc heading :heading/level final-level))]
     (set-last-edit-heading! (:heading/uuid heading) value)
-    (handler/save-heading-if-changed! heading new-value)))
+    (editor-handler/save-heading-if-changed! heading new-value)))
 
 (defn- append-paste-doc!
   [format event]
@@ -631,7 +633,7 @@
           (state/append-current-edit-content! doc-text))))))
 
 (rum/defc box < rum/reactive
-  (mixins/keyboard-mixin "ctrl+shift+a" handler/select-all-headings!)
+  (mixins/keyboard-mixin "ctrl+shift+a" editor-handler/select-all-headings!)
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [id format heading]} (get-state state)
@@ -817,7 +819,7 @@
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format heading-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
-                  (handler/restore-cursor-pos! id content dummy?)
+                  (editor-handler/restore-cursor-pos! id content dummy?)
 
                   (when-let [input (gdom/getElement id)]
                     (dnd/subscribe!

@@ -9,6 +9,8 @@
             [frontend.extensions.latex :as latex]
             [frontend.extensions.code :as code]
             [frontend.handler :as handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.util :as util]
@@ -223,7 +225,7 @@
            svg/arrow-right-v2))]
 
       [:a.ml-2 {:key (str "contents-" page)
-                     :href (str "/page/" page)}
+                :href (str "/page/" page)}
        (util/capitalize-all page)]]
      (when (seq l)
        [:div.contents-list.ml-4 {:class (if @fold? "hidden" "initial")}
@@ -249,16 +251,16 @@
               "Edit the contents"
               :on-click (fn [e]
                           (util/stop e)
-                          (handler/redirect! {:to :page
-                                              :path-params {:name "contents"}})))]
+                          (route-handler/redirect! {:to :page
+                                                    :path-params {:name "contents"}})))]
            [:div
-           [:p.text-base
-            [:i.font-medium "Contents"] " (similar to book contents) is a way to structure your pages, please click the button below to start!"]
-           (ui/button
-             "Create the contents"
-             :on-click (fn [e]
-                         (util/stop e)
-                         (handler/create-new-page! "contents")))])))]))
+            [:p.text-base
+             [:i.font-medium "Contents"] " (similar to book contents) is a way to structure your pages, please click the button below to start!"]
+            (ui/button
+              "Create the contents"
+              :on-click (fn [e]
+                          (util/stop e)
+                          (editor-handler/create-new-page! "contents")))])))]))
 
 (defn build-sidebar-item
   [repo idx db-id block-type block-data]
@@ -267,9 +269,9 @@
     [[:a {:on-click (fn [e]
                       (util/stop e)
                       (if-not (db/entity [:page/name "contents"])
-                        (handler/create-new-page! "contents")
-                        (handler/redirect! {:to :page
-                                            :path-params {:name "contents"}})))}
+                        (editor-handler/create-new-page! "contents")
+                        (route-handler/redirect! {:to :page
+                                                  :path-params {:name "contents"}})))}
       "Contents (edit)"]
      (contents)]
 

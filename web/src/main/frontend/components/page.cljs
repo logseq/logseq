@@ -2,8 +2,13 @@
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler :as handler]
+            [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -77,7 +82,7 @@
                  :page-presentation
                  {:page page
                   :journal? journal?})
-                (handler/show-right-sidebar))}
+                (ui-handler/show-right-sidebar))}
    svg/slideshow])
 
 (rum/defc today-queries < rum/reactive
@@ -98,7 +103,7 @@
                           (notification/show! (str "Page " page-name " was deleted successfully!")
                                                       :success)))
   (state/set-state! :modal/delete-page false)
-  (handler/redirect-to-home!))
+  (route-handler/redirect-to-home!))
 
 (defn delete-page-dialog
   [page-name]
@@ -183,12 +188,12 @@
              (when-let [page-id (db/entity repo [:page/name page-name])]
                [repo :page/headings page-id])))))))
   {:did-mount (fn [state]
-                (handler/scroll-and-highlight! state)
+                (ui-handler/scroll-and-highlight! state)
                 (let [page-name (get-page-name state)]
                   (when (= (string/lower-case page-name) "contents")
                     (when-let [first-heading (first (db/get-page-headings "contents"))]
                       (let [edit-id (str "edit-heading-" (:heading/uuid first-heading))]
-                        (handler/edit-heading!
+                        (editor-handler/edit-heading!
                          (:heading/uuid first-heading)
                          :max
                          (:heading/format first-heading)
@@ -200,7 +205,7 @@
                           (js/setTimeout #(util/cursor-move-back (gdom/getElement edit-id) 6)
                                          50))))))
                 state)
-   :did-update handler/scroll-and-highlight!}
+   :did-update ui-handler/scroll-and-highlight!}
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         repo (or repo current-repo)
@@ -247,10 +252,10 @@
                          (when file
                            [{:title "Re-index this page"
                              :options {:on-click (fn []
-                                                   (handler/re-index-file! file))}}
+                                                   (file/re-index! file))}}
                             {:title "Copy the whole page as JSON"
                              :options {:on-click (fn []
-                                                   (handler/copy-page-as-json! page-name))}}
+                                                   (export-handler/copy-page-as-json! page-name))}}
                             (when-not journal?
                               {:title "Rename page"
                                :options {:on-click #(state/set-state! :modal/rename-page true)}})
@@ -292,7 +297,7 @@
                                   (:db/id page)
                                   :page
                                   {:page page}))
-                               (handler/show-right-sidebar)))}
+                               (ui-handler/show-right-sidebar)))}
              [:h1.title page-original-name]])
           [:div
            [:div.content
@@ -389,7 +394,7 @@
                       :on-enter (fn []
                                   (let [title @(get state ::title)]
                                     (when-not (string/blank? title)
-                                      (handler/create-new-page! title)))))))
+                                      (editor-handler/create-new-page! title)))))))
   [state]
   (let [title (get state ::title)]
     [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}

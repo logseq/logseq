@@ -1,5 +1,9 @@
 (ns frontend.keyboards
   (:require [frontend.handler :as handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.history :as history-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [goog.events.KeyCodes :as codes]))
 
@@ -45,17 +49,17 @@
 
 (defonce keyboards
   {
-   "tab" handler/cycle-collapse!
+   "tab" editor-handler/cycle-collapse!
    "ctrl+alt+d" state/toggle-document-mode!
-   "ctrl+z" handler/undo!
-   "ctrl+y" handler/redo!
-   "ctrl+alt+r" handler/toggle-right-sidebar!
-   "ctrl+u" handler/go-to-search!
-   "alt+j" handler/go-to-journals!
-   "alt+right" handler/zoom-in!
-   "ctrl+o" handler/follow-link-under-cursor!
-   "ctrl+shift+o" handler/open-link-in-sidebar!
-   "ctrl+b" handler/bold-format!
-   "ctrl+i" handler/italics-format!
-   "ctrl+k" handler/html-link-format!
-   "ctrl+h" handler/highlight-format!})
+   "ctrl+z" history-handler/undo!
+   "ctrl+y" history-handler/redo!
+   "ctrl+alt+r" ui-handler/toggle-right-sidebar!
+   "ctrl+u" route-handler/go-to-search!
+   "alt+j" route-handler/go-to-journals!
+   "alt+right" editor-handler/zoom-in!
+   "ctrl+o" editor-handler/follow-link-under-cursor!
+   "ctrl+shift+o" editor-handler/open-link-in-sidebar!
+   "ctrl+b" editor-handler/bold-format!
+   "ctrl+i" editor-handler/italics-format!
+   "ctrl+k" editor-handler/html-link-format!
+   "ctrl+h" editor-handler/highlight-format!})

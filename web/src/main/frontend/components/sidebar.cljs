@@ -18,6 +18,9 @@
             [frontend.state :as state]
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
@@ -167,7 +170,7 @@
         home? (= :home route-name)]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
-                       (handler/unhighlight-heading!))}
+                       (editor-handler/unhighlight-heading!))}
      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden
        [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
@@ -279,7 +282,7 @@
                           :target "_blank"}}
                (when logged?
                  {:title "Sign out"
-                  :options {:on-click handler/sign-out!}})]
+                  :options {:on-click user-handler/sign-out!}})]
               (remove nil?)))
            {})
 
@@ -287,8 +290,8 @@
            {:on-click (fn []
                         (let [sidebar (d/by-id "right-sidebar")]
                           (if (d/has-class? sidebar "enter")
-                            (handler/hide-right-sidebar)
-                            (handler/show-right-sidebar))))}
+                            (ui-handler/hide-right-sidebar)
+                            (ui-handler/show-right-sidebar))))}
            (svg/menu)]]]]
        [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-hidden
         {:tabIndex "0"

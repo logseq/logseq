@@ -7,6 +7,9 @@
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler :as handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.file :as file-handler]
+            [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
             [frontend.date :as date]
             [clojure.walk :as walk]
@@ -25,7 +28,7 @@
           page-format (db/get-page-format page-name)
           new-directives-content (db/add-directives! page-format directives-content directives)
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
-      (handler/alter-file (state/get-current-repo)
+      (file-handler/alter-file (state/get-current-repo)
                           file-path
                           full-content
                           {:reset? true
@@ -49,7 +52,7 @@
                                        lines (remove #(string/starts-with? % prefix) lines)]
                                    (string/join "\n" lines))
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
-      (handler/alter-file (state/get-current-repo)
+      (file-handler/alter-file (state/get-current-repo)
                           file-path
                           full-content
                           {:reset? true
@@ -101,7 +104,7 @@
   ([page-name]
    (publish-page-as-slide! page-name (db/get-page-headings page-name)))
   ([page-name headings]
-   (handler/exists-or-create!
+   (project-handler/exists-or-create!
     (fn [project]
       (page-add-directives! page-name {"published" true
                                        "slide" true})
@@ -125,7 +128,7 @@
 
 (defn publish-page!
   [page-name]
-  (handler/exists-or-create!
+  (project-handler/exists-or-create!
    (fn [project]
      (let [directives (db/get-page-directives page-name)
            slide? (let [slide (:slide directives)]
@@ -230,7 +233,7 @@
                   new-content (string/replace file-content
                                               (util/format "[[%s]]" old-original-name)
                                               (util/format "[[%s]]" new-name))]
-              (handler/alter-file repo
+              (file-handler/alter-file repo
                                   file-path
                                   new-content
                                   {:reset? true
@@ -239,7 +242,7 @@
       ;; TODO: update browser history, remove the current one
 
       ;; Redirect to the new page
-      (handler/redirect! {:to :page
+      (route-handler/redirect! {:to :page
                           :path-params {:name (util/encode-str (string/lower-case new-name))}})
 
       (notification/show! "Page renamed successfully!" :success))))

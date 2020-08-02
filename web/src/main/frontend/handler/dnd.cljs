@@ -1,6 +1,7 @@
 (ns frontend.handler.dnd
   (:require [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
             [frontend.config :as config]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.db :as db]
@@ -286,7 +287,7 @@
                            vec))]
       (profile
        "Move heading in the same file: "
-       (handler/transact-react-and-alter-file!
+       (repo-handler/transact-react-and-alter-file!
         repo
         (concat
          after-headings
@@ -357,7 +358,7 @@
                                                     {:same-file? false})))]
     (profile
      "Move heading between different files: "
-     (handler/transact-react-and-alter-file!
+     (repo-handler/transact-react-and-alter-file!
       repo
       (concat
        target-after-headings
@@ -426,7 +427,7 @@
                                                     {:same-file? false})))]
     (profile
      "[Target file] Move heading between different files: "
-     (handler/transact-react-and-alter-file!
+     (repo-handler/transact-react-and-alter-file!
       target-heading-repo
       (concat
        target-delete-tx
@@ -438,7 +439,7 @@
 
     (profile
      "[Destination file] Move heading between different files: "
-     (handler/transact-react-and-alter-file!
+     (repo-handler/transact-react-and-alter-file!
       to-heading-repo
       (concat
        to-after-headings

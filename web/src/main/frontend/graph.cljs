@@ -1,5 +1,7 @@
 (ns frontend.graph
   (:require [frontend.handler :as handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.util :as util]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
@@ -32,8 +34,8 @@
                            (:db/id page)
                            :page
                            {:page page})
-                          (handler/show-right-sidebar))
-                        (handler/redirect! {:to :page
+                          (ui-handler/show-right-sidebar))
+                        (route-handler/redirect! {:to :page
                                             :path-params {:name (util/url-encode page-name)}})))))
     :linkDirectionalArrowLength 2
     :linkDirectionalArrowRelPos 0.6

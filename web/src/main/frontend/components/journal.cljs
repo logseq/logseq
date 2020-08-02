@@ -4,6 +4,8 @@
             [frontend.date :as date]
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.editor :as editor]
+            [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -31,7 +33,7 @@
         (when (= 1 (count raw-headings))
           (when-let [template (state/get-journal-template)]
             (when-not (string/blank? template)
-              (handler/insert-new-heading!
+              (editor/insert-new-heading!
                (first headings)
                template
                false
@@ -323,7 +325,7 @@
                          :page
                          {:page page
                           :journal? true}))
-                      (handler/show-right-sidebar)))}
+                      (ui-handler/show-right-sidebar)))}
        [:h1.title
         (util/capitalize-all title)]]
 

@@ -3,6 +3,7 @@
             [frontend.ui :as ui]
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -28,7 +29,7 @@
         "Submit"
         :on-click
         (fn []
-          (handler/set-email! @email)))]]))
+          (user-handler/set-email! @email)))]]))
 
 (rum/defcs settings < rum/reactive
   []
@@ -56,7 +57,7 @@
                          (let [format (-> (util/evalue e)
                                           (string/lower-case)
                                           keyword)]
-                           (handler/set-preferred-format! format)))}
+                           (user-handler/set-preferred-format! format)))}
            (for [format [:org :markdown]]
              [:option (cond->
                           {:key (name format)}
@@ -75,12 +76,12 @@
             :on-blur (fn [event]
                        (when-let [token (util/evalue event)]
                          (when-not (string/blank? token)
-                           (handler/set-github-token! token false)
+                           (user-handler/set-github-token! token false)
                            (notification/show! "Github personal access token updated successfully!" :success))))
             :on-key-press (fn [event]
                             (let [k (gobj/get event "key")]
                               (if (= "Enter" k)
                                 (when-let [token (util/evalue event)]
                                   (when-not (string/blank? token)
-                                    (handler/set-github-token! token false)
+                                    (user-handler/set-github-token! token false)
                                     (notification/show! "Github personal access token updated successfully!" :success))))))}]]]]]]]))
