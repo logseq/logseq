@@ -23,7 +23,8 @@
             [clojure.walk :as walk]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.extensions.sci :as sci]
-            [goog.array :as garray]))
+            [goog.array :as garray]
+            [frontend.db-schema :as db-schema]))
 
 (defonce brain "🧠")
 (defonce brain-text "logseq-second-brain")
@@ -101,102 +102,6 @@
   (swap! conns dissoc (datascript-db repo))
   (swap! conns dissoc (datascript-files-db repo))
   )
-
-(def files-db-schema
-  {:file/path {:db/unique :db.unique/identity}
-   :file/content {}})
-
-;; A page can corresponds to multiple files (same title),
-;; a month journal file can have multiple pages,
-;; also, each heading can be treated as a page if we support
-;; "zoom edit".
-(def schema
-  {:db/ident        {:db/unique :db.unique/identity}
-
-   ;; user
-   :me/name  {}
-   :me/email {}
-   :me/avatar {}
-
-   ;; local, github, dropbox, etc.
-   :db/type {}
-   :encrypted-token {}
-
-   ;; Git
-   :repo/url        {:db/unique :db.unique/identity}
-   :repo/cloned?    {}
-   :git/latest-commit {}
-   :git/status {}
-   :git/write-permission? {}
-   :git/last-pulled-at {}
-   ;; last error, better we should record all the errors
-   :git/error {}
-
-   ;; file
-   :file/path       {:db/unique :db.unique/identity}
-   :file/created-at {}
-   :file/last-modified-at {}
-   ;; TODO: calculate memory/disk usage
-   ;; :file/size       {}
-
-   :recent/pages    {}
-
-   :page/id         {:db/unique      :db.unique/identity}
-   :page/name       {:db/unique      :db.unique/identity}
-   :page/original-name {}
-   :page/file       {:db/valueType   :db.type/ref}
-   :page/directives {}
-   :page/list {}
-   :page/alias      {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
-   :page/tags       {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
-   :page/created-at {}
-   :page/last-modified-at {}
-   :page/contributors {}
-   :page/journal?   {}
-   :page/journal-day {}
-   ;; TODO: page meta like :page/start-pos and :page/end-pos to improve the performance for month journal pages.
-   ;; ;; Maybe we should add daily journal or weekly journal later.
-   ;; :page/headings {:db/valueType   :db.type/ref
-   ;;                 :db/cardinality :db.cardinality/many
-   ;;                 :db/isComponent true}
-
-   ;; heading
-   :heading/uuid   {:db/unique      :db.unique/identity}
-   :heading/file   {:db/valueType   :db.type/ref}
-   :heading/format {}
-   ;; belongs to which page
-   :heading/page   {:db/valueType   :db.type/ref}
-   ;; referenced pages
-   :heading/ref-pages {:db/valueType   :db.type/ref
-                       :db/cardinality :db.cardinality/many}
-   ;; referenced headings
-   :heading/ref-headings {:db/valueType   :db.type/ref
-                          :db/cardinality :db.cardinality/many}
-   :heading/content {}
-   :heading/anchor {}
-   :heading/marker {}
-   :heading/priority {}
-   :heading/level {}
-   :heading/tags {:db/valueType   :db.type/ref
-                  :db/cardinality :db.cardinality/many
-                  :db/isComponent true}
-   :heading/meta {}
-   :heading/properties {}
-   :heading/properties-meta {}
-
-   ;; TODO: To make this really working, every heading needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
-   ;; Any suggestions?
-   :heading/created-at {}
-   :heading/last-modified-at {}
-
-   :heading/body {}
-   :heading/pre-heading? {}
-   :heading/collapsed? {}
-   :heading/children {:db/cardinality :db.cardinality/many}
-
-   :tag/name       {:db/unique :db.unique/identity}})
 
 ;; transit serialization
 
@@ -1648,9 +1553,9 @@
 (defn start-db-conn!
   [me repo listen-handler]
   (let [files-db-name (datascript-files-db repo)
-        files-db-conn (d/create-conn files-db-schema)
+        files-db-conn (d/create-conn db-schema/files-db-schema)
         db-name (datascript-db repo)
-        db-conn (d/create-conn schema)]
+        db-conn (d/create-conn db-schema/schema)]
     (swap! conns assoc files-db-name files-db-conn)
     (swap! conns assoc db-name db-conn)
     (listen-handler repo db-conn)
@@ -1664,7 +1569,7 @@
      (for [{:keys [url]} repos]
        (let [repo url
              db-name (datascript-files-db repo)
-             db-conn (d/create-conn files-db-schema)]
+             db-conn (d/create-conn db-schema/files-db-schema)]
          (swap! conns assoc db-name db-conn)
          (->
           (p/let [stored (-> (.getItem localforage-instance db-name)
@@ -1675,16 +1580,16 @@
                   _ (when stored
                       (let [stored-db (string->db stored)
                             attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (when (= (:schema stored-db) files-db-schema) ;; check for code update
+                        (when (= (:schema stored-db) db-schema/files-db-schema) ;; check for code update
                           (reset-conn! db-conn attached-db))))
                   db-name (datascript-db repo)
-                  db-conn (d/create-conn schema)
+                  db-conn (d/create-conn db-schema/schema)
                   _ (swap! conns assoc db-name db-conn)
                   stored (.getItem localforage-instance db-name)
                   _ (if stored
                       (let [stored-db (string->db stored)
                             attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (when (= (:schema stored-db) schema) ;; check for code update
+                        (when (= (:schema stored-db) db-schema/schema) ;; check for code update
                           (reset-conn! db-conn attached-db)))
                       (when logged?
                         (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
