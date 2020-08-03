@@ -52,7 +52,6 @@
     "Draw"
     :settings
     "Settings"
-    :else
     "Logseq"))
 
 (defn set-route-match!
