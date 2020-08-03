@@ -20,6 +20,7 @@
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.components.content :as content]
+            [frontend.components.project :as project]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.mixins :as mixins]
@@ -102,7 +103,7 @@
                         (fn []
                           (notification/show! (str "Page " page-name " was deleted successfully!")
                                                       :success)))
-  (state/set-state! :modal/delete-page false)
+  (state/close-modal!)
   (route-handler/redirect-to-home!))
 
 (defn delete-page-dialog
@@ -161,7 +162,7 @@
                        (let [value (string/trim value)]
                          (when-not (string/blank? value)
                            (page-handler/rename! page-name value)
-                           (state/set-state! :modal/rename-page false)))))}
+                           (state/close-modal!)))))}
         "Submit"]]
       [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
@@ -258,18 +259,18 @@
                                                    (export-handler/copy-page-as-json! page-name))}}
                             (when-not journal?
                               {:title "Rename page"
-                               :options {:on-click #(state/set-state! :modal/rename-page true)}})
+                               :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
                             (when-not journal?
                               {:title "Delete page (will delete the file too)"
-                               :options {:on-click #(state/set-state! :modal/delete-page true)}})
+                               :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
                             (when-not journal?
                               {:title "Publish this page on Logseq"
                                :options {:on-click (fn []
-                                                     (page-handler/publish-page! page-name))}})
+                                                     (page-handler/publish-page! page-name project/add-project))}})
                             (when-not journal?
                               {:title "Publish this page as a slide on Logseq"
                                :options {:on-click (fn []
-                                                     (page-handler/publish-page-as-slide! page-name))}})
+                                                     (page-handler/publish-page-as-slide! page-name project/add-project))}})
                             (when-not journal?
                               {:title "Un-publish this page on Logseq"
                                :options {:on-click (fn []
@@ -334,10 +335,7 @@
 
          (when-not sidebar?
            [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references page-name)])
-
-         (ui/modal :modal/rename-page (rename-page-dialog page-name))
-         (ui/modal :modal/delete-page (delete-page-dialog page-name))]))))
+            (reference/unlinked-references page-name)])]))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 

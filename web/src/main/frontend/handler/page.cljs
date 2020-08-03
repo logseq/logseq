@@ -101,9 +101,9 @@
     @plugins))
 
 (defn publish-page-as-slide!
-  ([page-name]
-   (publish-page-as-slide! page-name (db/get-page-headings page-name)))
-  ([page-name headings]
+  ([page-name project-add-modal]
+   (publish-page-as-slide! page-name (db/get-page-headings page-name) project-add-modal))
+  ([page-name headings project-add-modal]
    (project-handler/exists-or-create!
     (fn [project]
       (page-add-directives! page-name {"published" true
@@ -124,10 +124,11 @@
         (util/post (str config/api "pages")
                    data
                    (published-success-handler page-name)
-                   published-failed-handler))))))
+                   published-failed-handler)))
+    project-add-modal)))
 
 (defn publish-page!
-  [page-name]
+  [page-name project-add-modal]
   (project-handler/exists-or-create!
    (fn [project]
      (let [directives (db/get-page-directives page-name)
@@ -137,7 +138,7 @@
            headings (db/get-page-headings page-name)
            plugins (get-plugins headings)]
        (if slide?
-         (publish-page-as-slide! page-name headings)
+         (publish-page-as-slide! page-name headings project-add-modal)
          (do
            (page-add-directives! page-name {"published" true})
            (let [data {:project project
@@ -150,7 +151,8 @@
              (util/post (str config/api "pages")
                         data
                         (published-success-handler page-name)
-                        published-failed-handler))))))))
+                        published-failed-handler))))))
+   project-add-modal))
 
 (defn unpublished-success-handler
   [page-name]

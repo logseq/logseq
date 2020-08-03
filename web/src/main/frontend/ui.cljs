@@ -313,9 +313,11 @@
    (panel-content close-fn)])
 
 (rum/defc modal < rum/reactive
-  [sub-path panel-content]
-  (let [show? (state/sub sub-path)
-        close-fn #(state/set-state! sub-path false)]
+  []
+  (let [modal-panel-content (state/sub :modal/panel-content)
+        show? (boolean modal-panel-content)
+        close-fn #(state/close-modal!)
+        modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
      {:style {:z-index (if show? 10 -1)}}
      (css-transition
@@ -325,7 +327,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel panel-content state close-fn)))]))
+        (modal-panel modal-panel-content state close-fn)))]))
 
 (defn loading
   [content]
@@ -340,7 +342,7 @@
   {:will-mount (fn [state]
                  (let [args (:rum/args state)]
                    (when (true? (last args))
-                    (reset! (get state ::collapsed?) true)))
+                     (reset! (get state ::collapsed?) true)))
                  state)}
   [state header content default-collapsed?]
   (let [control? (get state ::control?)

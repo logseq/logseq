@@ -531,3 +531,15 @@
 (defn get-github-token
   []
   (get-in @state [:me :access-token]))
+
+(defn set-modal!
+  [modal-panel-content]
+  (swap! state assoc
+         :modal/show? true
+         :modal/panel-content modal-panel-content))
+
+(defn close-modal!
+  []
+  (swap! state assoc
+         :modal/show? false
+         :modal/panel-content nil))

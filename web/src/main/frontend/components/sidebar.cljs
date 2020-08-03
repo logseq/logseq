@@ -126,8 +126,7 @@
        ))))
 
 (rum/defcs sidebar <
-  (mixins/modal :modal/input-project)
-  (mixins/modal :modal/git-commit-message)
+  (mixins/modal :modal/show?)
   rum/reactive
   ;; TODO: move this to keyboards
   (mixins/event-mixin
@@ -150,7 +149,7 @@
                      (db/get-key-value repo-url :git/write-permission?)
                      (not (state/get-edit-input-id))
                      (seq (state/get-changed-files repo-url)))
-                  (state/set-state! :modal/git-commit-message true)
+                  (state/set-modal! commit/add-commit-message)
                   (notification/show! "No changed files yet!" :warning)))))}
       (fn [e key-code]
         nil))))
@@ -343,8 +342,5 @@
                  :z-index 111}}
         (svg/logo (not white?))]
        (ui/notification)
-       (ui/modal :modal/input-project
-                 project/add-project)
-       (ui/modal :modal/git-commit-message
-                 commit/add-commit-message)
+       (ui/modal)
        (custom-context-menu)]]]))

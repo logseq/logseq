@@ -34,19 +34,19 @@
                   (notification/show! (util/format "Project \"%s\" already taken, please change to another name." project) :error))))))
 
 (defn exists-or-create!
-  [ok-handler]
+  [ok-handler modal-content]
   (if-let [project (state/get-current-project)]
     (if (project-exists? project)
       (ok-handler project)
       (create-project! ok-handler))
-    (state/set-state! :modal/input-project true)))
+    (state/set-modal! modal-content)))
 
 (defn add-project!
   [project]
   (create-project! project
                    (fn []
                      (notification/show! (util/format "Project \"%s\" was created successfully." project) :success)
-                     (state/set-state! :modal/input-project false))))
+                     (state/close-modal!))))
 
 (defn sync-project-settings!
   ([]

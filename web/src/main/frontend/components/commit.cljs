@@ -43,7 +43,7 @@
                        (let [value @commit]
                          (when (and value (>= (count value) 1))
                            (repo-handler/git-commit-and-push! value)
-                           (state/set-state! :modal/git-commit-message false)
+                           (state/close-modal!)
                            (reset! commit ""))))}
           "Commit and push!"]]
         [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto

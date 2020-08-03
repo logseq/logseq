@@ -13,6 +13,7 @@
             [frontend.db :as db]
             [frontend.version :as version]
             [frontend.components.svg :as svg]
+            [frontend.components.commit :as commit]
             [clojure.set :as set]))
 
 (rum/defcs choose-preferred-format
@@ -104,7 +105,7 @@
                 ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
                 [:div.flex.flex-row.justify-between.align-items.mt-2
                  (ui/button "Push now"
-                   :on-click (fn [] (state/set-state! :modal/git-commit-message true)))
+                   :on-click (fn [] (state/set-modal! commit/add-commit-message)))
                  (if pushing?
                    [:span.lds-dual-ring.mt-1])]]
                [:p "All local changes are synced!"])
