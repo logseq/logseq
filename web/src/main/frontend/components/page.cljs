@@ -300,7 +300,8 @@
                                   :page
                                   {:page page}))
                                (ui-handler/show-right-sidebar)))}
-             [:h1.title page-original-name]])
+             [:h1.title {:style {:margin-left -2}}
+              page-original-name]])
           [:div
            [:div.content
             (when (and file-path (not sidebar?) (not journal?) (not heading?))

@@ -498,7 +498,7 @@
         dark? (= "dark" (state/sub :ui/theme))]
     [:div.hd-control.mr-2.flex.flex-row.items-center
      {:style {:height 24
-              :padding-left 9
+              ;; :padding-left 9
               :float "left"}}
 
      [:a.heading-control
@@ -915,8 +915,8 @@
        (merge drag-attrs))
 
      (if (and ref? (not ref-child?))
-       [:div.my-2.opacity-50.ml-7
-        (heading/heading-parents repo uuid format false)])
+       (when-let [heading-parents (heading/heading-parents repo uuid format false)]
+         [:div.my-2.opacity-50.ml-7 heading-parents]))
 
      (dnd-separator-wrapper heading slide? (zero? idx))
 
@@ -1308,8 +1308,16 @@
 
 (rum/defc headings-container < rum/static
   [headings config]
-  (let [headings (map #(dissoc % :heading/children) headings)]
-    [:div.headings-container.flex-1 {:style {:margin-left -24}}
+  (let [headings (map #(dissoc % :heading/children) headings)
+        sidebar? (:sidebar? config)
+        ref? (:ref? config)]
+    [:div.headings-container.flex-1 {:style {:margin-left (cond
+                                                            sidebar?
+                                                            0
+                                                            ref?
+                                                            -18
+                                                            :else
+                                                            -30)}}
      (build-headings headings config)]))
 
 ;; headers to hiccup
@@ -1326,7 +1334,7 @@
           (let [page (db/entity (:db/id page))]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)
-                         (assoc :class "bg-base-2 p-4 rounded"))
+                         (assoc :class "bg-base-2 p-7 rounded"))
              (ui/foldable
               (page-cp config page)
               (headings-container headings config))]))]

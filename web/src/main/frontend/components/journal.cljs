@@ -47,7 +47,7 @@
    [:div.flex-1
     [:div.flex.flex-col.pl-1.ls-heading
      [:hr {:style {:margin-top 200}}]
-     [:h1.title.welcome-title {:style {:margin-left -6}}
+     [:h1.title.welcome-title
       "Hi, welcome to Logseq!"]
      [:p
       {}

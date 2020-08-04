@@ -55,7 +55,7 @@
           n-ref (count ref-headings)]
       (when (> n-ref 0)
         [:div.references.mt-6.flex-1.flex-row
-         [:div.content.flex
+         [:div.content.flex-1
           (ui/foldable
            [:h2.font-bold.opacity-50 (let []
                                        (str n-ref " Unlinked References"))]
