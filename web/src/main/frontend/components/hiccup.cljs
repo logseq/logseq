@@ -759,6 +759,7 @@
                                     (let [target (gobj/get e "target")]
                                       (when-not (or (util/link? target)
                                                     (util/input? target)
+                                                    (util/details-or-summary? target)
                                                     (and (util/sup? target)
                                                          (d/has-class? target "fn")))
                                         (editor-handler/clear-selection! nil)

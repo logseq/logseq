@@ -344,6 +344,13 @@
      #{"INPUT" "TEXTAREA"}
      (gobj/get node "tagName"))))
 
+(defn details-or-summary?
+  [node]
+  (when node
+    (contains?
+     #{"DETAILS" "SUMMARY"}
+     (gobj/get node "tagName"))))
+
 (defn journal?
   [path]
   (string/starts-with? path "journals/"))
