@@ -620,6 +620,7 @@
                                 level)
                       :else level)
         new-value (block/with-levels value format (assoc heading :heading/level final-level))]
+    (prn {:new-value new-value})
     (set-last-edit-heading! (:heading/uuid heading) value)
     (editor-handler/save-heading-if-changed! heading new-value)))
 
@@ -651,27 +652,35 @@
                 (when (and heading
                            (not (:ref? config))
                            (not (:custom-query? config))) ; in reference section
-                  (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
-                                   (string/lower-case (string/trim v)))
-                        insert? (cond
-                                  config/mobile?
-                                  true
+                  (let [content (state/get-edit-content)]
+                    (if (and
+                         (not (in-auto-complete? input))
+                         (> (:heading/level heading) 2)
+                             (string/blank? content))
+                      (do
+                        (util/stop e)
+                        (adjust-heading-level! state :left))
+                      (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
+                                       (string/lower-case (string/trim v)))
+                            insert? (cond
+                                      config/mobile?
+                                      true
 
-                                  (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                                  false
+                                      (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
+                                      false
 
-                                  (gobj/get e "shiftKey")
-                                  false
+                                      (gobj/get e "shiftKey")
+                                      false
 
-                                  :else
-                                  true)]
-                    (when (and
-                           insert?
-                           (not (in-auto-complete? input)))
-                      (profile
-                       "Insert heading"
-                       (insert-new-heading! state))
-                      (util/stop e))))))
+                                      :else
+                                      true)]
+                        (when (and
+                               insert?
+                               (not (in-auto-complete? input)))
+                          (profile
+                           "Insert heading"
+                           (insert-new-heading! state))
+                          (util/stop e))))))))
          ;; up
          38 (fn [state e]
               (when-not (in-auto-complete? input)
