@@ -14,6 +14,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
             [frontend.components.draw :as draw]
+            [frontend.components.heading :as heading]
             [frontend.ui :as ui]
             [frontend.components.widgets :as widgets]
             [frontend.handler :as handler]
@@ -831,6 +832,7 @@
 (rum/defc heading-container < rum/static
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-heading? idx] :as heading}]
   (let [ref? (boolean (:ref? config))
+        ref-child? (:ref-child? config)
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
@@ -912,6 +914,10 @@
        (not slide?)
        (merge drag-attrs))
 
+     (if (and ref? (not ref-child?))
+       [:div.my-2.opacity-50.ml-7
+        (heading/heading-parents repo uuid format false)])
+
      (dnd-separator-wrapper heading slide? (zero? idx))
 
      [:div.flex-1.flex-row
@@ -924,9 +930,18 @@
        [:div.heading-children {:style {:margin-left (if doc-mode? 12 31)
                                        :display (if collapsed? "none" "")}}
         (for [child children]
-          (let [child (dissoc child :heading/meta)]
-            (rum/with-key (heading-container config child)
-              (:heading/uuid child))))])
+          (when (map? child)
+            (let [child (dissoc child :heading/meta)]
+             (rum/with-key (heading-container config child)
+               (:heading/uuid child)))))])
+
+     (when (and ref? (not ref-child?))
+       (let [children (db/get-heading-children repo uuid)]
+         (when (seq children)
+           [:div.ref-children.ml-12
+            (headings-container children (assoc config
+                                                :ref-child? true
+                                                :ref? true))])))
 
      (dnd-separator-wrapper heading slide? false)]))
 
@@ -1309,7 +1324,9 @@
        [:div.flex.flex-col
         (for [[page headings] headings]
           (let [page (db/entity (:db/id page))]
-            [:div.my-2 {:key (str "page-" (:db/id page))}
+            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                         (:ref? config)
+                         (assoc :class "bg-base-2 p-4 rounded"))
              (ui/foldable
               (page-cp config page)
               (headings-container headings config))]))]
