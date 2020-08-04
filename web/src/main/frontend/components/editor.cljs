@@ -620,7 +620,6 @@
                                 level)
                       :else level)
         new-value (block/with-levels value format (assoc heading :heading/level final-level))]
-    (prn {:new-value new-value})
     (set-last-edit-heading! (:heading/uuid heading) value)
     (editor-handler/save-heading-if-changed! heading new-value)))
 
@@ -745,12 +744,16 @@
                  nil)))
          ;; tab
          9 (fn [state e]
-             (when-not (state/get-editor-show-input)
-               (util/stop e)
-               (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
-                                 :left
-                                 :right)]
-                 (adjust-heading-level! state direction))))}
+             (let [input-id (state/get-edit-input-id)
+                   input (and input-id (gdom/getElement id))
+                   pos (and input (:pos (util/get-caret-pos input)))]
+               (when-not (state/get-editor-show-input)
+                (util/stop e)
+                (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
+                                  :left
+                                  :right)]
+                  (adjust-heading-level! state direction)
+                  (and input pos (js/setTimeout #(util/set-caret-pos! input pos) 50))))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
