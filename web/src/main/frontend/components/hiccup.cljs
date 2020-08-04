@@ -927,7 +927,7 @@
       (heading-content-or-editor config heading edit-input-id heading-id slide?)]
 
      (when (seq children)
-       [:div.heading-children {:style {:margin-left (if doc-mode? 12 31)
+       [:div.heading-children {:style {:margin-left (if doc-mode? 12 22)
                                        :display (if collapsed? "none" "")}}
         (for [child children]
           (when (map? child)
@@ -1317,7 +1317,7 @@
                                                             ref?
                                                             -18
                                                             :else
-                                                            -30)}}
+                                                            -24)}}
      (build-headings headings config)]))
 
 ;; headers to hiccup
