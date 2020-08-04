@@ -610,6 +610,12 @@
                                    (editor-handler/uncheck heading)
                                    (editor-handler/check heading)))}))))
 
+(defn list-checkbox
+  [checked?]
+  (ui/checkbox {:style {:margin-right 6
+                        :margin-top -1}
+                :checked checked?}))
+
 (defn marker-switch
   [{:heading/keys [pre-heading? marker] :as heading}]
   (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
@@ -983,14 +989,12 @@
                (vec-cat content [items]))]
 
       :else
-      (->elem
-       :li
-       {:checked checked?}
-       (vec-cat
-        [(->elem
-          :p
-          content)]
-        [items])))))
+      [:li {:checked checked?}
+       (let [item [[:p content]
+                   items]]
+         (if (nil? checkbox)
+           [[:p content] items]
+           [[:p (list-checkbox checkbox) content] items]))])))
 
 (defn table
   [config {:keys [header groups col_groups]}]
