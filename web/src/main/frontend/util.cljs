@@ -692,7 +692,8 @@
 
 (defn tag-valid?
   [tag-name]
-  (re-find regex/valid-tag-pattern tag-name))
+  (when tag-name
+    (re-find regex/valid-tag-pattern tag-name)))
 
 (defn encode-str
   [s]

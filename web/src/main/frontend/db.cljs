@@ -1905,7 +1905,7 @@
   [repo heading headings]
   (if (> (count headings) 1)
     (when-let [conn (get-conn repo)]
-      (let [top-parent (first (get-heading-parent repo (:heading/uuid heading)))
+      (let [top-parent (:heading/uuid (get-heading-parent repo (:heading/uuid heading)))
             level (:heading/level heading)
             result (loop [result []
                           headings (reverse headings)

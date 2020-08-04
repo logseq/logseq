@@ -11,25 +11,26 @@
    (let [parents (db/get-heading-parents repo heading-id 3)
          page (db/get-heading-page repo heading-id)
          page-name (:page/name page)]
-     (when (seq parents)
-       [:div.heading-parents.flex-row.flex
-       (when show-page?
-         [:a {:href (str "/page/" (util/encode-str page-name))}
-          (:page/original-name page)])
+     [:div.heading-parents.flex-row.flex
+      (when show-page?
+        [:a {:href (str "/page/" (util/encode-str page-name))}
+         (or (:page/original-name page)
+             (:page/name page))])
 
-       (when show-page?
-         [:span.mx-2.opacity-50 "⮞"])
+      (when (and show-page? (seq parents))
+        [:span.mx-2.opacity-50 "⮞"])
 
-       (let [parents (for [{:heading/keys [uuid content]} parents]
-                       (let [title (->> (take 24
-                                              (-> (string/split content #"\n")
-                                                  first
-                                                  (editor/remove-level-spaces format)))
-                                        (apply str))]
-                         (when (and (not (string/blank? title))
-                                    (not= (string/lower-case page-name) (string/lower-case title)))
-                           [:a {:href (str "/page/" uuid)}
-                            title])))
-             parents (remove nil? parents)]
-         (interpose [:span.mx-2.opacity-50 "⮞"]
-                    parents))]))))
+      (when (seq parents)
+        (let [parents (for [{:heading/keys [uuid content]} parents]
+                        (let [title (->> (take 24
+                                               (-> (string/split content #"\n")
+                                                   first
+                                                   (editor/remove-level-spaces format)))
+                                         (apply str))]
+                          (when (and (not (string/blank? title))
+                                     (not= (string/lower-case page-name) (string/lower-case title)))
+                            [:a {:href (str "/page/" uuid)}
+                             title])))
+              parents (remove nil? parents)]
+          (interpose [:span.mx-2.opacity-50 "⮞"]
+                     parents)))])))
