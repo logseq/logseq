@@ -216,7 +216,7 @@
        [repo :heading/block heading-id])))
   [config id]
   (let [headings (db/get-heading-and-children (state/get-current-repo) id)]
-    [:div.embed-block.py-2.my-2.px-3.bg-base-2
+    [:div.embed-block.py-2.my-2.px-3.bg-base-2 {:style {:z-index 2}}
      [:p
       [:code "Embed block:"]]
      (headings-container headings (assoc config :embed? true))]))
@@ -776,7 +776,8 @@
                                            edit-input-id
                                            (editor-handler/remove-level-spaces content format)
                                            heading
-                                           cursor-range)))))
+                                           cursor-range))
+                                        (util/stop e))))
                         :on-drag-over (fn [event]
                                         (util/stop event)
                                         (when-not (dnd-same-heading? uuid)
