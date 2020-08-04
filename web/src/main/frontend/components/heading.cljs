@@ -29,6 +29,7 @@
                          (when (and (not (string/blank? title))
                                     (not= (string/lower-case page-name) (string/lower-case title)))
                            [:a {:href (str "/page/" uuid)}
-                            title])))]
+                            title])))
+             parents (remove nil? parents)]
          (interpose [:span.mx-2.opacity-50 "⮞"]
                     parents))]))))
