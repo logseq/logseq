@@ -640,8 +640,8 @@
            input-id id
            input (gdom/getElement input-id)
            repo (:heading/repo heading)]
-       (.addEventListener input "paste" (fn [event]
-                                          (append-paste-doc! format event)))
+       ;; (.addEventListener input "paste" (fn [event]
+       ;;                                    (append-paste-doc! format event)))
        (mixins/on-key-down
         state
         {
@@ -865,8 +865,8 @@
    :will-unmount (fn [state]
                    (let [{:keys [id value format heading repo dummy?]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
-                       (.removeEventListener input "paste" (fn [event]
-                                                             (append-paste-doc! format event)))
+                       ;; (.removeEventListener input "paste" (fn [event]
+                       ;;                                       (append-paste-doc! format event)))
                        (dnd/unsubscribe!
                         input
                         :upload-images))
