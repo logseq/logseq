@@ -4,6 +4,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
+            [promesa.core :as p]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -752,8 +753,10 @@
                 (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
                                   :left
                                   :right)]
-                  (adjust-heading-level! state direction)
-                  (and input pos (js/setTimeout #(util/set-caret-pos! input pos) 50))))))}
+                  (p/let [_ (adjust-heading-level! state direction)]
+                    (and input pos (js/setTimeout #(when-let [input (gdom/getElement input-id)]
+                                                     (util/move-cursor-to input pos))
+                                                  0)))))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
