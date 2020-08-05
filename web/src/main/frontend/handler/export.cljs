@@ -38,3 +38,12 @@
         (.setAttribute anchor "href" data-str)
         (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".json"))
         (.click anchor)))))
+
+(defn download-file!
+  [file-path]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [content (db/get-file repo file-path)]
+      (when-let [anchor (gdom/getElement "download")]
+        (.setAttribute anchor "href" (str "data:application/octet-stream;charset=utf-8," content))
+        (.setAttribute anchor "download" (string/replace file-path "/" "-"))
+        (.click anchor)))))

@@ -18,8 +18,8 @@
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
-                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg"))]
-    [:div
+                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg"))]
+    [:div.dropdown-wrapper
      {:class (str class " "
                   (case state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
