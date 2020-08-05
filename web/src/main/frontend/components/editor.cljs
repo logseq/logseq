@@ -621,8 +621,9 @@
                                 level)
                       :else level)
         new-value (block/with-levels value format (assoc heading :heading/level final-level))]
-    (set-last-edit-heading! (:heading/uuid heading) value)
-    (editor-handler/save-heading-if-changed! heading new-value)))
+    (when (<= (- final-level previous-level) 1)
+      (set-last-edit-heading! (:heading/uuid heading) value)
+      (editor-handler/save-heading-if-changed! heading new-value))))
 
 (defn- append-paste-doc!
   [format event]
