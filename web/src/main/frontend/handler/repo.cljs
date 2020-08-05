@@ -281,7 +281,8 @@
                 (p/let [result (git/fetch repo-url (state/get-github-token))
                         {:keys [fetchHead]} (bean/->clj result)
                         _ (git-handler/set-latest-commit! repo-url fetchHead)]
-                  (route-handler/redirect! {:to :diff})))))))))))
+                  ;; (route-handler/redirect! {:to :diff})
+                  ))))))))))
 
 (defn pull-current-repo
   []
