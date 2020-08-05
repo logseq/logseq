@@ -43,7 +43,10 @@
   [file-path]
   (when-let [repo (state/get-current-repo)]
     (when-let [content (db/get-file repo file-path)]
-      (when-let [anchor (gdom/getElement "download")]
-        (.setAttribute anchor "href" (str "data:application/octet-stream;charset=utf-8," content))
-        (.setAttribute anchor "download" file-path)
-        (.click anchor)))))
+      (let [data (js/Blob. (array content)
+                           (clj->js {:type "text/plain"}))]
+        (let [anchor (gdom/getElement "download")
+              url (js/window.URL.createObjectURL data)]
+          (.setAttribute anchor "href" url)
+          (.setAttribute anchor "download" file-path)
+          (.click anchor))))))
