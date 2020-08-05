@@ -151,7 +151,7 @@
      [:h3 {} "2. Use it locally (no need to login)"]
      [:p
       {}
-      "Just remember to backup your notes periodically (we'll provide export and import soon)!"]
+      "Just remember to backup your notes periodically!"]
      [:h2 {} "Features"]
      [:ul
       {}
