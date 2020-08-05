@@ -1005,27 +1005,24 @@
                (vec-cat content [items]))]
 
       :else
-      [:li {:checked checked?}
-       (let [item [[:p content]
-                   items]]
-         (if (nil? checkbox)
-           (->elem
-            :li
-            {:checked checked?}
-            (vec-cat
-             [(->elem
-               :p
-               content)]
-             [items]))
-           (->elem
-            :li
-            {:checked checked?}
-            (vec-cat
-             [(->elem
-               :p
-               (list-checkbox checkbox)
-               content)]
-             [items]))))])))
+      (if (nil? checkbox)
+        (->elem
+         :li
+         {:checked checked?}
+         (vec-cat
+          [(->elem
+            :p
+            content)]
+          [items]))
+        (->elem
+         :li
+         {:checked checked?}
+         (vec-cat
+          [(->elem
+            :p
+            (list-checkbox checkbox)
+            content)]
+          [items]))))))
 
 (defn table
   [config {:keys [header groups col_groups]}]
