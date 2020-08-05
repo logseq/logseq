@@ -211,7 +211,7 @@
   (when (db/get-conn repo-url true)
     (let [status (db/get-key-value repo-url :git/status)]
       (when (and
-             (not= status :push-failed)
+             ;; (not= status :push-failed)
              (empty? (state/get-changed-files repo-url))
              (not (state/get-edit-input-id))
              (not (state/in-draw-mode?)))
@@ -250,7 +250,7 @@
   ([repo-url commit-message]
    (let [status (db/get-key-value repo-url :git/status)]
      (when (and
-            (not= status :push-failed)
+            ;; (not= status :push-failed)
             (db/get-key-value repo-url :git/write-permission?)
             (not (state/get-edit-input-id))
             (seq (state/get-changed-files repo-url)))
