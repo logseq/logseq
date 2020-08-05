@@ -34,10 +34,35 @@
 
       [:span.pl-1.opacity-70 "Git commit requires the email address."]]]))
 
+(rum/defcs set-cors < (rum/local "" ::cors)
+  [state]
+  (let [cors (get state ::cors)]
+    [:div.p-8.flex.items-center.justify-center
+     [:div.w-full.mx-auto
+      [:div
+       [:div
+        [:h1.title.mb-1
+         "Your cors address:"]
+        [:div.mt-2.mb-4.relative.rounded-md.shadow-sm.max-w-xs
+         [:input#.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
+          {:autoFocus true
+           :on-change (fn [e]
+                        (reset! cors (util/evalue e)))}]]]]
+      (ui/button
+        "Submit"
+        :on-click
+        (fn []
+          (user-handler/set-cors! @cors)))
+
+      [:hr]
+
+      [:span.pl-1.opacity-70 "Git commit requires the cors address."]]]))
+
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (keyword (state/sub [:me :preferred_format]))
-        github-token (state/sub [:me :access-token])]
+        github-token (state/sub [:me :access-token])
+        cors-proxy (state/sub [:me :cors_proxy])]
     [:div#settings
      [:h1.title "Settings"]
 
@@ -76,6 +101,7 @@
           [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
            {:default-value github-token
             :type "password"
+            :autocomplete "new-password"
             :on-blur (fn [event]
                        (when-let [token (util/evalue event)]
                          (when-not (string/blank? token)
@@ -87,4 +113,32 @@
                                 (when-let [token (util/evalue event)]
                                   (when-not (string/blank? token)
                                     (user-handler/set-github-token! token false)
-                                    (notification/show! "Github personal access token updated successfully!" :success))))))}]]]]]]]))
+                                    (notification/show! "Github personal access token updated successfully!" :success))))))}]]]]
+
+       [:hr ]
+
+       (ui/admonition
+        :important
+        [:p "Don't use other people's proxy servers. It's very dangerous, which could make your token and notes stolen. Logseq will not be responsible for this loss if you use other people's proxy servers. You can deploy it yourself, check "
+         [:a {:href "https://github.com/isomorphic-git/cors-proxy"
+              :target "_blank"}
+          "https://github.com/isomorphic-git/cors-proxy"]])
+
+       [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+        [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+         {:for "cors"}
+         "Custom CORS proxy server"]
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+          [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
+           {:default-value cors-proxy
+            :on-blur (fn [event]
+                       (when-let [server (util/evalue event)]
+                         (user-handler/set-cors! server)
+                         (notification/show! "Custom CORS proxy updated successfully!" :success)))
+            :on-key-press (fn [event]
+                            (let [k (gobj/get event "key")]
+                              (if (= "Enter" k)
+                                (when-let [server (util/evalue event)]
+                                  (user-handler/set-cors! server)
+                                  (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]]]]))

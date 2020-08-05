@@ -373,3 +373,19 @@
                      "hidden"
                      "initial")}
       content]]))
+
+(defn admonition
+  [type content]
+  (let [type (name type)]
+    (when-let [icon (case (string/lower-case type)
+                     "note" svg/note
+                     "tip" svg/tip
+                     "important" svg/important
+                     "caution" svg/caution
+                     "warning" svg/warning
+                     nil)]
+     [:div.flex.flex-row.admonitionblock.align-items {:class type}
+      [:div.pr-4.admonition-icon.flex.flex-col.justify-center
+       {:title (string/upper-case type)} (icon)]
+      [:div.ml-4.text-lg
+       content]])))
