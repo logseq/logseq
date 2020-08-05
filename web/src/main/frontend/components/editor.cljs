@@ -250,7 +250,7 @@
 
 (defn get-matched-blocks
   [q]
-  (search/search q 5))
+  (search/search q 20))
 
 (rum/defc block-search < rum/reactive
   {:will-unmount (fn [state] (reset! *selected-text nil) state)}
