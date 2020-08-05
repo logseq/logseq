@@ -5,6 +5,7 @@
             [frontend.handler.project :as project]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.file :as file]
+            [frontend.handler.export :as export-handler]
             [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -39,7 +40,8 @@
         [:thead
          [:tr
           [:th "File name"]
-          [:th "Last modified at"]]]
+          [:th "Last modified at"]
+          [:th ""]]]
         [:tbody
          (for [[file modified-at] files]
            (let [file-id (util/url-encode file)]
@@ -54,7 +56,12 @@
                     (if (zero? modified-at)
                       "No data"
                       (date/get-date-time-string
-                       (t/to-default-time-zone (tc/to-date-time modified-at))))]]]))]]))])
+                       (t/to-default-time-zone (tc/to-date-time modified-at))))]]
+
+              [:td [:a.text-sm
+                    {:on-click (fn [e]
+                                 (export-handler/download-file! file))}
+                    [:span "Download"]]]]))]]))])
 
 (rum/defcs file < rum/reactive
   [state]

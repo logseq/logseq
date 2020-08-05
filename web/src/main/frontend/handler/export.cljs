@@ -45,5 +45,5 @@
     (when-let [content (db/get-file repo file-path)]
       (when-let [anchor (gdom/getElement "download")]
         (.setAttribute anchor "href" (str "data:application/octet-stream;charset=utf-8," content))
-        (.setAttribute anchor "download" (string/replace file-path "/" "-"))
+        (.setAttribute anchor "download" file-path)
         (.click anchor)))))
