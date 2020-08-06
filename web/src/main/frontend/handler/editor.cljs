@@ -143,7 +143,8 @@
 (defn heading-content-join-newlines
   [prefix value postfix]
   (str
-   (if (= "\n" (last prefix))
+   (if (or (= "" prefix)
+           (= "\n" (last prefix)))
      ""
      "\n")
    (string/trim value)
@@ -177,13 +178,13 @@
   [{:heading/keys [content meta dummy?] :as heading} file-content value heading-with-children-content last-child-end-pos indent-left?]
   (let [utf8-content (utf8/encode file-content)
         prefix (utf8/substring utf8-content 0 (:pos meta))
-        postfix (let [last-child-end-pos (if (some? indent-left?) last-child-end-pos nil)
-                      end-pos (or
-                               last-child-end-pos
-                               (if dummy?
-                                 (:pos meta)
-                                 (:end-pos meta)))]
-                  (utf8/substring utf8-content end-pos))
+        last-child-end-pos (if (some? indent-left?) last-child-end-pos nil)
+        end-pos (or
+                 last-child-end-pos
+                 (if dummy?
+                   (:pos meta)
+                   (:end-pos meta)))
+        postfix (utf8/substring utf8-content end-pos)
         heading-children-value (heading-content-join-newlines prefix heading-with-children-content postfix)]
     (str prefix heading-children-value postfix)))
 
@@ -286,33 +287,36 @@
                         (fn [{:heading/keys [uuid meta level content] :as heading}]
                           (let [old-start-pos (:pos meta)
                                 old-end-pos (:end-pos meta)
-                                [new-content offset] (cond
-                                                       (true? indent-left?)
-                                                       [(subs content 1) -1]
-                                                       (false? indent-left?)
-                                                       [(str (config/get-heading-pattern format) content) 1]
-                                                       :else
-                                                       [nil 0])
-                                new-end-pos (if old-end-pos
-                                              (+ @last-start-pos
-                                                 (- old-end-pos old-start-pos)
-                                                 offset))
-                                new-meta {:pos @last-start-pos
-                                          :end-pos new-end-pos}]
-                            (reset! last-start-pos new-end-pos)
-                            (when-not @next-leq-level?
-                              (if (<= level heading-level)
-                               (reset! next-leq-level? true)
-                               (do
-                                 (reset! heading-and-children-content (str @heading-and-children-content new-content))
-                                 (reset! last-child-end-pos old-end-pos))))
-                            (cond->
-                              {:heading/uuid uuid
-                               :heading/meta new-meta}
-                              (and (some? indent-left?) (not @next-leq-level?))
-                              (assoc :heading/level (if indent-left? (dec level) (inc level)))
-                              (and new-content (not @next-leq-level?))
-                              (assoc :heading/content new-content))))
+                                ]
+                            (when (<= level heading-level)
+                              (reset! next-leq-level? true))
+
+                            (let [[new-content offset] (cond
+                                                         (and (not @next-leq-level?) (true? indent-left?))
+                                                         [(subs content 1) -1]
+                                                         (and (not @next-leq-level?) (false? indent-left?))
+                                                         [(str (config/get-heading-pattern format) content) 1]
+                                                         :else
+                                                         [nil 0])
+                                  new-end-pos (if old-end-pos
+                                                (+ @last-start-pos
+                                                   (- old-end-pos old-start-pos)
+                                                   offset))
+                                  new-meta {:pos @last-start-pos
+                                            :end-pos new-end-pos}]
+                              (reset! last-start-pos new-end-pos)
+                              (when-not @next-leq-level?
+                                (do
+                                  (reset! heading-and-children-content (str @heading-and-children-content new-content))
+                                  (reset! last-child-end-pos old-end-pos)))
+
+                              (cond->
+                                {:heading/uuid uuid
+                                 :heading/meta new-meta}
+                                (and (some? indent-left?) (not @next-leq-level?))
+                                (assoc :heading/level (if indent-left? (dec level) (inc level)))
+                                (and new-content (not @next-leq-level?))
+                                (assoc :heading/content new-content)))))
                         after-headings)]
     [after-headings @heading-and-children-content @last-child-end-pos]))
 
@@ -402,6 +406,9 @@
                                                               (block/parse-heading heading format))
                  [after-headings heading-children-content new-end-pos] (rebuild-after-headings-indent-outdent repo file heading (:end-pos (:heading/meta heading)) end-pos indent-left?)
                  new-content (new-file-content-indent-outdent heading file-content value heading-children-content new-end-pos indent-left?)
+                 ;; _ (prn {:heading-children-content heading-children-content
+                 ;;         :new-end-pos new-end-pos
+                 ;;         :new-content new-content})
                  retract-refs (compute-retract-refs (:db/id e) (first headings) ref-pages ref-headings)
                  headings (db/recompute-heading-children repo heading headings)
                  page-id (:db/id page)

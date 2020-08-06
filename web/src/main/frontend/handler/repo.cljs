@@ -187,7 +187,7 @@
    transact-option)
   (doseq [[file-path new-content] files]
     (file-handler/alter-file repo file-path new-content {:reset? false
-                                            :re-render-root? false})))
+                                                         :re-render-root? false})))
 
 (defn persist-repo-metadata!
   [repo]
