@@ -21,6 +21,7 @@
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.ui :as ui]
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
             [cljs.reader :as reader]
