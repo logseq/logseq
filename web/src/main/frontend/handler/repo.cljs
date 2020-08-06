@@ -276,13 +276,15 @@
                  [:p.content
                   "Failed to push, please "
                   [:span.text-gray-700.font-bold
-                   "resolve any diffs first."]]
-                 :error)
+                   "resolve any diff first."]
+                  (ui/button
+                    "Go to diff"
+                    :href "/diff")]
+                 :error
+                 false)
                 (p/let [result (git/fetch repo-url (state/get-github-token))
-                        {:keys [fetchHead]} (bean/->clj result)
-                        _ (git-handler/set-latest-commit! repo-url fetchHead)]
-                  ;; (route-handler/redirect! {:to :diff})
-                  ))))))))))
+                        {:keys [fetchHead]} (bean/->clj result)]
+                  (git-handler/set-latest-commit! repo-url fetchHead)))))))))))
 
 (defn pull-current-repo
   []
