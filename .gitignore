@@ -34,3 +34,6 @@ tauri-release/
 report.html
 /resources/static/css/tailwind.min.css
 resources/static/style.css
+
+.calva
+web/.calva
