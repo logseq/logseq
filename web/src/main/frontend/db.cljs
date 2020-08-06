@@ -720,14 +720,19 @@
           sort-by-pos))))
 
 (defn get-file-after-headings-meta
-  [repo-url file-id end-pos]
-  (let [db (get-conn repo-url)
-        headings (d/datoms db :avet :heading/file file-id)
-        eids (mapv :e headings)
-        headings (d/pull-many db '[:heading/uuid :heading/meta] eids)]
-    (->> (filter (fn [{:heading/keys [meta]}]
-                   (>= (:pos meta) end-pos)) headings)
-         sort-by-pos)))
+  ([repo-url file-id end-pos]
+   (get-file-after-headings-meta repo-url file-id end-pos false))
+  ([repo-url file-id end-pos content-level?]
+   (let [db (get-conn repo-url)
+         headings (d/datoms db :avet :heading/file file-id)
+         eids (mapv :e headings)
+         ks (if content-level?
+              '[:heading/uuid :heading/meta :heading/content :heading/level]
+              '[:heading/uuid :heading/meta])
+         headings (d/pull-many db ks eids)]
+     (->> (filter (fn [{:heading/keys [meta]}]
+                    (>= (:pos meta) end-pos)) headings)
+          sort-by-pos))))
 
 (defn delete-file-headings!
   [repo-url path]

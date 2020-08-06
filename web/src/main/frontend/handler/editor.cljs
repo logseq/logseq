@@ -104,7 +104,7 @@
   [heading-id]
   (when heading-id
     (route-handler/redirect! {:to :page
-                :path-params {:name (str heading-id)}})))
+                              :path-params {:name (str heading-id)}})))
 
 (defn open-heading-in-sidebar!
   [heading-id]
@@ -140,6 +140,17 @@
          (let [pos (inc (diff/find-position markup range))]
            (util/set-caret-pos! node pos)))))))
 
+(defn heading-content-join-newlines
+  [prefix value postfix]
+  (str
+   (if (= "\n" (last prefix))
+     ""
+     "\n")
+   (string/trim value)
+   (if (= "\n" (first postfix))
+     ""
+     "\n")))
+
 (defn new-file-content
   [{:heading/keys [content meta dummy?] :as heading} file-content value]
   (let [utf8-content (utf8/encode file-content)
@@ -148,16 +159,33 @@
                                 (:pos meta)
                                 (:end-pos meta))]
                   (utf8/substring utf8-content end-pos))
-        value (str
-               (if (= "\n" (last prefix))
-                 ""
-                 "\n")
-               value
-               (if (= "\n" (first postfix))
-                 ""
-                 "\n"))]
+        value (heading-content-join-newlines prefix value postfix)]
     [(str prefix value postfix)
      value]))
+
+(defn get-heading-new-value
+  [{:heading/keys [content meta dummy?] :as heading} file-content value]
+  (let [utf8-content (utf8/encode file-content)
+        prefix (utf8/substring utf8-content 0 (:pos meta))
+        postfix (let [end-pos (if dummy?
+                                (:pos meta)
+                                (:end-pos meta))]
+                  (utf8/substring utf8-content end-pos))]
+    (heading-content-join-newlines prefix value postfix)))
+
+(defn new-file-content-indent-outdent
+  [{:heading/keys [content meta dummy?] :as heading} file-content value heading-with-children-content last-child-end-pos indent-left?]
+  (let [utf8-content (utf8/encode file-content)
+        prefix (utf8/substring utf8-content 0 (:pos meta))
+        postfix (let [last-child-end-pos (if (some? indent-left?) last-child-end-pos nil)
+                      end-pos (or
+                               last-child-end-pos
+                               (if dummy?
+                                 (:pos meta)
+                                 (:end-pos meta)))]
+                  (utf8/substring utf8-content end-pos))
+        heading-children-value (heading-content-join-newlines prefix heading-with-children-content postfix)]
+    (str prefix heading-children-value postfix)))
 
 (defn- default-content-with-title
   [format title]
@@ -197,7 +225,7 @@
                   (db/reset-file! repo path content)
                   (git-handler/git-add repo path)
                   (route-handler/redirect! {:to :page
-                              :path-params {:name page}}))))))))))
+                                            :path-params {:name page}}))))))))))
 
 (defn- with-heading-meta
   [repo heading]
@@ -244,6 +272,50 @@
           :heading/meta new-meta}))
      after-headings)))
 
+(defn rebuild-after-headings-indent-outdent
+  [repo file heading before-end-pos new-end-pos indent-left?]
+  (let [file-id (:db/id file)
+        after-headings (db/get-file-after-headings-meta repo file-id before-end-pos true)
+        last-start-pos (atom new-end-pos)
+        heading-level (:heading/level heading)
+        next-leq-level? (atom false)
+        format (:heading/format heading)
+        heading-and-children-content (atom (:heading/content heading))
+        last-child-end-pos (atom before-end-pos)
+        after-headings (mapv
+                        (fn [{:heading/keys [uuid meta level content] :as heading}]
+                          (let [old-start-pos (:pos meta)
+                                old-end-pos (:end-pos meta)
+                                [new-content offset] (cond
+                                                       (true? indent-left?)
+                                                       [(subs content 1) -1]
+                                                       (false? indent-left?)
+                                                       [(str (config/get-heading-pattern format) content) 1]
+                                                       :else
+                                                       [nil 0])
+                                new-end-pos (if old-end-pos
+                                              (+ @last-start-pos
+                                                 (- old-end-pos old-start-pos)
+                                                 offset))
+                                new-meta {:pos @last-start-pos
+                                          :end-pos new-end-pos}]
+                            (reset! last-start-pos new-end-pos)
+                            (when-not @next-leq-level?
+                              (if (<= level heading-level)
+                               (reset! next-leq-level? true)
+                               (do
+                                 (reset! heading-and-children-content (str @heading-and-children-content new-content))
+                                 (reset! last-child-end-pos old-end-pos))))
+                            (cond->
+                              {:heading/uuid uuid
+                               :heading/meta new-meta}
+                              (and (some? indent-left?) (not @next-leq-level?))
+                              (assoc :heading/level (if indent-left? (dec level) (inc level)))
+                              (and new-content (not @next-leq-level?))
+                              (assoc :heading/content new-content))))
+                        after-headings)]
+    [after-headings @heading-and-children-content @last-child-end-pos]))
+
 (defn compute-retract-refs
   [eid {:heading/keys [ref-pages ref-headings]} old-ref-pages old-ref-headings]
   (let [retracted? (or (and (empty? ref-pages) (seq old-ref-pages))
@@ -259,129 +331,129 @@
        (remove nil?)))))
 
 (defn save-heading-if-changed!
-  [{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content ref-pages ref-headings] :as heading} value]
-  (let [repo (or repo (state/get-current-repo))
-        e (db/entity repo [:heading/uuid uuid])
-        heading (with-heading-meta repo heading)
-        format (or format (state/get-preferred-format))
-        page (db/entity repo (:db/id page))
-        [old-directives new-directives] (when pre-heading?
-                                          [(:page/directives (db/entity (:db/id page)))
-                                           (db/parse-directives value format)])
-        page-tags (when-let [tags (:tags new-directives)]
-                    (util/->tags tags))
-        page-alias (when-let [alias (:alias new-directives)]
-                     (map
-                       (fn [alias]
-                         {:page/name (string/lower-case alias)})
-                       (remove #{(:page/name page)} alias)))
-        page-list (when-let [content (:list new-directives)]
-                    (db/extract-page-list content))
-        permalink-changed? (when (and pre-heading? (:permalink old-directives))
-                             (not= (:permalink old-directives)
-                                   (:permalink new-directives)))
-        value (if permalink-changed?
-                (db/add-directives! format value {:old_permalink (:permalink old-directives)})
-                value)
-        new-directives (if permalink-changed?
-                         (assoc new-directives :old_permalink (:permalink old-directives))
-                         new-directives)]
-    (when (not= (string/trim content) (string/trim value)) ; heading content changed
-      (let [file (db/entity repo (:db/id file))
-            save-heading (fn [file {:heading/keys [uuid content meta page file dummy? format] :as heading}]
-                           (let [file (db/entity repo (:db/id file))
-                                 file-path (:file/path file)
-                                 format (format/get-format file-path)]
-                             (let [file-content (db/get-file repo file-path)
-                                   [new-content value] (new-file-content heading file-content value)
-                                   {:keys [headings pages start-pos end-pos]} (if pre-heading?
-                                                                                (let [new-end-pos (utf8/length (utf8/encode value))]
-                                                                                  {:headings [(-> heading
-                                                                                                  (assoc :heading/content value)
-                                                                                                  (assoc-in [:heading/meta :end-pos] new-end-pos))]
-                                                                                   :pages []
-                                                                                   :start-pos 0
-                                                                                   :end-pos new-end-pos})
-                                                                                (block/parse-heading (assoc heading :heading/content value) format))
-                                   retract-refs (compute-retract-refs (:db/id e) (first headings) ref-pages ref-headings)
-                                   headings (db/recompute-heading-children repo heading headings)
-                                   after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)
-                                   page-id (:db/id page)
-                                   modified-time (let [modified-at (tc/to-long (t/now))]
-                                                   [[:db/add page-id :page/last-modified-at modified-at]
-                                                    [:db/add (:db/id file) :file/last-modified-at modified-at]])
-                                   page-directives (when pre-heading?
-                                                     (if (seq new-directives)
-                                                       [[:db/retract page-id :page/directives]
-                                                        {:db/id page-id
-                                                         :page/directives new-directives}]
-                                                       [[:db/retract page-id :page/directives]]))
-                                   page-list (when pre-heading?
-                                               (if (seq page-list)
-                                                 [[:db/retract page-id :page/list]
-                                                  {:db/id page-id
-                                                   :page/list page-list}]
-                                                 [[:db/retract page-id :page/list]]))
-                                   page-tags (when (and pre-heading? (seq page-tags))
-                                               (if (seq page-tags)
-                                                 [[:db/retract page-id :page/tags]
-                                                  {:db/id page-id
-                                                   :page/tags page-tags}]
-                                                 [[:db/retract page-id :page/tags]]))
-                                   page-alias (when (and pre-heading? (seq page-alias))
-                                                (if (seq page-alias)
-                                                  [[:db/retract page-id :page/alias]
-                                                   {:db/id page-id
-                                                    :page/alias page-alias}]
-                                                  [[:db/retract page-id :page/alias]]))]
-                               (profile
-                                "Save heading: "
-                                (repo-handler/transact-react-and-alter-file!
-                                 repo
-                                 (concat
-                                  pages
-                                  headings
-                                  retract-refs
-                                  page-directives
-                                  page-list
-                                  page-tags
-                                  page-alias
-                                  after-headings
-                                  modified-time)
-                                 {:key :heading/change
-                                  :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
-                                 [[file-path new-content]]))
-                               (when (or (seq retract-refs) pre-heading?)
-                                 (ui-handler/re-render-root!)))))]
-        (cond
-          ;; Page was referenced but no related file
-          (and page (not file))
-          (let [format (name format)
-                path (str (-> (:page/name page)
-                              (string/replace #"\s+" "_")
-                              (util/encode-str)) "."
-                          (if (= format "markdown") "md" format))
-                file-path (str "/" path)
-                dir (util/get-repo-dir repo)]
-            (p/let [exists? (fs/file-exists? dir file-path)]
-              (if exists?
-                (notification/show!
-                 [:p.content
-                  "File already exists!"]
-                 :error)
-                ;; create the file
-                (let [content (default-content-with-title format (:page/original-name page))]
-                  (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                    (db/reset-file! repo path (str content
-                                                   (remove-level-spaces value (keyword format))))
-                    (git-handler/git-add repo path)
-                    (ui-handler/re-render-root!))))))
+  ([heading value]
+   (save-heading-if-changed! heading value nil))
+  ([{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content ref-pages ref-headings] :as heading} value indent-left?]
+   (let [repo (or repo (state/get-current-repo))
+         e (db/entity repo [:heading/uuid uuid])
+         heading (with-heading-meta repo heading)
+         format (or format (state/get-preferred-format))
+         page (db/entity repo (:db/id page))
+         [old-directives new-directives] (when pre-heading?
+                                           [(:page/directives (db/entity (:db/id page)))
+                                            (db/parse-directives value format)])
+         page-tags (when-let [tags (:tags new-directives)]
+                     (util/->tags tags))
+         page-alias (when-let [alias (:alias new-directives)]
+                      (map
+                        (fn [alias]
+                          {:page/name (string/lower-case alias)})
+                        (remove #{(:page/name page)} alias)))
+         page-list (when-let [content (:list new-directives)]
+                     (db/extract-page-list content))
+         permalink-changed? (when (and pre-heading? (:permalink old-directives))
+                              (not= (:permalink old-directives)
+                                    (:permalink new-directives)))
+         value (if permalink-changed?
+                 (db/add-directives! format value {:old_permalink (:permalink old-directives)})
+                 value)
+         new-directives (if permalink-changed?
+                          (assoc new-directives :old_permalink (:permalink old-directives))
+                          new-directives)]
+     (when (not= (string/trim content) (string/trim value)) ; heading content changed
+       (let [file (db/entity repo (:db/id file))]
+         (cond
+           ;; Page was referenced but no related file
+           (and page (not file))
+           (let [format (name format)
+                 path (str (-> (:page/name page)
+                               (string/replace #"\s+" "_")
+                               (util/encode-str)) "."
+                           (if (= format "markdown") "md" format))
+                 file-path (str "/" path)
+                 dir (util/get-repo-dir repo)]
+             (p/let [exists? (fs/file-exists? dir file-path)]
+               (if exists?
+                 (notification/show!
+                  [:p.content
+                   "File already exists!"]
+                  :error)
+                 ;; create the file
+                 (let [content (default-content-with-title format (:page/original-name page))]
+                   (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                     (db/reset-file! repo path (str content
+                                                    (remove-level-spaces value (keyword format))))
+                     (git-handler/git-add repo path)
+                     (ui-handler/re-render-root!))))))
 
-          (and file page)
-          (save-heading file heading)
+           (and file page)
+           (let [file (db/entity repo (:db/id file))
+                 file-path (:file/path file)
+                 format (format/get-format file-path)
+                 file-content (db/get-file repo file-path)
+                 value (get-heading-new-value heading file-content value)
+                 heading (assoc heading :heading/content value)
+                 {:keys [headings pages start-pos end-pos]} (if pre-heading?
+                                                              (let [new-end-pos (utf8/length (utf8/encode value))]
+                                                                {:headings [(assoc-in heading [:heading/meta :end-pos] new-end-pos)]
+                                                                 :pages []
+                                                                 :start-pos 0
+                                                                 :end-pos new-end-pos})
+                                                              (block/parse-heading heading format))
+                 [after-headings heading-children-content new-end-pos] (rebuild-after-headings-indent-outdent repo file heading (:end-pos (:heading/meta heading)) end-pos indent-left?)
+                 new-content (new-file-content-indent-outdent heading file-content value heading-children-content new-end-pos indent-left?)
+                 retract-refs (compute-retract-refs (:db/id e) (first headings) ref-pages ref-headings)
+                 headings (db/recompute-heading-children repo heading headings)
+                 page-id (:db/id page)
+                 modified-time (let [modified-at (tc/to-long (t/now))]
+                                 [[:db/add page-id :page/last-modified-at modified-at]
+                                  [:db/add (:db/id file) :file/last-modified-at modified-at]])
+                 page-directives (when pre-heading?
+                                   (if (seq new-directives)
+                                     [[:db/retract page-id :page/directives]
+                                      {:db/id page-id
+                                       :page/directives new-directives}]
+                                     [[:db/retract page-id :page/directives]]))
+                 page-list (when pre-heading?
+                             (if (seq page-list)
+                               [[:db/retract page-id :page/list]
+                                {:db/id page-id
+                                 :page/list page-list}]
+                               [[:db/retract page-id :page/list]]))
+                 page-tags (when (and pre-heading? (seq page-tags))
+                             (if (seq page-tags)
+                               [[:db/retract page-id :page/tags]
+                                {:db/id page-id
+                                 :page/tags page-tags}]
+                               [[:db/retract page-id :page/tags]]))
+                 page-alias (when (and pre-heading? (seq page-alias))
+                              (if (seq page-alias)
+                                [[:db/retract page-id :page/alias]
+                                 {:db/id page-id
+                                  :page/alias page-alias}]
+                                [[:db/retract page-id :page/alias]]))]
+             (profile
+              "Save heading: "
+              (repo-handler/transact-react-and-alter-file!
+               repo
+               (concat
+                pages
+                headings
+                retract-refs
+                page-directives
+                page-list
+                page-tags
+                page-alias
+                after-headings
+                modified-time)
+               {:key :heading/change
+                :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+               [[file-path new-content]]))
+             (when (or (seq retract-refs) pre-heading?)
+               (ui-handler/re-render-root!)))
 
-          :else
-          nil)))))
+           :else
+           nil))))))
 
 (defn insert-new-heading!
   [{:heading/keys [uuid content meta file dummy? level repo page format] :as heading} value create-new-heading? ok-handler with-level?]
@@ -674,7 +746,7 @@
   (when-let [page (get-nearest-page)]
     (let [page-name (string/lower-case page)]
       (route-handler/redirect! {:to :page
-                  :path-params {:name page-name}}))))
+                                :path-params {:name page-name}}))))
 
 (defn open-link-in-sidebar!
   []
@@ -699,7 +771,7 @@
   (if-let [heading (state/get-edit-heading)]
     (when-let [id (:heading/uuid heading)]
       (route-handler/redirect! {:to :page
-                  :path-params {:name (str id)}}))
+                                :path-params {:name (str id)}}))
     (js/window.history.forward)))
 
 (defn cut-heading!
