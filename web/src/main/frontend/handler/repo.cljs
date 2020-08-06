@@ -269,7 +269,9 @@
                 (git-handler/set-latest-commit-if-exists! repo-url)
                 (state/clear-changed-files! repo-url))
               (fn [error]
-                (println "Failed to push, error: " error)
+                (println "Failed to push")
+                (js/console.dir error)
+                ;; TODO: Different handler for different situations
                 (git-handler/set-git-status! repo-url :push-failed)
                 (git-handler/set-git-error! repo-url error)
                 (notification/show!
