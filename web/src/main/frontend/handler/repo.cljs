@@ -270,24 +270,27 @@
                 (git-handler/set-latest-commit-if-exists! repo-url)
                 (state/clear-changed-files! repo-url))
               (fn [error]
-                (println "Failed to push")
-                (js/console.dir error)
-                ;; TODO: Different handler for different situations
-                (git-handler/set-git-status! repo-url :push-failed)
-                (git-handler/set-git-error! repo-url error)
-                (notification/show!
-                 [:p.content
-                  "Failed to push, please "
-                  [:span.text-gray-700.font-bold
-                   "resolve any diff first."]
-                  (ui/button
-                    "Go to diff"
-                    :href "/diff")]
-                 :error
-                 false)
-                (p/let [result (git/fetch repo-url (state/get-github-token))
-                        {:keys [fetchHead]} (bean/->clj result)]
-                  (git-handler/set-latest-commit! repo-url fetchHead)))))))))))
+                (if (and (string? error)
+                         (= error "Failed to fetch"))
+                  (println "Failed to fetch")
+                  (do
+                    (println "Failed to push")
+                    (js/console.dir error)
+                    (git-handler/set-git-status! repo-url :push-failed)
+                    (git-handler/set-git-error! repo-url error)
+                    (notification/show!
+                     [:p.content
+                      "Failed to push, please "
+                      [:span.text-gray-700.font-bold.mr-2
+                       "resolve any diff first."]
+                      (ui/button
+                        "Go to diff"
+                        :href "/diff")]
+                     :error
+                     false)
+                    (p/let [result (git/fetch repo-url (state/get-github-token))
+                            {:keys [fetchHead]} (bean/->clj result)]
+                      (git-handler/set-latest-commit! repo-url fetchHead)))))))))))))
 
 (defn pull-current-repo
   []
