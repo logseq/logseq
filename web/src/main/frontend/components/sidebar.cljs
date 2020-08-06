@@ -343,4 +343,5 @@
         (svg/logo (not white?))]
        (ui/notification)
        (ui/modal)
-       (custom-context-menu)]]]))
+       (custom-context-menu)
+       [:a#download.hidden]]]]))

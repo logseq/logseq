@@ -248,7 +248,7 @@
                     (= page-name (string/lower-case (date/journal-name))))]
         [:div.flex-1.page.relative
          [:div.relative
-          (when-not sidebar?
+          (when (and (not heading?) (not sidebar?))
             (let [links (->>
                          (when file
                            [{:title "Re-index this page"
@@ -288,7 +288,8 @@
                  links
                  {:modal-class (util/hiccup->class
                                 "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")}))))
-          (when-not sidebar?
+          (when (and (not sidebar?)
+                     (not heading?))
             [:a {:on-click (fn [e]
                              (util/stop e)
                              (when (gobj/get e "shiftKey")
@@ -299,7 +300,8 @@
                                   :page
                                   {:page page}))
                                (ui-handler/show-right-sidebar)))}
-             [:h1.title page-original-name]])
+             [:h1.title {:style {:margin-left -2}}
+              page-original-name]])
           [:div
            [:div.content
             (when (and file-path (not sidebar?) (not journal?) (not heading?))
@@ -320,8 +322,8 @@
 
 
            (when (and heading? (not sidebar?))
-             (heading/heading-parents repo heading-id format))
-
+             [:div.mb-4
+              (heading/heading-parents repo heading-id format)])
            ;; headings
            (page-headings-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? heading? heading-id format)]]
 

@@ -21,6 +21,7 @@
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.ui :as ui]
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
             [cljs.reader :as reader]
@@ -211,7 +212,7 @@
   (when (db/get-conn repo-url true)
     (let [status (db/get-key-value repo-url :git/status)]
       (when (and
-             (not= status :push-failed)
+             ;; (not= status :push-failed)
              (empty? (state/get-changed-files repo-url))
              (not (state/get-edit-input-id))
              (not (state/in-draw-mode?)))
@@ -250,7 +251,7 @@
   ([repo-url commit-message]
    (let [status (db/get-key-value repo-url :git/status)]
      (when (and
-            (not= status :push-failed)
+            ;; (not= status :push-failed)
             (db/get-key-value repo-url :git/write-permission?)
             (not (state/get-edit-input-id))
             (seq (state/get-changed-files repo-url)))
@@ -278,12 +279,15 @@
                  [:p.content
                   "Failed to push, please "
                   [:span.text-gray-700.font-bold
-                   "resolve any diffs first."]]
-                 :error)
+                   "resolve any diff first."]
+                  (ui/button
+                    "Go to diff"
+                    :href "/diff")]
+                 :error
+                 false)
                 (p/let [result (git/fetch repo-url (state/get-github-token))
-                        {:keys [fetchHead]} (bean/->clj result)
-                        _ (git-handler/set-latest-commit! repo-url fetchHead)]
-                  (route-handler/redirect! {:to :diff})))))))))))
+                        {:keys [fetchHead]} (bean/->clj result)]
+                  (git-handler/set-latest-commit! repo-url fetchHead)))))))))))
 
 (defn pull-current-repo
   []

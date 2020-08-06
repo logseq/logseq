@@ -19,6 +19,15 @@
   {:username (get-in @state/state [:me :name])
    :token token})
 
+(defn get-cors-proxy
+  [repo-url]
+  (or
+   (when-not (string/blank? (:cors_proxy (state/get-me)))
+     (:cors_proxy (state/get-me)))
+   ;; Not working yet
+   ;; "https://cors-proxy-logseq.vercel.app"
+   "https://cors.isomorphic-git.org"))
+
 (defn set-username-email
   [dir username email]
   (util/p-handle (js/window.git.config (clj->js
@@ -46,10 +55,7 @@
   (js/window.git.clone (with-auth token
                          {:dir (util/get-repo-dir repo-url)
                           :url repo-url
-                          :corsProxy (or
-                                      (:cors-proxy (state/get-config repo-url))
-                                      ;; "https://cors-proxy-logseq.vercel.app"
-                                      "https://cors.isomorphic-git.org")
+                          :corsProxy (get-cors-proxy repo-url)
                           :singleBranch true
                           :depth 1})))
 
@@ -64,6 +70,7 @@
   (js/window.git.fetch (with-auth token
                          {:dir (util/get-repo-dir repo-url)
                           :ref default-branch
+                          :corsProxy (get-cors-proxy repo-url)
                           :singleBranch true
                           :depth 100
                           :tags false})))
@@ -96,6 +103,7 @@
   (js/window.git.pull (with-auth token
                         {:dir (util/get-repo-dir repo-url)
                          :ref default-branch
+                         :corsProxy (get-cors-proxy repo-url)
                          :singleBranch true
                          :fast true})))
 (defn add
@@ -139,6 +147,7 @@
   ([repo-url token force?]
    (js/window.git.push (with-auth token
                          {:dir (util/get-repo-dir repo-url)
+                          :corsProxy (get-cors-proxy repo-url)
                           :remote "origin"
                           :ref default-branch
                           :force force?}))))

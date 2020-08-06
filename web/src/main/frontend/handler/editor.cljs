@@ -333,8 +333,7 @@
                                                   [[:db/retract page-id :page/alias]
                                                    {:db/id page-id
                                                     :page/alias page-alias}]
-                                                  [[:db/retract page-id :page/alias]]))
-                                   ]
+                                                  [[:db/retract page-id :page/alias]]))]
                                (profile
                                 "Save heading: "
                                 (repo-handler/transact-react-and-alter-file!

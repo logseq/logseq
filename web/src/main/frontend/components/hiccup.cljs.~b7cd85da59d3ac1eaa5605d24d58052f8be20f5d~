@@ -14,12 +14,9 @@
             [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
             [frontend.components.draw :as draw]
-            [frontend.components.heading :as heading]
             [frontend.ui :as ui]
             [frontend.components.widgets :as widgets]
             [frontend.handler :as handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as dnd]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -194,7 +191,7 @@
                        (:db/id page)
                        :page
                        {:page page}))
-                    (ui-handler/show-right-sidebar)))}
+                    (handler/show-right-sidebar)))}
      original-page-name]))
 
 (defn- latex-environment-content
@@ -216,7 +213,7 @@
        [repo :heading/block heading-id])))
   [config id]
   (let [headings (db/get-heading-and-children (state/get-current-repo) id)]
-    [:div.embed-block.py-2.my-2.px-3.bg-base-2 {:style {:z-index 2}}
+    [:div.embed-block.py-2.my-2.px-3.bg-base-2
      [:p
       [:code "Embed block:"]]
      (headings-container headings (assoc config :embed? true))]))
@@ -306,7 +303,7 @@
                                (:db/id heading)
                                :heading-ref
                                {:heading heading})
-                              (ui-handler/show-right-sidebar)))}
+                              (handler/show-right-sidebar)))}
             (->elem
              :span.block-ref
              (map-inline config (:heading/title heading)))]
@@ -498,7 +495,7 @@
         dark? (= "dark" (state/sub :ui/theme))]
     [:div.hd-control.mr-2.flex.flex-row.items-center
      {:style {:height 24
-              ;; :padding-left 9
+              :padding-left 9
               :float "left"}}
 
      [:a.heading-control
@@ -532,12 +529,12 @@
                            (:db/id heading)
                            :heading
                            heading)
-                          (ui-handler/show-right-sidebar)))})
+                          (handler/show-right-sidebar)))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
         :on-drag-start (fn [event]
-                         (editor-handler/highlight-heading! uuid)
+                         (handler/highlight-heading! uuid)
                          (.setData (gobj/get event "dataTransfer")
                                    "heading-uuid"
                                    uuid)
@@ -608,14 +605,8 @@
                     :on-change (fn [_e]
                                  ;; FIXME: Log timestamp
                                  (if checked?
-                                   (editor-handler/uncheck heading)
-                                   (editor-handler/check heading)))}))))
-
-(defn list-checkbox
-  [checked?]
-  (ui/checkbox {:style {:margin-right 6
-                        :margin-top -1}
-                :checked checked?}))
+                                   (handler/uncheck heading)
+                                   (handler/check heading)))}))))
 
 (defn marker-switch
   [{:heading/keys [pre-heading? marker] :as heading}]
@@ -623,7 +614,7 @@
     (let [set-marker-fn (fn [marker]
                           (fn [e]
                             (util/stop e)
-                            (editor-handler/set-marker heading marker)))]
+                            (handler/set-marker heading marker)))]
       (case marker
         "NOW"
         [:a.marker-switch
@@ -664,7 +655,7 @@
      [:ul
       (for [p (remove #(= priority %) ["A" "B" "C"])]
         [:a.mr-2.text-base.tooltip-priority {:priority p
-                                             :on-click (fn [] (editor-handler/set-priority heading p))}])]
+                                             :on-click (fn [] (handler/set-priority heading p))}])]
      [:a.opacity-50.hover:opacity-100
       {:class "priority"
        :href (str "/page/" priority)
@@ -757,7 +748,7 @@
                     :dummy? dummy?
                     :on-hide (fn [value event]
                                (when (= event :esc)
-                                 (editor-handler/highlight-heading! uuid)))}
+                                 (handler/highlight-heading! uuid)))}
                    edit-input-id
                    config)]
       (let [dragging? (rum/react *dragging?)
@@ -766,18 +757,16 @@
                                     (let [target (gobj/get e "target")]
                                       (when-not (or (util/link? target)
                                                     (util/input? target)
-                                                    (util/details-or-summary? target)
                                                     (and (util/sup? target)
                                                          (d/has-class? target "fn")))
-                                        (editor-handler/clear-selection! nil)
-                                        (editor-handler/unhighlight-heading!)
+                                        (handler/clear-selection! nil)
+                                        (handler/unhighlight-heading!)
                                         (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
                                           (state/set-editing!
                                            edit-input-id
-                                           (editor-handler/remove-level-spaces content format)
+                                           (handler/remove-level-spaces content format)
                                            heading
-                                           cursor-range))
-                                        (util/stop e))))
+                                           cursor-range)))))
                         :on-drag-over (fn [event]
                                         (util/stop event)
                                         (when-not (dnd-same-heading? uuid)
@@ -797,7 +786,7 @@
                                                          true)))
                                    (reset! *dragging? false)
                                    (reset! *dragging-heading nil)
-                                   (editor-handler/unhighlight-heading!))}]
+                                   (handler/unhighlight-heading!))}]
         [:div.flex.flex-col.relative.heading-content
          (cond-> {:style {:cursor "text"
                           :min-height 24}}
@@ -833,7 +822,6 @@
 (rum/defc heading-container < rum/static
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-heading? idx] :as heading}]
   (let [ref? (boolean (:ref? config))
-        ref-child? (:ref-child? config)
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
@@ -878,7 +866,7 @@
                                                      false)))
                                (reset! *dragging? false)
                                (reset! *dragging-heading nil)
-                               (editor-handler/unhighlight-heading!))
+                               (handler/unhighlight-heading!))
                     :on-mouse-over (fn [e]
                                      (util/stop e)
                                      (when has-child?
@@ -915,10 +903,6 @@
        (not slide?)
        (merge drag-attrs))
 
-     (if (and ref? (not ref-child?))
-       (when-let [heading-parents (heading/heading-parents repo uuid format false)]
-         [:div.my-2.opacity-50.ml-7 heading-parents]))
-
      (dnd-separator-wrapper heading slide? (zero? idx))
 
      [:div.flex-1.flex-row
@@ -928,21 +912,12 @@
       (heading-content-or-editor config heading edit-input-id heading-id slide?)]
 
      (when (seq children)
-       [:div.heading-children {:style {:margin-left (if doc-mode? 12 22)
+       [:div.heading-children {:style {:margin-left (if doc-mode? 12 31)
                                        :display (if collapsed? "none" "")}}
         (for [child children]
-          (when (map? child)
-            (let [child (dissoc child :heading/meta)]
-             (rum/with-key (heading-container config child)
-               (:heading/uuid child)))))])
-
-     (when (and ref? (not ref-child?))
-       (let [children (db/get-heading-children repo uuid)]
-         (when (seq children)
-           [:div.ref-children.ml-12
-            (headings-container children (assoc config
-                                                :ref-child? true
-                                                :ref? true))])))
+          (let [child (dissoc child :heading/meta)]
+            (rum/with-key (heading-container config child)
+              (:heading/uuid child))))])
 
      (dnd-separator-wrapper heading slide? false)]))
 
@@ -1005,24 +980,14 @@
                (vec-cat content [items]))]
 
       :else
-      (if (nil? checkbox)
-        (->elem
-         :li
-         {:checked checked?}
-         (vec-cat
-          [(->elem
-            :p
-            content)]
-          [items]))
-        (->elem
-         :li
-         {:checked checked?}
-         (vec-cat
-          [(->elem
-            :p
-            (list-checkbox checkbox)
-            content)]
-          [items]))))))
+      (->elem
+       :li
+       {:checked checked?}
+       (vec-cat
+        [(->elem
+          :p
+          content)]
+        [items])))))
 
 (defn table
   [config {:keys [header groups col_groups]}]
@@ -1321,16 +1286,8 @@
 
 (rum/defc headings-container < rum/static
   [headings config]
-  (let [headings (map #(dissoc % :heading/children) headings)
-        sidebar? (:sidebar? config)
-        ref? (:ref? config)]
-    [:div.headings-container.flex-1 {:style {:margin-left (cond
-                                                            sidebar?
-                                                            0
-                                                            ref?
-                                                            -18
-                                                            :else
-                                                            -24)}}
+  (let [headings (map #(dissoc % :heading/children) headings)]
+    [:div.headings-container.flex-1 {:style {:margin-left -24}}
      (build-headings headings config)]))
 
 ;; headers to hiccup
@@ -1345,9 +1302,7 @@
        [:div.flex.flex-col
         (for [[page headings] headings]
           (let [page (db/entity (:db/id page))]
-            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                         (:ref? config)
-                         (assoc :class "bg-base-2 p-7 rounded"))
+            [:div.my-2 {:key (str "page-" (:db/id page))}
              (ui/foldable
               (page-cp config page)
               (headings-container headings config))]))]

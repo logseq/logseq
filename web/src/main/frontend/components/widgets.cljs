@@ -6,6 +6,7 @@
             [frontend.handler.git :as git-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.config :as config]
             [clojure.string :as string]
@@ -101,7 +102,13 @@
                  [:ul
                   (for [file changed-files]
                     [:li {:key (str "sync-" file)}
-                     file])]]
+                     [:div.flex.flex-row.justify-between.align-items
+                      [:a {:href (str "/file/" (util/encode-str file))}
+                       file]
+                      [:a.ml-4.text-sm.mt-1
+                       {:on-click (fn [e]
+                                    (export-handler/download-file! file))}
+                       [:span "Download"]]]])]]
                 ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
                 [:div.flex.flex-row.justify-between.align-items.mt-2
                  (ui/button "Push now"

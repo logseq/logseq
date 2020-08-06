@@ -18,8 +18,8 @@
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
-                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.w-48.rounded-md.shadow-lg"))]
-    [:div
+                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg"))]
+    [:div.dropdown-wrapper
      {:class (str class " "
                   (case state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
@@ -373,3 +373,19 @@
                      "hidden"
                      "initial")}
       content]]))
+
+(defn admonition
+  [type content]
+  (let [type (name type)]
+    (when-let [icon (case (string/lower-case type)
+                     "note" svg/note
+                     "tip" svg/tip
+                     "important" svg/important
+                     "caution" svg/caution
+                     "warning" svg/warning
+                     nil)]
+     [:div.flex.flex-row.admonitionblock.align-items {:class type}
+      [:div.pr-4.admonition-icon.flex.flex-col.justify-center
+       {:title (string/upper-case type)} (icon)]
+      [:div.ml-4.text-lg
+       content]])))

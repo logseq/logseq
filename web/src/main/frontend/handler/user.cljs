@@ -27,6 +27,17 @@
                  (notification/show! "Email already exists!"
                                      :error)))))
 
+(defn set-cors!
+  [cors-proxy]
+  (util/post (str config/api "cors_proxy")
+             {:cors-proxy cors-proxy}
+             (fn [result]
+               (db/transact! [{:me/cors_proxy cors-proxy}])
+               (swap! state/state assoc-in [:me :cors_proxy] cors-proxy))
+             (fn [error]
+               (notification/show! "Set cors proxy failed." :error)
+               (js/console.dir error))))
+
 (defn set-preferred-format!
   [format]
   (when format

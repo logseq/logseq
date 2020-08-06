@@ -92,6 +92,7 @@
    :heading/body {}
    :heading/pre-heading? {}
    :heading/collapsed? {}
-   :heading/children {:db/cardinality :db.cardinality/many}
+   :heading/children {:db/cardinality :db.cardinality/many
+                      :db/unique :db.unique/identity}
 
    :tag/name       {:db/unique :db.unique/identity}})

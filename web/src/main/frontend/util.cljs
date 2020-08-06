@@ -344,6 +344,13 @@
      #{"INPUT" "TEXTAREA"}
      (gobj/get node "tagName"))))
 
+(defn details-or-summary?
+  [node]
+  (when node
+    (contains?
+     #{"DETAILS" "SUMMARY"}
+     (gobj/get node "tagName"))))
+
 (defn journal?
   [path]
   (string/starts-with? path "journals/"))
@@ -685,7 +692,8 @@
 
 (defn tag-valid?
   [tag-name]
-  (re-find regex/valid-tag-pattern tag-name))
+  (when tag-name
+    (re-find regex/valid-tag-pattern tag-name)))
 
 (defn encode-str
   [s]

@@ -4,6 +4,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
+            [promesa.core :as p]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -250,7 +251,7 @@
 
 (defn get-matched-blocks
   [q]
-  (search/search q 5))
+  (search/search q 20))
 
 (rum/defc block-search < rum/reactive
   {:will-unmount (fn [state] (reset! *selected-text nil) state)}
@@ -620,8 +621,9 @@
                                 level)
                       :else level)
         new-value (block/with-levels value format (assoc heading :heading/level final-level))]
-    (set-last-edit-heading! (:heading/uuid heading) value)
-    (editor-handler/save-heading-if-changed! heading new-value)))
+    (when (<= (- final-level previous-level) 1)
+      (set-last-edit-heading! (:heading/uuid heading) value)
+      (editor-handler/save-heading-if-changed! heading new-value))))
 
 (defn- append-paste-doc!
   [format event]
@@ -640,8 +642,8 @@
            input-id id
            input (gdom/getElement input-id)
            repo (:heading/repo heading)]
-       (.addEventListener input "paste" (fn [event]
-                                          (append-paste-doc! format event)))
+       ;; (.addEventListener input "paste" (fn [event]
+       ;;                                    (append-paste-doc! format event)))
        (mixins/on-key-down
         state
         {
@@ -651,27 +653,35 @@
                 (when (and heading
                            (not (:ref? config))
                            (not (:custom-query? config))) ; in reference section
-                  (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
-                                   (string/lower-case (string/trim v)))
-                        insert? (cond
-                                  config/mobile?
-                                  true
+                  (let [content (state/get-edit-content)]
+                    (if (and
+                         (not (in-auto-complete? input))
+                         (> (:heading/level heading) 2)
+                             (string/blank? content))
+                      (do
+                        (util/stop e)
+                        (adjust-heading-level! state :left))
+                      (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
+                                       (string/lower-case (string/trim v)))
+                            insert? (cond
+                                      config/mobile?
+                                      true
 
-                                  (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                                  false
+                                      (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
+                                      false
 
-                                  (gobj/get e "shiftKey")
-                                  false
+                                      (gobj/get e "shiftKey")
+                                      false
 
-                                  :else
-                                  true)]
-                    (when (and
-                           insert?
-                           (not (in-auto-complete? input)))
-                      (profile
-                       "Insert heading"
-                       (insert-new-heading! state))
-                      (util/stop e))))))
+                                      :else
+                                      true)]
+                        (when (and
+                               insert?
+                               (not (in-auto-complete? input)))
+                          (profile
+                           "Insert heading"
+                           (insert-new-heading! state))
+                          (util/stop e))))))))
          ;; up
          38 (fn [state e]
               (when-not (in-auto-complete? input)
@@ -736,12 +746,18 @@
                  nil)))
          ;; tab
          9 (fn [state e]
-             (when-not (state/get-editor-show-input)
-               (util/stop e)
-               (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
-                                 :left
-                                 :right)]
-                 (adjust-heading-level! state direction))))}
+             (let [input-id (state/get-edit-input-id)
+                   input (and input-id (gdom/getElement id))
+                   pos (and input (:pos (util/get-caret-pos input)))]
+               (when-not (state/get-editor-show-input)
+                (util/stop e)
+                (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
+                                  :left
+                                  :right)]
+                  (p/let [_ (adjust-heading-level! state direction)]
+                    (and input pos (js/setTimeout #(when-let [input (gdom/getElement input-id)]
+                                                     (util/move-cursor-to input pos))
+                                                  0)))))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
@@ -853,8 +869,8 @@
    :will-unmount (fn [state]
                    (let [{:keys [id value format heading repo dummy?]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
-                       (.removeEventListener input "paste" (fn [event]
-                                                             (append-paste-doc! format event)))
+                       ;; (.removeEventListener input "paste" (fn [event]
+                       ;;                                       (append-paste-doc! format event)))
                        (dnd/unsubscribe!
                         input
                         :upload-images))
