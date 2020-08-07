@@ -28,6 +28,7 @@
 
 (defonce brain "🧠")
 (defonce brain-text "logseq-second-brain")
+
 ;; offline db
 (def store-name "dbs")
 (.config localforage
@@ -350,7 +351,7 @@
   (util/parse-int
    (string/replace (date/ymd date) "/" "")))
 
-(defn resolve-input
+(defn- resolve-input
   [input]
   (cond
     (= :today input)
@@ -373,23 +374,13 @@
     :else
     input))
 
-(defn sort-by-pos
+(defn- sort-by-pos
   [headings]
   (sort-by
    #(get-in % [:heading/meta :pos])
    headings))
 
-(comment
-  (def headings [{:heading/meta {:pos 0}}
-                 {:heading/meta {:pos 10}}
-                 {:heading/meta {:pos 7}}
-                 {:heading/meta {:pos 5}}
-                 {:heading/meta {:pos 3}}
-                 {:heading/meta {:pos 2}}
-                 {:heading/meta {:pos 8}}])
-  )
-
-(defn sort-headings
+(defn- sort-headings
   [headings]
   (let [pages-ids (map (comp :db/id :heading/page) headings)
         pages (pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
@@ -768,23 +759,6 @@
       react
       ffirst))))
 
-(defn get-file-no-sub
-  ([path]
-   (get-file (state/get-current-repo) path))
-  ([repo path]
-   (when (and repo path)
-     (->
-      (d/q
-        '[:find ?content
-          :in $ ?path
-          :where
-          [?file :file/path ?path]
-          [?file :file/content ?content]
-          ]
-        (d/db (get-files-conn repo))
-        path)
-      ffirst))))
-
 (defn reset-contents-and-headings!
   [repo-url contents headings-pages delete-files delete-headings]
   (let [files (doall
@@ -928,29 +902,6 @@
     (and (:heading/pre-heading? (first headings))
          (:heading/content (first headings)))))
 
-(comment
-
-
-  (defn filter-brands-and-products-by-token [db token-pred]
-    (->>
-     (d/datoms db :avet :token)
-     (filter (fn [{:keys [v]}] (token-pred v)))
-     (mapv :e)
-     (d/pull-many db
-                  '[:db/id
-                    :token
-                    {:token/sources [:db/id
-                                     :brand/name
-                                     :product/title
-                                     {:brand/tags [*]}
-                                     {:product/tags [*]}]}])
-     (mapcat :token/sources)
-     (filter (some-fn :brand/name :product/title))))
-
-  (d/datoms (get-conn (state/get-current-repo))
-            :avet :page/heading)
-  )
-
 (defn heading-and-children-transform
   [result repo-url heading-uuid level]
   (some->> result
@@ -1084,7 +1035,6 @@
          (map string/lower-case)
          (distinct))))
 
-;; file
 (defn extract-pages-and-headings
   [format ast directives file content utf8-content journal? pages-fn]
   (try
