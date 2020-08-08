@@ -49,6 +49,10 @@
   [files]
   (keep-formats files (config/text-formats)))
 
+(defn- only-image-formats
+  [files]
+  (keep-formats files (config/img-formats)))
+
 (defn- hidden?
   [path patterns]
   (some (fn [pattern]
@@ -87,11 +91,16 @@
 
 (defn load-files-contents!
   [repo-url files ok-handler]
-  (let [files (only-text-formats files)]
+  (let [images (only-image-formats files)
+        files (only-text-formats files)]
     (-> (p/all (load-multiple-files repo-url files))
         (p/then (fn [contents]
                   (ok-handler
-                   (zipmap files contents))))
+                   (cond->
+                     (zipmap files contents)
+
+                     (seq images)
+                     (merge (zipmap images (repeat (count images) "")))))))
         (p/catch (fn [error]
                    (println "load files failed: ")
                    (js/console.dir error))))))

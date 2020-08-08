@@ -19,6 +19,7 @@
             [frontend.components.widgets :as widgets]
             [frontend.handler :as handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.image :as image-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as dnd]
             [goog.object :as gobj]
@@ -33,7 +34,8 @@
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
             [clojure.walk :as walk]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.handler.image :as image-handler]))
 
 ;; local state
 (defonce *heading-children
@@ -92,16 +94,43 @@
         link
         (str protocol ":" link)))))
 
+(defn- get-file-absolute-path
+  [path]
+  (let [path (string/replace path "file:" "")
+        current-file (:file/path (:page/file (db/get-current-page)))]
+    (when current-file
+      (let [parts (reverse (string/split current-file #"/"))
+            parts-2 (reverse (string/split path #"/"))
+            parts (loop [acc []
+                   col parts-2
+                   idx 0]
+              (if (empty? col)
+                acc
+                (let [part (case (first col)
+                             ".."
+                             (nth parts idx)
+                             "."
+                             ""
+                             (first col))]
+                  (recur (conj acc part)
+                         (rest col)
+                         (inc idx)))))
+            parts (remove #(= % "") parts)]
+        (string/join "/" (reverse parts))))))
+
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [url href label]
-  [:img.rounded-sm.shadow-xl.mb-2.mt-2
-   {:class "object-contain object-center"
-    :loading "lazy"
-    :style {:max-height "24rem"}
-    ;; :on-error (fn [])
-    :src href
-    :title (second (first label))}])
+  (let [href (if (string/starts-with? href "http")
+               href
+               (get-file-absolute-path href))]
+    [:img.rounded-sm.shadow-xl.mb-2.mt-2
+    {:class "object-contain object-center"
+     :loading "lazy"
+     :style {:max-height "24rem"}
+     ;; :on-error (fn [])
+     :src href
+     :title (second (first label))}]))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
@@ -239,6 +268,18 @@
        page-original-name]]
      (headings-container headings (assoc config :embed? true))]))
 
+(defn- get-label-text
+  [label]
+  (and (= 1 (count label))
+       (let [label (first label)]
+         (string? (last label))
+         (last label))))
+
+(defn- get-page
+  [label]
+  (when-let [label-text (get-label-text label)]
+    (db/entity [:page/name (string/lower-case label-text)])))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -342,18 +383,32 @@
 
         :else
         (let [href (string-of-url url)
-              protocol (and (= "Complex" (first url))
-                            (:protocol (second url)))
+              protocol (or
+                        (and (= "Complex" (first url))
+                             (:protocol (second url)))
+                        (and (= "File" (first url))
+                             "file"))
               img-formats (set (map name (config/img-formats)))]
           (cond
             (= protocol "file")
-            (->elem
-             :a
-             (cond->
-                 {:href href}
-               title
-               (assoc :title title))
-             (map-inline config label))
+            (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
+              (image-link url href label)
+              (let [page (get-page label)]
+                (if (and page
+                         (when-let [ext (util/get-file-ext href)]
+                           (config/mldoc-support? ext)))
+                  [:span.page-reference
+                   [:span.text-gray-500 "[["]
+                   (page-cp config page)
+                   [:span.text-gray-500 "]]"]]
+
+                  (->elem
+                   :a
+                   (cond->
+                     {:href href}
+                     title
+                     (assoc :title title))
+                   (map-inline config label)))))
 
             ;; image
             (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
@@ -363,8 +418,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -745,6 +800,74 @@
   [event attr]
   (.getData (gobj/get event "dataTransfer") attr))
 
+(rum/defc heading-content < rum/reactive
+  {:did-mount (fn [state]
+                (let [id (str "heading-content-" (:heading/uuid (second (:rum/args state))))
+                      elem (gdom/getElement id)]
+                  (image-handler/render-local-images! elem))
+                state)}
+  [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
+  (let [dragging? (rum/react *dragging?)
+        drag-attrs {:headingid (str uuid)
+                    :on-click (fn [e]
+                                (let [target (gobj/get e "target")]
+                                  (when-not (or (util/link? target)
+                                                (util/input? target)
+                                                (util/details-or-summary? target)
+                                                (and (util/sup? target)
+                                                     (d/has-class? target "fn")))
+                                    (editor-handler/clear-selection! nil)
+                                    (editor-handler/unhighlight-heading!)
+                                    (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
+                                      (state/set-editing!
+                                       edit-input-id
+                                       (editor-handler/remove-level-spaces content format)
+                                       heading
+                                       cursor-range))
+                                    (util/stop e))))
+                    :on-drag-over (fn [event]
+                                    (util/stop event)
+                                    (when-not (dnd-same-heading? uuid)
+                                      (show-dnd-separator (str uuid "-nested"))))
+                    :on-drag-leave (fn [event]
+                                     (hide-dnd-separator (str uuid))
+                                     (hide-dnd-separator (str uuid "-nested"))
+                                     (hide-dnd-separator (str uuid "-top")))
+                    :on-drop (fn [event]
+                               (util/stop event)
+                               (when-not (dnd-same-heading? uuid)
+                                 (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
+                                   (dnd/move-heading @*dragging-heading
+                                                     heading
+                                                     from-dom-id
+                                                     false
+                                                     true)))
+                               (reset! *dragging? false)
+                               (reset! *dragging-heading nil)
+                               (editor-handler/unhighlight-heading!))}]
+    [:div.flex.flex-col.relative.heading-content
+     (cond-> {:id (str "heading-content-" uuid)
+              :style {:cursor "text"
+                      :min-height 24}}
+       (not slide?)
+       (merge drag-attrs))
+
+     (if pre-heading?
+       [:div.pre-heading.pre-line-white-space
+        (string/trim content)]
+       (build-heading-part config heading))
+
+     (when (and dragging? (not slide?))
+       (dnd-separator heading 0 -4 false true))
+
+     (when (and (not pre-heading?) (seq body))
+       [:div.heading-body {:style {:display (if collapsed? "none" "")}}
+        ;; TODO: consistent id instead of the idx (since it could be changed later)
+        (for [[idx child] (medley/indexed (:heading/body heading))]
+          (when-let [block (block config child)]
+            (rum/with-key (heading-child block)
+              (str uuid "-" idx))))])]))
+
 (rum/defc heading-content-or-editor < rum/reactive
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
   (let [edit? (state/sub [:editor/editing? edit-input-id])]
@@ -760,65 +883,7 @@
                                  (editor-handler/highlight-heading! uuid)))}
                    edit-input-id
                    config)]
-      (let [dragging? (rum/react *dragging?)
-            drag-attrs {:headingid (str uuid)
-                        :on-click (fn [e]
-                                    (let [target (gobj/get e "target")]
-                                      (when-not (or (util/link? target)
-                                                    (util/input? target)
-                                                    (util/details-or-summary? target)
-                                                    (and (util/sup? target)
-                                                         (d/has-class? target "fn")))
-                                        (editor-handler/clear-selection! nil)
-                                        (editor-handler/unhighlight-heading!)
-                                        (let [cursor-range (util/caret-range (gdom/getElement heading-id))]
-                                          (state/set-editing!
-                                           edit-input-id
-                                           (editor-handler/remove-level-spaces content format)
-                                           heading
-                                           cursor-range))
-                                        (util/stop e))))
-                        :on-drag-over (fn [event]
-                                        (util/stop event)
-                                        (when-not (dnd-same-heading? uuid)
-                                          (show-dnd-separator (str uuid "-nested"))))
-                        :on-drag-leave (fn [event]
-                                         (hide-dnd-separator (str uuid))
-                                         (hide-dnd-separator (str uuid "-nested"))
-                                         (hide-dnd-separator (str uuid "-top")))
-                        :on-drop (fn [event]
-                                   (util/stop event)
-                                   (when-not (dnd-same-heading? uuid)
-                                     (let [from-dom-id (get-data-transfer-attr event "heading-dom-id")]
-                                       (dnd/move-heading @*dragging-heading
-                                                         heading
-                                                         from-dom-id
-                                                         false
-                                                         true)))
-                                   (reset! *dragging? false)
-                                   (reset! *dragging-heading nil)
-                                   (editor-handler/unhighlight-heading!))}]
-        [:div.flex.flex-col.relative.heading-content
-         (cond-> {:style {:cursor "text"
-                          :min-height 24}}
-           (not slide?)
-           (merge drag-attrs))
-
-         (if pre-heading?
-           [:div.pre-heading.pre-line-white-space
-            (string/trim content)]
-           (build-heading-part config heading))
-
-         (when (and dragging? (not slide?))
-           (dnd-separator heading 0 -4 false true))
-
-         (when (and (not pre-heading?) (seq body))
-           [:div.heading-body {:style {:display (if collapsed? "none" "")}}
-            ;; TODO: consistent id instead of the idx (since it could be changed later)
-            (for [[idx child] (medley/indexed (:heading/body heading))]
-              (when-let [block (block config child)]
-                (rum/with-key (heading-child block)
-                  (str uuid "-" idx))))])]))))
+      (heading-content config heading edit-input-id heading-id slide?))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [heading slide? top?]
@@ -902,16 +967,16 @@
                                           (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-heading.flex.flex-col.pt-1
      (cond->
-         {:id heading-id
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-heading? " pre-heading"))
-          :headingid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
+       {:id heading-id
+        :style {:position "relative"}
+        :class (str uuid
+                    (when dummy? " dummy")
+                    (when (and collapsed? has-child?) " collapsed")
+                    (when pre-heading? " pre-heading"))
+        :headingid (str uuid)
+        :repo repo
+        :level level
+        :haschild (str has-child?)}
        (not slide?)
        (merge drag-attrs))
 
@@ -933,8 +998,8 @@
         (for [child children]
           (when (map? child)
             (let [child (dissoc child :heading/meta)]
-             (rum/with-key (heading-container config child)
-               (:heading/uuid child)))))])
+              (rum/with-key (heading-container config child)
+                (:heading/uuid child)))))])
 
      (when (and ref? (not ref-child?))
        (let [children (db/get-heading-children repo uuid)]

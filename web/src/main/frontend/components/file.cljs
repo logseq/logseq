@@ -4,6 +4,7 @@
             [frontend.handler :as handler]
             [frontend.handler.project :as project]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.image :as image-handler]
             [frontend.handler.file :as file]
             [frontend.handler.export :as export-handler]
             [frontend.config :as config]
@@ -64,6 +65,11 @@
                     [:span "Download"]]]]))]]))])
 
 (rum/defcs file < rum/reactive
+  {:did-mount (fn [state]
+                (let [[encoded-path path] (get-path state)]
+                  (when-let [elem (gdom/getElement (str "file-" encoded-path))]
+                    (image-handler/render-local-images! elem)))
+                state)}
   [state]
   (let [[encoded-path path] (get-path state)
         format (format/get-format path)
@@ -80,7 +86,7 @@
                                                              :on-hide (save-file-handler content)}))))
         page (db/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
-    [:div.file
+    [:div.file {:id (str "file-" encoded-path)}
      [:h1.title
       path]
      (when page

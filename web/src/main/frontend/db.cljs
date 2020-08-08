@@ -185,8 +185,8 @@
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
         (entity (if tag?
-                  [:page/name page-name]
-                  [:tag/name page-name]))))))
+                  [:tag/name page-name]
+                  [:page/name page-name]))))))
 
 (defn get-current-priority
   []
@@ -1210,7 +1210,7 @@
     (let [format (format/get-format file)
           utf8-content (utf8/encode content)
           file-content [{:file/path file}]
-          tx (if (contains? config/hiccup-support-formats format)
+          tx (if (contains? config/mldoc-support-formats format)
                (let [delete-headings (delete-file-headings! repo-url file)
                      headings-pages (extract-headings-pages file content utf8-content)]
                  (concat file-content delete-headings headings-pages))

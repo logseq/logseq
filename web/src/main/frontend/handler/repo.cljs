@@ -43,7 +43,7 @@
                            (let [parsed-files (filter
                                                (fn [[file _]]
                                                  (let [format (format/get-format file)]
-                                                   (contains? config/hiccup-support-formats format)))
+                                                   (contains? config/mldoc-support-formats format)))
                                                contents)
                                  headings-pages (if (seq parsed-files)
                                                   (db/extract-all-headings-pages parsed-files)

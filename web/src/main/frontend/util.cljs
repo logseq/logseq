@@ -764,3 +764,7 @@
       (gobj/set db "onsuccess"
                 (fn []
                   (js/window.indexedDB.deleteDatabase test-db))))))
+
+(defn get-file-ext
+  [file]
+  (last (string/split file #"\.")))

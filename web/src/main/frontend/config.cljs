@@ -71,8 +71,12 @@
              (img-formats)))
 
 ;; TODO: rename
-(defonce hiccup-support-formats
-  #{:org :markdown})
+(defonce mldoc-support-formats
+  #{:org :markdown :md})
+
+(defn mldoc-support?
+  [format]
+  (contains? mldoc-support-formats (keyword format)))
 
 (def mobile?
   (re-find #"Mobi" js/navigator.userAgent))
