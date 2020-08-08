@@ -35,7 +35,8 @@
             [frontend.format.block :as block]
             [clojure.walk :as walk]
             [cljs-bean.core :as bean]
-            [frontend.handler.image :as image-handler]))
+            [frontend.handler.image :as image-handler]
+            [frontend.format.mldoc :as mldoc]))
 
 ;; local state
 (defonce *heading-children
@@ -102,19 +103,19 @@
       (let [parts (reverse (string/split current-file #"/"))
             parts-2 (reverse (string/split path #"/"))
             parts (loop [acc []
-                   col parts-2
-                   idx 0]
-              (if (empty? col)
-                acc
-                (let [part (case (first col)
-                             ".."
-                             (nth parts idx)
-                             "."
-                             ""
-                             (first col))]
-                  (recur (conj acc part)
-                         (rest col)
-                         (inc idx)))))
+                         col parts-2
+                         idx 0]
+                    (if (empty? col)
+                      acc
+                      (let [part (case (first col)
+                                   ".."
+                                   (nth parts idx)
+                                   "."
+                                   ""
+                                   (first col))]
+                        (recur (conj acc part)
+                               (rest col)
+                               (inc idx)))))
             parts (remove #(= % "") parts)]
         (string/join "/" (reverse parts))))))
 
@@ -125,12 +126,12 @@
                href
                (get-file-absolute-path href))]
     [:img.rounded-sm.shadow-xl.mb-2.mt-2
-    {:class "object-contain object-center"
-     :loading "lazy"
-     :style {:max-height "24rem"}
-     ;; :on-error (fn [])
-     :src href
-     :title (second (first label))}]))
+     {:class "object-contain object-center"
+      :loading "lazy"
+      :style {:max-height "24rem"}
+      ;; :on-error (fn [])
+      :src href
+      :title (second (first label))}]))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
@@ -800,6 +801,12 @@
   [event attr]
   (.getData (gobj/get event "dataTransfer") attr))
 
+(defn- pre-heading-cp
+  [config content format]
+  (let [ast (mldoc/->edn content (mldoc/default-config format))]
+    [:div.pre-heading
+     (blocks config ast)]))
+
 (rum/defc heading-content < rum/reactive
   {:did-mount (fn [state]
                 (let [id (str "heading-content-" (:heading/uuid (second (:rum/args state))))
@@ -853,8 +860,7 @@
        (merge drag-attrs))
 
      (if pre-heading?
-       [:div.pre-heading.pre-line-white-space
-        (string/trim content)]
+       (pre-heading-cp config (string/trim content) format)
        (build-heading-part config heading))
 
      (when (and dragging? (not slide?))
@@ -1219,6 +1225,20 @@
   [{:keys [html-export?] :as config} item]
   (try
     (match item
+      ["Directives" m]
+      [:div.directives
+       (for [[k v] m]
+         (when-not (and (= k :macros) (empty? v))
+           [:div.directive
+            [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
+            (if (coll? v)
+              (for [item v]
+                (if (= k :tags)
+                  [:a.tag.mr-1 {:href (str "/page/" item)}
+                   item]
+                  [:span item]))
+              [:span v])]))]
+
       ["Paragraph" l]
       ;; TODO: speedup
       (if (re-find #"\"Export_Snippet\" \"embed\"" (str l))
