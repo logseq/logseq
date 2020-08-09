@@ -368,11 +368,15 @@
 
            :else
            [:span ""])]
-        header]]]
+        (if (fn? header)
+          (header @collapsed?)
+          header)]]]
      [:div {:class (if @collapsed?
                      "hidden"
                      "initial")}
-      content]]))
+      (if (and (fn? content) (not @collapsed?))
+        (content)
+        content)]]))
 
 (defn admonition
   [type content]
