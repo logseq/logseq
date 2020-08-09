@@ -787,3 +787,49 @@
     (let [content (:heading/content heading)]
       (util/copy-to-clipboard! content)
       (delete-heading! heading false))))
+
+(defonce select-start-heading-state (atom nil))
+
+(defn clear-last-selected-heading!
+  []
+  (let [first-heading (state/pop-selection-heading!)]
+    (dom/remove-class! first-heading "selected")
+    (dom/remove-class! first-heading "noselect")))
+
+(defn on-select-heading
+  [state e up?]
+  (when (and
+         (gobj/get e "shiftKey")
+         (or (state/in-selection-mode?)
+             (when-let [input-id (state/get-edit-input-id)]
+               (when-let [input (gdom/getElement input-id)]
+                 (let [value (gobj/get input "value")
+                       start (gobj/get input "selectionStart")
+                       end (gobj/get input "selectionEnd")]
+                   (or (and (= start 0) up?)
+                       (and (= end (count value)) (not up?))))))))
+    (state/clear-edit!)
+    (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} @select-start-heading-state
+          element (gdom/getElement heading-parent-id)
+          selected-headings (state/get-selection-headings)
+          selected-headings-count (count selected-headings)
+          first-heading (first selected-headings)
+          selection-up? (state/selection-up?)]
+      (when heading-id
+        (util/stop e)
+        (when-let [element (if-not (state/in-selection-mode?)
+                             element
+                             (let [f (if up? util/get-prev-heading util/get-next-heading)]
+                               (f first-heading)))]
+          (if (and (not (nil? selection-up?)) (not= up? selection-up?))
+            (cond
+              (>= selected-headings-count 2) ; back to the start heading
+              (do
+                (when (= 2 selected-headings-count) (state/set-selection-up? nil))
+                (clear-last-selected-heading!))
+
+              :else
+              nil)
+            (do
+              (dom/add-class! element "selected noselect")
+              (state/conj-selection-heading! element up?))))))))

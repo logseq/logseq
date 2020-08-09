@@ -281,8 +281,8 @@
 
                                  ;; Save it so it'll be parsed correctly in the future
                                  (editor-handler/set-heading-property! (:heading/uuid chosen)
-                                                                "CUSTOM_ID"
-                                                                uuid-string)
+                                                                       "CUSTOM_ID"
+                                                                       uuid-string)
 
                                  (when-let [input (gdom/getElement id)]
                                    (.focus input))))
@@ -355,12 +355,12 @@
             [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
              (merge
               (cond->
-                  {:key (str "modal-input-" (name id))
-                   :id (str "modal-input-" (name id))
-                   :type (or type "text")
-                   :on-change (fn [e]
-                                (swap! input-value assoc id (util/evalue e)))
-                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                {:key (str "modal-input-" (name id))
+                 :id (str "modal-input-" (name id))
+                 :type (or type "text")
+                 :on-change (fn [e]
+                              (swap! input-value assoc id (util/evalue e)))
+                 :auto-complete (if (util/chrome?) "chrome-off" "off")}
                 placeholder
                 (assoc :placeholder placeholder))
               (dissoc input-item :id))]])
@@ -401,61 +401,28 @@
           (editor-handler/save-heading-if-changed! heading new-value)
           (reset! *last-edit-heading cache))))))
 
-(defn clear-last-selected-heading!
-  []
-  (let [first-heading (state/pop-selection-heading!)]
-    (d/remove-class! first-heading "selected")
-    (d/remove-class! first-heading "noselect")))
-
-(defn on-select-heading
-  [state e up?]
-  (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format]} (get-state state)
-        element (gdom/getElement heading-parent-id)
-        selected-headings (state/get-selection-headings)
-        selected-headings-count (count selected-headings)
-        first-heading (first selected-headings)
-        selection-up? (state/selection-up?)]
-    (when heading-id
-      (util/stop e)
-      (when-let [element (if-not (state/in-selection-mode?)
-                           element
-                           (let [f (if up? util/get-prev-heading util/get-next-heading)]
-                             (f first-heading)))]
-        (if (and (not (nil? selection-up?)) (not= up? selection-up?))
-          (cond
-            (>= selected-headings-count 2) ; back to the start heading
-            (do
-              (when (= 2 selected-headings-count) (state/set-selection-up? nil))
-              (clear-last-selected-heading!))
-
-            :else
-            nil)
-          (do
-            (d/add-class! element "selected noselect")
-            (state/conj-selection-heading! element up?)))))))
-
 (defn on-up-down
   [state e up?]
-  (if (gobj/get e "shiftKey")
-    (on-select-heading state e up?)
-    (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format]} (get-state state)
-          element (gdom/getElement id)
-          line-height (util/get-textarea-line-height element)]
-      (when (and heading-id
-                 (or (and up? (util/textarea-cursor-first-row? element line-height))
-                     (and (not up?) (util/textarea-cursor-end-row? element line-height))))
-        (util/stop e)
-        (let [f (if up? util/get-prev-heading util/get-next-heading)
-              sibling-heading (f (gdom/getElement heading-parent-id))]
-          (when sibling-heading
-            (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-              (let [state (get-state state)
-                    content (:heading/content heading)
-                    value (:value state)]
-                (when (not= (string/trim (editor-handler/remove-level-spaces content format))
-                            (string/trim value))
-                  (save-heading! state (:value state))))
-              (editor-handler/edit-heading! (uuid sibling-heading-id) pos format id))))))))
+  (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} (get-state state)]
+    (if (gobj/get e "shiftKey")
+      (reset! editor-handler/select-start-heading-state heading-state)
+      (let [element (gdom/getElement id)
+           line-height (util/get-textarea-line-height element)]
+       (when (and heading-id
+                  (or (and up? (util/textarea-cursor-first-row? element line-height))
+                      (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+         (util/stop e)
+         (let [f (if up? util/get-prev-heading util/get-next-heading)
+               sibling-heading (f (gdom/getElement heading-parent-id))]
+           (when sibling-heading
+             (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+               (let [state (get-state state)
+                     content (:heading/content heading)
+                     value (:value state)]
+                 (when (not= (string/trim (editor-handler/remove-level-spaces content format))
+                             (string/trim value))
+                   (save-heading! state (:value state))))
+               (editor-handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))))
 
 (defn delete-heading!
   [state repo e]
@@ -481,7 +448,7 @@
                              0)]
                     (editor-handler/save-heading-if-changed! heading new-value)
                     (editor-handler/edit-heading! (uuid sibling-heading-id)
-                                           pos format id)))))))))))
+                                                  pos format id)))))))))))
 
 (defn get-matched-commands
   [input]
@@ -657,7 +624,7 @@
                     (if (and
                          (not (in-auto-complete? input))
                          (> (:heading/level heading) 2)
-                             (string/blank? content))
+                         (string/blank? content))
                       (do
                         (util/stop e)
                         (adjust-heading-level! state :left))
@@ -750,14 +717,14 @@
                    input (and input-id (gdom/getElement id))
                    pos (and input (:pos (util/get-caret-pos input)))]
                (when-not (state/get-editor-show-input)
-                (util/stop e)
-                (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
-                                  :left
-                                  :right)]
-                  (p/let [_ (adjust-heading-level! state direction)]
-                    (and input pos (js/setTimeout #(when-let [input (gdom/getElement input-id)]
-                                                     (util/move-cursor-to input pos))
-                                                  0)))))))}
+                 (util/stop e)
+                 (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
+                                   :left
+                                   :right)]
+                   (p/let [_ (adjust-heading-level! state direction)]
+                     (and input pos (js/setTimeout #(when-let [input (gdom/getElement input-id)]
+                                                      (util/move-cursor-to input pos))
+                                                   0)))))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond

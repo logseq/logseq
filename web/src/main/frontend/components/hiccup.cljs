@@ -1420,6 +1420,21 @@
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-key-down
+      state
+      {
+       ;; up
+       38 (fn [state e]
+            (editor-handler/on-select-heading state e true))
+
+       ;; down
+       40 (fn [state e]
+            (editor-handler/on-select-heading state e false))
+       }
+      (fn [e key-code]
+        nil))))
   [headings config option]
   (let [document-mode? (state/sub [:document/mode?])
         config (assoc config :document/mode? document-mode?)]

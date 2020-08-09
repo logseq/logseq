@@ -379,14 +379,15 @@
 (defn set-editing!
   [edit-input-id content heading cursor-range]
   (when edit-input-id
-    (swap! state
-           (fn [state]
-             (-> state
-                 (assoc-in [:editor/content edit-input-id] (string/trim content))
-                 (assoc
-                  :editor/heading heading
-                  :editor/editing? {edit-input-id true}
-                  :cursor-range cursor-range))))))
+    (let [content (or content "")]
+      (swap! state
+            (fn [state]
+              (-> state
+                  (assoc-in [:editor/content edit-input-id] (string/trim content))
+                  (assoc
+                   :editor/heading heading
+                   :editor/editing? {edit-input-id true}
+                   :cursor-range cursor-range)))))))
 
 (defn clear-edit!
   []
