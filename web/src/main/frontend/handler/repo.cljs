@@ -213,6 +213,7 @@
     (let [status (db/get-key-value repo-url :git/status)]
       (when (and
              ;; (not= status :push-failed)
+             (not= status :pushing)
              (empty? (state/get-changed-files repo-url))
              (not (state/get-edit-input-id))
              (not (state/in-draw-mode?)))
