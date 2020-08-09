@@ -82,8 +82,8 @@
   [e]
   (->
    (do
-     ;; remember to not to remove the encrypted token
      (storage/set :git/current-repo config/local-repo)
+     (storage/remove :encrypt/token)
      (storage/remove :git/clone-repo)
      (storage/remove "git-changed-files")
      (clear-store!))
