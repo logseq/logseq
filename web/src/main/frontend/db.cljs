@@ -404,6 +404,21 @@
          (assoc heading :heading/repo repo))
     headings))
 
+(defn- with-block-refs-count
+  [repo headings]
+  (let [db-ids (map :db/id headings)
+        refs (-> (d/q
+                   '[:find ?id2
+                     :where
+                     [_ :heading/ref-headings ?id2]]
+                   (get-conn repo))
+                 (seq-flatten)
+                 (frequencies))]
+    (map (fn [heading]
+           (assoc heading :heading/block-refs-count
+                  (get refs (:db/id heading))))
+      headings)))
+
 (defn custom-query
   ([query]
    (custom-query query {}))
@@ -442,6 +457,7 @@
                      result)
             result (some->> result
                             (with-repo repo)
+                            (with-block-refs-count repo)
                             (sort-headings))]
         (if-let [result-transform (:result-transform q)]
           (if-let [f (sci/eval-string (pr-str result-transform))]
@@ -802,7 +818,8 @@
   [repo-url result]
   (let [result (seq-flatten result)
         sorted (sort-by-pos result)]
-    (with-repo repo-url sorted)))
+    (->> (with-repo repo-url sorted)
+         (with-block-refs-count repo-url))))
 
 (defn get-marker-headings
   [repo-url marker]
@@ -820,6 +837,7 @@
      seq-flatten
      sort-by-pos
      (with-repo repo-url)
+     (with-block-refs-count repo-url)
      (sort-headings)
      (group-by-page))))
 
@@ -912,7 +930,8 @@
                           (= (:heading/uuid h)
                              heading-uuid)
                           (> (:heading/level h) level))))
-           (with-repo repo-url)))
+           (with-repo repo-url)
+           (with-block-refs-count repo-url)))
 
 (defn get-heading-children
   [repo heading-uuid]

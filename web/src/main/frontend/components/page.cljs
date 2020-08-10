@@ -332,13 +332,11 @@
            (today-queries repo today? sidebar?))
 
          ;; referenced headings
-         (when-not sidebar?
-           [:div {:key "page-references"}
-            (reference/references route-page-name false)])
+         [:div {:key "page-references"}
+          (reference/references route-page-name false)]
 
-         (when-not sidebar?
-           [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references route-page-name)])]))))
+         [:div {:key "page-unlinked-references"}
+          (reference/unlinked-references route-page-name)]]))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 

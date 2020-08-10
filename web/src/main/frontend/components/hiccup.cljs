@@ -744,7 +744,7 @@
            tags))))
 
 (defn build-heading-part
-  [{:keys [slide?] :as config} {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading? dummy?]
+  [{:keys [slide?] :as config} {:heading/keys [uuid title tags marker level priority anchor meta format content pre-heading? dummy? block-refs-count]
                                 :as t}]
   (let [config (assoc config :heading t)
         slide? (boolean (:slide? config))
@@ -813,7 +813,7 @@
                       elem (gdom/getElement id)]
                   (image-handler/render-local-images! elem))
                 state)}
-  [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
+  [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx block-refs-count] :as heading} edit-input-id heading-id slide?]
   (let [dragging? (rum/react *dragging?)
         drag-attrs {:headingid (str uuid)
                     :on-click (fn [e]
@@ -872,7 +872,21 @@
         (for [[idx child] (medley/indexed (:heading/body heading))]
           (when-let [block (block config child)]
             (rum/with-key (heading-child block)
-              (str uuid "-" idx))))])]))
+              (str uuid "-" idx))))])
+
+     (when (and block-refs-count (> block-refs-count 0))
+       [:a.block.absolute.origin-top-right.py-0.px-2.rounded.bg-base-2.opacity-50.hover:opacity-100
+        {:title "Open block references"
+         :style {:top -1
+                 :right 0}
+         :on-click (fn []
+                     (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      (:db/id heading)
+                      :heading-ref
+                      {:heading heading})
+                     (ui-handler/show-right-sidebar))}
+        block-refs-count])]))
 
 (rum/defc heading-content-or-editor < rum/reactive
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children pre-heading? collapsed? idx] :as heading} edit-input-id heading-id slide?]
@@ -1447,7 +1461,7 @@
           (let [page (db/entity (:db/id page))]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)
-                         (assoc :class "bg-base-2 p-7 rounded"))
+                         (assoc :class "bg-base-2 px-7 py-2 rounded"))
              (ui/foldable
               (page-cp config page)
               (headings-container headings config))]))]
