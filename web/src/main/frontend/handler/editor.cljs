@@ -321,18 +321,24 @@
     [after-headings @heading-and-children-content @last-child-end-pos]))
 
 (defn compute-retract-refs
+  "Computes old references to be retracted."
   [eid {:heading/keys [ref-pages ref-headings]} old-ref-pages old-ref-headings]
-  (let [retracted? (or (and (empty? ref-pages) (seq old-ref-pages))
-                       (and (empty? ref-headings) (seq old-ref-headings)))]
-    (when (and eid retracted?)
-      (->>
-       (map
-         (fn [[refs refs-k]]
-           (when (and refs (empty? refs))
-             [:db/retract eid refs-k]))
-         [[ref-pages :heading/ref-pages]
-          [ref-headings :heading/ref-headings]])
-       (remove nil?)))))
+  (let [ref-pages-id    (map #(:db/id (db/get-page (:page/name %))) ref-pages)
+        retracted-pages (reduce (fn [done current]
+                                  (if (some #(= (:db/id current) %) ref-pages-id)
+                                    done
+                                    (conj done (:db/id current))))
+                                [] old-ref-pages)
+        ref-headings-id    (map #(:db/id (db/get-page (str (last %)))) ref-headings)
+        retracted-headings (reduce (fn [done current]
+                                  (if (some #(= (:db/id current) %) ref-headings-id)
+                                    done
+                                    (conj done (:db/id current))))
+                                [] old-ref-headings)]
+    ;; removes retracted pages and headings
+    (into
+     (mapv (fn [ref] [:db/retract eid :heading/ref-pages ref]) retracted-pages)
+     (mapv (fn [ref] [:db/retract eid :heading/ref-headings ref]) retracted-headings))))
 
 (defn save-heading-if-changed!
   ([heading value]

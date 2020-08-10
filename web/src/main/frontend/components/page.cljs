@@ -366,6 +366,7 @@
     [:div.flex-1
      [:h1.title "All Pages"]
      (when current-repo
+       (db/remove-orphaned-pages! current-repo)
        (let [pages (db/get-pages-with-modified-at current-repo)]
          [:table.table-auto
           [:thead

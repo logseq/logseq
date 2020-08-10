@@ -1991,6 +1991,17 @@
          (when-let [l (get lists "contents")]
            (build-content-list lists l)))))))
 
+(defn remove-orphaned-pages!
+  [repo]
+  (let [empty-pages          (get-pages repo)
+        orphaned-pages       (remove nil? (map (fn [page]
+                                                 (let [name (string/lower-case page)]
+                                                   (if (and (empty? (get-pages-that-mentioned-page repo name))
+                                                            (not (journal-page? name))
+                                                            (empty? (get-page-headings name))) name nil))) empty-pages))
+        transaction          (mapv (fn [name] [:db/retractEntity (:db/id (get-page (str name)))]) orphaned-pages)]
+    (transact! transaction)))
+
 (comment
   (defn debug!
     []
