@@ -46,7 +46,7 @@
                                                    (contains? config/mldoc-support-formats format)))
                                                contents)
                                  headings-pages (if (seq parsed-files)
-                                                  (db/extract-all-headings-pages parsed-files)
+                                                  (db/extract-all-headings-pages repo-url parsed-files)
                                                   [])]
                              (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
                              (let [config-file (str config/app-name "/" config/config-file)]

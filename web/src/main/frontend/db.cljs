@@ -1062,10 +1062,11 @@
          (distinct))))
 
 (defn extract-pages-and-headings
-  [format ast directives file content utf8-content journal? pages-fn]
+  [repo-url format ast directives file content utf8-content journal? pages-fn]
   (try
     (let [now (tc/to-long (t/now))
-          headings (block/extract-headings ast (utf8/length utf8-content) utf8-content)
+          [block-refs headings] (block/extract-headings ast (utf8/length utf8-content) utf8-content)
+          _ (transact! repo-url block-refs)
           pages (pages-fn headings ast)
           ref-pages (atom #{})
           headings (doall
@@ -1179,7 +1180,7 @@
 
 ;; check journal formats and report errors
 (defn extract-headings-pages
-  [file content utf8-content]
+  [repo-url file content utf8-content]
   (if (string/blank? content)
     []
     (let [journal? (string/starts-with? file "journals/")
@@ -1193,6 +1194,7 @@
                          directives))]
       (if journal?
         (extract-pages-and-headings
+         repo-url
          format ast directives
          file content utf8-content true
          (fn [headings _ast]
@@ -1212,20 +1214,21 @@
                      (recur new-pages last-page-name tl))))
                pages))))
         (extract-pages-and-headings
+         repo-url
          format ast directives
          file content utf8-content false
          (fn [headings ast]
            [[(get-page-name file ast) headings]]))))))
 
 (defn extract-all-headings-pages
-  [contents]
+  [repo-url contents]
   (vec
    (mapcat
     (fn [[file content] contents]
       (println "Parsing : " file)
       (when content
         (let [utf8-content (utf8/encode content)]
-          (extract-headings-pages file content utf8-content))))
+          (extract-headings-pages repo-url file content utf8-content))))
     contents)))
 
 ;; TODO: compare headings
@@ -1238,7 +1241,7 @@
           file-content [{:file/path file}]
           tx (if (contains? config/mldoc-support-formats format)
                (let [delete-headings (delete-file-headings! repo-url file)
-                     headings-pages (extract-headings-pages file content utf8-content)]
+                     headings-pages (extract-headings-pages repo-url file content utf8-content)]
                  (concat file-content delete-headings headings-pages))
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]

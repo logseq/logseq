@@ -70,7 +70,7 @@
        [:div.references.mt-6.flex-1.flex-row
         [:div.content.flex-1
          (ui/foldable
-          [:h2.font-bold.opacity-50
+          [:h2.font-bold {:style {:opacity "0.3"}}
            (if @n-ref
              (str @n-ref " Unlinked References")
              "Unlinked References")]

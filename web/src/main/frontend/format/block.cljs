@@ -144,7 +144,8 @@
 
 (defn extract-headings
   [blocks last-pos encoded-content]
-  (let [headings
+  (let [block-refs (atom [])
+        headings
         (loop [headings []
                heading-body []
                blocks (reverse blocks)
@@ -196,6 +197,11 @@
                       heading (collect-heading-tags heading)
                       heading (with-page-refs heading)
                       heading (with-block-refs heading)
+                      _ (swap! block-refs
+                               (fn [refs]
+                                 (->> (concat refs (:ref-headings heading))
+                                      (remove nil?)
+                                      (distinct))))
                       last-pos' (get-in heading [:meta :pos])]
                   (recur (conj headings heading) [] (rest blocks) {} {} last-pos' (:level heading) children))
 
@@ -205,27 +211,32 @@
             (-> (reverse headings)
                 safe-headings)))]
     (let [first-heading (first headings)
-          first-heading-start-pos (get-in first-heading [:heading/meta :pos])]
-      (if (and
-           (not (string/blank? encoded-content))
-           (or (empty? headings)
-               (> first-heading-start-pos 1)))
-        (cons
-         (merge
-          (let [content (utf8/substring encoded-content 0 first-heading-start-pos)
-                uuid (d/squuid)]
-            {:heading/uuid uuid
-             :heading/content content
-             :heading/anchor (str uuid)
-             :heading/level 2
-             :heading/meta {:pos 0
-                            :end-pos (or first-heading-start-pos
-                                         (utf8/length encoded-content))}
-             :heading/body (take-while (fn [block] (not (heading-block? block))) blocks)
-             :heading/pre-heading? true})
-          (select-keys first-heading [:heading/file :heading/format :heading/page]))
-         headings)
-        headings))))
+          first-heading-start-pos (get-in first-heading [:heading/meta :pos])
+          headings (if (and
+                        (not (string/blank? encoded-content))
+                        (or (empty? headings)
+                            (> first-heading-start-pos 1)))
+                     (cons
+                      (merge
+                       (let [content (utf8/substring encoded-content 0 first-heading-start-pos)
+                             uuid (d/squuid)]
+                         {:heading/uuid uuid
+                          :heading/content content
+                          :heading/anchor (str uuid)
+                          :heading/level 2
+                          :heading/meta {:pos 0
+                                         :end-pos (or first-heading-start-pos
+                                                      (utf8/length encoded-content))}
+                          :heading/body (take-while (fn [block] (not (heading-block? block))) blocks)
+                          :heading/pre-heading? true})
+                       (select-keys first-heading [:heading/file :heading/format :heading/page]))
+                      headings)
+                     headings)
+          block-refs (mapv
+                      (fn [[_ heading-uuid]]
+                        {:heading/uuid heading-uuid})
+                      @block-refs)]
+      [block-refs headings])))
 
 (defn- page-with-journal
   [original-page-name]
@@ -246,7 +257,7 @@
           start-pos (:pos meta)
           encoded-content (utf8/encode content)
           content-length (utf8/length encoded-content)
-          headings (extract-headings ast content-length encoded-content)
+          [block-refs headings] (extract-headings ast content-length encoded-content)
           ref-pages-atom (atom [])
           headings (doall
                     (map-indexed
@@ -282,7 +293,8 @@
                              (assoc-in [:heading/meta :end-pos] (+ (:end-pos meta) start-pos)))))
                      headings))
           pages (vec (distinct @ref-pages-atom))]
-      {:headings headings
+      {:block-refs block-refs
+       :headings headings
        :pages pages
        :start-pos start-pos
        :end-pos (+ start-pos content-length)})))
