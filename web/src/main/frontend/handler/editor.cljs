@@ -616,6 +616,9 @@
             {:keys [start-pos end-pos]} properties-meta
             start-pos (- start-pos (:pos meta))]
         (cond
+          (= (get properties key) value)
+          nil
+
           (and start-pos end-pos (> end-pos start-pos))
           (let [encoded (utf8/encode content)
                 properties (utf8/substring encoded start-pos end-pos)
