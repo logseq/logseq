@@ -15,8 +15,7 @@
 (rum/defc references < rum/reactive
   [page-name marker? priority?]
   (when page-name
-    (let [current-page
-          heading? (util/uuid-string? page-name)
+    (let [heading? (util/uuid-string? page-name)
           heading-id (and heading? (uuid page-name))
           page-name (string/lower-case page-name)
           encoded-page-name (util/url-encode page-name)
