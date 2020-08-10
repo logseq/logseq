@@ -336,7 +336,7 @@
        address])
 
     ["Block_reference" id]
-    ;; get heading content
+    ;; FIXME: alert when self block reference
     (when-not (string/blank? id)
       (when (util/uuid-string? id)
         (when-let [heading (db/pull-heading (uuid id))]

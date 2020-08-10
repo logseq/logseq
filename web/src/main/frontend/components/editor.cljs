@@ -185,7 +185,10 @@
 
 (defn get-matched-pages
   [q]
-  (let [pages (db/get-pages (state/get-current-repo))]
+  (let [pages (->> (db/get-pages (state/get-current-repo))
+                   (remove (fn [p]
+                             (= (string/lower-case p)
+                                (:page/name (db/get-current-page))))))]
     (filter
      (fn [page]
        (string/index-of
