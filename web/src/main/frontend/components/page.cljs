@@ -361,12 +361,15 @@
        [:p.opacity-70.font-medium "Empty"]])))
 
 (rum/defc all-pages < rum/reactive
+  {:did-mount (fn [state]
+                (let [current-repo (state/sub :git/current-repo)]
+                  (db/remove-orphaned-pages! current-repo))
+                state)}
   []
   (let [current-repo (state/sub :git/current-repo)]
     [:div.flex-1
      [:h1.title "All Pages"]
      (when current-repo
-       (db/remove-orphaned-pages! current-repo)
        (let [pages (db/get-pages-with-modified-at current-repo)]
          [:table.table-auto
           [:thead
