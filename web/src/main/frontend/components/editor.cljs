@@ -251,7 +251,13 @@
 
 (defn get-matched-blocks
   [q]
-  (search/search q 20))
+  ;; remove current block
+  (let [current-heading (state/get-edit-heading)]
+    (remove
+     (fn [h]
+       (= (:heading/uuid current-heading)
+          (:heading/uuid h)))
+     (search/search q 21))))
 
 (rum/defc block-search < rum/reactive
   {:will-unmount (fn [state] (reset! *selected-text nil) state)}
@@ -355,12 +361,12 @@
             [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
              (merge
               (cond->
-                {:key (str "modal-input-" (name id))
-                 :id (str "modal-input-" (name id))
-                 :type (or type "text")
-                 :on-change (fn [e]
-                              (swap! input-value assoc id (util/evalue e)))
-                 :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                  {:key (str "modal-input-" (name id))
+                   :id (str "modal-input-" (name id))
+                   :type (or type "text")
+                   :on-change (fn [e]
+                                (swap! input-value assoc id (util/evalue e)))
+                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
                 placeholder
                 (assoc :placeholder placeholder))
               (dissoc input-item :id))]])
@@ -407,22 +413,22 @@
     (if (gobj/get e "shiftKey")
       (reset! editor-handler/select-start-heading-state heading-state)
       (let [element (gdom/getElement id)
-           line-height (util/get-textarea-line-height element)]
-       (when (and heading-id
-                  (or (and up? (util/textarea-cursor-first-row? element line-height))
-                      (and (not up?) (util/textarea-cursor-end-row? element line-height))))
-         (util/stop e)
-         (let [f (if up? util/get-prev-heading util/get-next-heading)
-               sibling-heading (f (gdom/getElement heading-parent-id))]
-           (when sibling-heading
-             (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-               (let [state (get-state state)
-                     content (:heading/content heading)
-                     value (:value state)]
-                 (when (not= (string/trim (editor-handler/remove-level-spaces content format))
-                             (string/trim value))
-                   (save-heading! state (:value state))))
-               (editor-handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))))
+            line-height (util/get-textarea-line-height element)]
+        (when (and heading-id
+                   (or (and up? (util/textarea-cursor-first-row? element line-height))
+                       (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+          (util/stop e)
+          (let [f (if up? util/get-prev-heading util/get-next-heading)
+                sibling-heading (f (gdom/getElement heading-parent-id))]
+            (when sibling-heading
+              (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+                (let [state (get-state state)
+                      content (:heading/content heading)
+                      value (:value state)]
+                  (when (not= (string/trim (editor-handler/remove-level-spaces content format))
+                              (string/trim value))
+                    (save-heading! state (:value state))))
+                (editor-handler/edit-heading! (uuid sibling-heading-id) pos format id)))))))))
 
 (defn delete-heading!
   [state repo e]
@@ -838,9 +844,10 @@
                      (when-let [input (gdom/getElement id)]
                        ;; (.removeEventListener input "paste" (fn [event]
                        ;;                                       (append-paste-doc! format event)))
-                       (dnd/unsubscribe!
-                        input
-                        :upload-images))
+                       (and input
+                            (dnd/unsubscribe!
+                             input
+                             :upload-images)))
                      (clear-when-saved!)
                      (save-heading! (get-state state) value))
                    state)}

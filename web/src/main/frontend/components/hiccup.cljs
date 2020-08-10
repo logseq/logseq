@@ -49,6 +49,9 @@
 (defonce *move-to-top?
   (atom false))
 
+(defonce container-ids (atom {}))
+(defonce container-idx (atom 0))
+
 ;; TODO:
 ;; add `key`
 
@@ -406,7 +409,7 @@
                   (->elem
                    :a
                    (cond->
-                     {:href href}
+                       {:href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -419,8 +422,8 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -612,19 +615,27 @@
 
 (defn- build-id
   [config ref? sidebar? embed?]
-  (cond->>
-      ""
-    (and (:id config) (or ref? sidebar? embed?))
-    (str (util/url-encode (:id config)) "-")
+  (let [k (pr-str config)
+        n (or
+           (get @container-ids k)
+           (let [n' (swap! container-idx inc)]
+             (swap! container-ids assoc k n')
+             n'))]
+    (str n "-"))
+  ;; (cond->>
+  ;;     ""
+  ;;   (and (:id config) (or ref? sidebar? embed?))
+  ;;   (str (util/url-encode (:id config)) "-")
 
-    (:custom-query? config)
-    (str "custom-query-")
+  ;;   (:custom-query? config)
+  ;;   (str "custom-query-")
 
-    embed?
-    (str "embed-")
+  ;;   embed?
+  ;;   (str "embed-")
 
-    sidebar?
-    (str "sidebar-")))
+  ;;   sidebar?
+  ;;   (str "sidebar-"))
+  )
 
 (rum/defc dnd-separator
   [heading margin-left bottom top? nested?]
@@ -923,7 +934,7 @@
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
-        unique-dom-id (build-id config ref? sidebar? embed?)
+        unique-dom-id (build-id (dissoc config :heading/uuid) ref? sidebar? embed?)
         edit-input-id (str "edit-heading-" unique-dom-id uuid)
         heading-id (str "ls-heading-" unique-dom-id uuid)
         has-child? (boolean
@@ -987,16 +998,16 @@
                                           (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-heading.flex.flex-col.pt-1
      (cond->
-       {:id heading-id
-        :style {:position "relative"}
-        :class (str uuid
-                    (when dummy? " dummy")
-                    (when (and collapsed? has-child?) " collapsed")
-                    (when pre-heading? " pre-heading"))
-        :headingid (str uuid)
-        :repo repo
-        :level level
-        :haschild (str has-child?)}
+         {:id heading-id
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-heading? " pre-heading"))
+          :headingid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
        (not slide?)
        (merge drag-attrs))
 
@@ -1423,13 +1434,14 @@
   (let [headings (map #(dissoc % :heading/children) headings)
         sidebar? (:sidebar? config)
         ref? (:ref? config)]
-    [:div.headings-container.flex-1 {:style {:margin-left (cond
-                                                            sidebar?
-                                                            0
-                                                            ref?
-                                                            -18
-                                                            :else
-                                                            -24)}}
+    [:div.headings-container.flex-1
+     {:style {:margin-left (cond
+                             sidebar?
+                             0
+                             ref?
+                             -18
+                             :else
+                             -24)}}
      (build-headings headings config)]))
 
 ;; headers to hiccup
@@ -1451,10 +1463,12 @@
         nil))))
   [headings config option]
   (let [document-mode? (state/sub [:document/mode?])
-        config (assoc config :document/mode? document-mode?)]
-    [:div.content (cond-> option
-                    document-mode?
-                    (assoc :class "doc-mode"))
+        config (assoc config
+                      :document/mode? document-mode?)]
+    [:div.content
+     (cond-> option
+       document-mode?
+       (assoc :class "doc-mode"))
      (if (:group-by-page? config)
        [:div.flex.flex-col
         (for [[page headings] headings]

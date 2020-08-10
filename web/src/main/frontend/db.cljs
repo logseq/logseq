@@ -276,7 +276,14 @@
                                  (map (fn [page]
                                         (when-let [page (entity [:page/name (:page/name page)])]
                                           [:page/refed-headings (:db/id page)]))
-                                   ref-pages))))
+                                   ref-pages)))
+
+                             ;; refed-headings
+                             (apply concat
+                               (for [{:heading/keys [ref-headings]} headings]
+                                 (map (fn [ref-heading]
+                                        [:heading/refed-headings (last ref-heading)])
+                                   ref-headings))))
                             (distinct))
               refed-pages (map
                             (fn [[k page-id]]
@@ -1215,7 +1222,7 @@
   (vec
    (mapcat
     (fn [[file content] contents]
-      (prn "Parsing : " file)
+      (println "Parsing : " file)
       (when content
         (let [utf8-content (utf8/encode content)]
           (extract-headings-pages file content utf8-content))))

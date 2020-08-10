@@ -347,7 +347,7 @@
        [:div.flex.flex-col
         [:div.flex.flex-row.justify-between
          [:div.flex.flex-row.justify-center
-          [:a.hover:text-gray-900.text-gray-500.flex.items-center.pl-1.pr-1
+          [:a.hover:text-gray-900.text-gray-500.flex.items-center.pr-1
            {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
            (if collapse?
              (svg/caret-right)
