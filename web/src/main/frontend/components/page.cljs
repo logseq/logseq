@@ -235,7 +235,8 @@
         (reference/references page-name true false)]]
 
       :else
-      (let [page (if heading?
+      (let [route-page-name page-name
+            page (if heading?
                    (->> (:db/id (:heading/page (db/entity repo [:heading/uuid heading-id])))
                         (db/entity repo))
                    (db/entity repo [:page/name page-name]))
@@ -333,11 +334,11 @@
          ;; referenced headings
          (when-not sidebar?
            [:div {:key "page-references"}
-            (reference/references page-name false)])
+            (reference/references route-page-name false)])
 
          (when-not sidebar?
            [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references page-name)])]))))
+            (reference/unlinked-references route-page-name)])]))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 

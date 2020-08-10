@@ -41,6 +41,12 @@
         (= (:protocol (second (:url (second block)))) "file")
         (:link (second (:url (second block)))))))))
 
+(defn get-block-reference
+  [block]
+  (and (vector? block)
+       (= "Block_reference" (first block))
+       (last block)))
+
 (defn task-block?
   [block]
   (and
@@ -90,7 +96,7 @@
       first
       second))
 
-(defn with-refs
+(defn with-page-refs
   [{:keys [title body tags] :as heading}]
   (let [tags (mapv :tag/name (util/->tags (map :tag/name tags)))
         ref-pages (atom tags)]
@@ -105,6 +111,21 @@
      (concat title body))
     (let [ref-pages (remove string/blank? @ref-pages)]
       (assoc heading :ref-pages (vec ref-pages)))))
+
+(defn with-block-refs
+  [{:keys [title body] :as heading}]
+  (let [ref-headings (atom nil)]
+    (walk/postwalk
+     (fn [form]
+       (when-let [heading (get-block-reference form)]
+         (swap! ref-headings conj heading))
+       form)
+     (concat title body))
+    (let [ref-headings (remove string/blank? @ref-headings)]
+      (assoc heading :ref-headings (map
+                                     (fn [id]
+                                       [:heading/uuid (medley/uuid id)])
+                                     ref-headings)))))
 
 (defn safe-headings
   [headings]
@@ -173,7 +194,8 @@
                                          :children (or current-heading-children []))
                                   (assoc-in [:meta :end-pos] last-pos))
                       heading (collect-heading-tags heading)
-                      heading (with-refs heading)
+                      heading (with-page-refs heading)
+                      heading (with-block-refs heading)
                       last-pos' (get-in heading [:meta :pos])]
                   (recur (conj headings heading) [] (rest blocks) {} {} last-pos' (:level heading) children))
 
@@ -228,7 +250,7 @@
           ref-pages-atom (atom [])
           headings (doall
                     (map-indexed
-                     (fn [idx {:heading/keys [ref-pages meta] :as heading}]
+                     (fn [idx {:heading/keys [ref-pages ref-headings meta] :as heading}]
                        (let [heading (collect-heading-tags heading)
                              heading (merge
                                       heading

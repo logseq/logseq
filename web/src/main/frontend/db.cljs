@@ -1458,15 +1458,16 @@
     (when (get-conn repo)
       (->> (q repo [:heading/refed-headings heading-uuid] {}
              '[:find (pull ?ref-heading [*])
-               :in $ ?page-name
+               :in $ ?heading-uuid
                :where
                [?heading :heading/uuid ?heading-uuid]
-               [?heading :heading/ref-headings ?ref-heading]]
+               [?ref-heading :heading/ref-headings ?heading]]
              heading-uuid)
            react
            seq-flatten
            sort-headings
-           group-by-page))))
+           group-by-page
+           ))))
 
 (defn get-matched-headings
   [match-fn limit]
