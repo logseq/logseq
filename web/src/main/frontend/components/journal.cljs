@@ -33,7 +33,7 @@
         (when (= 1 (count raw-headings))
           (when-let [template (state/get-journal-template)]
             (when-not (string/blank? template)
-              (editor/insert-new-heading!
+              (editor/insert-new-heading-aux!
                (first headings)
                template
                false

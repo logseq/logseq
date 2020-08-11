@@ -8,6 +8,7 @@
             [frontend.expand :as expand]
             [frontend.format :as format]
             [frontend.format.block :as block]
+            [frontend.image :as image]
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -22,7 +23,30 @@
             [frontend.utf8 :as utf8]
             [frontend.fs :as fs]
             [promesa.core :as p]
-            [frontend.diff :as diff]))
+            [dommy.core :as d]
+            [frontend.diff :as diff]
+            [frontend.search :as search]
+            [frontend.handler.image :as image-handler]
+            [frontend.commands :as commands
+             :refer [*show-commands
+                     *matched-commands
+                     *slash-caret-pos
+                     *angle-bracket-caret-pos
+                     *matched-block-commands
+                     *show-block-commands]]
+            [frontend.extensions.html-parser :as html-parser]))
+
+;; TODO: refactor the state, it is already too complex.
+(defonce *last-edit-heading (atom nil))
+
+;; FIXME: should support multiple images concurrently uploading
+(defonce *image-uploading? (atom false))
+(defonce *image-uploading-process (atom 0))
+(defonce *selected-text (atom nil))
+
+(defn set-last-edit-heading!
+  [id value]
+  (reset! *last-edit-heading [id value]))
 
 (defn- get-selection-and-format
   []
@@ -468,7 +492,7 @@
            :else
            nil))))))
 
-(defn insert-new-heading!
+(defn insert-new-heading-aux!
   [{:heading/keys [uuid content meta file dummy? level repo page format] :as heading} value create-new-heading? ok-handler with-level?]
   (let [input (gdom/getElement (state/get-edit-input-id))
         pos (:pos (util/get-caret-pos input))
@@ -538,6 +562,67 @@
       :else
       nil)))
 
+(defn clear-when-saved!
+  []
+  (state/set-editor-show-input nil)
+  (state/set-editor-show-date-picker false)
+  (state/set-editor-show-page-search false)
+  (state/set-editor-show-block-search false)
+  (commands/restore-state true))
+
+(defn get-state
+  [state]
+  (let [[{:keys [on-hide heading heading-id heading-parent-id dummy? format sidebar?]} id config] (:rum/args state)
+        node (gdom/getElement id)
+        value (gobj/get node "value")
+        pos (gobj/get node "selectionStart")]
+    {:config config
+     :on-hide on-hide
+     :dummy? dummy?
+     :sidebar? sidebar?
+     :format format
+     :id id
+     :heading heading
+     :heading-id heading-id
+     :heading-parent-id heading-parent-id
+     :node node
+     :value value
+     :pos pos}))
+
+(defn edit-heading!
+  [heading-id prev-pos format id]
+  (let [edit-input-id (str (subs id 0 (- (count id) 36)) heading-id)
+        heading (or
+                 (db/pull [:heading/uuid heading-id])
+                 ;; dummy?
+                 {:heading/uuid heading-id
+                  :heading/content ""})
+        {:heading/keys [content]} heading
+        content (string/trim (remove-level-spaces content format))
+        content-length (count content)
+        text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
+                     content
+                     (subs content 0 prev-pos))]
+    (state/set-editing! edit-input-id content heading text-range)))
+
+(defn- insert-new-heading!
+  [state]
+  (let [{:keys [heading value format id]} (get-state state)
+        heading-id (:heading/uuid heading)
+        heading (or (db/pull [:heading/uuid heading-id])
+                    heading)]
+    (set-last-edit-heading! (:heading/uuid heading) value)
+    ;; save the current heading and insert a new heading
+    (insert-new-heading-aux!
+     heading
+     value
+     true
+     (fn [[_first-heading last-heading _new-heading-content]]
+       (let [last-id (:heading/uuid last-heading)]
+         (edit-heading! last-id 0 format id)
+         (clear-when-saved!)))
+     false)))
+
 ;; TODO: utf8 encode performance
 (defn check
   [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
@@ -561,7 +646,7 @@
                                           (util/format "[#%s]" new-priority))]
     (save-heading-if-changed! heading new-content)))
 
-(defn delete-heading!
+(defn delete-heading-aux!
   [{:heading/keys [uuid meta content file repo ref-pages ref-headings] :as heading} dummy?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
@@ -581,6 +666,32 @@
            [[file-path new-content]])
           (when (or (seq ref-pages) (seq ref-headings))
             (ui-handler/re-render-root!)))))))
+
+(defn delete-heading!
+  [state repo e]
+  (let [{:keys [id heading-id heading-parent-id dummy? value pos format]} (get-state state)]
+    (when heading-id
+      (do
+        (util/stop e)
+        ;; delete heading, edit previous heading
+        (let [heading (db/pull [:heading/uuid heading-id])
+              heading-parent (gdom/getElement heading-parent-id)
+              sibling-heading (util/get-prev-heading heading-parent)]
+          (delete-heading-aux! heading dummy?)
+          (when sibling-heading
+            (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+              (when repo
+                (when-let [heading (db/pull repo '[*] [:heading/uuid (uuid sibling-heading-id)])]
+                  (let [original-content (util/trim-safe (:heading/content heading))
+                        new-value (str original-content value)
+                        pos (max
+                             (if original-content
+                               (utf8/length (utf8/encode (remove-level-spaces original-content format)))
+                               0)
+                             0)]
+                    (save-heading-if-changed! heading new-value)
+                    (edit-heading! (uuid sibling-heading-id)
+                                   pos format id)))))))))))
 
 (defn delete-headings!
   [repo heading-uuids]
@@ -659,22 +770,6 @@
                 new-content (str heading-line properties
                                  (string/join "\n" others))]
             (save-heading-if-changed! heading new-content)))))))
-
-(defn edit-heading!
-  [heading-id prev-pos format id]
-  (let [edit-input-id (str (subs id 0 (- (count id) 36)) heading-id)
-        heading (or
-                 (db/pull [:heading/uuid heading-id])
-                 ;; dummy?
-                 {:heading/uuid heading-id
-                  :heading/content ""})
-        {:heading/keys [content]} heading
-        content (string/trim (remove-level-spaces content format))
-        content-length (count content)
-        text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
-                     content
-                     (subs content 0 prev-pos))]
-    (state/set-editing! edit-input-id content heading text-range)))
 
 (defn clear-selection!
   [e]
@@ -795,7 +890,7 @@
   (when-let [heading (db/pull [:heading/uuid heading-id])]
     (let [content (:heading/content heading)]
       (util/copy-to-clipboard! content)
-      (delete-heading! heading false))))
+      (delete-heading-aux! heading false))))
 
 (defonce select-start-heading-state (atom nil))
 
@@ -842,3 +937,269 @@
             (do
               (dom/add-class! element "selected noselect")
               (state/conj-selection-heading! element up?))))))))
+
+(defn save-heading!
+  [{:keys [format heading id repo dummy?] :as state} value]
+  (when (or (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
+            dummy?)
+    (let [new-value (block/with-levels value format heading)]
+      (let [cache [(:heading/uuid heading) value]]
+        (when (not= @*last-edit-heading cache)
+          (save-heading-if-changed! heading new-value)
+          (reset! *last-edit-heading cache))))))
+
+(defn on-up-down
+  [state e up?]
+  (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} (get-state state)]
+    (if (gobj/get e "shiftKey")
+      (reset! select-start-heading-state heading-state)
+      (let [element (gdom/getElement id)
+            line-height (util/get-textarea-line-height element)]
+        (when (and heading-id
+                   (or (and up? (util/textarea-cursor-first-row? element line-height))
+                       (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+          (util/stop e)
+          (let [f (if up? util/get-prev-heading util/get-next-heading)
+                sibling-heading (f (gdom/getElement heading-parent-id))]
+            (when sibling-heading
+              (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+                (let [state (get-state state)
+                      content (:heading/content heading)
+                      value (:value state)]
+                  (when (not= (string/trim (remove-level-spaces content format))
+                              (string/trim value))
+                    (save-heading! state (:value state))))
+                (edit-heading! (uuid sibling-heading-id) pos format id)))))))))
+
+(defn insert-command!
+  [id command-output format {:keys [restore?]
+                             :or {restore? true}
+                             :as option}]
+  (cond
+    ;; replace string
+    (string? command-output)
+    (commands/insert! id command-output option)
+
+    ;; steps
+    (vector? command-output)
+    (commands/handle-steps command-output format)
+
+    :else
+    nil)
+
+  (when restore?
+    (let [restore-slash-caret-pos? (if (= :editor/click-hidden-file-input
+                                          (ffirst command-output))
+                                     false
+                                     true)]
+      (commands/restore-state restore-slash-caret-pos?))))
+
+(defn upload-image
+  [id files format uploading? drop?]
+  (image/upload
+   files
+   (fn [file file-name file-type]
+     (image-handler/request-presigned-url
+      file file-name file-type
+      uploading?
+      (fn [signed-url]
+        (insert-command! id
+                         (util/format "[[%s][%s]]"
+                                      signed-url
+                                      file-name)
+                         format
+                         {:last-pattern (if drop? "" commands/slash)
+                          :restore? false})
+
+        (reset! *image-uploading-process 0))
+      (fn [e]
+        (let [process (* (/ (gobj/get e "loaded")
+                            (gobj/get e "total"))
+                         100)]
+          (reset! *image-uploading-process process)))))))
+
+(def autopair-map
+  {"[" "]"
+   "{" "}"
+   "(" ")"
+   "$" "$"                              ; math
+   "`" "`"
+   "~" "~"
+   "*" "*"
+   "_" "_"
+   "^" "^"})
+
+(def reversed-autopair-map
+  (zipmap (vals autopair-map)
+          (keys autopair-map)))
+
+(defn autopair
+  [input-id prefix format {:keys [restore?]
+                           :or {restore? true}
+                           :as option}]
+  (let [value (get autopair-map prefix)
+        selected (util/get-selected-text)
+        postfix (str selected value)
+        value (str prefix postfix)
+        input (gdom/getElement input-id)]
+    (when value
+      (when-not (string/blank? selected) (reset! *selected-text selected))
+      (let [[prefix pos] (commands/simple-replace! input-id value selected
+                                                   {:backward-pos (count postfix)
+                                                    :check-fn (fn [new-value prefix-pos]
+                                                                (when (>= prefix-pos 0)
+                                                                  [(subs new-value prefix-pos (+ prefix-pos 2))
+                                                                   (+ prefix-pos 2)]))})]
+        (case prefix
+          "[["
+          (do
+            (commands/handle-step [:editor/search-page])
+            (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+          "(("
+          (do
+            (commands/handle-step [:editor/search-block :reference])
+            (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+          nil)))))
+
+(defn surround-by?
+  [input before after]
+  (when input
+    (let [value (gobj/get input "value")
+          pos (:pos (util/get-caret-pos input))
+          start-pos (- pos (count before))
+          end-pos (+ pos (count after))]
+      (when (>= (count value) end-pos)
+        (= (str before after)
+           (subs value start-pos end-pos))))))
+
+(defn get-matched-pages
+  [q]
+  (let [pages (->> (db/get-pages (state/get-current-repo))
+                   (remove (fn [p]
+                             (= (string/lower-case p)
+                                (:page/name (db/get-current-page))))))]
+    (filter
+     (fn [page]
+       (string/index-of
+        (string/lower-case page)
+        (string/lower-case q)))
+     pages)))
+
+(defn get-matched-blocks
+  [q]
+  ;; remove current block
+  (let [current-heading (state/get-edit-heading)]
+    (remove
+     (fn [h]
+       (= (:heading/uuid current-heading)
+          (:heading/uuid h)))
+     (search/search q 21))))
+
+(defn get-matched-commands
+  [input]
+  (try
+    (let [edit-content (gobj/get input "value")
+          pos (:pos (util/get-caret-pos input))
+          last-slash-caret-pos (:pos @*slash-caret-pos)
+          last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
+      (when (> pos 0)
+        (or
+         (and (= \/ (util/nth-safe edit-content (dec pos)))
+              (commands/commands-map))
+         (and last-command
+              (commands/get-matched-commands last-command)))))
+    (catch js/Error e
+      nil)))
+
+(defn get-matched-block-commands
+  [input]
+  (try
+    (let [edit-content (gobj/get input "value")
+          pos (:pos (util/get-caret-pos input))
+          last-command (subs edit-content
+                             (:pos @*angle-bracket-caret-pos)
+                             pos)]
+      (when (> pos 0)
+        (or
+         (and (= \< (util/nth-safe edit-content (dec pos)))
+              (commands/block-commands-map))
+         (and last-command
+              (commands/get-matched-commands
+               last-command
+               (commands/block-commands-map))))))
+    (catch js/Error e
+      nil)))
+
+(defn in-auto-complete?
+  [input]
+  (or @*show-commands
+      @*show-block-commands
+      (state/get-editor-show-input)
+      (state/get-editor-show-page-search)
+      (state/get-editor-show-block-search)
+      (state/get-editor-show-date-picker)))
+
+(defn get-previous-input-char
+  [input]
+  (when-let [pos (:pos (util/get-caret-pos input))]
+    (let [value (gobj/get input "value")]
+      (when (and (>= (count value) pos)
+                 (>= pos 1))
+        (util/nth-safe value (- pos 1))))))
+
+(defn get-previous-input-chars
+  [input length]
+  (when-let [pos (:pos (util/get-caret-pos input))]
+    (let [value (gobj/get input "value")]
+      (when (and (>= (count value) pos)
+                 (>= pos 1))
+        (subs value (- pos length) pos)))))
+
+(defn get-current-input-char
+  [input]
+  (when-let [pos (:pos (util/get-caret-pos input))]
+    (let [value (gobj/get input "value")]
+      (when (and (>= (count value) (inc pos))
+                 (>= pos 1))
+        (util/nth-safe value pos)))))
+
+(defn- get-previous-heading-level
+  [current-id]
+  (when-let [input (gdom/getElement current-id)]
+    (when-let [prev-heading (util/get-prev-heading input)]
+      (util/parse-int (d/attr prev-heading "level")))))
+
+(defn adjust-heading-level!
+  [state direction]
+  (let [{:keys [heading heading-parent-id value]} (get-state state)
+        format (:heading/format heading)
+        heading-pattern (config/get-heading-pattern format)
+        level (:heading/level heading)
+        previous-level (or (get-previous-heading-level heading-parent-id) 1)
+        [add? remove?] (case direction
+                         :left [false true]
+                         :right [true false]
+                         [(<= level previous-level)
+                          (and (> level previous-level)
+                               (> level 2))])
+        final-level (cond
+                      add? (inc level)
+                      remove? (if (> level 2)
+                                (dec level)
+                                level)
+                      :else level)
+        new-value (block/with-levels value format (assoc heading :heading/level final-level))]
+    (when (<= (- final-level previous-level) 1)
+      (set-last-edit-heading! (:heading/uuid heading) value)
+      (save-heading-if-changed! heading new-value (= direction :left)))))
+
+(defn append-paste-doc!
+  [format event]
+  (let [[html text] (util/get-clipboard-as-html event)]
+    (when-not (string/starts-with? (string/trim text) "http")
+      (let [doc-text (html-parser/parse format html)]
+        (when-not (string/blank? doc-text)
+          (util/stop event)
+          (state/append-current-edit-content! doc-text))))))
