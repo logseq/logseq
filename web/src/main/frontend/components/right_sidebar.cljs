@@ -39,7 +39,7 @@
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph
         (graph/build-graph-opts
-         graph dark?
+         graph dark? (atom false)
          {:width 600
           :height 600}))])))
 

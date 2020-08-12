@@ -102,7 +102,7 @@
   (page-handler/delete! page-name
                         (fn []
                           (notification/show! (str "Page " page-name " was deleted successfully!")
-                                                      :success)))
+                                              :success)))
   (state/close-modal!)
   (route-handler/redirect-to-home!))
 
@@ -341,24 +341,44 @@
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 
 (defonce graph-ref (atom nil))
+(defonce show-journal? (atom false))
+(defonce dot-mode? (atom false))
+
 (rum/defcs global-graph < rum/reactive
-  (rum/local false ::show-journal?)
   [state]
-  (let [show-journal? (get state ::show-journal?)
-        theme (state/sub :ui/theme)
+  (let [theme (state/sub :ui/theme)
         [width height] (rum/react layout)
         dark? (= theme "dark")
-        graph (db/build-global-graph theme @show-journal?)]
-    (if (seq (:nodes graph))
-      (graph-2d/graph
-       (graph/build-graph-opts
-        graph dark?
-        {:width (- width 24)
-         :height (- height 100)
-         :ref (fn [v] (reset! graph-ref v))
-         :ref-atom graph-ref}))
-      [:div.ls-center.mt-20
-       [:p.opacity-70.font-medium "Empty"]])))
+        graph (db/build-global-graph theme (rum/react show-journal?))
+        dot-mode-value? (rum/react dot-mode?)]
+    [:div.relative
+     (if (seq (:nodes graph))
+       (graph-2d/graph
+        (graph/build-graph-opts
+         graph
+         dark?
+         dot-mode-value?
+         {:width (- width 24)
+          :height (- height 100)
+          :ref (fn [v] (reset! graph-ref v))
+          :ref-atom graph-ref}))
+       [:div.ls-center.mt-20
+        [:p.opacity-70.font-medium "Empty"]])
+     [:div.absolute.top-5.left-5
+      [:div.flex.flex-col
+       [:a.text-sm.font-medium
+        {:on-click (fn [_e]
+                     (swap! show-journal? not))}
+        (str "Show Journals"
+             (if @show-journal? " (ON)"))]
+       [:a.text-sm.font-medium.mt-4
+        {:title (if @dot-mode?
+                  "Show page name"
+                  "Hide page name")
+         :on-click (fn [_e]
+                     (swap! dot-mode? not))}
+        (str "Dot mode"
+             (if @dot-mode? " (ON)"))]]]]))
 
 (rum/defc all-pages < rum/reactive
   {:did-mount (fn [state]

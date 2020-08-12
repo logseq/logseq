@@ -1386,7 +1386,6 @@
     (->
      (d/q
        '[:find ?page
-         :in $ ?with-journal ?brain-text
          :where
          [?p :page/name ?page]
          (not [?p :page/file])]
@@ -1397,18 +1396,23 @@
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (get-conn repo)]
-    (d/q
-      '[:find ?page ?ref-page-name
-        :in $ ?with-journal ?brain-text
-        :where
-        [?p :page/name ?page]
-        [?p :page/journal? ?with-journal]
-        [?heading :heading/page ?p]
-        [(get-else $ ?heading :heading/ref-pages 100000000) ?ref-page]
-        [(get-else $ ?ref-page :page/name ?brain-text) ?ref-page-name]]
-      conn
-      with-journal?
-      brain-text)))
+    (->>
+     (d/q
+       '[:find ?page ?ref-page-name
+         :in $ ?with-journal ?brain-text
+         :where
+         [?p :page/name ?page]
+         [?p :page/journal? ?with-journal]
+         [?heading :heading/page ?p]
+         [(get-else $ ?heading :heading/ref-pages 100000000) ?ref-page]
+         [(get-else $ ?ref-page :page/name ?brain-text) ?ref-page-name]]
+       conn
+       with-journal?
+       brain-text)
+     (map (fn [[page ref-page-name]]
+            (if (= ref-page-name brain-text)
+              [page]
+              [page ref-page-name]))))))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
@@ -1633,21 +1637,20 @@
 (defn- build-nodes
   [dark? current-page edges nodes]
   (mapv (fn [p]
-          (let [brain? (= brain-text p)]
-            (cond->
-                {:id (if brain? brain-text p)
-                 :name (if brain? brain p)
-                 :val (if brain? 0 (get-connections p edges))
-                 :autoColorBy "group"
-                 :group (js/Math.ceil (* (js/Math.random) 12))
-                 :color "#222222"
-                 }
-              dark?
-              (assoc :color "#8abbbb")
-              (= p current-page)
-              (assoc :color (if dark?
-                              "#ffffff"
-                              "#045591")))))
+          (cond->
+              {:id p
+               :name p
+               :val (get-connections p edges)
+               :autoColorBy "group"
+               :group (js/Math.ceil (* (js/Math.random) 12))
+               :color "#222222"
+               }
+            dark?
+            (assoc :color "#8abbbb")
+            (= p current-page)
+            (assoc :color (if dark?
+                            "#ffffff"
+                            "#045591"))))
         (set (flatten nodes))))
 
 (defn normalize-page-name
@@ -1677,8 +1680,13 @@
     (when-let [repo (state/get-current-repo)]
       (let [relation (get-pages-relation repo show-journal?)
             empty-pages (get-empty-pages repo)
-            nodes (concat (seq relation) (mapv (fn [p] [p brain-text]) empty-pages))
-            edges (build-edges nodes)
+            nodes (concat (seq relation) (if (seq empty-pages)
+                                           [empty-pages]
+                                           []))
+            edges (build-edges (remove
+                                (fn [[_ to]]
+                                  (nil? to))
+                                nodes))
             nodes (build-nodes dark? current-page edges nodes)]
         (normalize-page-name
          {:nodes nodes
