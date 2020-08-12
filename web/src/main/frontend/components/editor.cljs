@@ -1,5 +1,6 @@
 (ns frontend.components.editor
   (:require [rum.core :as rum]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.handler :as handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -172,55 +173,16 @@
                  :height "2.5rem"}}
    [:button
     {:on-click #(editor-handler/adjust-heading-level! parent-state :right)}
-    [:svg.h-6.w-6   
-     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-     [:path
-      {:d "M4.293 15.707a1 1 0 010-1.414L8.586 10 4.293 5.707a1 1 0 011.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0z"
-       :fill-rule "evenodd"
-       :clip-rule "evenodd"
-       :stroke-width "1"
-       :stroke-linejoin "round"
-       :stroke-linecap "round"}]
-     [:path
-      {:d "M10.293 15.707a1 1 0 010-1.414L14.586 10l-4.293-4.293a1 1 0 111.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0z"
-       :fill-rule "evenodd"
-       :clip-rule "evenodd"
-       :stroke-width "1"
-       :stroke-linejoin "round"
-       :stroke-linecap "round"}]]]
+    svg/indent-block]
    [:button 
     {:on-click #(editor-handler/adjust-heading-level! parent-state :left)} 
-    [:svg.h-6.w-6
-     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-     [:path
-      {:d "M15.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414zm-6 0a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L5.414 10l4.293 4.293a1 1 0 010 1.414z"
-       :fill-rule "evenodd"
-       :clip-rule "evenodd"
-       :stroke-width "1"
-       :stroke-linejoin "round"
-       :stroke-linecap "round"}]]]
+    svg/outdent-block]
    [:button
     {:on-click #(editor-handler/move-up-down parent-state % true)}
-    [:svg.h-6.w-6
-     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-     [:path
-      {:d "M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
-       :fill-rule "evenodd"
-       :clip-rule "evenodd"
-       :stroke-width "1"
-       :stroke-linejoin "round"
-       :stroke-linecap "round"}]]]
+    svg/move-up-block]
    [:button
     {:on-click #(editor-handler/move-up-down parent-state % false)}
-    [:svg.h-6.w-6
-     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-     [:path
-      {:d "M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-       :fill-rule "evenodd"
-       :clip-rule "evenodd"
-       :stroke-width "1"
-       :stroke-linejoin "round"
-       :stroke-linecap "round"}]]]])
+    svg/move-down-block]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
