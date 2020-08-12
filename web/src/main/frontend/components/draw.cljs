@@ -367,9 +367,10 @@
   state)
 
 (rum/defcs draw-inner < rum/reactive
-  (mixins/keyboard-mixin "Ctrl+s" (fn [state e]
-                                    (save-excalidraw! state e nil nil)))
-  (mixins/keyboard-mixin "Alt+z" set-canvas-actions-style!)
+  (mixins/keyboard-mixin (util/->system-modifier "ctrl+s")
+                         (fn [state e]
+                           (save-excalidraw! state e nil nil)))
+  (mixins/keyboard-mixin "alt+z" set-canvas-actions-style!)
   {:init (fn [state]
            (reset! *elements nil)
            (let [[option] (:rum/args state)

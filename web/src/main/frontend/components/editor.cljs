@@ -260,7 +260,10 @@
         *slash-caret-pos)))])
 
 (rum/defc box < rum/reactive
-  (mixins/keyboard-mixin "ctrl+shift+a" editor-handler/select-all-headings!)
+  (mixins/keyboard-mixin (util/->system-modifier "ctrl+shift+a") editor-handler/select-all-headings!)
+  (mixins/keyboard-mixin "alt+shift+up" (fn [state e]
+                                          (editor-handler/move-up-down state e true)))
+  (mixins/keyboard-mixin "alt+shift+down" (fn [state e] (editor-handler/move-up-down state e false)))
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [id format heading]} (get-state state)
@@ -496,10 +499,14 @@
                      (when-let [input (gdom/getElement id)]
                        ;; (.removeEventListener input "paste" (fn [event]
                        ;;                                       (append-paste-doc! format event)))
-                       (and input
-                            (dnd/unsubscribe!
-                             input
-                             :upload-images)))
+                       (let [s (str "cljs-drag-n-drop." :upload-images)
+                             a (gobj/get input s)
+                             timer (:timer a)]
+
+                         (and timer
+                             (dnd/unsubscribe!
+                              input
+                              :upload-images))))
                      (editor-handler/clear-when-saved!)
                      (editor-handler/save-heading! (get-state state) value))
                    state)}

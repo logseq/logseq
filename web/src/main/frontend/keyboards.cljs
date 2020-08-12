@@ -5,7 +5,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
-            [goog.events.KeyCodes :as codes]))
+            [goog.events.KeyCodes :as codes]
+            [frontend.util :as util]))
 
 ;; KeyCodes.QUESTION_MARK
 
@@ -50,16 +51,16 @@
 (defonce keyboards
   {
    "tab" editor-handler/cycle-collapse!
-   "ctrl+alt+d" state/toggle-document-mode!
-   "ctrl+z" history-handler/undo!
-   "ctrl+y" history-handler/redo!
-   "ctrl+alt+r" ui-handler/toggle-right-sidebar!
-   "ctrl+u" route-handler/go-to-search!
+   (util/->system-modifier "ctrl+alt+d") state/toggle-document-mode!
+   (util/->system-modifier "ctrl+z") history-handler/undo!
+   (util/->system-modifier "ctrl+y") history-handler/redo!
+   (util/->system-modifier "ctrl+alt+r") ui-handler/toggle-right-sidebar!
+   (util/->system-modifier "ctrl+u") route-handler/go-to-search!
    "alt+j" route-handler/go-to-journals!
    "alt+right" editor-handler/zoom-in!
-   "ctrl+o" editor-handler/follow-link-under-cursor!
-   "ctrl+shift+o" editor-handler/open-link-in-sidebar!
-   "ctrl+b" editor-handler/bold-format!
-   "ctrl+i" editor-handler/italics-format!
-   "ctrl+k" editor-handler/html-link-format!
-   "ctrl+h" editor-handler/highlight-format!})
+   (util/->system-modifier "ctrl+o") editor-handler/follow-link-under-cursor!
+   (util/->system-modifier "ctrl+shift+o") editor-handler/open-link-in-sidebar!
+   (util/->system-modifier "ctrl+b") editor-handler/bold-format!
+   (util/->system-modifier "ctrl+i") editor-handler/italics-format!
+   (util/->system-modifier "ctrl+k") editor-handler/html-link-format!
+   (util/->system-modifier "ctrl+h") editor-handler/highlight-format!})

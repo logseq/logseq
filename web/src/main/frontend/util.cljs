@@ -665,6 +665,34 @@
       (when (> (count headings) (inc index))
         (nth headings (inc index))))))
 
+(defn get-prev-heading-with-same-level
+  [heading]
+  (when-let [headings (d/by-class "ls-heading")]
+    (when-let [index (.indexOf headings heading)]
+      (let [level (d/attr heading "level")]
+        (when (> index 0)
+          (loop [idx (dec index)]
+            (if (>= idx 0)
+              (let [heading (nth headings idx)]
+                (if (= level (d/attr heading "level"))
+                  heading
+                  (recur (dec idx))))
+              nil)))))))
+
+(defn get-next-heading-with-same-level
+  [heading]
+  (when-let [headings (d/by-class "ls-heading")]
+    (when-let [index (.indexOf headings heading)]
+      (let [level (d/attr heading "level")]
+        (when (> (count headings) (inc index))
+          (loop [idx (inc index)]
+            (if (< idx (count headings))
+              (let [heading (nth headings idx)]
+                (if (= level (d/attr heading "level"))
+                  heading
+                  (recur (inc idx))))
+              nil)))))))
+
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))
     nil
@@ -770,3 +798,15 @@
 (defn get-file-ext
   [file]
   (last (string/split file #"\.")))
+
+(defn mac?
+  []
+  (string/starts-with?
+   (string/lower-case js/navigator.userAgent)
+   "mac"))
+
+(defn ->system-modifier
+  [keyboard-shortcut]
+  (if (mac?)
+    (string/replace keyboard-shortcut "ctrl" "meta")
+    keyboard-shortcut))

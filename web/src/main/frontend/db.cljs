@@ -967,25 +967,27 @@
                      (map (fn [id] [:heading/uuid id]) ids))))))
 
 (defn get-heading-and-children
-  [repo heading-uuid]
-  (let [heading (entity repo [:heading/uuid heading-uuid])
-        page (:db/id (:heading/page heading))
-        pos (:pos (:heading/meta heading))
-        level (:heading/level heading)
-        pred (fn [data meta]
-               (>= (:pos meta) pos))]
-    (some-> (q repo [:heading/block heading-uuid]
-              {:use-cache? true
-               :transform-fn #(heading-and-children-transform % repo heading-uuid level)}
-              '[:find (pull ?heading [*])
-                :in $ ?page ?pred
-                :where
-                [?heading :heading/page ?page]
-                [?heading :heading/meta ?meta]
-                [(?pred $ ?meta)]]
-              page
-              pred)
-            react)))
+  ([repo heading-uuid]
+   (get-heading-and-children repo heading-uuid true))
+  ([repo heading-uuid use-cache?]
+   (let [heading (entity repo [:heading/uuid heading-uuid])
+         page (:db/id (:heading/page heading))
+         pos (:pos (:heading/meta heading))
+         level (:heading/level heading)
+         pred (fn [data meta]
+                (>= (:pos meta) pos))]
+     (some-> (q repo [:heading/block heading-uuid]
+               {:use-cache? use-cache?
+                :transform-fn #(heading-and-children-transform % repo heading-uuid level)}
+               '[:find (pull ?heading [*])
+                 :in $ ?page ?pred
+                 :where
+                 [?heading :heading/page ?page]
+                 [?heading :heading/meta ?meta]
+                 [(?pred $ ?meta)]]
+               page
+               pred)
+             react))))
 
 (defn get-file-page
   [file-path]
@@ -1007,6 +1009,13 @@
   [page-name]
   (some-> (entity [:page/name page-name])
           :page/file))
+
+(defn get-heading-file
+  [heading-id]
+  (let [page-id (some-> (entity [:heading/uuid heading-id])
+                        :heading/page
+                        :db/id)]
+    (:page/file (entity page-id))))
 
 (defn get-file-page-id
   [file-path]

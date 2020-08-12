@@ -34,7 +34,8 @@
                      *angle-bracket-caret-pos
                      *matched-block-commands
                      *show-block-commands]]
-            [frontend.extensions.html-parser :as html-parser]))
+            [frontend.extensions.html-parser :as html-parser]
+            [medley.core :as medley]))
 
 ;; TODO: refactor the state, it is already too complex.
 (defonce *last-edit-heading (atom nil))
@@ -43,6 +44,12 @@
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
+
+(defn modified-time-tx
+  [page file]
+  (let [modified-at (tc/to-long (t/now))]
+    [[:db/add (:db/id page) :page/last-modified-at modified-at]
+     [:db/add (:db/id file) :file/last-modified-at modified-at]]))
 
 (defn set-last-edit-heading!
   [id value]
@@ -279,11 +286,9 @@
     (doseq [heading headings]
       (gdom-classes/remove heading "block-highlight"))))
 
-(defn rebuild-after-headings
-  [repo file before-end-pos new-end-pos]
-  (let [file-id (:db/id file)
-        after-headings (db/get-file-after-headings-meta repo file-id before-end-pos)
-        last-start-pos (atom new-end-pos)]
+(defn rebuild-headings-meta
+  [start-pos headings]
+  (let [last-start-pos (atom start-pos)]
     (mapv
      (fn [{:heading/keys [uuid meta] :as heading}]
        (let [old-start-pos (:pos meta)
@@ -295,7 +300,13 @@
          (reset! last-start-pos new-end-pos)
          {:heading/uuid uuid
           :heading/meta new-meta}))
-     after-headings)))
+     headings)))
+
+(defn rebuild-after-headings
+  [repo file before-end-pos new-end-pos]
+  (let [file-id (:db/id file)
+        after-headings (db/get-file-after-headings-meta repo file-id before-end-pos)]
+    (rebuild-headings-meta new-end-pos after-headings)))
 
 (defn rebuild-after-headings-indent-outdent
   [repo file heading before-end-pos new-end-pos indent-left?]
@@ -335,8 +346,8 @@
                                   (reset! last-child-end-pos old-end-pos)))
 
                               (cond->
-                                {:heading/uuid uuid
-                                 :heading/meta new-meta}
+                                  {:heading/uuid uuid
+                                   :heading/meta new-meta}
                                 (and (some? indent-left?) (not @next-leq-level?))
                                 (assoc :heading/level (if indent-left? (dec level) (inc level)))
                                 (and new-content (not @next-leq-level?))
@@ -355,10 +366,10 @@
                                 [] old-ref-pages)
         ref-headings-id    (map #(:db/id (db/get-page (str (last %)))) ref-headings)
         retracted-headings (reduce (fn [done current]
-                                  (if (some #(= (:db/id current) %) ref-headings-id)
-                                    done
-                                    (conj done (:db/id current))))
-                                [] old-ref-headings)]
+                                     (if (some #(= (:db/id current) %) ref-headings-id)
+                                       done
+                                       (conj done (:db/id current))))
+                                   [] old-ref-headings)]
     ;; removes retracted pages and headings
     (into
      (mapv (fn [ref] [:db/retract eid :heading/ref-pages ref]) retracted-pages)
@@ -904,6 +915,7 @@
   [state e up?]
   (when (and
          (gobj/get e "shiftKey")
+         (not (gobj/get e "altKey"))
          (or (state/in-selection-mode?)
              (when-let [input-id (state/get-edit-input-id)]
                (when-let [input (gdom/getElement input-id)]
@@ -1203,3 +1215,71 @@
         (when-not (string/blank? doc-text)
           (util/stop event)
           (state/append-current-edit-content! doc-text))))))
+
+(defn- heading-and-children-content
+  [heading-children]
+  (-> (map :heading/content heading-children)
+      string/join))
+
+(defn move-up-down
+  [state e up?]
+  (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} (get-state state)
+        heading (db/entity [:heading/uuid heading-id])
+        meta (:heading/meta heading)
+        page (:heading/page heading)
+        heading-dom-node (gdom/getElement heading-parent-id)
+        prev-heading (util/get-prev-heading heading-dom-node)
+        next-heading (util/get-next-heading heading-dom-node)
+        repo (state/get-current-repo)
+        move-upwards-to-parent? (and up? prev-heading (< (d/attr prev-heading "level") (:heading/level heading)))
+        move-down-to-higher-level? (and (not up?) next-heading (< (d/attr next-heading "level") (:heading/level heading)))]
+    (when-let [sibling-heading (cond
+                                 move-upwards-to-parent?
+                                 prev-heading
+                                 move-down-to-higher-level?
+                                 next-heading
+                                 :else
+                                 (let [f (if up? util/get-prev-heading-with-same-level util/get-next-heading-with-same-level)]
+                                   (f heading-dom-node)))]
+      (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+        (when-let [sibling-heading (db/pull-heading (medley/uuid sibling-heading-id))]
+          (let [sibling-meta (:heading/meta sibling-heading)
+                hc1 (db/get-heading-and-children repo (:heading/uuid heading) false)
+                hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
+                      [sibling-heading]
+                      (db/get-heading-and-children repo (:heading/uuid sibling-heading) false))]
+            ;; Same page and next to the other
+            (when (and
+                   (= (:db/id (:heading/page heading))
+                      (:db/id (:heading/page sibling-heading)))
+                   (or
+                    (and up? (= (:end-pos (:heading/meta (last hc2))) (:pos (:heading/meta (first hc1)))))
+                    (and (not up?) (= (:end-pos (:heading/meta (last hc1))) (:pos (:heading/meta (first hc2)))))))
+              (let [hc1-content (heading-and-children-content hc1)
+                    hc2-content (heading-and-children-content hc2)
+                    file (db/get-heading-file (:heading/uuid heading))
+                    file-path (:file/path file)
+                    old-file-content (db/get-file file-path)
+                    [start-pos end-pos new-content headings] (if up?
+                                                               [(:pos sibling-meta)
+                                                                (get-in (last hc1) [:heading/meta :end-pos])
+                                                                (str hc1-content hc2-content)
+                                                                (concat hc1 hc2)]
+                                                               [(:pos meta)
+                                                                (get-in (last hc2) [:heading/meta :end-pos])
+                                                                (str hc2-content hc1-content)
+                                                                (concat hc2 hc1)])]
+                (when (and start-pos end-pos)
+                  (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
+                        modified-time (modified-time-tx page file)
+                        headings-meta (rebuild-headings-meta start-pos headings)]
+                    (profile
+                     (str "Move heading " (if up? "up: " "down: "))
+                     (repo-handler/transact-react-and-alter-file!
+                      repo
+                      (concat
+                       headings-meta
+                       modified-time)
+                      {:key :heading/change
+                       :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+                      [[file-path new-file-content]]))))))))))))

@@ -96,11 +96,11 @@
   (editor-handler/clear-selection! nil))
 
 (rum/defc hidden-selection < rum/reactive
-  (mixins/keyboard-mixin "ctrl+c"
+  (mixins/keyboard-mixin (util/->system-modifier "ctrl+c")
                          (fn [_]
                            (editor-handler/copy-selection-headings)
                            (editor-handler/clear-selection! nil)))
-  (mixins/keyboard-mixin "ctrl+x" cut-headings-and-clear-selections!)
+  (mixins/keyboard-mixin (util/->system-modifier "ctrl+x") cut-headings-and-clear-selections!)
   (mixins/keyboard-mixin "backspace" cut-headings-and-clear-selections!)
   (mixins/keyboard-mixin "delete" cut-headings-and-clear-selections!)
   []
