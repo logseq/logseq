@@ -1,5 +1,6 @@
 (ns frontend.components.editor
   (:require [rum.core :as rum]
+            [frontend.config :as config]
             [frontend.handler :as handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.image :as image-handler]
@@ -587,7 +588,7 @@
                           :display "flex"
                           :flex "1 1 0%"}
                   :class (if heading "heading-editor" "non-heading-editor")}
-     (when (util/mobile?) (mobile-bar state))
+     (when config/mobile? (mobile-bar state))
      (ui/textarea
       {:id id
        :value (or content "")

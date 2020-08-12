@@ -810,12 +810,3 @@
   (if (mac?)
     (string/replace keyboard-shortcut "ctrl" "meta")
     keyboard-shortcut))
-
-(defn mobile?
-  []
-  (let [user-agent js/navigator.userAgent
-        vendor js/navigator.vendor]
-    (or (re-find #"Android" user-agent)
-        (re-find #"iPhone" user-agent)
-        (re-find #"iPad" user-agent)
-        (re-find #"Windows Phone" user-agent))))
