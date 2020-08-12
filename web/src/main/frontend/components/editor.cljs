@@ -277,39 +277,40 @@
         {
          ;; enter
          13 (fn [state e]
-              (let [{:keys [heading config]} (get-state state)]
-                (when (and heading
-                           (not (:ref? config))
-                           (not (:custom-query? config))) ; in reference section
-                  (let [content (state/get-edit-content)]
-                    (if (and
-                         (not (editor-handler/in-auto-complete? input))
-                         (> (:heading/level heading) 2)
-                         (string/blank? content))
-                      (do
-                        (util/stop e)
-                        (editor-handler/adjust-heading-level! state :left))
-                      (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
-                                       (string/lower-case (string/trim v)))
-                            insert? (cond
-                                      config/mobile?
-                                      true
+              (when-not (gobj/get e "ctrlKey")
+                (let [{:keys [heading config]} (get-state state)]
+                  (when (and heading
+                             (not (:ref? config))
+                             (not (:custom-query? config))) ; in reference section
+                    (let [content (state/get-edit-content)]
+                      (if (and
+                           (not (editor-handler/in-auto-complete? input))
+                           (> (:heading/level heading) 2)
+                           (string/blank? content))
+                        (do
+                          (util/stop e)
+                          (editor-handler/adjust-heading-level! state :left))
+                        (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
+                                         (string/lower-case (string/trim v)))
+                              insert? (cond
+                                        config/mobile?
+                                        true
 
-                                      (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                                      false
+                                        (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
+                                        false
 
-                                      (gobj/get e "shiftKey")
-                                      false
+                                        (gobj/get e "shiftKey")
+                                        false
 
-                                      :else
-                                      true)]
-                        (when (and
-                               insert?
-                               (not (editor-handler/in-auto-complete? input)))
-                          (profile
-                           "Insert heading"
-                           (editor-handler/insert-new-heading! state))
-                          (util/stop e))))))))
+                                        :else
+                                        true)]
+                          (when (and
+                                 insert?
+                                 (not (editor-handler/in-auto-complete? input)))
+                            (profile
+                             "Insert heading"
+                             (editor-handler/insert-new-heading! state))
+                            (util/stop e)))))))))
          ;; up
          38 (fn [state e]
               (when (and
@@ -512,9 +513,9 @@
                              timer (:timer a)]
 
                          (and timer
-                             (dnd/unsubscribe!
-                              input
-                              :upload-images))))
+                              (dnd/unsubscribe!
+                               input
+                               :upload-images))))
                      (editor-handler/clear-when-saved!)
                      (editor-handler/save-heading! (get-state state) value))
                    state)}

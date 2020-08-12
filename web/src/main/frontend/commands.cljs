@@ -69,21 +69,27 @@
 ;;                                              (pr-str {:hint hint
 ;;                                                       :content content})))}})
 
+(defn get-preferred-workflow
+  []
+  (let [workflow (state/get-preferred-workflow)]
+    (if (= :now workflow)
+      [["LATER" (->marker "LATER")]
+       ["NOW" (->marker "NOW")]]
+      [["TODO" (->marker "TODO")]
+       ["DOING" (->marker "DOING")]])))
+
 ;; Credits to roamresearch.com
 (defn commands-map
   []
   (->>
    (concat
-    [["LATER" (->marker "LATER")]
-     ["NOW" (->marker "NOW")]
-     ["DONE" (->marker "DONE")]
-     ["TODO" (->marker "TODO")]
+    (get-preferred-workflow)
+    [["DONE" (->marker "DONE")]
+     ;; ["WAIT" (->marker "WAIT")]
+     ;; ["IN-PROGRESS" (->marker "IN-PROGRESS")]
      ["A" (->priority "A")]
      ["B" (->priority "B")]
      ["C" (->priority "C")]
-     ;; ["DOING" (->marker "DOING")]
-     ;; ["WAIT" (->marker "WAIT")]
-     ;; ["IN-PROGRESS" (->marker "IN-PROGRESS")]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
      ["Tomorrow" (->page-reference (date/tomorrow))]

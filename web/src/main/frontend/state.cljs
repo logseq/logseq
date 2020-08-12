@@ -119,6 +119,18 @@
     (:preferred-format (get-config))
     (get-in @state [:me :preferred_format] "markdown"))))
 
+(defn get-preferred-workflow
+  []
+  (keyword
+   (or
+    (when-let [workflow (:preferred-workflow (get-config))]
+      (let [workflow (name workflow)]
+        (if (or (re-find #"now" workflow)
+                (re-find #"NOW" workflow))
+          :now
+          :todo)))
+    (get-in @state [:me :preferred_workflow] :now))))
+
 (defn get-repos
   []
   (get-in @state [:me :repos]))
@@ -133,6 +145,10 @@
 (defn set-preferred-format!
   [format]
   (swap! state assoc-in [:me :preferred_format] (name format)))
+
+(defn set-preferred-workflow!
+  [workflow]
+  (swap! state assoc-in [:me :preferred_workflow] (name workflow)))
 
 (defn delete-repo!
   [repo]
@@ -392,13 +408,13 @@
   (when edit-input-id
     (let [content (or content "")]
       (swap! state
-            (fn [state]
-              (-> state
-                  (assoc-in [:editor/content edit-input-id] (string/trim content))
-                  (assoc
-                   :editor/heading heading
-                   :editor/editing? {edit-input-id true}
-                   :cursor-range cursor-range)))))))
+             (fn [state]
+               (-> state
+                   (assoc-in [:editor/content edit-input-id] (string/trim content))
+                   (assoc
+                    :editor/heading heading
+                    :editor/editing? {edit-input-id true}
+                    :cursor-range cursor-range)))))))
 
 (defn clear-edit!
   []

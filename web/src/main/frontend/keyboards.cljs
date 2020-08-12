@@ -59,6 +59,7 @@
    "alt+j" route-handler/go-to-journals!
    "alt+right" editor-handler/zoom-in!
    "alt+left" editor-handler/zoom-out!
+   (util/->system-modifier "ctrl+enter") editor-handler/cycle-todo!
    (util/->system-modifier "ctrl+down") editor-handler/expand!
    (util/->system-modifier "ctrl+up") editor-handler/collapse!
    (util/->system-modifier "ctrl+o") editor-handler/follow-link-under-cursor!

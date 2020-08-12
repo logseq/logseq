@@ -49,6 +49,17 @@
                    (notification/show! "Format set successfully!" :success))
                  (fn [_e])))))
 
+(defn set-preferred-workflow!
+  [workflow]
+  (when workflow
+    (state/set-preferred-workflow! workflow)
+    (when (:name (:me @state/state))
+      (util/post (str config/api "set_preferred_workflow")
+                 {:preferred_workflow (name workflow)}
+                 (fn [_result]
+                   (notification/show! "Workflow set successfully!" :success))
+                 (fn [_e])))))
+
 (defn set-github-token!
   ([token]
    (set-github-token! token true))

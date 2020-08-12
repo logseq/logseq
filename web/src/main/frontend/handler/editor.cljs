@@ -642,8 +642,35 @@
 
 (defn uncheck
   [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
-  (let [new-content (string/replace-first content "DONE" "NOW")]
+  (let [new-content (string/replace-first content "DONE"
+                                          (if (= :now (state/get-preferred-workflow))
+                                            "LATER"
+                                            "TODO"))]
     (save-heading-if-changed! heading new-content)))
+
+(defn cycle-todo!
+  []
+  (when-let [heading (state/get-edit-heading)]
+    (let [edit-input-id (state/get-edit-input-id)
+          content (state/get-edit-content)
+          new-content (->
+                       (cond
+                         (string/starts-with? content "TODO")
+                         (string/replace-first content "TODO" "DOING")
+                         (string/starts-with? content "DOING")
+                         (string/replace-first content "DOING" "DONE")
+                         (string/starts-with? content "LATER")
+                         (string/replace-first content "LATER" "NOW")
+                         (string/starts-with? content "NOW")
+                         (string/replace-first content "NOW" "DONE")
+                         (string/starts-with? content "DONE")
+                         (string/replace-first content "DONE" "")
+                         :else
+                         (str (if (= :now (state/get-preferred-workflow))
+                                "LATER "
+                                "TODO ") (string/triml content)))
+                       (string/triml))]
+      (state/set-edit-content! edit-input-id new-content))))
 
 (defn set-marker
   [{:heading/keys [uuid marker content meta file dummy?] :as heading} new-marker]
@@ -899,15 +926,15 @@
 (defn zoom-out! []
   (let [parent? (atom false)]
     (when-let [page (state/get-current-page)]
-     (let [heading-id (and
-                       (string? page)
-                       (util/uuid-string? page)
-                       (medley/uuid page))
-           heading-parent (db/get-heading-parent (state/get-current-repo) heading-id)]
-       (when-let [id (:heading/uuid heading-parent)]
-         (route-handler/redirect! {:to :page
-                                   :path-params {:name (str id)}})
-         (reset! parent? true))))
+      (let [heading-id (and
+                        (string? page)
+                        (util/uuid-string? page)
+                        (medley/uuid page))
+            heading-parent (db/get-heading-parent (state/get-current-repo) heading-id)]
+        (when-let [id (:heading/uuid heading-parent)]
+          (route-handler/redirect! {:to :page
+                                    :path-params {:name (str id)}})
+          (reset! parent? true))))
     (when-not @parent?
       (route-handler/redirect-to-home!))))
 
