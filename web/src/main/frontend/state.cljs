@@ -77,6 +77,13 @@
   []
   (get-in (get-route-match) [:data :name]))
 
+(defn get-current-page
+  []
+  (and
+   (= :page (get-current-route))
+   (get-in (get-route-match)
+           [:path-params :name])))
+
 (defn sub
   [ks]
   (if (coll? ks)
@@ -229,6 +236,10 @@
 (defn expand-heading!
   [heading-id]
   (set-collapsed-state! heading-id false))
+
+(defn collapsed?
+  [heading-id]
+  (get-in @state [:ui/collapsed-headings heading-id]))
 
 (defn clear-collapsed-headings!
   []

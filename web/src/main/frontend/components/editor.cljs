@@ -312,11 +312,19 @@
                           (util/stop e))))))))
          ;; up
          38 (fn [state e]
-              (when-not (editor-handler/in-auto-complete? input)
+              (when (and
+                     (not (gobj/get e "shiftKey"))
+                     (not (gobj/get e "ctrlKey"))
+                     (not (gobj/get e "metaKey"))
+                     (not (editor-handler/in-auto-complete? input)))
                 (editor-handler/on-up-down state e true)))
          ;; down
          40 (fn [state e]
-              (when-not (editor-handler/in-auto-complete? input)
+              (when (and
+                     (not (gobj/get e "shiftKey"))
+                     (not (gobj/get e "ctrlKey"))
+                     (not (gobj/get e "metaKey"))
+                     (not (editor-handler/in-auto-complete? input)))
                 (editor-handler/on-up-down state e false)))
          ;; backspace
          8 (fn [state e]

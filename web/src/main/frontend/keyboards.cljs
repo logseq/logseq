@@ -58,6 +58,9 @@
    (util/->system-modifier "ctrl+u") route-handler/go-to-search!
    "alt+j" route-handler/go-to-journals!
    "alt+right" editor-handler/zoom-in!
+   "alt+left" editor-handler/zoom-out!
+   (util/->system-modifier "ctrl+down") editor-handler/expand!
+   (util/->system-modifier "ctrl+up") editor-handler/collapse!
    (util/->system-modifier "ctrl+o") editor-handler/follow-link-under-cursor!
    (util/->system-modifier "ctrl+shift+o") editor-handler/open-link-in-sidebar!
    (util/->system-modifier "ctrl+b") editor-handler/bold-format!

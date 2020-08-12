@@ -102,6 +102,8 @@
       [:tbody
        [:tr [:td "Indent Block Tab"] [:td "Tab"]]
        [:tr [:td "Unindent Block"] [:td "Shift-Tab"]]
+       [:tr [:td "Move Block Up"] [:td "Alt-Shift-Up"]]
+       [:tr [:td "Move Block Down"] [:td "Alt-Shift-Down"]]
        [:tr [:td "Create New Block"] [:td "Enter"]]
        [:tr [:td "New Line in Block"] [:td "Shift-Enter"]]
        [:tr [:td "Undo"] [:td "Ctrl-z"]]
@@ -110,6 +112,8 @@
        [:tr [:td "Zoom out"] [:td "Alt-left"]]
        [:tr [:td "Follow link under cursor"] [:td "Ctrl-o"]]
        [:tr [:td "Open link in Sidebar"] [:td "Ctrl-shift-o"]]
+       [:tr [:td "Expand"] [:td "Ctrl-Down"]]
+       [:tr [:td "Collapse"] [:td "Ctrl-Up"]]
        [:tr [:td "Select Block Above"] [:td "Shift-Up"]]
        [:tr [:td "Select Block Below"] [:td "Shift-Down"]]
        [:tr [:td "Select All Blocks"] [:td "Ctrl-Shift-a"]]]]

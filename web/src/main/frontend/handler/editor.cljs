@@ -5,7 +5,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.notification :as notification]
-            [frontend.expand :as expand]
+            [frontend.handler.expand :as expand]
             [frontend.format :as format]
             [frontend.format.block :as block]
             [frontend.image :as image]
@@ -896,6 +896,21 @@
                                 :path-params {:name (str id)}}))
     (js/window.history.forward)))
 
+(defn zoom-out! []
+  (let [parent? (atom false)]
+    (when-let [page (state/get-current-page)]
+     (let [heading-id (and
+                       (string? page)
+                       (util/uuid-string? page)
+                       (medley/uuid page))
+           heading-parent (db/get-heading-parent (state/get-current-repo) heading-id)]
+       (when-let [id (:heading/uuid heading-parent)]
+         (route-handler/redirect! {:to :page
+                                   :path-params {:name (str id)}})
+         (reset! parent? true))))
+    (when-not @parent?
+      (route-handler/redirect-to-home!))))
+
 (defn cut-heading!
   [heading-id]
   (when-let [heading (db/pull [:heading/uuid heading-id])]
@@ -960,6 +975,30 @@
           (save-heading-if-changed! heading new-value)
           (reset! *last-edit-heading cache))))))
 
+(defn- get-prev-heading-non-collapsed
+  [heading]
+  (when-let [headings (d/by-class "ls-heading")]
+    (when-let [index (.indexOf headings heading)]
+      (loop [idx (dec index)]
+        (when (>= idx 0)
+          (let [heading (nth headings idx)
+                collapsed? (= "none" (d/style heading "display"))]
+            (if collapsed?
+              (recur (dec idx))
+              heading)))))))
+
+(defn- get-next-heading-non-collapsed
+  [heading]
+  (when-let [headings (d/by-class "ls-heading")]
+    (when-let [index (.indexOf headings heading)]
+      (loop [idx (inc index)]
+        (when (>= (count headings) idx)
+          (let [heading (nth headings idx)
+                collapsed? (= "none" (d/style heading "display"))]
+            (if collapsed?
+              (recur (inc idx))
+              heading)))))))
+
 (defn on-up-down
   [state e up?]
   (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} (get-state state)]
@@ -971,7 +1010,7 @@
                    (or (and up? (util/textarea-cursor-first-row? element line-height))
                        (and (not up?) (util/textarea-cursor-end-row? element line-height))))
           (util/stop e)
-          (let [f (if up? util/get-prev-heading util/get-next-heading)
+          (let [f (if up? get-prev-heading-non-collapsed get-next-heading-non-collapsed)
                 sibling-heading (f (gdom/getElement heading-parent-id))]
             (when sibling-heading
               (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
@@ -1228,8 +1267,8 @@
         meta (:heading/meta heading)
         page (:heading/page heading)
         heading-dom-node (gdom/getElement heading-parent-id)
-        prev-heading (util/get-prev-heading heading-dom-node)
-        next-heading (util/get-next-heading heading-dom-node)
+        prev-heading (get-prev-heading-non-collapsed heading-dom-node)
+        next-heading (get-next-heading-non-collapsed heading-dom-node)
         repo (state/get-current-repo)
         move-upwards-to-parent? (and up? prev-heading (< (d/attr prev-heading "level") (:heading/level heading)))
         move-down-to-higher-level? (and (not up?) next-heading (< (d/attr next-heading "level") (:heading/level heading)))]
@@ -1283,3 +1322,17 @@
                       {:key :heading/change
                        :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
                       [[file-path new-file-content]]))))))))))))
+
+(defn expand!
+  []
+  (when-let [current-heading (state/get-edit-heading)]
+    (expand/expand! current-heading)
+    (state/set-collapsed-state! (:heading/uuid current-heading)
+                                false)))
+
+(defn collapse!
+  []
+  (when-let [current-heading (state/get-edit-heading)]
+    (expand/collapse! current-heading)
+    (state/set-collapsed-state! (:heading/uuid current-heading)
+                                true)))

@@ -1,4 +1,4 @@
-(ns frontend.expand
+(ns frontend.handler.expand
   (:require [dommy.core :as d]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -25,7 +25,10 @@
       (when-let [e (.querySelector node ".heading-body")]
         (hide! e))
       (when-let [e (.querySelector node ".heading-children")]
-        (hide! e))
+        (hide! e)
+        (let [elements (d/by-class node "ls-heading")]
+          (doseq [element elements]
+            (hide! element))))
       (db/collapse-heading! heading))))
 
 (defn expand!
@@ -36,6 +39,9 @@
       (when-let [e (.querySelector node ".heading-body")]
         (show! e))
       (when-let [e (.querySelector node ".heading-children")]
+        (let [elements (d/by-class node "ls-heading")]
+          (doseq [element elements]
+            (show! element)))
         (show! e))
       (db/expand-heading! heading))))
 

@@ -10,7 +10,7 @@
             [dommy.core :as d]
             [datascript.core :as dc]
             [goog.dom :as gdom]
-            [frontend.expand :as expand]
+            [frontend.handler.expand :as expand]
             [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
             [frontend.components.draw :as draw]
@@ -927,6 +927,12 @@
       nil)))
 
 (rum/defc heading-container < rum/static
+  {:did-mount (fn [state]
+                (let [heading (nth (:rum/args state) 1)
+                      collapsed? (:heading/collapsed? heading)]
+                  (when collapsed?
+                    (expand/collapse! heading))
+                  state))}
   [config {:heading/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-heading? idx] :as heading}]
   (let [ref? (boolean (:ref? config))
         ref-child? (:ref-child? config)
