@@ -161,6 +161,66 @@
                                           nil)
           (state/set-editor-show-date-picker false)))})))
 
+(rum/defc mobile-bar < rum/reactive
+  [parent-state]
+  [:div {:style {:position "fixed"
+                 :bottom 0 
+                 :width "100%"
+                 :left 0
+                 :text-align "center"
+                 :height "2.5rem"}}
+   [:button
+    {:on-click #(editor-handler/adjust-heading-level! parent-state :right)}
+    [:svg.h-6.w-6   
+     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
+     [:path
+      {:d "M4.293 15.707a1 1 0 010-1.414L8.586 10 4.293 5.707a1 1 0 011.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0z"
+       :fill-rule "evenodd"
+       :clip-rule "evenodd"
+       :stroke-width "1"
+       :stroke-linejoin "round"
+       :stroke-linecap "round"}]
+     [:path
+      {:d "M10.293 15.707a1 1 0 010-1.414L14.586 10l-4.293-4.293a1 1 0 111.414-1.414l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0z"
+       :fill-rule "evenodd"
+       :clip-rule "evenodd"
+       :stroke-width "1"
+       :stroke-linejoin "round"
+       :stroke-linecap "round"}]]]
+   [:button 
+    {:on-click #(editor-handler/adjust-heading-level! parent-state :left)} 
+    [:svg.h-6.w-6
+     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
+     [:path
+      {:d "M15.707 15.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414zm-6 0a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 011.414 1.414L5.414 10l4.293 4.293a1 1 0 010 1.414z"
+       :fill-rule "evenodd"
+       :clip-rule "evenodd"
+       :stroke-width "1"
+       :stroke-linejoin "round"
+       :stroke-linecap "round"}]]]
+   [:button
+    {:on-click #(editor-handler/move-up-down parent-state % true)}
+    [:svg.h-6.w-6
+     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
+     [:path
+      {:d "M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+       :fill-rule "evenodd"
+       :clip-rule "evenodd"
+       :stroke-width "1"
+       :stroke-linejoin "round"
+       :stroke-linecap "round"}]]]
+   [:button
+    {:on-click #(editor-handler/move-up-down parent-state % false)}
+    [:svg.h-6.w-6
+     {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
+     [:path
+      {:d "M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+       :fill-rule "evenodd"
+       :clip-rule "evenodd"
+       :stroke-width "1"
+       :stroke-linejoin "round"
+       :stroke-linecap "round"}]]]])
+
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   (mixins/event-mixin
@@ -259,7 +319,7 @@
         false
         *slash-caret-pos)))])
 
-(rum/defc box < rum/reactive
+(rum/defcs box < rum/reactive
   (mixins/keyboard-mixin (util/->system-modifier "ctrl+shift+a") editor-handler/select-all-headings!)
   (mixins/keyboard-mixin "alt+shift+up" (fn [state e]
                                           (editor-handler/move-up-down state e true)))
@@ -519,7 +579,7 @@
                      (editor-handler/clear-when-saved!)
                      (editor-handler/save-heading! (get-state state) value))
                    state)}
-  [{:keys [on-hide dummy? node format heading]
+  [state {:keys [on-hide dummy? node format heading]
     :or {dummy? false}
     :as option} id config]
   (let [content (state/sub [:editor/content id])]
@@ -527,6 +587,7 @@
                           :display "flex"
                           :flex "1 1 0%"}
                   :class (if heading "heading-editor" "non-heading-editor")}
+     (when (util/mobile?) (mobile-bar state))
      (ui/textarea
       {:id id
        :value (or content "")
