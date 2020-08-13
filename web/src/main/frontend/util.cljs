@@ -800,13 +800,11 @@
   [file]
   (last (string/split file #"\.")))
 
-(defn mac?
-  []
-  (prn "mac: " (gobj/get goog.userAgent "MAC"))
-  (gobj/get goog.userAgent "MAC"))
+(defonce mac? goog.userAgent/MAC)
 
 (defn ->system-modifier
   [keyboard-shortcut]
-  (if (mac?)
+  (prn {:mac? mac?})
+  (if mac?
     (string/replace keyboard-shortcut "ctrl" "meta")
     keyboard-shortcut))

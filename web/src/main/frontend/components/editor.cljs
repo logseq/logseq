@@ -284,10 +284,10 @@
 
 (rum/defcs box < rum/reactive
   (mixins/keyboard-mixin (util/->system-modifier "ctrl+shift+a") editor-handler/select-all-headings!)
-  (mixins/keyboard-mixin (if (util/mac?) "meta+shift+up" "alt+shift+up")
+  (mixins/keyboard-mixin (if util/mac? "meta+shift+up" "alt+shift+up")
                          (fn [state e]
                            (editor-handler/move-up-down state e true)))
-  (mixins/keyboard-mixin (if (util/mac?) "meta+shift+down" "alt+shift+down")
+  (mixins/keyboard-mixin (if util/mac? "meta+shift+down" "alt+shift+down")
                          (fn [state e] (editor-handler/move-up-down state e false)))
   (mixins/event-mixin
    (fn [state]
