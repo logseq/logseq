@@ -39,7 +39,7 @@
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph
         (graph/build-graph-opts
-         graph dark? (atom false)
+         graph dark? false
          {:width 600
           :height 600}))])))
 
@@ -385,49 +385,60 @@
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub :sidebar/blocks)
+        sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)
         match (state/sub :route-match)
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)]
-    [:div#right-sidebar.flex.flex-col.p-2.shadow-xs.overflow-y-auto
-     [:div#theme-selector.ml-3.mb-2
-      [:div.flex.flex-row
-       [:div.flex.flex-row {:key "right-sidebar-settings"}
-        [:div.mr-4.text-sm
-         [:a {:on-click (fn [e]
-                          (state/sidebar-add-block! repo "contents" :contents nil))}
-          "Contents"]]
+    [:div#right-sidebar.flex-col {:style {:height "100%"
+                                          :overflow "hidden"
+                                          :flex (if sidebar-open?
+                                                  "1 0 40%"
+                                                  "0 0 0px")}}
+     (if sidebar-open?
+       [:div {:style {:flex "1 1 auto"
+                      :padding 12
+                      :height "100%"
+                      :overflow-y "scroll"
+                      :overflow-x "hidden"
+                      :box-sizing "content-box"
+                      :margin-right -17}}
+        [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
+         [:div.mr-4.text-sm
+          [:a {:on-click (fn [e]
+                           (state/sidebar-add-block! repo "contents" :contents nil))}
+           "Contents"]]
 
-        [:div.mr-4.text-sm
-         [:a {:on-click (fn [_e]
-                          (state/sidebar-add-block! repo "recent" :recent nil))}
-          "Recent"]]
+         [:div.mr-4.text-sm
+          [:a {:on-click (fn [_e]
+                           (state/sidebar-add-block! repo "recent" :recent nil))}
+           "Recent"]]
 
-        [:div.mr-4.text-sm
-         [:a {:on-click (fn []
-                          (when-let [page (get-current-page)]
-                            (state/sidebar-add-block!
-                             repo
-                             (str "page-graph-" page)
-                             :page-graph
-                             page)))}
-          "Page graph"]]
+         [:div.mr-4.text-sm
+          [:a {:on-click (fn []
+                           (when-let [page (get-current-page)]
+                             (state/sidebar-add-block!
+                              repo
+                              (str "page-graph-" page)
+                              :page-graph
+                              page)))}
+           "Page graph"]]
 
-        [:div.mr-4.text-sm
-         (let [theme (if dark? "white" "dark")]
-           [:a {:title (str "Switch to "
-                            theme
-                            " theme")
-                :on-click (fn []
-                            (state/set-theme! theme))}
-            (str (string/capitalize theme) " theme")])]
+         [:div.mr-4.text-sm
+          (let [theme (if dark? "white" "dark")]
+            [:a {:title (str "Switch to "
+                             theme
+                             " theme")
+                 :on-click (fn []
+                             (state/set-theme! theme))}
+             (str (string/capitalize theme) " theme")])]
 
-        [:div.mr-4.text-sm
-         [:a {:on-click (fn [_e]
-                          (state/sidebar-add-block! repo "help" :help nil))}
-          "Help"]]]]]
+         [:div.mr-4.text-sm
+          [:a {:on-click (fn [_e]
+                           (state/sidebar-add-block! repo "help" :help nil))}
+           "Help"]]]
 
-     (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
-       (rum/with-key
-         (sidebar-item repo idx db-id block-type block-data)
-         (str "sidebar-block-" idx)))]))
+        (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
+          (rum/with-key
+            (sidebar-item repo idx db-id block-type block-data)
+            (str "sidebar-block-" idx)))])]))

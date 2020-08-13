@@ -34,6 +34,7 @@
     :search/q ""
     :search/result nil
 
+    :ui/sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
     ;; :show-all, :hide-heading-body, :hide-heading-children
     :ui/cycle-collapse :show-all
@@ -381,19 +382,34 @@
   (set-state! :encrypt/token nil)
   (storage/remove :encrypt/token))
 
+
+(defn toggle-sidebar-open?!
+  []
+  (swap! state update :ui/sidebar-open? not))
+
+(defn open-right-sidebar!
+  []
+  (swap! state assoc :ui/sidebar-open? true))
+
+(defn hide-right-sidebar!
+  []
+  (swap! state assoc :ui/sidebar-open? false))
+
 (defn sidebar-add-block!
   [repo db-id block-type block-data]
   (when db-id
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (first %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
-                                          (distinct))))))
+                                          (distinct))))
+    (open-right-sidebar!)))
+
 (defn sidebar-remove-block!
   [idx]
-  (update-state! :sidebar/blocks #(util/drop-nth idx %)))
-(defn sidebar-clear!
-  []
-  (set-state! :sidebar/blocks '()))
+  (update-state! :sidebar/blocks #(util/drop-nth idx %))
+  (when (empty? (:sidebar/blocks @state))
+    (hide-right-sidebar!)))
+
 (defn get-sidebar-blocks
   []
   (:sidebar/blocks @state))

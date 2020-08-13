@@ -226,8 +226,7 @@
                        (state/get-current-repo)
                        (:db/id page)
                        :page
-                       {:page page}))
-                    (ui-handler/show-right-sidebar)))}
+                       {:page page}))))}
      original-page-name]))
 
 (defn- latex-environment-content
@@ -350,8 +349,7 @@
                                (state/get-current-repo)
                                (:db/id heading)
                                :heading-ref
-                               {:heading heading})
-                              (ui-handler/show-right-sidebar)))}
+                               {:heading heading})))}
             (->elem
              :span.block-ref
              (map-inline config (:heading/title heading)))]
@@ -590,8 +588,7 @@
                            (state/get-current-repo)
                            (:db/id heading)
                            :heading
-                           heading)
-                          (ui-handler/show-right-sidebar)))})
+                           heading)))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
@@ -895,8 +892,7 @@
                       (state/get-current-repo)
                       (:db/id heading)
                       :heading-ref
-                      {:heading heading})
-                     (ui-handler/show-right-sidebar))}
+                      {:heading heading}))}
         block-refs-count])]))
 
 (rum/defc heading-content-or-editor < rum/reactive

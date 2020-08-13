@@ -324,8 +324,7 @@
                          (:db/id page)
                          :page
                          {:page page
-                          :journal? true}))
-                      (ui-handler/show-right-sidebar)))}
+                          :journal? true}))))}
        [:h1.title
         (util/capitalize-all title)]]
 

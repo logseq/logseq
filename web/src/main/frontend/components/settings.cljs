@@ -65,7 +65,7 @@
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)]
-    [:div#settings
+    [:div#settings.mb-20
      [:h1.title "Settings"]
 
      [:div.pl-1

@@ -287,49 +287,36 @@
 
           [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
            {:on-click (fn []
-                        (let [sidebar (d/by-id "right-sidebar")]
-                          (if (d/has-class? sidebar "enter")
-                            (ui-handler/hide-right-sidebar)
-                            (ui-handler/show-right-sidebar))))}
+                        (state/toggle-sidebar-open?!))}
            (svg/menu)]]]]
-       [:main#main.flex-1.relative.z-0.focus:outline-none.overflow-hidden
-        {:tabIndex "0"
-         :style {:width "100%"
-                 :height "100%"
-                 :z-index 1}}
-        [:div#main-content
-         {:style {
-                  :height "100%"
-                  :overflow-y "scroll"
-                  :box-sizing "content-box"}}
-         [:div.flex.justify-center
-          ;; FIXME: overflow-x-hidden conflicts with heading collapsers
-          [:div.flex-1.#main-content-container
-           ;; .overflow-x-hidden
-           {:style (if global-graph-pages?
-                     {:position "relative"}
-                     (cond->
-                         {:position "relative"
-                          :max-width 700
-                          :width "100%"
-                          :margin-bottom 200}
-                       (and (not logged?) home?)
-                       (dissoc :max-width)))}
-           (cond
-             (not indexeddb-support?)
-             nil
+       [:div#main-content.flex.wrapper.overflow-y-auto {:style {:height "100vh"}}
+        [:div.flex.#main-content-container.justify-center
+         {:class (if global-graph-pages?
+                   "initial"
+                   (util/hiccup->class ".mx-6.my-12"))
+          :style {:position "relative"
+                  :flex "1 1 65%"
+                  :width "100vw"}}
+         [:div.flex-1 {:style (cond->
+                                {:max-width 640
+                                 :margin-bottom (if global-graph-pages? 0 200)}
+                                (or (and global-graph-pages?
+                                         ;; (not (state/sub :ui/sidebar-open?))
+                                         )
+                                    (and (not logged?)
+                                         home?))
+                                (dissoc :max-width))}
+          (cond
+            (not indexeddb-support?)
+            nil
 
-             db-restoring?
-             [:div.mt-20
-              [:div.ls-center
-               (ui/loading "Loading")]]
+            db-restoring?
+            [:div.mt-20
+             [:div.ls-center
+              (ui/loading "Loading")]]
 
-             global-graph-pages?
-             main-content
-
-             :else
-             [:div.mx-6.my-12
-              main-content])]]]
+            :else
+            main-content)]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:href "/"
@@ -344,4 +331,9 @@
        (ui/notification)
        (ui/modal)
        (custom-context-menu)
-       [:a#download.hidden]]]]))
+       [:a#download.hidden]
+       [:div#help.font-bold.absolute.bottom-4.right-7.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+        {:title "Click to check shortcuts and other tips"
+         :on-click (fn []
+                     (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+        "?"]]]]))

@@ -172,8 +172,7 @@
                               repo
                               (:db/id page)
                               :page
-                              {:page page})
-                             (ui-handler/show-right-sidebar))
+                              {:page page}))
                            (route-handler/redirect! {:to :page
                                                      :path-params {:name (util/url-encode page-name)}})))))
       :cooldownTicks 100

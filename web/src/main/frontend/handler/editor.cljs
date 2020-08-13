@@ -145,8 +145,7 @@
        (state/get-current-repo)
        (:db/id heading)
        :heading
-       heading)
-      (ui-handler/show-right-sidebar))))
+       heading))))
 
 (defn remove-level-spaces
   [text format]
@@ -913,8 +912,7 @@
            (state/get-current-repo)
            (:db/id page)
            :page
-           {:page page}))
-        (ui-handler/show-right-sidebar)))))
+           {:page page}))))))
 
 (defn zoom-in! []
   (if-let [heading (state/get-edit-heading)]

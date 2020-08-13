@@ -32,7 +32,7 @@
 
 (rum/defc files < rum/reactive
   []
-  [:div.flex-1.overflow-hidden
+  [:div.flex-1.overflow-hidden.mb-20
    [:h1.title
     "All files"]
    (when-let [current-repo (state/sub :git/current-repo)]
@@ -86,7 +86,7 @@
                                                              :on-hide (save-file-handler content)}))))
         page (db/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
-    [:div.file {:id (str "file-" encoded-path)}
+    [:div.file.mb-20 {:id (str "file-" encoded-path)}
      [:h1.title
       path]
      (when page
@@ -101,8 +101,7 @@
                                                  (state/get-current-repo)
                                                  (:db/id page)
                                                  :page
-                                                 {:page page}))
-                                              (ui-handler/show-right-sidebar)))}
+                                                 {:page page}))))}
          page]])
 
      (when (and config? (state/logged?))

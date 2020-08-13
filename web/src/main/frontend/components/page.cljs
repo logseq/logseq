@@ -82,8 +82,7 @@
                  (:db/id page)
                  :page-presentation
                  {:page page
-                  :journal? journal?})
-                (ui-handler/show-right-sidebar))}
+                  :journal? journal?}))}
    svg/slideshow])
 
 (rum/defc today-queries < rum/reactive
@@ -299,8 +298,7 @@
                                   repo
                                   (:db/id page)
                                   :page
-                                  {:page page}))
-                               (ui-handler/show-right-sidebar)))}
+                                  {:page page}))))}
              [:h1.title {:style {:margin-left -2}}
               page-original-name]])
           [:div
@@ -347,19 +345,22 @@
 (rum/defcs global-graph < rum/reactive
   [state]
   (let [theme (state/sub :ui/theme)
+        sidebar-open? (state/sub :ui/sidebar-open?)
         [width height] (rum/react layout)
         dark? (= theme "dark")
         graph (db/build-global-graph theme (rum/react show-journal?))
         dot-mode-value? (rum/react dot-mode?)]
-    [:div.relative
+    [:div.relative#global-graph
      (if (seq (:nodes graph))
        (graph-2d/graph
         (graph/build-graph-opts
          graph
          dark?
          dot-mode-value?
-         {:width (- width 24)
-          :height (- height 100)
+         {:width (if (and (> width 1280) sidebar-open?)
+                   (- width 24 600)
+                   (- width 24))
+          :height (- height 120)
           :ref (fn [v] (reset! graph-ref v))
           :ref-atom graph-ref}))
        [:div.ls-center.mt-20
@@ -387,7 +388,7 @@
                 state)}
   []
   (let [current-repo (state/sub :git/current-repo)]
-    [:div.flex-1
+    [:div.flex-1.mb-20
      [:h1.title "All Pages"]
      (when current-repo
        (let [pages (db/get-pages-with-modified-at current-repo)]

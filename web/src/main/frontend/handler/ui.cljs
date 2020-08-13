@@ -31,24 +31,15 @@
 
 (defn hide-right-sidebar
   []
-  (let [sidebar (dom/by-id "right-sidebar")]
-    (dom/remove-class! (dom/by-id "main-content-container")
-                       "right-sidebar-open")
-    (dom/remove-class! sidebar "enter")))
+  (state/hide-right-sidebar!))
 
 (defn show-right-sidebar
   []
-  (let [sidebar (dom/by-id "right-sidebar")]
-    (dom/add-class! sidebar "enter")
-    (dom/add-class! (dom/by-id "main-content-container")
-                    "right-sidebar-open")))
+  (state/open-right-sidebar!))
 
 (defn toggle-right-sidebar!
   []
-  (let [sidebar (dom/by-id "right-sidebar")]
-    (if (dom/has-class? sidebar "enter")
-      (hide-right-sidebar)
-      (show-right-sidebar))))
+  (state/toggle-sidebar-open?!))
 
 (defn re-render-root!
   []
