@@ -44,7 +44,6 @@
    :page/original-name {}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
-   :page/list {}
    :page/alias      {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref

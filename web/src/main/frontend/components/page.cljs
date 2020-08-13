@@ -72,6 +72,14 @@
                         :sidebar? sidebar?})
       (str encoded-page-name "-hiccup"))))
 
+(defn contents-page
+  [contents]
+  (let [page-name "contents"]
+    (when-let [repo (state/get-current-repo)]
+      (let [format (db/get-page-format page-name)
+            file-path (:file/path (:page/file contents))]
+        (page-headings-cp repo contents file-path page-name page-name page-name true false false nil format)))))
+
 (defn presentation
   [repo page journal?]
   [:a.opacity-50.hover:opacity-100.ml-4
@@ -189,21 +197,6 @@
                [repo :page/headings page-id])))))))
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
-                ;; (let [page-name (get-page-name state)]
-                ;;   (when (= (string/lower-case page-name) "contents")
-                ;;     (when-let [first-heading (first (db/get-page-headings "contents"))]
-                ;;       (let [edit-id (str "edit-heading-" (:heading/uuid first-heading))]
-                ;;         (editor-handler/edit-heading!
-                ;;          (:heading/uuid first-heading)
-                ;;          :max
-                ;;          (:heading/format first-heading)
-                ;;          edit-id)
-                ;;         (when (string/ends-with? (:heading/content first-heading) "[[]]" )
-                ;;           (js/setTimeout #(util/cursor-move-back (gdom/getElement edit-id) 2)
-                ;;                          50))
-                ;;         (when (string/ends-with? (:heading/content first-heading) "[[]]\n---" )
-                ;;           (js/setTimeout #(util/cursor-move-back (gdom/getElement edit-id) 6)
-                ;;                          50))))))
                 state)
    :did-update ui-handler/scroll-and-highlight!}
   [state {:keys [repo] :as option}]

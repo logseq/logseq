@@ -242,31 +242,9 @@
 
 (rum/defc contents < rum/reactive
   []
-  (let [l (db/get-contents)]
-    [:div.contents.text-sm.flex-col.flex.ml-3.mt-2
-     (if (seq l)
-       (for [{:keys [page list]} l]
-         (rum/with-key
-           (foldable-list page list)
-           (str "toc-item-" page)))
-       (let [page (db/entity [:page/name "contents"])]
-         (if page
-           [:div
-            [:p.text-base "No contents yet, you can click the button below to edit it."]
-            (ui/button
-              "Edit the contents"
-              :on-click (fn [e]
-                          (util/stop e)
-                          (route-handler/redirect! {:to :page
-                                                    :path-params {:name "contents"}})))]
-           [:div
-            [:p.text-base
-             [:i.font-medium "Contents"] " (similar to book contents) is a way to structure your pages, please click the button below to start!"]
-            (ui/button
-              "Create the contents"
-              :on-click (fn [e]
-                          (util/stop e)
-                          (editor-handler/create-new-page! "contents")))])))]))
+  [:div.contents.flex-col.flex.ml-3.mt-2
+   (if-let [contents (db/entity [:page/name "contents"])]
+     (page/contents-page contents))])
 
 (defn build-sidebar-item
   [repo idx db-id block-type block-data]
@@ -278,7 +256,7 @@
                         (editor-handler/create-new-page! "contents")
                         (route-handler/redirect! {:to :page
                                                   :path-params {:name "contents"}})))}
-      "Contents (edit)"]
+      "Contents"]
      (contents)]
 
     :recent

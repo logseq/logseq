@@ -372,7 +372,9 @@
           :else
           ;; page reference
           [:span.page-reference
-           (when-not html-export? [:span.text-gray-500 "[["])
+           (when (and (not html-export?)
+                      (not (= (:id config) "contents")))
+             [:span.text-gray-500 "[["])
            (if (string/ends-with? s ".excalidraw")
              [:a.page-ref
               {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))
@@ -381,7 +383,9 @@
                (svg/excalidraw-logo)
                (string/capitalize (draw/get-file-title s))]]
              (page-cp config {:page/name s}))
-           (when-not html-export? [:span.text-gray-500 "]]"])])
+           (when (and (not html-export?)
+                      (not (= (:id config) "contents")))
+             [:span.text-gray-500 "]]"])])
 
         :else
         (let [href (string-of-url url)

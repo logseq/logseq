@@ -807,3 +807,17 @@
   (if mac?
     (string/replace keyboard-shortcut "ctrl" "meta")
     keyboard-shortcut))
+
+(defn default-content-with-title
+  [text-format title]
+  (let [contents? (= (string/lower-case title) "contents")]
+    (case (name text-format)
+      "org"
+      (if contents?
+        (format "** [[]]" title)
+        (format "#+TITLE: %s\n#+TAGS:\n\n** " title))
+      "markdown"
+      (if contents?
+        (format "## [[]]" title)
+        (format "---\ntitle: %s\ntags:\n---\n\n## " title))
+      "")))

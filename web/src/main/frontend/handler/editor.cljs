@@ -218,20 +218,6 @@
         heading-children-value (heading-content-join-newlines prefix heading-with-children-content postfix)]
     (str prefix heading-children-value postfix)))
 
-(defn- default-content-with-title
-  [format title]
-  (let [contents? (= (string/lower-case title) "contents")]
-    (case format
-      "org"
-      (if contents?
-        (util/format "#+TITLE: %s\n#+LIST: [[]]" title)
-        (util/format "#+TITLE: %s\n#+TAGS:\n\n** " title))
-      "markdown"
-      (if contents?
-        (util/format "---\ntitle: %s\nlist: [[]]\n---" title)
-        (util/format "---\ntitle: %s\ntags:\n---\n\n## " title))
-      "")))
-
 (defn create-new-page!
   [title]
   (let [repo (state/get-current-repo)
@@ -251,7 +237,7 @@
                 "File already exists!"]
                :error)
               ;; create the file
-              (let [content (default-content-with-title format title)]
+              (let [content (util/default-content-with-title format title)]
                 (p/let [_ (fs/create-if-not-exists dir file-path content)]
                   (db/reset-file! repo path content)
                   (git-handler/git-add repo path)
@@ -393,8 +379,6 @@
                         (fn [alias]
                           {:page/name (string/lower-case alias)})
                         (remove #{(:page/name page)} alias)))
-         page-list (when-let [content (:list new-directives)]
-                     (db/extract-page-list content))
          permalink-changed? (when (and pre-heading? (:permalink old-directives))
                               (not= (:permalink old-directives)
                                     (:permalink new-directives)))
@@ -423,7 +407,7 @@
                    "File already exists!"]
                   :error)
                  ;; create the file
-                 (let [content (default-content-with-title format (:page/original-name page))]
+                 (let [content (util/default-content-with-title format (:page/original-name page))]
                    (p/let [_ (fs/create-if-not-exists dir file-path content)]
                      (db/reset-file! repo path (str content
                                                     (remove-level-spaces value (keyword format))))
@@ -461,12 +445,6 @@
                                       {:db/id page-id
                                        :page/directives new-directives}]
                                      [[:db/retract page-id :page/directives]]))
-                 page-list (when pre-heading?
-                             (if (seq page-list)
-                               [[:db/retract page-id :page/list]
-                                {:db/id page-id
-                                 :page/list page-list}]
-                               [[:db/retract page-id :page/list]]))
                  page-tags (when (and pre-heading? (seq page-tags))
                              (if (seq page-tags)
                                [[:db/retract page-id :page/tags]
@@ -488,7 +466,6 @@
                 headings
                 retract-refs
                 page-directives
-                page-list
                 page-tags
                 page-alias
                 after-headings
@@ -554,7 +531,7 @@
               "File already exists!"]
              :error)
             ;; create the file
-            (let [content (default-content-with-title format (:page/original-name page))]
+            (let [content (util/default-content-with-title format (:page/original-name page))]
               (p/let [_ (fs/create-if-not-exists dir file-path content)]
                 (db/reset-file! repo path
                                 (str content
@@ -1152,16 +1129,21 @@
 
 (defn get-matched-pages
   [q]
-  (let [pages (->> (db/get-pages (state/get-current-repo))
-                   (remove (fn [p]
-                             (= (string/lower-case p)
-                                (:page/name (db/get-current-page))))))]
-    (filter
-     (fn [page]
-       (string/index-of
-        (string/lower-case page)
-        (string/lower-case q)))
-     pages)))
+  (let [heading (state/get-edit-heading)
+        editing-page (and heading
+                       (when-let [page-id (:db/id (:heading/page heading))]
+                         (:page/name (db/entity page-id))))]
+    (let [pages (db/get-pages (state/get-current-repo))
+          pages (if editing-page
+                  ;; To prevent self references
+                  (remove (fn [p] (= (string/lower-case p) editing-page)) pages)
+                  pages)]
+     (filter
+      (fn [page]
+        (string/index-of
+         (string/lower-case page)
+         (string/lower-case q)))
+      pages))))
 
 (defn get-matched-blocks
   [q]

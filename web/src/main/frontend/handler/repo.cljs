@@ -137,6 +137,22 @@
         (ui-handler/re-render-root!)
         (git-handler/git-add repo-url path)))))
 
+(defn create-contents-file
+  [repo-url]
+  (let [repo-dir (util/get-repo-dir repo-url)
+        format (state/get-preferred-format)
+        path (str "pages/contents." (if (= (name format) "markdown")
+                                      "md"
+                                      (name format)))
+        file-path (str "/" path)
+        default-content (util/default-content-with-title format "contents")]
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/pages"))
+                  (p/catch (fn [_e])))
+            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+      (when-not file-exists?
+        (db/reset-file! repo-url path default-content)
+        (git-handler/git-add repo-url path)))))
+
 (defn create-default-files!
   [repo-url]
   (when-let [name (get-in @state/state [:me :name])]
@@ -149,6 +165,7 @@
              write-permission (contains? #{"admin" "write"} permission)]
          (create-month-journal-if-not-exists repo-url)
          (create-config-file-if-not-exists repo-url)
+         (create-contents-file repo-url)
          (db/set-key-value repo-url :git/write-permission? write-permission)))
      (fn []))))
 
@@ -196,9 +213,9 @@
       (let [data (db/get-sync-metadata repo)
             data-str (pr-str data)]
         (file-handler/alter-file repo
-                    (str config/app-name "/" config/metadata-file)
-                    data-str
-                    {:reset? false})))))
+                                 (str config/app-name "/" config/metadata-file)
+                                 data-str
+                                 {:reset? false})))))
 
 
 
@@ -334,7 +351,7 @@
   [repo path new-config]
   (let [new-content (util/pp-str new-config)]
     (file-handler/alter-file repo path new-content {:reset? false
-                                       :re-render-root? false})))
+                                                    :re-render-root? false})))
 
 (defn set-config!
   [k v]
@@ -376,7 +393,8 @@
                                    repo
                                    db-listen-to-tx!)
               _ (create-month-journal-if-not-exists repo)
-              _ (create-config-file-if-not-exists repo)]
+              _ (create-config-file-if-not-exists repo)
+              _ (create-contents-file repo)]
         (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 

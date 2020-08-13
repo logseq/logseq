@@ -1041,19 +1041,21 @@
 (defn get-page-name
   [file ast]
   ;; headline
-  (let [file-page-name (get-file-page file)
-        first-heading (last (first (filter block/heading-block? ast)))
-        directive-name (when (and (= "Directives" (ffirst ast))
-                                  (not (string/blank? (:title (last (first ast))))))
-                         (:title (last (first ast))))
-        first-heading-name (and first-heading
-                                ;; FIXME:
-                                (str (last (first (:title first-heading)))))]
-    (or
-     directive-name
-     file-page-name
-     first-heading-name
-     file)))
+  (if (string/starts-with? file "pages/contents.")
+    "Contents"
+    (let [file-page-name (get-file-page file)
+         first-heading (last (first (filter block/heading-block? ast)))
+         directive-name (when (and (= "Directives" (ffirst ast))
+                                   (not (string/blank? (:title (last (first ast))))))
+                          (:title (last (first ast))))
+         first-heading-name (and first-heading
+                                 ;; FIXME:
+                                 (str (last (first (:title first-heading)))))]
+     (or
+      directive-name
+      file-page-name
+      first-heading-name
+      file))))
 
 (defn get-heading-content
   [utf8-content heading]
@@ -1127,9 +1129,6 @@
                             :page/last-modified-at journal-date-long})
                         (seq directives)
                         (assoc :page/directives directives)
-
-                        (seq page-list)
-                        (assoc :page/list page-list)
 
                         other-alias
                         (assoc :page/alias
@@ -2013,33 +2012,6 @@
                   '())
         new-pages (take 12 (distinct (cons page pages)))]
     (set-key-value repo :recent/pages new-pages)))
-
-(defn build-content-list
-  [m l]
-  (map
-    (fn [page]
-      (if-let [page-list (get m page)]
-        {:page page
-         :list (build-content-list m page-list)}
-        {:page page}))
-    l))
-
-(defn get-contents
-  ([]
-   (get-contents (state/get-current-repo)))
-  ([repo]
-   (when-let [conn (get-conn repo)]
-     (let [lists (some->>
-                  (q repo [:contents] {}
-                    '[:find ?page-name ?list
-                      :where
-                      [?page :page/list ?list]
-                      [?page :page/name ?page-name]])
-                  react
-                  (into {}))]
-       (when (seq lists)
-         (when-let [l (get lists "contents")]
-           (build-content-list lists l)))))))
 
 (defn remove-orphaned-pages!
   [repo]
