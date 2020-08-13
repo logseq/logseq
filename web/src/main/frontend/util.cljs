@@ -804,7 +804,6 @@
 
 (defn ->system-modifier
   [keyboard-shortcut]
-  (prn {:mac? mac?})
   (if mac?
     (string/replace keyboard-shortcut "ctrl" "meta")
     keyboard-shortcut))
