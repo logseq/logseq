@@ -802,6 +802,7 @@
 
 (defn mac?
   []
+  (prn "mac: " (gobj/get goog.userAgent "MAC"))
   (gobj/get goog.userAgent "MAC"))
 
 (defn ->system-modifier
