@@ -339,7 +339,6 @@
          ;; up
          38 (fn [state e]
               (when (and
-                     (not (gobj/get e "shiftKey"))
                      (not (gobj/get e "ctrlKey"))
                      (not (gobj/get e "metaKey"))
                      (not (editor-handler/in-auto-complete? input)))
@@ -347,7 +346,6 @@
          ;; down
          40 (fn [state e]
               (when (and
-                     (not (gobj/get e "shiftKey"))
                      (not (gobj/get e "ctrlKey"))
                      (not (gobj/get e "metaKey"))
                      (not (editor-handler/in-auto-complete? input)))
