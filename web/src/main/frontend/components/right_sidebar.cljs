@@ -34,7 +34,9 @@
   [page]
   (let [theme (:ui/theme @state/state)
         dark? (= theme "dark")
-        graph (db/build-page-graph page theme)]
+        graph (if (util/uuid-string? page)
+                (db/build-heading-graph (uuid page) theme)
+                (db/build-page-graph page theme))]
     (when (seq (:nodes graph))
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph

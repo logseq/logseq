@@ -1736,6 +1736,39 @@
          {:nodes nodes
           :links edges})))))
 
+(defn build-heading-graph
+  "Builds a citation/reference graph for a given heading uuid."
+  [heading theme]
+  (let [dark? (= "dark" theme)]
+    (when-let [repo (state/get-current-repo)]
+      (let [ref-headings (get-heading-referenced-headings heading)
+            edges (concat
+                   (map (fn [[p aliases]]
+                          [heading p]) ref-headings))
+            other-headings (->> (concat (map first ref-headings))
+                             (remove nil?)
+                             (set))
+            other-headings-edges (mapcat
+                               (fn [heading]
+                                 (let [ref-headings (-> (map first (get-heading-referenced-headings heading))
+                                                     (set)
+                                                     (set/intersection other-headings))]
+                                   (concat
+                                    (map (fn [p] [heading p]) ref-headings))))
+                               other-headings)
+            edges (->> (concat edges other-headings-edges)
+                       (remove nil?)
+                       (distinct)
+                       (build-edges))
+            nodes (->> (concat
+                        [heading]
+                        (map first ref-headings))
+                       (remove nil?)
+                       (distinct)
+                       (build-nodes dark? heading edges))]
+         {:nodes nodes
+          :links edges}))))
+
 (defn headings->vec-tree [col]
   (let [col (map (fn [h] (cond->
                              h
