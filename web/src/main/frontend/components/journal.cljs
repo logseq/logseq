@@ -298,7 +298,9 @@
   {}
   [repo page encoded-page-name format]
   (let [raw-headings (db/get-page-headings repo page)
-        headings (db/with-dummy-heading raw-headings format nil true)]
+        headings (->>
+                  (db/with-dummy-heading raw-headings format nil true)
+                  (db/with-block-refs-count repo))]
     (headings-inner headings encoded-page-name page)))
 
 (rum/defc journal-cp < rum/reactive
