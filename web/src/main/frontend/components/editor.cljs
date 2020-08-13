@@ -84,7 +84,6 @@
                    (subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
-              _ (prn matched-pages)
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-page-search false)
                                (editor-handler/insert-command! id
