@@ -166,7 +166,7 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state]
   [:div {:style {:position "fixed"
-                 :bottom 0 
+                 :bottom 0
                  :width "100%"
                  :left 0
                  :text-align "center"
@@ -174,8 +174,8 @@
    [:button
     {:on-click #(editor-handler/adjust-heading-level! parent-state :right)}
     svg/indent-block]
-   [:button 
-    {:on-click #(editor-handler/adjust-heading-level! parent-state :left)} 
+   [:button
+    {:on-click #(editor-handler/adjust-heading-level! parent-state :left)}
     svg/outdent-block]
    [:button
     {:on-click #(editor-handler/move-up-down parent-state % true)}
@@ -284,9 +284,11 @@
 
 (rum/defcs box < rum/reactive
   (mixins/keyboard-mixin (util/->system-modifier "ctrl+shift+a") editor-handler/select-all-headings!)
-  (mixins/keyboard-mixin "alt+shift+up" (fn [state e]
-                                          (editor-handler/move-up-down state e true)))
-  (mixins/keyboard-mixin "alt+shift+down" (fn [state e] (editor-handler/move-up-down state e false)))
+  (mixins/keyboard-mixin (if (util/mac?) "meta+shift+up" "alt+shift+up")
+                         (fn [state e]
+                           (editor-handler/move-up-down state e true)))
+  (mixins/keyboard-mixin (if (util/mac?) "meta+shift+down" "alt+shift+down")
+                         (fn [state e] (editor-handler/move-up-down state e false)))
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [id format heading]} (get-state state)

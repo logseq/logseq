@@ -15,7 +15,8 @@
             [cljs-time.coerce :as tc]
             [cljs-time.format :as format]
             [frontend.regex :as regex]
-            [clojure.pprint :refer [pprint]]))
+            [clojure.pprint :refer [pprint]])
+  (:import [goog.userAgent]))
 
 (defn format
   [fmt & args]
@@ -801,9 +802,7 @@
 
 (defn mac?
   []
-  (string/starts-with?
-   (string/lower-case js/navigator.userAgent)
-   "mac"))
+  (gobj/get goog.userAgent "MAC"))
 
 (defn ->system-modifier
   [keyboard-shortcut]
