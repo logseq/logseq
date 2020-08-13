@@ -15,8 +15,8 @@
             [cljs-time.coerce :as tc]
             [cljs-time.format :as format]
             [frontend.regex :as regex]
-            [clojure.pprint :refer [pprint]])
-  (:import [goog.userAgent]))
+            [clojure.pprint :refer [pprint]]
+            [goog.userAgent]))
 
 (defn format
   [fmt & args]
