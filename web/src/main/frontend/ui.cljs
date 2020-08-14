@@ -118,7 +118,10 @@
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z",
                 :fill-rule "evenodd"}]]])]
       [:div.fixed.inset-0.flex.items-end.justify-center.px-4.py-6.pointer-events-none.sm:p-6.sm:items-start.sm:justify-end
-       {:style {:z-index 99
+       {:style {:z-index (if (or (= state "exiting")
+                                 (= state "exited"))
+                           -1
+                           99)
                 :top "3.2em"}}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
