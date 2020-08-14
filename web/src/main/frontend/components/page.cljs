@@ -213,7 +213,7 @@
         sidebar? (:sidebar? option)]
     (cond
       priority-page?
-      [:div.page
+      [:div.page.mb-20
        [:h1.title
         (str "Priority \"" (string/upper-case page-name) "\"")]
        [:div.ml-2
