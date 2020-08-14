@@ -238,11 +238,12 @@
        [:a
         {:href "https://logseq.com/blog/clojure.org"
          :target "_blank"}
-        "Clojure && Clojurescript"]]
+        "Clojure && Clojurescript"]
+       " - A dynamic, functional, general-purpose programming language"]
       [:li
        [:a {:href "https://github.com/tonsky/datascript"
             :target "_blank"} "Datascript"]
-       " - Immutable database and Datalog query engine for Clojure, ClojureScript and JS"]
+       " - Immutable database and Datalog query engine for Clojure, ClojureScript and JS"]
       [:li
        [:a {:href "https://ocaml.org/"
             :target "_blank"} "OCaml"]
