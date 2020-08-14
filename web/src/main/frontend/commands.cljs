@@ -74,9 +74,13 @@
   (let [workflow (state/get-preferred-workflow)]
     (if (= :now workflow)
       [["LATER" (->marker "LATER")]
-       ["NOW" (->marker "NOW")]]
+       ["NOW" (->marker "NOW")]
+       ["TODO" (->marker "TODO")]
+       ["DOING" (->marker "DOING")]]
       [["TODO" (->marker "TODO")]
-       ["DOING" (->marker "DOING")]])))
+       ["DOING" (->marker "DOING")]
+       ["LATER" (->marker "LATER")]
+       ["NOW" (->marker "NOW")]])))
 
 ;; Credits to roamresearch.com
 (defn commands-map
