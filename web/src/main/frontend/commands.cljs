@@ -5,7 +5,8 @@
             [frontend.search :as search]
             [clojure.string :as string]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.format :as format]))
 
 (defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
@@ -321,9 +322,6 @@
                                                  new-value
                                                  (count prefix))))))
 
-(def marker-pattern
-  #"^(NOW|LATER|TODO|DOING|DONE|WAIT|WAITING|CANCELED|STARTED|IN-PROGRESS)?\s?")
-
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
@@ -339,7 +337,7 @@
                     (count (re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
-                                                 marker-pattern
+                                                 format/marker-pattern
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)))))
 
@@ -358,8 +356,8 @@
                              (string/replace-first (subs edit-content pos)
                                                    priority-pattern
                                                    new-priority))
-                        (re-find marker-pattern edit-content)
-                        (string/replace-first edit-content marker-pattern
+                        (re-find format/marker-pattern edit-content)
+                        (string/replace-first edit-content format/marker-pattern
                                               (fn [marker] (str marker new-priority " ")))
 
                         :else

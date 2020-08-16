@@ -132,6 +132,12 @@
           :todo)))
     (get-in @state [:me :preferred_workflow] :now))))
 
+(defn get-preferred-todo
+  []
+  (if (= (get-preferred-workflow) :now)
+    "LATER"
+    "TODO"))
+
 (defn get-repos
   []
   (get-in @state [:me :repos]))

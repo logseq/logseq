@@ -50,7 +50,11 @@
     (ui/menu-link
      {:key "copy"
       :on-click editor-handler/copy-selection-headings}
-     "Copy")]])
+     "Copy")
+    (ui/menu-link
+     {:key "make-todos"
+      :on-click editor-handler/bulk-make-todos}
+     (str "Make " (state/get-preferred-todo) "s"))]])
 
 (rum/defc heading-context-menu-content
   [heading-id]

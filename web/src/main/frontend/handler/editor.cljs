@@ -1409,3 +1409,64 @@
                :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
               [[file-path new-content]])))
           (cycle-collapse! state e))))))
+
+(defn bulk-make-todos
+  [state e]
+  (when-let [repo (state/get-current-repo)]
+    (let [headings (seq (state/get-selection-headings))]
+      (if (seq headings)
+        (let [ids (map (fn [heading] (when-let [id (dom/attr heading "headingid")]
+                                       (medley/uuid id))) headings)
+              ids (->> (mapcat #(let [children (vec (db/get-heading-children-ids repo %))]
+                                  (cons % children)) ids)
+                       (distinct))
+              headings (db/pull-many '[*] (map (fn [id] [:heading/uuid id]) ids))
+              heading (first headings)
+              format (:heading/format heading)
+              start-pos (get-in heading [:heading/meta :pos])
+              old-end-pos (get-in (last headings) [:heading/meta :end-pos])
+              pattern (config/get-heading-pattern format)
+              last-start-pos (atom start-pos)
+              headings (doall
+                        (map (fn [heading]
+                               (let [content (:heading/content heading)
+                                     [prefix content] (if-let [col (util/split-first " " content)]
+                                                        col
+                                                        [content ""])
+                                     level (:heading/level heading)
+                                     new-marker (state/get-preferred-todo)
+                                     content' (string/replace-first content
+                                                                    format/marker-pattern
+                                                                    (str new-marker " "))
+                                     content' (str prefix " " content')
+                                     end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
+                                     heading (assoc heading
+                                                    :heading/marker new-marker
+                                                    :heading/content content'
+                                                    :heading/meta (merge
+                                                                   (:heading/meta heading)
+                                                                   {:pos @last-start-pos
+                                                                    :end-pos end-pos}))]
+                                 (reset! last-start-pos end-pos)
+                                 heading))
+                          headings))
+              file-id (:db/id (:heading/file heading))
+              file (db/entity file-id)
+              page (:heading/page heading)
+              after-headings (rebuild-after-headings repo file old-end-pos @last-start-pos)
+              file-path (:file/path file)
+              file-content (db/get-file file-path)
+              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :heading/content headings)))
+              modified-time (modified-time-tx page file)]
+          (profile
+           "Indent/outdent: "
+           (repo-handler/transact-react-and-alter-file!
+            repo
+            (concat
+             headings
+             after-headings
+             modified-time)
+            {:key :heading/change
+             :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+            [[file-path new-content]])))
+        (cycle-collapse! state e)))))
