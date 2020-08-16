@@ -117,16 +117,6 @@
       (state/set-edit-content! edit-id new-value)
       (util/cursor-move-back input back-pos))))
 
-(defn cycle-collapse!
-  [_state e]
-  (when (and
-         ;; not input, t
-         (nil? (state/get-edit-input-id))
-         (not (state/get-editor-show-input))
-         (string/blank? (:search/q @state/state)))
-    (util/stop e)
-    (expand/cycle!)))
-
 (defn copy-block-ref!
   [heading-id]
   (util/copy-to-clipboard! (str heading-id)))
@@ -331,8 +321,8 @@
                                   (reset! last-child-end-pos old-end-pos)))
 
                               (cond->
-                                  {:heading/uuid uuid
-                                   :heading/meta new-meta}
+                                {:heading/uuid uuid
+                                 :heading/meta new-meta}
                                 (and (some? indent-left?) (not @next-leq-level?))
                                 (assoc :heading/level (if indent-left? (dec level) (inc level)))
                                 (and new-content (not @next-leq-level?))
@@ -1131,19 +1121,19 @@
   [q]
   (let [heading (state/get-edit-heading)
         editing-page (and heading
-                       (when-let [page-id (:db/id (:heading/page heading))]
-                         (:page/name (db/entity page-id))))]
+                          (when-let [page-id (:db/id (:heading/page heading))]
+                            (:page/name (db/entity page-id))))]
     (let [pages (db/get-pages (state/get-current-repo))
           pages (if editing-page
                   ;; To prevent self references
                   (remove (fn [p] (= (string/lower-case p) editing-page)) pages)
                   pages)]
-     (filter
-      (fn [page]
-        (string/index-of
-         (string/lower-case page)
-         (string/lower-case q)))
-      pages))))
+      (filter
+       (fn [page]
+         (string/index-of
+          (string/lower-case page)
+          (string/lower-case q)))
+       pages))))
 
 (defn get-matched-blocks
   [q]
@@ -1253,6 +1243,9 @@
       (set-last-edit-heading! (:heading/uuid heading) value)
       (save-heading-if-changed! heading new-value (= direction :left)))))
 
+(defn adjust-headings-level!
+  [headings direction])
+
 (defn append-paste-doc!
   [format event]
   (let [[html text] (util/get-clipboard-as-html event)]
@@ -1343,3 +1336,76 @@
     (expand/collapse! current-heading)
     (state/set-collapsed-state! (:heading/uuid current-heading)
                                 true)))
+
+
+(defn cycle-collapse!
+  [_state e]
+  (when (and
+         ;; not input, t
+         (nil? (state/get-edit-input-id))
+         (not (state/get-editor-show-input))
+         (string/blank? (:search/q @state/state)))
+    (util/stop e)
+    (expand/cycle!)))
+
+(defn on-tab
+  [direction]
+  (fn [state e]
+    (when-let [repo (state/get-current-repo)]
+      (let [headings (seq (state/get-selection-headings))]
+        (if (seq headings)
+          (let [ids (map (fn [heading] (when-let [id (dom/attr heading "headingid")]
+                                         (medley/uuid id))) headings)
+                ids (->> (mapcat #(let [children (vec (db/get-heading-children-ids repo %))]
+                                    (cons % children)) ids)
+                         (distinct))
+                headings (db/pull-many '[*] (map (fn [id] [:heading/uuid id]) ids))
+                heading (first headings)
+                format (:heading/format heading)
+                start-pos (get-in heading [:heading/meta :pos])
+                old-end-pos (get-in (last headings) [:heading/meta :end-pos])
+                pattern (config/get-heading-pattern format)
+                last-start-pos (atom start-pos)
+                headings (doall
+                          (map (fn [heading]
+                                 (let [content (:heading/content heading)
+                                       level (:heading/level heading)
+                                       content' (if (= :left direction)
+                                                  (subs content 1)
+                                                  (str pattern content))
+                                       end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
+                                       heading (assoc heading
+                                                      :heading/content content'
+                                                      :heading/level (if (= direction :left)
+                                                                       (dec level)
+                                                                       (inc level))
+                                                      :heading/meta (merge
+                                                                     (:heading/meta heading)
+                                                                     {:pos @last-start-pos
+                                                                      :end-pos end-pos}))]
+                                   (reset! last-start-pos end-pos)
+                                   heading))
+                            headings))
+                file-id (:db/id (:heading/file heading))
+                file (db/entity file-id)
+                page (:heading/page heading)
+                after-headings (rebuild-after-headings repo file old-end-pos @last-start-pos)
+                ;; _ (prn {:headings (map (fn [h] (select-keys h [:heading/content :heading/meta])) headings)
+                ;;         :after-headings after-headings
+                ;;         :last-start-pos @last-start-pos})
+                file-path (:file/path file)
+                file-content (db/get-file file-path)
+                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :heading/content headings)))
+                modified-time (modified-time-tx page file)]
+            (profile
+             "Indent/outdent: "
+             (repo-handler/transact-react-and-alter-file!
+              repo
+              (concat
+               headings
+               after-headings
+               modified-time)
+              {:key :heading/change
+               :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+              [[file-path new-content]])))
+          (cycle-collapse! state e))))))

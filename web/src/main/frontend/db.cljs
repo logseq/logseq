@@ -944,24 +944,29 @@
            (with-repo repo-url)
            (with-block-refs-count repo-url)))
 
+(defn get-heading-children-ids
+  [repo heading-uuid]
+  (when-let [conn (get-conn repo)]
+    (let [eid (:db/id (entity repo [:heading/uuid heading-uuid]))]
+      (->> (d/q
+             '[:find ?e1
+               :in $ ?e2 %
+               :where (parent ?e2 ?e1)]
+             conn
+             eid
+             ;; recursive rules
+             '[[(parent ?e2 ?e1)
+                [?e2 :heading/children ?e1]]
+               [(parent ?e2 ?e1)
+                [?t :heading/children ?e1]
+                [?t :heading/uuid ?tid]
+                (parent ?e2 ?tid)]])
+           (seq-flatten)))))
+
 (defn get-heading-children
   [repo heading-uuid]
   (when-let [conn (get-conn repo)]
-    (let [eid (:db/id (entity repo [:heading/uuid heading-uuid]))
-          ids (->> (d/q
-                     '[:find ?e1
-                       :in $ ?e2 %
-                       :where (parent ?e2 ?e1)]
-                     conn
-                     eid
-                     ;; recursive rules
-                     '[[(parent ?e2 ?e1)
-                        [?e2 :heading/children ?e1]]
-                       [(parent ?e2 ?e1)
-                        [?t :heading/children ?e1]
-                        [?t :heading/uuid ?tid]
-                        (parent ?e2 ?tid)]])
-                   (seq-flatten))]
+    (let [ids (get-heading-children-ids repo heading-uuid)]
       (when (seq ids)
         (d/pull-many conn '[*]
                      (map (fn [id] [:heading/uuid id]) ids))))))

@@ -50,7 +50,8 @@
 
 (defonce keyboards
   {
-   "tab" editor-handler/cycle-collapse!
+   "tab" (editor-handler/on-tab :right)
+   "shift+tab" (editor-handler/on-tab :left)
    (util/->system-modifier "ctrl+alt+d") state/toggle-document-mode!
    (util/->system-modifier "ctrl+z") history-handler/undo!
    (util/->system-modifier "ctrl+y") history-handler/redo!
