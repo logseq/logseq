@@ -117,7 +117,9 @@
   []
   (keyword
    (or
-    (:preferred-format (get-config))
+    (when-let [fmt (:preferred-format (get-config))]
+      (string/lower-case (name fmt)))
+
     (get-in @state [:me :preferred_format] "markdown"))))
 
 (defn get-preferred-workflow
