@@ -471,13 +471,17 @@
 
 (defn insert-new-heading-aux!
   [{:heading/keys [uuid content meta file dummy? level repo page format] :as heading} value create-new-heading? ok-handler with-level?]
-  (let [input (gdom/getElement (state/get-edit-input-id))
+  (let [current-page (state/get-current-page)
+        heading-page? (and current-page (util/uuid-string? current-page))
+        heading-self? (= uuid (and heading-page? (medley/uuid current-page)))
+        input (gdom/getElement (state/get-edit-input-id))
         pos (:pos (util/get-caret-pos input))
         repo (or repo (state/get-current-repo))
         v1 (subs value 0 pos)
         v2 (string/triml (subs value pos))
         v1 (string/trim (if with-level? v1 (block/with-levels v1 format heading)))
-        v2 (str (config/default-empty-heading format level) " " v2)
+        v2-level (if heading-self? (inc level) level)
+        v2 (str (config/default-empty-heading format v2-level) " " v2)
         heading (with-heading-meta repo heading)
         format (:heading/format heading)
         page (db/entity repo (:db/id page))
