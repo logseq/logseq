@@ -109,3 +109,7 @@
     (some? (loaded?)))
   (lazyLoad [this ok-handler]
     true))
+
+(defn plain->text
+  [plains]
+  (string/join (map last plains)))

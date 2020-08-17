@@ -209,13 +209,16 @@
 (declare block)
 
 (defn page-cp
-  [{:keys [html-export?] :as config} page]
+  [{:keys [html-export? label] :as config} page]
   (let [page-name (:page/name page)
         original-page-name (get page :page/original-name page-name)
         page (string/lower-case page-name)
         href (if html-export?
                (util/encode-str page)
-               (str "/page/" (util/encode-str page)))]
+               (str "/page/" (util/encode-str page)))
+        title (if-not (string/blank? label)
+                label
+                original-page-name)]
     [:a.page-ref
      {:href href
       :on-click (fn [e]
@@ -227,7 +230,7 @@
                        (:db/id page)
                        :page
                        {:page page}))))}
-     original-page-name]))
+     title]))
 
 (defn- latex-environment-content
   [name option content]
@@ -382,7 +385,8 @@
               [:span
                (svg/excalidraw-logo)
                (string/capitalize (draw/get-file-title s))]]
-             (page-cp config {:page/name s}))
+             (page-cp (assoc config
+                             :label (mldoc/plain->text label)) {:page/name s}))
            (when (and (not html-export?)
                       (not (= (:id config) "contents")))
              [:span.text-gray-500 "]]"])])
