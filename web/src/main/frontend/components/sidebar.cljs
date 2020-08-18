@@ -146,7 +146,7 @@
                        (not (gobj/get e "altKey")))
               (when-let [repo-url (state/get-current-repo)]
                 (if (and
-                     (db/get-key-value repo-url :git/write-permission?)
+                     ;; (db/get-key-value repo-url :git/write-permission?)
                      (not (state/get-edit-input-id))
                      (seq (state/get-changed-files repo-url)))
                   (state/set-modal! commit/add-commit-message)
