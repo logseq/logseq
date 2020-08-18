@@ -268,6 +268,7 @@
    (push repo-url "Logseq auto save"))
   ([repo-url commit-message]
    (let [status (db/get-key-value repo-url :git/status)]
+     (println {:changed-files (seq (state/get-changed-files repo-url))})
      (when (and
             ;; (not= status :push-failed)
             ;; (db/get-key-value repo-url :git/write-permission?)
@@ -278,11 +279,13 @@
                               "Logseq auto save"
                               commit-message)]
          (p/let [_ (git/commit repo-url commit-message)]
+           (println "Commit successfully!")
            (git-handler/set-git-status! repo-url :pushing)
            (let [token (state/get-github-token)]
              (util/p-handle
               (git/push repo-url token)
               (fn []
+                (println "Push successfully!")
                 (git-handler/set-git-status! repo-url nil)
                 (git-handler/set-git-error! repo-url nil)
                 (git-handler/set-latest-commit-if-exists! repo-url)
