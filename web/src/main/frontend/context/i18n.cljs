@@ -19,8 +19,10 @@
   (let [prefered-language (keyword (state/sub :preferred-language))
         set-preferred-language state/set-preferred-language!
         t (partial tongue/translate prefered-language)]
-    (set-preferred-language (fetch-local-language))
-    (rum/bind-context [*tongue-context* [prefered-language set-preferred-language t]]
+    (if (nil? prefered-language) 
+      (set-preferred-language (fetch-local-language))
+      :ok)
+    (rum/bind-context [*tongue-context* [t prefered-language set-preferred-language]]
                       children)))
 
 (rum/defc use-tongue []

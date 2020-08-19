@@ -15,7 +15,8 @@
             [frontend.version :as version]
             [frontend.components.svg :as svg]
             [frontend.components.commit :as commit]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.context.i18n :as i18n]))
 
 (rum/defcs choose-preferred-format
   []
@@ -84,49 +85,50 @@
             last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
             changed-files (state/sub [:repo/changed-files repo])
             should-push? (seq changed-files)]
-        [:div.flex-row.flex.items-center
-         (when pushing?
-           [:span.lds-dual-ring.mt-1])
-         (ui/dropdown
-          (fn [{:keys [toggle-fn]}]
-            [:div.cursor.w-2.h-2.sync-status.mr-2
-             {:class (if (or should-push? pushing?) "bg-orange-400" "bg-green-600")
-              :style {:border-radius "50%"
-                      :margin-top 2}
-              :on-mouse-over toggle-fn}])
-          (fn [{:keys [toggle-fn]}]
-            [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-             (if (and should-push? (seq changed-files))
-               [:div
-                [:div.changes
-                 [:ul
-                  (for [file changed-files]
-                    [:li {:key (str "sync-" file)}
-                     [:div.flex.flex-row.justify-between.align-items
-                      [:a {:href (str "/file/" (util/encode-str file))}
-                       file]
-                      [:a.ml-4.text-sm.mt-1
-                       {:on-click (fn [e]
-                                    (export-handler/download-file! file))}
-                       [:span "Download"]]]])]]
+        (rum/with-context [[t] i18n/*tongue-context*]
+          [:div.flex-row.flex.items-center
+           (when pushing?
+             [:span.lds-dual-ring.mt-1])
+           (ui/dropdown
+            (fn [{:keys [toggle-fn]}]
+              [:div.cursor.w-2.h-2.sync-status.mr-2
+               {:class (if (or should-push? pushing?) "bg-orange-400" "bg-green-600")
+                :style {:border-radius "50%"
+                        :margin-top 2}
+                :on-mouse-over toggle-fn}])
+            (fn [{:keys [toggle-fn]}]
+              [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
+               (if (and should-push? (seq changed-files))
+                 [:div
+                  [:div.changes
+                   [:ul
+                    (for [file changed-files]
+                      [:li {:key (str "sync-" file)}
+                       [:div.flex.flex-row.justify-between.align-items
+                        [:a {:href (str "/file/" (util/encode-str file))}
+                         file]
+                        [:a.ml-4.text-sm.mt-1
+                         {:on-click (fn [e]
+                                      (export-handler/download-file! file))}
+                         [:span "Download"]]]])]]
                 ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
-                [:div.flex.flex-row.justify-between.align-items.mt-2
-                 (ui/button "Push now"
-                   :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-                 (if pushing?
-                   [:span.lds-dual-ring.mt-1])]]
-               [:p "All local changes are synced!"])
-             [:hr]
-             [:div
-              [:p {:style {:font-size 12}} "Last pulled at: "
-               last-pulled-at]
-              [:div.flex.flex-row.justify-between.align-items
-               (ui/button "Pull now"
-                 :on-click (fn [] (repo-handler/pull-current-repo)))
-               (if pulling?
-                 [:span.lds-dual-ring.mt-1])]
-              [:p.pt-2.text-sm.opacity-50
-               "Version: " version/version]]]))]))))
+                  [:div.flex.flex-row.justify-between.align-items.mt-2
+                   (ui/button "Push now"
+                              :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                   (if pushing?
+                     [:span.lds-dual-ring.mt-1])]]
+                 [:p "All local changes are synced!"])
+               [:hr]
+               [:div
+                [:p {:style {:font-size 12}} "Last pulled at: "
+                 last-pulled-at]
+                [:div.flex.flex-row.justify-between.align-items
+                 (ui/button "Pull now"
+                            :on-click (fn [] (repo-handler/pull-current-repo)))
+                 (if pulling?
+                   [:span.lds-dual-ring.mt-1])]
+                [:p.pt-2.text-sm.opacity-50
+                 "Version: " version/version]]]))])))))
 
 (rum/defc repos < rum/reactive
   [head? on-click]
