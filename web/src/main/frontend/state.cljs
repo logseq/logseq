@@ -68,7 +68,7 @@
 
     ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
-
+    
     :preferred-language "en"
     }))
 
