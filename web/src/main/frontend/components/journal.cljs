@@ -28,23 +28,23 @@
         repo (state/get-current-repo)]
     ;; no contents yet
     (when today?
-      (let [raw-headings (db/get-page-headings repo page)
-            headings (db/with-dummy-heading raw-headings format nil true)]
-        (when (= 1 (count raw-headings))
+      (let [raw-blocks (db/get-page-blocks repo page)
+            blocks (db/with-dummy-block raw-blocks format nil true)]
+        (when (= 1 (count raw-blocks))
           (when-let [template (state/get-journal-template)]
             (when-not (string/blank? template)
-              (editor/insert-new-heading-aux!
-               (first headings)
+              (editor/insert-new-block-aux!
+               (first blocks)
                template
                false
                nil
                true)))))))
   state)
 
-(rum/defc headings-inner < rum/static
+(rum/defc blocks-inner < rum/static
   {:did-mount (fn [state]
-                (let [[headings _ page] (:rum/args state)
-                      first-title (second (first (:heading/title (first headings))))
+                (let [[blocks _ page] (:rum/args state)
+                      first-title (second (first (:block/title (first blocks))))
                       journal? (and (string? first-title)
                                     (date/valid-journal-title? first-title))]
                   (when (and journal?
@@ -59,22 +59,22 @@
                      :error
                      false)))
                 state)}
-  [headings encoded-page-name page]
+  [blocks encoded-page-name page]
   (content/content
    encoded-page-name
-   {:hiccup (hiccup/->hiccup headings
+   {:hiccup (hiccup/->hiccup blocks
                              {:id encoded-page-name
                               :start-level 2}
                              {})}))
 
-(rum/defc headings-cp < rum/reactive
+(rum/defc blocks-cp < rum/reactive
   {}
   [repo page encoded-page-name format]
-  (let [raw-headings (db/get-page-headings repo page)
-        headings (->>
-                  (db/with-dummy-heading raw-headings format nil true)
-                  (db/with-block-refs-count repo))]
-    (headings-inner headings encoded-page-name page)))
+  (let [raw-blocks (db/get-page-blocks repo page)
+        blocks (->>
+                (db/with-dummy-block raw-blocks format nil true)
+                (db/with-block-refs-count repo))]
+    (blocks-inner blocks encoded-page-name page)))
 
 (rum/defc journal-cp < rum/reactive
   {:init journal-include-template!
@@ -103,7 +103,7 @@
        [:h1.title
         (util/capitalize-all title)]]
 
-      (headings-cp repo page encoded-page-name format))
+      (blocks-cp repo page encoded-page-name format))
 
      (page/today-queries repo today? false)
 

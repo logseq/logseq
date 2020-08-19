@@ -18,11 +18,11 @@
 ;;     :editor/last-saved-cursor
 ;;     :editor/editing?
 ;;     :editor/content
-;;     :editor/heading
+;;     :editor/block
 ;;     :cursor-range
 ;;     :cursor-pos
 ;;     :selection/mode
-;;     :selection/headings
+;;     :selection/blocks
 ;;     :custom-context-menu/show?
 ;;     :sidebar/blocks})
 

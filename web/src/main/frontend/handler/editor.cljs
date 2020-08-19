@@ -35,10 +35,11 @@
                      *matched-block-commands
                      *show-block-commands]]
             [frontend.extensions.html-parser :as html-parser]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.text :as text]))
 
 ;; TODO: refactor the state, it is already too complex.
-(defonce *last-edit-heading (atom nil))
+(defonce *last-edit-block (atom nil))
 
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
@@ -51,28 +52,28 @@
     [[:db/add (:db/id page) :page/last-modified-at modified-at]
      [:db/add (:db/id file) :file/last-modified-at modified-at]]))
 
-(defn set-last-edit-heading!
+(defn set-last-edit-block!
   [id value]
-  (reset! *last-edit-heading [id value]))
+  (reset! *last-edit-block [id value]))
 
 (defn- get-selection-and-format
   []
-  (when-let [heading (state/get-edit-heading)]
-    (when-let [id (:heading/uuid heading)]
+  (when-let [block (state/get-edit-block)]
+    (when-let [id (:block/uuid block)]
       (when-let [edit-id (state/get-edit-input-id)]
         (when-let [input (gdom/getElement edit-id)]
           {:selection-start (gobj/get input "selectionStart")
            :selection-end (gobj/get input "selectionEnd")
-           :format (:heading/format heading)
+           :format (:block/format block)
            :value (gobj/get input "value")
-           :heading heading
+           :block block
            :edit-id edit-id
            :input input})))))
 
 (defn- format-text!
   [pattern-fn]
   (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format value heading edit-id input]} m
+    (let [{:keys [selection-start selection-end format value block edit-id input]} m
           empty-selection? (= selection-start selection-end)
           pattern (pattern-fn format)
           new-value (str
@@ -96,7 +97,7 @@
 
 (defn html-link-format! []
   (when-let [m (get-selection-and-format)]
-    (let [{:keys [selection-start selection-end format value heading edit-id input]} m
+    (let [{:keys [selection-start selection-end format value block edit-id input]} m
           empty-selection? (= selection-start selection-end)
           selection (subs value selection-start selection-end)
           selection-link? (and selection (or (string/starts-with? selection "http://")
@@ -118,32 +119,24 @@
       (util/cursor-move-back input back-pos))))
 
 (defn copy-block-ref!
-  [heading-id]
-  (util/copy-to-clipboard! (str heading-id)))
+  [block-id]
+  (util/copy-to-clipboard! (str block-id)))
 
 (defn focus-on-block!
-  [heading-id]
-  (when heading-id
+  [block-id]
+  (when block-id
     (route-handler/redirect! {:to :page
-                              :path-params {:name (str heading-id)}})))
+                              :path-params {:name (str block-id)}})))
 
-(defn open-heading-in-sidebar!
-  [heading-id]
-  (when heading-id
-    (when-let [heading (db/pull [:heading/uuid heading-id])]
+(defn open-block-in-sidebar!
+  [block-id]
+  (when block-id
+    (when-let [block (db/pull [:block/uuid block-id])]
       (state/sidebar-add-block!
        (state/get-current-repo)
-       (:db/id heading)
-       :heading
-       heading))))
-
-(defn remove-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?"
-                   (config/get-heading-pattern format))]
-      (string/replace-first text (re-pattern pattern) ""))))
+       (:db/id block)
+       :block
+       block))))
 
 (defn reset-cursor-range!
   [node]
@@ -160,7 +153,7 @@
          (let [pos (inc (diff/find-position markup range))]
            (util/set-caret-pos! node pos)))))))
 
-(defn heading-content-join-newlines
+(defn block-content-join-newlines
   [prefix value postfix]
   (str
    (if (or (= "" prefix)
@@ -173,193 +166,167 @@
      "\n")))
 
 (defn new-file-content
-  [{:heading/keys [content meta dummy?] :as heading} file-content value]
+  [{:block/keys [content meta dummy?] :as block} file-content value]
   (let [utf8-content (utf8/encode file-content)
-        prefix (utf8/substring utf8-content 0 (:pos meta))
+        prefix (utf8/substring utf8-content 0 (:start-pos meta))
         postfix (let [end-pos (if dummy?
-                                (:pos meta)
+                                (:start-pos meta)
                                 (:end-pos meta))]
                   (utf8/substring utf8-content end-pos))
-        value (heading-content-join-newlines prefix value postfix)]
+        value (block-content-join-newlines prefix value postfix)]
     [(str prefix value postfix)
      value]))
 
-(defn get-heading-new-value
-  [{:heading/keys [content meta dummy?] :as heading} file-content value]
+(defn get-block-new-value
+  [{:block/keys [content meta dummy?] :as block} file-content value]
   (let [utf8-content (utf8/encode file-content)
-        prefix (utf8/substring utf8-content 0 (:pos meta))
+        prefix (utf8/substring utf8-content 0 (:start-pos meta))
         postfix (let [end-pos (if dummy?
-                                (:pos meta)
+                                (:start-pos meta)
                                 (:end-pos meta))]
                   (utf8/substring utf8-content end-pos))]
-    (heading-content-join-newlines prefix value postfix)))
+    (block-content-join-newlines prefix value postfix)))
 
 (defn new-file-content-indent-outdent
-  [{:heading/keys [content meta dummy?] :as heading} file-content value heading-with-children-content last-child-end-pos indent-left?]
+  [{:block/keys [content meta dummy?] :as block} file-content value block-with-children-content last-child-end-pos indent-left?]
   (let [utf8-content (utf8/encode file-content)
-        prefix (utf8/substring utf8-content 0 (:pos meta))
+        prefix (utf8/substring utf8-content 0 (:start-pos meta))
         last-child-end-pos (if (some? indent-left?) last-child-end-pos nil)
         end-pos (or
                  last-child-end-pos
                  (if dummy?
-                   (:pos meta)
+                   (:start-pos meta)
                    (:end-pos meta)))
         postfix (utf8/substring utf8-content end-pos)
-        heading-children-value (heading-content-join-newlines prefix heading-with-children-content postfix)]
-    (str prefix heading-children-value postfix)))
+        block-children-value (block-content-join-newlines prefix block-with-children-content postfix)]
+    (str prefix block-children-value postfix)))
 
-(defn create-new-page!
-  [title]
-  (let [repo (state/get-current-repo)
-        dir (util/get-repo-dir repo)]
-    (when dir
-      (p/let [_ (-> (fs/mkdir (str dir "/" config/default-pages-directory))
-                    (p/catch (fn [_e])))]
-        (let [format (name (state/get-preferred-format))
-              page (string/lower-case title)
-              path (str (string/replace page #"\s+" "_") "." (if (= format "markdown") "md" format))
-              path (str config/default-pages-directory "/" path)
-              file-path (str "/" path)]
-          (p/let [exists? (fs/file-exists? dir file-path)]
-            (if exists?
-              (notification/show!
-               [:p.content
-                "File already exists!"]
-               :error)
-              ;; create the file
-              (let [content (util/default-content-with-title format title)]
-                (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                  (db/reset-file! repo path content)
-                  (git-handler/git-add repo path)
-                  (route-handler/redirect! {:to :page
-                                            :path-params {:name page}}))))))))))
-
-(defn- with-heading-meta
-  [repo heading]
-  (if (:heading/dummy? heading)
-    (if-let [page-id (:db/id (:heading/page heading))]
+(defn- with-block-meta
+  [repo block]
+  (if (:block/dummy? block)
+    (if-let [page-id (:db/id (:block/page block))]
       (let [page-name (:page/name (db/entity repo page-id))
-            end-pos (db/get-heading-page-end-pos repo page-name)]
-        (assoc heading :heading/meta {:pos end-pos
+            end-pos (db/get-block-page-end-pos repo page-name)]
+        (assoc block :block/meta {:start-pos end-pos
                                       :end-pos end-pos}))
-      heading)
-    (if-let [meta (:heading/meta (db/entity repo [:heading/uuid (:heading/uuid heading)]))]
-      (assoc heading :heading/meta meta)
-      heading)))
+      block)
+    (if-let [meta (:block/meta (db/entity repo [:block/uuid (:block/uuid block)]))]
+      (assoc block :block/meta meta)
+      block)))
 
-(defn highlight-heading!
-  [heading-uuid]
-  (let [headings (array-seq (js/document.getElementsByClassName (str heading-uuid)))]
-    (doseq [heading headings]
-      (dom/add-class! heading "block-highlight"))))
+(defn highlight-block!
+  [block-uuid]
+  (let [blocks (array-seq (js/document.getElementsByClassName (str block-uuid)))]
+    (doseq [block blocks]
+      (dom/add-class! block "block-highlight"))))
 
-(defn unhighlight-heading!
+(defn unhighlight-block!
   []
-  (let [headings (some->> (array-seq (js/document.getElementsByClassName "block-highlight"))
+  (let [blocks (some->> (array-seq (js/document.getElementsByClassName "block-highlight"))
                           (repeat 2)
                           (apply concat))]
-    (doseq [heading headings]
-      (gdom-classes/remove heading "block-highlight"))))
+    (doseq [block blocks]
+      (gdom-classes/remove block "block-highlight"))))
 
-(defn rebuild-headings-meta
-  [start-pos headings]
+(defn rebuild-blocks-meta
+  [start-pos blocks]
   (let [last-start-pos (atom start-pos)]
     (mapv
-     (fn [{:heading/keys [uuid meta] :as heading}]
-       (let [old-start-pos (:pos meta)
+     (fn [{:block/keys [uuid meta] :as block}]
+       (let [old-start-pos (:start-pos meta)
              old-end-pos (:end-pos meta)
              new-end-pos (if old-end-pos
                            (+ @last-start-pos (- old-end-pos old-start-pos)))
-             new-meta {:pos @last-start-pos
+             new-meta {:start-pos @last-start-pos
                        :end-pos new-end-pos}]
          (reset! last-start-pos new-end-pos)
-         {:heading/uuid uuid
-          :heading/meta new-meta}))
-     headings)))
+         {:block/uuid uuid
+          :block/meta new-meta}))
+     blocks)))
 
-(defn rebuild-after-headings
+(defn rebuild-after-blocks
   [repo file before-end-pos new-end-pos]
   (let [file-id (:db/id file)
-        after-headings (db/get-file-after-headings-meta repo file-id before-end-pos)]
-    (rebuild-headings-meta new-end-pos after-headings)))
+        after-blocks (db/get-file-after-blocks-meta repo file-id before-end-pos)]
+    (rebuild-blocks-meta new-end-pos after-blocks)))
 
-(defn rebuild-after-headings-indent-outdent
-  [repo file heading before-end-pos new-end-pos indent-left?]
+(defn rebuild-after-blocks-indent-outdent
+  [repo file block before-end-pos new-end-pos indent-left?]
   (let [file-id (:db/id file)
-        after-headings (db/get-file-after-headings-meta repo file-id before-end-pos true)
+        after-blocks (db/get-file-after-blocks-meta repo file-id before-end-pos true)
         last-start-pos (atom new-end-pos)
-        heading-level (:heading/level heading)
+        block-level (:block/level block)
         next-leq-level? (atom false)
-        format (:heading/format heading)
-        heading-and-children-content (atom (:heading/content heading))
+        format (:block/format block)
+        block-and-children-content (atom (:block/content block))
         last-child-end-pos (atom before-end-pos)
-        after-headings (mapv
-                        (fn [{:heading/keys [uuid meta level content] :as heading}]
-                          (let [old-start-pos (:pos meta)
+        after-blocks (mapv
+                        (fn [{:block/keys [uuid meta level content] :as block}]
+                          (let [old-start-pos (:start-pos meta)
                                 old-end-pos (:end-pos meta)
                                 ]
-                            (when (<= level heading-level)
+                            (when (<= level block-level)
                               (reset! next-leq-level? true))
 
                             (let [[new-content offset] (cond
                                                          (and (not @next-leq-level?) (true? indent-left?))
                                                          [(subs content 1) -1]
                                                          (and (not @next-leq-level?) (false? indent-left?))
-                                                         [(str (config/get-heading-pattern format) content) 1]
+                                                         [(str (config/get-block-pattern format) content) 1]
                                                          :else
                                                          [nil 0])
                                   new-end-pos (if old-end-pos
                                                 (+ @last-start-pos
                                                    (- old-end-pos old-start-pos)
                                                    offset))
-                                  new-meta {:pos @last-start-pos
+                                  new-meta {:start-pos @last-start-pos
                                             :end-pos new-end-pos}]
                               (reset! last-start-pos new-end-pos)
                               (when-not @next-leq-level?
                                 (do
-                                  (reset! heading-and-children-content (str @heading-and-children-content new-content))
+                                  (reset! block-and-children-content (str @block-and-children-content new-content))
                                   (reset! last-child-end-pos old-end-pos)))
 
                               (cond->
-                                {:heading/uuid uuid
-                                 :heading/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                                 (and (some? indent-left?) (not @next-leq-level?))
-                                (assoc :heading/level (if indent-left? (dec level) (inc level)))
+                                (assoc :block/level (if indent-left? (dec level) (inc level)))
                                 (and new-content (not @next-leq-level?))
-                                (assoc :heading/content new-content)))))
-                        after-headings)]
-    [after-headings @heading-and-children-content @last-child-end-pos]))
+                                (assoc :block/content new-content)))))
+                        after-blocks)]
+    [after-blocks @block-and-children-content @last-child-end-pos]))
 
 (defn compute-retract-refs
   "Computes old references to be retracted."
-  [eid {:heading/keys [ref-pages ref-headings]} old-ref-pages old-ref-headings]
+  [eid {:block/keys [ref-pages ref-blocks]} old-ref-pages old-ref-blocks]
   (let [ref-pages-id    (map #(:db/id (db/get-page (:page/name %))) ref-pages)
         retracted-pages (reduce (fn [done current]
                                   (if (some #(= (:db/id current) %) ref-pages-id)
                                     done
                                     (conj done (:db/id current))))
                                 [] old-ref-pages)
-        ref-headings-id    (map #(:db/id (db/get-page (str (last %)))) ref-headings)
-        retracted-headings (reduce (fn [done current]
-                                     (if (some #(= (:db/id current) %) ref-headings-id)
+        ref-blocks-id    (map #(:db/id (db/get-page (str (last %)))) ref-blocks)
+        retracted-blocks (reduce (fn [done current]
+                                     (if (some #(= (:db/id current) %) ref-blocks-id)
                                        done
                                        (conj done (:db/id current))))
-                                   [] old-ref-headings)]
-    ;; removes retracted pages and headings
+                                   [] old-ref-blocks)]
+    ;; removes retracted pages and blocks
     (into
-     (mapv (fn [ref] [:db/retract eid :heading/ref-pages ref]) retracted-pages)
-     (mapv (fn [ref] [:db/retract eid :heading/ref-headings ref]) retracted-headings))))
+     (mapv (fn [ref] [:db/retract eid :block/ref-pages ref]) retracted-pages)
+     (mapv (fn [ref] [:db/retract eid :block/ref-blocks ref]) retracted-blocks))))
 
-(defn save-heading-if-changed!
-  ([heading value]
-   (save-heading-if-changed! heading value nil))
-  ([{:heading/keys [uuid content meta file page dummy? format repo pre-heading? content ref-pages ref-headings] :as heading} value indent-left?]
+(defn save-block-if-changed!
+  ([block value]
+   (save-block-if-changed! block value nil))
+  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block} value indent-left?]
    (let [repo (or repo (state/get-current-repo))
-         e (db/entity repo [:heading/uuid uuid])
-         heading (with-heading-meta repo heading)
+         e (db/entity repo [:block/uuid uuid])
+         block (with-block-meta repo block)
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         [old-directives new-directives] (when pre-heading?
+         [old-directives new-directives] (when pre-block?
                                            [(:page/directives (db/entity (:db/id page)))
                                             (db/parse-directives value format)])
          page-tags (when-let [tags (:tags new-directives)]
@@ -369,7 +336,7 @@
                         (fn [alias]
                           {:page/name (string/lower-case alias)})
                         (remove #{(:page/name page)} alias)))
-         permalink-changed? (when (and pre-heading? (:permalink old-directives))
+         permalink-changed? (when (and pre-block? (:permalink old-directives))
                               (not= (:permalink old-directives)
                                     (:permalink new-directives)))
          value (if permalink-changed?
@@ -378,7 +345,7 @@
          new-directives (if permalink-changed?
                           (assoc new-directives :old_permalink (:permalink old-directives))
                           new-directives)]
-     (when (not= (string/trim content) (string/trim value)) ; heading content changed
+     (when (not= (string/trim content) (string/trim value)) ; block content changed
        (let [file (db/entity repo (:db/id file))]
          (cond
            ;; Page was referenced but no related file
@@ -400,7 +367,7 @@
                  (let [content (util/default-content-with-title format (:page/original-name page))]
                    (p/let [_ (fs/create-if-not-exists dir file-path content)]
                      (db/reset-file! repo path (str content
-                                                    (remove-level-spaces value (keyword format))))
+                                                    (text/remove-level-spaces value (keyword format))))
                      (git-handler/git-add repo path)
                      (ui-handler/re-render-root!))))))
 
@@ -409,105 +376,105 @@
                  file-path (:file/path file)
                  format (format/get-format file-path)
                  file-content (db/get-file repo file-path)
-                 value (get-heading-new-value heading file-content value)
-                 heading (assoc heading :heading/content value)
-                 {:keys [headings pages start-pos end-pos]} (if pre-heading?
+                 value (get-block-new-value block file-content value)
+                 block (assoc block :block/content value)
+                 {:keys [blocks pages start-pos end-pos]} (if pre-block?
                                                               (let [new-end-pos (utf8/length (utf8/encode value))]
-                                                                {:headings [(assoc-in heading [:heading/meta :end-pos] new-end-pos)]
+                                                                {:blocks [(assoc-in block [:block/meta :end-pos] new-end-pos)]
                                                                  :pages []
                                                                  :start-pos 0
                                                                  :end-pos new-end-pos})
-                                                              (block/parse-heading heading format))
-                 [after-headings heading-children-content new-end-pos] (rebuild-after-headings-indent-outdent repo file heading (:end-pos (:heading/meta heading)) end-pos indent-left?)
-                 new-content (new-file-content-indent-outdent heading file-content value heading-children-content new-end-pos indent-left?)
-                 ;; _ (prn {:heading-children-content heading-children-content
+                                                              (block/parse-block block format))
+                 [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
+                 new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)
+                 ;; _ (prn {:block-children-content block-children-content
                  ;;         :new-end-pos new-end-pos
                  ;;         :new-content new-content})
-                 retract-refs (compute-retract-refs (:db/id e) (first headings) ref-pages ref-headings)
-                 headings (db/recompute-heading-children repo heading headings)
+                 retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
+                 blocks (db/recompute-block-children repo block blocks)
                  page-id (:db/id page)
                  modified-time (let [modified-at (tc/to-long (t/now))]
                                  [[:db/add page-id :page/last-modified-at modified-at]
                                   [:db/add (:db/id file) :file/last-modified-at modified-at]])
-                 page-directives (when pre-heading?
+                 page-directives (when pre-block?
                                    (if (seq new-directives)
                                      [[:db/retract page-id :page/directives]
                                       {:db/id page-id
                                        :page/directives new-directives}]
                                      [[:db/retract page-id :page/directives]]))
-                 page-tags (when (and pre-heading? (seq page-tags))
+                 page-tags (when (and pre-block? (seq page-tags))
                              (if (seq page-tags)
                                [[:db/retract page-id :page/tags]
                                 {:db/id page-id
                                  :page/tags page-tags}]
                                [[:db/retract page-id :page/tags]]))
-                 page-alias (when (and pre-heading? (seq page-alias))
+                 page-alias (when (and pre-block? (seq page-alias))
                               (if (seq page-alias)
                                 [[:db/retract page-id :page/alias]
                                  {:db/id page-id
                                   :page/alias page-alias}]
                                 [[:db/retract page-id :page/alias]]))]
              (profile
-              "Save heading: "
+              "Save block: "
               (repo-handler/transact-react-and-alter-file!
                repo
                (concat
                 pages
-                headings
+                blocks
                 retract-refs
                 page-directives
                 page-tags
                 page-alias
-                after-headings
+                after-blocks
                 modified-time)
-               {:key :heading/change
-                :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+               {:key :block/change
+                :data (map (fn [block] (assoc block :block/page page)) blocks)}
                [[file-path new-content]]))
-             (when (or (seq retract-refs) pre-heading?)
+             (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!)))
 
            :else
            nil))))))
 
-(defn insert-new-heading-aux!
-  [{:heading/keys [uuid content meta file dummy? level repo page format] :as heading} value create-new-heading? ok-handler with-level?]
+(defn insert-new-block-aux!
+  [{:block/keys [uuid content meta file dummy? level repo page format] :as block} value create-new-block? ok-handler with-level?]
   (let [current-page (state/get-current-page)
-        heading-page? (and current-page (util/uuid-string? current-page))
-        heading-self? (= uuid (and heading-page? (medley/uuid current-page)))
+        block-page? (and current-page (util/uuid-string? current-page))
+        block-self? (= uuid (and block-page? (medley/uuid current-page)))
         input (gdom/getElement (state/get-edit-input-id))
-        pos (:pos (util/get-caret-pos input))
+        pos (util/get-input-pos input)
         repo (or repo (state/get-current-repo))
         v1 (subs value 0 pos)
         v2 (string/triml (subs value pos))
-        v1 (string/trim (if with-level? v1 (block/with-levels v1 format heading)))
-        v2-level (if heading-self? (inc level) level)
-        v2 (str (config/default-empty-heading format v2-level) " " v2)
-        heading (with-heading-meta repo heading)
-        format (:heading/format heading)
+        v1 (string/trim (if with-level? v1 (block/with-levels v1 format block)))
+        v2-level (if block-self? (inc level) level)
+        v2 (str (config/default-empty-block format v2-level) " " v2)
+        block (with-block-meta repo block)
+        format (:block/format block)
         page (db/entity repo (:db/id page))
         file (db/entity repo (:db/id file))
-        insert-heading (fn [heading file-path file-content]
-                         (let [value (if create-new-heading?
+        insert-block (fn [block file-path file-content]
+                         (let [value (if create-new-block?
                                        (str v1 "\n" v2)
                                        value)
-                               [new-content value] (new-file-content heading file-content value)
-                               {:keys [headings pages start-pos end-pos]} (block/parse-heading (assoc heading :heading/content value) format)
-                               first-heading (first headings)
-                               last-heading (last headings)
-                               headings (db/recompute-heading-children repo heading headings)
-                               after-headings (rebuild-after-headings repo file (:end-pos meta) end-pos)]
+                               [new-content value] (new-file-content block file-content value)
+                               {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
+                               first-block (first blocks)
+                               last-block (last blocks)
+                               blocks (db/recompute-block-children repo block blocks)
+                               after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)]
                            (repo-handler/transact-react-and-alter-file!
                             repo
                             (concat
                              pages
-                             headings
-                             after-headings)
-                            {:key :heading/change
-                             :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+                             blocks
+                             after-blocks)
+                            {:key :block/change
+                             :data (map (fn [block] (assoc block :block/page page)) blocks)}
                             [[file-path new-content]])
 
                            (when ok-handler
-                             (ok-handler [first-heading last-heading v2]))))]
+                             (ok-handler [first-block last-block v2]))))]
     (cond
       (and (not file) page)
       (let [format (name format)
@@ -529,7 +496,7 @@
               (p/let [_ (fs/create-if-not-exists dir file-path content)]
                 (db/reset-file! repo path
                                 (str content
-                                     (remove-level-spaces value (keyword format))
+                                     (text/remove-level-spaces value (keyword format))
                                      "\n"
                                      v2))
                 (git-handler/git-add repo path)
@@ -538,7 +505,7 @@
       file
       (let [file-path (:file/path file)
             file-content (db/get-file repo file-path)]
-        (insert-heading heading file-path file-content))
+        (insert-block block file-path file-content))
 
       :else
       nil)))
@@ -553,7 +520,7 @@
 
 (defn get-state
   [state]
-  (let [[{:keys [on-hide heading heading-id heading-parent-id dummy? format sidebar?]} id config] (:rum/args state)
+  (let [[{:keys [on-hide block block-id block-parent-id dummy? format sidebar?]} id config] (:rum/args state)
         node (gdom/getElement id)
         value (gobj/get node "value")
         pos (gobj/get node "selectionStart")]
@@ -563,64 +530,64 @@
      :sidebar? sidebar?
      :format format
      :id id
-     :heading heading
-     :heading-id heading-id
-     :heading-parent-id heading-parent-id
+     :block block
+     :block-id block-id
+     :block-parent-id block-parent-id
      :node node
      :value value
      :pos pos}))
 
-(defn edit-heading!
-  [heading-id prev-pos format id]
-  (let [edit-input-id (str (subs id 0 (- (count id) 36)) heading-id)
-        heading (or
-                 (db/pull [:heading/uuid heading-id])
+(defn edit-block!
+  [block-id prev-pos format id]
+  (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
+        block (or
+                 (db/pull [:block/uuid block-id])
                  ;; dummy?
-                 {:heading/uuid heading-id
-                  :heading/content ""})
-        {:heading/keys [content]} heading
-        content (string/trim (remove-level-spaces content format))
+                 {:block/uuid block-id
+                  :block/content ""})
+        {:block/keys [content]} block
+        content (string/trim (text/remove-level-spaces content format))
         content-length (count content)
         text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
                      content
                      (subs content 0 prev-pos))]
-    (state/set-editing! edit-input-id content heading text-range)))
+    (state/set-editing! edit-input-id content block text-range)))
 
-(defn- insert-new-heading!
+(defn- insert-new-block!
   [state]
-  (let [{:keys [heading value format id]} (get-state state)
-        heading-id (:heading/uuid heading)
-        heading (or (db/pull [:heading/uuid heading-id])
-                    heading)]
-    (set-last-edit-heading! (:heading/uuid heading) value)
-    ;; save the current heading and insert a new heading
-    (insert-new-heading-aux!
-     heading
+  (let [{:keys [block value format id]} (get-state state)
+        block-id (:block/uuid block)
+        block (or (db/pull [:block/uuid block-id])
+                    block)]
+    (set-last-edit-block! (:block/uuid block) value)
+    ;; save the current block and insert a new block
+    (insert-new-block-aux!
+     block
      value
      true
-     (fn [[_first-heading last-heading _new-heading-content]]
-       (let [last-id (:heading/uuid last-heading)]
-         (edit-heading! last-id 0 format id)
+     (fn [[_first-block last-block _new-block-content]]
+       (let [last-id (:block/uuid last-block)]
+         (edit-block! last-id 0 format id)
          (clear-when-saved!)))
      false)))
 
 ;; TODO: utf8 encode performance
 (defn check
-  [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
+  [{:block/keys [uuid marker content meta file dummy?] :as block}]
   (let [new-content (string/replace-first content marker "DONE")]
-    (save-heading-if-changed! heading new-content)))
+    (save-block-if-changed! block new-content)))
 
 (defn uncheck
-  [{:heading/keys [uuid marker content meta file dummy?] :as heading}]
+  [{:block/keys [uuid marker content meta file dummy?] :as block}]
   (let [new-content (string/replace-first content "DONE"
                                           (if (= :now (state/get-preferred-workflow))
                                             "LATER"
                                             "TODO"))]
-    (save-heading-if-changed! heading new-content)))
+    (save-block-if-changed! block new-content)))
 
 (defn cycle-todo!
   []
-  (when-let [heading (state/get-edit-heading)]
+  (when-let [block (state/get-edit-block)]
     (let [edit-input-id (state/get-edit-input-id)
           content (state/get-edit-content)
           new-content (->
@@ -643,103 +610,103 @@
       (state/set-edit-content! edit-input-id new-content))))
 
 (defn set-marker
-  [{:heading/keys [uuid marker content meta file dummy?] :as heading} new-marker]
+  [{:block/keys [uuid marker content meta file dummy?] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
-    (save-heading-if-changed! heading new-content)))
+    (save-block-if-changed! block new-content)))
 
 (defn set-priority
-  [{:heading/keys [uuid marker priority content meta file dummy?] :as heading} new-priority]
+  [{:block/keys [uuid marker priority content meta file dummy?] :as block} new-priority]
   (let [new-content (string/replace-first content
                                           (util/format "[#%s]" priority)
                                           (util/format "[#%s]" new-priority))]
-    (save-heading-if-changed! heading new-content)))
+    (save-block-if-changed! block new-content)))
 
-(defn delete-heading-aux!
-  [{:heading/keys [uuid meta content file repo ref-pages ref-headings] :as heading} dummy?]
+(defn delete-block-aux!
+  [{:block/keys [uuid meta content file repo ref-pages ref-blocks] :as block} dummy?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
-          heading (db/pull repo '[*] [:heading/uuid uuid])]
-      (when heading
+          block (db/pull repo '[*] [:block/uuid uuid])]
+      (when block
         (let [file-path (:file/path (db/entity repo (:db/id file)))
               file-content (db/get-file repo file-path)
-              after-headings (rebuild-after-headings repo file (:end-pos meta) (:pos meta))
-              new-content (utf8/delete! file-content (:pos meta) (:end-pos meta))]
+              after-blocks (rebuild-after-blocks repo file (:end-pos meta) (:start-pos meta))
+              new-content (utf8/delete! file-content (:start-pos meta) (:end-pos meta))]
           (repo-handler/transact-react-and-alter-file!
            repo
            (concat
-            [[:db.fn/retractEntity [:heading/uuid uuid]]]
-            after-headings)
-           {:key :heading/change
-            :data [heading]}
+            [[:db.fn/retractEntity [:block/uuid uuid]]]
+            after-blocks)
+           {:key :block/change
+            :data [block]}
            [[file-path new-content]])
-          (when (or (seq ref-pages) (seq ref-headings))
+          (when (or (seq ref-pages) (seq ref-blocks))
             (ui-handler/re-render-root!)))))))
 
-(defn delete-heading!
+(defn delete-block!
   [state repo e]
-  (let [{:keys [id heading-id heading-parent-id dummy? value pos format]} (get-state state)]
-    (when heading-id
+  (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
+    (when block-id
       (do
         (util/stop e)
-        ;; delete heading, edit previous heading
-        (let [heading (db/pull [:heading/uuid heading-id])
-              heading-parent (gdom/getElement heading-parent-id)
-              sibling-heading (util/get-prev-heading heading-parent)]
-          (delete-heading-aux! heading dummy?)
-          (when sibling-heading
-            (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+        ;; delete block, edit previous block
+        (let [block (db/pull [:block/uuid block-id])
+              block-parent (gdom/getElement block-parent-id)
+              sibling-block (util/get-prev-block block-parent)]
+          (delete-block-aux! block dummy?)
+          (when sibling-block
+            (when-let [sibling-block-id (d/attr sibling-block "blockid")]
               (when repo
-                (when-let [heading (db/pull repo '[*] [:heading/uuid (uuid sibling-heading-id)])]
-                  (let [original-content (util/trim-safe (:heading/content heading))
+                (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+                  (let [original-content (util/trim-safe (:block/content block))
                         new-value (str original-content value)
                         pos (max
                              (if original-content
-                               (utf8/length (utf8/encode (remove-level-spaces original-content format)))
+                               (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
                                0)
                              0)]
-                    (save-heading-if-changed! heading new-value)
-                    (edit-heading! (uuid sibling-heading-id)
+                    (save-block-if-changed! block new-value)
+                    (edit-block! (uuid sibling-block-id)
                                    pos format id)))))))))))
 
-(defn delete-headings!
-  [repo heading-uuids]
-  (when (seq heading-uuids)
-    (let [headings (db/pull-many repo '[*] (mapv (fn [id]
-                                                   [:heading/uuid id])
-                                                 heading-uuids))
-          first-heading (first headings)
-          last-heading (last headings)
-          file (db/entity repo (:db/id (:heading/file first-heading)))
+(defn delete-blocks!
+  [repo block-uuids]
+  (when (seq block-uuids)
+    (let [blocks (db/pull-many repo '[*] (mapv (fn [id]
+                                                   [:block/uuid id])
+                                                 block-uuids))
+          first-block (first blocks)
+          last-block (last blocks)
+          file (db/entity repo (:db/id (:block/file first-block)))
           file-path (:file/path file)
           file-content (db/get-file repo file-path)
-          start-pos (:pos (:heading/meta first-heading))
-          end-pos (:end-pos (:heading/meta last-heading))
-          after-headings (rebuild-after-headings repo file end-pos start-pos)
+          start-pos (:start-pos (:block/meta first-block))
+          end-pos (:end-pos (:block/meta last-block))
+          after-blocks (rebuild-after-blocks repo file end-pos start-pos)
           new-content (utf8/delete! file-content start-pos end-pos)
           tx-data (concat
                    (mapv
                     (fn [uuid]
-                      [:db.fn/retractEntity [:heading/uuid uuid]])
-                    heading-uuids)
-                   after-headings
+                      [:db.fn/retractEntity [:block/uuid uuid]])
+                    block-uuids)
+                   after-blocks
                    [{:file/path file-path}])]
       (repo-handler/transact-react-and-alter-file!
        repo
        tx-data
-       {:key :heading/change
-        :data headings}
+       {:key :block/change
+        :data blocks}
        [[file-path new-content]])
       (ui-handler/re-render-root!))))
 
-(defn set-heading-property!
-  [heading-id key value]
-  (let [heading-id (if (string? heading-id) (uuid heading-id) heading-id)
+(defn set-block-property!
+  [block-id key value]
+  (let [block-id (if (string? block-id) (uuid block-id) block-id)
         key (string/upper-case (name key))
         value (name value)]
-    (when-let [heading (db/pull [:heading/uuid heading-id])]
-      (let [{:heading/keys [file page content properties properties-meta meta]} heading
+    (when-let [block (db/pull [:block/uuid block-id])]
+      (let [{:block/keys [file page content properties properties-meta meta]} block
             {:keys [start-pos end-pos]} properties-meta
-            start-pos (- start-pos (:pos meta))]
+            start-pos (- start-pos (:start-pos meta))]
         (cond
           (= (get properties key) value)
           nil
@@ -768,75 +735,75 @@
                     postfix (when (> (:end-pos meta) end-pos)
                               (utf8/substring encoded end-pos (:end-pos meta)))
                     new-content (str prefix properties postfix)]
-                (save-heading-if-changed! heading new-content))))
+                (save-block-if-changed! block new-content))))
 
           :else
           (let [properties (util/format
                             "\n   :PROPERTIES:\n   :%s: %s\n   :END:\n"
                             key value)
-                [heading-line & others] (string/split-lines content)
-                new-content (str heading-line properties
+                [block-line & others] (string/split-lines content)
+                new-content (str block-line properties
                                  (string/join "\n" others))]
-            (save-heading-if-changed! heading new-content)))))))
+            (save-block-if-changed! block new-content)))))))
 
 (defn clear-selection!
   [e]
   (when (state/in-selection-mode?)
-    (doseq [heading (state/get-selection-headings)]
-      (dom/remove-class! heading "selected")
-      (dom/remove-class! heading "noselect"))
+    (doseq [block (state/get-selection-blocks)]
+      (dom/remove-class! block "selected")
+      (dom/remove-class! block "noselect"))
     (state/clear-selection!))
   ;; (when e
   ;;   (when-not (util/input? (gobj/get e "target"))
   ;;     (util/clear-selection!)))
   )
 
-(defn select-all-headings!
+(defn select-all-blocks!
   []
   (when-let [current-input-id (state/get-edit-input-id)]
     (let [input (gdom/getElement current-input-id)
-          headings-container (util/rec-get-headings-container input)
-          headings (dom/by-class headings-container "ls-heading")]
-      (doseq [heading headings]
-        (dom/add-class! heading "selected noselect"))
-      (state/set-selection-headings! headings))))
+          blocks-container (util/rec-get-blocks-container input)
+          blocks (dom/by-class blocks-container "ls-block")]
+      (doseq [block blocks]
+        (dom/add-class! block "selected noselect"))
+      (state/set-selection-blocks! blocks))))
 
-(defn- get-selected-headings-with-children
+(defn- get-selected-blocks-with-children
   []
-  (when-let [headings (seq (get @state/state :selection/headings))]
-    (mapcat (fn [heading]
-              (cons heading
-                    (array-seq (dom/by-class heading "ls-heading"))))
-            headings)))
+  (when-let [blocks (seq (get @state/state :selection/blocks))]
+    (mapcat (fn [block]
+              (cons block
+                    (array-seq (dom/by-class block "ls-block"))))
+            blocks)))
 
-(defn copy-selection-headings
+(defn copy-selection-blocks
   []
-  (when-let [headings (seq (get-selected-headings-with-children))]
-    (let [repo (dom/attr (first headings) "repo")
-          ids (distinct (map #(uuid (dom/attr % "headingid")) headings))
+  (when-let [blocks (seq (get-selected-blocks-with-children))]
+    (let [repo (dom/attr (first blocks) "repo")
+          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
           up? (state/selection-up?)
-          content (some->> (db/get-headings-contents repo ids)
-                           (map :heading/content))
+          content (some->> (db/get-blocks-contents repo ids)
+                           (map :block/content))
           content (if (false? up?) (reverse content) content)
           content (string/join "" content)]
       (when-not (string/blank? content)
         (util/copy-to-clipboard! content)))))
 
-(defn cut-selection-headings
+(defn cut-selection-blocks
   []
-  (copy-selection-headings)
-  (when-let [headings (seq (get-selected-headings-with-children))]
-    (let [repo (dom/attr (first headings) "repo")
-          ids (distinct (map #(uuid (dom/attr % "headingid")) headings))]
-      (delete-headings! repo ids))))
+  (copy-selection-blocks)
+  (when-let [blocks (seq (get-selected-blocks-with-children))]
+    (let [repo (dom/attr (first blocks) "repo")
+          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
+      (delete-blocks! repo ids))))
 
 (defn- get-nearest-page
   []
-  (when-let [heading (state/get-edit-heading)]
-    (when-let [id (:heading/uuid heading)]
+  (when-let [block (state/get-edit-block)]
+    (when-let [id (:block/uuid block)]
       (when-let [edit-id (state/get-edit-input-id)]
         (when-let [input (gdom/getElement edit-id)]
-          (when-let [pos (:pos (util/get-caret-pos input))]
+          (when-let [pos (util/get-input-pos input)]
             (let [value (gobj/get input "value")
                   page-pattern #"\[\[([^\]]+)]]"
                   block-pattern #"\(\(([^\)]+)\)\)"
@@ -871,13 +838,13 @@
   []
   (when-let [page (get-nearest-page)]
     (let [page-name (string/lower-case page)
-          heading? (util/uuid-string? page-name)]
+          block? (util/uuid-string? page-name)]
       (when-let [page (db/get-page page-name)]
-        (if heading?
+        (if block?
           (state/sidebar-add-block!
            (state/get-current-repo)
            (:db/id page)
-           :heading
+           :block
            page)
           (state/sidebar-add-block!
            (state/get-current-repo)
@@ -886,8 +853,8 @@
            {:page page}))))))
 
 (defn zoom-in! []
-  (if-let [heading (state/get-edit-heading)]
-    (when-let [id (:heading/uuid heading)]
+  (if-let [block (state/get-edit-block)]
+    (when-let [id (:block/uuid block)]
       (route-handler/redirect! {:to :page
                                 :path-params {:name (str id)}}))
     (js/window.history.forward)))
@@ -895,34 +862,34 @@
 (defn zoom-out! []
   (let [parent? (atom false)]
     (when-let [page (state/get-current-page)]
-      (let [heading-id (and
+      (let [block-id (and
                         (string? page)
                         (util/uuid-string? page)
                         (medley/uuid page))
-            heading-parent (db/get-heading-parent (state/get-current-repo) heading-id)]
-        (when-let [id (:heading/uuid heading-parent)]
+            block-parent (db/get-block-parent (state/get-current-repo) block-id)]
+        (when-let [id (:block/uuid block-parent)]
           (route-handler/redirect! {:to :page
                                     :path-params {:name (str id)}})
           (reset! parent? true))))
     (when-not @parent?
       (route-handler/redirect-to-home!))))
 
-(defn cut-heading!
-  [heading-id]
-  (when-let [heading (db/pull [:heading/uuid heading-id])]
-    (let [content (:heading/content heading)]
+(defn cut-block!
+  [block-id]
+  (when-let [block (db/pull [:block/uuid block-id])]
+    (let [content (:block/content block)]
       (util/copy-to-clipboard! content)
-      (delete-heading-aux! heading false))))
+      (delete-block-aux! block false))))
 
-(defonce select-start-heading-state (atom nil))
+(defonce select-start-block-state (atom nil))
 
-(defn clear-last-selected-heading!
+(defn clear-last-selected-block!
   []
-  (let [first-heading (state/pop-selection-heading!)]
-    (dom/remove-class! first-heading "selected")
-    (dom/remove-class! first-heading "noselect")))
+  (let [first-block (state/pop-selection-block!)]
+    (dom/remove-class! first-block "selected")
+    (dom/remove-class! first-block "noselect")))
 
-(defn on-select-heading
+(defn on-select-block
   [state e up?]
   (when (and
          (gobj/get e "shiftKey")
@@ -936,87 +903,87 @@
                    (or (and (= start 0) up?)
                        (and (= end (count value)) (not up?))))))))
     (state/clear-edit!)
-    (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} @select-start-heading-state
-          element (gdom/getElement heading-parent-id)
-          selected-headings (state/get-selection-headings)
-          selected-headings-count (count selected-headings)
-          first-heading (first selected-headings)
+    (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} @select-start-block-state
+          element (gdom/getElement block-parent-id)
+          selected-blocks (state/get-selection-blocks)
+          selected-blocks-count (count selected-blocks)
+          first-block (first selected-blocks)
           selection-up? (state/selection-up?)]
-      (when heading-id
+      (when block-id
         (util/stop e)
         (when-let [element (if-not (state/in-selection-mode?)
                              element
-                             (let [f (if up? util/get-prev-heading util/get-next-heading)]
-                               (f first-heading)))]
+                             (let [f (if up? util/get-prev-block util/get-next-block)]
+                               (f first-block)))]
           (if (and (not (nil? selection-up?)) (not= up? selection-up?))
             (cond
-              (>= selected-headings-count 2) ; back to the start heading
+              (>= selected-blocks-count 2) ; back to the start block
               (do
-                (when (= 2 selected-headings-count) (state/set-selection-up? nil))
-                (clear-last-selected-heading!))
+                (when (= 2 selected-blocks-count) (state/set-selection-up? nil))
+                (clear-last-selected-block!))
 
               :else
               nil)
             (do
               (dom/add-class! element "selected noselect")
-              (state/conj-selection-heading! element up?))))))))
+              (state/conj-selection-block! element up?))))))))
 
-(defn save-heading!
-  [{:keys [format heading id repo dummy?] :as state} value]
-  (when (or (:db/id (db/entity repo [:heading/uuid (:heading/uuid heading)]))
+(defn save-block!
+  [{:keys [format block id repo dummy?] :as state} value]
+  (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
-    (let [new-value (block/with-levels value format heading)]
-      (let [cache [(:heading/uuid heading) value]]
-        (when (not= @*last-edit-heading cache)
-          (save-heading-if-changed! heading new-value)
-          (reset! *last-edit-heading cache))))))
+    (let [new-value (block/with-levels value format block)]
+      (let [cache [(:block/uuid block) value]]
+        (when (not= @*last-edit-block cache)
+          (save-block-if-changed! block new-value)
+          (reset! *last-edit-block cache))))))
 
-(defn- get-prev-heading-non-collapsed
-  [heading]
-  (when-let [headings (d/by-class "ls-heading")]
-    (when-let [index (.indexOf headings heading)]
+(defn- get-prev-block-non-collapsed
+  [block]
+  (when-let [blocks (d/by-class "ls-block")]
+    (when-let [index (.indexOf blocks block)]
       (loop [idx (dec index)]
         (when (>= idx 0)
-          (let [heading (nth headings idx)
-                collapsed? (= "none" (d/style heading "display"))]
+          (let [block (nth blocks idx)
+                collapsed? (= "none" (d/style block "display"))]
             (if collapsed?
               (recur (dec idx))
-              heading)))))))
+              block)))))))
 
-(defn- get-next-heading-non-collapsed
-  [heading]
-  (when-let [headings (d/by-class "ls-heading")]
-    (when-let [index (.indexOf headings heading)]
+(defn- get-next-block-non-collapsed
+  [block]
+  (when-let [blocks (d/by-class "ls-block")]
+    (when-let [index (.indexOf blocks block)]
       (loop [idx (inc index)]
-        (when (>= (count headings) idx)
-          (let [heading (nth headings idx)
-                collapsed? (= "none" (d/style heading "display"))]
+        (when (>= (count blocks) idx)
+          (let [block (nth blocks idx)
+                collapsed? (= "none" (d/style block "display"))]
             (if collapsed?
               (recur (inc idx))
-              heading)))))))
+              block)))))))
 
 (defn on-up-down
   [state e up?]
-  (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} (get-state state)]
+  (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} (get-state state)]
     (if (gobj/get e "shiftKey")
-      (reset! select-start-heading-state heading-state)
+      (reset! select-start-block-state block-state)
       (let [element (gdom/getElement id)
             line-height (util/get-textarea-line-height element)]
-        (when (and heading-id
+        (when (and block-id
                    (or (and up? (util/textarea-cursor-first-row? element line-height))
                        (and (not up?) (util/textarea-cursor-end-row? element line-height))))
           (util/stop e)
-          (let [f (if up? get-prev-heading-non-collapsed get-next-heading-non-collapsed)
-                sibling-heading (f (gdom/getElement heading-parent-id))]
-            (when sibling-heading
-              (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
+          (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
+                sibling-block (f (gdom/getElement block-parent-id))]
+            (when sibling-block
+              (when-let [sibling-block-id (d/attr sibling-block "blockid")]
                 (let [state (get-state state)
-                      content (:heading/content heading)
+                      content (:block/content block)
                       value (:value state)]
-                  (when (not= (string/trim (remove-level-spaces content format))
+                  (when (not= (string/trim (text/remove-level-spaces content format))
                               (string/trim value))
-                    (save-heading! state (:value state))))
-                (edit-heading! (uuid sibling-heading-id) pos format id)))))))))
+                    (save-block! state (:value state))))
+                (edit-block! (uuid sibling-block-id) pos format id)))))))))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]
@@ -1114,7 +1081,7 @@
   [input before after]
   (when input
     (let [value (gobj/get input "value")
-          pos (:pos (util/get-caret-pos input))
+          pos (util/get-input-pos input)
           start-pos (- pos (count before))
           end-pos (+ pos (count after))]
       (when (>= (count value) end-pos)
@@ -1123,9 +1090,9 @@
 
 (defn get-matched-pages
   [q]
-  (let [heading (state/get-edit-heading)
-        editing-page (and heading
-                          (when-let [page-id (:db/id (:heading/page heading))]
+  (let [block (state/get-edit-block)
+        editing-page (and block
+                          (when-let [page-id (:db/id (:block/page block))]
                             (:page/name (db/entity page-id))))]
     (let [pages (db/get-pages (state/get-current-repo))
           pages (if editing-page
@@ -1142,18 +1109,18 @@
 (defn get-matched-blocks
   [q]
   ;; remove current block
-  (let [current-heading (state/get-edit-heading)]
+  (let [current-block (state/get-edit-block)]
     (remove
      (fn [h]
-       (= (:heading/uuid current-heading)
-          (:heading/uuid h)))
+       (= (:block/uuid current-block)
+          (:block/uuid h)))
      (search/search q 21))))
 
 (defn get-matched-commands
   [input]
   (try
     (let [edit-content (gobj/get input "value")
-          pos (:pos (util/get-caret-pos input))
+          pos (util/get-input-pos input)
           last-slash-caret-pos (:pos @*slash-caret-pos)
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
@@ -1169,7 +1136,7 @@
   [input]
   (try
     (let [edit-content (gobj/get input "value")
-          pos (:pos (util/get-caret-pos input))
+          pos (util/get-input-pos input)
           last-command (subs edit-content
                              (:pos @*angle-bracket-caret-pos)
                              pos)]
@@ -1195,7 +1162,7 @@
 
 (defn get-previous-input-char
   [input]
-  (when-let [pos (:pos (util/get-caret-pos input))]
+  (when-let [pos (util/get-input-pos input)]
     (let [value (gobj/get input "value")]
       (when (and (>= (count value) pos)
                  (>= pos 1))
@@ -1203,7 +1170,7 @@
 
 (defn get-previous-input-chars
   [input length]
-  (when-let [pos (:pos (util/get-caret-pos input))]
+  (when-let [pos (util/get-input-pos input)]
     (let [value (gobj/get input "value")]
       (when (and (>= (count value) pos)
                  (>= pos 1))
@@ -1211,25 +1178,25 @@
 
 (defn get-current-input-char
   [input]
-  (when-let [pos (:pos (util/get-caret-pos input))]
+  (when-let [pos (util/get-input-pos input)]
     (let [value (gobj/get input "value")]
       (when (and (>= (count value) (inc pos))
                  (>= pos 1))
         (util/nth-safe value pos)))))
 
-(defn- get-previous-heading-level
+(defn- get-previous-block-level
   [current-id]
   (when-let [input (gdom/getElement current-id)]
-    (when-let [prev-heading (util/get-prev-heading input)]
-      (util/parse-int (d/attr prev-heading "level")))))
+    (when-let [prev-block (util/get-prev-block input)]
+      (util/parse-int (d/attr prev-block "level")))))
 
-(defn adjust-heading-level!
+(defn adjust-block-level!
   [state direction]
-  (let [{:keys [heading heading-parent-id value]} (get-state state)
-        format (:heading/format heading)
-        heading-pattern (config/get-heading-pattern format)
-        level (:heading/level heading)
-        previous-level (or (get-previous-heading-level heading-parent-id) 1)
+  (let [{:keys [block block-parent-id value]} (get-state state)
+        format (:block/format block)
+        block-pattern (config/get-block-pattern format)
+        level (:block/level block)
+        previous-level (or (get-previous-block-level block-parent-id) 1)
         [add? remove?] (case direction
                          :left [false true]
                          :right [true false]
@@ -1242,13 +1209,13 @@
                                 (dec level)
                                 level)
                       :else level)
-        new-value (block/with-levels value format (assoc heading :heading/level final-level))]
+        new-value (block/with-levels value format (assoc block :block/level final-level))]
     (when (<= (- final-level previous-level) 1)
-      (set-last-edit-heading! (:heading/uuid heading) value)
-      (save-heading-if-changed! heading new-value (= direction :left)))))
+      (set-last-edit-block! (:block/uuid block) value)
+      (save-block-if-changed! block new-value (= direction :left)))))
 
-(defn adjust-headings-level!
-  [headings direction])
+(defn adjust-blocks-level!
+  [blocks direction])
 
 (defn append-paste-doc!
   [format event]
@@ -1259,86 +1226,86 @@
           (util/stop event)
           (state/append-current-edit-content! doc-text))))))
 
-(defn- heading-and-children-content
-  [heading-children]
-  (-> (map :heading/content heading-children)
+(defn- block-and-children-content
+  [block-children]
+  (-> (map :block/content block-children)
       string/join))
 
 (defn move-up-down
   [state e up?]
-  (let [{:keys [id heading-id heading heading-parent-id dummy? value pos format] :as heading-state} (get-state state)
-        heading (db/entity [:heading/uuid heading-id])
-        meta (:heading/meta heading)
-        page (:heading/page heading)
-        heading-dom-node (gdom/getElement heading-parent-id)
-        prev-heading (get-prev-heading-non-collapsed heading-dom-node)
-        next-heading (get-next-heading-non-collapsed heading-dom-node)
+  (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} (get-state state)
+        block (db/entity [:block/uuid block-id])
+        meta (:block/meta block)
+        page (:block/page block)
+        block-dom-node (gdom/getElement block-parent-id)
+        prev-block (get-prev-block-non-collapsed block-dom-node)
+        next-block (get-next-block-non-collapsed block-dom-node)
         repo (state/get-current-repo)
-        move-upwards-to-parent? (and up? prev-heading (< (d/attr prev-heading "level") (:heading/level heading)))
-        move-down-to-higher-level? (and (not up?) next-heading (< (d/attr next-heading "level") (:heading/level heading)))]
-    (when-let [sibling-heading (cond
+        move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
+        move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
+    (when-let [sibling-block (cond
                                  move-upwards-to-parent?
-                                 prev-heading
+                                 prev-block
                                  move-down-to-higher-level?
-                                 next-heading
+                                 next-block
                                  :else
-                                 (let [f (if up? util/get-prev-heading-with-same-level util/get-next-heading-with-same-level)]
-                                   (f heading-dom-node)))]
-      (when-let [sibling-heading-id (d/attr sibling-heading "headingid")]
-        (when-let [sibling-heading (db/pull-heading (medley/uuid sibling-heading-id))]
-          (let [sibling-meta (:heading/meta sibling-heading)
-                hc1 (db/get-heading-and-children repo (:heading/uuid heading) false)
+                                 (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
+                                   (f block-dom-node)))]
+      (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+        (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
+          (let [sibling-meta (:block/meta sibling-block)
+                hc1 (db/get-block-and-children repo (:block/uuid block) false)
                 hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
-                      [sibling-heading]
-                      (db/get-heading-and-children repo (:heading/uuid sibling-heading) false))]
+                      [sibling-block]
+                      (db/get-block-and-children repo (:block/uuid sibling-block) false))]
             ;; Same page and next to the other
             (when (and
-                   (= (:db/id (:heading/page heading))
-                      (:db/id (:heading/page sibling-heading)))
+                   (= (:db/id (:block/page block))
+                      (:db/id (:block/page sibling-block)))
                    (or
-                    (and up? (= (:end-pos (:heading/meta (last hc2))) (:pos (:heading/meta (first hc1)))))
-                    (and (not up?) (= (:end-pos (:heading/meta (last hc1))) (:pos (:heading/meta (first hc2)))))))
-              (let [hc1-content (heading-and-children-content hc1)
-                    hc2-content (heading-and-children-content hc2)
-                    file (db/get-heading-file (:heading/uuid heading))
+                    (and up? (= (:end-pos (:block/meta (last hc2))) (:start-pos (:block/meta (first hc1)))))
+                    (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
+              (let [hc1-content (block-and-children-content hc1)
+                    hc2-content (block-and-children-content hc2)
+                    file (db/get-block-file (:block/uuid block))
                     file-path (:file/path file)
                     old-file-content (db/get-file file-path)
-                    [start-pos end-pos new-content headings] (if up?
-                                                               [(:pos sibling-meta)
-                                                                (get-in (last hc1) [:heading/meta :end-pos])
+                    [start-pos end-pos new-content blocks] (if up?
+                                                               [(:start-pos sibling-meta)
+                                                                (get-in (last hc1) [:block/meta :end-pos])
                                                                 (str hc1-content hc2-content)
                                                                 (concat hc1 hc2)]
-                                                               [(:pos meta)
-                                                                (get-in (last hc2) [:heading/meta :end-pos])
+                                                               [(:start-pos meta)
+                                                                (get-in (last hc2) [:block/meta :end-pos])
                                                                 (str hc2-content hc1-content)
                                                                 (concat hc2 hc1)])]
                 (when (and start-pos end-pos)
                   (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
                         modified-time (modified-time-tx page file)
-                        headings-meta (rebuild-headings-meta start-pos headings)]
+                        blocks-meta (rebuild-blocks-meta start-pos blocks)]
                     (profile
-                     (str "Move heading " (if up? "up: " "down: "))
+                     (str "Move block " (if up? "up: " "down: "))
                      (repo-handler/transact-react-and-alter-file!
                       repo
                       (concat
-                       headings-meta
+                       blocks-meta
                        modified-time)
-                      {:key :heading/change
-                       :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+                      {:key :block/change
+                       :data (map (fn [block] (assoc block :block/page page)) blocks)}
                       [[file-path new-file-content]]))))))))))))
 
 (defn expand!
   []
-  (when-let [current-heading (state/get-edit-heading)]
-    (expand/expand! current-heading)
-    (state/set-collapsed-state! (:heading/uuid current-heading)
+  (when-let [current-block (state/get-edit-block)]
+    (expand/expand! current-block)
+    (state/set-collapsed-state! (:block/uuid current-block)
                                 false)))
 
 (defn collapse!
   []
-  (when-let [current-heading (state/get-edit-heading)]
-    (expand/collapse! current-heading)
-    (state/set-collapsed-state! (:heading/uuid current-heading)
+  (when-let [current-block (state/get-edit-block)]
+    (expand/collapse! current-block)
+    (state/set-collapsed-state! (:block/uuid current-block)
                                 true)))
 
 
@@ -1356,121 +1323,121 @@
   [direction]
   (fn [state e]
     (when-let [repo (state/get-current-repo)]
-      (let [headings (seq (state/get-selection-headings))]
-        (if (seq headings)
-          (let [ids (map (fn [heading] (when-let [id (dom/attr heading "headingid")]
-                                         (medley/uuid id))) headings)
-                ids (->> (mapcat #(let [children (vec (db/get-heading-children-ids repo %))]
+      (let [blocks (seq (state/get-selection-blocks))]
+        (if (seq blocks)
+          (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                         (medley/uuid id))) blocks)
+                ids (->> (mapcat #(let [children (vec (db/get-block-children-ids repo %))]
                                     (cons % children)) ids)
                          (distinct))
-                headings (db/pull-many '[*] (map (fn [id] [:heading/uuid id]) ids))
-                heading (first headings)
-                format (:heading/format heading)
-                start-pos (get-in heading [:heading/meta :pos])
-                old-end-pos (get-in (last headings) [:heading/meta :end-pos])
-                pattern (config/get-heading-pattern format)
+                blocks (db/pull-many '[*] (map (fn [id] [:block/uuid id]) ids))
+                block (first blocks)
+                format (:block/format block)
+                start-pos (get-in block [:block/meta :start-pos])
+                old-end-pos (get-in (last blocks) [:block/meta :end-pos])
+                pattern (config/get-block-pattern format)
                 last-start-pos (atom start-pos)
-                headings (doall
-                          (map (fn [heading]
-                                 (let [content (:heading/content heading)
-                                       level (:heading/level heading)
+                blocks (doall
+                          (map (fn [block]
+                                 (let [content (:block/content block)
+                                       level (:block/level block)
                                        content' (if (= :left direction)
                                                   (subs content 1)
                                                   (str pattern content))
                                        end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
-                                       heading (assoc heading
-                                                      :heading/content content'
-                                                      :heading/level (if (= direction :left)
+                                       block (assoc block
+                                                      :block/content content'
+                                                      :block/level (if (= direction :left)
                                                                        (dec level)
                                                                        (inc level))
-                                                      :heading/meta (merge
-                                                                     (:heading/meta heading)
-                                                                     {:pos @last-start-pos
+                                                      :block/meta (merge
+                                                                     (:block/meta block)
+                                                                     {:start-pos @last-start-pos
                                                                       :end-pos end-pos}))]
                                    (reset! last-start-pos end-pos)
-                                   heading))
-                            headings))
-                file-id (:db/id (:heading/file heading))
+                                   block))
+                            blocks))
+                file-id (:db/id (:block/file block))
                 file (db/entity file-id)
-                page (:heading/page heading)
-                after-headings (rebuild-after-headings repo file old-end-pos @last-start-pos)
-                ;; _ (prn {:headings (map (fn [h] (select-keys h [:heading/content :heading/meta])) headings)
-                ;;         :after-headings after-headings
+                page (:block/page block)
+                after-blocks (rebuild-after-blocks repo file old-end-pos @last-start-pos)
+                ;; _ (prn {:blocks (map (fn [h] (select-keys h [:block/content :block/meta])) blocks)
+                ;;         :after-blocks after-blocks
                 ;;         :last-start-pos @last-start-pos})
                 file-path (:file/path file)
                 file-content (db/get-file file-path)
-                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :heading/content headings)))
+                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
                 modified-time (modified-time-tx page file)]
             (profile
              "Indent/outdent: "
              (repo-handler/transact-react-and-alter-file!
               repo
               (concat
-               headings
-               after-headings
+               blocks
+               after-blocks
                modified-time)
-              {:key :heading/change
-               :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+              {:key :block/change
+               :data (map (fn [block] (assoc block :block/page page)) blocks)}
               [[file-path new-content]])))
           (cycle-collapse! state e))))))
 
 (defn bulk-make-todos
   [state e]
   (when-let [repo (state/get-current-repo)]
-    (let [headings (seq (state/get-selection-headings))]
-      (if (seq headings)
-        (let [ids (map (fn [heading] (when-let [id (dom/attr heading "headingid")]
-                                       (medley/uuid id))) headings)
-              ids (->> (mapcat #(let [children (vec (db/get-heading-children-ids repo %))]
+    (let [blocks (seq (state/get-selection-blocks))]
+      (if (seq blocks)
+        (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                       (medley/uuid id))) blocks)
+              ids (->> (mapcat #(let [children (vec (db/get-block-children-ids repo %))]
                                   (cons % children)) ids)
                        (distinct))
-              headings (db/pull-many '[*] (map (fn [id] [:heading/uuid id]) ids))
-              heading (first headings)
-              format (:heading/format heading)
-              start-pos (get-in heading [:heading/meta :pos])
-              old-end-pos (get-in (last headings) [:heading/meta :end-pos])
-              pattern (config/get-heading-pattern format)
+              blocks (db/pull-many '[*] (map (fn [id] [:block/uuid id]) ids))
+              block (first blocks)
+              format (:block/format block)
+              start-pos (get-in block [:block/meta :start-pos])
+              old-end-pos (get-in (last blocks) [:block/meta :end-pos])
+              pattern (config/get-block-pattern format)
               last-start-pos (atom start-pos)
-              headings (doall
-                        (map (fn [heading]
-                               (let [content (:heading/content heading)
+              blocks (doall
+                        (map (fn [block]
+                               (let [content (:block/content block)
                                      [prefix content] (if-let [col (util/split-first " " content)]
                                                         col
                                                         [content ""])
-                                     level (:heading/level heading)
+                                     level (:block/level block)
                                      new-marker (state/get-preferred-todo)
                                      content' (string/replace-first content
                                                                     format/marker-pattern
                                                                     (str new-marker " "))
                                      content' (str prefix " " content')
                                      end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
-                                     heading (assoc heading
-                                                    :heading/marker new-marker
-                                                    :heading/content content'
-                                                    :heading/meta (merge
-                                                                   (:heading/meta heading)
-                                                                   {:pos @last-start-pos
+                                     block (assoc block
+                                                    :block/marker new-marker
+                                                    :block/content content'
+                                                    :block/meta (merge
+                                                                   (:block/meta block)
+                                                                   {:start-pos @last-start-pos
                                                                     :end-pos end-pos}))]
                                  (reset! last-start-pos end-pos)
-                                 heading))
-                          headings))
-              file-id (:db/id (:heading/file heading))
+                                 block))
+                          blocks))
+              file-id (:db/id (:block/file block))
               file (db/entity file-id)
-              page (:heading/page heading)
-              after-headings (rebuild-after-headings repo file old-end-pos @last-start-pos)
+              page (:block/page block)
+              after-blocks (rebuild-after-blocks repo file old-end-pos @last-start-pos)
               file-path (:file/path file)
               file-content (db/get-file file-path)
-              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :heading/content headings)))
+              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
               modified-time (modified-time-tx page file)]
           (profile
            "Indent/outdent: "
            (repo-handler/transact-react-and-alter-file!
             repo
             (concat
-             headings
-             after-headings
+             blocks
+             after-blocks
              modified-time)
-            {:key :heading/change
-             :data (map (fn [heading] (assoc heading :heading/page page)) headings)}
+            {:key :block/change
+             :data (map (fn [block] (assoc block :block/page page)) blocks)}
             [[file-path new-content]])))
         (cycle-collapse! state e)))))

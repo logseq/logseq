@@ -25,10 +25,10 @@
   [format hiccup]
   (let [transform-fn (fn [hiccup]
                        (hiccup->doc-inner format hiccup))
-        heading-pattern (config/get-heading-pattern format)
+        block-pattern (config/get-block-pattern format)
         map-join (fn [children] (apply str (map transform-fn children)))
-        heading-transform (fn [level children]
-                            (str (apply str (repeat level heading-pattern))
+        block-transform (fn [level children]
+                            (str (apply str (repeat level block-pattern))
                                  " "
                                  (->> (map transform-fn children)
                                       (string/join " "))
@@ -68,12 +68,12 @@
               (let [[tag attrs & children] x
                     result (match tag
                              :head nil
-                             :h1 (heading-transform 1 children)
-                             :h2 (heading-transform 2 children)
-                             :h3 (heading-transform 3 children)
-                             :h4 (heading-transform 4 children)
-                             :h5 (heading-transform 5 children)
-                             :h6 (heading-transform 6 children)
+                             :h1 (block-transform 1 children)
+                             :h2 (block-transform 2 children)
+                             :h3 (block-transform 3 children)
+                             :h4 (block-transform 4 children)
+                             :h5 (block-transform 5 children)
+                             :h6 (block-transform 6 children)
                              :a (let [href (:href attrs)
                                       title (:title attrs)
                                       label (map-join children)
@@ -200,17 +200,12 @@
                      (goog.string.unescapeEntities f)
                      f)) hiccup))
 
-(defonce debug-hiccup (atom nil))
 (defn parse
   [format html]
   (when-not (string/blank? html)
     (let [hiccup (hickory/as-hiccup (hickory/parse html))
           decoded-hiccup (html-decode-hiccup hiccup)]
-      (reset! debug-hiccup decoded-hiccup)
       (hiccup->doc format decoded-hiccup))))
-
-(def img-link
-  [:a {:href "https://www.markdownguide.org/book/", :style "box-sizing: border-box; color: rgb(0, 123, 255); text-decoration: none; background-color: transparent;"} [:img {:src "https://d33wubrfki0l68.cloudfront.net/cb41dd8e38b0543a305f9c56db89b46caa802263/25192/assets/images/book-cover.jpg", :class "card-img", :alt "Markdown Guide book cover", :style "box-sizing: border-box; vertical-align: middle; border-style: none; flex-shrink: 0; width: 205.75px; border-radius: calc(0.25rem - 1px);"}]])
 
 (comment
   ;; | Syntax      | Description | Test Text     |``

@@ -9,13 +9,53 @@
             [frontend.handler :as handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.git :as git-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
             [frontend.date :as date]
             [clojure.walk :as walk]
             [frontend.git :as git]
             [frontend.fs :as fs]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [goog.object :as gobj]))
+
+(defn create!
+  [title]
+  (let [repo (state/get-current-repo)
+        dir (util/get-repo-dir repo)]
+    (when dir
+      (p/let [_ (-> (fs/mkdir (str dir "/" config/default-pages-directory))
+                    (p/catch (fn [_e])))]
+        (let [format (name (state/get-preferred-format))
+              page (string/lower-case title)
+              path (str (string/replace page #"\s+" "_") "." (if (= format "markdown") "md" format))
+              path (str config/default-pages-directory "/" path)
+              file-path (str "/" path)]
+          (p/let [exists? (fs/file-exists? dir file-path)]
+            (if exists?
+              (notification/show!
+               [:p.content
+                "File already exists!"]
+               :error)
+              ;; create the file
+              (let [content (util/default-content-with-title format title)]
+                (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                  (db/reset-file! repo path content)
+                  (git-handler/git-add repo path)
+                  (route-handler/redirect! {:to :page
+                                            :path-params {:name page}})
+                  (let [blocks (db/get-page-blocks page)
+                        last-block (last blocks)]
+                    (js/setTimeout
+                     #(when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
+                        (editor-handler/edit-block! (:block/uuid last-block)
+                                                   0
+                                                   (:block/format last-block)
+                                                   (string/replace (gobj/get first-block "id")
+                                                                   "ls-block"
+                                                                   "edit-block")))
+                     100)))))))))))
 
 (defn page-add-directives!
   [page-name directives]
@@ -29,10 +69,10 @@
           new-directives-content (db/add-directives! page-format directives-content directives)
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
-                          file-path
-                          full-content
-                          {:reset? true
-                           :re-render-root? true}))))
+                               file-path
+                               full-content
+                               {:reset? true
+                                :re-render-root? true}))))
 
 (defn page-remove-directive!
   [page-name k]
@@ -53,10 +93,10 @@
                                    (string/join "\n" lines))
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
-                          file-path
-                          full-content
-                          {:reset? true
-                           :re-render-root? true}))))
+                               file-path
+                               full-content
+                               {:reset? true
+                                :re-render-root? true}))))
 
 (defn published-success-handler
   [page-name]
@@ -78,7 +118,7 @@
    :error))
 
 (defn get-plugins
-  [headings]
+  [blocks]
   (let [plugins (atom {})
         add-plugin #(swap! plugins assoc % true)]
     (walk/postwalk
@@ -97,23 +137,23 @@
              nil)
            x)
          x))
-     (map :heading/body headings))
+     (map :block/body blocks))
     @plugins))
 
 (defn publish-page-as-slide!
   ([page-name project-add-modal]
-   (publish-page-as-slide! page-name (db/get-page-headings page-name) project-add-modal))
-  ([page-name headings project-add-modal]
+   (publish-page-as-slide! page-name (db/get-page-blocks page-name) project-add-modal))
+  ([page-name blocks project-add-modal]
    (project-handler/exists-or-create!
     (fn [project]
       (page-add-directives! page-name {"published" true
                                        "slide" true})
       (let [directives (db/get-page-directives page-name)
-            plugins (get-plugins headings)
+            plugins (get-plugins blocks)
             data {:project project
                   :title page-name
                   :permalink (:permalink directives)
-                  :html (html-export/export-page page-name headings notification/show!)
+                  :html (html-export/export-page page-name blocks notification/show!)
                   :tags (:tags directives)
                   :settings (merge
                              (assoc directives
@@ -135,16 +175,16 @@
            slide? (let [slide (:slide directives)]
                     (or (true? slide)
                         (= "true" slide)))
-           headings (db/get-page-headings page-name)
-           plugins (get-plugins headings)]
+           blocks (db/get-page-blocks page-name)
+           plugins (get-plugins blocks)]
        (if slide?
-         (publish-page-as-slide! page-name headings project-add-modal)
+         (publish-page-as-slide! page-name blocks project-add-modal)
          (do
            (page-add-directives! page-name {"published" true})
            (let [data {:project project
                        :title page-name
                        :permalink (:permalink directives)
-                       :html (html-export/export-page page-name headings notification/show!)
+                       :html (html-export/export-page page-name blocks notification/show!)
                        :tags (:tags directives)
                        :settings (merge directives plugins)
                        :repo (state/get-current-repo)}]
@@ -193,12 +233,12 @@
             (when-let [files-conn (db/get-files-conn repo)]
               (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
-            ;; delete headings
-            (let [headings (db/get-page-headings page-name)
+            ;; delete blocks
+            (let [blocks (db/get-page-blocks page-name)
                   tx-data (mapv
-                           (fn [heading]
-                             [:db.fn/retractEntity [:heading/uuid (:heading/uuid heading)]])
-                           headings)]
+                           (fn [block]
+                             [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                           blocks)]
               (db/transact! tx-data)
               ;; remove file
               (->
@@ -236,15 +276,15 @@
                                               (util/format "[[%s]]" old-original-name)
                                               (util/format "[[%s]]" new-name))]
               (file-handler/alter-file repo
-                                  file-path
-                                  new-content
-                                  {:reset? true
-                                   :re-render-root? false})))))
+                                       file-path
+                                       new-content
+                                       {:reset? true
+                                        :re-render-root? false})))))
 
       ;; TODO: update browser history, remove the current one
 
       ;; Redirect to the new page
       (route-handler/redirect! {:to :page
-                          :path-params {:name (util/encode-str (string/lower-case new-name))}})
+                                :path-params {:name (util/encode-str (string/lower-case new-name))}})
 
       (notification/show! "Page renamed successfully!" :success))))

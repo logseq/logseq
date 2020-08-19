@@ -11,156 +11,156 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
 
-(defn- remove-heading-child!
-  [target-heading parent-heading]
-  (let [child-ids (set (db/get-heading-ids target-heading))]
-    (db/get-heading-content-rec
-     parent-heading
-     (fn [{:heading/keys [uuid level content]}]
+(defn- remove-block-child!
+  [target-block parent-block]
+  (let [child-ids (set (db/get-block-ids target-block))]
+    (db/get-block-content-rec
+     parent-block
+     (fn [{:block/keys [uuid level content]}]
        (if (contains? child-ids uuid)
          ""
          content)))))
 
-(defn- recompute-heading-level
-  [to-heading nested?]
-  (+ (:heading/level to-heading)
+(defn- recompute-block-level
+  [to-block nested?]
+  (+ (:block/level to-block)
      (if nested? 1 0)))
 
-(defn- recompute-heading-content-and-changes
-  [target-heading to-heading nested? same-repo? same-file?]
-  (let [new-level (recompute-heading-level to-heading nested?)
-        target-level (:heading/level target-heading)
-        format (:heading/format target-heading)
-        pattern (config/get-heading-pattern format)
-        heading-changes (atom [])
-        all-content (db/get-heading-content-rec
-                     target-heading
-                     (fn [{:heading/keys [uuid level content]
-                           :as heading}]
+(defn- recompute-block-content-and-changes
+  [target-block to-block nested? same-repo? same-file?]
+  (let [new-level (recompute-block-level to-block nested?)
+        target-level (:block/level target-block)
+        format (:block/format target-block)
+        pattern (config/get-block-pattern format)
+        block-changes (atom [])
+        all-content (db/get-block-content-rec
+                     target-block
+                     (fn [{:block/keys [uuid level content]
+                           :as block}]
                        (let [new-level (+ new-level (- level target-level))
                              new-content (string/replace-first content
                                                                (apply str (repeat level pattern))
                                                                (apply str (repeat new-level pattern)))
-                             heading (cond->
-                                         {:heading/uuid uuid
-                                          :heading/level new-level
-                                          :heading/content new-content
-                                          :heading/page (:heading/page to-heading)}
+                             block (cond->
+                                         {:block/uuid uuid
+                                          :block/level new-level
+                                          :block/content new-content
+                                          :block/page (:block/page to-block)}
 
                                        (not same-repo?)
-                                       (merge (dissoc heading [:heading/level :heading/content]))
+                                       (merge (dissoc block [:block/level :block/content]))
 
                                        (not same-file?)
-                                       (merge {:heading/page (:heading/page to-heading)
-                                               :heading/file (:heading/file to-heading)}))]
-                         (swap! heading-changes conj heading)
+                                       (merge {:block/page (:block/page to-block)
+                                               :block/file (:block/file to-block)}))]
+                         (swap! block-changes conj block)
                          new-content)))]
-    [all-content @heading-changes]))
+    [all-content @block-changes]))
 
 (defn- move-parent-to-child?
-  [target-heading to-heading]
-  (let [to-heading-id (:heading/uuid to-heading)
+  [target-block to-block]
+  (let [to-block-id (:block/uuid to-block)
         result (atom false)
         _ (walk/postwalk
            (fn [form]
              (when (map? form)
-               (when-let [id (:heading/uuid form)]
-                 (when (= id to-heading-id)
+               (when-let [id (:block/uuid form)]
+                 (when (= id to-block-id)
                    (reset! result true))))
              form)
-           target-heading)]
+           target-block)]
     @result))
 
 (defn- compute-target-child?
-  [target-heading to-heading]
-  (let [target-heading-id (:heading/uuid target-heading)
+  [target-block to-block]
+  (let [target-block-id (:block/uuid target-block)
         result (atom false)
         _ (walk/postwalk
            (fn [form]
              (when (map? form)
-               (when-let [id (:heading/uuid form)]
-                 (when (= id target-heading-id)
+               (when-let [id (:block/uuid form)]
+                 (when (= id target-block-id)
                    (reset! result true))))
              form)
-           to-heading)]
+           to-block)]
     @result))
 
-(defn rebuild-dnd-headings
-  [repo file target-child? start-pos target-headings offset-heading-uuid {:keys [delete? same-file?]
+(defn rebuild-dnd-blocks
+  [repo file target-child? start-pos target-blocks offset-block-uuid {:keys [delete? same-file?]
                                                                           :or {delete? false
                                                                                same-file? true}}]
-  (when (seq target-headings)
+  (when (seq target-blocks)
     (let [file-id (:db/id file)
-          target-heading-ids (set (map :heading/uuid target-headings))
-          after-headings (->> (db/get-file-after-headings repo file-id start-pos)
-                              (remove (fn [h] (contains? target-heading-ids (:heading/uuid h)))))
+          target-block-ids (set (map :block/uuid target-blocks))
+          after-blocks (->> (db/get-file-after-blocks repo file-id start-pos)
+                              (remove (fn [h] (contains? target-block-ids (:block/uuid h)))))
 
-          after-headings (cond
+          after-blocks (cond
                            delete?
-                           after-headings
+                           after-blocks
 
-                           (and offset-heading-uuid
-                                (not (contains? (set (map :heading/uuid after-headings)) offset-heading-uuid)))
-                           (concat target-headings after-headings)
+                           (and offset-block-uuid
+                                (not (contains? (set (map :block/uuid after-blocks)) offset-block-uuid)))
+                           (concat target-blocks after-blocks)
 
-                           offset-heading-uuid
-                           (let [[before after] (split-with (fn [h] (not= (:heading/uuid h)
-                                                                          offset-heading-uuid)) after-headings)]
+                           offset-block-uuid
+                           (let [[before after] (split-with (fn [h] (not= (:block/uuid h)
+                                                                          offset-block-uuid)) after-blocks)]
                              (concat (conj (vec before) (first after))
-                                     target-headings
+                                     target-blocks
                                      (rest after)))
                            :else
-                           (concat target-headings after-headings))
-          after-headings (remove nil? after-headings)
+                           (concat target-blocks after-blocks))
+          after-blocks (remove nil? after-blocks)
           ;; _ (prn {:start-pos start-pos
-          ;;         :target-headings target-headings
-          ;;         :after-headings (map (fn [heading]
-          ;;                                (:heading/content heading))
-          ;;                           after-headings)})
+          ;;         :target-blocks target-blocks
+          ;;         :after-blocks (map (fn [block]
+          ;;                                (:block/content block))
+          ;;                           after-blocks)})
           last-start-pos (atom start-pos)
           result (mapv
-                  (fn [{:heading/keys [uuid meta content level page] :as heading}]
+                  (fn [{:block/keys [uuid meta content level page] :as block}]
                     (let [content (str (util/trim-safe content) "\n")
-                          target-heading? (contains? target-heading-ids uuid)
-                          content-length (if target-heading?
+                          target-block? (contains? target-block-ids uuid)
+                          content-length (if target-block?
                                            (utf8/length (utf8/encode content))
-                                           (- (:end-pos meta) (:pos meta)))
+                                           (- (:end-pos meta) (:start-pos meta)))
                           new-end-pos (+ @last-start-pos content-length)
-                          new-meta {:pos @last-start-pos
+                          new-meta {:start-pos @last-start-pos
                                     :end-pos new-end-pos}]
                       (reset! last-start-pos new-end-pos)
-                      (let [data {:heading/uuid uuid
-                                  :heading/meta new-meta}]
+                      (let [data {:block/uuid uuid
+                                  :block/meta new-meta}]
                         (cond
-                          (and target-heading? (not same-file?))
+                          (and target-block? (not same-file?))
                           (merge
-                           (dissoc heading :heading/idx :heading/dummy?)
+                           (dissoc block :block/idx :block/dummy?)
                            data)
 
-                          target-heading?
+                          target-block?
                           (merge
                            data
-                           {:heading/level level
-                            :heading/content content
-                            :heading/page page})
+                           {:block/level level
+                            :block/content content
+                            :block/page page})
 
                           :else
                           data))))
-                  after-headings)]
+                  after-blocks)]
       result)))
 
 (defn- get-start-pos
-  [heading]
-  (get-in heading [:heading/meta :pos]))
+  [block]
+  (get-in block [:block/meta :start-pos]))
 
 (defn- get-end-pos
-  [heading]
-  (get-in heading [:heading/meta :end-pos]))
+  [block]
+  (get-in block [:block/meta :end-pos]))
 
 (defn- compute-direction
-  [target-heading top-heading nested? top? target-child?]
+  [target-block top-block nested? top? target-child?]
   (cond
-    (= top-heading target-heading)
+    (= top-block target-block)
     :down
 
     (and target-child? nested?)
@@ -172,85 +172,85 @@
     :else
     :up))
 
-(defn- compute-after-headings-in-same-file
-  [repo target-heading to-heading direction top? nested? target-child? target-file original-top-heading-start-pos heading-changes]
+(defn- compute-after-blocks-in-same-file
+  [repo target-block to-block direction top? nested? target-child? target-file original-top-block-start-pos block-changes]
   (cond
     top?
-    (rebuild-dnd-headings repo target-file target-child?
-                          original-top-heading-start-pos
-                          heading-changes
+    (rebuild-dnd-blocks repo target-file target-child?
+                          original-top-block-start-pos
+                          block-changes
                           nil
                           {})
 
     (= direction :up)
-    (let [offset-heading-id (if nested?
-                              (:heading/uuid to-heading)
-                              (last (db/get-heading-ids to-heading)))
+    (let [offset-block-id (if nested?
+                              (:block/uuid to-block)
+                              (last (db/get-block-ids to-block)))
           offset-end-pos (get-end-pos
-                          (db/entity repo [:heading/uuid offset-heading-id]))]
-      (rebuild-dnd-headings repo target-file target-child?
+                          (db/entity repo [:block/uuid offset-block-id]))]
+      (rebuild-dnd-blocks repo target-file target-child?
                             offset-end-pos
-                            heading-changes
+                            block-changes
                             nil
                             {}))
 
     (= direction :down)
-    (let [offset-heading-id (if nested?
-                              (:heading/uuid to-heading)
-                              (last (db/get-heading-ids to-heading)))
-          target-start-pos (get-start-pos target-heading)]
-      (rebuild-dnd-headings repo target-file target-child?
+    (let [offset-block-id (if nested?
+                              (:block/uuid to-block)
+                              (last (db/get-block-ids to-block)))
+          target-start-pos (get-start-pos target-block)]
+      (rebuild-dnd-blocks repo target-file target-child?
                             target-start-pos
-                            heading-changes
-                            offset-heading-id
+                            block-changes
+                            offset-block-id
                             {}))))
 
-;; TODO: still could be different pages, e.g. move a heading from one journal to another journal
-(defn- move-heading-in-same-file
-  [repo target-heading to-heading top-heading bottom-heading nested? top? target-child? direction target-content target-file original-top-heading-start-pos heading-changes]
-  (if (move-parent-to-child? target-heading to-heading)
+;; TODO: still could be different pages, e.g. move a block from one journal to another journal
+(defn- move-block-in-same-file
+  [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
+  (if (move-parent-to-child? target-block to-block)
     nil
-    (let [old-file-content (db/get-file (:file/path (db/entity (:db/id (:heading/file target-heading)))))
+    (let [old-file-content (db/get-file (:file/path (db/entity (:db/id (:block/file target-block)))))
           old-file-content (utf8/encode old-file-content)
           subs (fn [start-pos end-pos] (utf8/substring old-file-content start-pos end-pos))
-          bottom-content (db/get-heading-content-rec bottom-heading)
-          top-content (remove-heading-child! bottom-heading top-heading)
-          top-area (subs 0 (get-start-pos top-heading))
+          bottom-content (db/get-block-content-rec bottom-block)
+          top-content (remove-block-child! bottom-block top-block)
+          top-area (subs 0 (get-start-pos top-block))
           bottom-area (subs
                        (cond
                          (and nested? (= direction :down))
-                         (get-end-pos bottom-heading)
+                         (get-end-pos bottom-block)
                          target-child?
-                         (db/get-heading-end-pos-rec repo top-heading)
+                         (db/get-block-end-pos-rec repo top-block)
                          :else
-                         (db/get-heading-end-pos-rec repo bottom-heading))
+                         (db/get-block-end-pos-rec repo bottom-block))
                        nil)
           between-area (if (= direction :down)
-                         (subs (db/get-heading-end-pos-rec repo target-heading) (get-start-pos to-heading))
-                         (subs (db/get-heading-end-pos-rec repo to-heading) (get-start-pos target-heading)))
+                         (subs (db/get-block-end-pos-rec repo target-block) (get-start-pos to-block))
+                         (subs (db/get-block-end-pos-rec repo to-block) (get-start-pos target-block)))
           up-content (when (= direction :up)
                        (cond
                          nested?
-                         (util/join-newline (:heading/content top-heading)
+                         (util/join-newline (:block/content top-block)
                                             target-content
                                             (if target-child?
-                                              (remove-heading-child! target-heading (:heading/children to-heading))
-                                              (db/get-heading-content-rec (:heading/children top-heading))))
+                                              (remove-block-child! target-block (:block/children to-block))
+                                              (db/get-block-content-rec (:block/children top-block))))
                          (and top? target-child?)
-                         (util/join-newline target-content (remove-heading-child! target-heading to-heading))
+                         (util/join-newline target-content (remove-block-child! target-block to-block))
 
                          top?
                          (util/join-newline target-content top-content)
 
                          :else
                          (let [top-content (if target-child?
-                                             (remove-heading-child! target-heading to-heading)
+                                             (remove-block-child! target-block to-block)
                                              top-content)]
                            (util/join-newline top-content target-content))))
           down-content (when (= direction :down)
                          (cond
                            nested?
-                           (util/join-newline (:heading/content bottom-heading)
+                           (util/join-newline (:block/content bottom-block)
                                               target-content)
                            target-child?
                            (util/join-newline top-content target-content)
@@ -274,26 +274,26 @@
                              between-area
                              down-content
                              bottom-area))
-          after-headings (->> (compute-after-headings-in-same-file repo target-heading to-heading direction top? nested? target-child? target-file original-top-heading-start-pos heading-changes)
+          after-blocks (->> (compute-after-blocks-in-same-file repo target-block to-block direction top? nested? target-child? target-file original-top-block-start-pos block-changes)
                               (remove nil?))
-          path (:file/path (db/entity repo (:db/id (:heading/file to-heading))))
+          path (:file/path (db/entity repo (:db/id (:block/file to-block))))
           modified-time (let [modified-at (tc/to-long (t/now))]
                           (->
-                           [[:db/add (:db/id (:heading/page target-heading)) :page/last-modified-at modified-at]
-                            [:db/add (:db/id (:heading/page to-heading)) :page/last-modified-at modified-at]
-                            [:db/add (:db/id (:heading/file target-heading)) :file/last-modified-at modified-at]
-                            [:db/add (:db/id (:heading/file to-heading)) :file/last-modified-at modified-at]]
+                           [[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
+                            [:db/add (:db/id (:block/page to-block)) :page/last-modified-at modified-at]
+                            [:db/add (:db/id (:block/file target-block)) :file/last-modified-at modified-at]
+                            [:db/add (:db/id (:block/file to-block)) :file/last-modified-at modified-at]]
                            distinct
                            vec))]
       (profile
-       "Move heading in the same file: "
+       "Move block in the same file: "
        (repo-handler/transact-react-and-alter-file!
         repo
         (concat
-         after-headings
+         after-blocks
          modified-time)
-        {:key :heading/change
-         :data heading-changes}
+        {:key :block/change
+         :data block-changes}
         [[path new-file-content]]))
       ;; (alter-file repo
       ;;             path
@@ -301,26 +301,26 @@
       ;;             {:re-render-root? true})
       )))
 
-(defn- move-heading-in-different-files
-  [repo target-heading to-heading top-heading bottom-heading nested? top? target-child? direction target-content target-file original-top-heading-start-pos heading-changes]
-  (let [target-file (db/entity repo (:db/id (:heading/file target-heading)))
+(defn- move-block-in-different-files
+  [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
+  (let [target-file (db/entity repo (:db/id (:block/file target-block)))
         target-file-path (:file/path target-file)
         target-file-content (db/get-file repo target-file-path)
-        to-file (db/entity repo (:db/id (:heading/file to-heading)))
+        to-file (db/entity repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-heading-end-pos (db/get-heading-end-pos-rec repo target-heading)
-        to-heading-start-pos (get-start-pos to-heading)
-        to-heading-end-pos (db/get-heading-end-pos-rec repo to-heading)
+        target-block-end-pos (db/get-block-end-pos-rec repo target-block)
+        to-block-start-pos (get-start-pos to-block)
+        to-block-end-pos (db/get-block-end-pos-rec repo to-block)
         new-target-file-content (utf8/delete! target-file-content
-                                              (get-start-pos target-heading)
-                                              target-heading-end-pos)
+                                              (get-start-pos target-block)
+                                              target-block-end-pos)
         to-file-content (utf8/encode (db/get-file repo to-file-path))
         new-to-file-content (let [separate-pos (cond nested?
-                                                     (get-end-pos to-heading)
+                                                     (get-end-pos to-block)
                                                      top?
-                                                     to-heading-start-pos
+                                                     to-block-start-pos
                                                      :else
-                                                     to-heading-end-pos)]
+                                                     to-block-end-pos)]
                               (string/trim
                                (util/join-newline
                                 (utf8/substring to-file-content 0 separate-pos)
@@ -328,185 +328,185 @@
                                 (utf8/substring to-file-content separate-pos))))
         modified-time (let [modified-at (tc/to-long (t/now))]
                         (->
-                         [[:db/add (:db/id (:heading/page target-heading)) :page/last-modified-at modified-at]
-                          [:db/add (:db/id (:heading/page to-heading)) :page/last-modified-at modified-at]
-                          [:db/add (:db/id (:heading/file target-heading)) :file/last-modified-at modified-at]
-                          [:db/add (:db/id (:heading/file to-heading)) :file/last-modified-at modified-at]]
+                         [[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
+                          [:db/add (:db/id (:block/page to-block)) :page/last-modified-at modified-at]
+                          [:db/add (:db/id (:block/file target-block)) :file/last-modified-at modified-at]
+                          [:db/add (:db/id (:block/file to-block)) :file/last-modified-at modified-at]]
                          distinct
                          vec))
-        target-after-headings (rebuild-dnd-headings repo target-file target-child?
-                                                    (get-start-pos target-heading)
-                                                    heading-changes nil {:delete? true})
-        to-after-headings (cond
+        target-after-blocks (rebuild-dnd-blocks repo target-file target-child?
+                                                    (get-start-pos target-block)
+                                                    block-changes nil {:delete? true})
+        to-after-blocks (cond
                             top?
-                            (rebuild-dnd-headings repo to-file target-child?
-                                                  (get-start-pos to-heading)
-                                                  heading-changes
+                            (rebuild-dnd-blocks repo to-file target-child?
+                                                  (get-start-pos to-block)
+                                                  block-changes
                                                   nil
                                                   {:same-file? false})
 
                             :else
-                            (let [offset-heading-id (if nested?
-                                                      (:heading/uuid to-heading)
-                                                      (last (db/get-heading-ids to-heading)))
+                            (let [offset-block-id (if nested?
+                                                      (:block/uuid to-block)
+                                                      (last (db/get-block-ids to-block)))
                                   offset-end-pos (get-end-pos
-                                                  (db/entity repo [:heading/uuid offset-heading-id]))]
-                              (rebuild-dnd-headings repo to-file target-child?
+                                                  (db/entity repo [:block/uuid offset-block-id]))]
+                              (rebuild-dnd-blocks repo to-file target-child?
                                                     offset-end-pos
-                                                    heading-changes
+                                                    block-changes
                                                     nil
                                                     {:same-file? false})))]
     (profile
-     "Move heading between different files: "
+     "Move block between different files: "
      (repo-handler/transact-react-and-alter-file!
       repo
       (concat
-       target-after-headings
-       to-after-headings
+       target-after-blocks
+       to-after-blocks
        modified-time)
-      {:key :heading/change
-       :data (conj heading-changes target-heading)}
+      {:key :block/change
+       :data (conj block-changes target-block)}
       [[target-file-path new-target-file-content]
        [to-file-path new-to-file-content]]))))
 
-(defn- move-heading-in-different-repos
-  [target-heading-repo to-heading-repo target-heading to-heading top-heading bottom-heading nested? top? target-child? direction target-content target-file original-top-heading-start-pos heading-changes]
-  (let [target-file (db/entity target-heading-repo (:db/id (:heading/file target-heading)))
+(defn- move-block-in-different-repos
+  [target-block-repo to-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
+  (let [target-file (db/entity target-block-repo (:db/id (:block/file target-block)))
         target-file-path (:file/path target-file)
-        target-file-content (db/get-file target-heading-repo target-file-path)
-        to-file (db/entity to-heading-repo (:db/id (:heading/file to-heading)))
+        target-file-content (db/get-file target-block-repo target-file-path)
+        to-file (db/entity to-block-repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-heading-end-pos (db/get-heading-end-pos-rec target-heading-repo target-heading)
-        to-heading-start-pos (get-start-pos to-heading)
-        to-heading-end-pos (db/get-heading-end-pos-rec to-heading-repo to-heading)
+        target-block-end-pos (db/get-block-end-pos-rec target-block-repo target-block)
+        to-block-start-pos (get-start-pos to-block)
+        to-block-end-pos (db/get-block-end-pos-rec to-block-repo to-block)
         new-target-file-content (utf8/delete! target-file-content
-                                              (get-start-pos target-heading)
-                                              target-heading-end-pos)
-        to-file-content (utf8/encode (db/get-file to-heading-repo to-file-path))
+                                              (get-start-pos target-block)
+                                              target-block-end-pos)
+        to-file-content (utf8/encode (db/get-file to-block-repo to-file-path))
         new-to-file-content (let [separate-pos (cond nested?
-                                                     (get-end-pos to-heading)
+                                                     (get-end-pos to-block)
                                                      top?
-                                                     to-heading-start-pos
+                                                     to-block-start-pos
                                                      :else
-                                                     to-heading-end-pos)]
+                                                     to-block-end-pos)]
                               (string/trim
                                (util/join-newline
                                 (utf8/substring to-file-content 0 separate-pos)
                                 target-content
                                 (utf8/substring to-file-content separate-pos))))
         target-delete-tx (map (fn [id]
-                                [:db.fn/retractEntity [:heading/uuid id]])
-                           (db/get-heading-ids target-heading))
+                                [:db.fn/retractEntity [:block/uuid id]])
+                           (db/get-block-ids target-block))
         [target-modified-time to-modified-time]
         (let [modified-at (tc/to-long (t/now))]
-          [[[:db/add (:db/id (:heading/page target-heading)) :page/last-modified-at modified-at]
-            [:db/add (:db/id (:heading/file target-heading)) :file/last-modified-at modified-at]]
-           [[:db/add (:db/id (:heading/page to-heading)) :page/last-modified-at modified-at]
-            [:db/add (:db/id (:heading/file to-heading)) :file/last-modified-at modified-at]]])
-        target-after-headings (rebuild-dnd-headings target-heading-repo target-file target-child?
-                                                    (get-start-pos target-heading)
-                                                    heading-changes nil {:delete? true})
-        to-after-headings (cond
+          [[[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
+            [:db/add (:db/id (:block/file target-block)) :file/last-modified-at modified-at]]
+           [[:db/add (:db/id (:block/page to-block)) :page/last-modified-at modified-at]
+            [:db/add (:db/id (:block/file to-block)) :file/last-modified-at modified-at]]])
+        target-after-blocks (rebuild-dnd-blocks target-block-repo target-file target-child?
+                                                    (get-start-pos target-block)
+                                                    block-changes nil {:delete? true})
+        to-after-blocks (cond
                             top?
-                            (rebuild-dnd-headings to-heading-repo to-file target-child?
-                                                  (get-start-pos to-heading)
-                                                  heading-changes
+                            (rebuild-dnd-blocks to-block-repo to-file target-child?
+                                                  (get-start-pos to-block)
+                                                  block-changes
                                                   nil
                                                   {:same-file? false})
 
                             :else
-                            (let [offset-heading-id (if nested?
-                                                      (:heading/uuid to-heading)
-                                                      (last (db/get-heading-ids to-heading)))
+                            (let [offset-block-id (if nested?
+                                                      (:block/uuid to-block)
+                                                      (last (db/get-block-ids to-block)))
                                   offset-end-pos (get-end-pos
-                                                  (db/entity to-heading-repo [:heading/uuid offset-heading-id]))]
-                              (rebuild-dnd-headings to-heading-repo to-file target-child?
+                                                  (db/entity to-block-repo [:block/uuid offset-block-id]))]
+                              (rebuild-dnd-blocks to-block-repo to-file target-child?
                                                     offset-end-pos
-                                                    heading-changes
+                                                    block-changes
                                                     nil
                                                     {:same-file? false})))]
     (profile
-     "[Target file] Move heading between different files: "
+     "[Target file] Move block between different files: "
      (repo-handler/transact-react-and-alter-file!
-      target-heading-repo
+      target-block-repo
       (concat
        target-delete-tx
-       target-after-headings
+       target-after-blocks
        target-modified-time)
-      {:key :heading/change
-       :data [(dissoc target-heading :heading/children)]}
+      {:key :block/change
+       :data [(dissoc target-block :block/children)]}
       [[target-file-path new-target-file-content]]))
 
     (profile
-     "[Destination file] Move heading between different files: "
+     "[Destination file] Move block between different files: "
      (repo-handler/transact-react-and-alter-file!
-      to-heading-repo
+      to-block-repo
       (concat
-       to-after-headings
+       to-after-blocks
        to-modified-time)
-      {:key :heading/change
-       :data [heading-changes]}
+      {:key :block/change
+       :data [block-changes]}
       [[to-file-path new-to-file-content]]))))
 
-(defn move-heading
+(defn move-block
   "There can be at least 3 possible situations:
-  1. Move a heading in the same file (either top-to-bottom or bottom-to-top).
-  2. Move a heading between two different files.
-  3. Move a heading between two files in different repos.
+  1. Move a block in the same file (either top-to-bottom or bottom-to-top).
+  2. Move a block between two different files.
+  3. Move a block between two files in different repos.
 
   Notes:
-  1. Those two headings might have different formats, e.g. one is `org` and another is `markdown`,
+  1. Those two blocks might have different formats, e.g. one is `org` and another is `markdown`,
      we don't handle this now. TODO: transform between different formats in mldoc.
-  2. Sometimes we might need to move a parent heading to it's own child.
+  2. Sometimes we might need to move a parent block to it's own child.
   "
-  [target-heading to-heading target-dom-id top? nested?]
-  (when (and target-heading to-heading (:heading/format target-heading) (:heading/format to-heading))
+  [target-block to-block target-dom-id top? nested?]
+  (when (and target-block to-block (:block/format target-block) (:block/format to-block))
     (cond
-      (not= (:heading/format target-heading)
-            (:heading/format to-heading))
+      (not= (:block/format target-block)
+            (:block/format to-block))
       (notification/show!
        (util/format "Sorry, you can't move a block of format %s to another file of format %s."
-                    (:heading/format target-heading)
-                    (:heading/format to-heading))
+                    (:block/format target-block)
+                    (:block/format to-block))
        :error)
 
-      (= (:heading/uuid target-heading) (:heading/uuid to-heading))
+      (= (:block/uuid target-block) (:block/uuid to-block))
       nil
 
       :else
-      (let [pattern (config/get-heading-pattern (:heading/format to-heading))
-            target-heading-repo (:heading/repo target-heading)
-            to-heading-repo (:heading/repo to-heading)
-            target-heading (assoc target-heading
-                                  :heading/meta
-                                  (:heading/meta (db/entity target-heading-repo [:heading/uuid (:heading/uuid target-heading)])))
-            to-heading (assoc to-heading
-                              :heading/meta
-                              (:heading/meta (db/entity [:heading/uuid (:heading/uuid to-heading)])))
-            same-repo? (= target-heading-repo to-heading-repo)
-            target-file (:heading/file target-heading)
+      (let [pattern (config/get-block-pattern (:block/format to-block))
+            target-block-repo (:block/repo target-block)
+            to-block-repo (:block/repo to-block)
+            target-block (assoc target-block
+                                  :block/meta
+                                  (:block/meta (db/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
+            to-block (assoc to-block
+                              :block/meta
+                              (:block/meta (db/entity [:block/uuid (:block/uuid to-block)])))
+            same-repo? (= target-block-repo to-block-repo)
+            target-file (:block/file target-block)
             same-file? (and
                         same-repo?
                         (= (:db/id target-file)
-                           (:db/id (:heading/file to-heading))))
-            [top-heading bottom-heading] (if same-file?
-                                           (if (< (get-start-pos target-heading)
-                                                  (get-start-pos to-heading))
-                                             [target-heading to-heading]
-                                             [to-heading target-heading])
+                           (:db/id (:block/file to-block))))
+            [top-block bottom-block] (if same-file?
+                                           (if (< (get-start-pos target-block)
+                                                  (get-start-pos to-block))
+                                             [target-block to-block]
+                                             [to-block target-block])
                                            [nil nil])
-            target-child? (compute-target-child? target-heading to-heading)
-            direction (compute-direction target-heading top-heading nested? top? target-child?)
-            original-top-heading-start-pos (get-start-pos top-heading)
-            [target-content heading-changes] (recompute-heading-content-and-changes target-heading to-heading nested? same-repo? same-file?)]
+            target-child? (compute-target-child? target-block to-block)
+            direction (compute-direction target-block top-block nested? top? target-child?)
+            original-top-block-start-pos (get-start-pos top-block)
+            [target-content block-changes] (recompute-block-content-and-changes target-block to-block nested? same-repo? same-file?)]
         (cond
           same-file?
-          (move-heading-in-same-file target-heading-repo target-heading to-heading top-heading bottom-heading nested? top? target-child? direction target-content target-file original-top-heading-start-pos heading-changes)
+          (move-block-in-same-file target-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes)
 
           ;; same repo but different files
           same-repo?
-          (move-heading-in-different-files target-heading-repo target-heading to-heading top-heading bottom-heading nested? top? target-child? direction target-content target-file original-top-heading-start-pos heading-changes)
+          (move-block-in-different-files target-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes)
 
           ;; different repos
           :else
-          (move-heading-in-different-repos target-heading-repo to-heading-repo target-heading to-heading top-heading bottom-heading nested? top? target-child? direction target-content target-file original-top-heading-start-pos heading-changes))))))
+          (move-block-in-different-repos target-block-repo to-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes))))))

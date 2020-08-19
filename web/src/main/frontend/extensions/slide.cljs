@@ -11,8 +11,8 @@
   js/window.Reveal)
 
 (defn- with-properties
-  [m heading]
-  (let [properties (:heading/properties heading)]
+  [m block]
+  (let [properties (:block/properties block)]
     (if (seq properties)
       (merge m
              (medley/map-keys
@@ -44,14 +44,14 @@
     (for [[idx sections] (medley/indexed sections)]
       (if (> (count sections) 1)       ; nested
         [:section {:key (str "slide-section-" idx)}
-         (for [[idx2 [heading heading-cp]] (medley/indexed sections)]
+         (for [[idx2 [block block-cp]] (medley/indexed sections)]
            [:section (-> {:key (str "slide-section-" idx "-" idx2)}
-                         (with-properties heading))
-            heading-cp])]
-        (let [[heading heading-cp] (first sections)]
+                         (with-properties block))
+            block-cp])]
+        (let [[block block-cp] (first sections)]
           [:section (-> {:key (str "slide-section-" idx)}
-                        (with-properties heading))
-           heading-cp])))]])
+                        (with-properties block))
+           block-cp])))]])
 
 (rum/defc slide < rum/reactive
   {:did-mount (fn [state]

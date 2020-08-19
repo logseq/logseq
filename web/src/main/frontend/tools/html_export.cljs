@@ -15,37 +15,37 @@
 ;; It could be better that we can reuse some parts of this module in a nodejs tool,
 ;; so users don't have to use the web for exporting to htmls or publishing.
 
-(defn- build-heading
-  [config heading]
-  (let [body (:heading/body heading)
-        heading (hiccup/build-heading-part config heading)]
-    [:div.heading
-     heading
+(defn- build-block
+  [config block]
+  (let [body (:block/body block)
+        block (hiccup/build-block-part config block)]
+    [:div.block
+     block
      (when (seq body)
        (for [child body]
          (do
-           (hiccup/block config child))))]))
+           (hiccup/block-cp config child))))]))
 
 (defn export-page
-  [page-name headings show-notification!]
+  [page-name blocks show-notification!]
   (let [{:keys [slide] :as directives} (db/get-page-directives page-name)
         slide? slide
-        headings (if (:heading/pre-heading? (first headings))
-                   (rest headings)
-                   headings)]
-    (if (seq headings)
+        blocks (if (:block/pre-block? (first blocks))
+                   (rest blocks)
+                   blocks)]
+    (if (seq blocks)
       (let [config {:html-export? true :slide? slide?}
             hiccup (if slide?
-                     (let [sections (hiccup/build-slide-sections headings
+                     (let [sections (hiccup/build-slide-sections blocks
                                                                  (merge
                                                                   config
                                                                   {:id "slide"
                                                                    :start-level 2})
-                                                                 build-heading)]
+                                                                 build-block)]
                        (slide/slide-content false "" sections))
                      [:div.page
-                      (for [heading headings]
-                        (build-heading config heading))])
+                      (for [block blocks]
+                        (build-block config block))])
             remove-attrs #{:on-click :on-change}
             hiccup (walk/postwalk (fn [f]
                                     (if (and (map? f)

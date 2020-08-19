@@ -4,12 +4,13 @@
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
             [frontend.components.hiccup :as hiccup]
-            [frontend.components.heading :as heading]
+            [frontend.components.block :as block]
             [frontend.extensions.graph-2d :as graph-2d]
             [frontend.components.onboarding :as onboarding]
             [frontend.handler :as handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.util :as util]
@@ -21,9 +22,9 @@
             [goog.object :as gobj]
             [frontend.graph :as graph]))
 
-(rum/defc heading-cp < rum/reactive
-  [repo idx heading]
-  (let [id (:heading/uuid heading)]
+(rum/defc block-cp < rum/reactive
+  [repo idx block]
+  (let [id (:block/uuid block)]
     (page/page {:parameters {:path {:name (str id)}}
                 :sidebar? true
                 :sidebar/idx idx
@@ -34,7 +35,7 @@
   (let [theme (:ui/theme @state/state)
         dark? (= theme "dark")
         graph (if (util/uuid-string? page)
-                (db/build-heading-graph (uuid page) theme)
+                (db/build-block-graph (uuid page) theme)
                 (db/build-page-graph page theme))]
     (when (seq (:nodes graph))
       [:div.sidebar-item.flex-col.flex-1
@@ -90,7 +91,7 @@
     [[:a {:on-click (fn [e]
                       (util/stop e)
                       (if-not (db/entity [:page/name "contents"])
-                        (editor-handler/create-new-page! "contents")
+                        (page-handler/create! "contents")
                         (route-handler/redirect! {:to :page
                                                   :path-params {:name "contents"}})))}
       "Contents"]
@@ -106,22 +107,22 @@
     [(str "Graph of " (util/capitalize-all block-data))
      (page-graph block-data)]
 
-    :heading-ref
+    :block-ref
     ["Block reference"
-     (let [heading (:heading block-data)
-           heading-id (:heading/uuid heading)
-           format (:heading/format heading)]
+     (let [block (:block block-data)
+           block-id (:block/uuid block)
+           format (:block/format block)]
        [[:div.ml-2.mt-1
-         (heading/heading-parents repo heading-id format)]
+         (block/block-parents repo block-id format)]
         [:div.ml-2
-         (heading-cp repo idx heading)]])]
+         (block-cp repo idx block)]])]
 
-    :heading
-    (let [heading-id (:heading/uuid block-data)
-          format (:heading/format block-data)]
-      [(heading/heading-parents repo heading-id format)
+    :block
+    (let [block-id (:block/uuid block-data)
+          format (:block/format block-data)]
+      [(block/block-parents repo block-id format)
        [:div.ml-2
-        (heading-cp repo idx block-data)]])
+        (block-cp repo idx block-data)]])
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
@@ -135,11 +136,11 @@
     :page-presentation
     (let [page-name (get-in block-data [:page :page/name])
           journal? (:journal? block-data)
-          headings (db/get-page-headings repo page-name)
-          headings (if journal?
-                     (rest headings)
-                     headings)
-          sections (hiccup/build-slide-sections headings {:id "slide-reveal-js"
+          blocks (db/get-page-blocks repo page-name)
+          blocks (if journal?
+                     (rest blocks)
+                     blocks)
+          sections (hiccup/build-slide-sections blocks {:id "slide-reveal-js"
                                                           :start-level 2
                                                           :slide? true
                                                           :sidebar? true})]

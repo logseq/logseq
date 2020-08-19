@@ -237,57 +237,57 @@
 
     :else
     (case key
-      :heading/change
+      :block/change
       (when (seq data)
-        (let [headings data
-              pre-heading? (:heading/pre-heading? (first headings))
+        (let [blocks data
+              pre-block? (:block/pre-block? (first blocks))
               current-priority (get-current-priority)
               current-marker (get-current-marker)
               current-page-id (:page/id (get-current-page))
-              {:heading/keys [page]} (first headings)
+              {:block/keys [page]} (first blocks)
               handler-keys (->>
                             (util/concat-without-nil
                              (mapcat
-                              (fn [heading]
-                                (when-let [page-id (:db/id (:heading/page heading))]
-                                  [[:headings (:heading/uuid heading)]
-                                   [:page/headings page-id]
+                              (fn [block]
+                                (when-let [page-id (:db/id (:block/page block))]
+                                  [[:blocks (:block/uuid block)]
+                                   [:page/blocks page-id]
                                    [:page/ref-pages page-id]]))
-                              headings)
+                              blocks)
 
-                             (when pre-heading?
+                             (when pre-block?
                                [[:contents]])
 
                              ;; affected priority
                              (when current-priority
-                               [[:priority/headings current-priority]])
+                               [[:priority/blocks current-priority]])
 
                              (when current-marker
-                               [[:marker/headings current-marker]])
+                               [[:marker/blocks current-marker]])
 
                              (when current-page-id
                                [[:page/ref-pages current-page-id]
-                                [:page/refed-headings current-page-id]
+                                [:page/refed-blocks current-page-id]
                                 [:page/mentioned-pages current-page-id]])
 
                              ;; refed-pages
                              (apply concat
-                               (for [{:heading/keys [ref-pages]} headings]
+                               (for [{:block/keys [ref-pages]} blocks]
                                  (map (fn [page]
                                         (when-let [page (entity [:page/name (:page/name page)])]
-                                          [:page/refed-headings (:db/id page)]))
+                                          [:page/refed-blocks (:db/id page)]))
                                    ref-pages)))
 
-                             ;; refed-headings
+                             ;; refed-blocks
                              (apply concat
-                               (for [{:heading/keys [ref-headings]} headings]
-                                 (map (fn [ref-heading]
-                                        [:heading/refed-headings (last ref-heading)])
-                                   ref-headings))))
+                               (for [{:block/keys [ref-blocks]} blocks]
+                                 (map (fn [ref-block]
+                                        [:block/refed-blocks (last ref-block)])
+                                   ref-blocks))))
                             (distinct))
               refed-pages (map
                             (fn [[k page-id]]
-                              (if (= k :page/refed-headings)
+                              (if (= k :page/refed-blocks)
                                 [:page/ref-pages page-id]))
                             handler-keys)
               custom-queries (some->>
@@ -297,10 +297,10 @@
                                       (keys @query-state))
                               (map (fn [v]
                                      (vec (drop 1 v)))))
-              heading-blocks (some->>
+              block-blocks (some->>
                               (filter (fn [v]
                                         (and (= (first v) (state/get-current-repo))
-                                             (= (second v) :heading/block)))
+                                             (= (second v) :block/block)))
                                       (keys @query-state))
                               (map (fn [v]
                                      (vec (drop 1 v)))))]
@@ -309,7 +309,7 @@
             handler-keys
             refed-pages
             custom-queries
-            heading-blocks)
+            block-blocks)
            distinct)))
       [[key]])))
 
@@ -382,53 +382,53 @@
     input))
 
 (defn- sort-by-pos
-  [headings]
+  [blocks]
   (sort-by
-   #(get-in % [:heading/meta :pos])
-   headings))
+   #(get-in % [:block/meta :start-pos])
+   blocks))
 
-(defn- sort-headings
-  [headings]
-  (let [pages-ids (map (comp :db/id :heading/page) headings)
+(defn- sort-blocks
+  [blocks]
+  (let [pages-ids (map (comp :db/id :block/page) blocks)
         pages (pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
-        headings (map
-                   (fn [heading]
-                     (assoc heading :heading/page
-                            (get pages-map (:db/id (:heading/page heading)))))
-                   headings)]
-    (sort-by-pos headings)))
+        blocks (map
+                   (fn [block]
+                     (assoc block :block/page
+                            (get pages-map (:db/id (:block/page block)))))
+                   blocks)]
+    (sort-by-pos blocks)))
 
 (defn group-by-page
-  [headings]
-  (some->> headings
-           (group-by :heading/page)
-           (sort-by (fn [[p headings]] (:page/last-modified-at p)) >)))
+  [blocks]
+  (some->> blocks
+           (group-by :block/page)
+           (sort-by (fn [[p blocks]] (:page/last-modified-at p)) >)))
 
 (defn- with-repo
-  [repo headings]
-  (map (fn [heading]
-         (assoc heading :heading/repo repo))
-    headings))
+  [repo blocks]
+  (map (fn [block]
+         (assoc block :block/repo repo))
+    blocks))
 
 (defn get-block-refs-count
   [repo]
   (->> (d/q
          '[:find ?id2 ?id1
            :where
-           [?id1 :heading/ref-headings ?id2]]
+           [?id1 :block/ref-blocks ?id2]]
          (get-conn repo))
        (map first)
        (frequencies)))
 
 (defn- with-block-refs-count
-  [repo headings]
-  (let [db-ids (map :db/id headings)
+  [repo blocks]
+  (let [db-ids (map :db/id blocks)
         refs (get-block-refs-count repo)]
-    (map (fn [heading]
-           (assoc heading :heading/block-refs-count
-                  (get refs (:db/id heading))))
-      headings)))
+    (map (fn [block]
+           (assoc block :block/block-refs-count
+                  (get refs (:db/id block))))
+      blocks)))
 
 (defn custom-query
   ([query]
@@ -455,21 +455,21 @@
          (js/console.dir e))))))
 
 (defn custom-query-result-transform
-  [query-result remove-headings q]
+  [query-result remove-blocks q]
   (let [repo (state/get-current-repo)
         result (seq-flatten query-result)
-        heading? (:heading/uuid (first result))]
-    (if heading?
-      (let [result (if (seq remove-headings)
-                     (let [remove-headings (set remove-headings)]
+        block? (:block/uuid (first result))]
+    (if block?
+      (let [result (if (seq remove-blocks)
+                     (let [remove-blocks (set remove-blocks)]
                        (remove (fn [h]
-                                 (contains? remove-headings (:heading/uuid h)))
+                                 (contains? remove-blocks (:block/uuid h)))
                                result))
                      result)
             result (some->> result
                             (with-repo repo)
                             (with-block-refs-count repo)
-                            (sort-headings))]
+                            (sort-blocks))]
         (if-let [result-transform (:result-transform q)]
           (if-let [f (sci/eval-string (pr-str result-transform))]
             (sci/call-fn f result)
@@ -540,16 +540,16 @@
                                     transform-fn)]
                     (set-new-result! handler-key new-result)))))))))))
 
-(defn pull-heading
+(defn pull-block
   [id]
   (let [repo (state/get-current-repo)]
     (when (get-conn repo)
       (->
-       (q repo [:headings id] {}
-         '[:find (pull ?heading [*])
+       (q repo [:blocks id] {}
+         '[:find (pull ?block [*])
            :in $ ?id
            :where
-           [?heading :heading/uuid ?id]]
+           [?block :block/uuid ?id]]
          id)
        react
        ffirst))))
@@ -572,7 +572,7 @@
            :where
            [?t :tag/name ?name]
            (or
-            [?h :heading/tags ?t]
+            [?h :block/tags ?t]
             [?p :page/tags ?t])])
        react
        (seq)
@@ -633,13 +633,13 @@
              ;; (or
              ;;  ;; journal pages, can't be empty
              ;;  (and [(true? ?journal)]
-             ;;       [?h :heading/page ?page]
-             ;;       [?h :heading/level ?level]
+             ;;       [?h :block/page ?page]
+             ;;       [?h :block/level ?level]
              ;;       [(> ?level 1)])
              ;;  ;; non-journals, might be empty pages
              ;;  (and [(false? ?journal)]
-             ;;       [?h :heading/page]
-             ;;       [?h :heading/level ?level]))
+             ;;       [?h :block/page]
+             ;;       [?h :block/level ?level]))
              ])
          (react)
          (seq)
@@ -688,74 +688,74 @@
          (sort-by last)
          (reverse))))
 
-(defn get-files-headings
+(defn get-files-blocks
   [repo-url paths]
   (let [paths (set paths)
         pred (fn [db e]
                (contains? paths e))]
-    (-> (d/q '[:find ?heading
+    (-> (d/q '[:find ?block
                :in $ ?pred
                :where
                [?file :file/path ?path]
                [(?pred $ ?path)]
-               [?heading :heading/file ?file]]
+               [?block :block/file ?file]]
           (get-conn repo-url) pred)
         seq-flatten)))
 
-(defn delete-headings
+(defn delete-blocks
   [repo-url files]
   (when (seq files)
-    (let [headings (get-files-headings repo-url files)]
-      (mapv (fn [eid] [:db.fn/retractEntity eid]) headings))))
+    (let [blocks (get-files-blocks repo-url files)]
+      (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks))))
 
 (defn delete-files
   [files]
   (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files))
 
-(defn get-file-headings
+(defn get-file-blocks
   [repo-url path]
-  (-> (d/q '[:find ?heading
+  (-> (d/q '[:find ?block
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?heading :heading/file ?file]]
+             [?block :block/file ?file]]
         (get-conn repo-url) path)
       seq-flatten))
 
-(defn get-file-after-headings
+(defn get-file-after-blocks
   [repo-url file-id end-pos]
   (when end-pos
     (let [pred (fn [db meta]
-                 (>= (:pos meta) end-pos))]
-      (-> (d/q '[:find (pull ?heading [*])
+                 (>= (:start-pos meta) end-pos))]
+      (-> (d/q '[:find (pull ?block [*])
                  :in $ ?file-id ?pred
                  :where
-                 [?heading :heading/file ?file-id]
-                 [?heading :heading/meta ?meta]
+                 [?block :block/file ?file-id]
+                 [?block :block/meta ?meta]
                  [(?pred $ ?meta)]]
             (get-conn repo-url) file-id pred)
           seq-flatten
           sort-by-pos))))
 
-(defn get-file-after-headings-meta
+(defn get-file-after-blocks-meta
   ([repo-url file-id end-pos]
-   (get-file-after-headings-meta repo-url file-id end-pos false))
+   (get-file-after-blocks-meta repo-url file-id end-pos false))
   ([repo-url file-id end-pos content-level?]
    (let [db (get-conn repo-url)
-         headings (d/datoms db :avet :heading/file file-id)
-         eids (mapv :e headings)
+         blocks (d/datoms db :avet :block/file file-id)
+         eids (mapv :e blocks)
          ks (if content-level?
-              '[:heading/uuid :heading/meta :heading/content :heading/level]
-              '[:heading/uuid :heading/meta])
-         headings (d/pull-many db ks eids)]
-     (->> (filter (fn [{:heading/keys [meta]}]
-                    (>= (:pos meta) end-pos)) headings)
+              '[:block/uuid :block/meta :block/content :block/level]
+              '[:block/uuid :block/meta])
+         blocks (d/pull-many db ks eids)]
+     (->> (filter (fn [{:block/keys [meta]}]
+                    (>= (:start-pos meta) end-pos)) blocks)
           sort-by-pos))))
 
-(defn delete-file-headings!
+(defn delete-file-blocks!
   [repo-url path]
-  (let [headings (get-file-headings repo-url path)]
-    (mapv (fn [eid] [:db.fn/retractEntity eid]) headings)))
+  (let [blocks (get-file-blocks repo-url path)]
+    (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
 
 (defn set-file-content!
   [repo path content]
@@ -786,20 +786,20 @@
       react
       ffirst))))
 
-(defn reset-contents-and-headings!
-  [repo-url contents headings-pages delete-files delete-headings]
+(defn reset-contents-and-blocks!
+  [repo-url contents blocks-pages delete-files delete-blocks]
   (let [files (doall
                (map (fn [[file content]]
                       (set-file-content! repo-url file content)
                       {:file/path file})
                  contents))
-        all-data (-> (concat delete-files delete-headings files headings-pages)
+        all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils))]
     (transact! repo-url all-data)))
 
-(defn get-heading-by-uuid
+(defn get-block-by-uuid
   [uuid]
-  (entity [:heading/uuid uuid]))
+  (entity [:block/uuid uuid]))
 
 (defn remove-key
   [repo-url key]
@@ -825,23 +825,23 @@
     (let [aliases (get-page-alias repo-url page)]
       (set (conj aliases page-id)))))
 
-(defn page-headings-transform
+(defn page-blocks-transform
   [repo-url result]
   (let [result (seq-flatten result)
         sorted (sort-by-pos result)]
     (->> (with-repo repo-url sorted)
          (with-block-refs-count repo-url))))
 
-(defn get-marker-headings
+(defn get-marker-blocks
   [repo-url marker]
   (let [marker (string/upper-case marker)]
     (some->>
-     (q repo-url [:marker/headings marker]
+     (q repo-url [:marker/blocks marker]
        {:use-cache? true}
        '[:find (pull ?h [*])
          :in $ ?marker
          :where
-         [?h :heading/marker ?m]
+         [?h :block/marker ?m]
          [(= ?marker ?m)]]
        marker)
      react
@@ -849,21 +849,21 @@
      sort-by-pos
      (with-repo repo-url)
      (with-block-refs-count repo-url)
-     (sort-headings)
+     (sort-blocks)
      (group-by-page))))
 
-;; (defn get-page-headings-old
+;; (defn get-page-blocks-old
 ;;   [repo-url page]
 ;;   (let [page (string/lower-case page)
 ;;         page-id (:db/id (entity repo-url [:page/name page]))]
 ;;     (some->
-;;      (q repo-url [:page/headings page-id]
+;;      (q repo-url [:page/blocks page-id]
 ;;        {:use-cache? false
-;;         :transform-fn #(page-headings-transform repo-url %)}
-;;        '[:find (pull ?heading [*])
+;;         :transform-fn #(page-blocks-transform repo-url %)}
+;;        '[:find (pull ?block [*])
 ;;          :in $ ?page-id
 ;;          :where
-;;          [?heading :heading/page ?page-id]]
+;;          [?block :block/page ?page-id]]
 ;;        page-id)
 ;;      react)))
 
@@ -906,48 +906,48 @@
                     not-exists))))]
     (string/join "\n" lines)))
 
-(defn get-page-headings
+(defn get-page-blocks
   ([page]
-   (get-page-headings (state/get-current-repo) page))
+   (get-page-blocks (state/get-current-repo) page))
   ([repo-url page]
    (let [page (string/lower-case page)
          page-id (:db/id (entity repo-url [:page/name page]))
          db (get-conn repo-url)]
      (when page-id
        (some->
-        (q repo-url [:page/headings page-id]
+        (q repo-url [:page/blocks page-id]
           {:use-cache? true
-           :transform-fn #(page-headings-transform repo-url %)
+           :transform-fn #(page-blocks-transform repo-url %)
            :query-fn (fn [db]
-                       (let [datoms (d/datoms db :avet :heading/page page-id)
-                             heading-eids (mapv :e datoms)]
-                         (d/pull-many db '[*] heading-eids)))}
+                       (let [datoms (d/datoms db :avet :block/page page-id)
+                             block-eids (mapv :e datoms)]
+                         (d/pull-many db '[*] block-eids)))}
           nil)
         react)))))
 
 (defn get-page-directives-content
   [page]
-  (let [headings (get-page-headings page)]
-    (and (:heading/pre-heading? (first headings))
-         (:heading/content (first headings)))))
+  (let [blocks (get-page-blocks page)]
+    (and (:block/pre-block? (first blocks))
+         (:block/content (first blocks)))))
 
-(defn heading-and-children-transform
-  [result repo-url heading-uuid level]
+(defn block-and-children-transform
+  [result repo-url block-uuid level]
   (some->> result
            seq-flatten
            sort-by-pos
            (take-while (fn [h]
                          (or
-                          (= (:heading/uuid h)
-                             heading-uuid)
-                          (> (:heading/level h) level))))
+                          (= (:block/uuid h)
+                             block-uuid)
+                          (> (:block/level h) level))))
            (with-repo repo-url)
            (with-block-refs-count repo-url)))
 
-(defn get-heading-children-ids
-  [repo heading-uuid]
+(defn get-block-children-ids
+  [repo block-uuid]
   (when-let [conn (get-conn repo)]
-    (let [eid (:db/id (entity repo [:heading/uuid heading-uuid]))]
+    (let [eid (:db/id (entity repo [:block/uuid block-uuid]))]
       (->> (d/q
              '[:find ?e1
                :in $ ?e2 %
@@ -956,39 +956,39 @@
              eid
              ;; recursive rules
              '[[(parent ?e2 ?e1)
-                [?e2 :heading/children ?e1]]
+                [?e2 :block/children ?e1]]
                [(parent ?e2 ?e1)
-                [?t :heading/children ?e1]
-                [?t :heading/uuid ?tid]
+                [?t :block/children ?e1]
+                [?t :block/uuid ?tid]
                 (parent ?e2 ?tid)]])
            (seq-flatten)))))
 
-(defn get-heading-children
-  [repo heading-uuid]
+(defn get-block-children
+  [repo block-uuid]
   (when-let [conn (get-conn repo)]
-    (let [ids (get-heading-children-ids repo heading-uuid)]
+    (let [ids (get-block-children-ids repo block-uuid)]
       (when (seq ids)
         (d/pull-many conn '[*]
-                     (map (fn [id] [:heading/uuid id]) ids))))))
+                     (map (fn [id] [:block/uuid id]) ids))))))
 
-(defn get-heading-and-children
-  ([repo heading-uuid]
-   (get-heading-and-children repo heading-uuid true))
-  ([repo heading-uuid use-cache?]
-   (let [heading (entity repo [:heading/uuid heading-uuid])
-         page (:db/id (:heading/page heading))
-         pos (:pos (:heading/meta heading))
-         level (:heading/level heading)
+(defn get-block-and-children
+  ([repo block-uuid]
+   (get-block-and-children repo block-uuid true))
+  ([repo block-uuid use-cache?]
+   (let [block (entity repo [:block/uuid block-uuid])
+         page (:db/id (:block/page block))
+         pos (:start-pos (:block/meta block))
+         level (:block/level block)
          pred (fn [data meta]
-                (>= (:pos meta) pos))]
-     (some-> (q repo [:heading/block heading-uuid]
+                (>= (:start-pos meta) pos))]
+     (some-> (q repo [:block/block block-uuid]
                {:use-cache? use-cache?
-                :transform-fn #(heading-and-children-transform % repo heading-uuid level)}
-               '[:find (pull ?heading [*])
+                :transform-fn #(block-and-children-transform % repo block-uuid level)}
+               '[:find (pull ?block [*])
                  :in $ ?page ?pred
                  :where
-                 [?heading :heading/page ?page]
-                 [?heading :heading/meta ?meta]
+                 [?block :block/page ?page]
+                 [?block :block/meta ?meta]
                  [(?pred $ ?meta)]]
                page
                pred)
@@ -1015,10 +1015,10 @@
   (some-> (entity [:page/name page-name])
           :page/file))
 
-(defn get-heading-file
-  [heading-id]
-  (let [page-id (some-> (entity [:heading/uuid heading-id])
-                        :heading/page
+(defn get-block-file
+  [block-id]
+  (let [page-id (some-> (entity [:block/uuid block-id])
+                        :block/page
                         :db/id)]
     (:page/file (entity page-id))))
 
@@ -1040,37 +1040,38 @@
 (defn get-page
   [page-name]
   (if (util/uuid-string? page-name)
-    (entity [:heading/uuid (uuid page-name)])
+    (entity [:block/uuid (uuid page-name)])
     (entity [:page/name page-name])))
 
 (defn get-page-name
   [file ast]
   ;; headline
-  (if (string/starts-with? file "pages/contents.")
-    "Contents"
-    (let [file-page-name (get-file-page file)
-         first-heading (last (first (filter block/heading-block? ast)))
-         directive-name (when (and (= "Directives" (ffirst ast))
-                                   (not (string/blank? (:title (last (first ast))))))
-                          (:title (last (first ast))))
-         first-heading-name (and first-heading
-                                 ;; FIXME:
-                                 (str (last (first (:title first-heading)))))]
-     (or
-      directive-name
-      file-page-name
-      first-heading-name
-      file))))
+  (let [ast (map first ast)]
+    (if (string/starts-with? file "pages/contents.")
+     "Contents"
+     (let [file-page-name (get-file-page file)
+           first-block (last (first (filter block/heading-block? ast)))
+           directive-name (when (and (= "Directives" (ffirst ast))
+                                     (not (string/blank? (:title (last (first ast))))))
+                            (:title (last (first ast))))
+           first-block-name (and first-block
+                                   ;; FIXME:
+                                   (str (last (first (:title first-block)))))]
+       (or
+        directive-name
+        file-page-name
+        first-block-name
+        file)))))
 
-(defn get-heading-content
-  [utf8-content heading]
-  (let [meta (:heading/meta heading)]
+(defn get-block-content
+  [utf8-content block]
+  (let [meta (:block/meta block)]
     (if-let [end-pos (:end-pos meta)]
       (utf8/substring utf8-content
-                      (:pos meta)
+                      (:start-pos meta)
                       end-pos)
       (utf8/substring utf8-content
-                      (:pos meta)))))
+                      (:start-pos meta)))))
 
 (defn extract-page-list
   [content]
@@ -1081,33 +1082,33 @@
          (map string/lower-case)
          (distinct))))
 
-(defn extract-pages-and-headings
+(defn extract-pages-and-blocks
   [repo-url format ast directives file content utf8-content journal? pages-fn]
   (try
     (let [now (tc/to-long (t/now))
-          [block-refs headings] (block/extract-headings ast (utf8/length utf8-content) utf8-content)
+          [block-refs blocks] (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
           _ (transact! repo-url block-refs)
-          pages (pages-fn headings ast)
+          pages (pages-fn blocks ast)
           ref-pages (atom #{})
-          headings (doall
+          blocks (doall
                     (mapcat
-                     (fn [[page headings]]
+                     (fn [[page blocks]]
                        (if page
-                         (map (fn [heading]
-                                (let [heading-ref-pages (seq (:heading/ref-pages heading))]
-                                  (when heading-ref-pages
-                                    (swap! ref-pages set/union (set heading-ref-pages)))
-                                  (-> heading
+                         (map (fn [block]
+                                (let [block-ref-pages (seq (:block/ref-pages block))]
+                                  (when block-ref-pages
+                                    (swap! ref-pages set/union (set block-ref-pages)))
+                                  (-> block
                                       (dissoc :ref-pages)
-                                      (assoc :heading/content (get-heading-content utf8-content heading)
-                                             :heading/file [:file/path file]
-                                             :heading/format format
-                                             :heading/page [:page/name (string/lower-case page)]
-                                             :heading/ref-pages (mapv
+                                      (assoc :block/content (get-block-content utf8-content block)
+                                             :block/file [:file/path file]
+                                             :block/format format
+                                             :block/page [:page/name (string/lower-case page)]
+                                             :block/ref-pages (mapv
                                                                  (fn [page]
                                                                    (block/page-with-journal page))
-                                                                 heading-ref-pages)))))
-                           headings)))
+                                                                 block-ref-pages)))))
+                           blocks)))
                      (remove nil? pages)))
           pages (map
                   (fn [page]
@@ -1179,15 +1180,16 @@
       (vec
        (->> (concat
              pages
-             headings)
+             blocks)
             (remove nil?))))
     (catch js/Error e
       (js/console.log e))))
 
 (defn parse-directives
   [content format]
-  (let [ast (mldoc/->edn content
-                         (mldoc/default-config format))
+  (let [ast (->> (mldoc/->edn content
+                             (mldoc/default-config format))
+                 (map first))
         directives (let [directives (and (seq ast)
                                          (= "Directives" (ffirst ast))
                                          (last (first ast)))]
@@ -1196,7 +1198,7 @@
     (into {} directives)))
 
 ;; check journal formats and report errors
-(defn extract-headings-pages
+(defn extract-blocks-pages
   [repo-url file content utf8-content]
   (if (string/blank? content)
     []
@@ -1204,40 +1206,41 @@
           format (format/get-format file)
           ast (mldoc/->edn content
                            (mldoc/default-config format))
-          directives (let [directives (and (seq ast)
-                                           (= "Directives" (ffirst ast))
-                                           (last (first ast)))]
+          first-block (first ast)
+          directives (let [directives (and (seq first-block)
+                                           (= "Directives" (ffirst first-block))
+                                           (last (first first-block)))]
                        (if (and directives (seq directives))
                          directives))]
       (if journal?
-        (extract-pages-and-headings
+        (extract-pages-and-blocks
          repo-url
          format ast directives
          file content utf8-content true
-         (fn [headings _ast]
+         (fn [blocks _ast]
            (loop [pages {}
                   last-page-name nil
-                  headings headings]
-             (if (seq headings)
-               (let [[{:heading/keys [level title] :as heading} & tl] headings]
+                  blocks blocks]
+             (if (seq blocks)
+               (let [[{:block/keys [level title] :as block} & tl] blocks]
                  (if (and (= level 1)
                           (when-let [title (last (first title))]
                             (date/valid-journal-title? title)))
                    (let [page-name (last (first title))
-                         new-pages (assoc pages page-name [heading])]
+                         new-pages (assoc pages page-name [block])]
                      (recur new-pages page-name tl))
-                   (let [new-pages (update pages last-page-name (fn [headings]
-                                                                  (vec (conj headings heading))))]
+                   (let [new-pages (update pages last-page-name (fn [blocks]
+                                                                  (vec (conj blocks block))))]
                      (recur new-pages last-page-name tl))))
                pages))))
-        (extract-pages-and-headings
+        (extract-pages-and-blocks
          repo-url
          format ast directives
          file content utf8-content false
-         (fn [headings ast]
-           [[(get-page-name file ast) headings]]))))))
+         (fn [blocks ast]
+           [[(get-page-name file ast) blocks]]))))))
 
-(defn extract-all-headings-pages
+(defn extract-all-blocks-pages
   [repo-url contents]
   (vec
    (mapcat
@@ -1245,10 +1248,10 @@
       (println "Parsing : " file)
       (when content
         (let [utf8-content (utf8/encode content)]
-          (extract-headings-pages repo-url file content utf8-content))))
+          (extract-blocks-pages repo-url file content utf8-content))))
     contents)))
 
-;; TODO: compare headings
+;; TODO: compare blocks
 (defn reset-file!
   [repo-url file content]
   (let [new? (nil? (entity [:file/path file]))]
@@ -1257,9 +1260,9 @@
           utf8-content (utf8/encode content)
           file-content [{:file/path file}]
           tx (if (contains? config/mldoc-support-formats format)
-               (let [delete-headings (delete-file-headings! repo-url file)
-                     headings-pages (extract-headings-pages repo-url file content utf8-content)]
-                 (concat file-content delete-headings headings-pages))
+               (let [delete-blocks (delete-file-blocks! repo-url file)
+                     blocks-pages (extract-blocks-pages repo-url file content utf8-content)]
+                 (concat file-content delete-blocks blocks-pages))
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
@@ -1278,7 +1281,7 @@
   ([]
    (get-journal (date/journal-name)))
   ([page-name]
-   [page-name (get-page-headings (state/get-current-repo) page-name)]))
+   [page-name (get-page-blocks (state/get-current-repo) page-name)]))
 
 (defn get-journals-length
   []
@@ -1329,40 +1332,40 @@
                      :me/email email
                      :me/avatar avatar}))
 
-(defn with-dummy-heading
-  ([headings format]
-   (with-dummy-heading headings format {} false))
-  ([headings format default-option journal?]
+(defn with-dummy-block
+  ([blocks format]
+   (with-dummy-block blocks format {} false))
+  ([blocks format default-option journal?]
    (let [format (or format (state/get-preferred-format) :markdown)]
      (cond
-       (and journal? (> (count headings) 1))
-       (rest headings)                  ; remove journal titles
+       (and journal? (> (count blocks) 1))
+       (rest blocks)                  ; remove journal titles
 
-       (and (not journal?) (seq headings))
-       headings
+       (and (not journal?) (seq blocks))
+       blocks
 
        :else
-       (let [last-heading (last headings)
-             end-pos (get-in last-heading [:heading/meta :end-pos] 0)
-             dummy (merge last-heading
+       (let [last-block (last blocks)
+             end-pos (get-in last-block [:block/meta :end-pos] 0)
+             dummy (merge last-block
                           (let [uuid (d/squuid)]
-                            {:heading/uuid uuid
-                             :heading/title ""
-                             :heading/content (config/default-empty-heading format)
-                             :heading/format format
-                             :heading/level 2
-                             :heading/priority nil
-                             :heading/anchor (str uuid)
-                             :heading/meta {:pos end-pos
+                            {:block/uuid uuid
+                             :block/title ""
+                             :block/content (config/default-empty-block format)
+                             :block/format format
+                             :block/level 2
+                             :block/priority nil
+                             :block/anchor (str uuid)
+                             :block/meta {:start-pos end-pos
                                             :end-pos end-pos}
-                             :heading/body nil
-                             :heading/dummy? true
-                             :heading/marker nil})
+                             :block/body nil
+                             :block/dummy? true
+                             :block/marker nil})
                           default-option)
-             headings (vec (concat headings [dummy]))]
+             blocks (vec (concat blocks [dummy]))]
          (if journal?
-           (rest headings)
-           headings))))))
+           (rest blocks)
+           blocks))))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
@@ -1374,16 +1377,16 @@
                            '[:find ?ref-page-name
                              :in $ ?pages
                              :where
-                             [?heading :heading/page ?p]
+                             [?block :block/page ?p]
                              [(contains? ?pages ?p)]
-                             [?heading :heading/ref-pages ?ref-page]
+                             [?block :block/ref-pages ?ref-page]
                              [?ref-page :page/name ?ref-page-name]]
                            pages)
                          react
                          seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
-;; Ignore files with empty headings for now
+;; Ignore files with empty blocks for now
 (defn get-empty-pages
   [repo]
   (when-let [conn (get-conn repo)]
@@ -1407,8 +1410,8 @@
          :where
          [?p :page/name ?page]
          [?p :page/journal? ?with-journal]
-         [?heading :heading/page ?p]
-         [(get-else $ ?heading :heading/ref-pages 100000000) ?ref-page]
+         [?block :block/page ?p]
+         [(get-else $ ?block :block/ref-pages 100000000) ?ref-page]
          [(get-else $ ?ref-page :page/name ?brain-text) ?ref-page-name]]
        conn
        with-journal?
@@ -1428,9 +1431,9 @@
                                  '[:find ?mentioned-page-name
                                    :in $ ?pages ?page-name
                                    :where
-                                   [?heading :heading/ref-pages ?p]
+                                   [?block :block/ref-pages ?p]
                                    [(contains? ?pages ?p)]
-                                   [?heading :heading/page ?mentioned-page]
+                                   [?block :block/page ?mentioned-page]
                                    [?mentioned-page :page/name ?mentioned-page-name]]
                                  pages
                                  page)
@@ -1438,25 +1441,25 @@
                                seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
-(defn get-page-referenced-headings
+(defn get-page-referenced-blocks
   [page]
   (when-let [repo (state/get-current-repo)]
     (when (get-conn repo)
       (let [page-id (:db/id (entity [:page/name page]))
             pages (page-alias-set repo page)]
-        (->> (q repo [:page/refed-headings page-id] {}
-               '[:find (pull ?heading [*])
+        (->> (q repo [:page/refed-blocks page-id] {}
+               '[:find (pull ?block [*])
                  :in $ ?pages
                  :where
-                 [?heading :heading/ref-pages ?ref-page]
+                 [?block :block/ref-pages ?ref-page]
                  [(contains? ?pages ?ref-page)]]
                pages)
              react
              seq-flatten
-             (remove (fn [heading]
+             (remove (fn [block]
                        (let [exclude-pages pages]
-                         (contains? exclude-pages (:db/id (:heading/page heading))))))
-             sort-headings
+                         (contains? exclude-pages (:db/id (:block/page block))))))
+             sort-blocks
              group-by-page)))))
 
 (defn get-files-that-referenced-page
@@ -1467,8 +1470,8 @@
              '[:find ?path
                :in $ ?page-id
                :where
-               [?heading :heading/ref-pages ?page-id]
-               [?heading :heading/page ?p]
+               [?block :block/ref-pages ?page-id]
+               [?block :block/page ?p]
                [?p :page/file ?f]
                [?f :file/path ?path]
                ]
@@ -1484,66 +1487,67 @@
             pages (page-alias-set repo page)
             pattern (re-pattern (str "(?i)" page))]
         (->> (d/q
-               '[:find (pull ?heading [*])
+               '[:find (pull ?block [*])
                  :in $ ?pattern
                  :where
-                 [?heading :heading/content ?content]
+                 [?block :block/content ?content]
                  [(re-find ?pattern ?content)]]
                conn
                pattern)
              seq-flatten
-             (remove (fn [heading]
-                       (let [ref-pages (set (map :db/id (:heading/ref-pages heading)))]
+             (remove (fn [block]
+                       (let [ref-pages (set (map :db/id (:block/ref-pages block)))]
                          (or
-                          (= (get-in heading [:heading/page :db/id]) page-id)
+                          (= (get-in block [:block/page :db/id]) page-id)
                           (seq (set/intersection
                                 ref-pages
                                 pages))))))
-             sort-headings
+             sort-blocks
              group-by-page)))))
 
-(defn get-heading-referenced-headings
-  [heading-uuid]
+(defn get-block-referenced-blocks
+  [block-uuid]
   (when-let [repo (state/get-current-repo)]
     (when (get-conn repo)
-      (->> (q repo [:heading/refed-headings heading-uuid] {}
-             '[:find (pull ?ref-heading [*])
-               :in $ ?heading-uuid
+      (->> (q repo [:block/refed-blocks block-uuid] {}
+             '[:find (pull ?ref-block [*])
+               :in $ ?block-uuid
                :where
-               [?heading :heading/uuid ?heading-uuid]
-               [?ref-heading :heading/ref-headings ?heading]]
-             heading-uuid)
+               [?block :block/uuid ?block-uuid]
+               [?ref-block :block/ref-blocks ?block]]
+             block-uuid)
            react
            seq-flatten
-           sort-headings
+           sort-blocks
            group-by-page
            ))))
 
-(defn get-matched-headings
+(defn get-matched-blocks
   [match-fn limit]
   (when-let [repo (state/get-current-repo)]
     (let [pred (fn [db content]
                  (match-fn content))]
-      (->> (q repo [:matched-headings] {:use-cache? false}
-             '[:find ?heading
+      (->> (q repo [:matched-blocks] {:use-cache? false}
+             '[:find ?block
                :in $ ?pred
                :where
-               [?heading :heading/content ?content]
+               [?block :block/content ?content]
                [(?pred $ ?content)]]
              pred)
            react
            (take limit)
            seq-flatten
-           (pull-many '[:heading/uuid
-                        :heading/content
-                        {:heading/page [:page/name]}])))))
+           (pull-many '[:block/uuid
+                        :block/content
+                        :block/format
+                        {:block/page [:page/name]}])))))
 
 ;; TODO: Does the result preserves the order of the arguments?
-(defn get-headings-contents
-  [repo heading-uuids]
+(defn get-blocks-contents
+  [repo block-uuids]
   (let [db (get-conn repo)]
-    (d/pull-many db '[:heading/content]
-                 (mapv (fn [id] [:heading/uuid id]) heading-uuids))))
+    (d/pull-many db '[:block/content]
+                 (mapv (fn [id] [:block/uuid id]) block-uuids))))
 
 (defn journal-page?
   [page-name]
@@ -1740,54 +1744,54 @@
          {:nodes nodes
           :links edges})))))
 
-(defn build-heading-graph
-  "Builds a citation/reference graph for a given heading uuid."
-  [heading theme]
+(defn build-block-graph
+  "Builds a citation/reference graph for a given block uuid."
+  [block theme]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
-      (let [ref-headings (get-heading-referenced-headings heading)
+      (let [ref-blocks (get-block-referenced-blocks block)
             edges (concat
                    (map (fn [[p aliases]]
-                          [heading p]) ref-headings))
-            other-headings (->> (concat (map first ref-headings))
+                          [block p]) ref-blocks))
+            other-blocks (->> (concat (map first ref-blocks))
                              (remove nil?)
                              (set))
-            other-headings-edges (mapcat
-                               (fn [heading]
-                                 (let [ref-headings (-> (map first (get-heading-referenced-headings heading))
+            other-blocks-edges (mapcat
+                               (fn [block]
+                                 (let [ref-blocks (-> (map first (get-block-referenced-blocks block))
                                                      (set)
-                                                     (set/intersection other-headings))]
+                                                     (set/intersection other-blocks))]
                                    (concat
-                                    (map (fn [p] [heading p]) ref-headings))))
-                               other-headings)
-            edges (->> (concat edges other-headings-edges)
+                                    (map (fn [p] [block p]) ref-blocks))))
+                               other-blocks)
+            edges (->> (concat edges other-blocks-edges)
                        (remove nil?)
                        (distinct)
                        (build-edges))
             nodes (->> (concat
-                        [heading]
-                        (map first ref-headings))
+                        [block]
+                        (map first ref-blocks))
                        (remove nil?)
                        (distinct)
-                       (build-nodes dark? heading edges))]
+                       (build-nodes dark? block edges))]
          {:nodes nodes
           :links edges}))))
 
-(defn headings->vec-tree [col]
+(defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
                              h
-                           (not (:heading/dummy? h))
-                           (dissoc h :heading/meta))) col)
+                           (not (:block/dummy? h))
+                           (dissoc h :block/meta))) col)
         parent? (fn [item children]
                   (and (seq children)
-                       (every? #(< (:heading/level item) (:heading/level %)) children)))]
+                       (every? #(< (:block/level item) (:block/level %)) children)))]
     (loop [col (reverse col)
            children (list)]
       (if (empty? col)
         children
         (let [[item & others] col
-              cur-level (:heading/level item)
-              bottom-level (:heading/level (first children))]
+              cur-level (:block/level item)
+              bottom-level (:block/level (first children))]
           (cond
             (empty? children)
             (recur others (list item))
@@ -1797,218 +1801,210 @@
 
             (> bottom-level cur-level)      ; parent
             (let [[children other-children] (split-with (fn [h]
-                                                          (> (:heading/level h) cur-level))
+                                                          (> (:block/level h) cur-level))
                                                         children)
 
                   children (cons
-                            (assoc item :heading/children children)
+                            (assoc item :block/children children)
                             other-children)]
               (recur others children))))))))
 
 ;; recursively with children content
-(defn get-heading-content-rec
-  ([heading]
-   (get-heading-content-rec heading (fn [heading] (:heading/content heading))))
-  ([heading transform-fn]
+(defn get-block-content-rec
+  ([block]
+   (get-block-content-rec block (fn [block] (:block/content block))))
+  ([block transform-fn]
    (let [contents (atom [])
          _ (walk/prewalk
             (fn [form]
               (when (map? form)
-                (when-let [content (:heading/content form)]
+                (when-let [content (:block/content form)]
                   (swap! contents conj (transform-fn form))))
               form)
-            heading)]
+            block)]
      (apply util/join-newline @contents))))
 
-(defn get-heading-end-pos-rec
-  [repo heading]
-  (let [children (:heading/children heading)]
+(defn get-block-end-pos-rec
+  [repo block]
+  (let [children (:block/children block)]
     (if (seq children)
-      (get-heading-end-pos-rec repo (last children))
-      (if-let [end-pos (get-in heading [:heading/meta :end-pos])]
+      (get-block-end-pos-rec repo (last children))
+      (if-let [end-pos (get-in block [:block/meta :end-pos])]
         end-pos
-        (when-let [heading (entity repo [:heading/uuid (:heading/uuid heading)])]
-          (get-in heading [:heading/meta :end-pos]))))))
+        (when-let [block (entity repo [:block/uuid (:block/uuid block)])]
+          (get-in block [:block/meta :end-pos]))))))
 
-(defn get-heading-ids
-  [heading]
+(defn get-block-ids
+  [block]
   (let [ids (atom [])
         _ (walk/prewalk
            (fn [form]
              (when (map? form)
-               (when-let [id (:heading/uuid form)]
+               (when-let [id (:block/uuid form)]
                  (swap! ids conj id)))
              form)
-           heading)]
+           block)]
     @ids))
 
-(defn collapse-heading!
-  [heading]
-  (let [repo (:heading/repo heading)]
+(defn collapse-block!
+  [block]
+  (let [repo (:block/repo block)]
     (transact! repo
-      [{:heading/uuid (:heading/uuid heading)
-        :heading/collapsed? true}])))
+      [{:block/uuid (:block/uuid block)
+        :block/collapsed? true}])))
 
-(defn collapse-headings!
-  [heading-ids]
+(defn collapse-blocks!
+  [block-ids]
   (let [repo (state/get-current-repo)]
     (transact! repo
       (map
         (fn [id]
-          {:heading/uuid id
-           :heading/collapsed? true})
-        heading-ids))))
+          {:block/uuid id
+           :block/collapsed? true})
+        block-ids))))
 
-(defn expand-heading!
-  [heading]
-  (let [repo (:heading/repo heading)]
+(defn expand-block!
+  [block]
+  (let [repo (:block/repo block)]
     (transact! repo
-      [{:heading/uuid (:heading/uuid heading)
-        :heading/collapsed? false}])))
+      [{:block/uuid (:block/uuid block)
+        :block/collapsed? false}])))
 
-(defn expand-headings!
-  [heading-ids]
+(defn expand-blocks!
+  [block-ids]
   (let [repo (state/get-current-repo)]
     (transact! repo
       (map
         (fn [id]
-          {:heading/uuid id
-           :heading/collapsed? false})
-        heading-ids))))
+          {:block/uuid id
+           :block/collapsed? false})
+        block-ids))))
 
-(defn get-collapsed-headings
+(defn get-collapsed-blocks
   []
   (d/q
     '[:find ?content
       :where
-      [?h :heading/content ?content]
-      [?h :heading/collapsed? true]]
+      [?h :block/content ?content]
+      [?h :block/collapsed? true]]
     (get-conn)))
 
 ;; recursive query might be slow, need benchmarks
 ;; Could replace this with a recursive call, see below
-(defn get-heading-parents-rec
-  [repo heading-id depth]
+(defn get-block-parents-rec
+  [repo block-id depth]
   (when-let [conn (get-conn repo)]
     (let [ids (->> (d/q
                      '[:find ?e2
                        :in $ ?e1 %
                        :where (parent ?e2 ?e1)]
                      conn
-                     heading-id
+                     block-id
                      ;; recursive rules
                      '[[(parent ?e2 ?e1)
-                        [?e2 :heading/children ?e1]]
+                        [?e2 :block/children ?e1]]
                        [(parent ?e2 ?e1)
-                        [?t :heading/children ?e1]
-                        [?t :heading/uuid ?tid]
+                        [?t :block/children ?e1]
+                        [?t :block/uuid ?tid]
                         (parent ?e2 ?tid)]])
                    (seq-flatten))]
       (when (seq ids)
-        (d/pull-many conn '[:heading/uuid :heading/title] ids)))))
+        (d/pull-many conn '[:block/uuid :block/title] ids)))))
 
-(defn get-heading-parent
-  [repo heading-id]
+(defn get-block-parent
+  [repo block-id]
   (when-let [conn (get-conn repo)]
-    (d/entity conn [:heading/children heading-id])))
+    (d/entity conn [:block/children block-id])))
 
 ;; non recursive query
-(defn get-heading-parents
-  [repo heading-id depth]
+(defn get-block-parents
+  [repo block-id depth]
   (when-let [conn (get-conn repo)]
-    (loop [heading-id heading-id
+    (loop [block-id block-id
            parents (list)
            d 1]
       (if (> d depth)
         parents
-        (if-let [parent (get-heading-parent repo heading-id)]
-          (recur (:heading/uuid parent) (conj parents parent) (inc d))
+        (if-let [parent (get-block-parent repo block-id)]
+          (recur (:block/uuid parent) (conj parents parent) (inc d))
           parents)))))
 
-(defn get-heading-page
-  [repo heading-id]
-  (when-let [heading (entity repo [:heading/uuid heading-id])]
-    (entity repo (:db/id (:heading/page heading)))))
+(defn get-block-page
+  [repo block-id]
+  (when-let [block (entity repo [:block/uuid block-id])]
+    (entity repo (:db/id (:block/page block)))))
 
-(defn get-heading-page-end-pos
+(defn get-block-page-end-pos
   [repo page-name]
   (or
    (when-let [page-id (:db/id (entity repo [:page/name (string/lower-case page-name)]))]
      (when-let [db (get-conn repo)]
-       (let [heading-eids (->> (d/datoms db :avet :heading/page page-id)
+       (let [block-eids (->> (d/datoms db :avet :block/page page-id)
                                (mapv :e))]
-         (when (seq heading-eids)
-           (let [headings (d/pull-many db '[:heading/meta] heading-eids)]
-             (-> (last (sort-by-pos headings))
-                 (get-in [:heading/meta :end-pos])))))))
+         (when (seq block-eids)
+           (let [blocks (d/pull-many db '[:block/meta] block-eids)]
+             (-> (last (sort-by-pos blocks))
+                 (get-in [:block/meta :end-pos])))))))
    ;; TODO: need more thoughts
    0))
 
-(defn recompute-heading-children
-  [repo heading headings]
-  (if (> (count headings) 1)
+(defn recompute-block-children
+  [repo block blocks]
+  (if (> (count blocks) 1)
     (when-let [conn (get-conn repo)]
-      (let [top-parent (:heading/uuid (get-heading-parent repo (:heading/uuid heading)))
-            level (:heading/level heading)
+      (let [top-parent (:block/uuid (get-block-parent repo (:block/uuid block)))
+            level (:block/level block)
             result (loop [result []
-                          headings (reverse headings)
+                          blocks (reverse blocks)
                           last-level 1000
                           children []]
-                     (if-let [h (first headings)]
-                       (let [id (:heading/uuid h)
-                             level (:heading/level h)
-                             [children current-heading-children]
+                     (if-let [h (first blocks)]
+                       (let [id (:block/uuid h)
+                             level (:block/level h)
+                             [children current-block-children]
                              (cond
                                (>= level last-level)
                                [(conj children [id level])
                                 #{}]
 
                                (< level last-level)
-                               (let [current-heading-children (set (->> (filter #(< level (second %)) children)
+                               (let [current-block-children (set (->> (filter #(< level (second %)) children)
                                                                         (map first)))
                                      others (vec (remove #(< level (second %)) children))]
                                  [(conj others [id level])
-                                  current-heading-children]))
-                             h (assoc h :heading/children current-heading-children)]
+                                  current-block-children]))
+                             h (assoc h :block/children current-block-children)]
                          (recur (conj result h)
-                                (rest headings)
+                                (rest blocks)
                                 level
                                 children))
                        (reverse result)))
             result (vec result)]
         (if top-parent
-          (let [top-parent-children (filter (fn [h] (= (:heading/level h) level)) headings)
-                top-parent-children-ids (map :heading/uuid top-parent-children)]
+          (let [top-parent-children (filter (fn [h] (= (:block/level h) level)) blocks)
+                top-parent-children-ids (map :block/uuid top-parent-children)]
             (if (= 1 (count top-parent-children)) ; no children count changed
               result
-              (let [old-top-parent-children (:heading/children (entity repo [:heading/uuid top-parent]))
+              (let [old-top-parent-children (:block/children (entity repo [:block/uuid top-parent]))
                     new-children (set/union (set old-top-parent-children) (set top-parent-children-ids))]
-                (conj result {:heading/uuid top-parent
-                              :heading/children new-children}))))
+                (conj result {:block/uuid top-parent
+                              :block/children new-children}))))
           result)))
-    headings))
+    blocks))
 
-(comment
-  (def heading {:heading/properties-meta [], :heading/meta {:pos 885, :end-pos 894}, :heading/format :markdown, :heading/title [["Plain" "world"]], :heading/level 2, :heading/marker "nil", :heading/file {:db/id 1}, :heading/page {:db/id 10}, :db/id 195, :heading/body [], :heading/content "## world\n### cool\n### nice\n#### nested nice\n", :heading/uuid #uuid "5f07d298-16ff-4036-b625-d5885db5f7ea", :heading/properties [], :heading/anchor "world"})
-  (def headings (:headings (block/parse-heading heading :markdown)))
-
-  (recompute-heading-children (state/get-current-repo)
-                              heading
-                              headings))
-
-(defn get-headings-by-priority
+(defn get-blocks-by-priority
   [repo priority]
   (let [priority (string/capitalize priority)]
     (when (get-conn repo)
-      (->> (q repo [:priority/headings priority] {}
+      (->> (q repo [:priority/blocks priority] {}
              '[:find (pull ?h [*])
                :in $ ?priority
                :where
-               [?h :heading/priority ?priority]]
+               [?h :block/priority ?priority]]
              priority)
            react
            seq-flatten
-           sort-headings
+           sort-blocks
            group-by-page))))
 
 (defn add-page-to-recent!
@@ -2025,7 +2021,7 @@
                                                  (let [name (string/lower-case page)]
                                                    (if (and (empty? (get-pages-that-mentioned-page repo name))
                                                             (not (journal-page? name))
-                                                            (empty? (get-page-headings name))) name nil))) all-pages))
+                                                            (empty? (get-page-blocks name))) name nil))) all-pages))
         transaction          (mapv (fn [name] [:db/retractEntity (:db/id (get-page (str name)))]) orphaned-pages)]
     (transact! transaction)))
 
@@ -2043,12 +2039,12 @@
                :git/error (get-key-value repo :git/error)})
             repos)))
 
-  (defn headings-count
+  (defn blocks-count
     []
     (->
      (d/q '[:find (count ?h)
             :where
-            [?h :heading/uuid]]
+            [?h :block/uuid]]
        (get-conn ))
      ffirst))
   )

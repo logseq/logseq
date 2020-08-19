@@ -6,7 +6,7 @@
 
 ;; A page can corresponds to multiple files (same title),
 ;; a month journal file can have multiple pages,
-;; also, each heading can be treated as a page if we support
+;; also, each block can be treated as a page if we support
 ;; "zoom edit".
 (def schema
   {:db/ident        {:db/unique :db.unique/identity}
@@ -55,43 +55,42 @@
    :page/journal-day {}
    ;; TODO: page meta like :page/start-pos and :page/end-pos to improve the performance for month journal pages.
    ;; ;; Maybe we should add daily journal or weekly journal later.
-   ;; :page/headings {:db/valueType   :db.type/ref
-   ;;                 :db/cardinality :db.cardinality/many
-   ;;                 :db/isComponent true}
 
-   ;; heading
-   :heading/uuid   {:db/unique      :db.unique/identity}
-   :heading/file   {:db/valueType   :db.type/ref}
-   :heading/format {}
+   ;; block
+   :block/type   {}
+   :block/uuid   {:db/unique      :db.unique/identity}
+   :block/file   {:db/valueType   :db.type/ref}
+   :block/format {}
    ;; belongs to which page
-   :heading/page   {:db/valueType   :db.type/ref}
+   :block/page   {:db/valueType   :db.type/ref}
    ;; referenced pages
-   :heading/ref-pages {:db/valueType   :db.type/ref
-                       :db/cardinality :db.cardinality/many}
-   ;; referenced headings
-   :heading/ref-headings {:db/valueType   :db.type/ref
-                          :db/cardinality :db.cardinality/many}
-   :heading/content {}
-   :heading/anchor {}
-   :heading/marker {}
-   :heading/priority {}
-   :heading/level {}
-   :heading/tags {:db/valueType   :db.type/ref
-                  :db/cardinality :db.cardinality/many
-                  :db/isComponent true}
-   :heading/meta {}
-   :heading/properties {}
-   :heading/properties-meta {}
+   :block/ref-pages {:db/valueType   :db.type/ref
+                     :db/cardinality :db.cardinality/many}
+   ;; referenced blocks
+   :block/ref-blocks {:db/valueType   :db.type/ref
+                      :db/cardinality :db.cardinality/many}
+   :block/content {}
+   :block/anchor {}
+   :block/marker {}
+   :block/priority {}
+   :block/level {}
+   :block/tags {:db/valueType   :db.type/ref
+                :db/cardinality :db.cardinality/many
+                :db/isComponent true}
+   ;; :start-pos :end-pos
+   :block/meta {}
+   :block/properties {}
+   :block/properties-meta {}
 
-   ;; TODO: To make this really working, every heading needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
+   ;; TODO: To make this really working, every block needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
    ;; Any suggestions?
-   :heading/created-at {}
-   :heading/last-modified-at {}
+   :block/created-at {}
+   :block/last-modified-at {}
 
-   :heading/body {}
-   :heading/pre-heading? {}
-   :heading/collapsed? {}
-   :heading/children {:db/cardinality :db.cardinality/many
-                      :db/unique :db.unique/identity}
+   :block/body {}
+   :block/pre-block? {}
+   :block/collapsed? {}
+   :block/children {:db/cardinality :db.cardinality/many
+                    :db/unique :db.unique/identity}
 
    :tag/name       {:db/unique :db.unique/identity}})
