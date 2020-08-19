@@ -808,7 +808,8 @@
 
 (defn- pre-block-cp
   [config content format]
-  (let [ast (mldoc/->edn content (mldoc/default-config format))]
+  (let [ast (mldoc/->edn content (mldoc/default-config format))
+        ast (map first ast)]
     [:div.pre-block
      (blocks-cp config ast)]))
 
