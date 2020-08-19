@@ -427,7 +427,8 @@
   (periodically-pull repo-url pull-now?)
   (when (and
          (or (not config/dev?)
-             (= repo-url "https://github.com/tiensonqin/empty-repo"))
+             ;; (= repo-url "https://github.com/tiensonqin/empty-repo")
+             )
          (not (false? (:git-auto-push (state/get-config repo-url)))))
     (periodically-push-tasks repo-url)))
 

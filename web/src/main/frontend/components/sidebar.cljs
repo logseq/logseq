@@ -273,6 +273,9 @@
                (when current-repo
                  {:title "Settings"
                   :options {:href "/settings"}})
+               (when current-repo
+                 {:title "Import"
+                  :options {:href "/import"}})
                {:title [:div.flex-row.flex.justify-between.items-center
                         [:span "Join the community"]
                         svg/discord]

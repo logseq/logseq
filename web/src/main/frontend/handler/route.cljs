@@ -52,6 +52,8 @@
     "Draw"
     :settings
     "Settings"
+    :import
+    "Import data into Logseq"
     "Logseq"))
 
 (defn set-route-match!
