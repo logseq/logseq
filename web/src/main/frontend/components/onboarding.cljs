@@ -8,7 +8,7 @@
   []
   [:div#intro.pl-1
    [:div.flex-1
-    [:div.flex.flex-col.pl-1.ls-heading
+    [:div.flex.flex-col.pl-1.ls-block
      [:hr {:style {:margin-top 200}}]
      [:h1.title.welcome-title
       "Hi, welcome to Logseq!"]
@@ -62,9 +62,9 @@
     [:img.shadow-2xl
      {:src
       "https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA"
-      :alt "screentshot"}]
+      :alt "screenshot"}]
 
-    [:div.flex.flex-col.ls-heading
+    [:div.flex.flex-col.ls-block
 
      [:h2 {} "Where are my notes saved?"]
      [:p
