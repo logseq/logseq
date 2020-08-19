@@ -68,6 +68,8 @@
 
     ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
+
+    :preferred-language "en"
     }))
 
 (defn get-route-match
@@ -158,6 +160,10 @@
 (defn set-preferred-workflow!
   [workflow]
   (swap! state assoc-in [:me :preferred_workflow] (name workflow)))
+
+(defn set-preferred-language!
+  [language]
+  (set-state! :preferred_language (name language)))
 
 (defn delete-repo!
   [repo]
