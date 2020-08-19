@@ -1,6 +1,11 @@
 (ns frontend.external.protocol)
 
 (defprotocol External
-  (toMldocAst [this content]               ; might be json or anything
+  (toMarkdownFiles [this content config]
+    "Should return a map of markdown's file name to contents."
     )
-  (fromMldocAst [this ast]))
+
+  ;; Long-term goal:
+  ;; (toMldocAst [this content])
+  ;; (fromMldocAst [this ast])
+  )
