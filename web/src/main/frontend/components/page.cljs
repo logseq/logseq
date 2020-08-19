@@ -13,7 +13,7 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.components.hiccup :as hiccup]
-            [frontend.components.heading :as heading]
+            [frontend.components.block :as block]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.extensions.graph-2d :as graph-2d]
@@ -38,34 +38,34 @@
   (let [route-match (first (:rum/args state))]
     (get-in route-match [:parameters :path :name])))
 
-(defn- get-headings
-  [repo page-name page-original-name heading? heading-id]
+(defn- get-blocks
+  [repo page-name page-original-name block? block-id]
   (when page-name
-    (if heading?
-      (db/get-heading-and-children repo heading-id)
+    (if block?
+      (db/get-block-and-children repo block-id)
       (do
         (db/add-page-to-recent! repo page-original-name)
-        (db/get-page-headings repo page-name)))))
+        (db/get-page-blocks repo page-name)))))
 
-(rum/defc page-headings-cp < rum/reactive
-  [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? heading? heading-id format]
-  (let [raw-page-headings (get-headings repo page-name page-original-name heading? heading-id)
-        page-headings (db/with-dummy-heading raw-page-headings format
-                        (if (empty? raw-page-headings)
+(rum/defc page-blocks-cp < rum/reactive
+  [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
+  (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
+        page-blocks (db/with-dummy-block raw-page-blocks format
+                        (if (empty? raw-page-blocks)
                           (let [content (db/get-file repo file-path)]
-                            {:heading/page {:db/id (:db/id page)}
-                             :heading/file {:db/id (:db/id (:page/file page))}
-                             :heading/meta
+                            {:block/page {:db/id (:db/id page)}
+                             :block/file {:db/id (:db/id (:page/file page))}
+                             :block/meta
                              (let [file-id (:db/id (:page/file page))]
-                               {:pos (utf8/length (utf8/encode content))
+                               {:start-pos (utf8/length (utf8/encode content))
                                 :end-pos nil})}))
                         journal?)
         start-level (if journal? 2 1)
         hiccup-config {:id encoded-page-name
                        :start-level start-level
                        :sidebar? sidebar?
-                       :heading? heading?}
-        hiccup (hiccup/->hiccup page-headings hiccup-config {})]
+                       :block? block?}
+        hiccup (hiccup/->hiccup page-blocks hiccup-config {})]
     (rum/with-key
       (content/content encoded-page-name
                        {:hiccup hiccup
@@ -78,7 +78,7 @@
     (when-let [repo (state/get-current-repo)]
       (let [format (db/get-page-format page-name)
             file-path (:file/path (:page/file contents))]
-        (page-headings-cp repo contents file-path page-name page-name page-name true false false nil format)))))
+        (page-blocks-cp repo contents file-path page-name page-name page-name true false false nil format)))))
 
 (defn presentation
   [repo page journal?]
@@ -182,7 +182,7 @@
   (fn [close-fn]
     (rename-page-dialog-inner page-name close-fn)))
 
-;; A page is just a logical heading
+;; A page is just a logical block
 (rum/defcs page < rum/reactive
   (db-mixins/clear-query-cache
    (fn [state]
@@ -190,11 +190,11 @@
            encoded-page-name (get-page-name state)]
        (when-not (string/blank? encoded-page-name)
          (let [page-name (string/lower-case (util/url-decode encoded-page-name))
-               heading? (util/uuid-string? page-name)]
-           (if heading?
-             [repo :heading/block (uuid page-name)]
+               block? (util/uuid-string? page-name)]
+           (if block?
+             [repo :block/block (uuid page-name)]
              (when-let [page-id (db/entity repo [:page/name page-name])]
-               [repo :page/headings page-id])))))))
+               [repo :page/blocks page-id])))))))
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
                 state)
@@ -208,12 +208,12 @@
         priority-page? (contains? #{"a" "b" "c"} page-name)
         format (db/get-page-format page-name)
         journal? (db/journal-page? page-name)
-        heading? (util/uuid-string? page-name)
-        heading-id (and heading? (uuid page-name))
+        block? (util/uuid-string? page-name)
+        block-id (and block? (uuid page-name))
         sidebar? (:sidebar? option)]
     (cond
       priority-page?
-      [:div.page.mb-20
+      [:div.page
        [:h1.title
         (str "Priority \"" (string/upper-case page-name) "\"")]
        [:div.ml-2
@@ -228,8 +228,8 @@
 
       :else
       (let [route-page-name page-name
-            page (if heading?
-                   (->> (:db/id (:heading/page (db/entity repo [:heading/uuid heading-id])))
+            page (if block?
+                   (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                         (db/entity repo))
                    (db/entity repo [:page/name page-name]))
             page-name (:page/name page)
@@ -241,7 +241,7 @@
                     (= page-name (string/lower-case (date/journal-name))))]
         [:div.flex-1.page.relative
          [:div.relative
-          (when (and (not heading?) (not sidebar?))
+          (when (and (not block?) (not sidebar?))
             (let [links (->>
                          (when file
                            [{:title "Re-index this page"
@@ -282,7 +282,7 @@
                  {:modal-class (util/hiccup->class
                                 "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")}))))
           (when (and (not sidebar?)
-                     (not heading?))
+                     (not block?))
             [:a {:on-click (fn [e]
                              (util/stop e)
                              (when (gobj/get e "shiftKey")
@@ -296,14 +296,14 @@
               page-original-name]])
           [:div
            [:div.content
-            (when (and file-path (not sidebar?) (not journal?) (not heading?))
+            (when (and file-path (not sidebar?) (not journal?) (not block?))
               [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
                [:span.opacity-50 "File: "]
                [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
                                        :href (str "/file/" (util/url-encode file-path))}
                 file-path]])]
 
-           (when (and repo (not journal?) (not heading?))
+           (when (and repo (not journal?) (not block?))
              (let [alias (db/get-page-alias-names repo page-name)]
                (when (seq alias)
                  [:div.text-sm.ml-1.mb-4 {:key "page-file"}
@@ -313,16 +313,16 @@
                      item])])))
 
 
-           (when (and heading? (not sidebar?))
+           (when (and block? (not sidebar?))
              [:div.mb-4
-              (heading/heading-parents repo heading-id format)])
-           ;; headings
-           (page-headings-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? heading? heading-id format)]]
+              (block/block-parents repo block-id format)])
+           ;; blocks
+           (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]
 
-         (when-not heading?
+         (when-not block?
            (today-queries repo today? sidebar?))
 
-         ;; referenced headings
+         ;; referenced blocks
          [:div {:key "page-references"}
           (reference/references route-page-name false)]
 
@@ -381,7 +381,7 @@
                 state)}
   []
   (let [current-repo (state/sub :git/current-repo)]
-    [:div.flex-1.mb-20
+    [:div.flex-1
      [:h1.title "All Pages"]
      (when current-repo
        (let [pages (db/get-pages-with-modified-at current-repo)]
@@ -411,7 +411,7 @@
                       :on-enter (fn []
                                   (let [title @(get state ::title)]
                                     (when-not (string/blank? title)
-                                      (editor-handler/create-new-page! title)))))))
+                                      (page-handler/create! title)))))))
   [state]
   (let [title (get state ::title)]
     [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}

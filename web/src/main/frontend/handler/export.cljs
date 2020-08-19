@@ -6,28 +6,28 @@
             [clojure.string :as string]
             [goog.dom :as gdom]))
 
-(defn copy-heading!
-  [heading-id]
-  (when-let [heading (db/pull [:heading/uuid heading-id])]
-    (let [content (:heading/content heading)]
+(defn copy-block!
+  [block-id]
+  (when-let [block (db/pull [:block/uuid block-id])]
+    (let [content (:block/content block)]
       (util/copy-to-clipboard! content))))
 
-(defn copy-heading-as-json!
-  [heading-id]
+(defn copy-block-as-json!
+  [block-id]
   (when-let [repo (state/get-current-repo)]
-    (let [heading-children (db/get-heading-and-children repo heading-id)]
-      (util/copy-to-clipboard! (js/JSON.stringify (bean/->js heading-children))))))
+    (let [block-children (db/get-block-and-children repo block-id)]
+      (util/copy-to-clipboard! (js/JSON.stringify (bean/->js block-children))))))
 
 (defn copy-page-as-json!
   [page-name]
   (when-let [repo (state/get-current-repo)]
     (let [directives (db/get-page-directives page-name)
-          headings (db/get-page-headings repo page-name)]
+          blocks (db/get-page-blocks repo page-name)]
       (util/copy-to-clipboard!
        (js/JSON.stringify
         (bean/->js
          {:directives directives
-          :headings headings}))))))
+          :blocks blocks}))))))
 
 (defn export-repo-as-json!
   [repo]

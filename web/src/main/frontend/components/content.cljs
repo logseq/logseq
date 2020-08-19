@@ -45,68 +45,68 @@
    [:div.py-1.rounded-md.bg-base-3.shadow-xs
     (ui/menu-link
      {:key "cut"
-      :on-click editor-handler/cut-selection-headings}
+      :on-click editor-handler/cut-selection-blocks}
      "Cut")
     (ui/menu-link
      {:key "copy"
-      :on-click editor-handler/copy-selection-headings}
+      :on-click editor-handler/copy-selection-blocks}
      "Copy")
     (ui/menu-link
      {:key "make-todos"
       :on-click editor-handler/bulk-make-todos}
      (str "Make " (state/get-preferred-todo) "s"))]])
 
-(rum/defc heading-context-menu-content
-  [heading-id]
+(rum/defc block-context-menu-content
+  [block-id]
   [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
    [:div.py-1.rounded-md.bg-base-3.shadow-xs
     (ui/menu-link
      {:key "Copy block ref"
       :on-click (fn [_e]
-                  (editor-handler/copy-block-ref! heading-id))}
+                  (editor-handler/copy-block-ref! block-id))}
      "Copy block ref")
     (ui/menu-link
      {:key "Focus on block"
       :on-click (fn [_e]
-                  (editor-handler/focus-on-block! heading-id))}
+                  (editor-handler/focus-on-block! block-id))}
      "Focus on block")
     (ui/menu-link
      {:key "Open in sidebar"
       :on-click (fn [_e]
-                  (editor-handler/open-heading-in-sidebar! heading-id))}
+                  (editor-handler/open-block-in-sidebar! block-id))}
      "Open in sidebar")
     (ui/menu-link
      {:key "Cut"
       :on-click (fn [_e]
-                  (editor-handler/cut-heading! heading-id))}
+                  (editor-handler/cut-block! block-id))}
      "Cut")
     (ui/menu-link
      {:key "Copy"
       :on-click (fn [_e]
-                  (export-handler/copy-heading! heading-id))}
+                  (export-handler/copy-block! block-id))}
      "Copy")
     (ui/menu-link
      {:key "Copy as JSON"
       :on-click (fn [_e]
-                  (export-handler/copy-heading-as-json! heading-id))}
+                  (export-handler/copy-block-as-json! block-id))}
      "Copy as JSON")]])
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
-;; headings were already selected.
-(defn- cut-headings-and-clear-selections!
+;; blocks were already selected.
+(defn- cut-blocks-and-clear-selections!
   [_]
-  (editor-handler/cut-selection-headings)
+  (editor-handler/cut-selection-blocks)
   (editor-handler/clear-selection! nil))
 
 (rum/defc hidden-selection < rum/reactive
   (mixins/keyboard-mixin (util/->system-modifier "ctrl+c")
                          (fn [_]
-                           (editor-handler/copy-selection-headings)
+                           (editor-handler/copy-selection-blocks)
                            (editor-handler/clear-selection! nil)))
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+x") cut-headings-and-clear-selections!)
-  (mixins/keyboard-mixin "backspace" cut-headings-and-clear-selections!)
-  (mixins/keyboard-mixin "delete" cut-headings-and-clear-selections!)
+  (mixins/keyboard-mixin (util/->system-modifier "ctrl+x") cut-blocks-and-clear-selections!)
+  (mixins/keyboard-mixin "backspace" cut-blocks-and-clear-selections!)
+  (mixins/keyboard-mixin "delete" cut-blocks-and-clear-selections!)
   []
   [:div#selection.hidden])
 
@@ -116,15 +116,15 @@
      (mixins/listen state js/window "mouseup"
                     (fn [e]
                       (when-not (state/in-selection-mode?)
-                        (when-let [headings (seq (util/get-selected-nodes "ls-heading"))]
-                          (let [headings (remove nil? headings)
-                                headings (remove #(d/has-class? % "dummy") headings)]
-                            (when (seq headings)
-                              (doseq [heading headings]
-                                (d/add-class! heading "selected noselect"))
+                        (when-let [blocks (seq (util/get-selected-nodes "ls-block"))]
+                          (let [blocks (remove nil? blocks)
+                                blocks (remove #(d/has-class? % "dummy") blocks)]
+                            (when (seq blocks)
+                              (doseq [block blocks]
+                                (d/add-class! block "selected noselect"))
                               ;; TODO: We delay this so the following "click" event won't clear the selections.
                               ;; Needs more thinking.
-                              (js/setTimeout #(state/set-selection-headings! headings)
+                              (js/setTimeout #(state/set-selection-blocks! blocks)
                                              200)))))))
 
      (mixins/listen state js/window "click"
@@ -142,9 +142,9 @@
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")
-                            heading-id (d/attr target "headingid")]
+                            block-id (d/attr target "blockid")]
                         (cond
-                          (and heading-id (util/uuid-string? heading-id))
+                          (and block-id (util/uuid-string? block-id))
                           (do
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
@@ -154,7 +154,7 @@
                                 (d/remove-class! main "overflow-y-auto")
                                 (d/add-class! main "overflow-hidden"))
 
-                              (state/show-custom-context-menu! (heading-context-menu-content (cljs.core/uuid heading-id)))
+                              (state/show-custom-context-menu! (block-context-menu-content (cljs.core/uuid block-id)))
                               (when-let [context-menu (d/by-id "custom-context-menu")]
                                 (d/set-style! context-menu
                                               :left (str client-x "px")
@@ -229,12 +229,12 @@
 (defn- set-fixed-width!
   []
   (when (> (gobj/get js/window "innerWidth") 1024)
-    (let [headings (d/by-class "ls-heading")]
-      (doseq [heading headings]
-        (if (and (not (d/sel1 heading "img"))
-                 (not (d/sel1 heading "iframe")))
-          (d/add-class! heading "fixed-width")
-          (d/remove-class! heading "fixed-width"))))))
+    (let [blocks (d/by-class "ls-block")]
+      (doseq [block blocks]
+        (if (and (not (d/sel1 block "img"))
+                 (not (d/sel1 block "iframe")))
+          (d/add-class! block "fixed-width")
+          (d/remove-class! block "fixed-width"))))))
 
 (rum/defcs content < rum/reactive
   {:will-mount (fn [state]

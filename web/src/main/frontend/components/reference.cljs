@@ -15,21 +15,21 @@
 (rum/defc references < rum/reactive
   [page-name marker? priority?]
   (when page-name
-    (let [heading? (util/uuid-string? page-name)
-          heading-id (and heading? (uuid page-name))
+    (let [block? (util/uuid-string? page-name)
+          block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
           encoded-page-name (util/url-encode page-name)
-          ref-headings (cond
+          ref-blocks (cond
                          priority?
-                         (db/get-headings-by-priority (state/get-current-repo) page-name)
+                         (db/get-blocks-by-priority (state/get-current-repo) page-name)
 
                          marker?
-                         (db/get-marker-headings (state/get-current-repo) page-name)
-                         heading-id
-                         (db/get-heading-referenced-headings heading-id)
+                         (db/get-marker-blocks (state/get-current-repo) page-name)
+                         block-id
+                         (db/get-block-referenced-blocks block-id)
                          :else
-                         (db/get-page-referenced-headings page-name))
-          n-ref (count ref-headings)]
+                         (db/get-page-referenced-blocks page-name))
+          n-ref (count ref-blocks)]
       (when (> n-ref 0)
         [:div.references.mt-6.flex-1.flex-row
          [:div.content
@@ -37,7 +37,7 @@
            [:h2.font-bold.opacity-50 (let []
                                        (str n-ref " Linked References"))]
            [:div.references-blocks
-            (let [ref-hiccup (hiccup/->hiccup ref-headings
+            (let [ref-hiccup (hiccup/->hiccup ref-blocks
                                               {:id encoded-page-name
                                                :start-level 2
                                                :ref? true
@@ -48,11 +48,11 @@
 
 (rum/defc unlinked-references-aux < rum/reactive
   [page-name n-ref]
-  (let [ref-headings (db/get-page-unlinked-references page-name)
+  (let [ref-blocks (db/get-page-unlinked-references page-name)
         encoded-page-name (util/url-encode page-name)]
-    (reset! n-ref (count ref-headings))
+    (reset! n-ref (count ref-blocks))
     [:div.references-blocks
-     (let [ref-hiccup (hiccup/->hiccup ref-headings
+     (let [ref-hiccup (hiccup/->hiccup ref-blocks
                                        {:id (str encoded-page-name "-unlinked-")
                                         :start-level 2
                                         :ref? true

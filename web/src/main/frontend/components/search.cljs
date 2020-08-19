@@ -4,6 +4,7 @@
             [frontend.handler :as handler]
             [frontend.handler.route :as route]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -64,15 +65,15 @@
                     (leave-focus)
                     (case type
                       :new-page
-                      (editor-handler/create-new-page! search-q)
+                      (page-handler/create! search-q)
 
                       :page
                       (route/redirect! {:to :page
                                           :path-params {:name (util/encode-str data)}})
 
                       :block
-                      (let [page (:page/name (:heading/page data))
-                            path (str "/page/" (util/encode-str page) "#ls-heading-" (:heading/uuid data))]
+                      (let [page (:page/name (:block/page data))
+                            path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
                         (route/redirect-with-fragment! path))
                       nil))
        :item-render (fn [{:keys [type data]}]
@@ -85,7 +86,7 @@
                         [:div.text-sm.font-medium data]
 
                         :block
-                        (let [{:heading/keys [page content]} data]
+                        (let [{:block/keys [page content]} data]
                           (let [page (:page/original-name page)]
                             [:div.flex-1
                              [:div.text-sm.font-medium page]

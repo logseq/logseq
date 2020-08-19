@@ -33,7 +33,7 @@
 
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]
-  (let [load-contents (fn [files delete-files delete-headings re-render?]
+  (let [load-contents (fn [files delete-files delete-blocks re-render?]
                         (file-handler/load-files-contents!
                          repo-url
                          files
@@ -45,19 +45,19 @@
                                                  (let [format (format/get-format file)]
                                                    (contains? config/mldoc-support-formats format)))
                                                contents)
-                                 headings-pages (if (seq parsed-files)
-                                                  (db/extract-all-headings-pages repo-url parsed-files)
+                                 blocks-pages (if (seq parsed-files)
+                                                  (db/extract-all-blocks-pages repo-url parsed-files)
                                                   [])]
-                             (db/reset-contents-and-headings! repo-url contents headings-pages delete-files delete-headings)
+                             (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
                              (let [config-file (str config/app-name "/" config/config-file)]
                                (when (contains? (set files) config-file)
                                  (when-let [content (get contents config-file)]
                                    (file-handler/restore-config! repo-url content true))))
-                             (let [metadata-file (str config/app-name "/" config/metadata-file)]
-                               (when (contains? (set files) metadata-file)
-                                 (when-let [content (get contents metadata-file)]
-                                   (let [{:keys [tx-data]} (reader/read-string content)]
-                                     (db/transact! repo-url tx-data)))))
+                             ;; (let [metadata-file (str config/app-name "/" config/metadata-file)]
+                             ;;   (when (contains? (set files) metadata-file)
+                             ;;     (when-let [content (get contents metadata-file)]
+                             ;;       (let [{:keys [tx-data]} (reader/read-string content)]
+                             ;;         (db/transact! repo-url tx-data)))))
                              (state/set-state! :repo/importing-to-db? false)
                              (when re-render?
                                (ui-handler/re-render-root!))))))]
@@ -77,9 +77,9 @@
               add-files (filter-diffs "add")
               delete-files (if (seq remove-files)
                              (db/delete-files remove-files))
-              delete-headings (db/delete-headings repo-url (concat remove-files modify-files))
+              delete-blocks (db/delete-blocks repo-url (concat remove-files modify-files))
               add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files delete-files delete-headings true))))))
+          (load-contents add-or-modify-files delete-files delete-blocks true))))))
 
 (defn journal-file-changed?
   [repo-url diffs]
@@ -95,16 +95,21 @@
                   (p/catch (fn [_e])))]
       (let [default-content config/config-default-content]
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
-          (let [path (str app-dir "/" config/config-file)]
-            (when-not file-exists?
-              (db/reset-file! repo-url path default-content)
-              (db/reset-config! repo-url default-content)
-              (git-handler/git-add repo-url path))))
-        (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
-          (let [path (str app-dir "/" config/metadata-file)]
-            (when-not file-exists?
-              (db/reset-file! repo-url path "{:tx-data []}")
-              (git-handler/git-add repo-url path))))))))
+          (let [path (str app-dir "/" config/config-file)
+                content (or
+                         (when file-exists?
+                           (when-let [content (db/get-file repo-url path)]
+                             (string/replace content "heading" "block")))
+                         default-content)]
+            (db/reset-file! repo-url path content)
+            (db/reset-config! repo-url content)
+            (git-handler/git-add repo-url path)))
+        ;; (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
+        ;;   (let [path (str app-dir "/" config/metadata-file)]
+        ;;     (when-not file-exists?
+        ;;       (db/reset-file! repo-url path "{:tx-data []}")
+        ;;       (git-handler/git-add repo-url path))))
+        ))))
 
 (defn- default-month-journal-content
   [format]
@@ -117,7 +122,7 @@
                    today? (= d (date/journal-name))]
                (util/format
                 "%s %s\n"
-                (config/get-heading-pattern format)
+                (config/get-block-pattern format)
                 d)))
            (range 1 (inc last-day)))
          (apply str))))
@@ -163,10 +168,10 @@
      (fn [permission]
        (let [permission (:permission permission)
              write-permission (contains? #{"admin" "write"} permission)]
+         ;; (db/set-key-value repo-url :git/write-permission? write-permission)
          (create-month-journal-if-not-exists repo-url)
          (create-config-file-if-not-exists repo-url)
-         (create-contents-file repo-url)
-         (db/set-key-value repo-url :git/write-permission? write-permission)))
+         (create-contents-file repo-url)))
      (fn []))))
 
 (defn load-db-and-journals!
@@ -268,9 +273,10 @@
    (push repo-url "Logseq auto save"))
   ([repo-url commit-message]
    (let [status (db/get-key-value repo-url :git/status)]
+     (println {:changed-files (seq (state/get-changed-files repo-url))})
      (when (and
             ;; (not= status :push-failed)
-            (db/get-key-value repo-url :git/write-permission?)
+            ;; (db/get-key-value repo-url :git/write-permission?)
             (not (state/get-edit-input-id))
             (seq (state/get-changed-files repo-url)))
        ;; auto commit if there are any un-committed changes
@@ -278,11 +284,13 @@
                               "Logseq auto save"
                               commit-message)]
          (p/let [_ (git/commit repo-url commit-message)]
+           (println "Commit successfully!")
            (git-handler/set-git-status! repo-url :pushing)
            (let [token (state/get-github-token)]
              (util/p-handle
               (git/push repo-url token)
               (fn []
+                (println "Push successfully!")
                 (git-handler/set-git-status! repo-url nil)
                 (git-handler/set-git-error! repo-url nil)
                 (git-handler/set-latest-commit-if-exists! repo-url)

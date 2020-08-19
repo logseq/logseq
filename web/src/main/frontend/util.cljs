@@ -532,19 +532,19 @@
      (.getDate local-date-time)
      0 0 0 0)))
 
-(defn rec-get-heading-node
+(defn rec-get-block-node
   [node]
-  (if (and node (d/has-class? node "ls-heading"))
+  (if (and node (d/has-class? node "ls-block"))
     node
     (and node
-         (rec-get-heading-node (gobj/get node "parentNode")))))
+         (rec-get-block-node (gobj/get node "parentNode")))))
 
-(defn rec-get-headings-container
+(defn rec-get-blocks-container
   [node]
-  (if (and node (d/has-class? node "headings-container"))
+  (if (and node (d/has-class? node "blocks-container"))
     node
     (and node
-         (rec-get-headings-container (gobj/get node "parentNode")))))
+         (rec-get-blocks-container (gobj/get node "parentNode")))))
 
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
@@ -555,18 +555,22 @@
       (let [selection (js/window.getSelection)
             range (.getRangeAt selection 0)
             container (-> (gobj/get range "commonAncestorContainer")
-                          (rec-get-headings-container))
+                          (rec-get-blocks-container))
             start-node (gobj/get range "startContainer")
             container-nodes (array-seq (selection/getSelectedNodes container start-node))]
         (map
           (fn [node]
             (if (or (= 3 (gobj/get node "nodeType"))
                     (not (d/has-class? node class-name))) ;textnode
-              (rec-get-heading-node node)
+              (rec-get-block-node node)
               node))
           container-nodes)))
     (catch js/Error _e
       nil)))
+
+(defn get-input-pos
+  [input]
+  (and input (.-selectionStart input)))
 
 (defn get-selection
   []
@@ -652,45 +656,45 @@
   [title]
   (set! (.-title js/document) title))
 
-(defn get-prev-heading
-  [heading]
-  (when-let [headings (d/by-class "ls-heading")]
-    (when-let [index (.indexOf headings heading)]
+(defn get-prev-block
+  [block]
+  (when-let [blocks (d/by-class "ls-block")]
+    (when-let [index (.indexOf blocks block)]
       (when (> index 0)
-        (nth headings (dec index))))))
+        (nth blocks (dec index))))))
 
-(defn get-next-heading
-  [heading]
-  (when-let [headings (d/by-class "ls-heading")]
-    (when-let [index (.indexOf headings heading)]
-      (when (> (count headings) (inc index))
-        (nth headings (inc index))))))
+(defn get-next-block
+  [block]
+  (when-let [blocks (d/by-class "ls-block")]
+    (when-let [index (.indexOf blocks block)]
+      (when (> (count blocks) (inc index))
+        (nth blocks (inc index))))))
 
-(defn get-prev-heading-with-same-level
-  [heading]
-  (when-let [headings (d/by-class "ls-heading")]
-    (when-let [index (.indexOf headings heading)]
-      (let [level (d/attr heading "level")]
+(defn get-prev-block-with-same-level
+  [block]
+  (when-let [blocks (d/by-class "ls-block")]
+    (when-let [index (.indexOf blocks block)]
+      (let [level (d/attr block "level")]
         (when (> index 0)
           (loop [idx (dec index)]
             (if (>= idx 0)
-              (let [heading (nth headings idx)]
-                (if (= level (d/attr heading "level"))
-                  heading
+              (let [block (nth blocks idx)]
+                (if (= level (d/attr block "level"))
+                  block
                   (recur (dec idx))))
               nil)))))))
 
-(defn get-next-heading-with-same-level
-  [heading]
-  (when-let [headings (d/by-class "ls-heading")]
-    (when-let [index (.indexOf headings heading)]
-      (let [level (d/attr heading "level")]
-        (when (> (count headings) (inc index))
+(defn get-next-block-with-same-level
+  [block]
+  (when-let [blocks (d/by-class "ls-block")]
+    (when-let [index (.indexOf blocks block)]
+      (let [level (d/attr block "level")]
+        (when (> (count blocks) (inc index))
           (loop [idx (inc index)]
-            (if (< idx (count headings))
-              (let [heading (nth headings idx)]
-                (if (= level (d/attr heading "level"))
-                  heading
+            (if (< idx (count blocks))
+              (let [block (nth blocks idx)]
+                (if (= level (d/attr block "level"))
+                  block
                   (recur (inc idx))))
               nil)))))))
 
@@ -815,9 +819,16 @@
       "org"
       (if contents?
         (format "** [[]]" title)
-        (format "#+TITLE: %s\n#+TAGS:\n\n** " title))
+        (format "#+TITLE: %s\n\n** " title))
       "markdown"
       (if contents?
         (format "## [[]]" title)
-        (format "---\ntitle: %s\ntags:\n---\n\n## " title))
+        (format "---\ntitle: %s\n---\n\n## " title))
       "")))
+
+(defn get-first-block-by-id
+  [block-id]
+  (when block-id
+    (let [block-id (str block-id)]
+      (when (uuid-string? block-id)
+        (first (array-seq (js/document.getElementsByClassName block-id)))))))

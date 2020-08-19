@@ -30,24 +30,26 @@
   [s]
   (when s
     (let [comma? (re-find #"," s)]
-     (some->>
-      (string/split s #"[\"|\,]{1}")
-      (remove string/blank?)
-      (map (fn [s]
-             (if (and (not comma?)
-                      (or (= " " (first s)) (= " " (last s))))
-               ;; space separated tags
-               (string/split (string/trim s) #" ")
-               s)))
-      flatten
-      distinct
-      (map string/lower-case)
-      (map string/trim)))))
+      (some->>
+       (string/split s #"[\"|\,]{1}")
+       (remove string/blank?)
+       (map (fn [s]
+              (if (and (not comma?)
+                       (or (= " " (first s)) (= " " (last s))))
+                ;; space separated tags
+                (string/split (string/trim s) #" ")
+                s)))
+       flatten
+       distinct
+       (map string/lower-case)
+       (map string/trim)))))
 
 (defn collect-page-directives
   [ast]
   (if (seq ast)
-    (let [directive? (fn [item] (= "directive" (string/lower-case (first item))))
+    (let [original-ast ast
+          ast (map first ast)           ; without position meta
+          directive? (fn [item] (= "directive" (string/lower-case (first item))))
           directives (->> (take-while directive? ast)
                           (map (fn [[_ k v]]
                                  [(keyword (string/lower-case k))
@@ -80,11 +82,13 @@
                          (:roam_tags directives)
                          (update :roam_tags sep-by-quote-or-space-or-comma))
                        directives)
-          directives (assoc directives :macros macros)
-          other-ast (drop-while directive? ast)]
+          directives (cond-> directives
+                       (seq macros)
+                       (assoc :macros macros))
+          other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
       (if (seq directives)
-        (cons ["Directives" directives] other-ast)
-        ast))
+        (cons [["Directives" directives] nil] other-ast)
+        original-ast))
     ast))
 
 (defn ->edn

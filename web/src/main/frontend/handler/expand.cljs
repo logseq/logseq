@@ -17,33 +17,33 @@
   (d/set-style! element :display ""))
 
 (defn collapse!
-  [heading]
-  (let [uuid (:heading/uuid heading)
+  [block]
+  (let [uuid (:block/uuid block)
         nodes (array-seq (js/document.getElementsByClassName (str uuid)))]
     (doseq [node nodes]
       (d/add-class! node "collapsed")
-      (when-let [e (.querySelector node ".heading-body")]
+      (when-let [e (.querySelector node ".block-body")]
         (hide! e))
-      (when-let [e (.querySelector node ".heading-children")]
+      (when-let [e (.querySelector node ".block-children")]
         (hide! e)
-        (let [elements (d/by-class node "ls-heading")]
+        (let [elements (d/by-class node "ls-block")]
           (doseq [element elements]
             (hide! element))))
-      (db/collapse-heading! heading))))
+      (db/collapse-block! block))))
 
 (defn expand!
-  [heading]
-  (let [uuid (:heading/uuid heading)
+  [block]
+  (let [uuid (:block/uuid block)
         nodes (array-seq (js/document.getElementsByClassName (str uuid)))]
     (doseq [node nodes]
-      (when-let [e (.querySelector node ".heading-body")]
+      (when-let [e (.querySelector node ".block-body")]
         (show! e))
-      (when-let [e (.querySelector node ".heading-children")]
-        (let [elements (d/by-class node "ls-heading")]
+      (when-let [e (.querySelector node ".block-children")]
+        (let [elements (d/by-class node "ls-block")]
           (doseq [element elements]
             (show! element)))
         (show! e))
-      (db/expand-heading! heading))))
+      (db/expand-block! block))))
 
 (defn set-bullet-closed!
   [element]
@@ -53,14 +53,14 @@
 
 ;; Collapse acts like TOC
 ;; There are three modes to cycle:
-;; 1. Collapse all headings which levels are greater than 2
-;; 2. Hide all heading's body (user can still see the heading title)
+;; 1. Collapse all blocks which levels are greater than 2
+;; 2. Hide all block's body (user can still see the block title)
 ;; 3. Show everything
 (defn cycle!
   []
   (let [mode (state/next-collapse-mode)
-        get-headings (fn []
-                       (let [elements (d/by-class "ls-heading")
+        get-blocks (fn []
+                       (let [elements (d/by-class "ls-block")
                              result (group-by (fn [e]
                                                 (let [level (d/attr e "level")]
                                                   (and level
@@ -69,30 +69,30 @@
     (case mode
       :show-all
       (do
-        (doseq [element (d/by-class "ls-heading")]
+        (doseq [element (d/by-class "ls-block")]
           (show! element))
-        (let [elements (d/by-class "heading-body")]
+        (let [elements (d/by-class "block-body")]
           (doseq [element elements]
             (show! element)))
         (doseq [element (d/by-class "bullet-closed")]
           (d/remove-class! element "bullet-closed"))
-        (doseq [element (d/by-class "heading-children")]
+        (doseq [element (d/by-class "block-children")]
           (show! element)))
 
-      :hide-heading-body
-      (let [elements (d/by-class "heading-body")]
+      :hide-block-body
+      (let [elements (d/by-class "block-body")]
         (doseq [element elements]
           (d/set-style! element :display "none")
-          (when-let [parent (util/rec-get-heading-node element)]
+          (when-let [parent (util/rec-get-block-node element)]
             (set-bullet-closed! parent))))
 
-      :hide-heading-children
-      (let [[elements top-level-elements] (get-headings)
+      :hide-block-children
+      (let [[elements top-level-elements] (get-blocks)
             level-2-elements (filter (fn [e]
                                        (let [level (d/attr e "level")]
                                          (and level
                                               (= (util/parse-int level) 2)
-                                              (not (d/has-class? e "pre-heading")))))
+                                              (not (d/has-class? e "pre-block")))))
                                      top-level-elements)]
         (doseq [element elements]
           (hide! element))

@@ -4,7 +4,8 @@
             [medley.core :as medley]
             [frontend.util :as util]
             [cljs-bean.core :as bean]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.text :as text]))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
@@ -82,12 +83,14 @@
    (when-not (string/blank? q)
      (let [q (clean q)]
        (when-not (string/blank? q)
-         (db/get-matched-headings
-          (fn [content]
-            (re-find (re-pattern (str "(?i)" q)) content))
-          ;; (fn [content]
-          ;;   (> (score q (.toLowerCase content)) 0))
-          limit))))))
+         (let [blocks (db/get-matched-blocks
+                       (fn [content]
+                         (re-find (re-pattern (str "(?i)" q)) content))
+                       ;; (fn [content]
+                       ;;   (> (score q (.toLowerCase content)) 0))
+                       limit)]
+           (map (fn [{:block/keys [content format] :as block}]
+                  (assoc block :block/content (text/remove-level-spaces content format))) blocks)))))))
 
 (defn page-search
   ([q]

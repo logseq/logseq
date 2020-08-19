@@ -36,9 +36,9 @@
 
     :ui/sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
-    ;; :show-all, :hide-heading-body, :hide-heading-children
+    ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
-    :ui/collapsed-headings {}
+    :ui/collapsed-blocks {}
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
     :ui/custom-query-components {}
@@ -54,19 +54,19 @@
     :editor/last-saved-cursor nil
     :editor/editing? nil
     :editor/content {}
-    :editor/heading nil
+    :editor/block nil
     :cursor-range nil
     :cursor-pos nil
 
     :selection/mode false
-    :selection/headings []
+    :selection/blocks []
     :custom-context-menu/show? false
     :custom-context-menu/links nil
 
     ;; encrypted github token
     :encrypt/token (storage/get :encrypt/token)
 
-    ;; pages or headings in the right sidebar
+    ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
     
     :preferred-language "en"
@@ -180,12 +180,12 @@
   []
   (case (:ui/cycle-collapse @state)
     :show-all
-    :hide-heading-body
+    :hide-block-body
 
-    :hide-heading-body
-    :hide-heading-children
+    :hide-block-body
+    :hide-block-children
 
-    :hide-heading-children
+    :hide-block-children
     :show-all))
 
 (defn cycle-collapse!
@@ -202,7 +202,7 @@
     ;; followers
     ;; (when-let [s (util/extract-uuid input-id)]
     ;;   (let [input (gdom/getElement input-id)
-    ;;         leader-parent (util/rec-get-heading-node input)
+    ;;         leader-parent (util/rec-get-block-node input)
     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
     ;;                        (remove #(= leader-parent %)))]
     ;;     (prn "followers: " (count followers))
@@ -252,29 +252,29 @@
   [value]
   (set-state! :repo/cloning? value))
 
-(defn get-heading-collapsed-state
-  [heading-id]
-  (get-in @state [:ui/collapsed-headings heading-id]))
+(defn get-block-collapsed-state
+  [block-id]
+  (get-in @state [:ui/collapsed-blocks block-id]))
 
 (defn set-collapsed-state!
-  [heading-id value]
-  (set-state! [:ui/collapsed-headings heading-id] value))
+  [block-id value]
+  (set-state! [:ui/collapsed-blocks block-id] value))
 
-(defn collapse-heading!
-  [heading-id]
-  (set-collapsed-state! heading-id true))
+(defn collapse-block!
+  [block-id]
+  (set-collapsed-state! block-id true))
 
-(defn expand-heading!
-  [heading-id]
-  (set-collapsed-state! heading-id false))
+(defn expand-block!
+  [block-id]
+  (set-collapsed-state! block-id false))
 
 (defn collapsed?
-  [heading-id]
-  (get-in @state [:ui/collapsed-headings heading-id]))
+  [block-id]
+  (get-in @state [:ui/collapsed-blocks block-id]))
 
-(defn clear-collapsed-headings!
+(defn clear-collapsed-blocks!
   []
-  (set-state! :ui/collapsed-headings {}))
+  (set-state! :ui/collapsed-blocks {}))
 
 (defn set-q!
   [value]
@@ -315,42 +315,42 @@
          (fn [m]
            (and input-id {input-id true}))))
 
-(defn set-selection-headings!
-  [headings]
-  (when (seq headings)
+(defn set-selection-blocks!
+  [blocks]
+  (when (seq blocks)
     (swap! state assoc
            :selection/mode true
-           :selection/headings headings)))
+           :selection/blocks blocks)))
 
 (defn clear-selection!
   []
   (swap! state assoc
          :selection/mode false
-         :selection/headings nil
+         :selection/blocks nil
          :selection/up? nil))
 
-(defn get-selection-headings
+(defn get-selection-blocks
   []
-  (:selection/headings @state))
+  (:selection/blocks @state))
 
 (defn in-selection-mode?
   []
   (:selection/mode @state))
 
-(defn conj-selection-heading!
-  [heading up?]
+(defn conj-selection-block!
+  [block up?]
   (swap! state assoc
          :selection/mode true
-         :selection/headings (conj (:selection/headings @state) heading)
+         :selection/blocks (conj (:selection/blocks @state) block)
          :selection/up? up?))
 
-(defn pop-selection-heading!
+(defn pop-selection-block!
   []
-  (let [[first-heading & others] (:selection/headings @state)]
+  (let [[first-block & others] (:selection/blocks @state)]
     (swap! state assoc
            :selection/mode true
-           :selection/headings others)
-    first-heading))
+           :selection/blocks others)
+    first-block))
 
 (defn selection-up?
   []
@@ -434,7 +434,7 @@
     (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))
 
 (defn set-editing!
-  [edit-input-id content heading cursor-range]
+  [edit-input-id content block cursor-range]
   (when edit-input-id
     (let [content (or content "")]
       (swap! state
@@ -442,21 +442,21 @@
                (-> state
                    (assoc-in [:editor/content edit-input-id] (string/trim content))
                    (assoc
-                    :editor/heading heading
+                    :editor/block block
                     :editor/editing? {edit-input-id true}
                     :cursor-range cursor-range)))))))
 
 (defn clear-edit!
   []
   (swap! state merge {:editor/editing? nil
-                      :editor/heading nil
+                      :editor/block nil
                       :cursor-range nil}))
 
-(defn get-edit-heading
+(defn get-edit-block
   []
-  (get @state :editor/heading))
+  (get @state :editor/block))
 
-(defn set-heading-content-and-last-pos!
+(defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)

@@ -208,7 +208,7 @@
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-heading-content-and-last-pos! id new-value new-pos)
+    (state/set-block-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input
                          (if (or backward-pos forward-pos)
                            new-pos
@@ -229,7 +229,7 @@
                       (count value)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-heading-content-and-last-pos! id new-value new-pos)
+    (state/set-block-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input new-pos)
     (when check-fn
       (check-fn new-value (dec (count prefix))))))
@@ -253,7 +253,7 @@
                       (count value)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-heading-content-and-last-pos! id new-value new-pos)
+    (state/set-block-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input new-pos)
     (when selected?
       (.setSelectionRange input new-pos (+ new-pos (count selected))))
@@ -269,7 +269,7 @@
         new-value (str prefix
                        (subs edit-content (inc current-pos)))
         new-pos (count prefix)]
-    (state/set-heading-content-and-last-pos! id new-value new-pos)
+    (state/set-block-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input new-pos)))
 
 (defn get-matched-commands
@@ -318,7 +318,7 @@
             prefix (util/replace-last slash prefix "")
             new-value (str prefix
                            (subs edit-content current-pos))]
-        (state/set-heading-content-and-last-pos! input-id
+        (state/set-block-content-and-last-pos! input-id
                                                  new-value
                                                  (count prefix))))))
 

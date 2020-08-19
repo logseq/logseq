@@ -118,7 +118,7 @@
                                (editor-handler/get-matched-blocks q))
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search false)
-                               (let [uuid-string (str (:heading/uuid chosen))]
+                               (let [uuid-string (str (:block/uuid chosen))]
 
                                  ;; block reference
                                  (editor-handler/insert-command! id
@@ -128,7 +128,7 @@
                                                                   :postfix-fn (fn [s] (util/replace-first "))" s ""))})
 
                                  ;; Save it so it'll be parsed correctly in the future
-                                 (editor-handler/set-heading-property! (:heading/uuid chosen)
+                                 (editor-handler/set-block-property! (:block/uuid chosen)
                                                                        "CUSTOM_ID"
                                                                        uuid-string)
 
@@ -142,7 +142,7 @@
            {:on-chosen chosen-handler
             :on-enter non-exist-block-handler
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-            :item-render (fn [{:heading/keys [content]}]
+            :item-render (fn [{:block/keys [content]}]
                            (subs content 0 64))
             :class "black"}))))))
 
@@ -172,10 +172,10 @@
                  :text-align "center"
                  :height "2.5rem"}}
    [:button
-    {:on-click #(editor-handler/adjust-heading-level! parent-state :right)}
+    {:on-click #(editor-handler/adjust-block-level! parent-state :right)}
     svg/indent-block]
    [:button
-    {:on-click #(editor-handler/adjust-heading-level! parent-state :left)}
+    {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
     svg/outdent-block]
    [:button
     {:on-click #(editor-handler/move-up-down parent-state % true)}
@@ -283,7 +283,7 @@
         *slash-caret-pos)))])
 
 (rum/defcs box < rum/reactive
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+shift+a") editor-handler/select-all-headings!)
+  (mixins/keyboard-mixin (util/->system-modifier "ctrl+shift+a") editor-handler/select-all-blocks!)
   (mixins/keyboard-mixin (if util/mac? "meta+shift+up" "alt+shift+up")
                          (fn [state e]
                            (editor-handler/move-up-down state e true)))
@@ -291,10 +291,10 @@
                          (fn [state e] (editor-handler/move-up-down state e false)))
   (mixins/event-mixin
    (fn [state]
-     (let [{:keys [id format heading]} (get-state state)
+     (let [{:keys [id format block]} (get-state state)
            input-id id
            input (gdom/getElement input-id)
-           repo (:heading/repo heading)]
+           repo (:block/repo block)]
        ;; (.addEventListener input "paste" (fn [event]
        ;;                                    (editor-handler/append-paste-doc! format event)))
        (mixins/on-key-down
@@ -303,19 +303,19 @@
          ;; enter
          13 (fn [state e]
               (when-not (gobj/get e "ctrlKey")
-                (let [{:keys [heading config]} (get-state state)]
-                  (when (and heading
+                (let [{:keys [block config]} (get-state state)]
+                  (when (and block
                              (not (:ref? config))
                              (not (:custom-query? config))) ; in reference section
                     (let [content (state/get-edit-content)]
                       (if (and
                            (not (editor-handler/in-auto-complete? input))
-                           (> (:heading/level heading) 2)
+                           (> (:block/level block) 2)
                            (string/blank? content))
                         (do
                           (util/stop e)
-                          (editor-handler/adjust-heading-level! state :left))
-                        (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-heading)]
+                          (editor-handler/adjust-block-level! state :left))
+                        (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-block)]
                                          (string/lower-case (string/trim v)))
                               insert? (cond
                                         config/mobile?
@@ -333,8 +333,8 @@
                                  insert?
                                  (not (editor-handler/in-auto-complete? input)))
                             (profile
-                             "Insert heading"
-                             (editor-handler/insert-new-heading! state))
+                             "Insert block"
+                             (editor-handler/insert-new-block! state))
                             (util/stop e)))))))))
          ;; up
          38 (fn [state e]
@@ -365,7 +365,7 @@
                  nil
 
                  (zero? current-pos)
-                 (editor-handler/delete-heading! state repo e)
+                 (editor-handler/delete-block! state repo e)
 
                  (and (> current-pos 1)
                       (= (util/nth-safe value (dec current-pos)) commands/slash))
@@ -414,7 +414,7 @@
                  (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
                                    :left
                                    :right)]
-                   (p/let [_ (editor-handler/adjust-heading-level! state direction)]
+                   (p/let [_ (editor-handler/adjust-block-level! state direction)]
                      (and input pos (js/setTimeout #(when-let [input (gdom/getElement input-id)]
                                                       (util/move-cursor-to input pos))
                                                    0)))))))}
@@ -493,7 +493,7 @@
                       (reset! *matched-block-commands matched-block-commands))
                     (reset! *show-block-commands false)))))))))))
   {:did-mount (fn [state]
-                (let [[{:keys [dummy? format heading-parent-id]} id] (:rum/args state)
+                (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
                   (editor-handler/restore-cursor-pos! id content dummy?)
 
@@ -512,7 +512,7 @@
                       state
                       :on-hide
                       (fn [state e event]
-                        (let [{:keys [on-hide format value heading id repo dummy?]} (get-state state)]
+                        (let [{:keys [on-hide format value block id repo dummy?]} (get-state state)]
                           (when on-hide
                             (on-hide value event))
                           (when
@@ -527,7 +527,7 @@
                     (.focus element)))
                 state)
    :will-unmount (fn [state]
-                   (let [{:keys [id value format heading repo dummy?]} (get-state state)]
+                   (let [{:keys [id value format block repo dummy?]} (get-state state)]
                      (when-let [input (gdom/getElement id)]
                        ;; (.removeEventListener input "paste" (fn [event]
                        ;;                                       (append-paste-doc! format event)))
@@ -540,16 +540,16 @@
                                input
                                :upload-images))))
                      (editor-handler/clear-when-saved!)
-                     (editor-handler/save-heading! (get-state state) value))
+                     (editor-handler/save-block! (get-state state) value))
                    state)}
-  [state {:keys [on-hide dummy? node format heading]
+  [state {:keys [on-hide dummy? node format block]
     :or {dummy? false}
     :as option} id config]
   (let [content (state/sub [:editor/content id])]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}
-                  :class (if heading "heading-editor" "non-heading-editor")}
+                  :class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state))
      (ui/textarea
       {:id id

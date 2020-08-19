@@ -43,9 +43,11 @@
 
 (defn get-block-reference
   [block]
-  (and (vector? block)
-       (= "Block_reference" (first block))
-       (last block)))
+  (when-let [block-id (and (vector? block)
+                           (= "Block_reference" (first block))
+                           (last block))]
+    (when (util/uuid-string? block-id)
+      block-id)))
 
 (defn task-block?
   [block]
@@ -79,7 +81,7 @@
    (= "Property_Drawer" (first block))))
 
 (defn extract-properties
-  [[_ properties start-pos end-pos :as all]]
+  [[_ properties] start-pos end-pos]
   {:properties (into {} properties)
    :start-pos start-pos
    :end-pos end-pos})
@@ -97,7 +99,7 @@
       second))
 
 (defn with-page-refs
-  [{:keys [title body tags] :as heading}]
+  [{:keys [title body tags] :as block}]
   (let [tags (mapv :tag/name (util/->tags (map :tag/name tags)))
         ref-pages (atom tags)]
     (walk/postwalk
@@ -110,44 +112,44 @@
        form)
      (concat title body))
     (let [ref-pages (remove string/blank? @ref-pages)]
-      (assoc heading :ref-pages (vec ref-pages)))))
+      (assoc block :ref-pages (vec ref-pages)))))
 
 (defn with-block-refs
-  [{:keys [title body] :as heading}]
-  (let [ref-headings (atom nil)]
+  [{:keys [title body] :as block}]
+  (let [ref-blocks (atom nil)]
     (walk/postwalk
      (fn [form]
-       (when-let [heading (get-block-reference form)]
-         (swap! ref-headings conj heading))
+       (when-let [block (get-block-reference form)]
+         (swap! ref-blocks conj block))
        form)
      (concat title body))
-    (let [ref-headings (remove string/blank? @ref-headings)]
-      (assoc heading :ref-headings (map
-                                     (fn [id]
-                                       [:heading/uuid (medley/uuid id)])
-                                     ref-headings)))))
+    (let [ref-blocks (remove string/blank? @ref-blocks)]
+      (assoc block :ref-blocks (map
+                                 (fn [id]
+                                   [:block/uuid (medley/uuid id)])
+                                 ref-blocks)))))
 
-(defn safe-headings
-  [headings]
-  (map (fn [heading]
-         (let [heading (util/remove-nils heading)]
+(defn safe-blocks
+  [blocks]
+  (map (fn [block]
+         (let [block (util/remove-nils block)]
            (medley/map-keys
-            (fn [k] (keyword "heading" k))
-            heading)))
-    headings))
+            (fn [k] (keyword "block" k))
+            block)))
+    blocks))
 
-(defn collect-heading-tags
-  [{:keys [title body tags] :as heading}]
-  (cond-> heading
+(defn collect-block-tags
+  [{:keys [title body tags] :as block}]
+  (cond-> block
     (seq tags)
     (assoc :tags (util/->tags tags))))
 
-(defn extract-headings
+(defn extract-blocks
   [blocks last-pos encoded-content]
   (let [block-refs (atom [])
-        headings
+        blocks
         (loop [headings []
-               heading-body []
+               block-body []
                blocks (reverse blocks)
                timestamps {}
                properties {}
@@ -155,88 +157,89 @@
                last-level 1000
                children []]
           (if (seq blocks)
-            (let [block (first blocks)
+            (let [[block {:keys [start_pos end_pos]}] (first blocks)
                   level (:level (second block))]
               (cond
                 (paragraph-timestamp-block? block)
                 (let [timestamp (extract-timestamp block)
                       timestamps' (conj timestamps timestamp)]
-                  (recur headings heading-body (rest blocks) timestamps' properties last-pos last-level children))
+                  (recur headings block-body (rest blocks) timestamps' properties last-pos last-level children))
 
                 (properties-block? block)
-                (let [properties (extract-properties block)]
-                  (recur headings heading-body (rest blocks) timestamps properties last-pos last-level children))
+                (let [properties (extract-properties block start_pos end_pos)]
+                  (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
                 (let [id (or (when-let [custom-id (get-in properties [:properties "CUSTOM_ID"])]
                                (when (util/uuid-string? custom-id)
                                  (uuid custom-id)))
                              (d/squuid))
-                      heading (second block)
-                      level (:level heading)
-                      [children current-heading-children]
+                      block (second block)
+                      level (:level block)
+                      [children current-block-children]
                       (cond
                         (>= level last-level)
                         [(conj children [id level])
                          #{}]
 
                         (< level last-level)
-                        (let [current-heading-children (set (->> (filter #(< level (second %)) children)
-                                                                 (map first)))
+                        (let [current-block-children (set (->> (filter #(< level (second %)) children)
+                                                               (map first)))
                               others (vec (remove #(< level (second %)) children))]
                           [(conj others [id level])
-                           current-heading-children]))
-                      heading (-> (assoc heading
-                                         :uuid id
-                                         :body (vec (reverse heading-body))
-                                         :timestamps timestamps
-                                         :properties (:properties properties)
-                                         :properties-meta (dissoc properties :properties)
-                                         :children (or current-heading-children []))
-                                  (assoc-in [:meta :end-pos] last-pos))
-                      heading (collect-heading-tags heading)
-                      heading (with-page-refs heading)
-                      heading (with-block-refs heading)
+                           current-block-children]))
+                      block (-> (assoc block
+                                       :uuid id
+                                       :body (vec (reverse block-body))
+                                       :timestamps timestamps
+                                       :properties (:properties properties)
+                                       :properties-meta (dissoc properties :properties)
+                                       :children (or current-block-children []))
+                                (assoc-in [:meta :start-pos] start_pos)
+                                (assoc-in [:meta :end-pos] last-pos))
+                      block (collect-block-tags block)
+                      block (with-page-refs block)
+                      block (with-block-refs block)
                       _ (swap! block-refs
                                (fn [refs]
-                                 (->> (concat refs (:ref-headings heading))
+                                 (->> (concat refs (:ref-blocks block))
                                       (remove nil?)
                                       (distinct))))
-                      last-pos' (get-in heading [:meta :pos])]
-                  (recur (conj headings heading) [] (rest blocks) {} {} last-pos' (:level heading) children))
+                      last-pos' (get-in block [:meta :start-pos])]
+                  (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
 
                 :else
-                (let [heading-body' (conj heading-body block)]
-                  (recur headings heading-body' (rest blocks) timestamps properties last-pos last-level children))))
+                (let [block-body' (conj block-body block)]
+                  (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
             (-> (reverse headings)
-                safe-headings)))]
-    (let [first-heading (first headings)
-          first-heading-start-pos (get-in first-heading [:heading/meta :pos])
-          headings (if (and
-                        (not (string/blank? encoded-content))
-                        (or (empty? headings)
-                            (> first-heading-start-pos 1)))
-                     (cons
-                      (merge
-                       (let [content (utf8/substring encoded-content 0 first-heading-start-pos)
-                             uuid (d/squuid)]
-                         {:heading/uuid uuid
-                          :heading/content content
-                          :heading/anchor (str uuid)
-                          :heading/level 2
-                          :heading/meta {:pos 0
-                                         :end-pos (or first-heading-start-pos
-                                                      (utf8/length encoded-content))}
-                          :heading/body (take-while (fn [block] (not (heading-block? block))) blocks)
-                          :heading/pre-heading? true})
-                       (select-keys first-heading [:heading/file :heading/format :heading/page]))
-                      headings)
-                     headings)
+                safe-blocks)))]
+    (let [first-block (first blocks)
+          first-block-start-pos (get-in first-block [:block/meta :start-pos])
+          blocks (if (and
+                      (not (string/blank? encoded-content))
+                      (or (empty? blocks)
+                          (> first-block-start-pos 1)))
+                   (cons
+                    (merge
+                     (let [content (utf8/substring encoded-content 0 first-block-start-pos)
+                           uuid (d/squuid)]
+                       {:block/uuid uuid
+                        :block/content content
+                        :block/anchor (str uuid)
+                        :block/level 2
+                        :block/meta {:start-pos 0
+                                     :end-pos (or first-block-start-pos
+                                                  (utf8/length encoded-content))}
+                        :block/body (take-while (fn [block] (not (heading-block? block))) blocks)
+                        :block/pre-block? true})
+                     (select-keys first-block [:block/file :block/format :block/page]))
+                    blocks)
+                   blocks)
           block-refs (mapv
-                      (fn [[_ heading-uuid]]
-                        {:heading/uuid heading-uuid})
+                      (fn [[_ block-uuid]]
+                        {:block/uuid block-uuid})
                       @block-refs)]
-      [block-refs headings])))
+      [block-refs blocks])))
 
 (defn- page-with-journal
   [original-page-name]
@@ -250,59 +253,59 @@
         {:page/name page-name
          :page/original-name original-page-name}))))
 
-(defn parse-heading
-  [{:heading/keys [uuid content meta file page] :as heading} format]
+(defn parse-block
+  [{:block/keys [uuid content meta file page] :as block} format]
   (when-not (string/blank? content)
     (let [ast (format/to-edn content format nil)
-          start-pos (:pos meta)
+          start-pos (:start-pos meta)
           encoded-content (utf8/encode content)
           content-length (utf8/length encoded-content)
-          [block-refs headings] (extract-headings ast content-length encoded-content)
+          [block-refs blocks] (extract-blocks ast content-length encoded-content)
           ref-pages-atom (atom [])
-          headings (doall
-                    (map-indexed
-                     (fn [idx {:heading/keys [ref-pages ref-headings meta] :as heading}]
-                       (let [heading (collect-heading-tags heading)
-                             heading (merge
-                                      heading
-                                      {:heading/meta meta
-                                       :heading/marker (get heading :heading/marker "nil")
-                                       :heading/properties (get heading :heading/properties [])
-                                       :heading/properties-meta (get heading :heading/properties-meta [])
-                                       :heading/file file
-                                       :heading/format format
-                                       :heading/page page
-                                       :heading/content (utf8/substring encoded-content
-                                                                        (:pos meta)
-                                                                        (:end-pos meta))}
-                                      ;; Preserve the original heading id
-                                      (when (and (zero? idx)
-                                                 ;; not custom-id
-                                                 (not (get-in heading [:heading/properties "CUSTOM_ID"])))
-                                        {:heading/uuid uuid})
-                                      (when (seq ref-pages)
-                                        {:heading/ref-pages
-                                         (mapv
-                                          (fn [page]
-                                            (let [page (page-with-journal page)]
-                                              (swap! ref-pages-atom conj page)
-                                              page))
-                                          ref-pages)}))]
-                         (-> heading
-                             (assoc-in [:heading/meta :pos] (+ (:pos meta) start-pos))
-                             (assoc-in [:heading/meta :end-pos] (+ (:end-pos meta) start-pos)))))
-                     headings))
+          blocks (doall
+                  (map-indexed
+                   (fn [idx {:block/keys [ref-pages ref-blocks meta] :as block}]
+                     (let [block (collect-block-tags block)
+                           block (merge
+                                  block
+                                  {:block/meta meta
+                                   :block/marker (get block :block/marker "nil")
+                                   :block/properties (get block :block/properties [])
+                                   :block/properties-meta (get block :block/properties-meta [])
+                                   :block/file file
+                                   :block/format format
+                                   :block/page page
+                                   :block/content (utf8/substring encoded-content
+                                                                  (:start-pos meta)
+                                                                  (:end-pos meta))}
+                                  ;; Preserve the original block id
+                                  (when (and (zero? idx)
+                                             ;; not custom-id
+                                             (not (get-in block [:block/properties "CUSTOM_ID"])))
+                                    {:block/uuid uuid})
+                                  (when (seq ref-pages)
+                                    {:block/ref-pages
+                                     (mapv
+                                      (fn [page]
+                                        (let [page (page-with-journal page)]
+                                          (swap! ref-pages-atom conj page)
+                                          page))
+                                      ref-pages)}))]
+                       (-> block
+                           (assoc-in [:block/meta :start-pos] (+ (:start-pos meta) start-pos))
+                           (assoc-in [:block/meta :end-pos] (+ (:end-pos meta) start-pos)))))
+                   blocks))
           pages (vec (distinct @ref-pages-atom))]
       {:block-refs block-refs
-       :headings headings
+       :blocks blocks
        :pages pages
        :start-pos start-pos
        :end-pos (+ start-pos content-length)})))
 
 (defn with-levels
-  [text format {:heading/keys [level pre-heading?]}]
-  (let [pattern (config/get-heading-pattern format)
-        prefix (if pre-heading? "" (str (apply str (repeat level pattern)) " "))]
+  [text format {:block/keys [level pre-block?]}]
+  (let [pattern (config/get-block-pattern format)
+        prefix (if pre-block? "" (str (apply str (repeat level pattern)) " "))]
     (str prefix (string/triml text))))
 
 (defn macro-subs
@@ -319,24 +322,32 @@
 
 (comment
   (defn sort-tasks
-    [headings]
+    [blocks]
     (let [markers ["NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAITING" "WAIT" "DONE" "CANCELED" "CANCELLED"]
           markers (zipmap markers (reverse (range 1 (count markers))))
           priorities ["A" "B" "C" "D" "E" "F" "G"]
           priorities (zipmap priorities (reverse (range 1 (count priorities))))]
       (sort (fn [t1 t2]
-              (let [m1 (get markers (:heading/marker t1) 0)
-                    m2 (get markers (:heading/marker t2) 0)
-                    p1 (get priorities (:heading/priority t1) 0)
-                    p2 (get priorities (:heading/priority t2) 0)]
+              (let [m1 (get markers (:block/marker t1) 0)
+                    m2 (get markers (:block/marker t2) 0)
+                    p1 (get priorities (:block/priority t1) 0)
+                    p2 (get priorities (:block/priority t2) 0)]
                 (cond
                   (and (= m1 m2)
                        (= p1 p2))
-                  (compare (str (:heading/title t1))
-                           (str (:heading/title t2)))
+                  (compare (str (:block/title t1))
+                           (str (:block/title t2)))
 
                   (= m1 m2)
                   (> p1 p2)
                   :else
                   (> m1 m2))))
-            headings))))
+            blocks)))
+
+  (def file-content "# Aug 1st, 2020\n# Aug 2nd, 2020\n# Aug 3rd, 2020\n# Aug 4th, 2020\n# Aug 5th, 2020\n# Aug 6th, 2020\n# Aug 7th, 2020\n# Aug 8th, 2020\n# Aug 9th, 2020\n# Aug 10th, 2020\n# Aug 11th, 2020\n# Aug 12th, 2020\n# Aug 13th, 2020\n# Aug 14th, 2020\n# Aug 15th, 2020\n# Aug 16th, 2020\n# Aug 17th, 2020\n# Aug 18th, 2020\n# Aug 19th, 2020\n# Aug 20th, 2020\n# Aug 21st, 2020\n# Aug 22nd, 2020\n# Aug 23rd, 2020\n# Aug 24th, 2020\n# Aug 25th, 2020\n# Aug 26th, 2020\n# Aug 27th, 2020\n# Aug 28th, 2020\n# Aug 29th, 2020\n# Aug 30th, 2020\n# Aug 31st, 2020\n")
+
+  (def ast (frontend.format.mldoc/->edn file-content (frontend.format.mldoc/default-config :markdown)))
+
+  (let [utf8-content (utf8/encode file-content)]
+    (extract-blocks ast (utf8/length utf8-content) utf8-content))
+  )

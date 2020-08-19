@@ -355,7 +355,7 @@
       [:div.flex-1.flex-row.foldable-title {:on-mouse-over #(reset! control? true)
                                             :on-mouse-out #(reset! control? false)}
        [:div.hd-control.flex.flex-row.items-center
-        [:a.heading-control.opacity-50.hover:opacity-100.mr-2
+        [:a.block-control.opacity-50.hover:opacity-100.mr-2
          {:style {:width 14
                   :height 16
                   :margin-left -24}

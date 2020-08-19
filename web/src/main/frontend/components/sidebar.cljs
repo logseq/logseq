@@ -146,7 +146,7 @@
                        (not (gobj/get e "altKey")))
               (when-let [repo-url (state/get-current-repo)]
                 (if (and
-                     (db/get-key-value repo-url :git/write-permission?)
+                     ;; (db/get-key-value repo-url :git/write-permission?)
                      (not (state/get-edit-input-id))
                      (seq (state/get-changed-files repo-url)))
                   (state/set-modal! commit/add-commit-message)
@@ -169,7 +169,7 @@
         home? (= :home route-name)]
     [:div {:class (if white? "white-theme" "dark-theme")
            :on-click (fn []
-                       (editor-handler/unhighlight-heading!))}
+                       (editor-handler/unhighlight-block!))}
      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden
        [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
@@ -298,11 +298,8 @@
                   :flex "1 1 65%"
                   :width "100vw"}}
          [:div.flex-1 {:style (cond->
-                                {:max-width 640
-                                 :margin-bottom (if global-graph-pages? 0 200)}
-                                (or (and global-graph-pages?
-                                         ;; (not (state/sub :ui/sidebar-open?))
-                                         )
+                                {:max-width 640}
+                                (or global-graph-pages?
                                     (and (not logged?)
                                          home?))
                                 (dissoc :max-width))}
@@ -316,7 +313,8 @@
               (ui/loading "Loading")]]
 
             :else
-            main-content)]]
+            [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
+             main-content])]]
         (right-sidebar/sidebar)]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:href "/"
@@ -332,8 +330,9 @@
        (ui/modal)
        (custom-context-menu)
        [:a#download.hidden]
-       [:div#help.font-bold.absolute.bottom-4.right-7.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-        {:title "Click to check shortcuts and other tips"
+       [:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+        {:style {:right 24}
+         :title "Click to check shortcuts and other tips"
          :on-click (fn []
                      (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
         "?"]]]]))
