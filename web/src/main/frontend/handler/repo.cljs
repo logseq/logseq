@@ -185,7 +185,8 @@
       (history/add-history!
        [:git/repo repo-url]
        {:db (d/db (db/get-conn repo-url false))
-        :files-db (d/db (db/get-files-conn repo-url))}))))
+        :files-db (when-let [file-conn (db/get-files-conn repo-url)]
+                    (d/db file-conn))}))))
 
 (defn db-listen-to-tx!
   [repo db-conn]

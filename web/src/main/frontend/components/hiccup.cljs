@@ -375,7 +375,7 @@
     ;; FIXME: alert when self block reference
     (when-not (string/blank? id)
       (let [block (and (util/uuid-string? id)
-                         (db/pull-block (uuid id)))]
+                       (db/pull-block (uuid id)))]
         (if block
           [:span
            [:span.text-gray-500 "(("]
@@ -448,7 +448,7 @@
                   (->elem
                    :a
                    (cond->
-                       {:href href}
+                     {:href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -461,8 +461,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -550,7 +550,7 @@
             nil))
 
         :else
-        (when-let [block-uuid (:block/uuid config)]
+        (if-let [block-uuid (:block/uuid config)]
           (let [macro-content (or
                                (-> (db/entity [:block/uuid block-uuid])
                                    (:block/page)
@@ -564,7 +564,13 @@
             [:span
              (if (and (seq arguments) macro-content)
                (block/macro-subs macro-content arguments)
-               macro-content)]))))
+               (or
+                macro-content
+                [:span.warning {:title (str "Unsupported macro name: " name)}
+                 (util/format "{{{%s %s}}}" name (string/join ", " arguments))]))])
+
+          [:span
+           (util/format "{{{%s %s}}}" name (string/join ", " arguments))])))
 
     :else
     ""))
@@ -880,10 +886,10 @@
                                (when-not (dnd-same-block? uuid)
                                  (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
                                    (dnd/move-block @*dragging-block
-                                                     block
-                                                     from-dom-id
-                                                     false
-                                                     true)))
+                                                   block
+                                                   from-dom-id
+                                                   false
+                                                   true)))
                                (reset! *dragging? false)
                                (reset! *dragging-block nil)
                                (editor-handler/unhighlight-block!))}]
@@ -997,10 +1003,10 @@
                                (when-not (dnd-same-block? uuid)
                                  (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
                                    (dnd/move-block @*dragging-block
-                                                     block
-                                                     from-dom-id
-                                                     @*move-to-top?
-                                                     false)))
+                                                   block
+                                                   from-dom-id
+                                                   @*move-to-top?
+                                                   false)))
                                (reset! *dragging? false)
                                (reset! *dragging-block nil)
                                (editor-handler/unhighlight-block!))
@@ -1027,16 +1033,16 @@
                                           (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-block.flex.flex-col.pt-1
      (cond->
-         {:id block-id
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-block? " pre-block"))
-          :blockid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
+       {:id block-id
+        :style {:position "relative"}
+        :class (str uuid
+                    (when dummy? " dummy")
+                    (when (and collapsed? has-child?) " collapsed")
+                    (when pre-block? " pre-block"))
+        :blockid (str uuid)
+        :repo repo
+        :level level
+        :haschild (str has-child?)}
        (not slide?)
        (merge drag-attrs))
 
@@ -1054,7 +1060,7 @@
 
      (when (seq children)
        [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
-                                       :display (if collapsed? "none" "")}}
+                                     :display (if collapsed? "none" "")}}
         (for [child children]
           (when (map? child)
             (let [child (dissoc child :block/meta)]
@@ -1066,8 +1072,8 @@
          (when (seq children)
            [:div.ref-children.ml-12
             (blocks-container children (assoc config
-                                                :ref-child? true
-                                                :ref? true))])))
+                                              :ref-child? true
+                                              :ref? true))])))
 
      (dnd-separator-wrapper block slide? false)]))
 
@@ -1227,9 +1233,9 @@
           view-f (sci/eval-string (pr-str view))
           only-blocks? (:block/uuid (first result))
           blocks-grouped-by-page? (and (seq result)
-                                         (:page/name (ffirst result))
-                                         (:block/uuid (first (second (first result))))
-                                         true)
+                                       (:page/name (ffirst result))
+                                       (:block/uuid (first (second (first result))))
+                                       true)
           built-in? (built-in-custom-query? title)]
       [:div.custom-query.mt-2
        (when-not (and built-in? (empty? result))
@@ -1444,10 +1450,10 @@
                        (let [block (dissoc block :block/meta)
                              level (:block/level block)
                              block-cp (if build-block-fn
-                                          (build-block-fn config block)
-                                          (rum/with-key
-                                            (block-container config block)
-                                            (str "slide-" (:block/uuid block))))]
+                                        (build-block-fn config block)
+                                        (rum/with-key
+                                          (block-container config block)
+                                          (str "slide-" (:block/uuid block))))]
                          (if (= first-block-level level)
                            ;; new slide
                            (conj acc [[block block-cp]])
