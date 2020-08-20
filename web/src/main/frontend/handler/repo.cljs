@@ -447,7 +447,8 @@
           _ (git-handler/git-set-username-email! repo-url (:me @state/state))]
     (load-db-and-journals! repo-url nil true)
     (periodically-pull-and-push repo-url {:pull-now? false})
-    (periodically-persist-app-metadata repo-url)))
+    ;; (periodically-persist-app-metadata repo-url)
+    ))
 
 (defn clone-and-pull-repos
   [me]
