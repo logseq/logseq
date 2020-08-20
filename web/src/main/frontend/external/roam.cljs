@@ -17,8 +17,9 @@
 ;; DONE: 1. uid converted to a uuid
 ;; DONE: 2. merge pages with same names (case-sensitive)
 ;; DONE: 3. mldoc add support to roam research macros, or we can transform here.
-;; TODO: 4. mldoc add support to nested links
-;; TODO: hiccup
+;; DONE: 4. mldoc add support to nested links
+;; TODO: 5. Roam attributes -> properties
+;; TODO: 6. hiccup
 
 (defonce uid-pattern #"\(\(([a-zA-Z0-9_\\-]{9})\)\)")
 (defonce macro-pattern #"\{\{([^{}]+)\}\}")
@@ -100,8 +101,7 @@
 (defn ->files
   [edn-data]
   (load-all-refed-uids! edn-data)
-  (let [pages-with-data (filter :children edn-data)
-        files (map ->file edn-data)
+  (let [files (map ->file edn-data)
         files (group-by (fn [f] (string/lower-case (:title f)))
                         files)]
     (map
