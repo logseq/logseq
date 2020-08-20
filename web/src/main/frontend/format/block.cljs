@@ -24,7 +24,8 @@
 
 (defn get-page-reference
   [block]
-  (when (and (vector? block) (= "Link" (first block)))
+  (cond
+    (and (vector? block) (= "Link" (first block)))
     (let [typ (first (:url (second block)))]
       (or
        (and
@@ -39,7 +40,14 @@
        (and
         (= typ "Complex")
         (= (:protocol (second (:url (second block)))) "file")
-        (:link (second (:url (second block)))))))))
+        (:link (second (:url (second block)))))))
+
+    (and (vector? block) (= "Nested_link" (first block)))
+    (let [content (:content (last block))]
+      (subs content 2 (- (count content) 2)))
+
+    :else
+    nil))
 
 (defn get-block-reference
   [block]

@@ -209,29 +209,52 @@
 (declare map-inline)
 (declare block-cp)
 
+(declare page-reference)
+
 (defn page-cp
-  [{:keys [html-export? label] :as config} page]
-  (let [page-name (:page/name page)
-        original-page-name (get page :page/original-name page-name)
-        page (string/lower-case page-name)
-        href (if html-export?
-               (util/encode-str page)
-               (str "/page/" (util/encode-str page)))
-        title (if-not (string/blank? label)
-                label
-                original-page-name)]
-    [:a.page-ref
-     {:href href
-      :on-click (fn [e]
-                  (util/stop e)
-                  (when (gobj/get e "shiftKey")
-                    (when-let [page (db/entity [:page/name page])]
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       (:db/id page)
-                       :page
-                       {:page page}))))}
-     title]))
+  [{:keys [html-export? label children] :as config} page]
+  (when-let [page-name (:page/name page)]
+    (let [original-page-name (get page :page/original-name page-name)
+          page (string/lower-case page-name)
+          href (if html-export?
+                 (util/encode-str page)
+                 (str "/page/" (util/encode-str page)))]
+      [:a.page-ref
+       {:href href
+        :on-click (fn [e]
+                    (util/stop e)
+                    (when (gobj/get e "shiftKey")
+                      (when-let [page (db/entity [:page/name page])]
+                        (state/sidebar-add-block!
+                         (state/get-current-repo)
+                         (:db/id page)
+                         :page
+                         {:page page}))))}
+       (for [child children]
+         (if (= (first child) "Label")
+           [:span (last child)]
+           (let [{:keys [content children]} (last child)
+                 page-name (subs content 2 (- (count content) 2))]
+             (page-reference html-export? page-name (assoc config :children children) nil))))])))
+
+(defn page-reference
+  [html-export? s config label]
+  [:span.page-reference
+   (when (and (not html-export?)
+              (not (= (:id config) "contents")))
+     [:span.text-gray-500 "[["])
+   (if (string/ends-with? s ".excalidraw")
+     [:a.page-ref
+      {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))
+       :on-click (fn [e] (util/stop e))}
+      [:span
+       (svg/excalidraw-logo)
+       (string/capitalize (draw/get-file-title s))]]
+     (page-cp (assoc config
+                     :label (mldoc/plain->text label)) {:page/name s}))
+   (when (and (not html-export?)
+              (not (= (:id config) "contents")))
+     [:span.text-gray-500 "]]"])])
 
 (defn- latex-environment-content
   [name option content]
@@ -372,6 +395,18 @@
           [:span.warning.mr-1 {:title "Block ref invalid"}
            (util/format "((%s))" id)])))
 
+    ["Nested_link" link]
+    (let [{:keys [content children]} link]
+      [:span.page-reference
+       (when (and (not html-export?)
+                  (not (= (:id config) "contents")))
+         [:span.text-gray-500 "[["])
+       (let [page-name (subs content 2 (- (count content) 2))]
+         (page-cp (assoc config :children children) {:page/name page-name}))
+       (when (and (not html-export?)
+                  (not (= (:id config) "contents")))
+         [:span.text-gray-500 "]]"])])
+
     ["Link" link]
     (let [{:keys [url label title]} link]
       (match url
@@ -387,23 +422,7 @@
                   (map-inline config label))
 
           :else
-          ;; page reference
-          [:span.page-reference
-           (when (and (not html-export?)
-                      (not (= (:id config) "contents")))
-             [:span.text-gray-500 "[["])
-           (if (string/ends-with? s ".excalidraw")
-             [:a.page-ref
-              {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))
-               :on-click (fn [e] (util/stop e))}
-              [:span
-               (svg/excalidraw-logo)
-               (string/capitalize (draw/get-file-title s))]]
-             (page-cp (assoc config
-                             :label (mldoc/plain->text label)) {:page/name s}))
-           (when (and (not html-export?)
-                      (not (= (:id config) "contents")))
-             [:span.text-gray-500 "]]"])])
+          (page-reference html-export? s config label))
 
         :else
         (let [href (string-of-url url)
