@@ -154,9 +154,9 @@
 
 (defn extract-blocks
   [blocks last-pos encoded-content]
-  (let [block-refs (atom [])
-        blocks
-        (loop [headings []
+  (let [[block-refs blocks]
+        (loop [block-refs []
+               headings []
                block-body []
                blocks (reverse blocks)
                timestamps {}
@@ -171,11 +171,11 @@
                 (paragraph-timestamp-block? block)
                 (let [timestamp (extract-timestamp block)
                       timestamps' (conj timestamps timestamp)]
-                  (recur headings block-body (rest blocks) timestamps' properties last-pos last-level children))
+                  (recur block-refs headings block-body (rest blocks) timestamps' properties last-pos last-level children))
 
                 (properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]
-                  (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
+                  (recur block-refs headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
                 (let [id (or (when-let [custom-id (get-in properties [:properties "CUSTOM_ID"])]
@@ -208,19 +208,18 @@
                       block (collect-block-tags block)
                       block (with-page-refs block)
                       block (with-block-refs block)
-                      _ (swap! block-refs
-                               (fn [refs]
-                                 (->> (concat refs (:ref-blocks block))
-                                      (remove nil?)
-                                      (distinct))))
+                      block-refs (into block-refs (:ref-blocks block))
                       last-pos' (get-in block [:meta :start-pos])]
-                  (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
+                  (recur block-refs (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
 
                 :else
                 (let [block-body' (conj block-body block)]
-                  (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
-            (-> (reverse headings)
-                safe-blocks)))]
+                  (recur block-refs headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
+            [(->> block-refs
+                  (remove nil?)
+                  (distinct))
+             (-> (reverse headings)
+                 safe-blocks)]))]
     (let [first-block (first blocks)
           first-block-start-pos (get-in first-block [:block/meta :start-pos])
           blocks (if (and
@@ -246,7 +245,7 @@
           block-refs (mapv
                       (fn [[_ block-uuid]]
                         {:block/uuid block-uuid})
-                      @block-refs)]
+                      block-refs)]
       [block-refs blocks])))
 
 (defn- page-with-journal
