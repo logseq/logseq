@@ -461,6 +461,12 @@
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
 
+(defn toggle-theme!
+  []
+  (let [theme (:ui/theme @state)
+        theme' (if (= theme "dark") "white" "dark")]
+    (set-theme! theme')))
+
 (defn- file-content-key
   [repo path]
   (str "ls_file_content_" repo path))

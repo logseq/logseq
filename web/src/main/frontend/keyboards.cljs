@@ -55,6 +55,7 @@
    (util/->system-modifier "ctrl+alt+d") state/toggle-document-mode!
    (util/->system-modifier "ctrl+z") history-handler/undo!
    (util/->system-modifier "ctrl+y") history-handler/redo!
+   (util/->system-modifier "ctrl+alt+t") state/toggle-theme!
    (util/->system-modifier "ctrl+alt+r") ui-handler/toggle-right-sidebar!
    (util/->system-modifier "ctrl+u") route-handler/go-to-search!
    "alt+j" route-handler/go-to-journals!
