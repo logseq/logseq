@@ -316,6 +316,7 @@
        [:tr [:td "Context Menu"] [:td "Right Click"]]
        [:tr [:td "Fold/Unfold blocks (when not in edit mode)"] [:td "Tab"]]
        [:tr [:td "Toggle document mode"] [:td "Ctrl-Alt-d"]]
+       [:tr [:td "Toggle between dark/light theme"] [:td "Ctrl-Alt-t"]]
        [:tr [:td "Toggle right sidebar"] [:td "Ctrl-Alt-r"]]
        [:tr [:td "Jump to Journals"] [:td "Alt-j"]]]]
      [:table
