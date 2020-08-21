@@ -93,4 +93,5 @@
    :block/children {:db/cardinality :db.cardinality/many
                     :db/unique :db.unique/identity}
 
+   ;; For pages
    :tag/name       {:db/unique :db.unique/identity}})
