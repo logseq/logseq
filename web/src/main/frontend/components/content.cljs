@@ -232,10 +232,22 @@
     (let [blocks (d/by-class "ls-block")]
       (doseq [block blocks]
         (if (and
-             ;; (not (d/sel1 block "img"))
+             (not (d/sel1 block "img"))
              (not (d/sel1 block "iframe")))
           (d/add-class! block "fixed-width")
           (d/remove-class! block "fixed-width"))))))
+
+(defn- set-draw-iframe-style!
+  []
+  (let [width (gobj/get js/window "innerWidth")]
+    (when (>= width 1024)
+      (let [draws (d/by-class "draw-iframe")
+            width (- width 200)]
+       (doseq [draw draws]
+         (d/set-style! draw :width (str width "px"))
+         (let [height (max 700 (/ width 2))]
+           (d/set-style! draw :height (str height "px")))
+         (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
 
 (rum/defcs content < rum/reactive
   {:will-mount (fn [state]
@@ -243,9 +255,11 @@
                  state)
    :did-mount (fn [state]
                 (set-fixed-width!)
+                (set-draw-iframe-style!)
                 state)
    :did-update (fn [state]
                  (set-fixed-width!)
+                 (set-draw-iframe-style!)
                  (lazy-load-js state)
                  state)}
   [state id {:keys [format

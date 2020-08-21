@@ -301,12 +301,12 @@
                   :flex "1 1 65%"
                   :width "100vw"}}
          [:div.flex-1
-          ;; {:style (cond->
-          ;;           {:max-width 640}
-          ;;           (or global-graph-pages?
-          ;;               (and (not logged?)
-          ;;                    home?))
-          ;;           (dissoc :max-width))}
+          {:style (cond->
+                    {:max-width 640}
+                    (or global-graph-pages?
+                        (and (not logged?)
+                             home?))
+                    (dissoc :max-width))}
           (cond
             (not indexeddb-support?)
             nil
