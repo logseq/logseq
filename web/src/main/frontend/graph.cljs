@@ -76,6 +76,7 @@
 (defn- dot-mode
   [node ctx global-scale dark?]
   (let [label (gobj/get node "id")
+        val (gobj/get node "val")
         font-size (/ 15 global-scale)
         arc-radius (/ 3 global-scale)
         x (gobj/get node "x")
@@ -83,13 +84,16 @@
         color (gobj/get node "color")]
     (set! (.-fillStyle ctx) color)
     (.beginPath ctx)
-    (.arc ctx x y arc-radius 0 (* 2 js/Math.PI) false)
+    (.arc ctx x y (if (zero? val)
+                    arc-radius
+                    (* arc-radius (js/Math.sqrt (js/Math.sqrt val)))) 0 (* 2 js/Math.PI) false)
     (set! (.-fillStyle ctx) (if dark? "#aaa" "#222"))
     (.fill ctx)))
 
 (defn- dot-text-mode
   [node ctx global-scale dark?]
   (let [label (gobj/get node "id")
+        val (gobj/get node "val")
         font-size (/ 15 global-scale)
         arc-radius (/ 3 global-scale)
         _ (set! (.-font ctx)
@@ -102,10 +106,14 @@
     (set! (.-filltextAlign ctx) "center")
     (set! (.-textBaseLine ctx) "middle")
     (set! (.-fillStyle ctx) color)
-    (.fillText ctx label (- x (/ text-width 2)) (- y (/ 9 global-scale)))
+    (.fillText ctx label
+               (- x (/ text-width 2))
+               (- y (/ 9 global-scale)))
 
     (.beginPath ctx)
-    (.arc ctx x y arc-radius 0 (* 2 js/Math.PI) false)
+    (.arc ctx x y (if (zero? val)
+                    arc-radius
+                    (* arc-radius (js/Math.sqrt (js/Math.sqrt val)))) 0 (* 2 js/Math.PI) false)
     (set! (.-fillStyle ctx)
           (if (= (gobj/get node "id") @hover-node)
             (if dark? "#A3BFFA" "#4C51BF")
@@ -175,10 +183,10 @@
                               {:page page}))
                            (route-handler/redirect! {:to :page
                                                      :path-params {:name (util/url-encode page-name)}})))))
-      :cooldownTicks 100
-      :onEngineStop (fn []
-                      (when-let [ref (:ref-atom option)]
-                        (.zoomToFit @ref 400)))
+      ;; :cooldownTicks 100
+      ;; :onEngineStop (fn []
+      ;;                 (when-let [ref (:ref-atom option)]
+      ;;                   (.zoomToFit @ref 400)))
       :nodeCanvasObject
       (fn [node ^CanvasRenderingContext2D ctx global-scale]
         (case @graph-mode

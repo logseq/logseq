@@ -33,4 +33,5 @@
           error-files (atom #{})]
       (index-files! repo files error-files)
       (when (seq @error-files)
-        (index-files! repo @error-files (atom nil))))))
+        (index-files! repo @error-files (atom nil)))
+      (notification/show! "Importing finished!" :success))))

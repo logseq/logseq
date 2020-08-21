@@ -275,10 +275,10 @@
        [repo :block/block block-id])))
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.embed-block.py-2.my-2.px-3.bg-base-2 {:style {:z-index 2}}
-     [:p
-      [:code "Embed block:"]]
-     (blocks-container blocks (assoc config :embed? true))]))
+    [:div.embed-block.bg-base-2 {:style {:z-index 2}}
+     [:code "Embed block:"]
+     [:div.px-2
+      (blocks-container blocks (assoc config :embed? true))]]))
 
 (rum/defc page-embed < rum/reactive
   (db-mixins/clear-query-cache
@@ -295,7 +295,7 @@
      [:p
       [:code "Embed page:"]
       [:a.ml-2 {:href (str "/page/" (util/encode-str page-name))}
-       page-original-name]]
+       (or page-original-name page-name)]]
      (blocks-container blocks (assoc config :embed? true))]))
 
 (defn- get-label-text
@@ -309,6 +309,13 @@
   [label]
   (when-let [label-text (get-label-text label)]
     (db/entity [:page/name (string/lower-case label-text)])))
+
+(defn- macro->text
+  [name arguments]
+  (if (and (seq arguments)
+           (not= arguments ["null"]))
+    (util/format "{{{%s %s}}}" name (string/join ", " arguments))
+    (util/format "{{{%s}}}" name)))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -567,10 +574,10 @@
                (or
                 macro-content
                 [:span.warning {:title (str "Unsupported macro name: " name)}
-                 (util/format "{{{%s %s}}}" name (string/join ", " arguments))]))])
+                 (macro->text name arguments)]))])
 
           [:span
-           (util/format "{{{%s %s}}}" name (string/join ", " arguments))])))
+           (macro->text name arguments)])))
 
     :else
     ""))
