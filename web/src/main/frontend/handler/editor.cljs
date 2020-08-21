@@ -5,6 +5,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.draw :as draw]
             [frontend.handler.expand :as expand]
             [frontend.format :as format]
             [frontend.format.block :as block]
@@ -208,7 +209,7 @@
       (let [page-name (:page/name (db/entity repo page-id))
             end-pos (db/get-block-page-end-pos repo page-name)]
         (assoc block :block/meta {:start-pos end-pos
-                                      :end-pos end-pos}))
+                                  :end-pos end-pos}))
       block)
     (if-let [meta (:block/meta (db/entity repo [:block/uuid (:block/uuid block)]))]
       (assoc block :block/meta meta)
@@ -223,8 +224,8 @@
 (defn unhighlight-block!
   []
   (let [blocks (some->> (array-seq (js/document.getElementsByClassName "block-highlight"))
-                          (repeat 2)
-                          (apply concat))]
+                        (repeat 2)
+                        (apply concat))]
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
@@ -261,40 +262,40 @@
         block-and-children-content (atom (:block/content block))
         last-child-end-pos (atom before-end-pos)
         after-blocks (mapv
-                        (fn [{:block/keys [uuid meta level content] :as block}]
-                          (let [old-start-pos (:start-pos meta)
-                                old-end-pos (:end-pos meta)
-                                ]
-                            (when (<= level block-level)
-                              (reset! next-leq-level? true))
+                      (fn [{:block/keys [uuid meta level content] :as block}]
+                        (let [old-start-pos (:start-pos meta)
+                              old-end-pos (:end-pos meta)
+                              ]
+                          (when (<= level block-level)
+                            (reset! next-leq-level? true))
 
-                            (let [[new-content offset] (cond
-                                                         (and (not @next-leq-level?) (true? indent-left?))
-                                                         [(subs content 1) -1]
-                                                         (and (not @next-leq-level?) (false? indent-left?))
-                                                         [(str (config/get-block-pattern format) content) 1]
-                                                         :else
-                                                         [nil 0])
-                                  new-end-pos (if old-end-pos
-                                                (+ @last-start-pos
-                                                   (- old-end-pos old-start-pos)
-                                                   offset))
-                                  new-meta {:start-pos @last-start-pos
-                                            :end-pos new-end-pos}]
-                              (reset! last-start-pos new-end-pos)
-                              (when-not @next-leq-level?
-                                (do
-                                  (reset! block-and-children-content (str @block-and-children-content new-content))
-                                  (reset! last-child-end-pos old-end-pos)))
+                          (let [[new-content offset] (cond
+                                                       (and (not @next-leq-level?) (true? indent-left?))
+                                                       [(subs content 1) -1]
+                                                       (and (not @next-leq-level?) (false? indent-left?))
+                                                       [(str (config/get-block-pattern format) content) 1]
+                                                       :else
+                                                       [nil 0])
+                                new-end-pos (if old-end-pos
+                                              (+ @last-start-pos
+                                                 (- old-end-pos old-start-pos)
+                                                 offset))
+                                new-meta {:start-pos @last-start-pos
+                                          :end-pos new-end-pos}]
+                            (reset! last-start-pos new-end-pos)
+                            (when-not @next-leq-level?
+                              (do
+                                (reset! block-and-children-content (str @block-and-children-content new-content))
+                                (reset! last-child-end-pos old-end-pos)))
 
-                              (cond->
-                                {:block/uuid uuid
-                                 :block/meta new-meta}
-                                (and (some? indent-left?) (not @next-leq-level?))
-                                (assoc :block/level (if indent-left? (dec level) (inc level)))
-                                (and new-content (not @next-leq-level?))
-                                (assoc :block/content new-content)))))
-                        after-blocks)]
+                            (cond->
+                              {:block/uuid uuid
+                               :block/meta new-meta}
+                              (and (some? indent-left?) (not @next-leq-level?))
+                              (assoc :block/level (if indent-left? (dec level) (inc level)))
+                              (and new-content (not @next-leq-level?))
+                              (assoc :block/content new-content)))))
+                      after-blocks)]
     [after-blocks @block-and-children-content @last-child-end-pos]))
 
 (defn compute-retract-refs
@@ -308,10 +309,10 @@
                                 [] old-ref-pages)
         ref-blocks-id    (map #(:db/id (db/get-page (str (last %)))) ref-blocks)
         retracted-blocks (reduce (fn [done current]
-                                     (if (some #(= (:db/id current) %) ref-blocks-id)
-                                       done
-                                       (conj done (:db/id current))))
-                                   [] old-ref-blocks)]
+                                   (if (some #(= (:db/id current) %) ref-blocks-id)
+                                     done
+                                     (conj done (:db/id current))))
+                                 [] old-ref-blocks)]
     ;; removes retracted pages and blocks
     (into
      (mapv (fn [ref] [:db/retract eid :block/ref-pages ref]) retracted-pages)
@@ -379,12 +380,12 @@
                  value (get-block-new-value block file-content value)
                  block (assoc block :block/content value)
                  {:keys [blocks pages start-pos end-pos]} (if pre-block?
-                                                              (let [new-end-pos (utf8/length (utf8/encode value))]
-                                                                {:blocks [(assoc-in block [:block/meta :end-pos] new-end-pos)]
-                                                                 :pages []
-                                                                 :start-pos 0
-                                                                 :end-pos new-end-pos})
-                                                              (block/parse-block block format))
+                                                            (let [new-end-pos (utf8/length (utf8/encode value))]
+                                                              {:blocks [(assoc-in block [:block/meta :end-pos] new-end-pos)]
+                                                               :pages []
+                                                               :start-pos 0
+                                                               :end-pos new-end-pos})
+                                                            (block/parse-block block format))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)
                  ;; _ (prn {:block-children-content block-children-content
@@ -454,27 +455,27 @@
         page (db/entity repo (:db/id page))
         file (db/entity repo (:db/id file))
         insert-block (fn [block file-path file-content]
-                         (let [value (if create-new-block?
-                                       (str v1 "\n" v2)
-                                       value)
-                               [new-content value] (new-file-content block file-content value)
-                               {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
-                               first-block (first blocks)
-                               last-block (last blocks)
-                               blocks (db/recompute-block-children repo block blocks)
-                               after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)]
-                           (repo-handler/transact-react-and-alter-file!
-                            repo
-                            (concat
-                             pages
-                             blocks
-                             after-blocks)
-                            {:key :block/change
-                             :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                            [[file-path new-content]])
+                       (let [value (if create-new-block?
+                                     (str v1 "\n" v2)
+                                     value)
+                             [new-content value] (new-file-content block file-content value)
+                             {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
+                             first-block (first blocks)
+                             last-block (last blocks)
+                             blocks (db/recompute-block-children repo block blocks)
+                             after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)]
+                         (repo-handler/transact-react-and-alter-file!
+                          repo
+                          (concat
+                           pages
+                           blocks
+                           after-blocks)
+                          {:key :block/change
+                           :data (map (fn [block] (assoc block :block/page page)) blocks)}
+                          [[file-path new-content]])
 
-                           (when ok-handler
-                             (ok-handler [first-block last-block v2]))))]
+                         (when ok-handler
+                           (ok-handler [first-block last-block v2]))))]
     (cond
       (and (not file) page)
       (let [format (name format)
@@ -541,10 +542,10 @@
   [block-id prev-pos format id]
   (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
         block (or
-                 (db/pull [:block/uuid block-id])
-                 ;; dummy?
-                 {:block/uuid block-id
-                  :block/content ""})
+               (db/pull [:block/uuid block-id])
+               ;; dummy?
+               {:block/uuid block-id
+                :block/content ""})
         {:block/keys [content]} block
         content (string/trim (text/remove-level-spaces content format))
         content-length (count content)
@@ -558,7 +559,7 @@
   (let [{:keys [block value format id]} (get-state state)
         block-id (:block/uuid block)
         block (or (db/pull [:block/uuid block-id])
-                    block)]
+                  block)]
     (set-last-edit-block! (:block/uuid block) value)
     ;; save the current block and insert a new block
     (insert-new-block-aux!
@@ -666,14 +667,14 @@
                              0)]
                     (save-block-if-changed! block new-value)
                     (edit-block! (uuid sibling-block-id)
-                                   pos format id)))))))))))
+                                 pos format id)))))))))))
 
 (defn delete-blocks!
   [repo block-uuids]
   (when (seq block-uuids)
     (let [blocks (db/pull-many repo '[*] (mapv (fn [id]
-                                                   [:block/uuid id])
-                                                 block-uuids))
+                                                 [:block/uuid id])
+                                               block-uuids))
           first-block (first blocks)
           last-block (last blocks)
           file (db/entity repo (:db/id (:block/file first-block)))
@@ -863,9 +864,9 @@
   (let [parent? (atom false)]
     (when-let [page (state/get-current-page)]
       (let [block-id (and
-                        (string? page)
-                        (util/uuid-string? page)
-                        (medley/uuid page))
+                      (string? page)
+                      (util/uuid-string? page)
+                      (medley/uuid page))
             block-parent (db/get-block-parent (state/get-current-repo) block-id)]
         (when-let [id (:block/uuid block-parent)]
           (route-handler/redirect! {:to :page
@@ -1244,13 +1245,13 @@
         move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
         move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
     (when-let [sibling-block (cond
-                                 move-upwards-to-parent?
-                                 prev-block
-                                 move-down-to-higher-level?
-                                 next-block
-                                 :else
-                                 (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
-                                   (f block-dom-node)))]
+                               move-upwards-to-parent?
+                               prev-block
+                               move-down-to-higher-level?
+                               next-block
+                               :else
+                               (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
+                                 (f block-dom-node)))]
       (when-let [sibling-block-id (d/attr sibling-block "blockid")]
         (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
           (let [sibling-meta (:block/meta sibling-block)
@@ -1271,14 +1272,14 @@
                     file-path (:file/path file)
                     old-file-content (db/get-file file-path)
                     [start-pos end-pos new-content blocks] (if up?
-                                                               [(:start-pos sibling-meta)
-                                                                (get-in (last hc1) [:block/meta :end-pos])
-                                                                (str hc1-content hc2-content)
-                                                                (concat hc1 hc2)]
-                                                               [(:start-pos meta)
-                                                                (get-in (last hc2) [:block/meta :end-pos])
-                                                                (str hc2-content hc1-content)
-                                                                (concat hc2 hc1)])]
+                                                             [(:start-pos sibling-meta)
+                                                              (get-in (last hc1) [:block/meta :end-pos])
+                                                              (str hc1-content hc2-content)
+                                                              (concat hc1 hc2)]
+                                                             [(:start-pos meta)
+                                                              (get-in (last hc2) [:block/meta :end-pos])
+                                                              (str hc2-content hc1-content)
+                                                              (concat hc2 hc1)])]
                 (when (and start-pos end-pos)
                   (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
                         modified-time (modified-time-tx page file)
@@ -1326,7 +1327,7 @@
       (let [blocks (seq (state/get-selection-blocks))]
         (if (seq blocks)
           (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                         (medley/uuid id))) blocks)
+                                       (medley/uuid id))) blocks)
                 ids (->> (mapcat #(let [children (vec (db/get-block-children-ids repo %))]
                                     (cons % children)) ids)
                          (distinct))
@@ -1338,25 +1339,25 @@
                 pattern (config/get-block-pattern format)
                 last-start-pos (atom start-pos)
                 blocks (doall
-                          (map (fn [block]
-                                 (let [content (:block/content block)
-                                       level (:block/level block)
-                                       content' (if (= :left direction)
-                                                  (subs content 1)
-                                                  (str pattern content))
-                                       end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
-                                       block (assoc block
-                                                      :block/content content'
-                                                      :block/level (if (= direction :left)
-                                                                       (dec level)
-                                                                       (inc level))
-                                                      :block/meta (merge
-                                                                     (:block/meta block)
-                                                                     {:start-pos @last-start-pos
-                                                                      :end-pos end-pos}))]
-                                   (reset! last-start-pos end-pos)
-                                   block))
-                            blocks))
+                        (map (fn [block]
+                               (let [content (:block/content block)
+                                     level (:block/level block)
+                                     content' (if (= :left direction)
+                                                (subs content 1)
+                                                (str pattern content))
+                                     end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
+                                     block (assoc block
+                                                  :block/content content'
+                                                  :block/level (if (= direction :left)
+                                                                 (dec level)
+                                                                 (inc level))
+                                                  :block/meta (merge
+                                                               (:block/meta block)
+                                                               {:start-pos @last-start-pos
+                                                                :end-pos end-pos}))]
+                                 (reset! last-start-pos end-pos)
+                                 block))
+                          blocks))
                 file-id (:db/id (:block/file block))
                 file (db/entity file-id)
                 page (:block/page block)
@@ -1387,7 +1388,7 @@
     (let [blocks (seq (state/get-selection-blocks))]
       (if (seq blocks)
         (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                       (medley/uuid id))) blocks)
+                                     (medley/uuid id))) blocks)
               ids (->> (mapcat #(let [children (vec (db/get-block-children-ids repo %))]
                                   (cons % children)) ids)
                        (distinct))
@@ -1399,28 +1400,28 @@
               pattern (config/get-block-pattern format)
               last-start-pos (atom start-pos)
               blocks (doall
-                        (map (fn [block]
-                               (let [content (:block/content block)
-                                     [prefix content] (if-let [col (util/split-first " " content)]
-                                                        col
-                                                        [content ""])
-                                     level (:block/level block)
-                                     new-marker (state/get-preferred-todo)
-                                     content' (string/replace-first content
-                                                                    format/marker-pattern
-                                                                    (str new-marker " "))
-                                     content' (str prefix " " content')
-                                     end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
-                                     block (assoc block
-                                                    :block/marker new-marker
-                                                    :block/content content'
-                                                    :block/meta (merge
-                                                                   (:block/meta block)
-                                                                   {:start-pos @last-start-pos
-                                                                    :end-pos end-pos}))]
-                                 (reset! last-start-pos end-pos)
-                                 block))
-                          blocks))
+                      (map (fn [block]
+                             (let [content (:block/content block)
+                                   [prefix content] (if-let [col (util/split-first " " content)]
+                                                      col
+                                                      [content ""])
+                                   level (:block/level block)
+                                   new-marker (state/get-preferred-todo)
+                                   content' (string/replace-first content
+                                                                  format/marker-pattern
+                                                                  (str new-marker " "))
+                                   content' (str prefix " " content')
+                                   end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
+                                   block (assoc block
+                                                :block/marker new-marker
+                                                :block/content content'
+                                                :block/meta (merge
+                                                             (:block/meta block)
+                                                             {:start-pos @last-start-pos
+                                                              :end-pos end-pos}))]
+                               (reset! last-start-pos end-pos)
+                               block))
+                        blocks))
               file-id (:db/id (:block/file block))
               file (db/entity file-id)
               page (:block/page block)
@@ -1441,3 +1442,38 @@
              :data (map (fn [block] (assoc block :block/page page)) blocks)}
             [[file-path new-content]])))
         (cycle-collapse! state e)))))
+
+(defn handle-command-input
+  [command id format m pos]
+  (case command
+    :link
+    (let [{:keys [link label]} m]
+      (if (and (string/blank? link)
+               (string/blank? label))
+        nil
+        (insert-command! id
+                         (util/format "[[%s][%s]]"
+                                      (or link "")
+                                      (or label ""))
+                         format
+                         {:last-pattern (str commands/slash "link")})))
+    :draw
+    (when-not (string/blank? (:title m))
+      (let [file (draw/title->file-name (:title m))
+            value (util/format
+                   "[[%s]]\n<iframe src=\"/draw?file=%s\" width=\"100%\" height=\"800\"></iframe>"
+                   file
+                   file)]
+        (insert-command! id
+                         value
+                         format
+                         {:last-pattern (str commands/slash "draw ")})
+        (draw/create-draw-with-default-content file)))
+    nil)
+
+  (state/set-editor-show-input nil)
+
+  (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
+    (when-let [input (gdom/getElement id)]
+      (.focus input)
+      (util/move-cursor-to input saved-cursor))))

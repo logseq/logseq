@@ -129,8 +129,8 @@
 
                                  ;; Save it so it'll be parsed correctly in the future
                                  (editor-handler/set-block-property! (:block/uuid chosen)
-                                                                       "CUSTOM_ID"
-                                                                       uuid-string)
+                                                                     "CUSTOM_ID"
+                                                                     uuid-string)
 
                                  (when-let [input (gdom/getElement id)]
                                    (.focus input))))
@@ -193,13 +193,15 @@
       {
        ;; enter
        13 (fn [state e]
-            (let [input-value (get state ::input-value)]
+            (let [input-value (get state ::input-value)
+                  input-option (get @state/state :editor/show-input)]
               (when (seq @input-value)
                 ;; no new line input
                 (util/stop e)
                 (let [[_id on-submit] (:rum/args state)
-                      {:keys [pos]} @*slash-caret-pos]
-                  (on-submit @input-value pos))
+                      {:keys [pos]} @*slash-caret-pos
+                      command (:command (first input-option))]
+                  (on-submit command @input-value pos))
                 (reset! input-value nil))))}
       nil)))
   {:did-update
@@ -218,27 +220,28 @@
     (let [{:keys [pos]} (util/react *slash-caret-pos)
           input-value (get state ::input-value)]
       (when (seq input-option)
-        [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
-         (for [{:keys [id placeholder type] :as input-item} input-option]
-           [:div.my-3
-            [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
-             (merge
-              (cond->
-                  {:key (str "modal-input-" (name id))
-                   :id (str "modal-input-" (name id))
-                   :type (or type "text")
-                   :on-change (fn [e]
-                                (swap! input-value assoc id (util/evalue e)))
-                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                placeholder
-                (assoc :placeholder placeholder))
-              (dissoc input-item :id))]])
-         (ui/button
-           "Submit"
-           :on-click
-           (fn [e]
-             (util/stop e)
-             (on-submit @input-value pos)))]))))
+        (let [command (:command (first input-option))]
+          [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
+          (for [{:keys [id placeholder type] :as input-item} input-option]
+            [:div.my-3
+             [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
+              (merge
+               (cond->
+                 {:key (str "modal-input-" (name id))
+                  :id (str "modal-input-" (name id))
+                  :type (or type "text")
+                  :on-change (fn [e]
+                               (swap! input-value assoc id (util/evalue e)))
+                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                 placeholder
+                 (assoc :placeholder placeholder))
+               (dissoc input-item :id))]])
+          (ui/button
+            "Submit"
+            :on-click
+            (fn [e]
+              (util/stop e)
+              (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left]}]
@@ -543,8 +546,8 @@
                      (editor-handler/save-block! (get-state state) value))
                    state)}
   [state {:keys [on-hide dummy? node format block]
-    :or {dummy? false}
-    :as option} id config]
+          :or {dummy? false}
+          :as option} id config]
   (let [content (state/sub [:editor/content id])]
     [:div.editor {:style {:position "relative"
                           :display "flex"
@@ -599,21 +602,8 @@
 
      (transition-cp
       (input id
-             (fn [{:keys [link label]} pos]
-               (if (and (string/blank? link)
-                        (string/blank? label))
-                 nil
-                 (editor-handler/insert-command! id
-                                                 (util/format "[[%s][%s]]"
-                                                              (or link "")
-                                                              (or label ""))
-                                                 format
-                                                 {:last-pattern (str commands/slash "link")}))
-               (state/set-editor-show-input nil)
-               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-                 (when-let [input (gdom/getElement id)]
-                   (.focus input)
-                   (util/move-cursor-to input saved-cursor)))))
+             (fn [command m pos]
+               (editor-handler/handle-command-input command id format m pos)))
       true
       *slash-caret-pos)
 

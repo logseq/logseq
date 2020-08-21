@@ -231,8 +231,9 @@
   (when (> (gobj/get js/window "innerWidth") 1024)
     (let [blocks (d/by-class "ls-block")]
       (doseq [block blocks]
-        (if (and (not (d/sel1 block "img"))
-                 (not (d/sel1 block "iframe")))
+        (if (and
+             ;; (not (d/sel1 block "img"))
+             (not (d/sel1 block "iframe")))
           (d/add-class! block "fixed-width")
           (d/remove-class! block "fixed-width"))))))
 
