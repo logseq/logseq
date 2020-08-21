@@ -1468,7 +1468,11 @@
                          value
                          format
                          {:last-pattern (str commands/slash "draw ")})
-        (draw/create-draw-with-default-content file)))
+        (draw/create-draw-with-default-content
+         file
+         (fn []
+           (let [input (gdom/getElement "download")]
+             (.click input))))))
     nil)
 
   (state/set-editor-show-input nil)

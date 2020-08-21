@@ -302,7 +302,7 @@
                   :width "100vw"}}
          [:div.flex-1
           {:style (cond->
-                    {:max-width 640}
+                      {:max-width 640}
                     (or global-graph-pages?
                         (and (not logged?)
                              home?))

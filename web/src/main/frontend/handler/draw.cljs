@@ -126,7 +126,7 @@
       (str (date/get-date-time-string-2) "-" title ".excalidraw"))))
 
 (defn create-draw-with-default-content
-  [current-file]
+  [current-file ok-handler]
   (when-let [repo (state/get-current-repo)]
     (p/let [exists? (fs/file-exists? (util/get-repo-dir repo)
                                      (str config/default-draw-directory current-file))]
@@ -138,4 +138,5 @@
                             (reset! *current-file file)
                             (reset! *unsaved? false)
                             (set-last-file! file)
-                            (reset! *saving-title nil)))))))
+                            (reset! *saving-title nil)
+                            (ok-handler)))))))

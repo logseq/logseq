@@ -97,7 +97,7 @@
      ["A" (->priority "A")]
      ["B" (->priority "B")]
      ["C" (->priority "C")]
-     ["DRAW" [[:editor/input "/draw "]
+     ["Draw" [[:editor/input "/draw "]
               [:editor/show-input [{:command :draw
                                     :id :title
                                     :placeholder "Draw title"}]]]]
