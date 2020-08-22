@@ -30,6 +30,7 @@
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.graph :as graph]
+            [frontend.format.mldoc :as mldoc]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
 
@@ -293,7 +294,11 @@
                                   :page
                                   {:page page}))))}
              [:h1.title {:style {:margin-left -2}}
-              page-original-name]])
+              (if (and (string/includes? page-original-name "[[")
+                       (string/includes? page-original-name "]]"))
+                (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
+                  (hiccup/block-cp {} (ffirst ast)))
+                page-original-name)]])
           [:div
            [:div.content
             (when (and file-path (not sidebar?) (not journal?) (not block?))
