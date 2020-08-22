@@ -98,7 +98,7 @@
   (when (and today? (not sidebar?))
     (let [queries (state/sub [:config repo :default-queries :journals])]
       (when (seq queries)
-        [:div#today-queries.mt-10.ml-2
+        [:div#today-queries.mt-10
          (for [{:keys [title] :as query} queries]
            (rum/with-key
              (hiccup/custom-query {:start-level 2} query)

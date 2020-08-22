@@ -1482,10 +1482,8 @@
      {:style {:margin-left (cond
                              sidebar?
                              0
-                             ref?
-                             -18
                              :else
-                             -24)}}
+                             -18)}}
      (build-blocks blocks config)]))
 
 ;; headers to hiccup
