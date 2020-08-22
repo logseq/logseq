@@ -134,6 +134,18 @@
      (mixins/on-key-down
       state
       {
+       ;; esc
+       27 (fn [_state e]
+            (editor-handler/clear-selection! e))
+
+       ;; shift+up
+       38 (fn [state e]
+            (editor-handler/on-select-block state e true))
+
+       ;; shift+down
+       40 (fn [state e]
+            (editor-handler/on-select-block state e false))
+
        ;; ?
        191 (fn [state e]
              (when-not (util/input? (gobj/get e "target"))

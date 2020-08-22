@@ -532,6 +532,18 @@
      (.getDate local-date-time)
      0 0 0 0)))
 
+(defn get-nodes-between-two-nodes
+  [id1 id2 class]
+  (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
+    (let [id #(gobj/get % "id")
+          node-1 (gdom/getElement id1)
+          node-2 (gdom/getElement id2)
+          idx-1 (.indexOf nodes node-1)
+          idx-2 (.indexOf nodes node-2)]
+      (subvec (vec nodes)
+              (min idx-1 idx-2)
+              (inc (max idx-1 idx-2))))))
+
 (defn rec-get-block-node
   [node]
   (if (and node (d/has-class? node "ls-block"))

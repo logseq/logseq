@@ -137,7 +137,10 @@
                         (d/remove-class! main "overflow-hidden")
                         (d/add-class! main "overflow-y-auto"))
 
-                      (editor-handler/clear-selection! e)))
+                      (when-not (state/get-selection-start-block)
+                        (editor-handler/clear-selection! e))
+
+                      (state/set-selection-start-block! nil)))
 
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
@@ -243,11 +246,11 @@
     (when (>= width 1024)
       (let [draws (d/by-class "draw-iframe")
             width (- width 200)]
-       (doseq [draw draws]
-         (d/set-style! draw :width (str width "px"))
-         (let [height (max 700 (/ width 2))]
-           (d/set-style! draw :height (str height "px")))
-         (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
+        (doseq [draw draws]
+          (d/set-style! draw :width (str width "px"))
+          (let [height (max 700 (/ width 2))]
+            (d/set-style! draw :height (str height "px")))
+          (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
 
 (rum/defcs content < rum/reactive
   {:will-mount (fn [state]

@@ -5,7 +5,8 @@
             [clojure.string :as string]
             [medley.core :as medley]
             [goog.object :as gobj]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [dommy.core :as dom]))
 
 (defonce state
   (atom
@@ -60,6 +61,7 @@
 
     :selection/mode false
     :selection/blocks []
+    :selection/start-block nil
     :custom-context-menu/show? false
     :custom-context-menu/links nil
 
@@ -309,6 +311,20 @@
          (fn [m]
            (and input-id {input-id true}))))
 
+(defn set-selection-start-block!
+  [start-block]
+  (swap! state assoc :selection/start-block start-block))
+
+(defn get-selection-start-block
+  []
+  (get @state :selection/start-block))
+
+(defn clear-selection-region!
+  []
+  (swap! state assoc
+         :selection/start-block nil
+         :selection/end-block nil))
+
 (defn set-selection-blocks!
   [blocks]
   (when (seq blocks)
@@ -316,12 +332,20 @@
            :selection/mode true
            :selection/blocks blocks)))
 
+(defn into-selection-mode!
+  []
+  (swap! state assoc :selection/mode true))
+
 (defn clear-selection!
   []
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
          :selection/up? nil))
+
+(defn clear-selection-blocks!
+  []
+  (swap! state assoc :selection/blocks nil))
 
 (defn get-selection-blocks
   []
@@ -333,6 +357,7 @@
 
 (defn conj-selection-block!
   [block up?]
+  (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (conj (:selection/blocks @state) block)

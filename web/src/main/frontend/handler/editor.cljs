@@ -748,7 +748,7 @@
             (save-block-if-changed! block new-content)))))))
 
 (defn clear-selection!
-  [e]
+  [_e]
   (when (state/in-selection-mode?)
     (doseq [block (state/get-selection-blocks)]
       (dom/remove-class! block "selected")
@@ -758,6 +758,14 @@
   ;;   (when-not (util/input? (gobj/get e "target"))
   ;;     (util/clear-selection!)))
   )
+
+(defn clear-selection-blocks!
+  []
+  (when (state/in-selection-mode?)
+    (doseq [block (state/get-selection-blocks)]
+      (dom/remove-class! block "selected")
+      (dom/remove-class! block "noselect"))
+    (state/clear-selection-blocks!)))
 
 (defn select-all-blocks!
   []
@@ -890,6 +898,27 @@
     (dom/remove-class! first-block "selected")
     (dom/remove-class! first-block "noselect")))
 
+(defn input-start-or-end?
+  ([input]
+   (input-start-or-end? input nil))
+  ([input up?]
+   (let [value (gobj/get input "value")
+         start (gobj/get input "selectionStart")
+         end (gobj/get input "selectionEnd")]
+     (if (nil? up?)
+       (or (= start 0) (= end (count value)))
+       (or (and (= start 0) up?)
+           (and (= end (count value)) (not up?)))))))
+
+(defn highlight-selection-area!
+  [end-block]
+  (when-let [start-block (:selection/start-block @state/state)]
+    (clear-selection-blocks!)
+    (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")]
+      (doseq [block blocks]
+        (dom/add-class! block "selected noselect"))
+      (state/set-selection-blocks! blocks))))
+
 (defn on-select-block
   [state e up?]
   (when (and
@@ -898,11 +927,7 @@
          (or (state/in-selection-mode?)
              (when-let [input-id (state/get-edit-input-id)]
                (when-let [input (gdom/getElement input-id)]
-                 (let [value (gobj/get input "value")
-                       start (gobj/get input "selectionStart")
-                       end (gobj/get input "selectionEnd")]
-                   (or (and (= start 0) up?)
-                       (and (= end (count value)) (not up?))))))))
+                 (input-start-or-end? input up?)))))
     (state/clear-edit!)
     (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} @select-start-block-state
           element (gdom/getElement block-parent-id)
@@ -925,9 +950,7 @@
 
               :else
               nil)
-            (do
-              (dom/add-class! element "selected noselect")
-              (state/conj-selection-block! element up?))))))))
+            (state/conj-selection-block! element up?)))))))
 
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
