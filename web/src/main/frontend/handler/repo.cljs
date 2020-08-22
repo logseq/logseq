@@ -465,7 +465,8 @@
             (do
               (git-handler/git-set-username-email! repo me)
               (periodically-pull-and-push repo {:pull-now? true})
-              (periodically-persist-app-metadata repo))
+              ;; (periodically-persist-app-metadata repo)
+              )
             (clone-and-pull repo)))))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
