@@ -964,27 +964,33 @@
 
 (defn- get-prev-block-non-collapsed
   [block]
-  (when-let [blocks (d/by-class "ls-block")]
-    (when-let [index (.indexOf blocks block)]
-      (loop [idx (dec index)]
-        (when (>= idx 0)
-          (let [block (nth blocks idx)
-                collapsed? (= "none" (d/style block "display"))]
-            (if collapsed?
-              (recur (dec idx))
-              block)))))))
+  (let [id (gobj/get block "id")
+        prefix (re-find #"ls-block-[\d]+" id)]
+    (when-let [blocks (d/by-class "ls-block")]
+     (when-let [index (.indexOf blocks block)]
+       (loop [idx (dec index)]
+         (when (>= idx 0)
+           (let [block (nth blocks idx)
+                 collapsed? (= "none" (d/style block "display"))
+                 prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+             (if (or collapsed?
+                     ;; might be embed blocks
+                     (not prefix-match?))
+               (recur (dec idx))
+               block))))))))
 
 (defn- get-next-block-non-collapsed
   [block]
-  (when-let [blocks (d/by-class "ls-block")]
-    (when-let [index (.indexOf blocks block)]
-      (loop [idx (inc index)]
-        (when (>= (count blocks) idx)
-          (let [block (nth blocks idx)
-                collapsed? (= "none" (d/style block "display"))]
-            (if collapsed?
-              (recur (inc idx))
-              block)))))))
+  (let [id (gobj/get block "id")]
+    (when-let [blocks (d/by-class "ls-block")]
+     (when-let [index (.indexOf blocks block)]
+       (loop [idx (inc index)]
+         (when (>= (count blocks) idx)
+           (let [block (nth blocks idx)
+                 collapsed? (= "none" (d/style block "display"))]
+             (if collapsed?
+               (recur (inc idx))
+               block))))))))
 
 (defn on-up-down
   [state e up?]
