@@ -289,8 +289,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                              {:block/uuid uuid
-                               :block/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -967,30 +967,34 @@
   (let [id (gobj/get block "id")
         prefix (re-find #"ls-block-[\d]+" id)]
     (when-let [blocks (d/by-class "ls-block")]
-     (when-let [index (.indexOf blocks block)]
-       (loop [idx (dec index)]
-         (when (>= idx 0)
-           (let [block (nth blocks idx)
-                 collapsed? (= "none" (d/style block "display"))
-                 prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
-             (if (or collapsed?
-                     ;; might be embed blocks
-                     (not prefix-match?))
-               (recur (dec idx))
-               block))))))))
+      (when-let [index (.indexOf blocks block)]
+        (loop [idx (dec index)]
+          (when (>= idx 0)
+            (let [block (nth blocks idx)
+                  collapsed? (= "none" (d/style block "display"))
+                  prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+              (if (or collapsed?
+                      ;; might be embed blocks
+                      (not prefix-match?))
+                (recur (dec idx))
+                block))))))))
 
 (defn- get-next-block-non-collapsed
   [block]
-  (let [id (gobj/get block "id")]
+  (let [id (gobj/get block "id")
+        prefix (re-find #"ls-block-[\d]+" id)]
     (when-let [blocks (d/by-class "ls-block")]
-     (when-let [index (.indexOf blocks block)]
-       (loop [idx (inc index)]
-         (when (>= (count blocks) idx)
-           (let [block (nth blocks idx)
-                 collapsed? (= "none" (d/style block "display"))]
-             (if collapsed?
-               (recur (inc idx))
-               block))))))))
+      (when-let [index (.indexOf blocks block)]
+        (loop [idx (inc index)]
+          (when (>= (count blocks) idx)
+            (when-let [block (util/nth-safe blocks idx)]
+              (let [collapsed? (= "none" (d/style block "display"))
+                    prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+                (if (or collapsed?
+                        ;; might be embed blocks
+                        (not prefix-match?))
+                  (recur (inc idx))
+                  block)))))))))
 
 (defn on-up-down
   [state e up?]

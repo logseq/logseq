@@ -684,17 +684,21 @@
 
 (defn get-prev-block-with-same-level
   [block]
-  (when-let [blocks (d/by-class "ls-block")]
-    (when-let [index (.indexOf blocks block)]
-      (let [level (d/attr block "level")]
-        (when (> index 0)
-          (loop [idx (dec index)]
-            (if (>= idx 0)
-              (let [block (nth blocks idx)]
-                (if (= level (d/attr block "level"))
-                  block
-                  (recur (dec idx))))
-              nil)))))))
+  (let [id (gobj/get block "id")
+        prefix (re-find #"ls-block-[\d]+" id)]
+    (when-let [blocks (d/by-class "ls-block")]
+     (when-let [index (.indexOf blocks block)]
+       (let [level (d/attr block "level")]
+         (when (> index 0)
+           (loop [idx (dec index)]
+             (if (>= idx 0)
+               (let [block (nth blocks idx)
+                     prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+                 (if (and prefix-match?
+                          (= level (d/attr block "level")))
+                   block
+                   (recur (dec idx))))
+               nil))))))))
 
 (defn get-next-block-with-same-level
   [block]
