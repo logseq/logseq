@@ -1260,7 +1260,7 @@
                                        (:block/uuid (first (second (first result))))
                                        true)
           built-in? (built-in-custom-query? title)]
-      [:div.custom-query.mt-2
+      [:div.custom-query.mt-2 (get config :attr {})
        (when-not (and built-in? (empty? result))
          (ui/foldable
           [:div.opacity-70
