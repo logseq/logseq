@@ -319,12 +319,6 @@
   []
   (get @state :selection/start-block))
 
-(defn clear-selection-region!
-  []
-  (swap! state assoc
-         :selection/start-block nil
-         :selection/end-block nil))
-
 (defn set-selection-blocks!
   [blocks]
   (when (seq blocks)

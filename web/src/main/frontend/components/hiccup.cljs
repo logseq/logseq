@@ -1027,7 +1027,7 @@
                                  (when (and
                                         (not (state/get-selection-start-block))
                                         (= (gobj/get e "buttons") 1))
-                                   (state/set-selection-start-block! block-id)))
+                                   (when block-id (state/set-selection-start-block! block-id))))
                :on-mouse-over (fn [e]
                                 (util/stop e)
                                 (when has-child?

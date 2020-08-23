@@ -127,21 +127,6 @@
                               (js/setTimeout #(state/set-selection-blocks! blocks)
                                              200)))))))
 
-     (mixins/listen state js/window "click"
-                    (fn [e]
-                      ;; hide context menu
-                      (state/hide-custom-context-menu!)
-
-                      ;; enable scroll
-                      (let [main (d/by-id "main-content")]
-                        (d/remove-class! main "overflow-hidden")
-                        (d/add-class! main "overflow-y-auto"))
-
-                      (when-not (state/get-selection-start-block)
-                        (editor-handler/clear-selection! e))
-
-                      (state/set-selection-start-block! nil)))
-
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")

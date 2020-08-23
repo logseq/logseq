@@ -131,6 +131,19 @@
   ;; TODO: move this to keyboards
   (mixins/event-mixin
    (fn [state]
+     (mixins/listen state js/window "click"
+                    (fn [e]
+                      ;; hide context menu
+                      (state/hide-custom-context-menu!)
+
+                      ;; enable scroll
+                      (let [main (d/by-id "main-content")]
+                        (d/remove-class! main "overflow-hidden")
+                        (d/add-class! main "overflow-y-auto"))
+                      (if-not (state/get-selection-start-block)
+                        (editor-handler/clear-selection! e)
+                        (state/set-selection-start-block! nil))))
+
      (mixins/on-key-down
       state
       {
