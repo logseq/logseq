@@ -93,9 +93,13 @@
              {:class (if (or should-push? pushing?) "bg-orange-400" "bg-green-600")
               :style {:border-radius "50%"
                       :margin-top 2}
-              :on-mouse-over toggle-fn}])
+              :on-mouse-over
+              (fn [e]
+                (toggle-fn)
+                (js/setTimeout repo-handler/check-changed-files-status 0))}])
           (fn [{:keys [toggle-fn]}]
             [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
+             {:on-mouse-leave toggle-fn}
              (if (and should-push? (seq changed-files))
                [:div
                 [:div.changes

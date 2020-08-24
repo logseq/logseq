@@ -46,8 +46,8 @@
                                                    (contains? config/mldoc-support-formats format)))
                                                contents)
                                  blocks-pages (if (seq parsed-files)
-                                                  (db/extract-all-blocks-pages repo-url parsed-files)
-                                                  [])]
+                                                (db/extract-all-blocks-pages repo-url parsed-files)
+                                                [])]
                              (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
                              (let [config-file (str config/app-name "/" config/config-file)]
                                (when (contains? (set files) config-file)
@@ -96,14 +96,16 @@
       (let [default-content config/config-default-content]
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
+                old-content (when file-exists?
+                              (db/get-file repo-url path))
                 content (or
-                         (when file-exists?
-                           (when-let [content (db/get-file repo-url path)]
-                             (string/replace content "heading" "block")))
+                         (and old-content
+                              (string/replace old-content "heading" "block"))
                          default-content)]
             (db/reset-file! repo-url path content)
             (db/reset-config! repo-url content)
-            (git-handler/git-add repo-url path)))
+            (when-not (= content old-content)
+              (git-handler/git-add repo-url path))))
         ;; (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
         ;;   (let [path (str app-dir "/" config/metadata-file)]
         ;;     (when-not file-exists?
@@ -269,55 +271,62 @@
                               :error)
                              (route-handler/redirect! {:to :diff})))))))))))
 
+(defn check-changed-files-status
+  [f]
+  (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
+    (let [files (bean/->clj files)]
+      (state/reset-changed-files! files))))
+
 (defn push
   ([repo-url]
    (push repo-url "Logseq auto save"))
   ([repo-url commit-message]
    (let [status (db/get-key-value repo-url :git/status)]
-     ;; (println {:changed-files (seq (state/get-changed-files repo-url))})
      (when (and
             ;; (not= status :push-failed)
             ;; (db/get-key-value repo-url :git/write-permission?)
             (not (state/get-edit-input-id))
-            (seq (state/get-changed-files repo-url)))
-       ;; auto commit if there are any un-committed changes
-       (let [commit-message (if (string/blank? commit-message)
-                              "Logseq auto save"
-                              commit-message)]
-         (p/let [_ (git/commit repo-url commit-message)]
-           ;; (println "Commit successfully!")
-           (git-handler/set-git-status! repo-url :pushing)
-           (let [token (state/get-github-token)]
-             (util/p-handle
-              (git/push repo-url token)
-              (fn []
-                ;; (println "Push successfully!")
-                (git-handler/set-git-status! repo-url nil)
-                (git-handler/set-git-error! repo-url nil)
-                (git-handler/set-latest-commit-if-exists! repo-url)
-                (state/clear-changed-files! repo-url))
-              (fn [error]
-                (if (and (string? error)
-                         (= error "Failed to fetch"))
-                  (println "Failed to fetch")
-                  (do
-                    (println "Failed to push")
-                    (js/console.dir error)
-                    (git-handler/set-git-status! repo-url :push-failed)
-                    (git-handler/set-git-error! repo-url error)
-                    (notification/show!
-                     [:p.content
-                      "Failed to push, please "
-                      [:span.text-gray-700.font-bold.mr-2
-                       "resolve any diff first."]
-                      (ui/button
-                        "Go to diff"
-                        :href "/diff")]
-                     :error
-                     false)
-                    (p/let [result (git/fetch repo-url (state/get-github-token))
-                            {:keys [fetchHead]} (bean/->clj result)]
-                      (git-handler/set-latest-commit! repo-url fetchHead)))))))))))))
+            ;; getChangedFiles is not very reliable
+            (seq (state/get-changed-files repo-url))
+            )
+       (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
+         (when (seq files)
+           ;; auto commit if there are any un-committed changes
+           (let [commit-message (if (string/blank? commit-message)
+                                  "Logseq auto save"
+                                  commit-message)]
+             (p/let [_ (git/commit repo-url commit-message)]
+               (git-handler/set-git-status! repo-url :pushing)
+               (let [token (state/get-github-token)]
+                 (util/p-handle
+                  (git/push repo-url token)
+                  (fn []
+                    (git-handler/set-git-status! repo-url nil)
+                    (git-handler/set-git-error! repo-url nil)
+                    (git-handler/set-latest-commit-if-exists! repo-url)
+                    (state/clear-changed-files! repo-url))
+                  (fn [error]
+                    (if (and (string? error)
+                             (= error "Failed to fetch"))
+                      (println "Failed to fetch")
+                      (do
+                        (println "Failed to push")
+                        (js/console.dir error)
+                        (git-handler/set-git-status! repo-url :push-failed)
+                        (git-handler/set-git-error! repo-url error)
+                        (notification/show!
+                         [:p.content
+                          "Failed to push, please "
+                          [:span.text-gray-700.font-bold.mr-2
+                           "resolve any diff first."]
+                          (ui/button
+                            "Go to diff"
+                            :href "/diff")]
+                         :error
+                         false)
+                        (p/let [result (git/fetch repo-url (state/get-github-token))
+                                {:keys [fetchHead]} (bean/->clj result)]
+                          (git-handler/set-latest-commit! repo-url fetchHead)))))))))))))))
 
 (defn pull-current-repo
   []
@@ -428,8 +437,7 @@
   (periodically-pull repo-url pull-now?)
   (when (and
          (or (not config/dev?)
-             ;; (= repo-url "https://github.com/tiensonqin/empty-repo")
-             )
+             (= repo-url "https://github.com/tiensonqin/empty-repo"))
          (not (false? (:git-auto-push (state/get-config repo-url)))))
     (periodically-push-tasks repo-url)))
 

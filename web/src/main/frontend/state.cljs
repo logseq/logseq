@@ -595,6 +595,11 @@
                  (fn [files] (distinct (conj files file))))
   (storage/set "git-changed-files" (:repo/changed-files @state)))
 
+(defn reset-changed-files!
+  [files]
+  (when-let [repo (get-current-repo)]
+    (swap! state assoc-in [:repo/changed-files repo] files)))
+
 (defn clear-changed-files!
   [repo]
   (set-state! [:repo/changed-files repo] nil)
