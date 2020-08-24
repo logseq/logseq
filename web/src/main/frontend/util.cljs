@@ -834,11 +834,11 @@
     (case (name text-format)
       "org"
       (if contents?
-        (format "** [[]]" title)
+        "** "
         (format "#+TITLE: %s\n\n** " title))
       "markdown"
       (if contents?
-        (format "## [[]]" title)
+        "## "
         (format "---\ntitle: %s\n---\n\n## " title))
       "")))
 

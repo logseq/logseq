@@ -189,7 +189,8 @@
       (history/clear-specific-history! [:git/repo repo-url])
       (history/add-history!
        [:git/repo repo-url]
-       {:db (d/db (db/get-conn repo-url false))
+       {:db (when-let [conn (db/get-conn repo-url false)]
+              (d/db conn))
         :files-db (when-let [file-conn (db/get-files-conn repo-url)]
                     (d/db file-conn))}))))
 
@@ -360,11 +361,28 @@
        (git-handler/set-git-error! repo-url e)
 
        (notification/show!
-        [:p
-         "Please make sure that your Github Personal Token has the right scopes. Follow this link to learn how to set the scopes: "
-         [:a {:href "https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-"
-              :target "_blank"}
-          "How to create a Github personal access token?"]]
+        [:div
+         [:p {:style {:margin-top 0}}
+          "Please make sure that your Github Personal Token has the right scopes. "]
+
+         [:ol
+          [:li {:style {:color "#555"}}
+           [:p {:style {:margin 0}}
+            "Follow this link to learn how to set the scopes: "]
+           [:a {:href "https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-"
+                :target "_blank"
+                :style {:color "#045591"}}
+            "How to create a Github personal access token?"]]
+          [:li {:style {:color "#555"}}
+           "Go to "
+           [:a {:href "/settings"
+                :style {:color "#045591"}}
+            "Settings"]
+           " and change your Github Personal Token."]
+
+          [:li {:style {:color "#555"}}
+           "Refresh the browser."]]]
+
         :error
         false)))))
 
@@ -503,6 +521,7 @@
 
 (defn read-repair-journals!
   [repo-url]
+  (prn "read repair journals")
   (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)]
     ;; add missing dates if monthly basis

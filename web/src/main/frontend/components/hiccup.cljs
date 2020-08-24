@@ -793,7 +793,7 @@
            tags))))
 
 (defn build-block-part
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker level priority anchor meta format content pre-block? dummy? block-refs-count]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker level priority anchor meta format content pre-block? dummy? block-refs-count page]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -806,7 +806,8 @@
                         (marker-switch t))
         marker-cp (marker-cp t)
         priority (priority-cp t)
-        tags (block-tags-cp t)]
+        tags (block-tags-cp t)
+        contents? (= (:id config) "contents")]
     (when level
       (let [element (if (<= level 6)
                       (keyword (str "h" level))
@@ -823,8 +824,17 @@
             (when-not slide? marker-switch)
             marker-cp
             priority]
-           (if dummy?
+           (cond
+             dummy?
              [[:span.opacity-50 "Click here to start writing"]]
+
+             ;; empty item
+             (and contents? (or
+                             (empty? title)
+                             (= title [["Plain" "[[]]"]])))
+             [[:span.opacity-50 "Click here to add a page, e.g. [[favorite-page]]"]]
+
+             :else
              (map-inline config title))
            [tags])))))))
 

@@ -64,14 +64,16 @@
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
-        logged? (state/logged?)]
+        logged? (state/logged?)
+        current-repo (state/get-current-repo)]
     [:div#settings
      [:h1.title "Settings"]
 
      [:div.pl-1
       ;; config.edn
-      [:a {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}
-       "Edit config.edn (for current repo)"]
+      (when current-repo
+        [:a {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}
+         "Edit config.edn (for current repo)"])
 
       (when logged? [:hr])
 
@@ -91,7 +93,7 @@
                              (user-handler/set-preferred-format! format)))}
              (for [format [:org :markdown]]
                [:option (cond->
-                            {:key (name format)}
+                          {:key (name format)}
                           (= format preferred-format)
                           (assoc :selected "selected"))
                 (string/capitalize (name format))])]]]]
@@ -104,15 +106,15 @@
             [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
              {:on-change (fn [e]
                            (let [workflow (-> (util/evalue e)
-                                            (string/lower-case)
-                                            keyword)
+                                              (string/lower-case)
+                                              keyword)
                                  workflow (if (= workflow :now/later)
                                             :now
                                             :todo)]
                              (user-handler/set-preferred-workflow! workflow)))}
              (for [workflow [:now :todo]]
                [:option (cond->
-                            {:key (name workflow)}
+                          {:key (name workflow)}
                           (= workflow preferred-workflow)
                           (assoc :selected "selected"))
                 (if (= workflow :now)

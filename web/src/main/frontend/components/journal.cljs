@@ -52,7 +52,9 @@
                     (notification/show!
                      [:div
                       [:p
-                       "It seems that you have multiple journal files (with different formats) for the same month, please only keep one journal file for each month."]
+                       (util/format
+                        "It seems that you have multiple journals for the same day \"%s\"."
+                        first-title)]
                       (ui/button "Go to files"
                         :href "/all-files"
                         :on-click notification/clear!)]

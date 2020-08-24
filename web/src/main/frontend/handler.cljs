@@ -40,7 +40,11 @@
 
     (-> (p/all (db/restore! (assoc me :repos repos)
                             repo-handler/db-listen-to-tx!
-                            #(file-handler/restore-config! % false)))
+                            (fn [repo]
+                              (file-handler/restore-config! repo false)
+                              (when (and (state/logged?)
+                                         (empty? (db/get-latest-journals repo 1)))
+                                  (repo-handler/read-repair-journals! repo)))))
         (p/then
          (fn []
            (if (and (not logged?)

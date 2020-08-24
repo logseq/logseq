@@ -134,7 +134,7 @@
           [:div.flex.items-start
            [:div.flex-shrink-0
             svg]
-           [:div.ml-3.w-0.flex-1 {:style {:padding-top 3}}
+           [:div.ml-3.w-0.flex-1
             [:div.text-sm.leading-5.font-medium {:style {:margin 0}
                                                  :class color-class}
              content]]
