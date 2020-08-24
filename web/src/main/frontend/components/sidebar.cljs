@@ -63,7 +63,8 @@
      [:div.pl-4.pr-4 {:style {:height 1
                               :background-color "rgb(57, 75, 89)"
                               :margin 12}}]
-     (right-sidebar/contents)]))
+     (when config/mobile?
+       (right-sidebar/contents))]))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
