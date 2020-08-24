@@ -29,3 +29,10 @@ export var getOffsetRect = function getOffsetRect(elem) {
 
   return { top: Math.round(top), left: Math.round(left) };
 };
+
+// jquery focus
+export var focus = function( elem ) {
+  return elem === document.activeElement &&
+    document.hasFocus() &&
+    !!( elem.type || elem.href || ~elem.tabIndex );
+}

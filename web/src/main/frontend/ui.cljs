@@ -212,10 +212,22 @@
       {
        ;; up
        38 (fn [_ e]
-            (let [current-idx (get state ::current-idx)]
+            (let [current-idx (get state ::current-idx)
+                  matched (first (:rum/args state))]
               (util/stop e)
-              (when (>= @current-idx 1)
-                (swap! current-idx dec))))
+              (cond
+                (>= @current-idx 1)
+                (swap! current-idx dec)
+                (= @current-idx 0)
+                (reset! current-idx (dec (count matched)))
+
+                :else
+                nil)
+              (when-let [element (gdom/getElement (str "ac-" @current-idx))]
+                (let [ac-inner (gdom/getElement "ac-inner")
+                      element-top (gobj/get element "offsetTop")
+                      scroll-top (- (gobj/get element "offsetTop") 360)]
+                  (set! (.-scrollTop ac-inner) scroll-top)))))
        ;; down
        40 (fn [state e]
             (let [current-idx (get state ::current-idx)
@@ -224,7 +236,12 @@
               (let [total (count matched)]
                 (if (>= @current-idx (dec total))
                   (reset! current-idx 0)
-                  (swap! current-idx inc)))))
+                  (swap! current-idx inc)))
+              (when-let [element (gdom/getElement (str "ac-" @current-idx))]
+                (let [ac-inner (gdom/getElement "ac-inner")
+                      element-top (gobj/get element "offsetTop")
+                      scroll-top (- (gobj/get element "offsetTop") 360)]
+                  (set! (.-scrollTop ac-inner) scroll-top)))))
 
        ;; enter
        13 (fn [state e]
@@ -243,22 +260,29 @@
                          item-render
                          class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-3.overflow-y-auto {:class class
-                                                               :style {:max-height 450}}
+    [:div.py-1.rounded-md.shadow-xs.bg-base-3 {:class class}
      (if (seq matched)
-       (for [[idx item] (medley/indexed matched)]
-         (rum/with-key
-           (menu-link
-            {:style {:padding-top 6
-                     :padding-bottom 6}
-             :class (when (= @current-idx idx)
-                      "chosen")
-             :tab-index 0
-             :on-click (fn [e]
-                         (util/stop e)
-                         (on-chosen item))}
-            (if item-render (item-render item) item))
-           idx))
+       [:div#ac-inner
+        {:style {:max-height 400
+                 :overflow "hidden"
+                 :overflow-x "hidden"
+                 :overflow-y "auto"
+                 :position "relative"
+                 "-webkit-overflow-scrolling" "touch"}}
+        (for [[idx item] (medley/indexed matched)]
+          (rum/with-key
+            (menu-link
+             {:id (str "ac-" idx)
+              :style {:padding-top 6
+                      :padding-bottom 6}
+              :class (when (= @current-idx idx)
+                       "chosen")
+              ;; :tab-index -1
+              :on-click (fn [e]
+                          (util/stop e)
+                          (on-chosen item))}
+             (if item-render (item-render item) item))
+            idx))]
        (when empty-div
          empty-div))]))
 
@@ -385,14 +409,14 @@
   [type content]
   (let [type (name type)]
     (when-let [icon (case (string/lower-case type)
-                     "note" svg/note
-                     "tip" svg/tip
-                     "important" svg/important
-                     "caution" svg/caution
-                     "warning" svg/warning
-                     nil)]
-     [:div.flex.flex-row.admonitionblock.align-items {:class type}
-      [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-       {:title (string/upper-case type)} (icon)]
-      [:div.ml-4.text-lg
-       content]])))
+                      "note" svg/note
+                      "tip" svg/tip
+                      "important" svg/important
+                      "caution" svg/caution
+                      "warning" svg/warning
+                      nil)]
+      [:div.flex.flex-row.admonitionblock.align-items {:class type}
+       [:div.pr-4.admonition-icon.flex.flex-col.justify-center
+        {:title (string/upper-case type)} (icon)]
+       [:div.ml-4.text-lg
+        content]])))
