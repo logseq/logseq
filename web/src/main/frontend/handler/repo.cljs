@@ -290,6 +290,7 @@
             (seq (state/get-changed-files repo-url))
             )
        (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
+         (prn {:changed-files files})
          (when (seq files)
            ;; auto commit if there are any un-committed changes
            (let [commit-message (if (string/blank? commit-message)
