@@ -44,7 +44,7 @@
                               (file-handler/restore-config! repo false)
                               (when (and (state/logged?)
                                          (empty? (db/get-latest-journals repo 1)))
-                                  (repo-handler/read-repair-journals! repo)))))
+                                (repo-handler/read-repair-journals! repo)))))
         (p/then
          (fn []
            (if (and (not logged?)
