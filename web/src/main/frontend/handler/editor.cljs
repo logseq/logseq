@@ -643,6 +643,40 @@
                                           (util/format "[#%s]" new-priority))]
     (save-block-if-changed! block new-content)))
 
+(defn- get-prev-block-non-collapsed
+  [block]
+  (let [id (gobj/get block "id")
+        prefix (re-find #"ls-block-[\d]+" id)]
+    (when-let [blocks (d/by-class "ls-block")]
+      (when-let [index (.indexOf blocks block)]
+        (loop [idx (dec index)]
+          (when (>= idx 0)
+            (let [block (nth blocks idx)
+                  collapsed? (= "none" (d/style block "display"))
+                  prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+              (if (or collapsed?
+                      ;; might be embed blocks
+                      (not prefix-match?))
+                (recur (dec idx))
+                block))))))))
+
+(defn- get-next-block-non-collapsed
+  [block]
+  (let [id (gobj/get block "id")
+        prefix (re-find #"ls-block-[\d]+" id)]
+    (when-let [blocks (d/by-class "ls-block")]
+      (when-let [index (.indexOf blocks block)]
+        (loop [idx (inc index)]
+          (when (>= (count blocks) idx)
+            (when-let [block (util/nth-safe blocks idx)]
+              (let [collapsed? (= "none" (d/style block "display"))
+                    prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+                (if (or collapsed?
+                        ;; might be embed blocks
+                        (not prefix-match?))
+                  (recur (inc idx))
+                  block)))))))))
+
 (defn delete-block-aux!
   [{:block/keys [uuid meta content file repo ref-pages ref-blocks] :as block} dummy?]
   (when-not dummy?
@@ -673,7 +707,7 @@
         ;; delete block, edit previous block
         (let [block (db/pull [:block/uuid block-id])
               block-parent (gdom/getElement block-parent-id)
-              sibling-block (util/get-prev-block block-parent)]
+              sibling-block (get-prev-block-non-collapsed block-parent)]
           (delete-block-aux! block dummy?)
           (when sibling-block
             (when-let [sibling-block-id (d/attr sibling-block "blockid")]
@@ -982,40 +1016,6 @@
         (when (not= @*last-edit-block cache)
           (save-block-if-changed! block new-value)
           (reset! *last-edit-block cache))))))
-
-(defn- get-prev-block-non-collapsed
-  [block]
-  (let [id (gobj/get block "id")
-        prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (d/by-class "ls-block")]
-      (when-let [index (.indexOf blocks block)]
-        (loop [idx (dec index)]
-          (when (>= idx 0)
-            (let [block (nth blocks idx)
-                  collapsed? (= "none" (d/style block "display"))
-                  prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
-              (if (or collapsed?
-                      ;; might be embed blocks
-                      (not prefix-match?))
-                (recur (dec idx))
-                block))))))))
-
-(defn- get-next-block-non-collapsed
-  [block]
-  (let [id (gobj/get block "id")
-        prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (d/by-class "ls-block")]
-      (when-let [index (.indexOf blocks block)]
-        (loop [idx (inc index)]
-          (when (>= (count blocks) idx)
-            (when-let [block (util/nth-safe blocks idx)]
-              (let [collapsed? (= "none" (d/style block "display"))
-                    prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
-                (if (or collapsed?
-                        ;; might be embed blocks
-                        (not prefix-match?))
-                  (recur (inc idx))
-                  block)))))))))
 
 (defn on-up-down
   [state e up?]
