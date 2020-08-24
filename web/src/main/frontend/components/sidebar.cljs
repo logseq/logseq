@@ -61,7 +61,8 @@
                close-modal-fn)
      [:div.pl-4.pr-4 {:style {:height 1
                               :background-color "rgb(57, 75, 89)"
-                              :margin 12}}]]))
+                              :margin 12}}]
+     (right-sidebar/contents)]))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
@@ -257,7 +258,7 @@
               :target "_blank"}
              svg/external-link])
 
-          (when (and page? current-repo)
+          (when (and page? current-repo (not config/mobile?))
             (let [page (get-in route-match [:path-params :name])
                   page (string/lower-case (util/url-decode page))
                   page (db/entity [:page/name page])]
@@ -344,7 +345,8 @@
             :else
             [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
              main-content])]]
-        (right-sidebar/sidebar)]
+        (when-not config/mobile?
+          (right-sidebar/sidebar))]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:href "/"
          :on-click (fn []
@@ -359,9 +361,10 @@
        (ui/modal)
        (custom-context-menu)
        [:a#download.hidden]
-       [:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-        {:style {:right 24}
-         :title "Click to check shortcuts and other tips"
-         :on-click (fn []
-                     (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-        "?"]]]]))
+       (when-not config/mobile?
+         [:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+          {:style {:right 24}
+           :title "Click to check shortcuts and other tips"
+           :on-click (fn []
+                       (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+          "?"])]]]))
