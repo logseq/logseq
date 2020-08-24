@@ -21,6 +21,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
@@ -109,6 +110,11 @@
 
        (and logged? (empty? (:repos me)))
        (widgets/add-repo)
+
+       (and logged? current-repo (empty? latest-journals))
+       (do
+         (repo-handler/read-repair-journals! current-repo)
+         (ui/loading "Read repair journals"))
 
        ;; FIXME: why will this happen?
        :else

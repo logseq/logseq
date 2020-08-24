@@ -93,8 +93,10 @@
   ([]
    (ymd (js/Date.)))
   ([date]
+   (ymd date "/"))
+  ([date sep]
    (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
-     (str year "/" month "/" day))))
+     (str year sep month sep day))))
 
 (defn get-local-date
   []

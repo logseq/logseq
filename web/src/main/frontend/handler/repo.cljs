@@ -25,7 +25,9 @@
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
             [cljs.reader :as reader]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            ;; [clojure.set :as set]
+            ))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -136,10 +138,11 @@
         path (date/current-journal-path format)
         file-path (str "/" path)
         default-content (default-month-journal-content format)]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/journals"))
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
                   (p/catch (fn [_e])))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
-      (when-not file-exists?
+      (when (and (not file-exists?)
+                 (= :monthly (state/get-journal-basis)))
         (db/reset-file! repo-url path default-content)
         (ui-handler/re-render-root!)
         (git-handler/git-add repo-url path)))))
@@ -171,8 +174,8 @@
        (let [permission (:permission permission)
              write-permission (contains? #{"admin" "write"} permission)]
          ;; (db/set-key-value repo-url :git/write-permission? write-permission)
-         (create-month-journal-if-not-exists repo-url)
          (create-config-file-if-not-exists repo-url)
+         (create-month-journal-if-not-exists repo-url)
          (create-contents-file repo-url)))
      (fn []))))
 
@@ -290,7 +293,6 @@
             (seq (state/get-changed-files repo-url))
             )
        (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-         (prn {:changed-files files})
          (when (seq files)
            ;; auto commit if there are any un-committed changes
            (let [commit-message (if (string/blank? commit-message)
@@ -498,3 +500,32 @@
   [commit-message]
   (when-let [repo (state/get-current-repo)]
     (push repo commit-message)))
+
+(defn read-repair-journals!
+  [repo-url]
+  (let [repo-dir (util/get-repo-dir repo-url)
+        format (state/get-preferred-format)]
+    ;; add missing dates if monthly basis
+    (if (= :monthly (state/get-journal-basis))
+      (let [path (date/current-journal-path format)
+            content (db/get-file repo-url path)
+            lines (set (string/split content #"\n"))
+            default-content (default-month-journal-content format)
+            default-lines (string/split default-content #"\n")
+            missing-dates (remove (fn [line] (contains? lines line)) default-lines)
+            missing-dates-content (if (seq missing-dates)
+                                    (string/join "\n" missing-dates))
+            content (str content "\n" missing-dates-content)]
+        (db/reset-file! repo-url path content)
+        (ui-handler/re-render-root!)
+        (git-handler/git-add repo-url path))
+
+      ;; daily basis, create the specific day journal file
+      (let [today (date/today)
+            content (str (config/get-block-pattern format) " " today)
+            path (str config/default-journals-directory "/" (date/ymd (js/Date.) "_") "."
+                      (config/get-file-extension format))]
+        (p/let [_file-exists? (fs/create-if-not-exists repo-dir (str "/" path) content)]
+          (db/reset-file! repo-url path content)
+          (ui-handler/re-render-root!)
+          (git-handler/git-add repo-url path))))))

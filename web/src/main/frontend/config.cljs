@@ -196,6 +196,13 @@
      1]
     ["" 0]))
 
+(defn get-file-extension
+  [format]
+  (case (keyword format)
+    :markdown
+    "md"
+    (name format)))
+
 (defn default-empty-block
   ([format]
    (default-empty-block format 2))
@@ -203,6 +210,7 @@
    (let [block-pattern (get-block-pattern format)]
      (apply str (repeat n block-pattern)))))
 
+(defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
 (defonce default-draw-directory "draws")
 

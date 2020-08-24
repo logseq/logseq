@@ -625,3 +625,11 @@
   (swap! state assoc
          :modal/show? false
          :modal/panel-content nil))
+
+(defn get-journal-basis
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (when-let [basis (get-in @state [:config repo :journal-basis])]
+       (keyword (string/lower-case (str basis)))))
+   :monthly))
