@@ -994,6 +994,13 @@
                pred)
              react))))
 
+(defn block-has-children?
+  [repo block]
+  (let [blocks (get-block-and-children repo (:block/uuid block))
+        second-block (second blocks)]
+    (and second-block
+         (> (:block/level second-block) (:block/level block)))))
+
 (defn get-file-page
   [file-path]
   (when-let [repo (state/get-current-repo)]

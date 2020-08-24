@@ -289,8 +289,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                                {:block/uuid uuid
-                                 :block/meta new-meta}
+                              {:block/uuid uuid
+                               :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -438,78 +438,90 @@
            nil))))))
 
 (defn insert-new-block-aux!
-  [{:block/keys [uuid content meta file dummy? level repo page format] :as block} value create-new-block? ok-handler with-level?]
-  (let [current-page (state/get-current-page)
-        block-page? (and current-page (util/uuid-string? current-page))
-        block-self? (= uuid (and block-page? (medley/uuid current-page)))
-        input (gdom/getElement (state/get-edit-input-id))
-        pos (util/get-input-pos input)
-        repo (or repo (state/get-current-repo))
-        v1 (subs value 0 pos)
-        v2 (string/triml (subs value pos))
-        v1 (string/trim (if with-level? v1 (block/with-levels v1 format block)))
-        v2-level (if block-self? (inc level) level)
-        v2 (str (config/default-empty-block format v2-level) " " v2)
-        block (with-block-meta repo block)
-        format (:block/format block)
-        page (db/entity repo (:db/id page))
-        file (db/entity repo (:db/id file))
-        insert-block (fn [block file-path file-content]
-                       (let [value (if create-new-block?
-                                     (str v1 "\n" v2)
-                                     value)
-                             [new-content value] (new-file-content block file-content value)
-                             {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
-                             first-block (first blocks)
-                             last-block (last blocks)
-                             blocks (db/recompute-block-children repo block blocks)
-                             after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)]
-                         (repo-handler/transact-react-and-alter-file!
-                          repo
-                          (concat
-                           pages
-                           blocks
-                           after-blocks)
-                          {:key :block/change
-                           :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                          [[file-path new-content]])
+  ([block value create-new-block? ok-handler with-level?]
+   (insert-new-block-aux! block value create-new-block? ok-handler with-level? nil))
+  ([{:block/keys [uuid content meta file dummy? level repo page format collapsed?] :as block} value create-new-block? ok-handler with-level? new-level]
+   (let [current-page (state/get-current-page)
+         block-page? (and current-page (util/uuid-string? current-page))
+         block-self? (= uuid (and block-page? (medley/uuid current-page)))
+         input (gdom/getElement (state/get-edit-input-id))
+         pos (if new-level
+               (dec (count value))
+               (util/get-input-pos input))
+         repo (or repo (state/get-current-repo))
+         ;; block-has-children? (seq children) ; not working for now
+         block-has-children? (db/block-has-children? repo block)
+         v1 (subs value 0 pos)
+         v2 (string/triml (subs value pos))
+         v1 (string/trim (if with-level? v1 (block/with-levels v1 format block)))
+         v2-level (cond
+                    new-level
+                    new-level
+                    (or block-self? block-has-children?)
+                    (inc level)
+                    :else
+                    level)
+         v2 (str (config/default-empty-block format v2-level) " " v2)
+         block (with-block-meta repo block)
+         format (:block/format block)
+         page (db/entity repo (:db/id page))
+         file (db/entity repo (:db/id file))
+         insert-block (fn [block file-path file-content]
+                        (let [value (if create-new-block?
+                                      (str v1 "\n" v2)
+                                      value)
+                              [new-content value] (new-file-content block file-content value)
+                              {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
+                              first-block (first blocks)
+                              last-block (last blocks)
+                              blocks (db/recompute-block-children repo block blocks)
+                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)]
+                          (repo-handler/transact-react-and-alter-file!
+                           repo
+                           (concat
+                            pages
+                            blocks
+                            after-blocks)
+                           {:key :block/change
+                            :data (map (fn [block] (assoc block :block/page page)) blocks)}
+                           [[file-path new-content]])
 
-                         (when ok-handler
-                           (ok-handler [first-block last-block v2]))))]
-    (cond
-      (and (not file) page)
-      (let [format (name format)
-            path (str (-> (:page/name page)
-                          (string/replace #"\s+" "_")
-                          (util/encode-str))
-                      "."
-                      (if (= format "markdown") "md" format))
-            file-path (str "/" path)
-            dir (util/get-repo-dir repo)]
-        (p/let [exists? (fs/file-exists? dir file-path)]
-          (if exists?
-            (notification/show!
-             [:p.content
-              "File already exists!"]
-             :error)
-            ;; create the file
-            (let [content (util/default-content-with-title format (:page/original-name page))]
-              (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                (db/reset-file! repo path
-                                (str content
-                                     (text/remove-level-spaces value (keyword format))
-                                     "\n"
-                                     v2))
-                (git-handler/git-add repo path)
-                (ui-handler/re-render-root!))))))
+                          (when ok-handler
+                            (ok-handler [first-block last-block v2]))))]
+     (cond
+       (and (not file) page)
+       (let [format (name format)
+             path (str (-> (:page/name page)
+                           (string/replace #"\s+" "_")
+                           (util/encode-str))
+                       "."
+                       (if (= format "markdown") "md" format))
+             file-path (str "/" path)
+             dir (util/get-repo-dir repo)]
+         (p/let [exists? (fs/file-exists? dir file-path)]
+           (if exists?
+             (notification/show!
+              [:p.content
+               "File already exists!"]
+              :error)
+             ;; create the file
+             (let [content (util/default-content-with-title format (:page/original-name page))]
+               (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                 (db/reset-file! repo path
+                                 (str content
+                                      (text/remove-level-spaces value (keyword format))
+                                      "\n"
+                                      v2))
+                 (git-handler/git-add repo path)
+                 (ui-handler/re-render-root!))))))
 
-      file
-      (let [file-path (:file/path file)
-            file-content (db/get-file repo file-path)]
-        (insert-block block file-path file-content))
+       file
+       (let [file-path (:file/path file)
+             file-content (db/get-file repo file-path)]
+         (insert-block block file-path file-content))
 
-      :else
-      nil)))
+       :else
+       nil))))
 
 (defn clear-when-saved!
   []
@@ -559,18 +571,27 @@
   (let [{:keys [block value format id]} (get-state state)
         block-id (:block/uuid block)
         block (or (db/pull [:block/uuid block-id])
-                  block)]
+                  block)
+        collapsed? (:block/collapsed? block)
+        repo (or (:block/repo block) (state/get-current-repo))
+        last-child (and collapsed?
+                        (last (db/get-block-and-children repo (:block/uuid block))))
+        last-child (when (not= (:block/uuid last-child)
+                               (:block/uuid block))
+                     last-child)]
     (set-last-edit-block! (:block/uuid block) value)
     ;; save the current block and insert a new block
     (insert-new-block-aux!
-     block
-     value
+     (or last-child block)
+     (if last-child (:block/content last-child) value)
      true
      (fn [[_first-block last-block _new-block-content]]
        (let [last-id (:block/uuid last-block)]
          (edit-block! last-id 0 format id)
          (clear-when-saved!)))
-     false)))
+     (if last-child true false)
+     (and last-child
+          (:block/level block)))))
 
 ;; TODO: utf8 encode performance
 (defn check
