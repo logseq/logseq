@@ -1293,6 +1293,10 @@
   ([page-name]
    [page-name (get-page-blocks (state/get-current-repo) page-name)]))
 
+(defn get-today-journal
+  [repo]
+  (get-page-blocks repo (date/journal-name)))
+
 (defn get-journals-length
   []
   (let [today (date->int (js/Date.))]
@@ -2040,6 +2044,7 @@
                                                             (empty? (get-page-blocks name))) name nil))) all-pages))
         transaction          (mapv (fn [name] [:db/retractEntity (:db/id (get-page (str name)))]) orphaned-pages)]
     (transact! transaction)))
+
 
 (comment
   (defn debug!

@@ -52,16 +52,22 @@
 
 (defn highlight-element!
   [fragment]
-  (when (> (count fragment) 36)
-    (let [id (subs fragment (- (count fragment) 36))]
-      (when (util/uuid-string? id)
-        (let [elements (array-seq (js/document.getElementsByClassName id))]
-          (when (first elements)
-            (util/scroll-to-element (gobj/get (first elements) "id")))
-          (doseq [element elements]
-            (dom/add-class! element "block-highlight")
-            (js/setTimeout #(dom/remove-class! element "block-highlight")
-                           4000)))))))
+  (let [id (and
+            (> (count fragment) 36)
+            (subs fragment (- (count fragment) 36)))]
+    (if (and id (util/uuid-string? id))
+      (let [elements (array-seq (js/document.getElementsByClassName id))]
+        (when (first elements)
+          (util/scroll-to-element (gobj/get (first elements) "id")))
+        (doseq [element elements]
+          (dom/add-class! element "block-highlight")
+          (js/setTimeout #(dom/remove-class! element "block-highlight")
+                         4000)))
+      (when-let [element (gdom/getElement fragment)]
+        (util/scroll-to-element fragment)
+        (dom/add-class! element "block-highlight")
+        (js/setTimeout #(dom/remove-class! element "block-highlight")
+                       4000)))))
 
 (defn scroll-and-highlight!
   [state]
