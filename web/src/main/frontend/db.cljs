@@ -1645,7 +1645,7 @@
                       (when logged?
                         (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
                   _ (restore-config-handler repo)]
-            (listen-handler repo db-conn))))))))
+            (when stored (listen-handler repo db-conn)))))))))
 
 (defn- build-edges
   [edges]
