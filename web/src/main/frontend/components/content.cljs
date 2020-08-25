@@ -5,6 +5,7 @@
             [frontend.handler :as handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -244,11 +245,13 @@
    :did-mount (fn [state]
                 (set-fixed-width!)
                 (set-draw-iframe-style!)
+                (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-fixed-width!)
                  (set-draw-iframe-style!)
                  (lazy-load-js state)
+                 (image-handler/render-local-images!)
                  state)}
   [state id {:keys [format
                     config

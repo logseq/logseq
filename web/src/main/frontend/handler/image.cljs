@@ -10,8 +10,8 @@
             [goog.dom :as gdom]))
 
 (defn render-local-images!
-  [node]
-  (let [images (array-seq (gdom/getElementsByTagName "img" node))
+  []
+  (let [images (array-seq (gdom/getElementsByTagName "img"))
         get-src (fn [image] (.getAttribute image "src"))
         local-images (filter
                       (fn [image]

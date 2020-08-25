@@ -104,23 +104,23 @@
   (let [path (string/replace path "file:" "")
         current-file (:file/path (:page/file (db/get-current-page)))]
     (when current-file
-      (let [parts (reverse (string/split current-file #"/"))
-            parts-2 (reverse (string/split path #"/"))
+      (let [parts (string/split current-file #"/")
+            parts-2 (string/split path #"/")
             parts (loop [acc []
-                         col parts-2
-                         idx 0]
+                         parts (reverse parts)
+                         col (reverse parts-2)]
                     (if (empty? col)
                       acc
-                      (let [part (case (first col)
+                      (let [[part parts] (case (first col)
                                    ".."
-                                   (nth parts idx)
+                                   [(first parts) (rest parts)]
                                    "."
-                                   ""
-                                   (first col))]
+                                   ["" parts]
+                                   [(first col) (rest parts)])]
                         (recur (conj acc part)
-                               (rest col)
-                               (inc idx)))))
-            parts (remove #(= % "") parts)]
+                               parts
+                               (rest col)))))
+            parts (remove #(string/blank? %) parts)]
         (string/join "/" (reverse parts))))))
 
 ;; TODO: safe encoding asciis
@@ -417,10 +417,15 @@
          [:span.text-gray-500 "]]"])])
 
     ["Link" link]
-    (let [{:keys [url label title]} link]
+    (let [{:keys [url label title]} link
+          img-formats (set (map name (config/img-formats)))]
       (match url
         ["Search" s]
         (cond
+          ;; image
+          (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) s)) img-formats)
+          (image-link url s label)
+
           (= \# (first s))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
@@ -439,8 +444,7 @@
                         (and (= "Complex" (first url))
                              (:protocol (second url)))
                         (and (= "File" (first url))
-                             "file"))
-              img-formats (set (map name (config/img-formats)))]
+                             "file"))]
           (cond
             (= protocol "file")
             (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
@@ -868,11 +872,6 @@
      (blocks-cp config ast)]))
 
 (rum/defc block-content < rum/reactive
-  {:did-mount (fn [state]
-                (let [id (str "block-content-" (:block/uuid (second (:rum/args state))))
-                      elem (gdom/getElement id)]
-                  (image-handler/render-local-images! elem))
-                state)}
   [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid (str uuid)

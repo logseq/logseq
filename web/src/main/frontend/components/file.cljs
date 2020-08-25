@@ -65,11 +65,6 @@
                     [:span "Download"]]]]))]]))])
 
 (rum/defcs file < rum/reactive
-  {:did-mount (fn [state]
-                (let [[encoded-path path] (get-path state)]
-                  (when-let [elem (gdom/getElement (str "file-" encoded-path))]
-                    (image-handler/render-local-images! elem)))
-                state)}
   [state]
   (let [[encoded-path path] (get-path state)
         format (format/get-format path)

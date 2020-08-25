@@ -131,6 +131,23 @@
            (range 1 (inc last-day)))
          (apply str))))
 
+(defn create-today-journal-if-not-exists
+  [repo-url]
+  (let [repo-dir (util/get-repo-dir repo-url)
+        format (state/get-preferred-format)
+        title (date/today)
+        content (util/default-content-with-title format title)
+        path (str config/default-journals-directory "/" title "."
+                  (config/get-file-extension format))
+        file-path (str "/" path)]
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
+                  (p/catch (fn [_e])))
+            file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+      (when (not file-exists?)
+        (db/reset-file! repo-url path content)
+        (ui-handler/re-render-root!)
+        (git-handler/git-add repo-url path)))))
+
 (defn create-month-journal-if-not-exists
   [repo-url]
   (let [repo-dir (util/get-repo-dir repo-url)
@@ -175,7 +192,9 @@
              write-permission (contains? #{"admin" "write"} permission)]
          ;; (db/set-key-value repo-url :git/write-permission? write-permission)
          (create-config-file-if-not-exists repo-url)
-         (create-month-journal-if-not-exists repo-url)
+         (if (= :monthly (state/get-journal-basis))
+           (create-month-journal-if-not-exists repo-url)
+           (create-today-journal-if-not-exists repo-url))
          (create-contents-file repo-url)))
      (fn []))))
 
@@ -540,13 +559,5 @@
             (git-handler/git-add repo-url path))))
 
       ;; daily basis, create the specific day journal file
-      (let [today (date/today)
-            content (str (config/get-block-pattern format) " " today)
-            path (str config/default-journals-directory "/" (date/ymd (js/Date.) "_") "."
-                      (config/get-file-extension format))]
-        (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
-                      (p/catch (fn [_e])))
-                _file-exists? (fs/create-if-not-exists repo-dir (str "/" path) content)]
-          (db/reset-file! repo-url path content)
-          (ui-handler/re-render-root!)
-          (git-handler/git-add repo-url path))))))
+      ;; (create-today-journal-if-not-exists repo-url)
+      )))

@@ -17,8 +17,7 @@
   cljs-drag-n-drop            {:mvn/version "0.1.0"}
   borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
   hickory                     {:mvn/version "0.7.1"}
-  hiccups                     {:mvn/version "0.3.0"}
-  }
+  hiccups                     {:mvn/version "0.3.0"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}
