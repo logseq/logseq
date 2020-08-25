@@ -370,8 +370,7 @@
      (fn []
        (state/set-git-clone-repo! "")
        (state/set-current-repo! repo-url)
-       (db/start-db-conn! (:me @state/state)
-                          repo-url)
+       (db/start-db-conn! (:me @state/state) repo-url nil)
        (db/mark-repo-as-cloned repo-url)
        (git-handler/set-latest-commit-if-exists! repo-url))
      (fn [e]
@@ -449,8 +448,7 @@
       (p/let [result (-> (fs/mkdir (str "/" repo))
                          (p/catch (fn [_e] nil)))
               _ (state/set-current-repo! repo)
-              _ (db/start-db-conn! nil
-                                   repo)
+              _ (db/start-db-conn! nil repo db-listen-to-tx!)
               _ (create-month-journal-if-not-exists repo)
               _ (create-config-file-if-not-exists repo)
               _ (create-contents-file repo)]

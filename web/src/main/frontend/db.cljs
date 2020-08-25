@@ -1603,13 +1603,15 @@
       config)))
 
 (defn start-db-conn!
-  [me repo]
+  [me repo listen-handler!]
   (let [files-db-name (datascript-files-db repo)
         files-db-conn (d/create-conn db-schema/files-db-schema)
         db-name (datascript-db repo)
         db-conn (d/create-conn db-schema/schema)]
     (swap! conns assoc files-db-name files-db-conn)
     (swap! conns assoc db-name db-conn)
+    (when listen-handler!
+      (listen-handler! repo db-conn))
     (when me
       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))))
 
