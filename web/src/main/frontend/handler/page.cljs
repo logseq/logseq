@@ -23,14 +23,17 @@
 (defn create!
   [title]
   (let [repo (state/get-current-repo)
-        dir (util/get-repo-dir repo)]
+        dir (util/get-repo-dir repo)
+        directory (if (date/valid-journal-title? title)
+                    config/default-journals-directory
+                    config/default-pages-directory)]
     (when dir
-      (p/let [_ (-> (fs/mkdir (str dir "/" config/default-pages-directory))
+      (p/let [_ (-> (fs/mkdir (str dir "/" directory))
                     (p/catch (fn [_e])))]
         (let [format (name (state/get-preferred-format))
               page (string/lower-case title)
               path (str (string/replace page #"\s+" "_") "." (if (= format "markdown") "md" format))
-              path (str config/default-pages-directory "/" path)
+              path (str directory "/" path)
               file-path (str "/" path)]
           (p/let [exists? (fs/file-exists? dir file-path)]
             (if exists?

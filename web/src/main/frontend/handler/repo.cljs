@@ -544,7 +544,9 @@
             content (str (config/get-block-pattern format) " " today)
             path (str config/default-journals-directory "/" (date/ymd (js/Date.) "_") "."
                       (config/get-file-extension format))]
-        (p/let [_file-exists? (fs/create-if-not-exists repo-dir (str "/" path) content)]
+        (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
+                      (p/catch (fn [_e])))
+                _file-exists? (fs/create-if-not-exists repo-dir (str "/" path) content)]
           (db/reset-file! repo-url path content)
           (ui-handler/re-render-root!)
           (git-handler/git-add repo-url path))))))

@@ -60,8 +60,8 @@
                              (let [file-id (:db/id (:page/file page))]
                                {:start-pos (utf8/length (utf8/encode content))
                                 :end-pos nil})}))
-                        journal?)
-        start-level (if journal? 2 1)
+                      journal?)
+        start-level (or (:block/level (first page-blocks)) 1 )
         hiccup-config {:id encoded-page-name
                        :start-level start-level
                        :sidebar? sidebar?
@@ -302,7 +302,7 @@
                 page-original-name)]])
           [:div
            [:div.content
-            (when (and file-path (not sidebar?) (not journal?) (not block?))
+            (when (and file-path (not sidebar?) (not block?))
               [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
                [:span.opacity-50 "File: "]
                [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}

@@ -298,12 +298,12 @@
                               (map (fn [v]
                                      (vec (drop 1 v)))))
               block-blocks (some->>
-                              (filter (fn [v]
-                                        (and (= (first v) (state/get-current-repo))
-                                             (= (second v) :block/block)))
-                                      (keys @query-state))
-                              (map (fn [v]
-                                     (vec (drop 1 v)))))]
+                            (filter (fn [v]
+                                      (and (= (first v) (state/get-current-repo))
+                                           (= (second v) :block/block)))
+                                    (keys @query-state))
+                            (map (fn [v]
+                                   (vec (drop 1 v)))))]
           (->>
            (util/concat-without-nil
             handler-keys
@@ -393,10 +393,10 @@
         pages (pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
-                   (fn [block]
-                     (assoc block :block/page
-                            (get pages-map (:db/id (:block/page block)))))
-                   blocks)]
+                 (fn [block]
+                   (assoc block :block/page
+                          (get pages-map (:db/id (:block/page block)))))
+                 blocks)]
     (sort-by-pos blocks)))
 
 (defn group-by-page
@@ -1055,20 +1055,20 @@
   ;; headline
   (let [ast (map first ast)]
     (if (string/starts-with? file "pages/contents.")
-     "Contents"
-     (let [file-page-name (get-file-page file)
-           first-block (last (first (filter block/heading-block? ast)))
-           directive-name (when (and (= "Directives" (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
-           first-block-name (and first-block
-                                   ;; FIXME:
-                                   (str (last (first (:title first-block)))))]
-       (or
-        directive-name
-        file-page-name
-        first-block-name
-        file)))))
+      "Contents"
+      (let [file-page-name (get-file-page file)
+            first-block (last (first (filter block/heading-block? ast)))
+            directive-name (when (and (= "Directives" (ffirst ast))
+                                      (not (string/blank? (:title (last (first ast))))))
+                             (:title (last (first ast))))
+            first-block-name (and first-block
+                                  ;; FIXME:
+                                  (str (last (first (:title first-block)))))]
+        (or
+         directive-name
+         file-page-name
+         first-block-name
+         file)))))
 
 (defn get-block-content
   [utf8-content block]
@@ -1098,25 +1098,25 @@
           pages (pages-fn blocks ast)
           ref-pages (atom #{})
           blocks (doall
-                    (mapcat
-                     (fn [[page blocks]]
-                       (if page
-                         (map (fn [block]
-                                (let [block-ref-pages (seq (:block/ref-pages block))]
-                                  (when block-ref-pages
-                                    (swap! ref-pages set/union (set block-ref-pages)))
-                                  (-> block
-                                      (dissoc :ref-pages)
-                                      (assoc :block/content (get-block-content utf8-content block)
-                                             :block/file [:file/path file]
-                                             :block/format format
-                                             :block/page [:page/name (string/lower-case page)]
-                                             :block/ref-pages (mapv
-                                                                 (fn [page]
-                                                                   (block/page-with-journal page))
-                                                                 block-ref-pages)))))
-                           blocks)))
-                     (remove nil? pages)))
+                  (mapcat
+                   (fn [[page blocks]]
+                     (if page
+                       (map (fn [block]
+                              (let [block-ref-pages (seq (:block/ref-pages block))]
+                                (when block-ref-pages
+                                  (swap! ref-pages set/union (set block-ref-pages)))
+                                (-> block
+                                    (dissoc :ref-pages)
+                                    (assoc :block/content (get-block-content utf8-content block)
+                                           :block/file [:file/path file]
+                                           :block/format format
+                                           :block/page [:page/name (string/lower-case page)]
+                                           :block/ref-pages (mapv
+                                                             (fn [page]
+                                                               (block/page-with-journal page))
+                                                             block-ref-pages)))))
+                         blocks)))
+                   (remove nil? pages)))
           pages (map
                   (fn [page]
                     (let [page-file? (= page (string/lower-case file))
@@ -1195,7 +1195,7 @@
 (defn parse-directives
   [content format]
   (let [ast (->> (mldoc/->edn content
-                             (mldoc/default-config format))
+                              (mldoc/default-config format))
                  (map first))
         directives (let [directives (and (seq ast)
                                          (= "Directives" (ffirst ast))
@@ -1225,21 +1225,24 @@
          format ast directives
          file content utf8-content true
          (fn [blocks _ast]
-           (loop [pages {}
-                  last-page-name nil
-                  blocks blocks]
-             (if (seq blocks)
-               (let [[{:block/keys [level title] :as block} & tl] blocks]
-                 (if (and (= level 1)
-                          (when-let [title (last (first title))]
-                            (date/valid-journal-title? title)))
-                   (let [page-name (last (first title))
-                         new-pages (assoc pages page-name [block])]
-                     (recur new-pages page-name tl))
-                   (let [new-pages (update pages last-page-name (fn [blocks]
-                                                                  (vec (conj blocks block))))]
-                     (recur new-pages last-page-name tl))))
-               pages))))
+           (let [directive-title (:title directives)]
+             (loop [pages {}
+                    last-page-name nil
+                    blocks blocks]
+               (if (seq blocks)
+                 (let [[{:block/keys [level title] :as block} & tl] blocks]
+                   (if (or
+                        (and (= level 1)
+                             (when-let [title (last (first title))]
+                               (date/valid-journal-title? title)))
+                        (and directive-title (date/valid-journal-title? directive-title)))
+                     (let [page-name (or directive-title (last (first title)))
+                           new-pages (assoc pages page-name [block])]
+                       (recur new-pages page-name tl))
+                     (let [new-pages (update pages last-page-name (fn [blocks]
+                                                                    (vec (conj blocks block))))]
+                       (recur new-pages last-page-name tl))))
+                 pages)))))
         (extract-pages-and-blocks
          repo-url
          format ast directives
@@ -1345,8 +1348,14 @@
   ([blocks format default-option journal?]
    (let [format (or format (state/get-preferred-format) :markdown)]
      (cond
-       (and journal? (> (count blocks) 1))
+       (and journal?
+            (seq blocks)
+            (date/valid-journal-title? (second (first (:block/title (first blocks)))))
+            (> (count blocks) 1))
        (rest blocks)                  ; remove journal titles
+
+       (and journal? (seq blocks) (not (date/valid-journal-title? (second (first (:block/title (first blocks)))))))
+       blocks
 
        (and (not journal?) (seq blocks))
        blocks
@@ -1364,7 +1373,7 @@
                              :block/priority nil
                              :block/anchor (str uuid)
                              :block/meta {:start-pos end-pos
-                                            :end-pos end-pos}
+                                          :end-pos end-pos}
                              :block/body nil
                              :block/dummy? true
                              :block/marker nil})
@@ -1761,16 +1770,16 @@
                    (map (fn [[p aliases]]
                           [block p]) ref-blocks))
             other-blocks (->> (concat (map first ref-blocks))
-                             (remove nil?)
-                             (set))
+                              (remove nil?)
+                              (set))
             other-blocks-edges (mapcat
-                               (fn [block]
-                                 (let [ref-blocks (-> (map first (get-block-referenced-blocks block))
-                                                     (set)
-                                                     (set/intersection other-blocks))]
-                                   (concat
-                                    (map (fn [p] [block p]) ref-blocks))))
-                               other-blocks)
+                                (fn [block]
+                                  (let [ref-blocks (-> (map first (get-block-referenced-blocks block))
+                                                       (set)
+                                                       (set/intersection other-blocks))]
+                                    (concat
+                                     (map (fn [p] [block p]) ref-blocks))))
+                                other-blocks)
             edges (->> (concat edges other-blocks-edges)
                        (remove nil?)
                        (distinct)
@@ -1781,8 +1790,8 @@
                        (remove nil?)
                        (distinct)
                        (build-nodes dark? block edges))]
-         {:nodes nodes
-          :links edges}))))
+        {:nodes nodes
+         :links edges}))))
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
@@ -1947,7 +1956,7 @@
    (when-let [page-id (:db/id (entity repo [:page/name (string/lower-case page-name)]))]
      (when-let [db (get-conn repo)]
        (let [block-eids (->> (d/datoms db :avet :block/page page-id)
-                               (mapv :e))]
+                             (mapv :e))]
          (when (seq block-eids)
            (let [blocks (d/pull-many db '[:block/meta] block-eids)]
              (-> (last (sort-by-pos blocks))
@@ -1976,7 +1985,7 @@
 
                                (< level last-level)
                                (let [current-block-children (set (->> (filter #(< level (second %)) children)
-                                                                        (map first)))
+                                                                      (map first)))
                                      others (vec (remove #(< level (second %)) children))]
                                  [(conj others [id level])
                                   current-block-children]))

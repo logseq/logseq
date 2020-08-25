@@ -62,12 +62,13 @@
                      false)))
                 state)}
   [blocks encoded-page-name page]
-  (content/content
-   encoded-page-name
-   {:hiccup (hiccup/->hiccup blocks
-                             {:id encoded-page-name
-                              :start-level 2}
-                             {})}))
+  (let [start-level (or (:block/level (first blocks)) 1 )]
+    (content/content
+     encoded-page-name
+     {:hiccup (hiccup/->hiccup blocks
+                               {:id encoded-page-name
+                                :start-level 2}
+                               {})})))
 
 (rum/defc blocks-cp < rum/reactive
   {}
