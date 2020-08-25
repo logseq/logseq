@@ -198,10 +198,27 @@
          (create-contents-file repo-url)))
      (fn []))))
 
+(defn db-listen-to-tx!
+  [repo db-conn]
+  (when-let [files-conn (db/get-files-conn repo)]
+    (d/listen! files-conn :persistence
+               (fn [tx-report]
+                 (when (seq (:tx-data tx-report))
+                   (when-let [db (:db-after tx-report)]
+                     (db/persist repo db true))))))
+  (d/listen! db-conn :persistence
+             (fn [tx-report]
+               (when (seq (:tx-data tx-report))
+                 (when-let [db (:db-after tx-report)]
+                   (db/persist repo db false))))))
+
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
+      (when-let [conn (db/get-conn repo-url false)]
+        (db-listen-to-tx! repo-url conn))
+
       (when first-clone?
         (create-default-files! repo-url))
 
@@ -212,20 +229,6 @@
               (d/db conn))
         :files-db (when-let [file-conn (db/get-files-conn repo-url)]
                     (d/db file-conn))}))))
-
-(defn db-listen-to-tx!
-  [repo db-conn]
-  (when-let [files-conn (db/get-files-conn repo)]
-    (d/listen! files-conn :persistence
-               (fn [tx-report]
-                 (when (seq (:tx-data tx-report))
-                   (when-let [db (:db-after tx-report)]
-                     (js/setTimeout #(db/persist repo db true) 0))))))
-  (d/listen! db-conn :persistence
-             (fn [tx-report]
-               (when (seq (:tx-data tx-report))
-                 (when-let [db (:db-after tx-report)]
-                   (js/setTimeout #(db/persist repo db false) 0))))))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]
@@ -368,8 +371,7 @@
        (state/set-git-clone-repo! "")
        (state/set-current-repo! repo-url)
        (db/start-db-conn! (:me @state/state)
-                          repo-url
-                          db-listen-to-tx!)
+                          repo-url)
        (db/mark-repo-as-cloned repo-url)
        (git-handler/set-latest-commit-if-exists! repo-url))
      (fn [e]
@@ -448,8 +450,7 @@
                          (p/catch (fn [_e] nil)))
               _ (state/set-current-repo! repo)
               _ (db/start-db-conn! nil
-                                   repo
-                                   db-listen-to-tx!)
+                                   repo)
               _ (create-month-journal-if-not-exists repo)
               _ (create-config-file-if-not-exists repo)
               _ (create-contents-file repo)]

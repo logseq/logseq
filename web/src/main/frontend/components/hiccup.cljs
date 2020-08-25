@@ -100,35 +100,47 @@
         (str protocol ":" link)))))
 
 (defn- get-file-absolute-path
-  [path]
+  [config path]
   (let [path (string/replace path "file:" "")
-        current-file (:file/path (:page/file (db/get-current-page)))]
+        block-id (:block/uuid config)
+        current-file (and block-id
+                          (:file/path (:page/file (:block/page (db/entity [:block/uuid block-id])))))]
     (when current-file
       (let [parts (string/split current-file #"/")
             parts-2 (string/split path #"/")
-            parts (loop [acc []
-                         parts (reverse parts)
-                         col (reverse parts-2)]
-                    (if (empty? col)
-                      acc
-                      (let [[part parts] (case (first col)
-                                   ".."
-                                   [(first parts) (rest parts)]
-                                   "."
-                                   ["" parts]
-                                   [(first col) (rest parts)])]
-                        (recur (conj acc part)
-                               parts
-                               (rest col)))))
-            parts (remove #(string/blank? %) parts)]
-        (string/join "/" (reverse parts))))))
+            current-dir (string/join "/" (drop-last 1 parts))]
+        (cond
+          (string/starts-with? path "/")
+          path
+
+          (and (not (string/starts-with? path ".."))
+               (not (string/starts-with? path ".")))
+          (str current-dir "/" path)
+
+          :else
+          (let [parts (loop [acc []
+                             parts (reverse parts)
+                             col (reverse parts-2)]
+                        (if (empty? col)
+                          acc
+                          (let [[part parts] (case (first col)
+                                               ".."
+                                               [(first parts) (rest parts)]
+                                               "."
+                                               ["" parts]
+                                               [(first col) (rest parts)])]
+                            (recur (conj acc part)
+                                   parts
+                                   (rest col)))))
+                parts (remove #(string/blank? %) parts)]
+            (string/join "/" (reverse parts))))))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
-(defn image-link [url href label]
+(defn image-link [config url href label]
   (let [href (if (string/starts-with? href "http")
                href
-               (get-file-absolute-path href))]
+               (get-file-absolute-path config href))]
     [:img.rounded-sm.shadow-xl.mb-2.mt-2
      {:class "object-contain object-center"
       :loading "lazy"
@@ -424,7 +436,7 @@
         (cond
           ;; image
           (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) s)) img-formats)
-          (image-link url s label)
+          (image-link config url s label)
 
           (= \# (first s))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
@@ -448,8 +460,11 @@
           (cond
             (= protocol "file")
             (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
-              (image-link url href label)
-              (let [page (get-page label)]
+              (image-link config url href label)
+              (let [label-text (get-label-text label)
+                    page (if (string/blank? label-text)
+                           {:page/name (db/get-file-page (string/replace href "file:" ""))}
+                           (get-page label))]
                 (if (and page
                          (when-let [ext (util/get-file-ext href)]
                            (config/mldoc-support? ext)))
@@ -468,7 +483,7 @@
 
             ;; image
             (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
-            (image-link url href label)
+            (image-link config url href label)
 
             :else
             (->elem
@@ -1033,10 +1048,10 @@
                                   (state/into-selection-mode!)))
 
                :on-mouse-down (fn [e]
-                                 (when (and
-                                        (not (state/get-selection-start-block))
-                                        (= (gobj/get e "buttons") 1))
-                                   (when block-id (state/set-selection-start-block! block-id))))
+                                (when (and
+                                       (not (state/get-selection-start-block))
+                                       (= (gobj/get e "buttons") 1))
+                                  (when block-id (state/set-selection-start-block! block-id))))
                :on-mouse-over (fn [e]
                                 (util/stop e)
                                 (when has-child?
