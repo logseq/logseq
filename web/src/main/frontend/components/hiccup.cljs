@@ -86,7 +86,7 @@
 
 (defn- join-lines
   [l]
-  (string/join "\n" l))
+  (string/trim (apply str l)))
 
 (defn- string-of-url
   [url]
@@ -1354,6 +1354,7 @@
       (if (re-find #"\"Export_Snippet\" \"embed\"" (str l))
         (->elem :div (map-inline config l))
         (->elem :p (map-inline config l)))
+
       ["Horizontal_Rule"]
       (when-not (:slide? config)
         [:hr])
