@@ -289,8 +289,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                              {:block/uuid uuid
-                               :block/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -403,6 +403,14 @@
                                       {:db/id page-id
                                        :page/directives new-directives}]
                                      [[:db/retract page-id :page/directives]]))
+                 pages (if (seq page-tags)
+                         (let [tag-pages (map
+                                       (fn [page]
+                                         {:page/original-name page
+                                          :page/name page})
+                                           (map :tag/name page-tags))]
+                           (concat pages tag-pages))
+                         pages)
                  page-tags (when (and pre-block? (seq page-tags))
                              (if (seq page-tags)
                                [[:db/retract page-id :page/tags]

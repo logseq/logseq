@@ -227,7 +227,10 @@
    (pull-many (state/get-current-repo) selector eids))
   ([repo selector eids]
    (when-let [conn (get-conn repo)]
-     (d/pull-many conn selector eids))))
+     (try
+       (d/pull-many conn selector eids)
+       (catch js/Error e
+         (js/console.error e))))))
 
 (defn get-handler-keys
   [{:keys [key data]}]
@@ -1119,6 +1122,7 @@
           _ (transact! repo-url block-refs)
           pages (pages-fn blocks ast)
           ref-pages (atom #{})
+          ref-tags (atom #{})
           blocks (doall
                   (mapcat
                    (fn [[page blocks]]
@@ -1139,73 +1143,82 @@
                                                              block-ref-pages)))))
                          blocks)))
                    (remove nil? pages)))
-          pages (map
-                  (fn [page]
-                    (let [page-file? (= page (string/lower-case file))
-                          other-alias (and (:alias directives)
-                                           (seq (remove #(= page %)
-                                                        (:alias directives))))
-                          other-alias (distinct
-                                       (remove nil? other-alias))
-                          journal-date-long (if journal?
-                                              (date/journal-title->long (string/capitalize page)))
-                          page-list (when-let [list-content (:list directives)]
-                                      (extract-page-list list-content))]
-                      (cond->
-                          (util/remove-nils
-                           {:page/name (string/lower-case page)
-                            :page/original-name page
-                            :page/file [:file/path file]
-                            :page/journal? journal?
-                            :page/journal-day (if journal?
-                                                (date/journal-title->int (string/capitalize page))
-                                                0)
-                            :page/created-at journal-date-long
-                            :page/last-modified-at journal-date-long})
-                        (seq directives)
-                        (assoc :page/directives directives)
+          pages (doall
+                 (map
+                   (fn [page]
+                     (let [page-file? (= page (string/lower-case file))
+                           other-alias (and (:alias directives)
+                                            (seq (remove #(= page %)
+                                                         (:alias directives))))
+                           other-alias (distinct
+                                        (remove nil? other-alias))
+                           journal-date-long (if journal?
+                                               (date/journal-title->long (string/capitalize page)))
+                           page-list (when-let [list-content (:list directives)]
+                                       (extract-page-list list-content))]
+                       (cond->
+                           (util/remove-nils
+                            {:page/name (string/lower-case page)
+                             :page/original-name page
+                             :page/file [:file/path file]
+                             :page/journal? journal?
+                             :page/journal-day (if journal?
+                                                 (date/journal-title->int (string/capitalize page))
+                                                 0)
+                             :page/created-at journal-date-long
+                             :page/last-modified-at journal-date-long})
+                         (seq directives)
+                         (assoc :page/directives directives)
 
-                        other-alias
-                        (assoc :page/alias
-                               (map
-                                 (fn [alias]
-                                   (let [alias (string/lower-case alias)
-                                         aliases (->>
-                                                  (distinct
-                                                   (conj
-                                                    (remove #{alias} other-alias)
-                                                    page))
-                                                  (remove nil?))
-                                         aliases (if (seq aliases)
-                                                   (map
-                                                     (fn [alias]
-                                                       {:page/name alias})
-                                                     aliases))]
-                                     (if (seq aliases)
-                                       {:page/name alias
-                                        :page/alias aliases}
-                                       {:page/name alias})))
-                                 other-alias))
+                         other-alias
+                         (assoc :page/alias
+                                (map
+                                  (fn [alias]
+                                    (let [alias (string/lower-case alias)
+                                          aliases (->>
+                                                   (distinct
+                                                    (conj
+                                                     (remove #{alias} other-alias)
+                                                     page))
+                                                   (remove nil?))
+                                          aliases (if (seq aliases)
+                                                    (map
+                                                      (fn [alias]
+                                                        {:page/name alias})
+                                                      aliases))]
+                                      (if (seq aliases)
+                                        {:page/name alias
+                                         :page/alias aliases}
+                                        {:page/name alias})))
+                                  other-alias))
 
-                        (or (:tags directives) (:roam_tags directives))
-                        (assoc :page/tags (let [tags (:tags directives)
-                                                roam-tags (:roam_tags directives)
-                                                tags (if (string? tags)
-                                                       (string/split tags #",")
-                                                       tags)
-                                                tags (->> (concat tags roam-tags)
-                                                          (remove nil?)
-                                                          (distinct))]
-                                            (util/->tags tags))))))
-                  (->> (map first pages)
-                       (remove nil?)))
+                         (or (:tags directives) (:roam_tags directives))
+                         (assoc :page/tags (let [tags (:tags directives)
+                                                 roam-tags (:roam_tags directives)
+                                                 tags (if (string? tags)
+                                                        (string/split tags #",")
+                                                        tags)
+                                                 tags (->> (concat tags roam-tags)
+                                                           (remove nil?)
+                                                           (distinct))
+                                                 tags (util/->tags tags)]
+                                             (swap! ref-tags set/union (set (map :tag/name tags)))
+                                             tags)))))
+                   (->> (map first pages)
+                        (remove nil?))))
           pages (concat
                  pages
                  (map
                    (fn [page]
                      {:page/original-name page
+                      :page/name page})
+                   @ref-tags)
+                 (map
+                   (fn [page]
+                     {:page/original-name page
                       :page/name (string/lower-case page)})
                    @ref-pages))]
+      (prn {:pages pages})
       (vec
        (->> (concat
              pages

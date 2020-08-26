@@ -48,6 +48,8 @@
                      :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
+   :page/definitions {:db/valueType   :db.type/ref
+                      :db/cardinality :db.cardinality/many}
    :page/created-at {}
    :page/last-modified-at {}
    :page/contributors {}
@@ -94,4 +96,11 @@
                     :db/unique :db.unique/identity}
 
    ;; For pages
-   :tag/name       {:db/unique :db.unique/identity}})
+   :tag/name       {:db/unique :db.unique/identity}
+
+   ;; Definitions, useful for tags and future anki cards
+   :definition/block {:db/valueType   :db.type/ref}
+   ;; Why not make :definition/key unique?
+   ;; Multiple definitions with the same key in either one page or multiple pages
+   :definition/key {}
+   :definition/value {}})

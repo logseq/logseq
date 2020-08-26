@@ -5,7 +5,8 @@
             [clojure.string :as string]
             [frontend.loader :as loader]
             [cljs-bean.core :as bean]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [cljs.core.match :refer-macros [match]]))
 
 (defn default-config
   [format]
@@ -44,6 +45,39 @@
        (map string/lower-case)
        (map string/trim)))))
 
+;; Org-roam
+(defn get-tags-from-definition
+  [ast]
+  (loop [ast ast]
+    (if (seq ast)
+      (match (first ast)
+        ["List" l]
+        (when-let [name (:name (first l))]
+          (let [name (and (vector? name)
+                          (last (first name)))]
+            (when (and (string? name)
+                       (= (string/lower-case name) "tags"))
+              (->>
+               (last (first (:content (first l))))
+               (map second)
+               (filter (and map? :url))
+               (map (fn [x]
+                      (let [label (last (first (:label x)))
+                            search (and (= (first (:url x)) "Search")
+                                        (last (:url x)))
+                            tag (if-not (string/blank? label)
+                                  label
+                                  search)]
+                        (when tag (string/lower-case tag)))))
+               (remove nil?)))))
+
+        ["Heading" _h]
+        nil
+
+        :else
+        (recur (rest ast)))
+      nil)))
+
 (defn collect-page-directives
   [ast]
   (if (seq ast)
@@ -81,6 +115,12 @@
                          (update :tags sep-by-quote-or-space-or-comma)
                          (:roam_tags directives)
                          (update :roam_tags sep-by-quote-or-space-or-comma))
+                       directives)
+          definition-tags (get-tags-from-definition ast)
+          directives (if definition-tags
+                       (update directives :tags (fn [tags]
+                                                  (-> (concat tags definition-tags)
+                                                      distinct)))
                        directives)
           directives (cond-> directives
                        (seq macros)

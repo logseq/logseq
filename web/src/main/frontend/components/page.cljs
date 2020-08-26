@@ -52,14 +52,14 @@
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
         page-blocks (db/with-dummy-block raw-page-blocks format
-                        (if (empty? raw-page-blocks)
-                          (let [content (db/get-file repo file-path)]
-                            {:block/page {:db/id (:db/id page)}
-                             :block/file {:db/id (:db/id (:page/file page))}
-                             :block/meta
-                             (let [file-id (:db/id (:page/file page))]
-                               {:start-pos (utf8/length (utf8/encode content))
-                                :end-pos nil})}))
+                      (if (empty? raw-page-blocks)
+                        (let [content (db/get-file repo file-path)]
+                          {:block/page {:db/id (:db/id page)}
+                           :block/file {:db/id (:db/id (:page/file page))}
+                           :block/meta
+                           (let [file-id (:db/id (:page/file page))]
+                             {:start-pos (utf8/length (utf8/encode content))
+                              :end-pos nil})}))
                       journal?)
         start-level (or (:block/level (first page-blocks)) 1 )
         hiccup-config {:id encoded-page-name
@@ -220,6 +220,7 @@
         repo (or repo current-repo)
         encoded-page-name (get-page-name state)
         page-name (string/lower-case (util/url-decode encoded-page-name))
+        path-page-name page-name
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
         format (db/get-page-format page-name)
@@ -309,11 +310,16 @@
                                   :page
                                   {:page page}))))}
              [:h1.title {:style {:margin-left -2}}
-              (if (and (string/includes? page-original-name "[[")
-                       (string/includes? page-original-name "]]"))
-                (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                  (hiccup/block-cp {} (ffirst ast)))
-                page-original-name)]])
+              (if page-original-name
+                (if (and (string/includes? page-original-name "[[")
+                         (string/includes? page-original-name "]]"))
+                  (when page-original-name
+                    (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
+                      (hiccup/block-cp {} (ffirst ast))))
+                  page-original-name)
+                (or
+                 page-name
+                 path-page-name))]])
           [:div
            [:div.content
             (when (and file-path (not sidebar?) (not block?))
