@@ -776,7 +776,9 @@
   (->> (map (fn [tag]
               (let [tag (-> (string/trim tag)
                             (string/lower-case)
-                            (string/replace #"\s+" "-"))]
+                            (string/replace #"\s+" "-")
+                            (string/replace "[" "")
+                            (string/replace "]" ""))]
                 (if (tag-valid? tag)
                   {:db/id tag
                    :tag/name tag})))

@@ -1341,8 +1341,11 @@
             (if (coll? v)
               (for [item v]
                 (if (= k :tags)
-                  [:a.tag.mr-1 {:href (str "/page/" item)}
-                   item]
+                  (let [tag (-> item
+                                (string/replace "[" "")
+                                (string/replace "]" ""))]
+                    [:a.tag.mr-1 {:href (str "/page/" tag)}
+                     tag])
                   [:span item]))
               [:span v])]))]
 

@@ -581,6 +581,18 @@
        ;; (util/sort-by-value :desc)
        ))))
 
+(defn get-tag-pages
+  [repo tag-name]
+  (d/q '[:find ?original-name ?name
+         :in $ ?tag
+         :where
+         [?e :tag/name ?tag]
+         [?page :page/tags ?e]
+         [?page :page/original-name ?original-name]
+         [?page :page/name ?name]]
+    (get-conn repo)
+    tag-name))
+
 (defn- remove-journal-files
   [files]
   (remove
@@ -1726,14 +1738,21 @@
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [page (string/lower-case page)
-            original-page-name (:page/original-name (entity [:page/name page]))
+            page-entity (entity [:page/name page])
+            original-page-name (:page/original-name page-entity)
+            tags (->> (:page/tags page-entity)
+                      (map :tag/name))
+            tags (remove #(= page %) tags)
             ref-pages (get-page-referenced-pages repo page)
             mentioned-pages (get-pages-that-mentioned-page repo page)
             edges (concat
                    (map (fn [[p aliases]]
                           [page p]) ref-pages)
                    (map (fn [[p aliases]]
-                          [p page]) mentioned-pages))
+                          [p page]) mentioned-pages)
+                   (map (fn [tag]
+                          [page tag])
+                     tags))
             other-pages (->> (concat (map first ref-pages)
                                      (map first mentioned-pages))
                              (remove nil?)
@@ -1757,7 +1776,8 @@
             nodes (->> (concat
                         [page]
                         (map first ref-pages)
-                        (map first mentioned-pages))
+                        (map first mentioned-pages)
+                        tags)
                        (remove nil?)
                        (distinct)
                        (build-nodes dark? page edges))]

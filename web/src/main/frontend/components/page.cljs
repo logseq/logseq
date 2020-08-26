@@ -184,6 +184,20 @@
   (fn [close-fn]
     (rename-page-dialog-inner page-name close-fn)))
 
+(defn tagged-pages
+  [repo tag]
+  (let [pages (db/get-tag-pages repo tag)]
+    (when (seq pages)
+      [:div.references.mt-6.flex-1.flex-row
+       [:div.content
+        (ui/foldable
+         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
+         [:ul.mt-2
+          (for [[original-name name] pages]
+            [:li {:key (str "tagged-page-" name)}
+             [:a {:href (str "/page/" (util/encode-str name))}
+              original-name]])])]])))
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
   (db-mixins/clear-query-cache
@@ -318,7 +332,6 @@
                     [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
                      item])])))
 
-
            (when (and block? (not sidebar?))
              [:div.mb-4
               (block/block-parents repo block-id format)])
@@ -327,6 +340,8 @@
 
          (when-not block?
            (today-queries repo today? sidebar?))
+
+         (tagged-pages repo page-name)
 
          ;; referenced blocks
          [:div {:key "page-references"}
