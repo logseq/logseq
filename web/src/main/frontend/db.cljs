@@ -1218,7 +1218,6 @@
                      {:page/original-name page
                       :page/name (string/lower-case page)})
                    @ref-pages))]
-      (prn {:pages pages})
       (vec
        (->> (concat
              pages
