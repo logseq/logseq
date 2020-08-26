@@ -345,7 +345,7 @@
                         (git-handler/set-git-error! repo-url error)
                         (notification/show!
                          [:p.content
-                          "Failed to push, please "
+                          (util/format "Failed to push to %s, please " repo-url)
                           [:span.text-gray-700.font-bold.mr-2
                            "resolve any diff first."]
                           (ui/button
