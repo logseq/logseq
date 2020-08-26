@@ -593,6 +593,16 @@
     (get-conn repo)
     tag-name))
 
+(defn get-all-tagged-pages
+  [repo]
+  (d/q '[:find ?page-name ?tag
+         :where
+         [?page :page/tags ?e]
+         [?e :tag/name ?tag]
+         [?tag-page :page/name ?tag]
+         [?page :page/name ?page-name]]
+    (get-conn repo)))
+
 (defn- remove-journal-files
   [files]
   (remove
@@ -1720,10 +1730,13 @@
         current-page (:page/name (get-current-page))]
     (when-let [repo (state/get-current-repo)]
       (let [relation (get-pages-relation repo show-journal?)
+            tagged-pages (get-all-tagged-pages repo)
             empty-pages (get-empty-pages repo)
-            nodes (concat (seq relation) (if (seq empty-pages)
-                                           [empty-pages]
-                                           []))
+            nodes (concat (seq relation)
+                          (seq tagged-pages)
+                          (if (seq empty-pages)
+                            [empty-pages]
+                            []))
             edges (build-edges (remove
                                 (fn [[_ to]]
                                   (nil? to))
