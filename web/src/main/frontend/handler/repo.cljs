@@ -480,10 +480,7 @@
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
   (periodically-pull repo-url pull-now?)
-  (when (and
-         (or (not config/dev?)
-             (= repo-url "https://github.com/tiensonqin/empty-repo"))
-         (not (false? (:git-auto-push (state/get-config repo-url)))))
+  (when (not (false? (:git-auto-push (state/get-config repo-url))))
     (periodically-push-tasks repo-url)))
 
 (defn clone-and-pull
