@@ -300,11 +300,14 @@
 (defn check-changed-files-status
   [f]
   (when (gobj/get js/window.workerThread "getChangedFiles")
-      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-     (let [files (bean/->clj files)]
-       (when (empty? files)
-         ;; FIXME: getChangedFiles not return right result
-         (state/reset-changed-files! files))))))
+    (->
+     (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
+       (let [files (bean/->clj files)]
+         (when (empty? files)
+           ;; FIXME: getChangedFiles not return right result
+           (state/reset-changed-files! files))))
+     (p/catch (fn [error]
+                (js/console.dir error))))))
 
 (defn push
   ([repo-url]

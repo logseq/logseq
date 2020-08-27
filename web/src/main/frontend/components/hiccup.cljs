@@ -110,11 +110,11 @@
             parts-2 (string/split path #"/")
             current-dir (string/join "/" (drop-last 1 parts))]
         (cond
-          (string/starts-with? path "/")
+          (util/starts-with? path "/")
           path
 
-          (and (not (string/starts-with? path ".."))
-               (not (string/starts-with? path ".")))
+          (and (not (util/starts-with? path ".."))
+               (not (util/starts-with? path ".")))
           (str current-dir "/" path)
 
           :else
@@ -138,7 +138,7 @@
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [config url href label]
-  (let [href (if (string/starts-with? href "http")
+  (let [href (if (util/starts-with? href "http")
                href
                (get-file-absolute-path config href))]
     [:img.rounded-sm.shadow-xl.mb-2.mt-2
@@ -555,7 +555,7 @@
         (= name "embed")
         (let [a (first arguments)]
           (cond
-            (and (string/starts-with? a "[[")
+            (and (util/starts-with? a "[[")
                  (string/ends-with? a "]]"))
             (let [page-name (-> (string/replace a "[[" "")
                                 (string/replace "]]" "")
@@ -563,7 +563,7 @@
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
-            (and (string/starts-with? a "((")
+            (and (util/starts-with? a "((")
                  (string/ends-with? a "))"))
             (when-let [s (-> (string/replace a "((" "")
                              (string/replace "))" "")

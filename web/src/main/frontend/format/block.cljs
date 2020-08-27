@@ -33,8 +33,8 @@
         (= typ "Search")
         (not (contains? #{\# \* \/ \( \[} (first (second (:url (second block))))))
         (let [page (second (:url (second block)))]
-          (when (and (not (string/starts-with? page "http"))
-                     (not (string/starts-with? page "file"))
+          (when (and (not (util/starts-with? page "http"))
+                     (not (util/starts-with? page "file"))
                      (not (string/ends-with? page ".html")))
             page)))
 

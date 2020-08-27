@@ -92,7 +92,7 @@
                                                 :markdown (str (string/lower-case k) ": ")
                                                 "")
                                        exists? (atom false)
-                                       lines (remove #(string/starts-with? % prefix) lines)]
+                                       lines (remove #(util/starts-with? % prefix) lines)]
                                    (string/join "\n" lines))
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)

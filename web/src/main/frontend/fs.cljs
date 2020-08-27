@@ -43,7 +43,7 @@
   ([dir path]
    (create-if-not-exists dir path ""))
   ([dir path initial-content]
-   (let [path (if (string/starts-with? path "/")
+   (let [path (if (util/starts-with? path "/")
                 path
                 (str "/" path))]
      (util/p-handle

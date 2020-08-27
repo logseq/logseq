@@ -115,10 +115,10 @@
                                (let [content (string/trim (doall (map-join children)))]
                                  (reset! *inside-pre? false)
                                  (case format
-                                   :markdown (if (string/starts-with? content "```")
+                                   :markdown (if (util/starts-with? content "```")
                                                content
                                                (str "```\n" content "\n```"))
-                                   :org (if (string/starts-with? content "#+BEGIN_SRC")
+                                   :org (if (util/starts-with? content "#+BEGIN_SRC")
                                           content
                                           (util/format "#+BEGIN_SRC\n%s\n#+END_SRC" content))
                                    nil)))

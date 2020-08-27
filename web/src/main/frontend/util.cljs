@@ -352,9 +352,14 @@
      #{"DETAILS" "SUMMARY"}
      (gobj/get node "tagName"))))
 
+;; Debug
+(defn starts-with?
+  [s substr]
+  (string/starts-with? s substr))
+
 (defn journal?
   [path]
-  (string/starts-with? path "journals/"))
+  (starts-with? path "journals/"))
 
 (defn drop-first-line
   [s]
@@ -693,7 +698,7 @@
            (loop [idx (dec index)]
              (if (>= idx 0)
                (let [block (nth blocks idx)
-                     prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+                     prefix-match? (starts-with? (gobj/get block "id") prefix)]
                  (if (and prefix-match?
                           (= level (d/attr block "level")))
                    block

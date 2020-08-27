@@ -101,8 +101,8 @@
     (let [{:keys [selection-start selection-end format value block edit-id input]} m
           empty-selection? (= selection-start selection-end)
           selection (subs value selection-start selection-end)
-          selection-link? (and selection (or (string/starts-with? selection "http://")
-                                             (string/starts-with? selection "https://")))
+          selection-link? (and selection (or (util/starts-with? selection "http://")
+                                             (util/starts-with? selection "https://")))
           [content back-pos] (cond
                                empty-selection?
                                (config/get-empty-link-and-back-pos format)
@@ -622,15 +622,15 @@
           content (state/get-edit-content)
           new-content (->
                        (cond
-                         (string/starts-with? content "TODO")
+                         (util/starts-with? content "TODO")
                          (string/replace-first content "TODO" "DOING")
-                         (string/starts-with? content "DOING")
+                         (util/starts-with? content "DOING")
                          (string/replace-first content "DOING" "DONE")
-                         (string/starts-with? content "LATER")
+                         (util/starts-with? content "LATER")
                          (string/replace-first content "LATER" "NOW")
-                         (string/starts-with? content "NOW")
+                         (util/starts-with? content "NOW")
                          (string/replace-first content "NOW" "DONE")
-                         (string/starts-with? content "DONE")
+                         (util/starts-with? content "DONE")
                          (string/replace-first content "DONE" "")
                          :else
                          (str (if (= :now (state/get-preferred-workflow))
@@ -661,7 +661,7 @@
           (when (>= idx 0)
             (let [block (nth blocks idx)
                   collapsed? (= "none" (d/style block "display"))
-                  prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+                  prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
               (if (or collapsed?
                       ;; might be embed blocks
                       (not prefix-match?))
@@ -678,7 +678,7 @@
           (when (>= (count blocks) idx)
             (when-let [block (util/nth-safe blocks idx)]
               (let [collapsed? (= "none" (d/style block "display"))
-                    prefix-match? (string/starts-with? (gobj/get block "id") prefix)]
+                    prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
                 (if (or collapsed?
                         ;; might be embed blocks
                         (not prefix-match?))
@@ -1283,7 +1283,7 @@
 (defn append-paste-doc!
   [format event]
   (let [[html text] (util/get-clipboard-as-html event)]
-    (when-not (string/starts-with? (string/trim text) "http")
+    (when-not (util/starts-with? (string/trim text) "http")
       (let [doc-text (html-parser/parse format html)]
         (when-not (string/blank? doc-text)
           (util/stop event)

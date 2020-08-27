@@ -216,7 +216,7 @@
 
 (defn draw?
   [path]
-  (string/starts-with? path default-draw-directory))
+  (util/starts-with? path default-draw-directory))
 
 (defonce local-repo "local")
 (def config-file "config.edn")

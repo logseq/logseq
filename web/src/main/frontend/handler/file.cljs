@@ -58,7 +58,7 @@
   (some (fn [pattern]
           (or
            (= path pattern)
-           (and (string/starts-with? pattern "/")
+           (and (util/starts-with? pattern "/")
                 (= (str "/" (first (string/split path #"/")))
                    pattern)))) patterns))
 

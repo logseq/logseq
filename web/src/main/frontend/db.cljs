@@ -48,7 +48,7 @@
 
 (defn get-repo-path
   [url]
-  (if (string/starts-with? url "http")
+  (if (util/starts-with? url "http")
     (->> (take-last 2 (string/split url #"/"))
          (string/join "/"))
     url))
@@ -610,7 +610,7 @@
   [files]
   (remove
    (fn [file]
-     (string/starts-with? file "journals/"))
+     (util/starts-with? file "journals/"))
    files))
 
 (defn get-pages
@@ -911,7 +911,7 @@
         exists? (atom #{})
         lines (doall
                (mapv (fn [line]
-                       (let [result (filter #(and (string/starts-with? line (prefix-f %))
+                       (let [result (filter #(and (util/starts-with? line (prefix-f %))
                                                   %)
                                             directive-keys)]
                          (if (seq result)
@@ -1079,7 +1079,7 @@
   [file ast]
   ;; headline
   (let [ast (map first ast)]
-    (if (string/starts-with? file "pages/contents.")
+    (if (util/starts-with? file "pages/contents.")
       "Contents"
       (let [file-page-name (get-file-page file)
             first-block (last (first (filter block/heading-block? ast)))
@@ -1243,7 +1243,7 @@
   [repo-url file content utf8-content]
   (if (string/blank? content)
     []
-    (let [journal? (string/starts-with? file "journals/")
+    (let [journal? (util/starts-with? file "journals/")
           format (format/get-format file)
           ast (mldoc/->edn content
                            (mldoc/default-config format))

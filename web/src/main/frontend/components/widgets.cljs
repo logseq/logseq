@@ -192,7 +192,7 @@
         "Clone"
         :on-click
         (fn []
-          (when (string/starts-with? repo-url "https://github.com/")
+          (when (util/starts-with? repo-url "https://github.com/")
             (let [repo-url (string/replace repo-url ".git" "")]
               (repo-handler/clone-and-pull repo-url)
               (route-handler/redirect-to-home!)))))
