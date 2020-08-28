@@ -335,10 +335,10 @@
                           (when (and
                                  insert?
                                  (not (editor-handler/in-auto-complete? input)))
+                            (util/stop e)
                             (profile
                              "Insert block"
-                             (editor-handler/insert-new-block! state))
-                            (util/stop e)))))))))
+                             (editor-handler/insert-new-block! state))))))))))
          ;; up
          38 (fn [state e]
               (when (and

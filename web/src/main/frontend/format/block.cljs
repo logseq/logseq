@@ -183,8 +183,9 @@
 
                 (heading-block? block)
                 (let [id (or (when-let [custom-id (get-in properties [:properties "CUSTOM_ID"])]
-                               (when (util/uuid-string? custom-id)
-                                 (uuid custom-id)))
+                               (let [custom-id (string/trim custom-id)]
+                                 (when (util/uuid-string? custom-id)
+                                   (uuid custom-id))))
                              (d/squuid))
                       block (second block)
                       level (:level block)
