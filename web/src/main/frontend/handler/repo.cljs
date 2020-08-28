@@ -328,13 +328,11 @@
                     (git-handler/set-latest-commit-if-exists! repo-url)
                     (state/clear-changed-files! repo-url))
                   (fn [error]
-                    (prn {:error error})
                     (if (and (string? error)
                              (= error "Failed to fetch"))
                       (println "Failed to fetch")
                       (do
                         (println "Failed to push")
-                        (js/console.dir error)
                         (git-handler/set-git-status! repo-url :push-failed)
                         (git-handler/set-git-error! repo-url error)
                         (notification/show!
