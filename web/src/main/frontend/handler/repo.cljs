@@ -261,32 +261,48 @@
              (not (state/in-draw-mode?)))
         (git-handler/set-git-status! repo-url :pulling)
         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
-          (p/let [result (git/fetch repo-url token)]
-            (let [{:keys [fetchHead]} (bean/->clj result)]
-              (git-handler/set-latest-commit! repo-url fetchHead)
-              (-> (git/merge repo-url)
-                  (p/then (fn [result]
-                            (-> (git/checkout repo-url)
-                                (p/then (fn [result]
-                                          (git-handler/set-git-status! repo-url nil)
-                                          (git-handler/set-git-last-pulled-at! repo-url)
-                                          (when (and latest-commit fetchHead
-                                                     (not= latest-commit fetchHead))
-                                            (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                              (load-db-and-journals! repo-url diffs false)))))
-                                (p/catch (fn [error]
-                                           (git-handler/set-git-status! repo-url :checkout-failed)
-                                           (git-handler/set-git-error! repo-url error))))))
-                  (p/catch (fn [error]
-                             (git-handler/set-git-status! repo-url :merge-failed)
-                             (git-handler/set-git-error! repo-url error)
-                             (notification/show!
-                              [:p.content
-                               "Failed to merge, please "
-                               [:span.text-gray-700.font-bold
-                                "resolve any diffs first."]]
-                              :error)
-                             (route-handler/redirect! {:to :diff})))))))))))
+          (->
+           (p/let [result (git/fetch repo-url token)]
+             (let [{:keys [fetchHead]} (bean/->clj result)]
+               (git-handler/set-latest-commit! repo-url fetchHead)
+               (-> (git/merge repo-url)
+                   (p/then (fn [result]
+                             (-> (git/checkout repo-url)
+                                 (p/then (fn [result]
+                                           (git-handler/set-git-status! repo-url nil)
+                                           (git-handler/set-git-last-pulled-at! repo-url)
+                                           (when (and latest-commit fetchHead
+                                                      (not= latest-commit fetchHead))
+                                             (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                               (load-db-and-journals! repo-url diffs false)))))
+                                 (p/catch (fn [error]
+                                            (git-handler/set-git-status! repo-url :checkout-failed)
+                                            (git-handler/set-git-error! repo-url error))))))
+                   (p/catch (fn [error]
+                              (git-handler/set-git-status! repo-url :merge-failed)
+                              (git-handler/set-git-error! repo-url error)
+                              (notification/show!
+                               [:p.content
+                                "Failed to merge, please "
+                                [:span.text-gray-700.font-bold
+                                 "resolve any diffs first."]]
+                               :error)
+                              (route-handler/redirect! {:to :diff}))))))
+           (p/catch (fn [error]
+                      (println error)
+                      (notification/show!
+                       [:p.content
+                        (util/format "Failed to fetch %s." repo-url)
+                        [:br]
+                        [:span.text-gray-700.mr-2
+                         (util/format
+                          "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
+                          repo-url)
+                         (ui/button
+                           "Install Logseq on GitHub"
+                           :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
+                       :error
+                       false)))))))))
 
 (defn check-changed-files-status
   [f]
@@ -534,18 +550,17 @@
     ;; add missing dates if monthly basis
     (if (= :monthly (state/get-journal-basis))
       (let [path (date/current-journal-path format)
-            content (db/get-file repo-url path)]
-        (when content
-          (let [lines (set (string/split content #"\n"))
-                default-content (default-month-journal-content format)
-                default-lines (string/split default-content #"\n")
-                missing-dates (remove (fn [line] (contains? lines line)) default-lines)
-                missing-dates-content (if (seq missing-dates)
-                                        (string/join "\n" missing-dates))
-                content (str content "\n" missing-dates-content)]
-            (db/reset-file! repo-url path content)
-            (ui-handler/re-render-root!)
-            (git-handler/git-add repo-url path))))
+            content (or (db/get-file repo-url path) "")]
+        (let [lines (set (string/split content #"\n"))
+              default-content (default-month-journal-content format)
+              default-lines (string/split default-content #"\n")
+              missing-dates (remove (fn [line] (contains? lines line)) default-lines)
+              missing-dates-content (if (seq missing-dates)
+                                      (string/join "\n" missing-dates))
+              content (str content "\n" missing-dates-content)]
+          (db/reset-file! repo-url path content)
+          (ui-handler/re-render-root!)
+          (git-handler/git-add repo-url path)))
 
       ;; daily basis, create the specific day journal file
       ;; (create-today-journal-if-not-exists repo-url)

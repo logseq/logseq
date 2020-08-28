@@ -36,7 +36,7 @@
       :on-click
       #(user-handler/set-preferred-format! :org))]])
 
-(rum/defc set-personal-access-token <
+(rum/defc set-github-token! <
   {:init (fn [state]
            (when (and (state/logged?))
              (when-let [token (get-in (state/get-route-match) [:query-params :token])]
@@ -47,6 +47,7 @@
            state)}
   []
   (ui/loading "Store encrypted GitHub token in your browser"))
+
 
 (rum/defc sync-status < rum/reactive
   []

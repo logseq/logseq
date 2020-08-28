@@ -88,26 +88,14 @@
        "Isomorphic-git.org"]
       "."]
      [:h4 {} "Step 1"]
-     [:p {} "Click the button " [:i {} "Login with Github"] "."]
+     [:p {} "Create a GitHub account if you don't have one"]
      [:h4 {} "Step 2"]
-     [:p
-      {}
-      "Set your Github personal access token, the token will be encrypted and stored in the browser local storage, our server will never store it."]
-     [:p
-      {}
-      "If you know nothing about either Git or the personal access token, no worries, just follow the steps here: "
-      [:a
-       {:href
-        "https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-"
-        :target "_blank"}
-       "https://logseq.com/blog/faq#How"
-       [:i {} "to"]
-       "create"
-       [:i {} "a"]
-       "Github"
-       [:i {} "personal"]
-       "access_token-3f-"]]
+     [:p {} "Create a GitHub private repo if you don't have one"]
      [:h4 {} "Step 3"]
+     [:p {} "Click the button " [:i {} "Login with Github"] "."]
+     [:h4 {} "Step 4"]
+     [:p {} "Install Logseq app on your GitHub repos"]
+     [:h4 {} "Step 5"]
      [:p {} "Start writing!"]
      [:h3 {} "2. Use it locally (no need to login)"]
      [:p

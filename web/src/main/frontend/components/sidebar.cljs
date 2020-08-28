@@ -92,10 +92,14 @@
        (and logged? (nil? (:email me)))
        (settings/set-email)
 
-       ;; TODO: delay this
-       ;; personal token
-       (and logged? (nil? token))
-       (widgets/set-personal-access-token)
+       (and logged? (nil? token) (get-in (state/get-route-match) [:query-params :token]))
+       (widgets/set-github-token!)
+
+       ;; Install GitHub app
+       (and logged? (nil? (:github_installation_id me)))
+       (do
+         (set! (.-href js/window.location) (str "https://github.com/apps/" config/github-app-name "/installations/new"))
+         nil)
 
        cloning?
        (ui/loading "Cloning")
@@ -244,7 +248,9 @@
          [:div.ml-4.flex.items-center.md:ml-6
           (when-not logged?
             [:a.text-sm.font-medium.login
-             {:href (str "https://github.com/apps/" config/github-app-name "/installations/new")}
+             {:href "/login/github"
+              :on-click (fn []
+                          (storage/remove :git/current-repo))}
              "Login with GitHub"])
 
           (widgets/sync-status)
