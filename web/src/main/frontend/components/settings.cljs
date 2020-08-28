@@ -120,28 +120,6 @@
                 (if (= workflow :now)
                   "NOW/LATER"
                   "TODO/DOING")])]]]]
-         [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-           {:for "pat"}
-           "Github personal access token"]
-          [:div.mt-1.sm:mt-0.sm:col-span-2
-           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-            [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
-             {:default-value github-token
-              :type "password"
-              :autocomplete "new-password"
-              :on-blur (fn [event]
-                         (when-let [token (util/evalue event)]
-                           (when-not (string/blank? token)
-                             (user-handler/set-github-token! token false)
-                             (notification/show! "Github personal access token updated successfully!" :success))))
-              :on-key-press (fn [event]
-                              (let [k (gobj/get event "key")]
-                                (if (= "Enter" k)
-                                  (when-let [token (util/evalue event)]
-                                    (when-not (string/blank? token)
-                                      (user-handler/set-github-token! token false)
-                                      (notification/show! "Github personal access token updated successfully!" :success))))))}]]]]
 
          [:hr ]
 

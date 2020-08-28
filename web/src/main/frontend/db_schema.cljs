@@ -25,7 +25,6 @@
    :repo/cloned?    {}
    :git/latest-commit {}
    :git/status {}
-   :git/write-permission? {}
    :git/last-pulled-at {}
    ;; last error, better we should record all the errors
    :git/error {}

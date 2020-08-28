@@ -29,6 +29,8 @@
   (if dev? path
       (str asset-domain path)))
 
+(def github-app-name (if dev? "logseq-test" "logseq"))
+
 (defn git-pull-secs
   []
   (if dev?

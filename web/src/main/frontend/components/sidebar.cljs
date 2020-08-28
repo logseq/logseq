@@ -174,7 +174,6 @@
                        (not (gobj/get e "altKey")))
               (when-let [repo-url (state/get-current-repo)]
                 (if (and
-                     ;; (db/get-key-value repo-url :git/write-permission?)
                      (not (state/get-edit-input-id))
                      (seq (state/get-changed-files repo-url)))
                   (do
@@ -245,9 +244,7 @@
          [:div.ml-4.flex.items-center.md:ml-6
           (when-not logged?
             [:a.text-sm.font-medium.login
-             {:href "/login/github"
-              :on-click (fn []
-                          (storage/remove :git/current-repo))}
+             {:href (str "https://github.com/apps/" config/github-app-name "/installations/new")}
              "Login with GitHub"])
 
           (widgets/sync-status)

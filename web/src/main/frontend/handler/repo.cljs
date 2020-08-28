@@ -183,20 +183,11 @@
 (defn create-default-files!
   [repo-url]
   (when-let [name (get-in @state/state [:me :name])]
-    (github/get-repo-permission
-     (state/get-github-token)
-     repo-url
-     name
-     (fn [permission]
-       (let [permission (:permission permission)
-             write-permission (contains? #{"admin" "write"} permission)]
-         ;; (db/set-key-value repo-url :git/write-permission? write-permission)
-         (create-config-file-if-not-exists repo-url)
-         (if (= :monthly (state/get-journal-basis))
-           (create-month-journal-if-not-exists repo-url)
-           (create-today-journal-if-not-exists repo-url))
-         (create-contents-file repo-url)))
-     (fn []))))
+    (create-config-file-if-not-exists repo-url)
+    (if (= :monthly (state/get-journal-basis))
+      (create-month-journal-if-not-exists repo-url)
+      (create-today-journal-if-not-exists repo-url))
+    (create-contents-file repo-url)))
 
 (defn db-listen-to-tx!
   [repo db-conn]
@@ -316,7 +307,6 @@
    (let [status (db/get-key-value repo-url :git/status)]
      (when (and
             ;; (not= status :push-failed)
-            ;; (db/get-key-value repo-url :git/write-permission?)
             (not (state/get-edit-input-id))
             ;; getChangedFiles is not very reliable
             (seq (state/get-changed-files repo-url))
@@ -338,6 +328,7 @@
                     (git-handler/set-latest-commit-if-exists! repo-url)
                     (state/clear-changed-files! repo-url))
                   (fn [error]
+                    (prn {:error error})
                     (if (and (string? error)
                              (= error "Failed to fetch"))
                       (println "Failed to fetch")
@@ -348,12 +339,22 @@
                         (git-handler/set-git-error! repo-url error)
                         (notification/show!
                          [:p.content
-                          (util/format "Failed to push to %s, please " repo-url)
-                          [:span.text-gray-700.font-bold.mr-2
-                           "resolve any diff first."]
-                          (ui/button
-                            "Go to diff"
-                            :href "/diff")]
+                          (util/format "Failed to push to %s. " repo-url)
+                          [:ol.text-gray-700
+                           [:li.mb-4
+                            [:span.text-gray-700.mr-2
+                             (util/format
+                              "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
+                              repo-url)
+                             (ui/button
+                               "Install Logseq on GitHub"
+                               :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
+                           [:li
+                            [:span.text-gray-700.font-bold.mr-2
+                             "Please resolve the diffs if any."]
+                            (ui/button
+                              "Go to diff"
+                              :href "/diff")]]]
                          :error
                          false)
                         (p/let [result (git/fetch repo-url (state/get-github-token))
@@ -389,25 +390,13 @@
        (notification/show!
         [:div
          [:p {:style {:margin-top 0}}
-          "Please make sure that your Github Personal Token has the right scopes. "]
+          (util/format
+           "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
+           repo-url)
 
-         [:ol
-          [:li {:style {:color "#555"}}
-           [:p {:style {:margin 0}}
-            "Follow this link to learn how to set the scopes: "]
-           [:a {:href "https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-"
-                :target "_blank"
-                :style {:color "#045591"}}
-            "How to create a Github personal access token?"]]
-          [:li {:style {:color "#555"}}
-           "Go to "
-           [:a {:href "/settings"
-                :style {:color "#045591"}}
-            "Settings"]
-           " and change your Github Personal Token."]
-
-          [:li {:style {:color "#555"}}
-           "Refresh the browser."]]]
+          (ui/button
+            "Install Logseq on GitHub"
+            :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
 
         :error
         false)))))

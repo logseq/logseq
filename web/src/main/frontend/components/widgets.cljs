@@ -36,43 +36,17 @@
       :on-click
       #(user-handler/set-preferred-format! :org))]])
 
-(rum/defcs set-personal-access-token <
-  (rum/local "" ::token)
-  [state]
-  (when (state/logged?)
-    (let [access-token (get state ::token)]
-      [:div.p-8.flex.items-center.justify-center
-       [:div.w-full.mx-auto
-        [:div
-         [:div
-          [:h1.title
-           "Set Github personal access token"]
-          [:div.pl-1
-           [:p
-            "The token will be encrypted and stored in the browser localstorage."
-            [:br]
-            "The server will never store it."]
-           [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
-            [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
-             {:on-change (fn [e]
-                           (reset! access-token (util/evalue e)))}]]
-           (ui/button
-             "Submit"
-             :on-click
-             (fn []
-               (when-not (string/blank? access-token)
-                 (user-handler/set-github-token! @access-token))))]
-
-          [:hr]
-
-          [:div.flex.flex-row.admonitionblock.align-items {:class "tip"}
-           [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-            {:title "Tip"}
-            (svg/tip)]
-           [:div.ml-4.text-lg
-            [:a {:href "https://logseq.com/blog/faq"
-                 :target "_blank"}
-             "How to create a Github personal access token?"]]]]]]])))
+(rum/defc set-personal-access-token <
+  {:init (fn [state]
+           (when (and (state/logged?))
+             (when-let [token (get-in (state/get-route-match) [:query-params :token])]
+               (user-handler/set-github-token! token)
+               ;; clear token path param
+               (route-handler/redirect! {:to :home
+                                         :push false})))
+           state)}
+  []
+  (ui/loading "Store encrypted GitHub token in your browser"))
 
 (rum/defc sync-status < rum/reactive
   []
@@ -179,9 +153,8 @@
       [:div
        [:div
         [:h1.title.mb-1
-         "Import your notes"]
-        [:p "You can import your notes from a repo on Github."]
-        [:div.mt-4.mb-2.relative.rounded-md.shadow-sm.max-w-xs
+         "Import your repo from GitHub"]
+        [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
          [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
           {:autoFocus true
            :placeholder "https://github.com/username/repo"

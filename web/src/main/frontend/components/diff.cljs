@@ -1,9 +1,11 @@
 (ns frontend.components.diff
   (:require [rum.core :as rum]
             [frontend.util :as util]
+            [frontend.config :as config]
             [frontend.handler :as handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -97,8 +99,8 @@
                  (reset! *edit? false)
                  (let [new-content @*edit-content]
                    (file/alter-file repo path new-content
-                                       {:commit? false
-                                        :re-render-root? true})
+                                    {:commit? false
+                                     :re-render-root? true})
                    (swap! state/state
                           assoc-in [:github/contents repo remote-oid path] new-content)
                    (mark-as-resolved path))))]
@@ -110,8 +112,8 @@
                (fn []
                  ;; overwrite the file
                  (file/alter-file repo path content
-                                     {:commit? false
-                                      :re-render-root? true})
+                                  {:commit? false
+                                   :re-render-root? true})
                  (mark-as-resolved path))
                :background "green")
 
@@ -162,9 +164,18 @@
                    (fn [{:keys [repo-url path ref content]}]
                      (swap! state/state
                             assoc-in [:github/contents repo-url remote-oid path] content))
-                   (fn [error]
-                     ;; TODO:
-                     )))))))))
+                   (fn [response]
+                     (when (= (gobj/get response "status") 401)
+                       (notification/show!
+                        [:span.text-gray-700.mr-2
+                         (util/format
+                          "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
+                          repo)
+                         (ui/button
+                           "Install Logseq on GitHub"
+                           :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
+                        :error
+                        false)))))))))))
      state)
    :will-unmount
    (fn [state]
