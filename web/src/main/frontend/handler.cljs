@@ -44,6 +44,7 @@
                               (file-handler/restore-config! repo false)
                               (when (and (state/logged?)
                                          (not (db/get-today-journal repo)))
+                                ;; FIXME: check journal file exists
                                 (repo-handler/read-repair-journals! repo)))))
         (p/then
          (fn []

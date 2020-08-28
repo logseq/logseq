@@ -545,23 +545,28 @@
 
 (defn read-repair-journals!
   [repo-url]
-  (let [repo-dir (util/get-repo-dir repo-url)
-        format (state/get-preferred-format)]
-    ;; add missing dates if monthly basis
-    (if (= :monthly (state/get-journal-basis))
-      (let [path (date/current-journal-path format)
-            content (or (db/get-file repo-url path) "")]
-        (let [lines (set (string/split content #"\n"))
-              default-content (default-month-journal-content format)
-              default-lines (string/split default-content #"\n")
-              missing-dates (remove (fn [line] (contains? lines line)) default-lines)
-              missing-dates-content (if (seq missing-dates)
-                                      (string/join "\n" missing-dates))
-              content (str content "\n" missing-dates-content)]
-          (db/reset-file! repo-url path content)
-          (ui-handler/re-render-root!)
-          (git-handler/git-add repo-url path)))
+  (try
+    (let [repo-dir (util/get-repo-dir repo-url)
+         format (state/get-preferred-format)]
+     ;; add missing dates if monthly basis
+     (if (= :monthly (state/get-journal-basis))
+       (let [path (date/current-journal-path format)
+             content (or (db/get-file repo-url path) "")]
+         (let [lines (set (string/split content #"\n"))
+               default-content (default-month-journal-content format)
+               default-lines (string/split default-content #"\n")
+               missing-dates (remove (fn [line] (contains? lines line)) default-lines)
+               missing-dates-content (if (seq missing-dates)
+                                       (string/join "\n" missing-dates))
+               content (str content "\n" missing-dates-content)]
 
-      ;; daily basis, create the specific day journal file
-      ;; (create-today-journal-if-not-exists repo-url)
-      )))
+           ;; TODO: check whether file exists
+           (db/reset-file! repo-url path content)
+           (ui-handler/re-render-root!)
+           (git-handler/git-add repo-url path)))
+
+       ;; daily basis, create the specific day journal file
+       ;; (create-today-journal-if-not-exists repo-url)
+       ))
+    (catch js/Error e
+      (prn e))))
