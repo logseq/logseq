@@ -92,7 +92,7 @@
        (and logged? (nil? (:email me)))
        (settings/set-email)
 
-       (and logged? (nil? token) (get-in (state/get-route-match) [:query-params :token]))
+       (and logged? (get-in (state/get-route-match) [:query-params :token]))
        (widgets/set-github-token!)
 
        ;; Install GitHub app
