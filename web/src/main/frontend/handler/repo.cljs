@@ -126,15 +126,22 @@
 
 (defn request-app-tokens!
   [ok-handler error-handler]
-  (let [installation-ids (->> (map :installation_id (:repos (state/get-me)))
+  (let [repos (:repos (state/get-me))
+        installation-ids (->> (map :installation_id repos)
                               (remove nil?)
                               (distinct))]
-    (when (seq installation-ids)
+    (when (or (seq repos)
+              (seq installation-ids))
       (util/post (str config/api "refresh_github_token")
-                 {:installation-ids installation-ids}
+                 {:installation-ids installation-ids
+                  :repos repos}
                  (fn [result]
-                   (state/set-github-installation-tokens! result)
-                   (when ok-handler (ok-handler)))
+                   (if (= "refresh" (:message result))
+                     ;; reload
+                     (set! (.-href js/window.location) config/website)
+                     (do
+                       (state/set-github-installation-tokens! result)
+                       (when ok-handler (ok-handler)))))
                  (fn [error]
                    (println "Something wrong!")
                    (js/console.dir error)
