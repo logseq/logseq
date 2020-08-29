@@ -48,7 +48,7 @@
    (get-latest-commit repo-url handler 1))
   ([repo-url handler length]
    (-> (p/let [commits (git/log repo-url
-                                (state/get-github-token)
+                                (state/get-github-token repo-url)
                                 length)]
          (handler (if (= length 1)
                     (first commits)
@@ -73,7 +73,7 @@
       (p/let [commit-oid (git/commit repo commit-message)
               result (git/write-ref! repo commit-oid)
               push-result (git/push repo
-                                    (state/get-github-token)
+                                    (state/get-github-token repo)
                                     true)]
         (reset! pushing? false)
         (state/clear-changed-files! repo)

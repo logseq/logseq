@@ -83,6 +83,63 @@
               add-or-modify-files (util/remove-nils (concat add-files modify-files))]
           (load-contents add-or-modify-files delete-files delete-blocks true))))))
 
+(defn show-install-error!
+  [repo-url title push?]
+  (notification/show!
+   [:p.content
+    title
+    [:ol.text-gray-700
+     [:li.mb-4
+      [:span.text-gray-700.mr-2
+       (util/format
+        "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
+        repo-url)
+       (ui/button
+         "Install Logseq on GitHub"
+         :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
+     (when push?
+       [:li
+        [:span.text-gray-700.font-bold.mr-2
+         "Please resolve the diffs if any."]
+        (ui/button
+          "Go to diff"
+          :href "/diff")])]]
+   :error
+   false))
+
+(defn get-new-token
+  [repo]
+  (when-let [installation-id (-> (filter
+                                  (fn [r]
+                                    (= (:url r) repo))
+                                  (:repos (state/get-me)))
+                                 (first)
+                                 :installation_id)]
+    (util/post (str config/api "refresh_github_token")
+               {:installation-ids [installation-id]}
+               (fn [result]
+                 (let [token (:token (first result))]
+                   (state/set-github-token! repo token)))
+               (fn [error]
+                 (println "Something wrong!")
+                 (js/console.dir error)))))
+
+(defn request-app-tokens!
+  [ok-handler error-handler]
+  (let [installation-ids (->> (map :installation_id (:repos (state/get-me)))
+                              (remove nil?)
+                              (distinct))]
+    (when (seq installation-ids)
+      (util/post (str config/api "refresh_github_token")
+                 {:installation-ids installation-ids}
+                 (fn [result]
+                   (state/set-github-installation-tokens! result)
+                   (when ok-handler (ok-handler)))
+                 (fn [error]
+                   (println "Something wrong!")
+                   (js/console.dir error)
+                   (when error-handler (error-handler)))))))
+
 (defn journal-file-changed?
   [repo-url diffs]
   (contains? (set (map :path diffs))
@@ -250,59 +307,58 @@
                   (* 5 60 1000)))
 
 (defn pull
-  [repo-url token]
-  (when (db/get-conn repo-url true)
-    (let [status (db/get-key-value repo-url :git/status)]
-      (when (and
-             ;; (not= status :push-failed)
-             (not= status :pushing)
-             (empty? (state/get-changed-files repo-url))
-             (not (state/get-edit-input-id))
-             (not (state/in-draw-mode?)))
-        (git-handler/set-git-status! repo-url :pulling)
-        (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
-          (->
-           (p/let [result (git/fetch repo-url token)]
-             (let [{:keys [fetchHead]} (bean/->clj result)]
-               (git-handler/set-latest-commit! repo-url fetchHead)
-               (-> (git/merge repo-url)
-                   (p/then (fn [result]
-                             (-> (git/checkout repo-url)
-                                 (p/then (fn [result]
-                                           (git-handler/set-git-status! repo-url nil)
-                                           (git-handler/set-git-last-pulled-at! repo-url)
-                                           (when (and latest-commit fetchHead
-                                                      (not= latest-commit fetchHead))
-                                             (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                               (load-db-and-journals! repo-url diffs false)))))
-                                 (p/catch (fn [error]
-                                            (git-handler/set-git-status! repo-url :checkout-failed)
-                                            (git-handler/set-git-error! repo-url error))))))
-                   (p/catch (fn [error]
-                              (git-handler/set-git-status! repo-url :merge-failed)
-                              (git-handler/set-git-error! repo-url error)
-                              (notification/show!
-                               [:p.content
-                                "Failed to merge, please "
-                                [:span.text-gray-700.font-bold
-                                 "resolve any diffs first."]]
-                               :error)
-                              (route-handler/redirect! {:to :diff}))))))
-           (p/catch (fn [error]
-                      (println error)
-                      (notification/show!
-                       [:p.content
-                        (util/format "Failed to fetch %s." repo-url)
-                        [:br]
-                        [:span.text-gray-700.mr-2
-                         (util/format
-                          "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-                          repo-url)
-                         (ui/button
-                           "Install Logseq on GitHub"
-                           :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
-                       :error
-                       false)))))))))
+  ([repo-url token]
+   (pull repo-url token false))
+  ([repo-url token fallback?]
+   (when (and
+          (db/get-conn repo-url true)
+          (db/cloned? repo-url)
+          token)
+     (let [status (db/get-key-value repo-url :git/status)]
+       (when (and
+              ;; (not= status :push-failed)
+              (not= status :pushing)
+              (empty? (state/get-changed-files repo-url))
+              (not (state/get-edit-input-id))
+              (not (state/in-draw-mode?)))
+         (git-handler/set-git-status! repo-url :pulling)
+         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
+           (->
+            (p/let [result (git/fetch repo-url token)]
+              (let [{:keys [fetchHead]} (bean/->clj result)]
+                (git-handler/set-latest-commit! repo-url fetchHead)
+                (-> (git/merge repo-url)
+                    (p/then (fn [result]
+                              (-> (git/checkout repo-url)
+                                  (p/then (fn [result]
+                                            (git-handler/set-git-status! repo-url nil)
+                                            (git-handler/set-git-last-pulled-at! repo-url)
+                                            (when (and latest-commit fetchHead
+                                                       (not= latest-commit fetchHead))
+                                              (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                                (load-db-and-journals! repo-url diffs false)))))
+                                  (p/catch (fn [error]
+                                             (git-handler/set-git-status! repo-url :checkout-failed)
+                                             (git-handler/set-git-error! repo-url error))))))
+                    (p/catch (fn [error]
+                               (git-handler/set-git-status! repo-url :merge-failed)
+                               (git-handler/set-git-error! repo-url error)
+                               (notification/show!
+                                [:p.content
+                                 "Failed to merge, please "
+                                 [:span.text-gray-700.font-bold
+                                  "resolve any diffs first."]]
+                                :error)
+                               (route-handler/redirect! {:to :diff}))))))
+            (p/catch (fn [error]
+                       ;; token might be expired, request new token
+                       (if (and (string/includes? (str error) "401")
+                                (not fallback?))
+                         (request-app-tokens!
+                          (fn []
+                            (pull repo-url (state/get-github-token repo-url) true))
+                          nil)
+                         (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url) false)))))))))))
 
 (defn check-changed-files-status
   [f]
@@ -318,24 +374,24 @@
 
 (defn push
   ([repo-url]
-   (push repo-url "Logseq auto save"))
-  ([repo-url commit-message]
+   (push repo-url "Logseq auto save" false))
+  ([repo-url commit-message fallback?]
    (let [status (db/get-key-value repo-url :git/status)]
      (when (and
+            (db/cloned? repo-url)
             ;; (not= status :push-failed)
             (not (state/get-edit-input-id))
             ;; getChangedFiles is not very reliable
-            (seq (state/get-changed-files repo-url))
-            )
+            (seq (state/get-changed-files repo-url)))
        (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-         (when (seq files)
+         (when (or (seq files) fallback?)
            ;; auto commit if there are any un-committed changes
            (let [commit-message (if (string/blank? commit-message)
                                   "Logseq auto save"
                                   commit-message)]
              (p/let [_ (git/commit repo-url commit-message)]
                (git-handler/set-git-status! repo-url :pushing)
-               (let [token (state/get-github-token)]
+               (when-let [token (state/get-github-token repo-url)]
                  (util/p-handle
                   (git/push repo-url token)
                   (fn []
@@ -344,76 +400,57 @@
                     (git-handler/set-latest-commit-if-exists! repo-url)
                     (state/clear-changed-files! repo-url))
                   (fn [error]
-                    (if (and (string? error)
-                             (= error "Failed to fetch"))
-                      (println "Failed to fetch")
+                    (js/console.error error)
+                    (js/console.dir error)
+                    (if (and (string/includes? (str error) "401") (not fallback?))
+                      (request-app-tokens!
+                       (fn []
+                         (push repo-url commit-message true))
+                       nil)
                       (do
-                        (println "Failed to push")
                         (git-handler/set-git-status! repo-url :push-failed)
                         (git-handler/set-git-error! repo-url error)
-                        (notification/show!
-                         [:p.content
-                          (util/format "Failed to push to %s. " repo-url)
-                          [:ol.text-gray-700
-                           [:li.mb-4
-                            [:span.text-gray-700.mr-2
-                             (util/format
-                              "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-                              repo-url)
-                             (ui/button
-                               "Install Logseq on GitHub"
-                               :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
-                           [:li
-                            [:span.text-gray-700.font-bold.mr-2
-                             "Please resolve the diffs if any."]
-                            (ui/button
-                              "Go to diff"
-                              :href "/diff")]]]
-                         :error
-                         false)
-                        (p/let [result (git/fetch repo-url (state/get-github-token))
+                        (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url) true)
+                        (p/let [result (git/fetch repo-url (state/get-github-token repo-url))
                                 {:keys [fetchHead]} (bean/->clj result)]
                           (git-handler/set-latest-commit! repo-url fetchHead)))))))))))))))
 
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [token (state/get-github-token)]
+    (when-let [token (state/get-github-token repo)]
       (pull repo token))))
 
 (defn clone
-  [repo-url]
-  (when-let [token (state/get-github-token)]
-    (util/p-handle
-     (do
-       (state/set-cloning? true)
-       (git/clone repo-url token))
-     (fn []
-       (state/set-git-clone-repo! "")
-       (state/set-current-repo! repo-url)
-       (db/start-db-conn! (:me @state/state) repo-url nil)
-       (db/mark-repo-as-cloned repo-url)
-       (git-handler/set-latest-commit-if-exists! repo-url))
-     (fn [e]
-       (println "Clone failed, error: ")
-       (js/console.error e)
-       (state/set-cloning? false)
-       (git-handler/set-git-status! repo-url :clone-failed)
-       (git-handler/set-git-error! repo-url e)
+  ([repo-url]
+   (clone repo-url false))
+  ([repo-url fallback?]
+   (when-let [token (state/get-github-token repo-url)]
+     (util/p-handle
+      (do
+        (state/set-cloning? true)
+        (git/clone repo-url token))
+      (fn []
+        (state/set-git-clone-repo! "")
+        (state/set-current-repo! repo-url)
+        (db/start-db-conn! (:me @state/state) repo-url nil)
+        (db/mark-repo-as-cloned repo-url)
+        (git-handler/set-latest-commit-if-exists! repo-url))
+      (fn [e]
+        (if (and (not fallback?)
+                 (string/includes? (str e) "401"))
+          (request-app-tokens!
+           (fn []
+             (clone repo-url true))
+           nil)
+          (do
+            (println "Clone failed, error: ")
+            (js/console.error e)
+            (state/set-cloning? false)
+            (git-handler/set-git-status! repo-url :clone-failed)
+            (git-handler/set-git-error! repo-url e)
 
-       (notification/show!
-        [:div
-         [:p {:style {:margin-top 0}}
-          (util/format
-           "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-           repo-url)
-
-          (ui/button
-            "Install Logseq on GitHub"
-            :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
-
-        :error
-        false)))))
+            (show-install-error! repo-url (util/format "Failed to clone %s." repo-url) false))))))))
 
 (defn set-config-content!
   [repo path new-config]
@@ -466,14 +503,14 @@
 
 (defn periodically-pull
   [repo-url pull-now?]
-  (when-let [token (state/get-github-token)]
+  (when-let [token (state/get-github-token repo-url)]
     (when pull-now? (pull repo-url token))
     (js/setInterval #(pull repo-url token)
                     (* (config/git-pull-secs) 1000))))
 
 (defn periodically-push-tasks
   [repo-url]
-  (let [token (state/get-github-token)
+  (let [token (state/get-github-token repo-url)
         push (fn []
                (push repo-url))]
     (js/setInterval push
@@ -486,18 +523,20 @@
   (when (not (false? (:git-auto-push (state/get-config repo-url))))
     (periodically-push-tasks repo-url)))
 
-(defn clone-and-pull
+(defn create-repo!
   [repo-url]
   (util/post (str config/api "repos")
              {:url repo-url}
              (fn [result]
-               (swap! state/state
-                      update-in [:me :repos]
-                      (fn [repos]
-                        (util/distinct-by :url (conj repos result)))))
+               (if (:installation_id result)
+                 (set! (.-href js/window.location) config/website)
+                 (set! (.-href js/window.location) (str "https://github.com/apps/" config/github-app-name "/installations/new"))))
              (fn [error]
                (println "Something wrong!")
-               (js/console.dir error)))
+               (js/console.dir error))))
+
+(defn clone-and-pull
+  [repo-url]
   (p/let [_ (clone repo-url)
           _ (git-handler/git-set-username-email! repo-url (:me @state/state))]
     (load-db-and-journals! repo-url nil true)
@@ -541,32 +580,32 @@
 (defn git-commit-and-push!
   [commit-message]
   (when-let [repo (state/get-current-repo)]
-    (push repo commit-message)))
+    (push repo commit-message false)))
 
 (defn read-repair-journals!
   [repo-url]
   (try
     (let [repo-dir (util/get-repo-dir repo-url)
-         format (state/get-preferred-format)]
-     ;; add missing dates if monthly basis
-     (if (= :monthly (state/get-journal-basis))
-       (let [path (date/current-journal-path format)
-             content (or (db/get-file repo-url path) "")]
-         (let [lines (set (string/split content #"\n"))
-               default-content (default-month-journal-content format)
-               default-lines (string/split default-content #"\n")
-               missing-dates (remove (fn [line] (contains? lines line)) default-lines)
-               missing-dates-content (if (seq missing-dates)
-                                       (string/join "\n" missing-dates))
-               content (str content "\n" missing-dates-content)]
+          format (state/get-preferred-format)]
+      ;; add missing dates if monthly basis
+      (if (= :monthly (state/get-journal-basis))
+        (let [path (date/current-journal-path format)
+              content (or (db/get-file repo-url path) "")]
+          (let [lines (set (string/split content #"\n"))
+                default-content (default-month-journal-content format)
+                default-lines (string/split default-content #"\n")
+                missing-dates (remove (fn [line] (contains? lines line)) default-lines)
+                missing-dates-content (if (seq missing-dates)
+                                        (string/join "\n" missing-dates))
+                content (str content "\n" missing-dates-content)]
 
-           ;; TODO: check whether file exists
-           (db/reset-file! repo-url path content)
-           (ui-handler/re-render-root!)
-           (git-handler/git-add repo-url path)))
+            ;; TODO: check whether file exists
+            (db/reset-file! repo-url path content)
+            (ui-handler/re-render-root!)
+            (git-handler/git-add repo-url path)))
 
-       ;; daily basis, create the specific day journal file
-       ;; (create-today-journal-if-not-exists repo-url)
-       ))
+        ;; daily basis, create the specific day journal file
+        ;; (create-today-journal-if-not-exists repo-url)
+        ))
     (catch js/Error e
       (prn e))))

@@ -7,7 +7,6 @@
             [promesa.core :as p]
             [goog.object :as gobj]
             [frontend.handler.repo :as repo-handler]
-            [frontend.encrypt :as encrypt]
             [frontend.handler.notification :as notification])
   (:import [goog.format EmailAddress]))
 
@@ -60,28 +59,6 @@
                    (notification/show! "Workflow set successfully!" :success))
                  (fn [_e])))))
 
-(defn set-github-token!
-  ([token]
-   (set-github-token! token true))
-  ([token update-server-object-key?]
-   (state/set-github-token! token)
-   (let [object-key (get-in @state/state [:me :encrypt_object_key])]
-     (p/let [key (if object-key
-                   (encrypt/get-key-from-object-key object-key)
-                   (encrypt/generate-key))
-             encrypted (encrypt/encrypt key token)
-             object-key (or object-key
-                            (encrypt/base64-key key))]
-       (state/set-encrypt-token! encrypted)
-       (when update-server-object-key?
-         (util/post (str config/api "encrypt_object_key")
-                    {:object-key object-key}
-                    (fn []
-                      (let [me (:me @state/state)]
-                        (when (:repos me)
-                          (repo-handler/clone-and-pull-repos me))))
-                    (fn [_e])))))))
-
 (defn- clear-store!
   []
   (p/let [_ (.clear db/localforage-instance)
@@ -94,7 +71,6 @@
   (->
    (do
      (storage/set :git/current-repo config/local-repo)
-     (storage/remove :encrypt/token)
      (storage/remove :git/clone-repo)
      (storage/remove "git-changed-files")
      (clear-store!))

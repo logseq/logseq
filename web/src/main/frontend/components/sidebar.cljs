@@ -92,14 +92,11 @@
        (and logged? (nil? (:email me)))
        (settings/set-email)
 
-       (and logged? (get-in (state/get-route-match) [:query-params :token]))
-       (widgets/set-github-token!)
-
        ;; Install GitHub app
-       (and logged? (nil? (:github_installation_id me)))
-       (do
-         (set! (.-href js/window.location) (str "https://github.com/apps/" config/github-app-name "/installations/new"))
-         nil)
+       ;; (and logged? (nil? (:github_installation_id me)))
+       ;; (do
+       ;;   (set! (.-href js/window.location) (str "https://github.com/apps/" config/github-app-name "/installations/new"))
+       ;;   nil)
 
        cloning?
        (ui/loading "Cloning")

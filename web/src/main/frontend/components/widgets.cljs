@@ -7,6 +7,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.config :as config]
             [clojure.string :as string]
@@ -35,19 +36,6 @@
       "Org Mode"
       :on-click
       #(user-handler/set-preferred-format! :org))]])
-
-(rum/defc set-github-token! <
-  {:init (fn [state]
-           (when (and (state/logged?))
-             (when-let [token (get-in (state/get-route-match) [:query-params :token])]
-               (user-handler/set-github-token! token)
-               ;; clear token path param
-               (route-handler/redirect! {:to :home
-                                         :push false})))
-           state)}
-  []
-  (ui/loading "Store encrypted GitHub token in your browser"))
-
 
 (rum/defc sync-status < rum/reactive
   []
@@ -154,7 +142,7 @@
       [:div
        [:div
         [:h1.title.mb-1
-         "Import your repo from GitHub"]
+         "Install Logseq on your repo"]
         [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
          [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
           {:autoFocus true
@@ -163,30 +151,9 @@
                         (state/set-git-clone-repo! (util/evalue e)))}]]]]
 
       (ui/button
-        "Clone"
+        "Add and Install"
         :on-click
         (fn []
           (when (util/starts-with? repo-url "https://github.com/")
             (let [repo-url (string/replace repo-url ".git" "")]
-              (repo-handler/clone-and-pull repo-url)
-              (route-handler/redirect-to-home!)))))
-
-      ;; (when git-ask-private-grant?
-      ;;   [:div
-      ;;    [:hr]
-      ;;    [:div
-      ;;     [:h3.text-red-700.mb-2 "Git clone failed, it might be two reasons:"]
-      ;;     [:ol
-      ;;      [:li.mb-1 "Please check the repo link is correct."]
-      ;;      [:li
-      ;;       [:div.mb-1
-      ;;        "You're cloning a "
-      ;;        [:b "private"]
-      ;;        " repo, we need your permission grants for that.
-      ;;       We promise that our server will never store your github oauth token, it'll be stored securely and only in the "
-      ;;        [:a.underline {:title "Which has a HttpOnly flag"}
-      ;;         "browser cookie"]
-      ;;        "."]
-      ;;       [:a {:href "/auth/github_ask_repo_permission"}
-      ;;        (ui/button "Grant us your private repo permission")]]]]])
-      ]]))
+              (repo-handler/create-repo! repo-url)))))]]))

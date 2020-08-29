@@ -65,9 +65,6 @@
     :custom-context-menu/show? false
     :custom-context-menu/links nil
 
-    ;; encrypted github token
-    :encrypt/token (storage/get :encrypt/token)
-
     ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
     }))
@@ -391,24 +388,36 @@
   (storage/set :git/clone-repo repo))
 
 (defn set-github-token!
-  [token]
-  (swap! state assoc-in [:me :access-token] token))
+  [repo token]
+  (when token
+    (swap! state update-in [:me :repos]
+           (fn [repos]
+             (map (fn [r]
+                    (if (= repo (:url r))
+                      (assoc r :token token)
+                      repo)) repos)))))
 
-(defn get-encrypted-token
-  []
-  (:encrypt/token @state))
+(defn set-github-installation-tokens!
+  [tokens]
+  (when (seq tokens)
+    (let [tokens (medley/map-keys name tokens)
+          repos (get-in @state [:me :repos])]
+      (when (seq repos)
+        (let [repos (mapv (fn [{:keys [installation_id] :as r}]
+                           (if-let [token (get tokens installation_id)]
+                             (assoc r :token token)
+                             r)) repos)]
+          (swap! state assoc-in [:me :repos] repos))))))
 
-(defn set-encrypt-token!
-  [encrypted]
-  (when encrypted
-    (set-state! :encrypt/token encrypted)
-    (storage/set :encrypt/token encrypted)))
-
-(defn clear-encrypt-token!
-  []
-  (set-state! :encrypt/token nil)
-  (storage/remove :encrypt/token))
-
+(defn get-github-token
+  ([]
+   (get-github-token (get-current-repo)))
+  ([repo]
+   (when repo
+     (let [repos (get-in @state [:me :repos])]
+       (-> (filter #(= repo (:url %)) repos)
+           first
+           :token)))))
 
 (defn toggle-sidebar-open?!
   []
@@ -609,10 +618,6 @@
 (defn get-changed-files
   [repo]
   (get-in @state [:repo/changed-files repo]))
-
-(defn get-github-token
-  []
-  (get-in @state [:me :access-token]))
 
 (defn set-modal!
   [modal-panel-content]

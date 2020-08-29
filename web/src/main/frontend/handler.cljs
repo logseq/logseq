@@ -7,7 +7,6 @@
             [promesa.core :as p]
             [cljs-bean.core :as bean]
             [frontend.date :as date]
-            [frontend.encrypt :as encrypt]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]))
@@ -33,6 +32,7 @@
     (when me (state/set-state! :me me))
     (state/set-db-restoring! true)
     (render)
+
     (util/indexeddb-check?
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
@@ -43,8 +43,8 @@
                             (fn [repo]
                               (file-handler/restore-config! repo false)
                               (when (and (state/logged?)
+                                         (db/cloned? repo)
                                          (not (db/get-today-journal repo)))
-                                ;; FIXME: check journal file exists
                                 (repo-handler/read-repair-journals! repo)))))
         (p/then
          (fn []
@@ -53,16 +53,10 @@
              (repo-handler/setup-local-repo-if-not-exists!)
              (state/set-db-restoring! false))
            (watch-for-date!)
-           (when me
-             (when-let [object-key (:encrypt_object_key me)]
-               (when-let [encrypted-token (state/get-encrypted-token)]
-                 (->
-                  (p/let [token (encrypt/decrypt object-key encrypted-token)]
-                    ;; FIXME: Sometimes it has spaces in the front
-                    (let [token (string/trim token)]
-                      (state/set-github-token! token)
-                      (repo-handler/clone-and-pull-repos me)))
-                  (p/catch
-                      (fn [error]
-                        (println "Token decrypted failed")
-                        (state/clear-encrypt-token!))))))))))))
+           (when (seq (:repos me))
+             ;; FIXME: handle error
+             (repo-handler/request-app-tokens!
+              (fn []
+                (repo-handler/clone-and-pull-repos me))
+              (fn []
+                (js/console.error "Failed to request GitHub app tokens.")))))))))
