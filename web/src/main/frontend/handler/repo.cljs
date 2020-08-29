@@ -21,6 +21,7 @@
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.ui :as ui]
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
@@ -136,9 +137,15 @@
                  {:installation-ids installation-ids
                   :repos repos}
                  (fn [result]
-                   (if (= "refresh" (:message result))
+                   (cond
+                     (= "refresh" (:message result))
                      ;; reload
                      (set! (.-href js/window.location) config/website)
+
+                     (= "clear" (:message result))
+                     (user-handler/sign-out! nil)
+
+                     :else
                      (do
                        (state/set-github-installation-tokens! result)
                        (when ok-handler (ok-handler)))))

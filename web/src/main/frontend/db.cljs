@@ -2091,7 +2091,6 @@
         transaction          (mapv (fn [name] [:db/retractEntity (:db/id (get-page (str name)))]) orphaned-pages)]
     (transact! transaction)))
 
-
 (comment
   (defn debug!
     []

@@ -6,7 +6,6 @@
             [frontend.storage :as storage]
             [promesa.core :as p]
             [goog.object :as gobj]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.notification :as notification])
   (:import [goog.format EmailAddress]))
 
