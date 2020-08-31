@@ -23,6 +23,11 @@
          export JWT_SECRET="4fa183cf1d28460498b13330835e80ad"
          export COOKIE_SECRET="10a42ca724e34f4db6086a772d787034"
          export DATABASE_URL="postgres://localhost:5432/logseq"
+         export GITHUB_APP2_ID="78728"
+         export GITHUB_APP2_KEY="Iv1.5454f11e63f811bc"
+         export GITHUB_APP2_SECRET="3b952aa1c2f821a957ea1296039df6527fda5b6e"
+         # Replace your-code-directory with yours
+         export GITHUB_APP_PEM="/your-code-directory/logseq/pem/logseq-test.2020-08-27.private-key.pem"
        #+END_SRC
 
 *** 3. Start the clojure server
