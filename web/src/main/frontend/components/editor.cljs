@@ -447,11 +447,13 @@
                      (and (= deleted "(") (state/get-editor-show-block-search))
                      (state/set-editor-show-block-search false)
 
-                     (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
-                     (state/set-editor-show-page-search-hashtag false)
-
                      :else
                      nil))
+                 
+                  ;; deleting hashtag
+                 (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
+                 (do
+                   (state/set-editor-show-page-search-hashtag false))
 
                  :else
                  nil)))
@@ -471,6 +473,7 @@
                                                    0)))))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
+            (println key-code)
             (cond
               (editor-handler/surround-by? input "[[" "]]")
               (do
