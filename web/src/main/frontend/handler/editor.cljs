@@ -1145,10 +1145,21 @@
   (when input
     (let [value (gobj/get input "value")
           pos (util/get-input-pos input)
-          start-pos (- pos (count before))
-          end-pos (+ pos (count after))]
+          start-pos (if (= :start before) 0 (- pos (count before)))
+          end-pos (if (= :end after) (count value) (+ pos (count after)))]
       (when (>= (count value) end-pos)
-        (= (str before after)
+        (= (cond 
+             (and (= :end after) (= :start before))
+             ""
+             
+             (= :end after) 
+             before
+            
+             (= :start before)
+             after
+             
+             :else
+             (str before after))
            (subs value start-pos end-pos))))))
 
 (defn get-matched-pages

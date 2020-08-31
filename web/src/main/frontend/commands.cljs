@@ -373,6 +373,9 @@
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
 
+(defmethod handle-step :editor/search-page-hashtag [[_]]
+  (state/set-editor-show-page-search-hashtag true))
+
 (defmethod handle-step :editor/search-block [[_ type]]
   (state/set-editor-show-block-search true))
 
