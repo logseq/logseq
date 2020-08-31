@@ -214,7 +214,6 @@
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (println edit-content current-pos prefix value)
     (state/set-block-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input
                          (if (or backward-pos forward-pos)
