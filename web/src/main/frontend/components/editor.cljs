@@ -164,25 +164,54 @@
           (state/set-editor-show-date-picker false)))})))
 
 (rum/defc mobile-bar < rum/reactive
-  [parent-state]
-  [:div {:style {:position "fixed"
+  [parent-state parent-id]
+  [:div.bg-base-2 {:style {:position "fixed"
                  :bottom 0
                  :width "100%"
                  :left 0
-                 :text-align "center"
-                 :height "2.5rem"}}
+                 :justify-content "center"
+                 :height "2.5rem"
+                 :display "flex"
+                 :align-items "center"
+                 ;; This element should be the upper-most in most situations
+                 :z-index 99999999}}
    [:button
-    {:on-click #(editor-handler/adjust-block-level! parent-state :right)}
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/adjust-block-level! parent-state :right)}
     svg/indent-block]
    [:button
-    {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/adjust-block-level! parent-state :left)}
     svg/outdent-block]
    [:button
-    {:on-click #(editor-handler/move-up-down parent-state % true)}
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/move-up-down parent-state % true)}
     svg/move-up-block]
    [:button
-    {:on-click #(editor-handler/move-up-down parent-state % false)}
-    svg/move-down-block]])
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/move-up-down parent-state % false)}
+    svg/move-down-block]
+   [:button
+    {:style {:padding "5px"}
+     :on-click (fn []
+                 (let [old-content (state/sub [:editor/content parent-id])
+                       new-content (str old-content "\n.")]
+                   (state/set-state! :editor/content {parent-id new-content})))}
+    svg/multi-line-input]
+   [:button
+    {:style {:padding "5px"}
+     :on-click (fn []
+                 (let [old-content (state/sub [:editor/content parent-id])
+                       new-content (str old-content "[[]]")]
+                   (state/set-state! :editor/content {parent-id new-content})))}
+    "[[]]"]
+   [:button
+    {:style {:padding "5px"}
+     :on-click (fn []
+                 (let [old-content (state/sub [:editor/content parent-id])
+                       new-content (str old-content "(())")]
+                   (state/set-state! :editor/content {parent-id new-content})))}
+    "(())"]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -553,7 +582,8 @@
                           :display "flex"
                           :flex "1 1 0%"}
                   :class (if block "block-editor" "non-block-editor")}
-     (when config/mobile? (mobile-bar state))
+     (println id)
+     (when config/mobile? (mobile-bar state id))
      (ui/textarea
       {:id id
        :value (or content "")
