@@ -473,7 +473,6 @@
                                                    0)))))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")]
-            (println key-code)
             (cond
               (editor-handler/surround-by? input "[[" "]]")
               (do
