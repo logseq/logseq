@@ -193,24 +193,27 @@
     svg/move-down-block]
    [:button
     {:style {:padding "5px"}
-     :on-click (fn []
+     :on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
-                       new-content (str old-content "\n.")]
-                   (state/set-state! :editor/content {parent-id new-content})))}
+                       new-content (str old-content "\n")]
+                   (state/set-state! :editor/content {parent-id new-content}))
+                 (.stopPropagation e))}
     svg/multi-line-input]
    [:button
     {:style {:padding "5px"}
-     :on-click (fn []
+     :on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
                        new-content (str old-content "[[]]")]
-                   (state/set-state! :editor/content {parent-id new-content})))}
+                   (state/set-state! :editor/content {parent-id new-content}))
+                 (.stopPropagation e))}
     "[[]]"]
    [:button
     {:style {:padding "5px"}
-     :on-click (fn []
+     :on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
                        new-content (str old-content "(())")]
-                   (state/set-state! :editor/content {parent-id new-content})))}
+                   (state/set-state! :editor/content {parent-id new-content}))
+                 (.stopPropagation e))}
     "(())"]])
 
 (rum/defcs input < rum/reactive
