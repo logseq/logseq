@@ -49,6 +49,7 @@
     :github/contents {}
     :config {}
     :editor/show-page-search? false
+    :editor/show-page-search-hashtag? false
     :editor/show-date-picker? false
     ;; With label or other data
     :editor/show-input nil
@@ -280,9 +281,16 @@
 (defn set-editor-show-page-search
   [value]
   (set-state! :editor/show-page-search? value))
+(defn set-editor-show-page-search-hashtag
+  [value]
+  (set-state! :editor/show-page-search? value)
+  (set-state! :editor/show-page-search-hashtag? value))
 (defn get-editor-show-page-search
   []
   (get @state :editor/show-page-search?))
+(defn get-editor-show-page-search-hashtag
+  []
+  (get @state :editor/show-page-search-hashtag?))
 (defn set-editor-show-block-search
   [value]
   (set-state! :editor/show-block-search? value))
@@ -477,6 +485,10 @@
 (defn get-edit-block
   []
   (get @state :editor/block))
+
+(defn set-last-pos!
+  [new-pos]
+  (reset! state (assoc @state :editor/last-saved-cursor new-pos)))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]

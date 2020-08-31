@@ -214,6 +214,7 @@
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
+    (println edit-content current-pos prefix value)
     (state/set-block-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input
                          (if (or backward-pos forward-pos)
@@ -372,6 +373,9 @@
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
+
+(defmethod handle-step :editor/search-page-hashtag [[_]]
+  (state/set-editor-show-page-search-hashtag true))
 
 (defmethod handle-step :editor/search-block [[_ type]]
   (state/set-editor-show-block-search true))

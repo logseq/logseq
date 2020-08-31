@@ -80,17 +80,28 @@
               edit-content (state/sub [:editor/content id])
               q (or
                  @editor-handler/*selected-text
+                 (when (state/sub :editor/show-page-search-hashtag?)
+                   (subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
                    (subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
-              chosen-handler (fn [chosen _click?]
-                               (state/set-editor-show-page-search false)
-                               (editor-handler/insert-command! id
-                                                               (util/format "[[%s]]" chosen)
-                                                               format
-                                                               {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
-                                                                :postfix-fn (fn [s] (util/replace-first "]]" s ""))}))
+              chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
+                               (fn [chosen _click?]
+                                 (state/set-editor-show-page-search false)
+                                 (editor-handler/insert-command! id
+                                                                 (util/format "#%s" (if (string/includes? chosen " ") 
+                                                                                      (str "[[" chosen "]]") 
+                                                                                      chosen))
+                                                                 format
+                                                                 {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))}))
+                               (fn [chosen _click?]
+                                 (state/set-editor-show-page-search false)
+                                 (editor-handler/insert-command! id
+                                                                 (util/format "[[%s]]" chosen)
+                                                                 format
+                                                                 {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
+                                                                  :postfix-fn (fn [s] (util/replace-first "]]" s ""))})))
               non-exist-page-handler (fn [_state]
                                        (state/set-editor-show-page-search false)
                                        (util/cursor-move-forward input 2))]
@@ -436,6 +447,9 @@
                      (and (= deleted "(") (state/get-editor-show-block-search))
                      (state/set-editor-show-block-search false)
 
+                     (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
+                     (state/set-editor-show-page-search-hashtag false)
+
                      :else
                      nil))
 
@@ -461,6 +475,19 @@
               (editor-handler/surround-by? input "[[" "]]")
               (do
                 (commands/handle-step [:editor/search-page])
+                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+              (and 
+               (not= key-code 8) ;; backspace
+               (or
+                (editor-handler/surround-by? input "#" " ")
+                (editor-handler/surround-by? input "#" :end)
+                (and (= key "#") (editor-handler/surround-by? input "#" :end))
+                (and (= key "#") (editor-handler/surround-by? input " " :end))
+                (and (= key "#") (editor-handler/surround-by? input :start :end)))) 
+              (do
+                (commands/handle-step [:editor/search-page-hashtag])
+                (state/set-last-pos! (:pos (util/get-caret-pos input)))
                 (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
               (editor-handler/surround-by? input "((" "))")
@@ -587,7 +614,6 @@
                           :display "flex"
                           :flex "1 1 0%"}
                   :class (if block "block-editor" "non-block-editor")}
-     (println id)
      (when config/mobile? (mobile-bar state id))
      (ui/textarea
       {:id id

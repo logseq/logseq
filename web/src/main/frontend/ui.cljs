@@ -260,7 +260,7 @@
                          item-render
                          class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-2 {:class class}
+    [:div.py-1.rounded-md.shadow-xs.bg-base-3 {:class class}
      (if (seq matched)
        [:div#ac-inner
         {:style {:max-height 400
