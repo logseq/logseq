@@ -277,11 +277,13 @@
   [:div.absolute.rounded-md.shadow-lg
    {:style (merge
             {:top (+ top 24)
-             :left left
              :max-height 600
              :z-index 11}
             (if set-default-width?
-              {:width 400}))}
+              {:width 400})
+            (if config/mobile?
+              {:left 0}
+              {:left left}))}
    cp])
 
 (rum/defc transition-cp < rum/reactive
