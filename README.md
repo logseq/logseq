@@ -3,7 +3,7 @@
 
 Hello 👋, and welcome to Logseq!
 
-***This project is in its early days and under quick development. To be kept up to date, be sure to follow [@logseq](https://twitter.com/logseq) on Twitter, or join  our community [Discord](https://discord.gg/AxbyKJ)!***
+***This project is in its early days and under quick development. To be kept up to date, be sure to follow [@logseq](https://twitter.com/logseq) on Twitter, or join  our community [Discord](https://discord.gg/KpN4eHY)!***
 
 **Notice that it is alpha and files may be corrupted!**
 
