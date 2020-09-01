@@ -365,14 +365,22 @@
                                 :error)
                                (route-handler/redirect! {:to :diff}))))))
             (p/catch (fn [error]
+                       (println "Pull error:")
+                       (js/console.error error)
                        ;; token might be expired, request new token
-                       (if (and (string/includes? (str error) "401")
+                       (cond
+                         (and (string/includes? (str error) "401")
                                 (not fallback?))
                          (request-app-tokens!
                           (fn []
                             (pull repo-url (state/get-github-token repo-url) true))
                           nil)
-                         (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url) false)))))))))))
+
+                         (string/includes? (str error) "401")
+                         (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url) false)
+
+                         :else
+                         nil))))))))))
 
 (defn check-changed-files-status
   [f]
