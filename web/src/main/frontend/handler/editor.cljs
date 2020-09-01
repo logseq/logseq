@@ -362,7 +362,7 @@
                (if exists?
                  (notification/show!
                   [:p.content
-                   "File already exists!"]
+                   (util/format "File %s already exists!" file-path)]
                   :error)
                  ;; create the file
                  (let [content (util/default-content-with-title format (:page/original-name page))]
@@ -510,7 +510,8 @@
            (if exists?
              (notification/show!
               [:p.content
-               "File already exists!"]
+               (util/format "File %s already exists!"
+                            file-path)]
               :error)
              ;; create the file
              (let [content (util/default-content-with-title format (:page/original-name page))]
@@ -1148,16 +1149,16 @@
           start-pos (if (= :start before) 0 (- pos (count before)))
           end-pos (if (= :end after) (count value) (+ pos (count after)))]
       (when (>= (count value) end-pos)
-        (= (cond 
+        (= (cond
              (and (= :end after) (= :start before))
              ""
-             
-             (= :end after) 
+
+             (= :end after)
              before
-            
+
              (= :start before)
              after
-             
+
              :else
              (str before after))
            (subs value start-pos end-pos))))))

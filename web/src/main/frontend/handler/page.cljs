@@ -39,7 +39,7 @@
             (if exists?
               (notification/show!
                [:p.content
-                "File already exists!"]
+                (util/format "File %s already exists!" file-path)]
                :error)
               ;; create the file
               (let [content (util/default-content-with-title format title)]
