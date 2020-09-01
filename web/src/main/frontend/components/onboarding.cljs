@@ -252,7 +252,7 @@
     [:li
      [:a {:href "https://discord.gg/KpN4eHY"
           :target "_blank"}
-      [:div.flex-row.flex.items-center
+      [:div.flex-row.inline-flex.items-center
        [:span.mr-1 "Discord community"]
        svg/discord]]]
     [:li
