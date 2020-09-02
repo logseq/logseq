@@ -371,7 +371,7 @@
                        (println "Pull error:" (str error))
                        (js/console.error error)
                        ;; token might be expired, request new token
-                       (println {:fallback? fallback?})
+
                        (cond
                          (and (or (string/includes? (str error) "401")
                                   (string/includes? (str error) "404"))
@@ -465,7 +465,7 @@
       (do
         (state/set-cloning? true)
         (git/clone repo-url token))
-      (fn []
+      (fn [result]
         (state/set-git-clone-repo! "")
         (state/set-current-repo! repo-url)
         (db/start-db-conn! (:me @state/state) repo-url nil)
@@ -573,12 +573,15 @@
 
 (defn clone-and-pull
   [repo-url]
-  (p/let [_ (clone repo-url)
-          _ (git-handler/git-set-username-email! repo-url (:me @state/state))]
-    (load-db-and-journals! repo-url nil true)
-    (periodically-pull-and-push repo-url {:pull-now? false})
-    ;; (periodically-persist-app-metadata repo-url)
-    ))
+  (->
+   (p/let [_ (clone repo-url)
+           _ (git-handler/git-set-username-email! repo-url (:me @state/state))]
+     (load-db-and-journals! repo-url nil true)
+     (periodically-pull-and-push repo-url {:pull-now? false})
+     ;; (periodically-persist-app-metadata repo-url)
+     )
+   (p/catch (fn [error]
+              (js/console.error error)))))
 
 (defn clone-and-pull-repos
   [me]

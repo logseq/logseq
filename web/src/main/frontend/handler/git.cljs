@@ -47,9 +47,7 @@
   ([repo-url handler]
    (get-latest-commit repo-url handler 1))
   ([repo-url handler length]
-   (-> (p/let [commits (git/log repo-url
-                                (state/get-github-token repo-url)
-                                length)]
+   (-> (p/let [commits (git/log repo-url length)]
          (handler (if (= length 1)
                     (first commits)
                     commits)))
