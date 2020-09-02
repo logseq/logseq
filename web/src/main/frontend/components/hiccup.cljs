@@ -249,7 +249,7 @@
              (let [{:keys [content children]} (last child)
                    page-name (subs content 2 (- (count content) 2))]
                (page-reference html-export? page-name (assoc config :children children) nil))))
-         original-page-name)])))
+         (if label label original-page-name))])))
 
 (defn page-reference
   [html-export? s config label]
