@@ -85,26 +85,29 @@
           (load-contents add-or-modify-files delete-files delete-blocks true))))))
 
 (defn show-install-error!
-  [repo-url title push?]
+  [repo-url title]
   (notification/show!
    [:p.content
     title
-    [:ol.text-gray-700
-     [:li.mb-4
-      [:span.text-gray-700.mr-2
-       (util/format
-        "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-        repo-url)
-       (ui/button
-         "Install Logseq on GitHub"
-         :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
-     (when push?
-       [:li
-        [:span.text-gray-700.font-bold.mr-2
-         "Please resolve the diffs if any."]
-        (ui/button
-          "Go to diff"
-          :href "/diff")])]]
+    [:span.text-gray-700.mr-2
+     (util/format
+      "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
+      repo-url)
+     (ui/button
+       "Install Logseq on GitHub"
+       :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
+   :error
+   false))
+
+(defn show-diff-error!
+  [_repo-url]
+  (notification/show!
+   [:p
+    [:span.text-gray-700.font-bold.mr-2
+     "Please resolve the diffs if any."]
+    (ui/button
+      "Go to diff"
+      :href "/diff")]
    :error
    false))
 
@@ -365,19 +368,22 @@
                                 :error)
                                (route-handler/redirect! {:to :diff}))))))
             (p/catch (fn [error]
-                       (println "Pull error:")
+                       (println "Pull error:" (str error))
                        (js/console.error error)
                        ;; token might be expired, request new token
+                       (println {:fallback? fallback?})
                        (cond
-                         (and (string/includes? (str error) "401")
-                                (not fallback?))
+                         (and (or (string/includes? (str error) "401")
+                                  (string/includes? (str error) "404"))
+                              (not fallback?))
                          (request-app-tokens!
                           (fn []
                             (pull repo-url (state/get-github-token repo-url) true))
                           nil)
 
-                         (string/includes? (str error) "401")
-                         (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url) false)
+                         (or (string/includes? (str error) "401")
+                             (string/includes? (str error) "404"))
+                         (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
 
                          :else
                          nil))))))))))
@@ -424,18 +430,25 @@
                   (fn [error]
                     (js/console.error error)
                     (js/console.dir error)
-                    (if (and (string/includes? (str error) "401") (not fallback?))
-                      (request-app-tokens!
-                       (fn []
-                         (push repo-url commit-message true))
-                       nil)
-                      (do
-                        (git-handler/set-git-status! repo-url :push-failed)
-                        (git-handler/set-git-error! repo-url error)
-                        (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url) true)
-                        (p/let [result (git/fetch repo-url (state/get-github-token repo-url))
-                                {:keys [fetchHead]} (bean/->clj result)]
-                          (git-handler/set-latest-commit! repo-url fetchHead)))))))))))))))
+                    (let [permission? (or (string/includes? (str error) "401")
+                                          (string/includes? (str error) "404"))]
+                      (cond
+                        (and permission? (not fallback?))
+                       (request-app-tokens!
+                        (fn []
+                          (push repo-url commit-message true))
+                        nil)
+
+                       :else
+                       (do
+                         (git-handler/set-git-status! repo-url :push-failed)
+                         (git-handler/set-git-error! repo-url error)
+                         (if permission?
+                           (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
+                           (show-diff-error! repo-url))
+                         (p/let [result (git/fetch repo-url (state/get-github-token repo-url))
+                                 {:keys [fetchHead]} (bean/->clj result)]
+                           (git-handler/set-latest-commit! repo-url fetchHead))))))))))))))))
 
 (defn pull-current-repo
   []
@@ -460,7 +473,8 @@
         (git-handler/set-latest-commit-if-exists! repo-url))
       (fn [e]
         (if (and (not fallback?)
-                 (string/includes? (str e) "401"))
+                 (or (string/includes? (str e) "401")
+                     (string/includes? (str e) "404")))
           (request-app-tokens!
            (fn []
              (clone repo-url true))
@@ -472,7 +486,7 @@
             (git-handler/set-git-status! repo-url :clone-failed)
             (git-handler/set-git-error! repo-url e)
 
-            (show-install-error! repo-url (util/format "Failed to clone %s." repo-url) false))))))))
+            (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))))
 
 (defn set-config-content!
   [repo path new-config]
@@ -627,7 +641,6 @@
             (git-handler/git-add repo-url path)))
 
         ;; daily basis, create the specific day journal file
-        ;; (create-today-journal-if-not-exists repo-url)
-        ))
+        (create-today-journal-if-not-exists repo-url)))
     (catch js/Error e
       (prn e))))
