@@ -131,7 +131,8 @@
 
 (defn current-journal-path
   [preferred-format]
-  (let [{:keys [year month]} (get-date)]
+  (let [{:keys [year month]} (get-date)
+        preferred-format (or preferred-format :markdown)]
     (journals-path year month preferred-format)))
 
 (defn valid?
