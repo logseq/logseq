@@ -1081,52 +1081,55 @@
                                (when doc-mode?
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
-                                     (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.pt-1
-     (cond->
-         {:id block-id
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-block? " pre-block"))
-          :blockid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
-       (not slide?)
-       (merge attrs))
+                                     (d/add-class! node "hide-inner-bullet")))))}
+        pre-block-only-title? (and pre-block?
+                                   (db/pre-block-with-only-title? repo uuid))]
+    (when-not pre-block-only-title?
+      [:div.ls-block.flex.flex-col.pt-1
+       (cond->
+           {:id block-id
+            :style {:position "relative"}
+            :class (str uuid
+                        (when dummy? " dummy")
+                        (when (and collapsed? has-child?) " collapsed")
+                        (when pre-block? " pre-block"))
+            :blockid (str uuid)
+            :repo repo
+            :level level
+            :haschild (str has-child?)}
+         (not slide?)
+         (merge attrs))
 
-     (if (and ref? (not ref-child?))
-       (when-let [block-parents (block-comp/block-parents repo uuid format false)]
-         [:div.my-2.opacity-50.ml-7 block-parents]))
+       (if (and ref? (not ref-child?))
+         (when-let [block-parents (block-comp/block-parents repo uuid format false)]
+           [:div.my-2.opacity-50.ml-7 block-parents]))
 
-     (dnd-separator-wrapper block slide? (zero? idx))
+       (dnd-separator-wrapper block slide? (zero? idx))
 
-     [:div.flex-1.flex-row
-      (when (not slide?)
-        (block-control config block uuid block-id level start-level body children dummy?))
+       [:div.flex-1.flex-row
+        (when (not slide?)
+          (block-control config block uuid block-id level start-level body children dummy?))
 
-      (block-content-or-editor config block edit-input-id block-id slide?)]
+        (block-content-or-editor config block edit-input-id block-id slide?)]
 
-     (when (seq children)
-       [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
-                                     :display (if collapsed? "none" "")}}
-        (for [child children]
-          (when (map? child)
-            (let [child (dissoc child :block/meta)]
-              (rum/with-key (block-container config child)
-                (:block/uuid child)))))])
+       (when (seq children)
+         [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
+                                       :display (if collapsed? "none" "")}}
+          (for [child children]
+            (when (map? child)
+              (let [child (dissoc child :block/meta)]
+                (rum/with-key (block-container config child)
+                  (:block/uuid child)))))])
 
-     (when (and ref? (not ref-child?))
-       (let [children (db/get-block-children repo uuid)]
-         (when (seq children)
-           [:div.ref-children.ml-12
-            (blocks-container children (assoc config
-                                              :ref-child? true
-                                              :ref? true))])))
+       (when (and ref? (not ref-child?))
+         (let [children (db/get-block-children repo uuid)]
+           (when (seq children)
+             [:div.ref-children.ml-12
+              (blocks-container children (assoc config
+                                                :ref-child? true
+                                                :ref? true))])))
 
-     (dnd-separator-wrapper block slide? false)]))
+       (dnd-separator-wrapper block slide? false)])))
 
 (defn divide-lists
   [[f & l]]
@@ -1339,7 +1342,8 @@
       ["Directives" m]
       [:div.directives
        (for [[k v] m]
-         (when-not (and (= k :macros) (empty? v))
+         (when (and (not (and (= k :macros) (empty? v))) ; empty macros
+                    (not (= k :title)))
            [:div.directive
             [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
             (if (coll? v)

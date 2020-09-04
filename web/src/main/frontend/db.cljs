@@ -2082,14 +2082,26 @@
 
 (defn remove-orphaned-pages!
   [repo]
-  (let [all-pages          (get-pages repo)
-        orphaned-pages       (remove nil? (map (fn [page]
-                                                 (let [name (string/lower-case page)]
-                                                   (if (and (empty? (get-pages-that-mentioned-page repo name))
-                                                            (not (journal-page? name))
-                                                            (empty? (get-page-blocks name))) name nil))) all-pages))
-        transaction          (mapv (fn [name] [:db/retractEntity (:db/id (get-page (str name)))]) orphaned-pages)]
+  (let [all-pages (get-pages repo)
+        orphaned-pages (remove nil?
+                               (map (fn [page]
+                                      (let [name (string/lower-case page)]
+                                        (if (and (empty? (get-pages-that-mentioned-page repo name))
+                                                 (not (journal-page? name))
+                                                 (empty? (get-page-blocks name))) name nil))) all-pages))
+        transaction (mapv (fn [name] [:db/retractEntity (:db/id (get-page (str name)))]) orphaned-pages)]
     (transact! transaction)))
+
+(defn pre-block-with-only-title?
+  [repo block-id]
+  (when-let [block (entity repo [:block/uuid block-id])]
+    (let [directives (:page/directives (:block/page block))]
+      (and (:title directives)
+           (= 1 (count directives))
+           (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
+             (or
+              (empty? (rest ast))
+              (every? (fn [[element] _] (= element ["Paragraph" [["Break_Line"]]])) (rest ast))))))))
 
 (comment
   (defn debug!

@@ -352,10 +352,11 @@
            ;; Page was referenced but no related file
            (and page (not file))
            (let [format (name format)
-                 path (str (-> (:page/name page)
-                               (string/replace #"\s+" "_")
-                               (util/encode-str)) "."
-                           (if (= format "markdown") "md" format))
+                 path (str
+                       config/default-pages-directory "/"
+                       (-> (:page/name page)
+                           (string/replace #"\s+" "_")) "."
+                       (if (= format "markdown") "md" format))
                  file-path (str "/" path)
                  dir (util/get-repo-dir repo)]
              (p/let [exists? (fs/file-exists? dir file-path)]
@@ -405,9 +406,9 @@
                                      [[:db/retract page-id :page/directives]]))
                  pages (if (seq page-tags)
                          (let [tag-pages (map
-                                       (fn [page]
-                                         {:page/original-name page
-                                          :page/name page})
+                                           (fn [page]
+                                             {:page/original-name page
+                                              :page/name page})
                                            (map :tag/name page-tags))]
                            (concat pages tag-pages))
                          pages)
@@ -499,11 +500,12 @@
      (cond
        (and (not file) page)
        (let [format (name format)
-             path (str (-> (:page/name page)
-                           (string/replace #"\s+" "_")
-                           (util/encode-str))
-                       "."
-                       (if (= format "markdown") "md" format))
+             path (str
+                   config/default-pages-directory "/"
+                   (-> (:page/name page)
+                       (string/replace #"\s+" "_"))
+                   "."
+                   (if (= format "markdown") "md" format))
              file-path (str "/" path)
              dir (util/get-repo-dir repo)]
          (p/let [exists? (fs/file-exists? dir file-path)]
