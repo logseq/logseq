@@ -26,12 +26,13 @@
      content)
    (p/catch
        (fn [e]
+         (println "Load file failed: " path)
          (js/console.error e)))))
 
 (defn load-multiple-files
   [repo-url paths]
-  (let [repo-dir (util/get-repo-dir repo-url)]
-    (doall (mapv #(fs/read-file repo-dir %) paths))))
+  (doall
+   (mapv #(load-file repo-url %) paths)))
 
 (defn- keep-formats
   [files formats]
@@ -97,7 +98,7 @@
         (p/then (fn [contents]
                   (ok-handler
                    (cond->
-                     (zipmap files contents)
+                       (zipmap files contents)
 
                      (seq images)
                      (merge (zipmap images (repeat (count images) "")))))))

@@ -75,6 +75,7 @@
                                     true)]
         (reset! pushing? false)
         (state/clear-changed-files! repo)
+        (notification/clear! nil)
         (route-handler/redirect! {:to :home})))))
 
 (defn git-set-username-email!
