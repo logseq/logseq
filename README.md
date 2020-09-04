@@ -30,9 +30,9 @@ Logseq is hugely inspired by [Roam Research](https://roamresearch.com/), [Org Mo
 
 2. Click the button Login with Github. *We are using an excellent web git client called Isomorphic-git.org. More sync  options(e.g. Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon.*
 
-3. Set your Github personal access token, the token will be encrypted and stored in the browser local storage, our server will never store it. *If you are unfamiliar with either Git or the personal access token, no worries, please just follow the steps here: https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-*
+3. Install Logseq app on your selected repo.
 
-3. Start writing and have fun!
+4. Start writing and have fun!
 
 # Learn more:
 - Our blog: https://logseq.com/blog - Please be sure to visit our About page [here](https://logseq.com/blog/about) for the latest updates on the app.
