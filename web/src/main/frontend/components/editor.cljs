@@ -452,8 +452,7 @@
                  
                   ;; deleting hashtag
                  (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
-                 (do
-                   (state/set-editor-show-page-search-hashtag false))
+                 (state/set-editor-show-page-search-hashtag false)
 
                  :else
                  nil)))
@@ -482,15 +481,22 @@
               (and 
                (not= key-code 8) ;; backspace
                (or
+                (and (= key "#") (editor-handler/surround-by? input :start :end)) ;; most common case of hashtag
                 (editor-handler/surround-by? input "#" " ")
                 (editor-handler/surround-by? input "#" :end)
-                (and (= key "#") (editor-handler/surround-by? input "#" :end))
                 (and (= key "#") (editor-handler/surround-by? input " " :end))
-                (and (= key "#") (editor-handler/surround-by? input :start :end)))) 
+                (and (= key "#") (editor-handler/surround-by? input " " " "))
+                (and (= key "#") (editor-handler/surround-by? input "\n" " "))
+                (and (= key "#") (editor-handler/surround-by? input " " "\n")))) ;; least common case of hashtag
               (do
                 (commands/handle-step [:editor/search-page-hashtag])
                 (state/set-last-pos! (:pos (util/get-caret-pos input)))
                 (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+              
+              (and
+               (= key " ")
+               (state/get-editor-show-page-search-hashtag))
+              (state/set-editor-show-page-search-hashtag false)
 
               (editor-handler/surround-by? input "((" "))")
               (do
