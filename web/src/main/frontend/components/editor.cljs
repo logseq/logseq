@@ -481,13 +481,9 @@
               (and 
                (not= key-code 8) ;; backspace
                (or
-                (and (= key "#") (editor-handler/surround-by? input :start :end)) ;; most common case of hashtag
                 (editor-handler/surround-by? input "#" " ")
                 (editor-handler/surround-by? input "#" :end)
-                (and (= key "#") (editor-handler/surround-by? input " " :end))
-                (and (= key "#") (editor-handler/surround-by? input " " " "))
-                (and (= key "#") (editor-handler/surround-by? input "\n" " "))
-                (and (= key "#") (editor-handler/surround-by? input " " "\n")))) ;; least common case of hashtag
+                (= key "#")))
               (do
                 (commands/handle-step [:editor/search-page-hashtag])
                 (state/set-last-pos! (:pos (util/get-caret-pos input)))
