@@ -131,9 +131,10 @@
 
 (defn current-journal-path
   [preferred-format]
-  (let [{:keys [year month]} (get-date)
-        preferred-format (or preferred-format :markdown)]
-    (journals-path year month preferred-format)))
+  (when preferred-format
+    (let [{:keys [year month]} (get-date)
+          preferred-format preferred-format]
+      (journals-path year month preferred-format))))
 
 (defn valid?
   [s]
@@ -156,28 +157,28 @@
   [journal-title]
   (when-not (string/blank? journal-title)
     (when-let [time (->> (map
-                      (fn [formatter]
-                        (try
-                          (tf/parse (tf/formatter formatter) journal-title)
-                          (catch js/Error _e
-                            nil)))
-                      (journal-title-formatters))
-                    (filter some?)
-                    first)]
+                           (fn [formatter]
+                             (try
+                               (tf/parse (tf/formatter formatter) journal-title)
+                               (catch js/Error _e
+                                 nil)))
+                           (journal-title-formatters))
+                         (filter some?)
+                         first)]
       (util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") time)))))
 
 (defn journal-title->long
   [journal-title]
   (when-not (string/blank? journal-title)
     (when-let [time (->> (map
-                      (fn [formatter]
-                        (try
-                          (tf/parse (tf/formatter formatter) journal-title)
-                          (catch js/Error _e
-                            nil)))
-                      (journal-title-formatters))
-                    (filter some?)
-                    first)]
+                           (fn [formatter]
+                             (try
+                               (tf/parse (tf/formatter formatter) journal-title)
+                               (catch js/Error _e
+                                 nil)))
+                           (journal-title-formatters))
+                         (filter some?)
+                         first)]
       (tc/to-long time))))
 
 (comment

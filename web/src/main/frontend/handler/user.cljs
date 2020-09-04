@@ -69,9 +69,7 @@
   [e]
   (->
    (do
-     (storage/set :git/current-repo config/local-repo)
-     (storage/remove :git/clone-repo)
-     (storage/remove "git-changed-files")
+     (storage/clear)
      (clear-store!))
    (p/catch (fn [e]
               (println "sign out error: ")

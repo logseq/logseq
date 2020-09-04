@@ -224,19 +224,19 @@
 
 (defn create-month-journal-if-not-exists
   [repo-url]
-  (let [repo-dir (util/get-repo-dir repo-url)
-        format (state/get-preferred-format)
-        path (date/current-journal-path format)
-        file-path (str "/" path)
-        default-content (default-month-journal-content format)]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
-                  (p/catch (fn [_e])))
-            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
-      (when (and (not file-exists?)
-                 (= :monthly (state/get-journal-basis)))
-        (db/reset-file! repo-url path default-content)
-        (ui-handler/re-render-root!)
-        (git-handler/git-add repo-url path)))))
+  (when-let [format (state/get-preferred-format)]
+    (let [repo-dir (util/get-repo-dir repo-url)
+          path (date/current-journal-path format)
+          file-path (str "/" path)
+          default-content (default-month-journal-content format)]
+      (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
+                    (p/catch (fn [_e])))
+              file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+        (when (and (not file-exists?)
+                   (= :monthly (state/get-journal-basis)))
+          (db/reset-file! repo-url path default-content)
+          (ui-handler/re-render-root!)
+          (git-handler/git-add repo-url path))))))
 
 (defn create-contents-file
   [repo-url]
@@ -434,21 +434,21 @@
                                           (string/includes? (str error) "404"))]
                       (cond
                         (and permission? (not fallback?))
-                       (request-app-tokens!
-                        (fn []
-                          (push repo-url commit-message true))
-                        nil)
+                        (request-app-tokens!
+                         (fn []
+                           (push repo-url commit-message true))
+                         nil)
 
-                       :else
-                       (do
-                         (git-handler/set-git-status! repo-url :push-failed)
-                         (git-handler/set-git-error! repo-url error)
-                         (if permission?
-                           (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-                           (show-diff-error! repo-url))
-                         (p/let [result (git/fetch repo-url (state/get-github-token repo-url))
-                                 {:keys [fetchHead]} (bean/->clj result)]
-                           (git-handler/set-latest-commit! repo-url fetchHead))))))))))))))))
+                        :else
+                        (do
+                          (git-handler/set-git-status! repo-url :push-failed)
+                          (git-handler/set-git-error! repo-url error)
+                          (if permission?
+                            (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
+                            (show-diff-error! repo-url))
+                          (p/let [result (git/fetch repo-url (state/get-github-token repo-url))
+                                  {:keys [fetchHead]} (bean/->clj result)]
+                            (git-handler/set-latest-commit! repo-url fetchHead))))))))))))))))
 
 (defn pull-current-repo
   []
@@ -624,26 +624,26 @@
 (defn read-repair-journals!
   [repo-url]
   (try
-    (let [repo-dir (util/get-repo-dir repo-url)
-          format (state/get-preferred-format)]
-      ;; add missing dates if monthly basis
-      (if (= :monthly (state/get-journal-basis))
-        (let [path (date/current-journal-path format)
-              content (or (db/get-file repo-url path) "")]
-          (let [lines (set (string/split content #"\n"))
-                default-content (default-month-journal-content format)
-                default-lines (string/split default-content #"\n")
-                missing-dates (remove (fn [line] (contains? lines line)) default-lines)
-                missing-dates-content (if (seq missing-dates)
-                                        (string/join "\n" missing-dates))
-                content (str content "\n" missing-dates-content)]
+    (when-let [format (state/get-preferred-format)]
+      (let [repo-dir (util/get-repo-dir repo-url)]
+       ;; add missing dates if monthly basis
+       (if (= :monthly (state/get-journal-basis))
+         (let [path (date/current-journal-path format)
+               content (or (db/get-file repo-url path) "")]
+           (let [lines (set (string/split content #"\n"))
+                 default-content (default-month-journal-content format)
+                 default-lines (string/split default-content #"\n")
+                 missing-dates (remove (fn [line] (contains? lines line)) default-lines)
+                 missing-dates-content (if (seq missing-dates)
+                                         (string/join "\n" missing-dates))
+                 content (str content "\n" missing-dates-content)]
 
-            ;; TODO: check whether file exists
-            (db/reset-file! repo-url path content)
-            (ui-handler/re-render-root!)
-            (git-handler/git-add repo-url path)))
+             ;; TODO: check whether file exists
+             (db/reset-file! repo-url path content)
+             (ui-handler/re-render-root!)
+             (git-handler/git-add repo-url path)))
 
-        ;; daily basis, create the specific day journal file
-        (create-today-journal-if-not-exists repo-url)))
+         ;; daily basis, create the specific day journal file
+         (create-today-journal-if-not-exists repo-url))))
     (catch js/Error e
       (prn e))))
