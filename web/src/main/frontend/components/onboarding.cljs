@@ -83,7 +83,7 @@
       {}
       "We are using an excellent web git client called "
       [:a
-       {:href "https://logseq.com/blog/isomorphic-git.org"
+       {:href "https://isomorphic-git.org"
         :target "_blank"}
        "Isomorphic-git.org"]
       "."]
@@ -185,7 +185,7 @@
             :target "_blank"} "Workflowy"]]
       [:li
        [:a
-        {:href "https://logseq.com/blog/clojure.org"
+        {:href "https://clojure.org"
          :target "_blank"}
         "Clojure && Clojurescript"]
        " - A dynamic, functional, general-purpose programming language"]
