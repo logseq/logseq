@@ -887,7 +887,7 @@
   [config content format]
   (let [ast (mldoc/->edn content (mldoc/default-config format))
         ast (map first ast)]
-    [:div.pre-block
+    [:div.pre-block.bg-base-2.p-2
      (blocks-cp config ast)]))
 
 (rum/defc block-content < rum/reactive

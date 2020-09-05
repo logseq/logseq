@@ -329,7 +329,8 @@
                       {:max-width 640}
                     (or global-graph-pages?
                         (and (not logged?)
-                             home?))
+                             home?)
+                        (contains? #{:all-files :all-pages} route-name))
                     (dissoc :max-width))}
           (cond
             (not indexeddb-support?)

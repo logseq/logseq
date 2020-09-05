@@ -2101,7 +2101,9 @@
            (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
              (or
               (empty? (rest ast))
-              (every? (fn [[element] _] (= element ["Paragraph" [["Break_Line"]]])) (rest ast))))))))
+              (every? (fn [[[typ break-lines]] _]
+                        (and (= typ "Paragraph")
+                             (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
 
 (comment
   (defn debug!

@@ -11,7 +11,9 @@
   []
   (let [importing? (rum/react *importing?)]
     [:div#import
-     [:h1.title "Import JSON from Roam Research"]
+     [:h1.title "Import JSON from Roam Research (experimental)"]
+     [:p.text-sm.mb-8 "Export to Roam Research is coming!"]
+
      [:input
       {:id "import-roam"
        :type "file"
