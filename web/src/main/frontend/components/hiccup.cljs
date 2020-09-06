@@ -930,7 +930,8 @@
                           (reset! *dragging? false)
                           (reset! *dragging-block nil)
                           (editor-handler/unhighlight-block!))}]
-    [:div.flex.flex-col.relative.block-content
+    [:div.flex.flex-row
+     [:div.flex-1.flex-col.relative.block-content
      (cond-> {:id (str "block-content-" uuid)
               :style {:cursor "text"
                       :min-height 24}}
@@ -950,20 +951,19 @@
         (for [[idx child] (medley/indexed (:block/body block))]
           (when-let [block (block-cp config child)]
             (rum/with-key (block-child block)
-              (str uuid "-" idx))))])
-
+              (str uuid "-" idx))))])]
      (when (and block-refs-count (> block-refs-count 0))
-       [:a.block.absolute.origin-top-right.py-0.px-2.rounded.bg-base-2.opacity-50.hover:opacity-100
-        {:title "Open block references"
-         :style {:top -1
-                 :right 0}
-         :on-click (fn []
-                     (state/sidebar-add-block!
-                      (state/get-current-repo)
-                      (:db/id block)
-                      :block-ref
-                      {:block block}))}
-        block-refs-count])]))
+       [:div
+        [:a.block.py-0.px-2.rounded.bg-base-2.opacity-50.hover:opacity-100
+         {:title "Open block references"
+          :style {:margin-top -1}
+          :on-click (fn []
+                      (state/sidebar-add-block!
+                       (state/get-current-repo)
+                       (:db/id block)
+                       :block-ref
+                       {:block block}))}
+         block-refs-count]])]))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx] :as block} edit-input-id block-id slide?]
