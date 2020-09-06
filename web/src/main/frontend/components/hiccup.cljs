@@ -1351,7 +1351,8 @@
                 (if (= k :tags)
                   (let [tag (-> item
                                 (string/replace "[" "")
-                                (string/replace "]" ""))]
+                                (string/replace "]" "")
+                                (string/replace "#" ""))]
                     [:a.tag.mr-1 {:href (str "/page/" tag)}
                      tag])
                   [:span item]))

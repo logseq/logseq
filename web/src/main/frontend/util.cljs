@@ -782,6 +782,7 @@
               (let [tag (-> (string/trim tag)
                             (string/lower-case)
                             (string/replace #"\s+" "-")
+                            (string/replace #"#" "")
                             (string/replace "[" "")
                             (string/replace "]" ""))]
                 (if (tag-valid? tag)
