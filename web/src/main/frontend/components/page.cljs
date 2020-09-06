@@ -404,7 +404,7 @@
 (rum/defc all-pages < rum/reactive
   {:did-mount (fn [state]
                 (let [current-repo (state/sub :git/current-repo)]
-                  (db/remove-orphaned-pages! current-repo))
+                  (js/setTimeout #(db/remove-orphaned-pages! current-repo) 0))
                 state)}
   []
   (let [current-repo (state/sub :git/current-repo)]
