@@ -503,17 +503,17 @@
                (= (editor-handler/get-previous-input-chars input 2) (str key key)))
               nil
 
+              (contains? (set (keys editor-handler/autopair-map)) key)
+              (do
+                (util/stop e)
+                (editor-handler/autopair input-id key format nil))
+
               (and
                (contains? (set (keys editor-handler/reversed-autopair-map)) key)
                (= (editor-handler/get-current-input-char input) key))
               (do
                 (util/stop e)
                 (util/cursor-move-forward input 1))
-
-              (contains? (set (keys editor-handler/autopair-map)) key)
-              (do
-                (util/stop e)
-                (editor-handler/autopair input-id key format nil))
 
               :else
               nil))))
