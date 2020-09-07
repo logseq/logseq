@@ -9,7 +9,8 @@
             [frontend.date :as date]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file :as file-handler]))
+            [frontend.handler.file :as file-handler]
+            [frontend.ui :as ui]))
 
 (defn load-more-journals!
   []
@@ -68,7 +69,7 @@
        (when (and (> last-modified-at last-stored-at)
                   (or force?
                       (and (state/get-edit-input-id)
-                           (> (- (util/time-ms) last-stored-at) (* 1 60 1000)) ; 5 minutes
+                           (> (- (util/time-ms) last-stored-at) (* 5 60 1000)) ; 5 minutes
                            )
                       (nil? (state/get-edit-input-id))))
          (p/let [_ (repo-handler/persist-repo! repo)]
@@ -82,8 +83,18 @@
   (.addEventListener js/window "beforeunload"
                      (fn [e]
                        (when (state/repos-need-to-be-stored?)
-                         ;; FIXME: Not working
-                         (persist-repo-to-indexeddb! true)
+                         (notification/show!
+                          [:div
+                           [:p "It seems that you have some unsaved changes!"]
+                           (ui/button "Save"
+                             :on-click (fn [e]
+                                         (persist-repo-to-indexeddb!)
+                                         (notification/show!
+                                          "Saved successfully!"
+                                          :success)))]
+                          ;; replace with :warning
+                          :error
+                          false)
                          (let [message "\\o/"]
                            (set! (.-returnValue (or e js/window.event)) message)
                            message)))))

@@ -268,7 +268,6 @@
   (when-let [files-conn (db/get-files-conn repo)]
     (db/persist repo @files-conn true))
   (when-let [db (db/get-conn repo)]
-    (prn "persisted core db")
     (db/persist repo db false)))
 
 (defn load-db-and-journals!

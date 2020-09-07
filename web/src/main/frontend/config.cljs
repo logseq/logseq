@@ -5,7 +5,8 @@
             [frontend.util :as util]))
 
 ;; (defonce dev? ^boolean goog.DEBUG)
-(defonce dev? ^boolean goog.DEBUG)
+;; (defonce dev? ^boolean goog.DEBUG)
+(defonce dev? false)
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
