@@ -64,8 +64,7 @@
       "https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA"
       :alt "screenshot"}]
 
-    [:div.flex.flex-col.ls-block
-
+    [:div.flex.flex-col.ls-block.intro-docs
      [:h2 {} "Where are my notes saved?"]
      [:p
       {}
@@ -78,29 +77,26 @@
      [:h3 {} "1. Sync between multiple devices"]
      [:p
       {}
-      "Currently, we only support syncing through Github, more options (e.g.Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon."]
+      "Currently, we only support syncing through Github, more options (Self-host git, WebDAV, Google Drive, etc.) will be added soon."]
      [:p
-      {}
-      "We are using an excellent web git client called "
-      [:a
-       {:href "https://isomorphic-git.org"
-        :target "_blank"}
-       "Isomorphic-git.org"]
-      "."]
-     [:h4 {} "Step 1"]
-     [:p {} "Create a GitHub account if you don't have one"]
-     [:h4 {} "Step 2"]
-     [:p {} "Create a GitHub private repo if you don't have one"]
-     [:h4 {} "Step 3"]
-     [:p {} "Click the button " [:i {} "Login with Github"] "."]
-     [:h4 {} "Step 4"]
-     [:p {} "Install Logseq app on your GitHub repos"]
-     [:h4 {} "Step 5"]
-     [:p {} "Start writing!"]
+      "Check out this awesome video by "
+      [:a {:href "https://twitter.com/EdTravelling"
+           :target "_blank"}
+       "@EdTravelling"]
+      ":"]
+     [:iframe
+      {:allowfullscreen "allowfullscreen",
+       :allow
+       "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture",
+       :frameborder "0",
+       :src "https://www.youtube.com/embed/Vw-x7yTTO0s",
+       :height "367",
+       :width "653"}]
+
      [:h3 {} "2. Use it locally (no need to login)"]
      [:p
       {}
-      "Just remember to backup your notes periodically!"]
+      "Remember to backup your notes periodically!"]
      [:h2 {} "Features"]
      [:ul
       {}
@@ -204,18 +200,19 @@
        ", the document "
        [:a {:href "https://github.com/mldoc/mldoc"
             :target "_blank"} "parser"]
-       " is built on Angstrom."]
+       " is built on Angstrom."]
       [:li
        [:a {:href "https://github.com/talex5/cuekeeper"
             :target "_blank"} "Cuekeeper"]
-       " - Browser-based GTD (TODO list) system."]
+       " - Browser-based GTD (TODO list) system."]
       [:li
        [:a {:href "https://github.com/borkdude/sci"
             :target "_blank"} "sci"]
-       " - Small Clojure Interpreter"]
+       " - Small Clojure Interpreter"]
       [:li
        [:a {:href "https://isomorphic-git.org/"
-            :target "_blank"} "isomorphic-git"]]]]]])
+            :target "_blank"} "isomorphic-git"]
+       " - A pure JavaScript implementation of git for node and browsers!"]]]]])
 
 (defn help
   []
