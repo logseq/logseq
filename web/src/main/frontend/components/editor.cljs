@@ -505,9 +505,7 @@
 
               (and
                (contains? (set (keys editor-handler/reversed-autopair-map)) key)
-               (or
-                (= (editor-handler/get-previous-input-char input) key)
-                (= (editor-handler/get-current-input-char input) key)))
+               (= (editor-handler/get-current-input-char input) key))
               (do
                 (util/stop e)
                 (util/cursor-move-forward input 1))
