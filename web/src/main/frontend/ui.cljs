@@ -255,6 +255,7 @@
                   (and on-enter (on-enter state))))))}
       nil)))
   [state matched {:keys [on-chosen
+                         on-shift-chosen
                          on-enter
                          empty-div
                          item-render
@@ -280,7 +281,9 @@
               ;; :tab-index -1
               :on-click (fn [e]
                           (util/stop e)
-                          (on-chosen item))}
+                          (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                            (on-shift-chosen item)
+                            (on-chosen item)))}
              (if item-render (item-render item) item))
             idx))]
        (when empty-div
