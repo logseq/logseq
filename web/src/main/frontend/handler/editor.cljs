@@ -908,6 +908,7 @@
   []
   (when-let [page (get-nearest-page)]
     (let [page-name (string/lower-case page)]
+      (.blur js/document.activeElement)
       (route-handler/redirect! {:to :page
                                 :path-params {:name page-name}}))))
 
