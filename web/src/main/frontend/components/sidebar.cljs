@@ -177,6 +177,9 @@
                   (notification/show! "No changed files yet!" :warning)))))}
       (fn [e key-code]
         nil))))
+  {:did-mount (fn [state]
+                (handler/set-save-before-unload!)
+                state)}
   (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state

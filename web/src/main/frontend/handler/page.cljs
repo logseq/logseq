@@ -52,7 +52,7 @@
                         last-block (last blocks)]
                     (js/setTimeout
                      #(when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
-                        (editor-handler/edit-block! (:block/uuid last-block)
+                        (editor-handler/edit-block! last-block
                                                    0
                                                    (:block/format last-block)
                                                    (string/replace (gobj/get first-block "id")

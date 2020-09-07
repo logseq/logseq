@@ -33,7 +33,6 @@
                      (js/clearInterval @interval)
                      (reset! interval nil)
                      (-> (p/all (db/restore! (assoc me :repos repos)
-                                             repo-handler/db-listen-to-tx!
                                              (fn [repo]
                                                (file-handler/restore-config! repo false)
                                                (when (and (state/logged?)
@@ -60,6 +59,35 @@
     (let [interval-id (js/setInterval inner-fn 50)]
       (reset! interval interval-id))))
 
+(defn persist-repo-to-indexeddb!
+  ([]
+   (persist-repo-to-indexeddb! false))
+  ([force?]
+   (let [status (state/get-repo-persist-status)]
+     (doseq [[repo {:keys [last-stored-at last-modified-at] :as repo-status}] status]
+       (when (and (> last-modified-at last-stored-at)
+                  (or force?
+                      (and (state/get-edit-input-id)
+                           (> (- (util/time-ms) last-stored-at) (* 1 60 1000)) ; 5 minutes
+                           )
+                      (nil? (state/get-edit-input-id))))
+         (p/let [_ (repo-handler/persist-repo! repo)]
+           (state/update-repo-last-stored-at! repo)))))))
+
+(defn periodically-persist-repo-to-indexeddb!
+  []
+  (js/setInterval persist-repo-to-indexeddb! (* 5 1000)))
+
+(defn set-save-before-unload! []
+  (.addEventListener js/window "beforeunload"
+                     (fn [e]
+                       (when (state/repos-need-to-be-stored?)
+                         ;; FIXME: Not working
+                         (persist-repo-to-indexeddb! true)
+                         (let [message "\\o/"]
+                           (set! (.-returnValue (or e js/window.event)) message)
+                           message)))))
+
 (defn start!
   [render]
   (let [me (and js/window.user (bean/->clj js/window.user))
@@ -76,4 +104,8 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support? false)))
 
-    (restore-and-setup! me repos logged?)))
+    (restore-and-setup! me repos logged?)
+
+    (periodically-persist-repo-to-indexeddb!)
+
+    (db/run-batch-txs!)))

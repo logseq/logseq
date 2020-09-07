@@ -263,27 +263,18 @@
       (create-today-journal-if-not-exists repo-url))
     (create-contents-file repo-url)))
 
-(defn db-listen-to-tx!
-  [repo db-conn]
+(defn persist-repo!
+  [repo]
   (when-let [files-conn (db/get-files-conn repo)]
-    (d/listen! files-conn :persistence
-               (fn [tx-report]
-                 (when (seq (:tx-data tx-report))
-                   (when-let [db (:db-after tx-report)]
-                     (db/persist repo db true))))))
-  (d/listen! db-conn :persistence
-             (fn [tx-report]
-               (when (seq (:tx-data tx-report))
-                 (when-let [db (:db-after tx-report)]
-                   (db/persist repo db false))))))
+    (db/persist repo @files-conn true))
+  (when-let [db (db/get-conn repo)]
+    (prn "persisted core db")
+    (db/persist repo db false)))
 
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
-      (when-let [conn (db/get-conn repo-url false)]
-        (db-listen-to-tx! repo-url conn))
-
       (when first-clone?
         (create-default-files! repo-url))
 
@@ -468,7 +459,7 @@
       (fn [result]
         (state/set-git-clone-repo! "")
         (state/set-current-repo! repo-url)
-        (db/start-db-conn! (:me @state/state) repo-url nil)
+        (db/start-db-conn! (:me @state/state) repo-url)
         (db/mark-repo-as-cloned repo-url)
         (git-handler/set-latest-commit-if-exists! repo-url))
       (fn [e]
@@ -519,7 +510,8 @@
                  (db/remove-files-db! url)
                  (fs/rmdir (util/get-repo-dir url))
                  (state/delete-repo! repo)
-                 (state/clear-changed-files! repo))
+                 (state/clear-changed-files! repo)
+                 )
                (fn [error]
                  (prn "Delete repo failed, error: " error))))
 
@@ -530,7 +522,7 @@
       (p/let [result (-> (fs/mkdir (str "/" repo))
                          (p/catch (fn [_e] nil)))
               _ (state/set-current-repo! repo)
-              _ (db/start-db-conn! nil repo db-listen-to-tx!)
+              _ (db/start-db-conn! nil repo)
               _ (create-month-journal-if-not-exists repo)
               _ (create-config-file-if-not-exists repo)
               _ (create-contents-file repo)]

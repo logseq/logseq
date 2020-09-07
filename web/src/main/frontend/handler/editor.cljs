@@ -37,7 +37,8 @@
                      *show-block-commands]]
             [frontend.extensions.html-parser :as html-parser]
             [medley.core :as medley]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [clojure.core.async :as async]))
 
 ;; TODO: refactor the state, it is already too complex.
 (defonce *last-edit-block (atom nil))
@@ -481,22 +482,31 @@
                                       value)
                               [new-content value] (new-file-content block file-content value)
                               {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
-                              first-block (first blocks)
-                              last-block (last blocks)
                               blocks (db/recompute-block-children repo block blocks)
-                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)]
-                          (repo-handler/transact-react-and-alter-file!
-                           repo
-                           (concat
-                            pages
-                            blocks
-                            after-blocks)
-                           {:key :block/change
-                            :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                           [[file-path new-content]])
+                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
+                              blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
+                              [before-part after-part] (split-with #(not= (:block/uuid (first blocks)) (:block/uuid %)) @blocks-atom)
+                              after-part (rest after-part)]
+                          (reset! blocks-atom (->> (concat before-part blocks after-part)
+                                                   (remove nil?)))
+
+                          ;; Replace with batch transactions
+                          (state/add-tx!
+                           (fn []
+                             (repo-handler/transact-react-and-alter-file!
+                              repo
+                              (concat
+                               pages
+                               blocks
+                               after-blocks)
+                              {:key :block/change
+                               :data (map (fn [block] (assoc block :block/page page)) blocks)}
+                              [[file-path new-content]])))
 
                           (when ok-handler
-                            (ok-handler [first-block last-block v2]))))]
+                            (let [first-block (first blocks)
+                                  last-block (last blocks)]
+                              (ok-handler [first-block last-block v2])))))]
      (cond
        (and (not file) page)
        (let [format (name format)
@@ -562,20 +572,22 @@
      :pos pos}))
 
 (defn edit-block!
-  [block-id prev-pos format id]
-  (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
-        block (or
-               (db/pull [:block/uuid block-id])
-               ;; dummy?
-               {:block/uuid block-id
-                :block/content ""})
-        {:block/keys [content]} block
-        content (string/trim (text/remove-level-spaces content format))
-        content-length (count content)
-        text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
-                     content
-                     (subs content 0 prev-pos))]
-    (state/set-editing! edit-input-id content block text-range)))
+  [block prev-pos format id]
+  (when-let [block-id (:block/uuid block)]
+    (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
+          block (or
+                 block
+                 (db/pull [:block/uuid block-id])
+                 ;; dummy?
+                 {:block/uuid block-id
+                  :block/content ""})
+          {:block/keys [content]} block
+          content (string/trim (text/remove-level-spaces content format))
+          content-length (count content)
+          text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
+                       content
+                       (subs content 0 prev-pos))]
+      (state/set-editing! edit-input-id content block text-range))))
 
 (defn- insert-new-block!
   [state]
@@ -598,7 +610,7 @@
      true
      (fn [[_first-block last-block _new-block-content]]
        (let [last-id (:block/uuid last-block)]
-         (edit-block! last-id 0 format id)
+         (edit-block! last-block 0 format id)
          (clear-when-saved!)))
      (if last-child true false)
      (and last-child
@@ -734,8 +746,8 @@
                                    0)
                                  0)]
                         (save-block-if-changed! block new-value)
-                        (edit-block! (uuid sibling-block-id)
-                                     pos format id)))))))))))))
+                        (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
+                          (edit-block! block pos format id))))))))))))))
 
 (defn delete-blocks!
   [repo block-uuids]
@@ -1052,7 +1064,8 @@
                   (when (not= (string/trim (text/remove-level-spaces content format))
                               (string/trim value))
                     (save-block! state (:value state))))
-                (edit-block! (uuid sibling-block-id) pos format id)))))))))
+                (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
+                  (edit-block! block pos format id))))))))))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]

@@ -6,12 +6,16 @@
             [medley.core :as medley]
             [goog.object :as gobj]
             [goog.dom :as gdom]
-            [dommy.core :as dom]))
+            [dommy.core :as dom]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
+            [clojure.core.async :as async]))
 
 (defonce state
   (atom
    {:route-match nil
     :today nil
+    :db/batch-txs (async/chan 100)
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -22,6 +26,11 @@
                          (storage/get "git-changed-files")
                          {})
     :indexeddb/support? true
+    ;; TODO: save in local storage so that if :changed? is true when user
+    ;; reloads the browser, the app should re-index the repo (another way
+    ;; is to save all the tx data since :last-stored-at)
+    ;; repo -> {:last-stored-at :last-modified-at}
+    :repo/persist-status {}
     :me nil
     :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
@@ -413,9 +422,9 @@
           repos (get-in @state [:me :repos])]
       (when (seq repos)
         (let [repos (mapv (fn [{:keys [installation_id] :as r}]
-                           (if-let [token (get tokens installation_id)]
-                             (assoc r :token token)
-                             r)) repos)]
+                            (if-let [token (get tokens installation_id)]
+                              (assoc r :token token)
+                              r)) repos)]
           (swap! state assoc-in [:me :repos] repos))))))
 
 (defn get-github-token
@@ -651,3 +660,34 @@
      (when-let [basis (get-in @state [:config repo :journal-basis])]
        (keyword (string/lower-case (str basis)))))
    :monthly))
+
+(defn update-repo-last-stored-at!
+  [repo]
+  (swap! state assoc-in [:repo/persist-status repo :last-stored-at] (util/time-ms)))
+
+(defn get-repo-persist-status
+  []
+  (:repo/persist-status @state))
+
+(defn mark-repo-as-changed!
+  [repo _tx-id]
+  (swap! state assoc-in [:repo/persist-status repo :last-modified-at] (util/time-ms)))
+
+(defn add-tx!
+  ;; TODO: replace f with data for batch transactions
+  [f]
+  (when f
+    (swap! state update :db/batch-txs (fn [chan]
+                                        (async/put! chan f)
+                                        chan))))
+
+(defn get-db-batch-txs-chan
+  []
+  (:db/batch-txs @state))
+
+(defn repos-need-to-be-stored?
+  []
+  (let [status (vals (get-repo-persist-status))]
+    (some (fn [{:keys [last-stored-at last-modified-at]}]
+            (> last-modified-at last-stored-at))
+          status)))

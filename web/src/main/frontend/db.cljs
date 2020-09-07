@@ -24,7 +24,8 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.extensions.sci :as sci]
             [goog.array :as garray]
-            [frontend.db-schema :as db-schema]))
+            [frontend.db-schema :as db-schema]
+            [clojure.core.async :as async]))
 
 (defonce brain "🧠")
 (defonce brain-text "logseq-second-brain")
@@ -144,6 +145,10 @@
                               :query-fn query-fn
                               :transform-fn transform-fn})
   result-atom)
+
+(defn get-page-blocks-cache-atom
+  [repo page-id]
+  (:result (get @query-state [repo :page/blocks page-id])))
 
 (defn remove-q!
   [k]
@@ -480,6 +485,13 @@
           (group-by-page result)))
       result)))
 
+(defn get-repo-tx-id [repo]
+  (when-let [db (get-conn repo)]
+    ))
+
+(defn get-tx-id [tx-report]
+  (get-in tx-report [:tempids :db/current-tx]))
+
 (defn transact!
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
@@ -488,7 +500,8 @@
                       (remove nil?))]
      (when (seq tx-data)
        (when-let [conn (get-conn repo-url false)]
-         (d/transact! conn (vec tx-data)))))))
+         (let [tx-report (d/transact! conn (vec tx-data))]
+           (state/mark-repo-as-changed! repo-url (get-tx-id tx-report))))))))
 
 (defn get-key-value
   ([key]
@@ -518,6 +531,7 @@
                           (get-conn repo-url false)))]
     (when (and (seq tx-data) (get-conn))
       (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
+            _ (state/mark-repo-as-changed! repo-url (get-tx-id tx-result))
             db (:db-after tx-result)
             handler-keys (get-handler-keys handler-opts)]
         (doseq [handler-key handler-keys]
@@ -1162,16 +1176,16 @@
                            page-list (when-let [list-content (:list directives)]
                                        (extract-page-list list-content))]
                        (cond->
-                           (util/remove-nils
-                            {:page/name (string/lower-case page)
-                             :page/original-name page
-                             :page/file [:file/path file]
-                             :page/journal? journal?
-                             :page/journal-day (if journal?
-                                                 (date/journal-title->int (string/capitalize page))
-                                                 0)
-                             :page/created-at journal-date-long
-                             :page/last-modified-at journal-date-long})
+                         (util/remove-nils
+                          {:page/name (string/lower-case page)
+                           :page/original-name page
+                           :page/file [:file/path file]
+                           :page/journal? journal?
+                           :page/journal-day (if journal?
+                                               (date/journal-title->int (string/capitalize page))
+                                               0)
+                           :page/created-at journal-date-long
+                           :page/last-modified-at journal-date-long})
                          (seq directives)
                          (assoc :page/directives directives)
 
@@ -1315,8 +1329,8 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                               {:file/path file
-                                :file/last-modified-at t}
+                             {:file/path file
+                              :file/last-modified-at t}
                              new?
                              (assoc :file/created-at t)))])]
       (transact! repo-url tx))))
@@ -1642,20 +1656,18 @@
       config)))
 
 (defn start-db-conn!
-  [me repo listen-handler!]
+  [me repo]
   (let [files-db-name (datascript-files-db repo)
         files-db-conn (d/create-conn db-schema/files-db-schema)
         db-name (datascript-db repo)
         db-conn (d/create-conn db-schema/schema)]
     (swap! conns assoc files-db-name files-db-conn)
     (swap! conns assoc db-name db-conn)
-    (when listen-handler!
-      (listen-handler! repo db-conn))
     (when me
       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))))
 
 (defn restore!
-  [{:keys [repos] :as me} listen-handler restore-config-handler]
+  [{:keys [repos] :as me} restore-config-handler]
   (let [logged? (:name me)]
     (doall
      (for [{:keys [url]} repos]
@@ -1685,8 +1697,7 @@
                           (reset-conn! db-conn attached-db)))
                       (when logged?
                         (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
-                  _ (restore-config-handler repo)]
-            (when stored (listen-handler repo db-conn)))))))))
+                  _ (restore-config-handler repo)])))))))
 
 (defn- build-edges
   [edges]
@@ -1706,13 +1717,13 @@
   [dark? current-page edges nodes]
   (mapv (fn [p]
           (cond->
-              {:id p
-               :name p
-               :val (get-connections p edges)
-               :autoColorBy "group"
-               :group (js/Math.ceil (* (js/Math.random) 12))
-               :color "#222222"
-               }
+            {:id p
+             :name p
+             :val (get-connections p edges)
+             :autoColorBy "group"
+             :group (js/Math.ceil (* (js/Math.random) 12))
+             :color "#222222"
+             }
             dark?
             (assoc :color "#8abbbb")
             (= p current-page)
@@ -1850,7 +1861,7 @@
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
-                             h
+                           h
                            (not (:block/dummy? h))
                            (dissoc h :block/meta))) col)
         parent? (fn [item children]
@@ -2109,6 +2120,14 @@
               (every? (fn [[[typ break-lines]] _]
                         (and (= typ "Paragraph")
                              (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
+
+(defn run-batch-txs!
+  []
+  (let [chan (state/get-db-batch-txs-chan)]
+    (async/go-loop []
+      (let [f (async/<! chan)]
+        (f))
+      (recur))))
 
 (comment
   (defn debug!
