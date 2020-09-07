@@ -289,8 +289,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                                {:block/uuid uuid
-                                 :block/meta new-meta}
+                              {:block/uuid uuid
+                               :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -713,27 +713,29 @@
   [state repo e]
   (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
     (when block-id
-      (do
-        (util/stop e)
-        ;; delete block, edit previous block
-        (let [block (db/pull [:block/uuid block-id])
-              block-parent (gdom/getElement block-parent-id)
-              sibling-block (get-prev-block-non-collapsed block-parent)]
-          (delete-block-aux! block dummy?)
-          (when sibling-block
-            (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-              (when repo
-                (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-                  (let [original-content (util/trim-safe (:block/content block))
-                        new-value (str original-content value)
-                        pos (max
-                             (if original-content
-                               (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
-                               0)
-                             0)]
-                    (save-block-if-changed! block new-value)
-                    (edit-block! (uuid sibling-block-id)
-                                 pos format id)))))))))))
+      (when-let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))]
+        (let [page-blocks-count (db/get-page-blocks-count repo page-id)]
+          (when (> page-blocks-count 2)
+            (util/stop e)
+            ;; delete block, edit previous block
+            (let [block (db/pull [:block/uuid block-id])
+                  block-parent (gdom/getElement block-parent-id)
+                  sibling-block (get-prev-block-non-collapsed block-parent)]
+              (delete-block-aux! block dummy?)
+              (when sibling-block
+                (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+                  (when repo
+                    (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+                      (let [original-content (util/trim-safe (:block/content block))
+                            new-value (str original-content value)
+                            pos (max
+                                 (if original-content
+                                   (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
+                                   0)
+                                 0)]
+                        (save-block-if-changed! block new-value)
+                        (edit-block! (uuid sibling-block-id)
+                                     pos format id)))))))))))))
 
 (defn delete-blocks!
   [repo block-uuids]

@@ -90,8 +90,8 @@
                                (fn [chosen _click?]
                                  (state/set-editor-show-page-search false)
                                  (editor-handler/insert-command! id
-                                                                 (util/format "#%s" (if (string/includes? chosen " ") 
-                                                                                      (str "[[" chosen "]]") 
+                                                                 (util/format "#%s" (if (string/includes? chosen " ")
+                                                                                      (str "[[" chosen "]]")
                                                                                       chosen))
                                                                  format
                                                                  {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))}))
@@ -408,11 +408,10 @@
                    selected-start (gobj/get node "selectionStart")
                    selected-end (gobj/get node "selectionEnd")]
                (cond
-
                  (not= selected-start selected-end)
                  nil
 
-                 (zero? current-pos)
+                 (and (zero? current-pos))
                  (editor-handler/delete-block! state repo e)
 
                  (and (> current-pos 1)
@@ -449,7 +448,7 @@
 
                      :else
                      nil))
-                 
+
                   ;; deleting hashtag
                  (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
                  (state/set-editor-show-page-search-hashtag false)
@@ -478,7 +477,7 @@
                 (commands/handle-step [:editor/search-page])
                 (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
-              (and 
+              (and
                (not= key-code 8) ;; backspace
                (or
                 (editor-handler/surround-by? input "#" " ")
@@ -488,7 +487,7 @@
                 (commands/handle-step [:editor/search-page-hashtag])
                 (state/set-last-pos! (:pos (util/get-caret-pos input)))
                 (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-              
+
               (and
                (= key " ")
                (state/get-editor-show-page-search-hashtag))

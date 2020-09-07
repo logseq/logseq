@@ -950,6 +950,11 @@
           nil)
         react)))))
 
+(defn get-page-blocks-count
+  [repo page-id]
+  (when-let [db (get-conn repo)]
+    (count (d/datoms db :avet :block/page page-id))))
+
 (defn get-page-directives-content
   [page]
   (let [blocks (get-page-blocks page)]
