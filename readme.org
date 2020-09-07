@@ -5,14 +5,15 @@
    https://logseq.com
 
 ** Setup development environment
+If you're on Windows, use the [[#windows-setup][Windows setup]].
 
 *** 1. Requirements
 
 **** [[https://clojure.org/guides/getting_started][Java && Clojure]]
 
-**** [[https://www.postgresql.org/download/][Postgresql]]
+**** [[https://www.postgresql.org/download/][PostgreSQL]]
 
-**** [[https://nodejs.org/en/][Nodejs]]
+**** [[https://nodejs.org/en/][Node.js]]
 
 *** 2. Add environment variables
        #+BEGIN_SRC sh
@@ -44,7 +45,7 @@
         2. input "(go)" in the clojure repl
      #+END_EXAMPLE
 
-**** Using in Calva (Visual Studio Code )
+**** Using in Calva (Visual Studio Code)
      #+BEGIN_EXAMPLE
          1. Issue the command Start a REPL server and Connect: ctrl+alt+c ctrl+alt+j
          2. Select clojure-cli
@@ -58,6 +59,31 @@
       yarn watch
       open http://localhost:3000
     #+END_SRC
+
+** Windows setup
+
+*** 1. Required software
+    Install clojure through scoop-clojure: https://github.com/littleli/scoop-clojure. You can also install [[https://nodejs.org/en/][Node.js]], [[https://yarnpkg.com/][Yarn]] and [[https://www.postgresql.org/download/][PostgreSQL]] through scoop if you want to.
+
+*** 2. Setup PostgreSQL
+    Make sure you have PostgreSQL running. You can check if it's running with ~pg_ctl status~ and use ~pg_ctl start~ to start it up.
+    You'll also need to make a logseq DB in PostgreSQL. Do that with ~createdb logseq~.
+
+*** 3. Setup the server
+    Download [[https://gist.github.com/samfundev/98088dd76f67085f114c75493261aa3d][this little script]] that sets up the environment variables and runs ~cmd-clj -A:dev~.
+    The ~GITHUB_APP_PEM~ variable in the script needs to be set with the correct directory for your system.
+    Run that script in the repo and enter ~(go)~ into the interpreter.
+
+*** 4. Setup the website
+    Either run ~cmd-clojure -A:cljs watch app~ instead of ~yarn watch~ in the next step or modify web/package.json to use cmd-clojure instead of clojure in the scripts section.
+    
+    Open command prompt in the repo and do:
+    #+BEGIN_SRC batch
+      cd web
+      yarn
+      yarn watch
+    #+END_SRC
+    Wait for it to compile and open ~localhost:3000~.
 
 *** Notes
     1. The clojure deps should be synced between the two files: ~project.clj~ and ~deps.edn~.
