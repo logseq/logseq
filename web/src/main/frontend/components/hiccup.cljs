@@ -240,9 +240,9 @@
                       (when (gobj/get e "shiftKey")
                         (state/sidebar-add-block!
                          (state/get-current-repo)
-                         (:db/id page)
+                         (:db/id page-entity)
                          :page
-                         {:page page})))}
+                         {:page page-entity})))}
          {:class "warning"
           :title "Orphan page"})
        (if (seq children)
