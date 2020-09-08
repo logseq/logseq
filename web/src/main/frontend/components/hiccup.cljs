@@ -228,20 +228,23 @@
   (when-let [page-name (:page/name page)]
     (let [original-page-name (get page :page/original-name page-name)
           page (string/lower-case page-name)
+          page-entity (db/entity [:page/name page])
           href (if html-export?
                  (util/encode-str page)
                  (str "/page/" (util/encode-str page)))]
       [:a.page-ref
-       {:href href
-        :on-click (fn [e]
-                    (util/stop e)
-                    (when (gobj/get e "shiftKey")
-                      (when-let [page (db/entity [:page/name page])]
+       (if page-entity
+         {:href href
+          :on-click (fn [e]
+                      (util/stop e)
+                      (when (gobj/get e "shiftKey")
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
                          :page
-                         {:page page}))))}
+                         {:page page})))}
+         {:class "warning"
+          :title "Orphan page"})
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
@@ -480,7 +483,7 @@
                   (->elem
                    :a
                    (cond->
-                       {:href href}
+                     {:href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -493,8 +496,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -932,26 +935,26 @@
                           (editor-handler/unhighlight-block!))}]
     [:div.flex.flex-row
      [:div.flex-1.flex-col.relative.block-content
-     (cond-> {:id (str "block-content-" uuid)
-              :style {:cursor "text"
-                      :min-height 24}}
-       (not slide?)
-       (merge attrs))
+      (cond-> {:id (str "block-content-" uuid)
+               :style {:cursor "text"
+                       :min-height 24}}
+        (not slide?)
+        (merge attrs))
 
-     (if pre-block?
-       (pre-block-cp config (string/trim content) format)
-       (build-block-part config block))
+      (if pre-block?
+        (pre-block-cp config (string/trim content) format)
+        (build-block-part config block))
 
-     (when (and dragging? (not slide?))
-       (dnd-separator block 0 -4 false true))
+      (when (and dragging? (not slide?))
+        (dnd-separator block 0 -4 false true))
 
-     (when (and (not pre-block?) (seq body))
-       [:div.block-body {:style {:display (if collapsed? "none" "")}}
-        ;; TODO: consistent id instead of the idx (since it could be changed later)
-        (for [[idx child] (medley/indexed (:block/body block))]
-          (when-let [block (block-cp config child)]
-            (rum/with-key (block-child block)
-              (str uuid "-" idx))))])]
+      (when (and (not pre-block?) (seq body))
+        [:div.block-body {:style {:display (if collapsed? "none" "")}}
+         ;; TODO: consistent id instead of the idx (since it could be changed later)
+         (for [[idx child] (medley/indexed (:block/body block))]
+           (when-let [block (block-cp config child)]
+             (rum/with-key (block-child block)
+               (str uuid "-" idx))))])]
      (when (and block-refs-count (> block-refs-count 0))
        [:div
         [:a.block.py-0.px-2.rounded.bg-base-2.opacity-50.hover:opacity-100
@@ -1087,16 +1090,16 @@
     (when-not pre-block-only-title?
       [:div.ls-block.flex.flex-col.pt-1
        (cond->
-           {:id block-id
-            :style {:position "relative"}
-            :class (str uuid
-                        (when dummy? " dummy")
-                        (when (and collapsed? has-child?) " collapsed")
-                        (when pre-block? " pre-block"))
-            :blockid (str uuid)
-            :repo repo
-            :level level
-            :haschild (str has-child?)}
+         {:id block-id
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-block? " pre-block"))
+          :blockid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
          (not slide?)
          (merge attrs))
 

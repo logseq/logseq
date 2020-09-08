@@ -13,6 +13,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.ui :as ui-handler]
             [frontend.date :as date]
             [clojure.walk :as walk]
             [frontend.git :as git]
@@ -53,11 +54,11 @@
                     (js/setTimeout
                      #(when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
                         (editor-handler/edit-block! last-block
-                                                   0
-                                                   (:block/format last-block)
-                                                   (string/replace (gobj/get first-block "id")
-                                                                   "ls-block"
-                                                                   "edit-block")))
+                                                    0
+                                                    (:block/format last-block)
+                                                    (string/replace (gobj/get first-block "id")
+                                                                    "ls-block"
+                                                                    "edit-block")))
                      100)))))))))))
 
 (defn page-add-directives!
@@ -226,49 +227,52 @@
 
 (defn delete!
   [page-name ok-handler]
-  (when-not (date/valid-journal-title? page-name)
-    (when-let [repo (state/get-current-repo)]
-      (let [page-name (string/lower-case page-name)]
-        (when-let [file (db/get-page-file page-name)]
-          (let [file-path (:file/path file)]
+  (when page-name
+    (when-not (date/valid-journal-title? page-name)
+      (when-let [repo (state/get-current-repo)]
+        (let [page-name (string/lower-case page-name)]
+          (let [file (db/get-page-file page-name)
+                file-path (:file/path file)]
             ;; delete file
-            (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-            (when-let [files-conn (db/get-files-conn repo)]
-              (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
+            (when file-path
+              (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+              (when-let [files-conn (db/get-files-conn repo)]
+                (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
-            ;; delete blocks
-            (let [blocks (db/get-page-blocks page-name)
-                  tx-data (mapv
-                           (fn [block]
-                             [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                           blocks)]
-              (db/transact! tx-data)
-              ;; remove file
-              (->
-               (p/let [_ (git/remove-file repo file-path)
-                       _result (fs/unlink (str (util/get-repo-dir repo)
-                                               "/"
-                                               file-path)
-                                          nil)]
-                 (state/git-add! repo (str "- " file-path)))
-               (p/catch (fn [err]
-                          (prn "error: " err))))
+              (let [blocks (db/get-page-blocks page-name)
+                    tx-data (mapv
+                             (fn [block]
+                               [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                             blocks)]
+                (db/transact! tx-data)
+                ;; remove file
+                (->
+                 (p/let [_ (git/remove-file repo file-path)
+                         _result (fs/unlink (str (util/get-repo-dir repo)
+                                                 "/"
+                                                 file-path)
+                                            nil)]
+                   (state/git-add! repo (str "- " file-path)))
+                 (p/catch (fn [err]
+                            (prn "error: " err))))))
 
-              (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+            (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
-              (ok-handler))))))))
+            (ok-handler)))))))
 
 (defn rename!
   [old-name new-name]
   (when-let [repo (state/get-current-repo)]
     (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
-      (let [old-original-name (:page/original-name page)]
+      (let [old-original-name (:page/original-name page)
+            file (:page/file page)]
         (d/transact! (db/get-conn repo false)
           [{:db/id (:db/id page)
             :page/name (string/lower-case new-name)
             :page/original-name new-name}])
 
-        (page-add-directives! (string/lower-case new-name) {:title new-name})
+        (when file
+          (page-add-directives! (string/lower-case new-name) {:title new-name}))
 
         ;; update all files which have references to this page
         (let [files (db/get-files-that-referenced-page (:db/id page))]
@@ -290,4 +294,6 @@
       (route-handler/redirect! {:to :page
                                 :path-params {:name (util/encode-str (string/lower-case new-name))}})
 
-      (notification/show! "Page renamed successfully!" :success))))
+      (notification/show! "Page renamed successfully!" :success)
+
+      (ui-handler/re-render-root!))))

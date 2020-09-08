@@ -260,31 +260,28 @@
          [:div.relative
           (when (and (not block?) (not sidebar?))
             (let [links (->>
-                         (when file
-                           [{:title "Re-index this page"
+                         [(when file
+                            {:title "Re-index this page"
                              :options {:on-click (fn []
-                                                   (file/re-index! file))}}
-                            {:title "Copy the whole page as JSON"
+                                                   (file/re-index! file))}})
+                          (when-not journal?
+                            {:title "Rename page"
+                             :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
+                          (when-not journal?
+                            {:title "Delete page"
+                             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+                          (when (and (not journal?) file)
+                            {:title "Publish this page on Logseq"
                              :options {:on-click (fn []
-                                                   (export-handler/copy-page-as-json! page-name))}}
-                            (when-not journal?
-                              {:title "Rename page"
-                               :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
-                            (when-not journal?
-                              {:title "Delete page (will delete the file too)"
-                               :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-                            (when-not journal?
-                              {:title "Publish this page on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page! page-name project/add-project))}})
-                            (when-not journal?
-                              {:title "Publish this page as a slide on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page-as-slide! page-name project/add-project))}})
-                            (when-not journal?
-                              {:title "Un-publish this page on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/unpublish-page! page-name))}})])
+                                                   (page-handler/publish-page! page-name project/add-project))}})
+                          (when (and (not journal?) file)
+                            {:title "Publish this page as a slide on Logseq"
+                             :options {:on-click (fn []
+                                                   (page-handler/publish-page-as-slide! page-name project/add-project))}})
+                          (when (and (not journal?) file)
+                            {:title "Un-publish this page on Logseq"
+                             :options {:on-click (fn []
+                                                   (page-handler/unpublish-page! page-name))}})]
                          (remove nil?))]
               (when (seq links)
                 (ui/dropdown-with-links
