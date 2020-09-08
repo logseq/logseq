@@ -228,23 +228,32 @@
   (when-let [page-name (:page/name page)]
     (let [original-page-name (get page :page/original-name page-name)
           page (string/lower-case page-name)
-          page-entity (db/entity [:page/name page])
           href (if html-export?
                  (util/encode-str page)
                  (str "/page/" (util/encode-str page)))]
       [:a.page-ref
-       (if page-entity
-         {:href href
-          :on-click (fn [e]
-                      (util/stop e)
-                      (when (gobj/get e "shiftKey")
+       {:href href
+        :on-click (fn [e]
+                    (util/stop e)
+                    (when (gobj/get e "shiftKey")
+                      (when-let [page-entity (db/entity [:page/name page])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
-                         {:page page-entity})))}
-         {:class "warning"
-          :title "Orphan page"})
+                         {:page page-entity}))))}
+       ;; (if page-entity
+       ;;   {:href href
+       ;;    :on-click (fn [e]
+       ;;                (util/stop e)
+       ;;                (when (gobj/get e "shiftKey")
+       ;;                  (state/sidebar-add-block!
+       ;;                   (state/get-current-repo)
+       ;;                   (:db/id page-entity)
+       ;;                   :page
+       ;;                   {:page page-entity})))}
+       ;;   {:class "warning"
+       ;;    :title "Orphan page"})
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
