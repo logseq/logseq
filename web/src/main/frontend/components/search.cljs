@@ -5,6 +5,7 @@
             [frontend.handler.route :as route]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.db :as db]
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -76,6 +77,25 @@
                             path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
                         (route/redirect-with-fragment! path))
                       nil))
+       :on-shift-chosen (fn [{:keys [type data]}]
+                          (case type
+                            :page
+                            (let [page (db/entity [:page/name data])]
+                              (state/sidebar-add-block!
+                               (state/get-current-repo)
+                               (:db/id page)
+                               :page
+                               page))
+
+                            :block
+                            (let [block (db/entity [:block/uuid (:block/uuid data)])]
+                              (state/sidebar-add-block!
+                               (state/get-current-repo)
+                               (:db/id block)
+                               :block
+                               block))
+                            
+                            nil))
        :item-render (fn [{:keys [type data]}]
                       (case type
                         :new-page
