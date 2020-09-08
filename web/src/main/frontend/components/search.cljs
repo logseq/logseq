@@ -95,7 +95,6 @@
                                :block
                                block))
                             
-                            :default
                             nil))
        :item-render (fn [{:keys [type data]}]
                       (case type
