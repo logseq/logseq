@@ -4,6 +4,7 @@
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.migration :as migration-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -93,7 +94,7 @@
                              (user-handler/set-preferred-format! format)))}
              (for [format [:org :markdown]]
                [:option (cond->
-                          {:key (name format)}
+                         {:key (name format)}
                           (= format preferred-format)
                           (assoc :selected "selected"))
                 (string/capitalize (name format))])]]]]
@@ -114,7 +115,7 @@
                              (user-handler/set-preferred-workflow! workflow)))}
              (for [workflow [:now :todo]]
                [:option (cond->
-                          {:key (name workflow)}
+                         {:key (name workflow)}
                           (= workflow preferred-workflow)
                           (assoc :selected "selected"))
                 (if (= workflow :now)
@@ -147,4 +148,16 @@
                                 (if (= "Enter" k)
                                   (when-let [server (util/evalue event)]
                                     (user-handler/set-cors! server)
-                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]])]]))
+                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+
+         [:hr]
+
+         (ui/admonition
+          :warning
+          [:p "Logseq is migrating to creating journal pages on a daily basis for better performance and data safety. In the future, the current method of storing journal files once a month would be removed. Please use the following button to migrate, and feel free to let us know if anything unexpected happened!"])
+         
+         (ui/admonition
+          :warning
+          [:p "After migrating, please wait a few seconds, until the sync indicator turned yellow then green, then re-index your repository."])
+         
+         [:button {:on-click #(migration-handler/handle-journal-migration-from-monthly-to-daily! current-repo)} "Migrate"]])]]))
