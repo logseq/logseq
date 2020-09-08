@@ -708,9 +708,7 @@
   [repo page-name]
   (let [alias-ids (get-page-alias repo page-name)]
     (when (seq alias-ids)
-      (->> (d/pull-many (get-conn repo)
-                        '[:page/name]
-                        alias-ids)
+      (->> (pull-many repo '[:page/name] alias-ids)
            (map :page/name)
            distinct))))
 
@@ -786,7 +784,7 @@
          ks (if content-level?
               '[:block/uuid :block/meta :block/content :block/level]
               '[:block/uuid :block/meta])
-         blocks (d/pull-many db ks eids)]
+         blocks (pull-many repo-url ks eids)]
      (->> (filter (fn [{:block/keys [meta]}]
                     (>= (:start-pos meta) end-pos)) blocks)
           sort-by-pos))))
@@ -960,7 +958,7 @@
            :query-fn (fn [db]
                        (let [datoms (d/datoms db :avet :block/page page-id)
                              block-eids (mapv :e datoms)]
-                         (d/pull-many db '[*] block-eids)))}
+                         (pull-many repo-url '[*] block-eids)))}
           nil)
         react)))))
 
@@ -1012,8 +1010,8 @@
   (when-let [conn (get-conn repo)]
     (let [ids (get-block-children-ids repo block-uuid)]
       (when (seq ids)
-        (d/pull-many conn '[*]
-                     (map (fn [id] [:block/uuid id]) ids))))))
+        (pull-many repo '[*]
+                   (map (fn [id] [:block/uuid id]) ids))))))
 
 (defn get-block-and-children
   ([repo block-uuid]
@@ -1619,8 +1617,8 @@
 (defn get-blocks-contents
   [repo block-uuids]
   (let [db (get-conn repo)]
-    (d/pull-many db '[:block/content]
-                 (mapv (fn [id] [:block/uuid id]) block-uuids))))
+    (pull-many repo '[:block/content]
+               (mapv (fn [id] [:block/uuid id]) block-uuids))))
 
 (defn journal-page?
   [page-name]
@@ -1991,7 +1989,7 @@
                         (parent ?e2 ?tid)]])
                    (seq-flatten))]
       (when (seq ids)
-        (d/pull-many conn '[:block/uuid :block/title] ids)))))
+        (pull-many repo '[:block/uuid :block/title] ids)))))
 
 (defn get-block-parent
   [repo block-id]
@@ -2024,7 +2022,7 @@
        (let [block-eids (->> (d/datoms db :avet :block/page page-id)
                              (mapv :e))]
          (when (seq block-eids)
-           (let [blocks (d/pull-many db '[:block/meta] block-eids)]
+           (let [blocks (pull-many repo '[:block/meta] block-eids)]
              (-> (last (sort-by-pos blocks))
                  (get-in [:block/meta :end-pos])))))))
    ;; TODO: need more thoughts
