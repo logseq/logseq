@@ -322,7 +322,10 @@
                  path-page-name))]])
           [:div
            [:div.content
-            (when (and file-path (not sidebar?) (not block?))
+            (when (and file-path
+                       (not sidebar?)
+                       (not block?)
+                       (not (state/hide-file?)))
               [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
                [:span.opacity-50 "File: "]
                [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}

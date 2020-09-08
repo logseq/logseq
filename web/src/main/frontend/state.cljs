@@ -149,6 +149,10 @@
     "LATER"
     "TODO"))
 
+(defn hide-file?
+  []
+  (:hide-file-in-page? (get-config)))
+
 (defn get-repos
   []
   (get-in @state [:me :repos]))
