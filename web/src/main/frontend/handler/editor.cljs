@@ -487,9 +487,6 @@
                               blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
                               [before-part after-part] (split-with #(not= (:block/uuid (first blocks)) (:block/uuid %)) @blocks-atom)
                               after-part (rest after-part)]
-                          (reset! blocks-atom (->> (concat before-part blocks after-part)
-                                                   (remove nil?)))
-
                           ;; Replace with batch transactions
                           (state/add-tx!
                            (fn []
@@ -503,10 +500,14 @@
                                :data (map (fn [block] (assoc block :block/page page)) blocks)}
                               [[file-path new-content]])))
 
-                          (when ok-handler
-                            (let [first-block (first blocks)
-                                  last-block (last blocks)]
-                              (ok-handler [first-block last-block v2])))))]
+                          (let [blocks (remove (fn [block]
+                                                 (nil? (:block/content block))) blocks)]
+                            (reset! blocks-atom (->> (concat before-part blocks after-part)
+                                                     (remove nil?)))
+                            (when ok-handler
+                              (let [first-block (first blocks)
+                                    last-block (last blocks)]
+                                (ok-handler [first-block last-block v2]))))))]
      (cond
        (and (not file) page)
        (let [format (name format)

@@ -4,9 +4,7 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-;; (defonce dev? ^boolean goog.DEBUG)
-;; (defonce dev? ^boolean goog.DEBUG)
-(defonce dev? false)
+(defonce dev? ^boolean goog.DEBUG)
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
