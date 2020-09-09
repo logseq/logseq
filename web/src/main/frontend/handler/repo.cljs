@@ -230,14 +230,16 @@
         content (util/default-content-with-title format title)
         path (str config/default-journals-directory "/" file-name "."
                   (config/get-file-extension format))
-        file-path (str "/" path)]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
-                  (p/catch (fn [_e])))
-            file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-      (when (not file-exists?)
-        (db/reset-file! repo-url path content)
-        (ui-handler/re-render-root!)
-        (git-handler/git-add repo-url path)))))
+        file-path (str "/" path)
+        page-exists? (db/entity repo-url [:page/name (string/lower-case title)])]
+    (when-not page-exists?
+      (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
+                    (p/catch (fn [_e])))
+              file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+        (when (not file-exists?)
+          (db/reset-file! repo-url path content)
+          (ui-handler/re-render-root!)
+          (git-handler/git-add repo-url path))))))
 
 (defn create-default-files!
   [repo-url]
