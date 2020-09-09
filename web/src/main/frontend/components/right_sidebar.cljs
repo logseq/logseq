@@ -81,7 +81,7 @@
 (rum/defc contents < rum/reactive
   []
   [:div.contents.flex-col.flex.ml-3.mt-2
-   (if-let [contents (db/entity [:page/name "contents"])]
+   (when-let [contents (db/entity [:page/name "contents"])]
      (page/contents-page contents))])
 
 (defn build-sidebar-item

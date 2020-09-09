@@ -61,10 +61,11 @@
                "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
                (active? :all-files)
                close-modal-fn)
-     [:div.pl-4.pr-4 {:style {:height 1
-                              :background-color (if white? "#f0f8ff" "#073642")
-                              :margin 12}}]
-     (right-sidebar/contents)]))
+     ;; [:div.pl-4.pr-4 {:style {:height 1
+     ;;                          :background-color (if white? "#f0f8ff" "#073642")
+     ;;                          :margin 12}}]
+     ;; (right-sidebar/contents)
+     ]))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
@@ -378,16 +379,17 @@
        (ui/modal)
        (custom-context-menu)
        [:a#download.hidden]
-       (when-not config/mobile?
-         [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-          {:style {:right 24}
-           :title "Click to check shortcuts and other tips"
-           :on-click (fn []
-                       (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-          "?"]
-         [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-          {:style {:left 24}
-           :title "Click to show/hide sidebar"
-           :on-click (fn []
-                       (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
-          (if (state/sub :ui/left-sidebar-open?) "<" ">")]])]]]))
+       ;; (when-not config/mobile?
+       ;;   [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+       ;;    {:style {:right 24}
+       ;;     :title "Click to check shortcuts and other tips"
+       ;;     :on-click (fn []
+       ;;                 (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+       ;;    "?"]
+       ;;   [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+       ;;    {:style {:left 24}
+       ;;     :title "Click to show/hide sidebar"
+       ;;     :on-click (fn []
+       ;;                 (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
+       ;;    (if (state/sub :ui/left-sidebar-open?) "<" ">")]])
+       ]]]))
