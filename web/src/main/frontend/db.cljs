@@ -1270,7 +1270,8 @@
                                            (last (first first-block)))]
                        (if (and directives (seq directives))
                          directives))]
-      (if journal?
+      (cond
+        (and journal? (not= (state/get-journal-basis) :daily))
         (extract-pages-and-blocks
          repo-url
          format ast directives
@@ -1294,10 +1295,20 @@
                                                                     (vec (conj blocks block))))]
                        (recur new-pages last-page-name tl))))
                  pages)))))
+
+        (not journal?)
         (extract-pages-and-blocks
          repo-url
          format ast directives
          file content utf8-content false
+         (fn [blocks ast]
+           [[(get-page-name file ast) blocks]]))
+
+        (and journal? (= (state/get-journal-basis) :daily))
+        (extract-pages-and-blocks
+         repo-url
+         format ast directives
+         file content utf8-content true
          (fn [blocks ast]
            [[(get-page-name file ast) blocks]]))))))
 

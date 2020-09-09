@@ -210,8 +210,9 @@
   (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)
         title (date/today)
+        file-name (date/journal-title->default title)
         content (util/default-content-with-title format title)
-        path (str config/default-journals-directory "/" title "."
+        path (str config/default-journals-directory "/" file-name "."
                   (config/get-file-extension format))
         file-path (str "/" path)]
     (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
