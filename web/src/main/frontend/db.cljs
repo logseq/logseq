@@ -794,6 +794,34 @@
   (let [blocks (get-file-blocks repo-url path)]
     (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
 
+(defn get-file-pages
+  [repo-url path]
+  (-> (d/q '[:find ?page
+             :in $ ?path
+             :where
+             [?file :file/path ?path]
+             [?page :page/file ?file]]
+        (get-conn repo-url) path)
+      seq-flatten))
+
+(defn delete-file-pages!
+  [repo-url path]
+  (let [pages (get-file-pages repo-url path)]
+    (mapv (fn [eid] [:db.fn/retractEntity eid]) pages)))
+
+(defn delete-file-tx
+  [repo-url file-path]
+  (->>
+   (concat
+    (delete-file-blocks! repo-url file-path)
+    (delete-file-pages! repo-url file-path)
+    [[:db.fn/retractEntity [:file/path file-path]]])
+   (remove nil?)))
+
+(defn delete-file!
+  [repo-url file-path]
+  (transact! repo-url (delete-file-tx repo-url file-path)))
+
 (defn set-file-content!
   [repo path content]
   (when (and repo path)
@@ -1255,6 +1283,15 @@
                        directives))]
     (into {} directives)))
 
+(defn monthly-journals-exists?
+  [current-repo]
+  (when-let [files (seq (->> (get-files current-repo)
+                             (map first)
+                             (remove nil?)))]
+    (some
+     (fn [file] (re-find #"journals/[0-9]{4}_[0-9]{2}\.+" file))
+     files)))
+
 ;; check journal formats and report errors
 (defn extract-blocks-pages
   [repo-url file content utf8-content]
@@ -1269,9 +1306,10 @@
                                            (= "Directives" (ffirst first-block))
                                            (last (first first-block)))]
                        (if (and directives (seq directives))
-                         directives))]
+                         directives))
+          monthly? (re-find #"journals/[0-9]{4}_[0-9]{2}\.+" file)]
       (cond
-        (and journal? (not= (state/get-journal-basis) :daily))
+        (and journal? monthly?)
         (extract-pages-and-blocks
          repo-url
          format ast directives
@@ -1296,19 +1334,19 @@
                        (recur new-pages last-page-name tl))))
                  pages)))))
 
+        (and journal? (not monthly?))
+        (extract-pages-and-blocks
+         repo-url
+         format ast directives
+         file content utf8-content true
+         (fn [blocks ast]
+           [[(get-page-name file ast) blocks]]))
+
         (not journal?)
         (extract-pages-and-blocks
          repo-url
          format ast directives
          file content utf8-content false
-         (fn [blocks ast]
-           [[(get-page-name file ast) blocks]]))
-
-        (and journal? (= (state/get-journal-basis) :daily))
-        (extract-pages-and-blocks
-         repo-url
-         format ast directives
-         file content utf8-content true
          (fn [blocks ast]
            [[(get-page-name file ast) blocks]]))))))
 
@@ -1416,7 +1454,8 @@
      (cond
        (and journal?
             (seq blocks)
-            (date/valid-journal-title? (second (first (:block/title (first blocks)))))
+            (when-let [title (second (first (:block/title (first blocks))))]
+              (date/valid-journal-title? title))
             (> (count blocks) 1))
        (rest blocks)                  ; remove journal titles
 
@@ -1445,7 +1484,7 @@
                              :block/marker nil})
                           default-option)
              blocks (vec (concat blocks [dummy]))]
-         (if journal?
+         (if (and journal? (> (count blocks) 1))
            (rest blocks)
            blocks))))))
 

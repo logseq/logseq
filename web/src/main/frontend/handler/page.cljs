@@ -25,7 +25,8 @@
   [title]
   (let [repo (state/get-current-repo)
         dir (util/get-repo-dir repo)
-        directory (if (date/valid-journal-title? title)
+        journal-page? (date/valid-journal-title? title)
+        directory (if journal-page?
                     config/default-journals-directory
                     config/default-pages-directory)]
     (when dir
@@ -33,7 +34,11 @@
                     (p/catch (fn [_e])))]
         (let [format (name (state/get-preferred-format))
               page (string/lower-case title)
-              path (str (string/replace page #"\s+" "_") "." (if (= format "markdown") "md" format))
+              path (str (if journal-page?
+                          (date/journal-title->default title)
+                          (string/replace page #"\s+" "_"))
+                        "."
+                        (if (= format "markdown") "md" format))
               path (str directory "/" path)
               file-path (str "/" path)]
           (p/let [exists? (fs/file-exists? dir file-path)]

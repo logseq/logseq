@@ -15,6 +15,7 @@
   (atom
    {:route-match nil
     :today nil
+    :daily/migrating? nil
     :db/batch-txs (async/chan 100)
     :notification/show? false
     :notification/content nil
@@ -704,3 +705,7 @@
 (defn set-left-sidebar-open!
   [value]
   (set-state! :ui/left-sidebar-open? value))
+
+(defn set-daily-migrating!
+  [value]
+  (set-state! :daily/migrating? value))

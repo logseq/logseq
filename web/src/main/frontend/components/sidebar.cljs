@@ -78,9 +78,14 @@
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)
-        token (state/sub :encrypt/token)]
+        token (state/sub :encrypt/token)
+        ;; TODO: remove this
+        daily-migrating? (state/sub [:daily/migrating?])]
     [:div.max-w-7xl.mx-auto
      (cond
+       daily-migrating?
+       (ui/loading "Migrating to daily notes")
+
        (and (not logged?) (seq latest-journals))
        (journal/journals latest-journals)
 

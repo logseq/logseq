@@ -8,6 +8,7 @@
             [cljs-bean.core :as bean]
             [frontend.date :as date]
             [frontend.handler.notification :as notification]
+            [frontend.handler.migration :as migration-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.ui :as ui]))
@@ -45,10 +46,9 @@
                             (if (and (not logged?)
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
-                              (do
-                                (repo-handler/create-month-journal-if-not-exists config/local-repo)
-                                (state/set-db-restoring! false)))
+                              (state/set-db-restoring! false))
                             (watch-for-date!)
+                            (migration-handler/show!)
                             (when (seq (:repos me))
                               ;; FIXME: handle error
                               (repo-handler/request-app-tokens!
