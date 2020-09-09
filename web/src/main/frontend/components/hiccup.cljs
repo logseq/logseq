@@ -271,7 +271,8 @@
   [html-export? s config label]
   [:span.page-reference
    (when (and (not html-export?)
-              (not (= (:id config) "contents")))
+              (not (= (:id config) "contents"))
+              (not (= (:id config) "Contents")))
      [:span.text-gray-500 "[["])
    (if (string/ends-with? s ".excalidraw")
      [:a.page-ref
@@ -283,7 +284,8 @@
      (page-cp (assoc config
                      :label (mldoc/plain->text label)) {:page/name s}))
    (when (and (not html-export?)
-              (not (= (:id config) "contents")))
+              (not (= (:id config) "contents"))
+              (not (= (:id config) "Contents")))
      [:span.text-gray-500 "]]"])])
 
 (defn- latex-environment-content
