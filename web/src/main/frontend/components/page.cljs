@@ -265,6 +265,9 @@
                              :options {:on-click (fn []
                                                    (file/re-index! file))}})
                           (when-not journal?
+                            {:title "Add to Contents"
+                            :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+                          (when-not journal?
                             {:title "Rename page"
                              :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
                           (when-not journal?
