@@ -15,9 +15,11 @@
 
 (defn get-files-from-blocks
   [blocks]
-  (if (<= (count blocks) 1)
+  (println (count (:page blocks)))
+  (println (:page blocks))
+  (if (<= (count (:page blocks)) 1)
     nil
-    {:path (str config/default-journals-directory "/" (:title blocks) "." (config/get-file-extension (state/get-preferred-format)))
+    {:path (str config/default-journals-directory "/" (date/journal-title->default (:title blocks)) "." (config/get-file-extension (state/get-preferred-format)))
      :page (reduce #(if (not (str/blank? (:block/content %2))) (str %1 (:block/content %2)) %1) "" (:page blocks))}))
 
 (defn handle-journal-migration-from-monthly-to-daily!
@@ -33,7 +35,8 @@
                       (map first)
                       (map (fn [el] {:title el :page (db/get-page-blocks repo el)}))
                       (util/remove-nils)
-                      (map get-files-from-blocks))
+                      (map get-files-from-blocks)
+                      (remove nil?))
         journals-dir (str (frontend.util/get-repo-dir repo) "/journals")]
 
     (frontend.util/p-handle

@@ -153,33 +153,33 @@
         (valid? (string/capitalize title))
         (not (js/isNaN (js/Date.parse title))))))
 
-(defn journal-title->int
-  [journal-title]
+(defn journal-title->
+  [journal-title then-fn]
   (when-not (string/blank? journal-title)
     (when-let [time (->> (map
-                           (fn [formatter]
-                             (try
-                               (tf/parse (tf/formatter formatter) journal-title)
-                               (catch js/Error _e
-                                 nil)))
-                           (journal-title-formatters))
+                          (fn [formatter]
+                            (try
+                              (tf/parse (tf/formatter formatter) journal-title)
+                              (catch js/Error _e
+                                nil)))
+                          (journal-title-formatters))
                          (filter some?)
                          first)]
-      (util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") time)))))
+      (then-fn time))))
+
+(defn journal-title->int
+  [journal-title]
+  (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))
 
 (defn journal-title->long
   [journal-title]
-  (when-not (string/blank? journal-title)
-    (when-let [time (->> (map
-                           (fn [formatter]
-                             (try
-                               (tf/parse (tf/formatter formatter) journal-title)
-                               (catch js/Error _e
-                                 nil)))
-                           (journal-title-formatters))
-                         (filter some?)
-                         first)]
-      (tc/to-long time))))
+  (journal-title-> journal-title #(tc/to-long %)))
+
+(def default-journal-title-formatter (tf/formatter "yyyy_MM_dd"))
+
+(defn journal-title->default
+  [journal-title]
+  (journal-title-> journal-title #(tf/unparse default-journal-title-formatter %)))
 
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))

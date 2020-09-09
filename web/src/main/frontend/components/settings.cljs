@@ -160,4 +160,5 @@
           :warning
           [:p "After migrating, please wait a few seconds, until the sync indicator turned yellow then green, then re-index your repository."])
          
-         [:button {:on-click #(migration-handler/handle-journal-migration-from-monthly-to-daily! current-repo)} "Migrate"]])]]))
+         (ui/button "Begin migration"
+                    :on-click #(migration-handler/handle-journal-migration-from-monthly-to-daily! current-repo))])]]))
