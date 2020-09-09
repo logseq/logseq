@@ -44,7 +44,8 @@
 
 (rum/defc sidebar-nav
   [route-match close-modal-fn]
-  (let [active? (fn [route] (= route (get-in route-match [:data :name])))
+  (let [white? (= "white" (state/sub :ui/theme))
+        active? (fn [route] (= route (get-in route-match [:data :name])))
         page-active? (fn [page]
                        (= page (get-in route-match [:parameters :path :name])))]
     [:nav.flex-1
@@ -61,7 +62,7 @@
                (active? :all-files)
                close-modal-fn)
      [:div.pl-4.pr-4 {:style {:height 1
-                              :background-color "rgb(57, 75, 89)"
+                              :background-color (if white? "#f0f8ff" "#073642")
                               :margin 12}}]
      (right-sidebar/contents)]))
 
@@ -323,13 +324,15 @@
            {:on-click (fn []
                         (state/toggle-sidebar-open?!))}
            (svg/menu)]]]]
-       
+
        [:div#main-content.flex.wrapper.overflow-y-auto {:style {:height "100vh"}}
-        (when-not config/mobile? 
-            [:div#sidebar-nav-wrapper.flex-col
+        (when-not config/mobile?
+            [:div#sidebar-nav-wrapper.flex-col.pt-4
              {:style {:flex (if (state/get-left-sidebar-open)
                               "0 1 20%"
-                              "0 0 0px")}}
+                              "0 0 0px")
+                      :border-right (str "1px solid "
+                                         (if white? "#f0f8ff" "#073642"))}}
              (when (state/sub :ui/left-sidebar-open?)
                (sidebar-nav route-match nil))])
         [:div.flex.#main-content-container.justify-center
