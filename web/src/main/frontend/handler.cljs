@@ -46,9 +46,7 @@
                             (if (and (not logged?)
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
-                              (do
-                                (repo-handler/create-today-journal-if-not-exists config/local-repo)
-                                (state/set-db-restoring! false)))
+                              (state/set-db-restoring! false))
                             (watch-for-date!)
                             (when-let [current-repo (state/get-current-repo)]
                               (when (db/monthly-journals-exists? current-repo)
