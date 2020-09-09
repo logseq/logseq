@@ -48,17 +48,7 @@
                               (repo-handler/setup-local-repo-if-not-exists!)
                               (state/set-db-restoring! false))
                             (watch-for-date!)
-                            (when-let [current-repo (state/get-current-repo)]
-                              (when (db/monthly-journals-exists? current-repo)
-                                (notification/show!
-                                 [:div
-                                  [:p "Logseq is migrating to creating journal pages on a daily basis for better performance and data safety. In the future, the current method of storing journal files once a month would be removed. Please click the following button to migrate, and feel free to let us know if anything unexpected happened!"]
-                                  (when-not (= current-repo "local")
-                                    [:p "After migrating, please wait a few seconds, until the sync indicator turned yellow then green, then re-index your repository."])
-                                  (ui/button "Begin migration"
-                                    :on-click #(migration-handler/handle-journal-migration-from-monthly-to-daily! current-repo))]
-                                 :warning
-                                 false)))
+                            (migration-handler/show!)
                             (when (seq (:repos me))
                               ;; FIXME: handle error
                               (repo-handler/request-app-tokens!

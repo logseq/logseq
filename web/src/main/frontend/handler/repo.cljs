@@ -18,6 +18,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.migration :as migration-handler]
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
@@ -268,7 +269,9 @@
        {:db (when-let [conn (db/get-conn repo-url false)]
               (d/db conn))
         :files-db (when-let [file-conn (db/get-files-conn repo-url)]
-                    (d/db file-conn))}))))
+                    (d/db file-conn))})
+      (when first-clone?
+        (migration-handler/show!)))))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]

@@ -1,7 +1,7 @@
 (ns frontend.handler.migration
-  (:require [frontend.handler.repo :as repo-handler]
-            [frontend.handler.notification :as notification]
+  (:require [frontend.handler.notification :as notification]
             [frontend.db :as db]
+            [frontend.ui :as ui]
             [promesa.core :as p]
             [frontend.util :as util]
             [frontend.git :as git]
@@ -61,3 +61,17 @@
                               (state/set-daily-migrating! false)
                               (println "Migration failed: ")
                               (js/console.dir error)))))))))))
+
+(defn show!
+  []
+  (when-let [current-repo (state/get-current-repo)]
+    (when (db/monthly-journals-exists? current-repo)
+      (notification/show!
+       [:div
+        [:p "Logseq is migrating to creating journal pages on a daily basis for better performance and data safety. In the future, the current method of storing journal files once a month would be removed. Please click the following button to migrate, and feel free to let us know if anything unexpected happened!"]
+        (when-not (= current-repo "local")
+          [:p "After migrating, please wait a few seconds, until the sync indicator turned yellow then green, then re-index your repository."])
+        (ui/button "Begin migration"
+          :on-click #(handle-journal-migration-from-monthly-to-daily! current-repo))]
+       :warning
+       false))))
