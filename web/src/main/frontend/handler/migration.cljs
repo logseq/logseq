@@ -32,6 +32,7 @@
                           [?page :page/original-name ?page-name]])
                       (db/react)
                       (map first)
+                      (distinct)
                       (map (fn [el] {:title el :page (db/get-page-blocks repo el)}))
                       (util/remove-nils)
                       (map get-files-from-blocks)
@@ -54,7 +55,7 @@
                              (state/set-daily-migrating! false)
                              (ui-handler/re-render-root!)
                              (notification/show!
-                              "Migration successfully!"
+                              "Migration successfully! Please re-index your repository after the sync indicator turned green for a smooth experience."
                               :success)
                              ))
                    (p/catch (fn [error]
