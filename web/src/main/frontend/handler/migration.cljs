@@ -39,12 +39,12 @@
     (frontend.util/p-handle
      (frontend.fs/readdir journals-dir)
      (fn [files]
-       (let [to-delete (reduce #(if (re-matches #"[0-9]{4}_[0-9]{2}.*" %2) (concat [(str "journals/" %2)] %1) %1) [] (js->clj files))]
-         (doall (map #(file-handler/remove-file! repo %) to-delete))
+       (let [to-delete (filter #(re-matches #"[0-9]{4}_[0-9]{2}.*" %) (js->clj files))]
          (doall (map (fn [{:keys [path page]}]
                        (println "migrating" path)
                        (p/let [file-exists? (fs/create-if-not-exists (util/get-repo-dir repo) path page)]
                          (db/reset-file! repo path page)
                          (ui-handler/re-render-root!)
-                         (git-handler/git-add repo path))) all-journals))))
+                         (git-handler/git-add repo path))) all-journals))
+         (doall (map #(file-handler/remove-file! repo (str "journals/" %)) to-delete))))
      #(println "Migration failed"))))
