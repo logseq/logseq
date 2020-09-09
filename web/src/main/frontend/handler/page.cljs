@@ -302,3 +302,19 @@
       (notification/show! "Page renamed successfully!" :success)
 
       (ui-handler/re-render-root!))))
+
+(defn handle-add-page-to-contents!
+  [page-name]
+  (let [last-block (last (db/get-page-blocks (state/get-current-repo) "contents"))
+        last-empty? (>= 3 (count (:block/content last-block)))
+        new-content (if last-empty? (str "## [[" page-name "]]") (str (:block/content last-block) "## [[" page-name "]]"))]
+    (editor-handler/insert-new-block-aux!
+     "Contents"
+     last-block
+     new-content
+     false
+     (fn [[_first-block last-block _new-block-content]] 
+       (notification/show! "Added to contents!" :success)
+       (editor-handler/clear-when-saved!))
+     true
+     2)))

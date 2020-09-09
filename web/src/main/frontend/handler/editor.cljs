@@ -458,10 +458,11 @@
 
 (defn insert-new-block-aux!
   ([block value create-new-block? ok-handler with-level?]
-   (insert-new-block-aux! block value create-new-block? ok-handler with-level? nil))
-  ([{:block/keys [uuid content meta file dummy? level repo page format collapsed?] :as block} value create-new-block? ok-handler with-level? new-level]
-   (let [current-page (state/get-current-page)
-         block-page? (and current-page (util/uuid-string? current-page))
+   (insert-new-block-aux! (state/get-current-page) block value create-new-block? ok-handler with-level? nil))
+  ([block value create-new-block? ok-handler with-level? new-level]
+   (insert-new-block-aux! (state/get-current-page) block value create-new-block? ok-handler with-level? new-level))
+  ([current-page {:block/keys [ uuid content meta file dummy? level repo page format collapsed?] :as block} value create-new-block? ok-handler with-level? new-level]
+   (let [block-page? (and current-page (util/uuid-string? current-page))
          block-self? (= uuid (and block-page? (medley/uuid current-page)))
          input (gdom/getElement (state/get-edit-input-id))
          pos (if new-level

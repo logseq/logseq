@@ -46,6 +46,7 @@
     :search/result nil
 
     :ui/sidebar-open? false
+    :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
     ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
@@ -696,6 +697,14 @@
     (some (fn [{:keys [last-stored-at last-modified-at]}]
             (> last-modified-at last-stored-at))
           status)))
+
+(defn get-left-sidebar-open
+  []
+  (get-in @state [:ui/left-sidebar-open?]))
+
+(defn set-left-sidebar-open!
+  [value]
+  (set-state! :ui/left-sidebar-open? value))
 
 (defn set-daily-migrating!
   [value]
