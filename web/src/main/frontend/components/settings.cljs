@@ -4,7 +4,6 @@
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.migration :as migration-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -148,21 +147,4 @@
                                 (if (= "Enter" k)
                                   (when-let [server (util/evalue event)]
                                     (user-handler/set-cors! server)
-                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
-
-         [:hr]
-
-         (ui/admonition
-          :warning
-          [:p "Logseq is migrating to creating journal pages on a daily basis for better performance and data safety. In the future, the current method of storing journal files once a month would be removed. Please use the following button to migrate, and feel free to let us know if anything unexpected happened!"])
-
-         (ui/admonition
-          :warning
-          [:p "After migrating, please wait a few seconds, until the sync indicator turned yellow then green, then re-index your repository."])
-
-         (ui/admonition
-          :warning
-          [:p "In the unlikely scenario that the sync indicator turned yellow but did not turn green in a while, please manually re-index your repository and try again."])
-
-         (ui/button "Begin migration"
-                    :on-click #(migration-handler/handle-journal-migration-from-monthly-to-daily! current-repo))])]]))
+                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]])]]))

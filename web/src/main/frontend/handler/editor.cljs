@@ -38,6 +38,7 @@
             [frontend.extensions.html-parser :as html-parser]
             [medley.core :as medley]
             [frontend.text :as text]
+            [frontend.date :as date]
             [clojure.core.async :as async]))
 
 ;; TODO: refactor the state, it is already too complex.
@@ -351,12 +352,20 @@
        (let [file (db/entity repo (:db/id file))]
          (cond
            ;; Page was referenced but no related file
+           ;; TODO: replace with handler.page/create!
            (and page (not file))
            (let [format (name format)
+                 title (string/capitalize (:page/name page))
+                 journal-page? (date/valid-journal-title? title)
                  path (str
-                       config/default-pages-directory "/"
-                       (-> (:page/name page)
-                           (string/replace #"\s+" "_")) "."
+                       (if journal-page?
+                         config/default-journals-directory
+                         config/default-pages-directory)
+                       "/"
+                       (if journal-page?
+                         (date/journal-title->default title)
+                         (-> (:page/name page)
+                             (string/replace #"\s+" "_"))) "."
                        (if (= format "markdown") "md" format))
                  file-path (str "/" path)
                  dir (util/get-repo-dir repo)]
@@ -510,11 +519,19 @@
                                 (ok-handler [first-block last-block v2]))))))]
      (cond
        (and (not file) page)
+       ;; TODO: replace with handler.page/create!
        (let [format (name format)
+             title (string/capitalize (:page/name page))
+             journal-page? (date/valid-journal-title? title)
              path (str
-                   config/default-pages-directory "/"
-                   (-> (:page/name page)
-                       (string/replace #"\s+" "_"))
+                   (if journal-page?
+                     config/default-journals-directory
+                     config/default-pages-directory)
+                   "/"
+                   (if journal-page?
+                     (date/journal-title->default title)
+                     (-> (:page/name page)
+                         (string/replace #"\s+" "_")))
                    "."
                    (if (= format "markdown") "md" format))
              file-path (str "/" path)

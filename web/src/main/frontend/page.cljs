@@ -3,7 +3,6 @@
             [frontend.state :as state]
             [frontend.components.sidebar :as sidebar]
             [frontend.ui :as ui]
-            [frontend.handler.notification :as notification]
             [frontend.storage :as storage]))
 
 (rum/defc route-view
@@ -13,17 +12,6 @@
 (rum/defc current-page < rum/reactive
   {:did-mount (fn [state]
                 (state/set-root-component! (:rum/react-component state))
-                (when (and (not= (state/get-journal-basis) "daily")
-                           (not= (storage/get "migration-notified") "true"))
-                    (notification/show! 
-                     [:p
-                      "Logseq is moving towards a daily basis for storing journal entries and the current monthly journal files is deprecated and would be made read-only in a later time. To begin your migration, go to Settings."
-                      [:br]
-                      (ui/button "Go to Settings"
-                                 :href "/settings" 
-                                 :on-click (fn [e] (notification/clear! e) (storage/set "migration-notified" "true")))]
-                     :warning
-                     false))
                 state)}
   []
   (when-let [route-match (state/sub :route-match)]

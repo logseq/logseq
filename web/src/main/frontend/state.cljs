@@ -15,6 +15,7 @@
   (atom
    {:route-match nil
     :today nil
+    :daily/migrating? nil
     :db/batch-txs (async/chan 100)
     :notification/show? false
     :notification/content nil
@@ -695,3 +696,7 @@
     (some (fn [{:keys [last-stored-at last-modified-at]}]
             (> last-modified-at last-stored-at))
           status)))
+
+(defn set-daily-migrating!
+  [value]
+  (set-state! :daily/migrating? value))

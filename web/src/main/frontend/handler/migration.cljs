@@ -1,5 +1,6 @@
 (ns frontend.handler.migration
   (:require [frontend.handler.repo :as repo-handler]
+            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [promesa.core :as p]
             [frontend.util :as util]
@@ -22,30 +23,41 @@
 
 (defn handle-journal-migration-from-monthly-to-daily!
   [repo]
-  (repo-handler/set-config! :journal-basis "daily")
+  (state/set-daily-migrating! true)
   (let [all-journals (->>
                       (db/q repo [:journals] {:use-cache? false}
-                            '[:find ?page-name
-                              :where
-                              [?page :page/journal? true]
-                              [?page :page/original-name ?page-name]])
+                        '[:find ?page-name
+                          :where
+                          [?page :page/journal? true]
+                          [?page :page/original-name ?page-name]])
                       (db/react)
                       (map first)
                       (map (fn [el] {:title el :page (db/get-page-blocks repo el)}))
                       (util/remove-nils)
                       (map get-files-from-blocks)
                       (remove nil?))
-        journals-dir (str (frontend.util/get-repo-dir repo) "/journals")]
-
-    (frontend.util/p-handle
-     (frontend.fs/readdir journals-dir)
-     (fn [files]
-       (let [to-delete (filter #(re-matches #"[0-9]{4}_[0-9]{2}.*" %) (js->clj files))]
-         (doall (map (fn [{:keys [path page]}]
-                       (println "migrating" path)
-                       (p/let [file-exists? (fs/create-if-not-exists (util/get-repo-dir repo) path page)]
-                         (db/reset-file! repo path page)
-                         (ui-handler/re-render-root!)
-                         (git-handler/git-add repo path))) all-journals))
-         (doall (map #(file-handler/remove-file! repo (str "journals/" %)) to-delete))))
-     #(println "Migration failed"))))
+        all-files (map first (db/get-files repo))]
+    (let [to-delete (filter #(re-find #"journals/[0-9]{4}_[0-9]{2}\.+" %) all-files)]
+      (-> (p/all (doall (map (fn [{:keys [path page]}]
+                               (println "migrating" path)
+                               (p/let [file-exists? (fs/create-if-not-exists (util/get-repo-dir repo) path page)]
+                                 (db/reset-file! repo path page)
+                                 (git-handler/git-add repo path))) all-journals)))
+          (p/then
+           (fn [_result]
+             (let [remove-files (doall (map (fn [path]
+                                              (db/delete-file! repo path)
+                                              (file-handler/remove-file! repo path)) to-delete))]
+               (-> (p/all remove-files)
+                   (p/then (fn [result]
+                             (println "Migration successfully!")
+                             (state/set-daily-migrating! false)
+                             (ui-handler/re-render-root!)
+                             (notification/show!
+                              "Migration successfully!"
+                              :success)
+                             ))
+                   (p/catch (fn [error]
+                              (state/set-daily-migrating! false)
+                              (println "Migration failed: ")
+                              (js/console.dir error)))))))))))
