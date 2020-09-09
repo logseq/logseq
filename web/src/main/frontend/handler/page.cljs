@@ -307,7 +307,9 @@
   [page-name]
   (let [last-block (last (db/get-page-blocks (state/get-current-repo) "contents"))
         last-empty? (>= 3 (count (:block/content last-block)))
-        new-content (if last-empty? (str "## [[" page-name "]]") (str (:block/content last-block) "## [[" page-name "]]"))]
+        heading-pattern (config/get-block-pattern (state/get-preferred-format))
+        pre-str (str heading-pattern heading-pattern)
+        new-content (if last-empty? (str pre-str " [[" page-name "]]") (str (:block/content last-block) pre-str " [[" page-name "]]"))]
     (editor-handler/insert-new-block-aux!
      "Contents"
      last-block
