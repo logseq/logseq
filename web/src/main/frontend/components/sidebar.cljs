@@ -321,7 +321,12 @@
        
        [:div#main-content.flex.wrapper.overflow-y-auto {:style {:height "100vh"}}
         (when-not config/mobile? 
-          [:div#sidebar-nav-wrapper.flex-col (sidebar-nav route-match nil)])
+            [:div#sidebar-nav-wrapper.flex-col
+             {:style {:flex (if (state/get-left-sidebar-open)
+                              "0 1 20%"
+                              "0 0 0px")}}
+             (when (state/sub :ui/left-sidebar-open?)
+               (sidebar-nav route-match nil))])
         [:div.flex.#main-content-container.justify-center
          {:class (if global-graph-pages?
                    "initial"
@@ -366,9 +371,15 @@
        (custom-context-menu)
        [:a#download.hidden]
        (when-not config/mobile?
-         [:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+         [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
           {:style {:right 24}
            :title "Click to check shortcuts and other tips"
            :on-click (fn []
                        (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-          "?"])]]]))
+          "?"]
+         [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+          {:style {:left 24}
+           :title "Click to show/hide sidebar"
+           :on-click (fn []
+                       (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
+          (if (state/sub :ui/left-sidebar-open?) "<" ">")]])]]]))
