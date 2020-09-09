@@ -15,8 +15,6 @@
 
 (defn get-files-from-blocks
   [blocks]
-  (println (count (:page blocks)))
-  (println (:page blocks))
   (if (<= (count (:page blocks)) 1)
     nil
     {:path (str config/default-journals-directory "/" (date/journal-title->default (:title blocks)) "." (config/get-file-extension (state/get-preferred-format)))
