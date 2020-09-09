@@ -15,13 +15,13 @@
                 (state/set-root-component! (:rum/react-component state))
                 (when (and (not= (state/get-journal-basis) "daily")
                            (not= (storage/get "migration-notified") "true"))
-                    (storage/set "migration-notified" "true")
                     (notification/show! 
                      [:p
-                      "Logseq is moving towards a daily basis for storing journal entries for performance and data security reasons. The current monthly journal files is deprecated and would be made read-only in a later time. To begin your migration, go to Settings."
+                      "Logseq is moving towards a daily basis for storing journal entries and the current monthly journal files is deprecated and would be made read-only in a later time. To begin your migration, go to Settings."
+                      [:br]
                       (ui/button "Go to Settings"
                                  :href "/settings" 
-                                 :on-click notification/clear!)]
+                                 :on-click (fn [e] (notification/clear! e) (storage/set "migration-notified" "true")))]
                      :warning
                      false))
                 state)}
