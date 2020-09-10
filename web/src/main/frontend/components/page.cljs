@@ -32,7 +32,8 @@
             [frontend.graph :as graph]
             [frontend.format.mldoc :as mldoc]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [cljs.pprint :as pprint]))
 
 (defn- get-page-name
   [state]
@@ -255,7 +256,8 @@
             file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
             today? (and
                     journal?
-                    (= page-name (string/lower-case (date/journal-name))))]
+                    (= page-name (string/lower-case (date/journal-name))))
+            developer-mode? (state/sub [:ui/developer-mode?])]
         [:div.flex-1.page.relative
          [:div.relative
           (when (and (not block?) (not sidebar?))
@@ -284,7 +286,20 @@
                           (when (and (not journal?) file)
                             {:title "Un-publish this page on Logseq"
                              :options {:on-click (fn []
-                                                   (page-handler/unpublish-page! page-name))}})]
+                                                   (page-handler/unpublish-page! page-name))}})
+                          (when developer-mode?
+                            {:title "(Dev) Show page data"
+                             :options {:on-click (fn []
+                                                   (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                                     (println page-data)
+                                                     (notification/show!
+                                                      [:div
+                                                       [:pre.code page-data]
+                                                       [:br]
+                                                       (ui/button "Copy to clipboard"
+                                                                  :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                      :success
+                                                      false)))}})]
                          (remove nil?))]
               (when (seq links)
                 (ui/dropdown-with-links

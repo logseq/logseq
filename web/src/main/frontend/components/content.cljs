@@ -1,5 +1,6 @@
 (ns frontend.components.content
   (:require [rum.core :as rum]
+            [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.protocol :as protocol]
             [frontend.handler :as handler]
@@ -15,6 +16,8 @@
             [goog.object :as gobj]
             [dommy.core :as d]
             [clojure.string :as string]
+            [cljs.pprint :as pprint]
+            [frontend.handler.notification :as notification]
             [frontend.components.editor :as editor]))
 
 (defn- set-format-js-loading!
@@ -90,7 +93,23 @@
      {:key "Copy as JSON"
       :on-click (fn [_e]
                   (export-handler/copy-block-as-json! block-id))}
-     "Copy as JSON")]])
+     "Copy as JSON")
+    (when (state/sub [:ui/developer-mode?])
+      (ui/menu-link
+       {:key "(Dev) Show block data"
+       :on-click (fn []
+                   (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
+                     (println block-data)
+                     (notification/show!
+                      [:div
+                       [:pre.code block-data]
+                       [:br]
+                       (ui/button "Copy to clipboard"
+                                  :on-click #(.writeText js/navigator.clipboard block-data))]
+                      :success
+                      false)))}
+       "(Dev) Show block data")
+      )]]) 
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after

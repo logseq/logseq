@@ -55,6 +55,8 @@
     :ui/root-component nil
     :ui/custom-query-components {}
     :ui/show-recent? false
+    :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
+                            false)
     :document/mode? (or (storage/get :document/mode?) false)
 
     :github/contents {}
@@ -709,3 +711,8 @@
 (defn set-daily-migrating!
   [value]
   (set-state! :daily/migrating? value))
+
+(defn set-developer-mode!
+  [value]
+  (set-state! :ui/developer-mode? value)
+  (storage/set "developer-mode" (str value)))

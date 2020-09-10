@@ -65,7 +65,8 @@
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
-        current-repo (state/get-current-repo)]
+        current-repo (state/get-current-repo)
+        developer-mode? (state/sub [:ui/developer-mode?])]
     [:div#settings
      [:h1.title "Settings"]
 
@@ -147,4 +148,18 @@
                                 (if (= "Enter" k)
                                   (when-let [server (util/evalue event)]
                                     (user-handler/set-cors! server)
-                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]])]]))
+                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+         
+         [:hr]
+         
+         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "developer_mode"}
+           "Developer mode"]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            (ui/button (if developer-mode? "Disable developer mode" "Enable developer mode")
+             :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
+         
+         [:br]
+         "Developer mode helps contributors and extension developers test their integration with Logseq more efficient."])]]))
