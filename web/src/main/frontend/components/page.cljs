@@ -61,7 +61,7 @@
                              {:start-pos (utf8/length (utf8/encode content))
                               :end-pos nil})}))
                       journal?)
-        start-level (or (:block/level (first page-blocks)) 1 )
+        start-level (or (:block/level (first page-blocks)) 1)
         hiccup-config {:id encoded-page-name
                        :start-level start-level
                        :sidebar? sidebar?

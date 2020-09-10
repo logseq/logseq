@@ -941,6 +941,11 @@
   [page-format directives-content directives]
   (let [directives (medley/map-keys name directives)
         lines (string/split-lines directives-content)
+        front-matter-format? (contains? #{:markdown} page-format)
+        lines (if front-matter-format?
+                (remove (fn [line]
+                          (contains? #{"---" ""} (string/trim line))) lines)
+                lines)
         directive-keys (keys directives)
         prefix-f (case page-format
                    :org (fn [k]
@@ -951,8 +956,7 @@
         exists? (atom #{})
         lines (doall
                (mapv (fn [line]
-                       (let [result (filter #(and (util/starts-with? line (prefix-f %))
-                                                  %)
+                       (let [result (filter #(and % (util/starts-with? line (prefix-f %)))
                                             directive-keys)]
                          (if (seq result)
                            (let [k (first result)]
@@ -969,7 +973,9 @@
                    (mapv
                     (fn [[k v]] (str (prefix-f k) v))
                     not-exists))))]
-    (string/join "\n" lines)))
+    (util/format
+     (config/directives-wrapper-pattern page-format)
+     (string/join "\n" lines))))
 
 (defn get-page-blocks
   ([page]
@@ -997,9 +1003,23 @@
 
 (defn get-page-directives-content
   [page]
-  (let [blocks (get-page-blocks page)]
-    (and (:block/pre-block? (first blocks))
-         (:block/content (first blocks)))))
+  (when-let [content (let [blocks (get-page-blocks page)]
+                  (and (:block/pre-block? (first blocks))
+                       (:block/content (first blocks))))]
+    (let [format (get-page-format page)]
+      (case format
+        :org
+        (->> (string/split-lines content)
+             (take-while (fn [line]
+                           (or (string/blank? line)
+                               (string/starts-with? line "#+"))))
+             (string/join "\n"))
+
+        :markdown
+        (str (subs content 0 (string/last-index-of content "---\n\n"))
+             "---\n\n")
+
+        content))))
 
 (defn block-and-children-transform
   [result repo-url block-uuid level]
@@ -1462,7 +1482,12 @@
        (and journal? (seq blocks) (not (date/valid-journal-title? (second (first (:block/title (first blocks)))))))
        blocks
 
-       (and (not journal?) (seq blocks))
+       (and (not journal?)
+            (seq blocks)
+            (or (and (> (count blocks) 1)
+                     (:block/pre-block? (first blocks)))
+                (and (>= (count blocks) 1)
+                     (not (:block/pre-block? (first blocks))))))
        blocks
 
        :else
@@ -1481,7 +1506,8 @@
                                           :end-pos end-pos}
                              :block/body nil
                              :block/dummy? true
-                             :block/marker nil})
+                             :block/marker nil
+                             :block/pre-block? false})
                           default-option)
              blocks (vec (concat blocks [dummy]))]
          (if (and journal? (> (count blocks) 1))

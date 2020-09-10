@@ -82,7 +82,7 @@
 (def mobile?
   (re-find #"Mobi" js/navigator.userAgent))
 
-;; TODO: move to format ns
+;; TODO: protocol design for future formats support
 
 (defn get-block-pattern
   [format]
@@ -196,6 +196,20 @@
     [(util/format "[%s]()" label)
      1]
     ["" 0]))
+
+(defn directives-wrapper
+  [format]
+  (case format
+    :markdown
+    "---\n\n---"
+    ""))
+
+(defn directives-wrapper-pattern
+  [format]
+  (case format
+    :markdown
+    "---\n%s\n---"
+    "%s"))
 
 (defn get-file-extension
   [format]

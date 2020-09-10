@@ -228,32 +228,23 @@
   (when-let [page-name (:page/name page)]
     (let [original-page-name (get page :page/original-name page-name)
           page (string/lower-case page-name)
+          page-entity (db/entity [:page/name page])
           href (if html-export?
                  (util/encode-str page)
                  (str "/page/" (util/encode-str page)))]
       [:a.page-ref
-       {:href href
-        :on-click (fn [e]
-                    (util/stop e)
-                    (when (gobj/get e "shiftKey")
-                      (when-let [page-entity (db/entity [:page/name page])]
+       (if page-entity
+         {:href href
+          :on-click (fn [e]
+                      (util/stop e)
+                      (when (gobj/get e "shiftKey")
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
-                         {:page page-entity}))))}
-       ;; (if page-entity
-       ;;   {:href href
-       ;;    :on-click (fn [e]
-       ;;                (util/stop e)
-       ;;                (when (gobj/get e "shiftKey")
-       ;;                  (state/sidebar-add-block!
-       ;;                   (state/get-current-repo)
-       ;;                   (:db/id page-entity)
-       ;;                   :page
-       ;;                   {:page page-entity})))}
-       ;;   {:class "warning"
-       ;;    :title "Orphan page"})
+                         {:page page-entity})))}
+         {:class "warning"
+          :title "Orphan page"})
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
@@ -494,7 +485,7 @@
                   (->elem
                    :a
                    (cond->
-                     {:href href}
+                       {:href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -507,8 +498,8 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -1101,16 +1092,16 @@
     (when-not pre-block-only-title?
       [:div.ls-block.flex.flex-col.pt-1
        (cond->
-         {:id block-id
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-block? " pre-block"))
-          :blockid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
+           {:id block-id
+            :style {:position "relative"}
+            :class (str uuid
+                        (when dummy? " dummy")
+                        (when (and collapsed? has-child?) " collapsed")
+                        (when pre-block? " pre-block"))
+            :blockid (str uuid)
+            :repo repo
+            :level level
+            :haschild (str has-child?)}
          (not slide?)
          (merge attrs))
 
@@ -1488,7 +1479,7 @@
       :else
       "")
     (catch js/Error e
-      (prn "Convert to html failed, error: " e)
+      (println "Convert to html failed, error: " e)
       "")))
 
 (defn blocks-cp

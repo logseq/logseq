@@ -68,14 +68,18 @@
 
 (defn page-add-directives!
   [page-name directives]
-  (when-let [directives-content (string/trim (db/get-page-directives-content page-name))]
-    (let [page (db/entity [:page/name page-name])
-          file (db/entity (:db/id (:page/file page)))
+  (let [page (db/entity [:page/name page-name])
+        page-format (db/get-page-format page-name)
+        directives-content (db/get-page-directives-content page-name)
+        directives-content (if directives-content
+                             (string/trim directives-content)
+                             (config/directives-wrapper page-format))]
+    (let [file (db/entity (:db/id (:page/file page)))
           file-path (:file/path file)
           file-content (db/get-file file-path)
           after-content (subs file-content (inc (count directives-content)))
-          page-format (db/get-page-format page-name)
           new-directives-content (db/add-directives! page-format directives-content directives)
+          _ (prn new-directives-content)
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
                                file-path
@@ -267,41 +271,43 @@
 
 (defn rename!
   [old-name new-name]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
-      (let [old-original-name (:page/original-name page)
-            file (:page/file page)]
-        (d/transact! (db/get-conn repo false)
-          [{:db/id (:db/id page)
-            :page/name (string/lower-case new-name)
-            :page/original-name new-name}])
+  (when (and old-name new-name
+             (not= (string/lower-case old-name) (string/lower-case new-name)))
+    (when-let [repo (state/get-current-repo)]
+      (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
+        (let [old-original-name (:page/original-name page)
+              file (:page/file page)]
+          (d/transact! (db/get-conn repo false)
+            [{:db/id (:db/id page)
+              :page/name (string/lower-case new-name)
+              :page/original-name new-name}])
 
-        (when file
-          (page-add-directives! (string/lower-case new-name) {:title new-name}))
+          (when file
+            (page-add-directives! (string/lower-case new-name) {:title new-name}))
 
-        ;; update all files which have references to this page
-        (let [files (db/get-files-that-referenced-page (:db/id page))]
-          (doseq [file-path files]
-            (let [file-content (db/get-file file-path)
-                  ;; FIXME: not safe
-                  new-content (string/replace file-content
-                                              (util/format "[[%s]]" old-original-name)
-                                              (util/format "[[%s]]" new-name))]
-              (file-handler/alter-file repo
-                                       file-path
-                                       new-content
-                                       {:reset? true
-                                        :re-render-root? false})))))
+          ;; update all files which have references to this page
+          (let [files (db/get-files-that-referenced-page (:db/id page))]
+            (doseq [file-path files]
+              (let [file-content (db/get-file file-path)
+                    ;; FIXME: not safe
+                    new-content (string/replace file-content
+                                                (util/format "[[%s]]" old-original-name)
+                                                (util/format "[[%s]]" new-name))]
+                (file-handler/alter-file repo
+                                         file-path
+                                         new-content
+                                         {:reset? true
+                                          :re-render-root? false})))))
 
-      ;; TODO: update browser history, remove the current one
+        ;; TODO: update browser history, remove the current one
 
-      ;; Redirect to the new page
-      (route-handler/redirect! {:to :page
-                                :path-params {:name (util/encode-str (string/lower-case new-name))}})
+        ;; Redirect to the new page
+        (route-handler/redirect! {:to :page
+                                  :path-params {:name (util/encode-str (string/lower-case new-name))}})
 
-      (notification/show! "Page renamed successfully!" :success)
+        (notification/show! "Page renamed successfully!" :success)
 
-      (ui-handler/re-render-root!))))
+        (ui-handler/re-render-root!)))))
 
 (defn handle-add-page-to-contents!
   [page-name]
@@ -315,7 +321,7 @@
      last-block
      new-content
      false
-     (fn [[_first-block last-block _new-block-content]] 
+     (fn [[_first-block last-block _new-block-content]]
        (notification/show! "Added to contents!" :success)
        (editor-handler/clear-when-saved!))
      true
