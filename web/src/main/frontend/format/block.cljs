@@ -91,7 +91,9 @@
 
 (defn extract-properties
   [[_ properties] start-pos end-pos]
-  {:properties (into {} properties)
+  {:properties (->> (into {} properties)
+                    (medley/map-vals (fn [v]
+                                       (and v (string/trim v)))))
    :start-pos start-pos
    :end-pos end-pos})
 

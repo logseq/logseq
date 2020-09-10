@@ -79,7 +79,6 @@
           file-content (db/get-file file-path)
           after-content (subs file-content (inc (count directives-content)))
           new-directives-content (db/add-directives! page-format directives-content directives)
-          _ (prn new-directives-content)
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
                                file-path

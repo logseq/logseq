@@ -808,7 +808,8 @@
             {:keys [start-pos end-pos]} properties-meta
             start-pos (- start-pos (:start-pos meta))]
         (cond
-          (= (get properties key) value)
+          (and (get properties key)
+               (= (string/trim (get properties key)) value))
           nil
 
           (and start-pos end-pos (> end-pos start-pos))
