@@ -313,9 +313,8 @@
               (if page-original-name
                 (if (and (string/includes? page-original-name "[[")
                          (string/includes? page-original-name "]]"))
-                  (when page-original-name
-                    (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                      (hiccup/block-cp {} (ffirst ast))))
+                  (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
+                    (hiccup/block-cp {} (ffirst ast)))
                   page-original-name)
                 (or
                  page-name
