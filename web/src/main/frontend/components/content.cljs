@@ -168,7 +168,8 @@
                                               :left (str client-x "px")
                                               :top (str client-y "px")))))
 
-                          (state/in-selection-mode?)
+                          (and (state/in-selection-mode?)
+                               (seq (state/get-selection-blocks)))
                           (do
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
