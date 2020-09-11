@@ -190,22 +190,6 @@
         ;;       (git-handler/git-add repo-url path))))
         ))))
 
-(defn- default-month-journal-content
-  [format]
-  (let [{:keys [year month day]} (date/get-date)
-        last-day (date/get-month-last-day)
-        logged? (state/logged?)]
-    (->> (map
-           (fn [day]
-             (let [d (date/format (t/date-time year month day))
-                   today? (= d (date/journal-name))]
-               (util/format
-                "%s %s\n"
-                (config/get-block-pattern format)
-                d)))
-           (range 1 (inc last-day)))
-         (apply str))))
-
 (defn create-contents-file
   [repo-url]
   (let [repo-dir (util/get-repo-dir repo-url)

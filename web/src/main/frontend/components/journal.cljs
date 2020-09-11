@@ -4,6 +4,7 @@
             [frontend.date :as date]
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
@@ -19,27 +20,6 @@
             [frontend.utf8 :as utf8]
             [goog.object :as gobj]
             [clojure.string :as string]))
-
-(defn- journal-include-template!
-  [state]
-  (let [[[title format]] (:rum/args state)
-        page (string/lower-case title)
-        today? (= page (string/lower-case (date/journal-name)))
-        repo (state/get-current-repo)]
-    ;; no contents yet
-    (when today?
-      (let [raw-blocks (db/get-page-blocks repo page)
-            blocks (db/with-dummy-block raw-blocks format nil true)]
-        (when (= 1 (count raw-blocks))
-          (when-let [template (state/get-journal-template)]
-            (when-not (string/blank? template)
-              (editor/insert-new-block-aux!
-               (first blocks)
-               template
-               false
-               nil
-               true)))))))
-  state)
 
 (rum/defc blocks-inner < rum/static
   {:did-mount (fn [state]
@@ -80,8 +60,6 @@
     (blocks-inner blocks encoded-page-name page)))
 
 (rum/defc journal-cp < rum/reactive
-  {:init journal-include-template!
-   :did-update journal-include-template!}
   [[title format]]
   (let [;; Don't edit the journal title
         page (string/lower-case title)

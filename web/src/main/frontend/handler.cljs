@@ -21,8 +21,14 @@
 
 (defn- watch-for-date!
   []
-  (js/setInterval #(state/set-today! (date/today))
-                  10000))
+  (js/setInterval (fn []
+                    (state/set-today! (date/today))
+                    (when-let [repo (state/get-current-repo)]
+                      (let [today-page (string/lower-case (date/today))]
+                        (when (empty? (db/get-page-blocks repo today-page))
+                          (prn "Create today journal")
+                          (repo-handler/create-today-journal-if-not-exists repo)))))
+                  1000))
 
 ;; Avoid introducing core.async for smaller bundle size for now
 (defn restore-and-setup!
