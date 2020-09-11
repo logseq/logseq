@@ -20,6 +20,7 @@
   []
   (conj
    #{"MMM do, yyyy"
+     "MMMM do, yyyy"
      "E, MM/dd/yyyy"
      "E, yyyy/MM/dd"
      "EEE, MM/dd/yyyy"
@@ -180,6 +181,10 @@
 (defn journal-title->default
   [journal-title]
   (journal-title-> journal-title #(tf/unparse default-journal-title-formatter %)))
+
+(defn journal-title->custom-format
+  [journal-title]
+  (journal-title-> journal-title format))
 
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
