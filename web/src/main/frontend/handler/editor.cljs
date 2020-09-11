@@ -365,11 +365,11 @@
                        (if journal-page?
                          (date/journal-title->default title)
                          (-> (:page/name page)
-                             (string/replace #"\s+" "_")
-                             (string/replace "." "_"))) "."
+                             (string/replace #"\s+" "_"))) "."
                        (if (= format "markdown") "md" format))
                  file-path (str "/" path)
                  dir (util/get-repo-dir repo)]
+             (prn {:file-path file-path})
              (p/let [exists? (fs/file-exists? dir file-path)]
                (if exists?
                  (notification/show!
@@ -533,8 +533,7 @@
                    (if journal-page?
                      (date/journal-title->default title)
                      (-> (:page/name page)
-                         (string/replace #"\s+" "_")
-                         (string/replace "." "_")))
+                         (string/replace #"\s+" "_")))
                    "."
                    (if (= format "markdown") "md" format))
              file-path (str "/" path)

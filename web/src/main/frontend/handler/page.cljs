@@ -37,8 +37,7 @@
               path (str (if journal-page?
                           (date/journal-title->default title)
                           (-> page
-                              (string/replace #"\s+" "_")
-                              (string/replace "." "_")))
+                              (string/replace #"\s+" "_")))
                         "."
                         (if (= format "markdown") "md" format))
               path (str directory "/" path)

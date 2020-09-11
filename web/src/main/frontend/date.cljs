@@ -150,9 +150,7 @@
 (defn valid-journal-title?
   [title]
   (and title
-       (or
-        (valid? (string/capitalize title))
-        (not (js/isNaN (js/Date.parse title))))))
+       (valid? (string/capitalize title))))
 
 (defn journal-title->
   [journal-title then-fn]
