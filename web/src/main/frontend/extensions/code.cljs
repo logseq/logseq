@@ -15,10 +15,9 @@
                 (highlight! state)
                 state)}
   [state id attr code]
-  (let []
-    [:pre.code
-     [:code (assoc attr :id id)
-      code]]))
+  [:pre.code
+   [:code (assoc attr :id id)
+    code]])
 
 (defn html-export
   [attr code]

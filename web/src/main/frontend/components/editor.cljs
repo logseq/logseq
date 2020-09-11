@@ -19,6 +19,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [clojure.string :as string]
+            [clojure.set :as set]
             [frontend.commands :as commands
              :refer [*show-commands
                      *matched-commands
@@ -472,11 +473,6 @@
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
-              (editor-handler/surround-by? input "[[" "]]")
-              (do
-                (commands/handle-step [:editor/search-page])
-                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-
               (and
                (not= key-code 8) ;; backspace
                (or
@@ -493,27 +489,30 @@
                (state/get-editor-show-page-search-hashtag))
               (state/set-editor-show-page-search-hashtag false)
 
-              (editor-handler/surround-by? input "((" "))")
-              (do
-                (commands/handle-step [:editor/search-block :reference])
-                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-
               (and
-               (contains? (set (keys editor-handler/reversed-autopair-map)) key)
-               (= (editor-handler/get-previous-input-chars input 2) (str key key)))
-              nil
-
-              (contains? (set (keys editor-handler/autopair-map)) key)
-              (do
-                (util/stop e)
-                (editor-handler/autopair input-id key format nil))
-
-              (and
-               (contains? (set (keys editor-handler/reversed-autopair-map)) key)
+               (contains? (set/difference (set (keys editor-handler/reversed-autopair-map))
+                                          #{"`"})
+                          key)
                (= (editor-handler/get-current-input-char input) key))
               (do
                 (util/stop e)
                 (util/cursor-move-forward input 1))
+
+              (contains? (set (keys editor-handler/autopair-map)) key)
+              (do
+                (util/stop e)
+                (editor-handler/autopair input-id key format nil)
+                (cond
+                  (editor-handler/surround-by? input "[[" "]]")
+                  (do
+                    (commands/handle-step [:editor/search-page])
+                    (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+                  (editor-handler/surround-by? input "((" "))")
+                  (do
+                    (commands/handle-step [:editor/search-block :reference])
+                    (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+                  :else
+                  nil))
 
               :else
               nil))))
