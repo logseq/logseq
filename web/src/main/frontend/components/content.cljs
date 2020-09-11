@@ -109,7 +109,7 @@
                       :success
                       false)))}
        "(Dev) Show block data")
-      )]]) 
+      )]])
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -279,11 +279,12 @@
                     on-click
                     on-hide]
              :as option}]
-  (let [in-selection-mode? (state/sub :selection/mode)]
+  (let [in-selection-mode? (state/sub :selection/mode)
+        selected-blocks (state/sub :selection/blocks)]
     (if hiccup
       [:div
        (hiccup-content id option)
-       (when in-selection-mode?
+       (when (and in-selection-mode? (seq selected-blocks))
          (hidden-selection))]
       (let [format (format/normalize format)]
         (non-hiccup-content id content on-click on-hide config format)))))

@@ -899,6 +899,8 @@
   [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid (str uuid)
+               ;; FIXME: Click to copy a selection instead of click first and then copy
+               ;; It seems that `util/caret-range` can't get the correct range
                :on-click (fn [e]
                            (let [target (gobj/get e "target")]
                              (when-not (or (util/link? target)
