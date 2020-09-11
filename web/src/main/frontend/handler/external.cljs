@@ -19,7 +19,10 @@
                             config/default-journals-directory
                             config/default-pages-directory)
                           "/"
-                          (string/replace title "/" "-") ".md")]
+                          (if journal?
+                            (date/journal-title->default title)
+                            (string/replace title "/" "-"))
+                          ".md")]
             (file-handler/alter-file repo path text {})
             (when journal?
               (let [page-name (string/lower-case title)]
