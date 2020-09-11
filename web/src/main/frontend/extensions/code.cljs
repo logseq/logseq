@@ -3,43 +3,21 @@
             [frontend.loader :as loader]
             [frontend.config :as config]))
 
-;; TODO: extracted to a rum mixin
-(defn loaded? []
-  js/window.katex)
-
-(defonce *loading? (atom true))
-
 (defn highlight!
   [state]
-  (let [[id attr] (:rum/args state)
-        done? (get state ::done?)]
+  (let [[id attr] (:rum/args state)]
     (when (:data-lang attr)
       (when-let [element (js/document.getElementById id)]
-        (js/hljs.highlightBlock element)))
-    (reset! done? true)))
+        (js/hljs.highlightBlock element)))))
 
 (rum/defcs highlight < rum/reactive
-  (rum/local false ::done?)
   {:did-mount (fn [state]
-                (if (loaded?)
-                  (do
-                    (reset! *loading? false)
-                    (highlight! state))
-                  (do
-                    (reset! *loading? true)
-                    (loader/load
-                     (config/asset-uri "/static/js/highlight.min.js")
-                     (fn []
-                       (reset! *loading? false)
-                       (highlight! state)))))
+                (highlight! state)
                 state)}
   [state id attr code]
-  (let [loading? (rum/react *loading?)
-        done? @(get state ::done?)]
+  (let []
     [:pre.code
-     [:code (assoc attr
-                   :id id
-                   :style {:opacity (if done? 1 0)})
+     [:code (assoc attr :id id)
       code]]))
 
 (defn html-export
