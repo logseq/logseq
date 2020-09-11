@@ -36,7 +36,7 @@
 (defonce history
   (atom {}))
 
-(def ^:const history-limit 100)
+(def ^:const history-limit 20)
 
 (defonce current-id (atom nil))
 
@@ -116,6 +116,16 @@
 (defn clear-specific-history!
   [k]
   (swap! history assoc k []))
+
+(defn init-history!
+  [repo-url]
+  (clear-specific-history! [:git/repo repo-url])
+  (add-history!
+   [:git/repo repo-url]
+   {:db (when-let [conn (db/get-conn repo-url false)]
+          (d/db conn))
+    :files-db (when-let [file-conn (db/get-files-conn repo-url)]
+                (d/db file-conn))}))
 
 (comment
   (def k [:git/repo "https://github.com/tiensonqin/notes"])

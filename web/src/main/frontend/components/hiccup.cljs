@@ -1077,7 +1077,8 @@
                                       (d/remove-class! node "hide-inner-bullet"))))
                                 (when (and
                                        (state/in-selection-mode?)
-                                       (= (gobj/get e "buttons") 1))
+                                       (= (gobj/get e "buttons") 1)
+                                       (false? @*dragging?))
                                   (util/stop e)
                                   (editor-handler/highlight-selection-area! block-id)))
                :on-mouse-out (fn [e]

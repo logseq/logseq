@@ -11,6 +11,7 @@
             [frontend.handler.migration :as migration-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.history :as history]
             [frontend.ui :as ui]))
 
 (defn load-more-journals!
@@ -42,10 +43,12 @@
                      (-> (p/all (db/restore! (assoc me :repos repos)
                                              (fn [repo]
                                                (file-handler/restore-config! repo false)
-                                               (when (and (state/logged?)
-                                                          (db/cloned? repo)
-                                                          (not (db/get-today-journal repo)))
-                                                 (repo-handler/read-repair-journals! repo)))))
+                                               (js/setTimeout #(history/init-history! repo) 1000)
+                                               ;; (when (and (state/logged?)
+                                               ;;            (db/cloned? repo)
+                                               ;;            (not (db/get-today-journal repo)))
+                                               ;;   (repo-handler/read-repair-journals! repo))
+                                               )))
                          (p/then
                           (fn []
                             (if (and (not logged?)

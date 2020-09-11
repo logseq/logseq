@@ -247,13 +247,8 @@
       (when first-clone?
         (create-default-files! repo-url))
 
-      (history/clear-specific-history! [:git/repo repo-url])
-      (history/add-history!
-       [:git/repo repo-url]
-       {:db (when-let [conn (db/get-conn repo-url false)]
-              (d/db conn))
-        :files-db (when-let [file-conn (db/get-files-conn repo-url)]
-                    (d/db file-conn))})
+      (history/init-history! repo-url)
+
       (when first-clone?
         (migration-handler/show!)))))
 
@@ -263,9 +258,12 @@
    repo
    tx
    transact-option)
-  (doseq [[file-path new-content] files]
-    (file-handler/alter-file repo file-path new-content {:reset? false
-                                                         :re-render-root? false})))
+  (when (seq files)
+    (file-handler/alter-files repo files))
+  ;; (doseq [[file-path new-content] files]
+  ;;   (file-handler/alter-file repo file-path new-content {:reset? false
+  ;;                                                        :re-render-root? false}))
+  )
 
 (defn persist-repo-metadata!
   [repo]

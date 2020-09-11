@@ -537,6 +537,12 @@
      (.getDate local-date-time)
      0 0 0 0)))
 
+(defn safe-subvec [xs start end]
+  (if (or (neg? start)
+          (> end (count xs)))
+    []
+    (subvec xs start end)))
+
 (defn get-nodes-between-two-nodes
   [id1 id2 class]
   (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
@@ -544,10 +550,10 @@
           node-1 (gdom/getElement id1)
           node-2 (gdom/getElement id2)
           idx-1 (.indexOf nodes node-1)
-          idx-2 (.indexOf nodes node-2)]
-      (subvec (vec nodes)
-              (min idx-1 idx-2)
-              (inc (max idx-1 idx-2))))))
+          idx-2 (.indexOf nodes node-2)
+          start (min idx-1 idx-2)
+          end (inc (max idx-1 idx-2))]
+      (safe-subvec (vec nodes) start end))))
 
 (defn rec-get-block-node
   [node]
