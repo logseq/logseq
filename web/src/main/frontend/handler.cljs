@@ -26,7 +26,6 @@
                     (when-let [repo (state/get-current-repo)]
                       (let [today-page (string/lower-case (date/today))]
                         (when (empty? (db/get-page-blocks repo today-page))
-                          (prn "Create today journal")
                           (repo-handler/create-today-journal-if-not-exists repo)))))
                   1000))
 
