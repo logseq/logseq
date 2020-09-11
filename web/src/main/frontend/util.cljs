@@ -843,18 +843,25 @@
     keyboard-shortcut))
 
 (defn default-content-with-title
-  [text-format title]
-  (let [contents? (= (string/lower-case title) "contents")]
-    (case (name text-format)
-      "org"
-      (if contents?
-        "** "
-        (format "#+TITLE: %s\n\n** " title))
-      "markdown"
-      (if contents?
-        "## "
-        (format "---\ntitle: %s\n---\n\n## " title))
-      "")))
+  ([text-format title]
+   (default-content-with-title text-format title true))
+  ([text-format title new-block?]
+   (let [contents? (= (string/lower-case title) "contents")
+         properties (case (name text-format)
+                      "org"
+                      (format "#+TITLE: %s" title)
+                      "markdown"
+                      (format "---\ntitle: %s\n---" title)
+                      "")
+         new-block (case (name text-format)
+                     "org"
+                     "** "
+                     "markdown"
+                     "## "
+                     "")]
+     (if contents?
+       new-block
+       (str properties "\n\n" (if new-block? new-block))))))
 
 (defn get-first-block-by-id
   [block-id]

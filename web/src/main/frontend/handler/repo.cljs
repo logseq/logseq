@@ -212,7 +212,10 @@
         format (state/get-preferred-format)
         title (date/today)
         file-name (date/journal-title->default title)
-        content (util/default-content-with-title format title)
+        default-content (util/default-content-with-title format title false)
+        content (if-let [template (state/get-journal-template)]
+                  (str default-content template)
+                  (util/default-content-with-title format title true))
         path (str config/default-journals-directory "/" file-name "."
                   (config/get-file-extension format))
         file-path (str "/" path)
