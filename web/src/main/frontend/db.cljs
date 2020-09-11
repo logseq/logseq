@@ -1146,19 +1146,22 @@
   (let [ast (map first ast)]
     (if (util/starts-with? file "pages/contents.")
       "Contents"
-      (let [file-page-name (get-file-page file)
-            first-block (last (first (filter block/heading-block? ast)))
+      (let [first-block (last (first (filter block/heading-block? ast)))
             directive-name (when (and (= "Directives" (ffirst ast))
                                       (not (string/blank? (:title (last (first ast))))))
                              (:title (last (first ast))))
             first-block-name (and first-block
                                   ;; FIXME:
-                                  (str (last (first (:title first-block)))))]
-        (or
-         directive-name
-         file-page-name
-         first-block-name
-         file)))))
+                                  (str (last (first (:title first-block)))))
+            file-name (when-let [file-name (last (string/split file #"/"))]
+                        (when-let [file-name (first (util/split-last "." file-name))]
+                         (-> file-name
+                             (string/replace "-" " ")
+                             (string/replace "_" " ")
+                             (util/capitalize-all))))]
+        (or directive-name
+            first-block-name
+            file-name)))))
 
 (defn get-block-content
   [utf8-content block]
