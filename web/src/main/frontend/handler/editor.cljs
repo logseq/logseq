@@ -365,7 +365,8 @@
                        (if journal-page?
                          (date/journal-title->default title)
                          (-> (:page/name page)
-                             (string/replace #"\s+" "_"))) "."
+                             (string/replace #"\s+" "_")
+                             (string/replace "." "_"))) "."
                        (if (= format "markdown") "md" format))
                  file-path (str "/" path)
                  dir (util/get-repo-dir repo)]
@@ -532,7 +533,8 @@
                    (if journal-page?
                      (date/journal-title->default title)
                      (-> (:page/name page)
-                         (string/replace #"\s+" "_")))
+                         (string/replace #"\s+" "_")
+                         (string/replace "." "_")))
                    "."
                    (if (= format "markdown") "md" format))
              file-path (str "/" path)
