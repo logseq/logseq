@@ -228,23 +228,20 @@
   (when-let [page-name (:page/name page)]
     (let [original-page-name (get page :page/original-name page-name)
           page (string/lower-case page-name)
-          page-entity (db/entity [:page/name page])
           href (if html-export?
                  (util/encode-str page)
                  (str "/page/" (util/encode-str page)))]
       [:a.page-ref
-       (if page-entity
-         {:href href
-          :on-click (fn [e]
-                      (util/stop e)
-                      (when (gobj/get e "shiftKey")
+       {:href href
+        :on-click (fn [e]
+                    (util/stop e)
+                    (when (gobj/get e "shiftKey")
+                      (when-let [page-entity (db/entity [:page/name page])]
                         (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page-entity)
-                         :page
-                         {:page page-entity})))}
-         {:class "warning"
-          :title "Orphan page"})
+                        (state/get-current-repo)
+                        (:db/id page-entity)
+                        :page
+                        {:page page-entity}))))}
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
@@ -955,10 +952,11 @@
       (when (and (not pre-block?) (seq body))
         [:div.block-body {:style {:display (if collapsed? "none" "")}}
          ;; TODO: consistent id instead of the idx (since it could be changed later)
-         (for [[idx child] (medley/indexed (:block/body block))]
-           (when-let [block (block-cp config child)]
-             (rum/with-key (block-child block)
-               (str uuid "-" idx))))])]
+         (let [body (block/trim-break-lines! (:block/body block))]
+           (for [[idx child] (medley/indexed body)]
+            (when-let [block (block-cp config child)]
+              (rum/with-key (block-child block)
+                (str uuid "-" idx)))))])]
      (when (and block-refs-count (> block-refs-count 0))
        [:div
         [:a.block.py-0.px-2.rounded.bg-base-2.opacity-50.hover:opacity-100
