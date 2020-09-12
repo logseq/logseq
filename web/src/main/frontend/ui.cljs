@@ -5,6 +5,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
+            [frontend.handler.notification :as notification-handler]
             [frontend.state :as state]
             [frontend.components.svg :as svg]
             [clojure.string :as string]
@@ -86,7 +87,7 @@
        text])))
 
 (rum/defc notification-content
-  [state content status]
+  [state content status uid]
   (when (and content status)
     (let [[color-class svg]
           (case status
@@ -117,7 +118,7 @@
                 :d
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z",
                 :fill-rule "evenodd"}]]])]
-      [:div.fixed.inset-0.flex.items-end.justify-center.px-4.py-6.pointer-events-none.sm:p-6.sm:items-start.sm:justify-end
+      [:div.inset-0.flex.items-end.justify-center.px-4.py-3.pointer-events-none.sm:px-6.sm:py-3.sm:items-start.sm:justify-end
        {:style {:z-index (if (or (= state "exiting")
                                  (= state "exited"))
                            -1
@@ -141,7 +142,7 @@
            [:div.ml-4.flex-shrink-0.flex
             [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
              {:on-click (fn []
-                          (swap! state/state assoc :notification/show? false))}
+                          (notification-handler/clear! uid))}
              [:svg.h-5.w-5
               {:fill "currentColor", :view-Box "0 0 20 20"}
               [:path
@@ -152,13 +153,18 @@
 
 (rum/defc notification < rum/reactive
   []
-  (let [show? (state/sub :notification/show?)
-        status (state/sub :notification/status)
-        content (state/sub :notification/content)]
-    (css-transition
-     {:in show? :timeout 100}
-     (fn [state]
-       (notification-content state content status)))))
+  (let [contents (state/sub :notification/contents)]
+   (transition-group 
+    {:class-name "notifications"}
+    (doall (map (fn [el]
+                  (let [k (first el)
+                        v (second el)]
+                    (css-transition
+                     {:timeout 100
+                      :key (name k)}
+                     (fn [state]
+                       (notification-content state (:content v) (:status v) k)))))
+                        contents)))))
 
 (defn checkbox
   [option]
