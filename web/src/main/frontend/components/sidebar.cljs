@@ -293,7 +293,6 @@
             (let [logged? (:name me)]
               (->>
               [(when current-repo
-                 (println (state/sub [:preferred-language]))
                   {:title (t :new-page)
                   :options {:href "/new-page"}})
                 (when current-repo
@@ -312,10 +311,10 @@
                  {:title (t :settings)
                   :options {:href "/settings"}})
                (when current-repo
-                 {:title "Import"
+                 {:title (t :import)
                   :options {:href "/import"}})
                {:title [:div.flex-row.flex.justify-between.items-center
-                        [:span "Join the community"]
+                        [:span (t :join-community)]
                         svg/discord]
                 :options {:href "https://discord.gg/KpN4eHY"
                           :title (t :discord-title)

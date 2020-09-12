@@ -21,22 +21,23 @@
 
 (rum/defcs choose-preferred-format
   []
-  [:div
-   [:h1.title {:style {:margin-bottom "0.25rem"}}
-    "What's your preferred mode?"]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    [:div
+     [:h1.title {:style {:margin-bottom "0.25rem"}}
+      (t :format/preferred-mode)]
 
-   [:div.mt-4.ml-1
-    (ui/button
-      "Markdown"
-      :on-click
-      #(user-handler/set-preferred-format! :markdown))
+     [:div.mt-4.ml-1
+      (ui/button
+       "Markdown"
+       :on-click
+       #(user-handler/set-preferred-format! :markdown))
 
-    [:span.ml-2.mr-2 "-OR-"]
+      [:span.ml-2.mr-2 "-OR-"]
 
-    (ui/button
-      "Org Mode"
-      :on-click
-      #(user-handler/set-preferred-format! :org))]])
+      (ui/button
+       "Org Mode"
+       :on-click
+       #(user-handler/set-preferred-format! :org))]]))
 
 (rum/defc sync-status < rum/reactive
   []
@@ -49,53 +50,53 @@
             changed-files (state/sub [:repo/changed-files repo])
             should-push? (seq changed-files)]
         (rum/with-context [[t] i18n/*tongue-context*]
-        [:div.flex-row.flex.items-center
-          (when pushing?
-            [:span.lds-dual-ring.mt-1])
-          (ui/dropdown
-          (fn [{:keys [toggle-fn]}]
-            [:div.cursor.w-2.h-2.sync-status.mr-2
-              {:class (if (or should-push? pushing?) "bg-orange-400" "bg-green-600")
-              :style {:border-radius "50%"
-                      :margin-top 2}
-              :on-mouse-over
-              (fn [e]
-                (toggle-fn)
-                (js/setTimeout repo-handler/check-changed-files-status 0))}])
-          (fn [{:keys [toggle-fn]}]
-            [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-             {:on-mouse-leave toggle-fn}
-             (if (and should-push? (seq changed-files))
-               [:div
-                [:div.changes
-                  [:ul
-                  (for [file changed-files]
-                    [:li {:key (str "sync-" file)}
-                      [:div.flex.flex-row.justify-between.align-items
-                      [:a {:href (str "/file/" (util/encode-str file))}
-                        file]
-                      [:a.ml-4.text-sm.mt-1
-                        {:on-click (fn [e]
-                                    (export-handler/download-file! file))}
-                        [:span "Download"]]]])]]
+          [:div.flex-row.flex.items-center
+           (when pushing?
+             [:span.lds-dual-ring.mt-1])
+           (ui/dropdown
+            (fn [{:keys [toggle-fn]}]
+              [:div.cursor.w-2.h-2.sync-status.mr-2
+               {:class (if (or should-push? pushing?) "bg-orange-400" "bg-green-600")
+                :style {:border-radius "50%"
+                        :margin-top 2}
+                :on-mouse-over
+                (fn [e]
+                  (toggle-fn)
+                  (js/setTimeout repo-handler/check-changed-files-status 0))}])
+            (fn [{:keys [toggle-fn]}]
+              [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
+               {:on-mouse-leave toggle-fn}
+               (if (and should-push? (seq changed-files))
+                 [:div
+                  [:div.changes
+                   [:ul
+                    (for [file changed-files]
+                      [:li {:key (str "sync-" file)}
+                       [:div.flex.flex-row.justify-between.align-items
+                        [:a {:href (str "/file/" (util/encode-str file))}
+                         file]
+                        [:a.ml-4.text-sm.mt-1
+                         {:on-click (fn [e]
+                                      (export-handler/download-file! file))}
+                         [:span (t :download)]]]])]]
               ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
-                [:div.flex.flex-row.justify-between.align-items.mt-2
-                  (ui/button "Push now"
-                            :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-                  (if pushing?
-                    [:span.lds-dual-ring.mt-1])]]
-                [:p "All local changes are synced!"])
-              [:hr]
-              [:div
-              [:p {:style {:font-size 12}} "Last pulled at: "
-                last-pulled-at]
-              [:div.flex.flex-row.justify-between.align-items
-                (ui/button "Pull now"
-                          :on-click (fn [] (repo-handler/pull-current-repo)))
-                (if pulling?
-                  [:span.lds-dual-ring.mt-1])]
-              [:p.pt-2.text-sm.opacity-50
-                "Version: " version/version]]]))])))))
+                  [:div.flex.flex-row.justify-between.align-items.mt-2
+                   (ui/button (t :git/push)
+                              :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                   (if pushing?
+                     [:span.lds-dual-ring.mt-1])]]
+                 [:p (t :git/local-changes-synced)])
+               [:hr]
+               [:div
+                [:p {:style {:font-size 12}} (t :git/last-pull)
+                 last-pulled-at]
+                [:div.flex.flex-row.justify-between.align-items
+                 (ui/button (t :git/pull)
+                            :on-click (fn [] (repo-handler/pull-current-repo)))
+                 (if pulling?
+                   [:span.lds-dual-ring.mt-1])]
+                [:p.pt-2.text-sm.opacity-50
+                 (t :git/version) version/version]]]))])))))
 
 (rum/defc repos < rum/reactive
   [head? on-click]
@@ -138,24 +139,25 @@
 
 (rum/defc add-repo < rum/reactive
   []
-  (let [repo-url (state/sub :git/clone-repo)]
-    [:div.p-8.flex.items-center.justify-center
-     [:div.w-full.mx-auto
-      [:div
-       [:div
-        [:h1.title.mb-1
-         "Install Logseq on your repo"]
-        [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
-         [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
-          {:autoFocus true
-           :placeholder "https://github.com/username/repo"
-           :on-change (fn [e]
-                        (state/set-git-clone-repo! (util/evalue e)))}]]]]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [repo-url (state/sub :git/clone-repo)]
+      [:div.p-8.flex.items-center.justify-center
+       [:div.w-full.mx-auto
+        [:div
+         [:div
+          [:h1.title.mb-1
+           (t :git/add-repo-prompt)]
+          [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
+           [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
+            {:autoFocus true
+             :placeholder "https://github.com/username/repo"
+             :on-change (fn [e]
+                          (state/set-git-clone-repo! (util/evalue e)))}]]]]
 
-      (ui/button
-        "Add and Install"
-        :on-click
-        (fn []
-          (when (util/starts-with? repo-url "https://github.com/")
-            (let [repo-url (string/replace repo-url ".git" "")]
-              (repo-handler/create-repo! repo-url)))))]]))
+        (ui/button
+         (t :git/add-repo-prompt-confirm)
+         :on-click
+         (fn []
+           (when (util/starts-with? repo-url "https://github.com/")
+             (let [repo-url (string/replace repo-url ".git" "")]
+               (repo-handler/create-repo! repo-url)))))]])))

@@ -44,7 +44,9 @@
                      :commit-message "Commit message (optional)"
                      :pushing "Pushing"
                      :force-push "Commit and force pushing"
-                     :a-force-push "A force push"}}
+                     :a-force-push "A force push"}
+              :add-repo-prompt "Install Logseq on your repo"
+              :add-repo-prompt-confirm "Add and install"}
         :format {:preferred-mode "What's your preferred mode?"
                  :markdown "Markdown"
                  :org-mode "Org Mode"}
@@ -64,6 +66,7 @@
                :publish "Publish this page on Logseq"
                :publish-as-slide "Publish this page as a slide on Logseq"
                :unpublish "Un-publish this page on Logseq"
+               :add-to-contents "Add to Contents"
                :show-journals "Show Journals"
                :show-name "Show page name"
                :hide-name "Hide page name"
@@ -73,6 +76,7 @@
         :journal {:multiple-files-with-different-formats "It seems that you have multiple journal files (with different formats) for the same month, please only keep one journal file for each month."
                   :go-to "Go to files"}
         :file {:name "File name"
+               :file "File: "
                :last-modified-at "Last modified at"
                :no-data "No data"
                :format-not-supported #(str "Format ." % " is not supported.")}
@@ -117,6 +121,7 @@
         :all-pages "All pages"
         :all-files "All files"
         :settings "Settings"
+        :import "Import"
         :join-community "Join the community"
         :discord-title "Our discord group!"
         :sign-out "Sign out"
@@ -141,7 +146,7 @@
                          :page "页面图谱"
                          :recent "最近"
                          :contents "目录"
-                         :graph-ref "图谱"
+                         :graph-ref "图谱："
                          :block-ref "块引用"}
         :git {:set-access-token "Set Github personal access token"
               :token-is-encrypted "The token will be encrypted and stored in the browser local storage"
@@ -153,7 +158,7 @@
               :last-pull "最后 pull 时间 "
               :version "版本"
               :import-notes "导入笔记"
-              :import-notes-helper "你可以从 Github 的库中倒入笔记"
+              :import-notes-helper "你可以从 Github 的库中导入笔记"
               :add-another-repo "添加一个库"
               :re-index "重新 clone 然后重新建立索引"
               :commit {:message "你的 commit 信息"
@@ -166,7 +171,9 @@
                      :commit-message "commit 消息（可选）"
                      :pushing "Pushing"
                      :force-push "Commit 并强制 push"
-                     :a-force-push "强制 push"}}
+                     :a-force-push "强制 push"}
+              :add-repo-prompt "在你的库上安装 Logseq"
+              :add-repo-prompt-confirm "添加并安装"}
         :format {:preferred-mode "请选择偏好格式"
                  :markdown "Markdown"
                  :org-mode "Org Mode"}
@@ -186,6 +193,7 @@
                :publish "将本页发布至 Logseq"
                :publish-as-slide "将本页作为幻灯片发布至 Logseq"
                :unpublish "取消将本页发布至 Logseq"
+               :add-to-contents "将本页添加到目录"
                :show-journals "显示日志"
                :show-name "显示页面名"
                :hide-name "隐藏页面名"
@@ -195,6 +203,7 @@
         :journal {:multiple-files-with-different-formats "It seems that you have multiple journal files (with different formats) for the same month, please only keep one journal file for each month."
                   :go-to "转到所有文件"}
         :file {:name "文件名"
+               :file "文件："
                :last-modified-at "最后更改于"
                :no-data "没有数据"
                :format-not-supported #(str "格式 ." % " 目前不支持.")}
@@ -239,6 +248,7 @@
         :all-pages "所有页面"
         :all-files "所有文件"
         :settings "设置"
+        :import "导入"
         :join-community "加入社区"
         :discord-title "我们的 Discord 社群!"
         :sign-out "登出"
