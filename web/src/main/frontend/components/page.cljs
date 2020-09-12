@@ -438,7 +438,17 @@
            (for [[page modified-at] pages]
              (let [encoded-page (util/encode-str page)]
                [:tr {:key encoded-page}
-                [:td [:a.text-gray-700 {:href (str "/page/" encoded-page)}
+                [:td [:a.text-gray-700 {:on-click (fn [e]
+                                                    (util/stop e)
+                                                    (let [repo (state/get-current-repo)
+                                                          page (db/pull repo '[*] [:page/name (string/lower-case page)])]
+                                                      (when (gobj/get e "shiftKey")
+                                                        (state/sidebar-add-block!
+                                                         repo
+                                                         (:db/id page)
+                                                         :page
+                                                         {:page page}))))
+                                        :href (str "/page/" encoded-page)}
                       page]]
                 [:td [:span.text-gray-500.text-sm
                       (if (zero? modified-at)
