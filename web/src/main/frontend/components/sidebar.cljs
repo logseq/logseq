@@ -293,6 +293,7 @@
             (let [logged? (:name me)]
               (->>
               [(when current-repo
+                 (println (state/sub [:preferred-language]))
                   {:title (t :new-page)
                   :options {:href "/new-page"}})
                 (when current-repo
