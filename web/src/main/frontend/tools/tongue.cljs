@@ -12,10 +12,8 @@
   {:en {:on-boaring {:title "Hi, welcome to Logseq!"
                      :notice "Notice that this project is in its early days and under quick development, files might be corrupted."}
         :right-side-bar {:help "Help"
-                         :switch-theme #(str "Switch to " % " theme")
-                         :theme #(cond
-                                   (= "white" %) "White theme"
-                                   (= "dark" %) "Dark theme")
+                         :switch-theme "Switch to {1} theme"
+                         :theme "{1} theme"
                          :page "Page graph"
                          :recent "Recent"
                          :contents "Contents"
@@ -55,10 +53,10 @@
         :project {:setup "Setup a public project on Logseq"
                   :location "All published pages will be located under"}
         :page {:presentation-mode "Presentation mode (Powered by Reveal.js)"
-               :delete-success #(str "Page " % " was delted successfully!")
+               :delete-success "Page {1} was delted successfully!"
                :delete-confirmation "Are you sure you want to delte this page?"
-               :rename-to #(str "Rename \"" % "\" to:")
-               :priority #(str "Priority \"" (string/upper-case %) "\"")
+               :rename-to "Rename \"{1}\" to:"
+               :priority "Priority \"{1}\""
                :re-index "Re-index this page"
                :copy-to-json "Copi the whole page as JSON"
                :rename "Rename page"
@@ -79,7 +77,7 @@
                :file "File: "
                :last-modified-at "Last modified at"
                :no-data "No data"
-               :format-not-supported #(str "Format ." % " is not supported.")}
+               :format-not-supported "Format .{1} is not supported."}
         :editor {:block-search "Search for a block"
                  :image-uploading "Uploading"}
         :draw {:invalid-file "Could not load this invalid excalidraw file"
@@ -96,7 +94,7 @@
                :back-to-logseq "Back to logseq"}
         :content {:copy "Copy"
                   :cut "Cut"
-                  :make-todos #(str "Make " % "s")
+                  :make-todos "Make {1}s"
                   :copy-block-ref "Copy block ref"
                   :focus-on-block "Focus on block"
                   :open-in-sidebar "Open in sidebar"
@@ -139,10 +137,8 @@
    :zh-CN {:on-boaring {:title "你好，欢迎使用 Logseq！"
                      :notice "请注意，本项目正在快速开发中，存在文件损坏的风险。"}
         :right-side-bar {:help "帮助"
-                         :switch-theme #(str "切换到" % "主题")
-                         :theme #(cond
-                                   (= "white" %) "亮色主题"
-                                   (= "dark" %) "暗色主题")
+                         :switch-theme "切换到 {1} 主题"
+                         :theme "{1} 主题"
                          :page "页面图谱"
                          :recent "最近"
                          :contents "目录"
@@ -182,10 +178,10 @@
         :project {:setup "在 Logseq 上发布新的项目"
                   :location "一切发布的页面将会被放到 "}
         :page {:presentation-mode "演讲模式 (由 Reveal.js 驱动)"
-               :delete-success #(str "页面 " % " 删除成功！")
+               :delete-success "页面 {1} 删除成功！"
                :delete-confirmation "你确定要删除此页面吗？"
-               :rename-to #(str "重命名\"" % "\" 至：")
-               :priority #(str "优先级 \"" (string/upper-case %) "\"")
+               :rename-to "重命名\"{1}\" 至："
+               :priority "优先级 \"{1}\""
                :re-index "对此页面重新建立索引"
                :copy-to-json "将整页以 JSON 格式复制"
                :rename "重命名本页"
@@ -206,7 +202,7 @@
                :file "文件："
                :last-modified-at "最后更改于"
                :no-data "没有数据"
-               :format-not-supported #(str "格式 ." % " 目前不支持.")}
+               :format-not-supported "格式 .{1} 目前不支持."}
         :editor {:block-search "搜索块"
                  :image-uploading "上传中"}
         :draw {:invalid-file "Could not load this invalid excalidraw file"
@@ -223,7 +219,7 @@
                :back-to-logseq "返回 logseq"}
         :content {:copy "复制"
                   :cut "剪切"
-                  :make-todos #(str "格式化为 " %)
+                  :make-todos "格式化为 {1}"
                   :copy-block-ref "复制块引用"
                   :focus-on-block "聚焦在此块"
                   :open-in-sidebar "在侧边栏打开"
