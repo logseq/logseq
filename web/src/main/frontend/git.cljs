@@ -10,14 +10,11 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
 
-;; TODO: move to a js worker
-
 (defonce default-branch "master")
 ;; only support Github now
-(defn auth
-  [token]
-  {:username (get-in @state/state [:me :name])
-   :token token})
+(defn get-username
+  []
+  (get-in @state/state [:me :name]))
 
 (defn get-cors-proxy
   [repo-url]
@@ -30,94 +27,69 @@
 
 (defn set-username-email
   [dir username email]
-  (util/p-handle (js/window.git.config (clj->js
-                                        {:global true
-                                         :dir dir
-                                         :path "user.name"
-                                         :value username}))
-                 (fn [result]
-                   (js/window.git.config (clj->js
-                                          {:global true
-                                           :dir dir
-                                           :path "user.email"
-                                           :value email})))
-                 (fn [error]
-                   (prn "error:" error))))
-
-(defn with-auth
-  [token m]
-  (clj->js
-   (clojure.core/merge (auth token)
-                       m)))
+  (-> (p/let [_ (js/window.workerThread.setConfig dir "user.name" username)]
+        (js/window.workerThread.setConfig dir "user.email" email))
+      (p/catch (fn [error]
+                 (prn "Git set config error:" error)))))
 
 (defn clone
   [repo-url token]
-  (js/window.git.clone (with-auth token
-                         {:dir (util/get-repo-dir repo-url)
-                          :url repo-url
-                          :corsProxy (get-cors-proxy repo-url)
-                          :singleBranch true
-                          :depth 1})))
+  (js/window.workerThread.clone (util/get-repo-dir repo-url)
+                                repo-url
+                                (get-cors-proxy repo-url)
+                                1
+                                default-branch
+                                (get-username)
+                                token))
 
 (defn list-files
   [repo-url]
-  (js/window.git.listFiles (clj->js
-                            {:dir (util/get-repo-dir repo-url)
-                             :ref "HEAD"})))
+  (js/window.workerThread.listFiles (util/get-repo-dir repo-url)))
 
 (defn fetch
   [repo-url token]
-  (js/window.git.fetch (with-auth token
-                         {:dir (util/get-repo-dir repo-url)
-                          :ref default-branch
-                          :corsProxy (get-cors-proxy repo-url)
-                          :singleBranch true
-                          :depth 100
-                          :tags false})))
+  (js/window.workerThread.fetch (util/get-repo-dir repo-url)
+                                repo-url
+                                (get-cors-proxy repo-url)
+                                100
+                                default-branch
+                                (get-username)
+                                token))
 
 (defn merge
   [repo-url]
-  (js/window.git.merge (clj->js
-                        {:dir (util/get-repo-dir repo-url)
-                         :ours default-branch
-                         :theirs (str "remotes/origin/" default-branch)
-                         :fastForwardOnly true})))
+  (js/window.workerThread.merge (util/get-repo-dir repo-url)
+                                default-branch))
 
 (defn checkout
   [repo-url]
-  (js/window.git.checkout (clj->js
-                           {:dir (util/get-repo-dir repo-url)
-                            :ref default-branch})))
+  (js/window.workerThread.checkout (util/get-repo-dir repo-url)
+                                default-branch))
 
 (defn log
-  [repo-url token depth]
-  (and js/window.git
-       (js/window.git.log (with-auth token
-                            {:dir (util/get-repo-dir repo-url)
-                             :ref default-branch
-                             :depth depth
-                             :singleBranch true}))))
+  [repo-url depth]
+  (js/window.workerThread.log (util/get-repo-dir repo-url)
+                              default-branch
+                              depth))
 
 (defn pull
   [repo-url token]
-  (js/window.git.pull (with-auth token
-                        {:dir (util/get-repo-dir repo-url)
-                         :ref default-branch
-                         :corsProxy (get-cors-proxy repo-url)
-                         :singleBranch true
-                         :fast true})))
+  (js/window.workerThread.pull (util/get-repo-dir repo-url)
+                               (get-cors-proxy repo-url)
+                               default-branch
+                               (get-username)
+                               token))
+
 (defn add
   [repo-url file]
   (when js/window.git
-    (js/window.git.add (clj->js
-                        {:dir (util/get-repo-dir repo-url)
-                         :filepath file}))))
+    (js/window.workerThread.add (util/get-repo-dir repo-url)
+                                file)))
 
 (defn remove-file
   [repo-url file]
-  (js/window.git.remove (clj->js
-                         {:dir (util/get-repo-dir repo-url)
-                          :filepath file})))
+  (js/window.workerThread.remove (util/get-repo-dir repo-url)
+                              file))
 
 (defn rename
   [repo-url old-file new-file]
@@ -129,28 +101,26 @@
 (defn commit
   [repo-url message]
   (let [{:keys [name email]} (:me @state/state)]
-    (js/window.git.commit (clj->js
-                           {:dir (util/get-repo-dir repo-url)
-                            :message message
-                            :author {:name name
-                                     :email email}}))))
+    (js/window.workerThread.commit (util/get-repo-dir repo-url)
+                                   message
+                                   name
+                                   email)))
 
 (defn read-commit
   [repo-url oid]
-  (js/window.git.readCommit (clj->js
-                             {:dir (util/get-repo-dir repo-url)
-                              :oid oid})))
+  (js/window.workerThread.readCommit (util/get-repo-dir repo-url)
+                                     oid))
 
 (defn push
   ([repo-url token]
    (push repo-url token false))
   ([repo-url token force?]
-   (js/window.git.push (with-auth token
-                         {:dir (util/get-repo-dir repo-url)
-                          :corsProxy (get-cors-proxy repo-url)
-                          :remote "origin"
-                          :ref default-branch
-                          :force force?}))))
+   (js/window.workerThread.push (util/get-repo-dir repo-url)
+                                (get-cors-proxy repo-url)
+                                default-branch
+                                force?
+                                (get-username)
+                                token)))
 
 (defn add-commit
   [repo-url file message commit-ok-handler commit-error-handler]
@@ -174,31 +144,6 @@
                  diffs (map (fn [diff]
                               (update diff :path #(subs % 1))) diffs)]
            diffs))))
-
-;; https://isomorphic-git.org/docs/en/statusMatrix
-;; TODO: status should not be `pulling`, otherwise the `:deleted` part is weird.
-;; (defn get-status-matrix
-;;   ([repo-url]
-;;    (get-status-matrix repo-url "master"))
-;;   ([repo-url branch]
-;;    (p/let [matrix (js/window.git.statusMatrix
-;;                    (clj->js
-;;                     {:dir (util/get-repo-dir repo-url)
-;;                      :ref "HEAD"}))]
-;;      (let [matrix (bean/->clj matrix)]
-;;        ;; added, modified, deleted
-;;        {:added (->> (filter (fn [[_file head-status _workdir-status _stage-status]]
-;;                               (= head-status 0))
-;;                             matrix)
-;;                     (map first))
-;;         :modified (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
-;;                                  (= workdir-status 2))
-;;                                matrix)
-;;                        (map first))
-;;         :deleted (->> (filter (fn [[_file _head-status workdir-status _stage-status]]
-;;                                 (= workdir-status 0))
-;;                               matrix)
-;;                       (map first))}))))
 
 (defn find-common-base
   ([repo-url remote-id local-id]
@@ -225,44 +170,12 @@
 
 (defn read-blob
   [repo-url oid path]
-  (js/window.git.readBlob (clj->js
-                           {:dir (util/get-repo-dir repo-url)
-                            :gitdir (str (util/get-repo-dir repo-url) ".git")
-                            :oid oid
-                            :path path})))
+  (js/window.workerThread.readBlob (util/get-repo-dir repo-url)
+                                   oid
+                                   path))
 
-;; * await git.writeRef({
-;;                       *   fs,
-;;                       *   dir: '/tutorial',
-;;                       *   ref: 'refs/heads/another-branch',
-;;                       *   value: 'HEAD'
-;;                       * })
 (defn write-ref!
   [repo-url oid]
-  (js/window.git.writeRef (clj->js
-                           {:dir (util/get-repo-dir repo-url)
-                            :ref (str "refs/heads/" default-branch)
-                            :value oid
-                            :force true})))
-
-;; "git log -1 --pretty=\"format:%cI\""
-;; FIXME: Uncaught (in promise) ObjectTypeAssertionFail: Object 0698e8812d6f7b37dc98aea28de2d04714cead80 was anticipated to be a commit but it is a blob. This is probably a bug deep in isomorphic-git!
-;; (defn get-last-modified-date
-;;   [repo-url token path]
-;;   (let [dir (util/get-repo-dir repo-url)]
-;;     (p/let [commits (log repo-url token 1)
-;;             commit (first commits)
-;;             time (try
-;;                    (p/let [o (js/window.git.readObject #js {:dir dir
-;;                                                      :oid (gobj/get commit "oid")
-;;                                                      :filepath path})
-;;                            oid (gobj/get o "oid")
-;;                            commit (read-commit repo-url oid)]
-;;                      (-> (gobj/get commit "author")
-;;                          (gobj/get "timestamp")))
-;;                      (catch js/Error e
-;;                        nil))]
-;;       (when time
-;;         (-> (* time 1000)
-;;             (tc/to-date-time)
-;;             (t/to-default-time-zone))))))
+  (js/window.workerThread.writeRef (util/get-repo-dir repo-url)
+                                   default-branch
+                                   oid))

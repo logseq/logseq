@@ -19,6 +19,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [clojure.string :as string]
+            [clojure.set :as set]
             [frontend.commands :as commands
              :refer [*show-commands
                      *matched-commands
@@ -80,17 +81,28 @@
               edit-content (state/sub [:editor/content id])
               q (or
                  @editor-handler/*selected-text
+                 (when (state/sub :editor/show-page-search-hashtag?)
+                   (subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
                    (subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
-              chosen-handler (fn [chosen _click?]
-                               (state/set-editor-show-page-search false)
-                               (editor-handler/insert-command! id
-                                                               (util/format "[[%s]]" chosen)
-                                                               format
-                                                               {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
-                                                                :postfix-fn (fn [s] (util/replace-first "]]" s ""))}))
+              chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
+                               (fn [chosen _click?]
+                                 (state/set-editor-show-page-search false)
+                                 (editor-handler/insert-command! id
+                                                                 (util/format "#%s" (if (string/includes? chosen " ")
+                                                                                      (str "[[" chosen "]]")
+                                                                                      chosen))
+                                                                 format
+                                                                 {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))}))
+                               (fn [chosen _click?]
+                                 (state/set-editor-show-page-search false)
+                                 (editor-handler/insert-command! id
+                                                                 (util/format "[[%s]]" chosen)
+                                                                 format
+                                                                 {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
+                                                                  :postfix-fn (fn [s] (util/replace-first "]]" s ""))})))
               non-exist-page-handler (fn [_state]
                                        (state/set-editor-show-page-search false)
                                        (util/cursor-move-forward input 2))]
@@ -129,8 +141,8 @@
 
                                  ;; Save it so it'll be parsed correctly in the future
                                  (editor-handler/set-block-property! (:block/uuid chosen)
-                                                                       "CUSTOM_ID"
-                                                                       uuid-string)
+                                                                     "CUSTOM_ID"
+                                                                     uuid-string)
 
                                  (when-let [input (gdom/getElement id)]
                                    (.focus input))))
@@ -164,25 +176,57 @@
           (state/set-editor-show-date-picker false)))})))
 
 (rum/defc mobile-bar < rum/reactive
-  [parent-state]
-  [:div {:style {:position "fixed"
+  [parent-state parent-id]
+  [:div.bg-base-2 {:style {:position "fixed"
                  :bottom 0
                  :width "100%"
                  :left 0
-                 :text-align "center"
-                 :height "2.5rem"}}
+                 :justify-content "center"
+                 :height "2.5rem"
+                 :display "flex"
+                 :align-items "center"
+                 ;; This element should be the upper-most in most situations
+                 :z-index 99999999}}
    [:button
-    {:on-click #(editor-handler/adjust-block-level! parent-state :right)}
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/adjust-block-level! parent-state :right)}
     svg/indent-block]
    [:button
-    {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/adjust-block-level! parent-state :left)}
     svg/outdent-block]
    [:button
-    {:on-click #(editor-handler/move-up-down parent-state % true)}
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/move-up-down parent-state % true)}
     svg/move-up-block]
    [:button
-    {:on-click #(editor-handler/move-up-down parent-state % false)}
-    svg/move-down-block]])
+    {:style {:padding "5px"}
+     :on-click #(editor-handler/move-up-down parent-state % false)}
+    svg/move-down-block]
+   [:button
+    {:style {:padding "5px"}
+     :on-click (fn [e]
+                 (let [old-content (state/sub [:editor/content parent-id])
+                       new-content (str old-content "\n")]
+                   (state/set-state! :editor/content {parent-id new-content}))
+                 (.stopPropagation e))}
+    svg/multi-line-input]
+   [:button
+    {:style {:padding "5px"}
+     :on-click (fn [e]
+                 (let [old-content (state/sub [:editor/content parent-id])
+                       new-content (str old-content "[[]]")]
+                   (state/set-state! :editor/content {parent-id new-content}))
+                 (.stopPropagation e))}
+    "[[]]"]
+   [:button
+    {:style {:padding "5px"}
+     :on-click (fn [e]
+                 (let [old-content (state/sub [:editor/content parent-id])
+                       new-content (str old-content "(())")]
+                   (state/set-state! :editor/content {parent-id new-content}))
+                 (.stopPropagation e))}
+    "(())"]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -193,13 +237,15 @@
       {
        ;; enter
        13 (fn [state e]
-            (let [input-value (get state ::input-value)]
+            (let [input-value (get state ::input-value)
+                  input-option (get @state/state :editor/show-input)]
               (when (seq @input-value)
                 ;; no new line input
                 (util/stop e)
                 (let [[_id on-submit] (:rum/args state)
-                      {:keys [pos]} @*slash-caret-pos]
-                  (on-submit @input-value pos))
+                      {:keys [pos]} @*slash-caret-pos
+                      command (:command (first input-option))]
+                  (on-submit command @input-value pos))
                 (reset! input-value nil))))}
       nil)))
   {:did-update
@@ -218,38 +264,41 @@
     (let [{:keys [pos]} (util/react *slash-caret-pos)
           input-value (get state ::input-value)]
       (when (seq input-option)
-        [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
-         (for [{:keys [id placeholder type] :as input-item} input-option]
-           [:div.my-3
-            [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
-             (merge
-              (cond->
-                  {:key (str "modal-input-" (name id))
-                   :id (str "modal-input-" (name id))
-                   :type (or type "text")
-                   :on-change (fn [e]
-                                (swap! input-value assoc id (util/evalue e)))
-                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                placeholder
-                (assoc :placeholder placeholder))
-              (dissoc input-item :id))]])
-         (ui/button
-           "Submit"
-           :on-click
-           (fn [e]
-             (util/stop e)
-             (on-submit @input-value pos)))]))))
+        (let [command (:command (first input-option))]
+          [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
+           (for [{:keys [id placeholder type] :as input-item} input-option]
+             [:div.my-3
+              [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
+               (merge
+                (cond->
+                    {:key (str "modal-input-" (name id))
+                     :id (str "modal-input-" (name id))
+                     :type (or type "text")
+                     :on-change (fn [e]
+                                  (swap! input-value assoc id (util/evalue e)))
+                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                  placeholder
+                  (assoc :placeholder placeholder))
+                (dissoc input-item :id))]])
+           (ui/button
+             "Submit"
+             :on-click
+             (fn [e]
+               (util/stop e)
+               (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left]}]
   [:div.absolute.rounded-md.shadow-lg
    {:style (merge
             {:top (+ top 24)
-             :left left
              :max-height 600
              :z-index 11}
             (if set-default-width?
-              {:width 400}))}
+              {:width 400})
+            (if config/mobile?
+              {:left 0}
+              {:left left}))}
    cp])
 
 (rum/defc transition-cp < rum/reactive
@@ -332,10 +381,10 @@
                           (when (and
                                  insert?
                                  (not (editor-handler/in-auto-complete? input)))
+                            (util/stop e)
                             (profile
                              "Insert block"
-                             (editor-handler/insert-new-block! state))
-                            (util/stop e)))))))))
+                             (editor-handler/insert-new-block! state))))))))))
          ;; up
          38 (fn [state e]
               (when (and
@@ -360,11 +409,10 @@
                    selected-start (gobj/get node "selectionStart")
                    selected-end (gobj/get node "selectionEnd")]
                (cond
-
                  (not= selected-start selected-end)
                  nil
 
-                 (zero? current-pos)
+                 (and (zero? current-pos))
                  (editor-handler/delete-block! state repo e)
 
                  (and (> current-pos 1)
@@ -402,6 +450,10 @@
                      :else
                      nil))
 
+                  ;; deleting hashtag
+                 (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
+                 (state/set-editor-show-page-search-hashtag false)
+
                  :else
                  nil)))
          ;; tab
@@ -421,26 +473,27 @@
         (fn [e key-code]
           (let [key (gobj/get e "key")]
             (cond
-              (editor-handler/surround-by? input "[[" "]]")
-              (do
-                (commands/handle-step [:editor/search-page])
-                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-
-              (editor-handler/surround-by? input "((" "))")
-              (do
-                (commands/handle-step [:editor/search-block :reference])
-                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-
               (and
-               (contains? (set (keys editor-handler/reversed-autopair-map)) key)
-               (= (editor-handler/get-previous-input-chars input 2) (str key key)))
-              nil
-
-              (and
-               (contains? (set (keys editor-handler/reversed-autopair-map)) key)
+               (not= key-code 8) ;; backspace
                (or
-                (= (editor-handler/get-previous-input-char input) key)
-                (= (editor-handler/get-current-input-char input) key)))
+                (editor-handler/surround-by? input "#" " ")
+                (editor-handler/surround-by? input "#" :end)
+                (= key "#")))
+              (do
+                (commands/handle-step [:editor/search-page-hashtag])
+                (state/set-last-pos! (:pos (util/get-caret-pos input)))
+                (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+              (and
+               (= key " ")
+               (state/get-editor-show-page-search-hashtag))
+              (state/set-editor-show-page-search-hashtag false)
+
+              (and
+               (contains? (set/difference (set (keys editor-handler/reversed-autopair-map))
+                                          #{"`"})
+                          key)
+               (= (editor-handler/get-current-input-char input) key))
               (do
                 (util/stop e)
                 (util/cursor-move-forward input 1))
@@ -448,7 +501,18 @@
               (contains? (set (keys editor-handler/autopair-map)) key)
               (do
                 (util/stop e)
-                (editor-handler/autopair input-id key format nil))
+                (editor-handler/autopair input-id key format nil)
+                (cond
+                  (editor-handler/surround-by? input "[[" "]]")
+                  (do
+                    (commands/handle-step [:editor/search-page])
+                    (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+                  (editor-handler/surround-by? input "((" "))")
+                  (do
+                    (commands/handle-step [:editor/search-block :reference])
+                    (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+                  :else
+                  nil))
 
               :else
               nil))))
@@ -543,14 +607,14 @@
                      (editor-handler/save-block! (get-state state) value))
                    state)}
   [state {:keys [on-hide dummy? node format block]
-    :or {dummy? false}
-    :as option} id config]
+          :or {dummy? false}
+          :as option} id config]
   (let [content (state/sub [:editor/content id])]
     [:div.editor {:style {:position "relative"
                           :display "flex"
                           :flex "1 1 0%"}
                   :class (if block "block-editor" "non-block-editor")}
-     (when config/mobile? (mobile-bar state))
+     (when config/mobile? (mobile-bar state id))
      (ui/textarea
       {:id id
        :value (or content "")
@@ -599,21 +663,8 @@
 
      (transition-cp
       (input id
-             (fn [{:keys [link label]} pos]
-               (if (and (string/blank? link)
-                        (string/blank? label))
-                 nil
-                 (editor-handler/insert-command! id
-                                                 (util/format "[[%s][%s]]"
-                                                              (or link "")
-                                                              (or label ""))
-                                                 format
-                                                 {:last-pattern (str commands/slash "link")}))
-               (state/set-editor-show-input nil)
-               (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
-                 (when-let [input (gdom/getElement id)]
-                   (.focus input)
-                   (util/move-cursor-to input saved-cursor)))))
+             (fn [command m pos]
+               (editor-handler/handle-command-input command id format m pos)))
       true
       *slash-caret-pos)
 

@@ -13,6 +13,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.ui :as ui-handler]
             [frontend.date :as date]
             [clojure.walk :as walk]
             [frontend.git :as git]
@@ -23,20 +24,29 @@
 (defn create!
   [title]
   (let [repo (state/get-current-repo)
-        dir (util/get-repo-dir repo)]
+        dir (util/get-repo-dir repo)
+        journal-page? (date/valid-journal-title? title)
+        directory (if journal-page?
+                    config/default-journals-directory
+                    config/default-pages-directory)]
     (when dir
-      (p/let [_ (-> (fs/mkdir (str dir "/" config/default-pages-directory))
+      (p/let [_ (-> (fs/mkdir (str dir "/" directory))
                     (p/catch (fn [_e])))]
         (let [format (name (state/get-preferred-format))
               page (string/lower-case title)
-              path (str (string/replace page #"\s+" "_") "." (if (= format "markdown") "md" format))
-              path (str config/default-pages-directory "/" path)
+              path (str (if journal-page?
+                          (date/journal-title->default title)
+                          (-> page
+                              (string/replace #"\s+" "_")))
+                        "."
+                        (if (= format "markdown") "md" format))
+              path (str directory "/" path)
               file-path (str "/" path)]
           (p/let [exists? (fs/file-exists? dir file-path)]
             (if exists?
               (notification/show!
                [:p.content
-                "File already exists!"]
+                (util/format "File %s already exists!" file-path)]
                :error)
               ;; create the file
               (let [content (util/default-content-with-title format title)]
@@ -49,23 +59,26 @@
                         last-block (last blocks)]
                     (js/setTimeout
                      #(when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
-                        (editor-handler/edit-block! (:block/uuid last-block)
-                                                   0
-                                                   (:block/format last-block)
-                                                   (string/replace (gobj/get first-block "id")
-                                                                   "ls-block"
-                                                                   "edit-block")))
+                        (editor-handler/edit-block! last-block
+                                                    0
+                                                    (:block/format last-block)
+                                                    (string/replace (gobj/get first-block "id")
+                                                                    "ls-block"
+                                                                    "edit-block")))
                      100)))))))))))
 
 (defn page-add-directives!
   [page-name directives]
-  (when-let [directives-content (string/trim (db/get-page-directives-content page-name))]
-    (let [page (db/entity [:page/name page-name])
-          file (db/entity (:db/id (:page/file page)))
+  (let [page (db/entity [:page/name page-name])
+        page-format (db/get-page-format page-name)
+        directives-content (db/get-page-directives-content page-name)
+        directives-content (if directives-content
+                             (string/trim directives-content)
+                             (config/directives-wrapper page-format))]
+    (let [file (db/entity (:db/id (:page/file page)))
           file-path (:file/path file)
           file-content (db/get-file file-path)
           after-content (subs file-content (inc (count directives-content)))
-          page-format (db/get-page-format page-name)
           new-directives-content (db/add-directives! page-format directives-content directives)
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
@@ -89,7 +102,7 @@
                                                 :markdown (str (string/lower-case k) ": ")
                                                 "")
                                        exists? (atom false)
-                                       lines (remove #(string/starts-with? % prefix) lines)]
+                                       lines (remove #(util/starts-with? % prefix) lines)]
                                    (string/join "\n" lines))
           full-content (str new-directives-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
@@ -223,68 +236,93 @@
 
 (defn delete!
   [page-name ok-handler]
-  (when-not (date/valid-journal-title? page-name)
-    (when-let [repo (state/get-current-repo)]
-      (let [page-name (string/lower-case page-name)]
-        (when-let [file (db/get-page-file page-name)]
-          (let [file-path (:file/path file)]
+  (when page-name
+    (when-not (date/valid-journal-title? page-name)
+      (when-let [repo (state/get-current-repo)]
+        (let [page-name (string/lower-case page-name)]
+          (let [file (db/get-page-file page-name)
+                file-path (:file/path file)]
             ;; delete file
-            (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-            (when-let [files-conn (db/get-files-conn repo)]
-              (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
+            (when file-path
+              (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+              (when-let [files-conn (db/get-files-conn repo)]
+                (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
-            ;; delete blocks
-            (let [blocks (db/get-page-blocks page-name)
-                  tx-data (mapv
-                           (fn [block]
-                             [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                           blocks)]
-              (db/transact! tx-data)
-              ;; remove file
-              (->
-               (p/let [_ (git/remove-file repo file-path)
-                       _result (fs/unlink (str (util/get-repo-dir repo)
-                                               "/"
-                                               file-path)
-                                          nil)]
-                 (state/git-add! repo (str "- " file-path)))
-               (p/catch (fn [err]
-                          (prn "error: " err))))
+              (let [blocks (db/get-page-blocks page-name)
+                    tx-data (mapv
+                             (fn [block]
+                               [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                             blocks)]
+                (db/transact! tx-data)
+                ;; remove file
+                (->
+                 (p/let [_ (git/remove-file repo file-path)
+                         _result (fs/unlink (str (util/get-repo-dir repo)
+                                                 "/"
+                                                 file-path)
+                                            nil)]
+                   (state/git-add! repo (str "- " file-path)))
+                 (p/catch (fn [err]
+                            (prn "error: " err))))))
 
-              (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+            (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
-              (ok-handler))))))))
+            (ok-handler)))))))
 
 (defn rename!
   [old-name new-name]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
-      (let [old-original-name (:page/original-name page)]
-        (d/transact! (db/get-conn repo false)
-          [{:db/id (:db/id page)
-            :page/name (string/lower-case new-name)
-            :page/original-name new-name}])
+  (when (and old-name new-name
+             (not= (string/lower-case old-name) (string/lower-case new-name)))
+    (when-let [repo (state/get-current-repo)]
+      (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
+        (let [old-original-name (:page/original-name page)
+              file (:page/file page)]
+          (d/transact! (db/get-conn repo false)
+            [{:db/id (:db/id page)
+              :page/name (string/lower-case new-name)
+              :page/original-name new-name}])
 
-        (page-add-directives! (string/lower-case new-name) {:title new-name})
+          (when file
+            (page-add-directives! (string/lower-case new-name) {:title new-name}))
 
-        ;; update all files which have references to this page
-        (let [files (db/get-files-that-referenced-page (:db/id page))]
-          (doseq [file-path files]
-            (let [file-content (db/get-file file-path)
-                  ;; FIXME: not safe
-                  new-content (string/replace file-content
-                                              (util/format "[[%s]]" old-original-name)
-                                              (util/format "[[%s]]" new-name))]
-              (file-handler/alter-file repo
-                                       file-path
-                                       new-content
-                                       {:reset? true
-                                        :re-render-root? false})))))
+          ;; update all files which have references to this page
+          (let [files (db/get-files-that-referenced-page (:db/id page))]
+            (doseq [file-path files]
+              (let [file-content (db/get-file file-path)
+                    ;; FIXME: not safe
+                    new-content (string/replace file-content
+                                                (util/format "[[%s]]" old-original-name)
+                                                (util/format "[[%s]]" new-name))]
+                (file-handler/alter-file repo
+                                         file-path
+                                         new-content
+                                         {:reset? true
+                                          :re-render-root? false})))))
 
-      ;; TODO: update browser history, remove the current one
+        ;; TODO: update browser history, remove the current one
 
-      ;; Redirect to the new page
-      (route-handler/redirect! {:to :page
-                                :path-params {:name (util/encode-str (string/lower-case new-name))}})
+        ;; Redirect to the new page
+        (route-handler/redirect! {:to :page
+                                  :path-params {:name (util/encode-str (string/lower-case new-name))}})
 
-      (notification/show! "Page renamed successfully!" :success))))
+        (notification/show! "Page renamed successfully!" :success)
+
+        (ui-handler/re-render-root!)))))
+
+(defn handle-add-page-to-contents!
+  [page-name]
+  (let [last-block (last (db/get-page-blocks (state/get-current-repo) "contents"))
+        last-empty? (>= 3 (count (:block/content last-block)))
+        heading-pattern (config/get-block-pattern (state/get-preferred-format))
+        pre-str (str heading-pattern heading-pattern)
+        new-content (if last-empty? (str pre-str " [[" page-name "]]") (str (:block/content last-block) pre-str " [[" page-name "]]"))]
+    (editor-handler/insert-new-block-aux!
+     "Contents"
+     last-block
+     new-content
+     false
+     (fn [[_first-block last-block _new-block-content]]
+       (notification/show! "Added to contents!" :success)
+       (editor-handler/clear-when-saved!))
+     true
+     2)))

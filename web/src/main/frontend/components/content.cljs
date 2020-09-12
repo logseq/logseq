@@ -1,10 +1,12 @@
 (ns frontend.components.content
   (:require [rum.core :as rum]
+            [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.protocol :as protocol]
             [frontend.handler :as handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -14,6 +16,8 @@
             [goog.object :as gobj]
             [dommy.core :as d]
             [clojure.string :as string]
+            [cljs.pprint :as pprint]
+            [frontend.handler.notification :as notification]
             [frontend.components.editor :as editor]))
 
 (defn- set-format-js-loading!
@@ -89,7 +93,23 @@
      {:key "Copy as JSON"
       :on-click (fn [_e]
                   (export-handler/copy-block-as-json! block-id))}
-     "Copy as JSON")]])
+     "Copy as JSON")
+    (when (state/sub [:ui/developer-mode?])
+      (ui/menu-link
+       {:key "(Dev) Show block data"
+       :on-click (fn []
+                   (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
+                     (println block-data)
+                     (notification/show!
+                      [:div
+                       [:pre.code block-data]
+                       [:br]
+                       (ui/button "Copy to clipboard"
+                                  :on-click #(.writeText js/navigator.clipboard block-data))]
+                      :success
+                      false)))}
+       "(Dev) Show block data")
+      )]])
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -127,18 +147,6 @@
                               (js/setTimeout #(state/set-selection-blocks! blocks)
                                              200)))))))
 
-     (mixins/listen state js/window "click"
-                    (fn [e]
-                      ;; hide context menu
-                      (state/hide-custom-context-menu!)
-
-                      ;; enable scroll
-                      (let [main (d/by-id "main-content")]
-                        (d/remove-class! main "overflow-hidden")
-                        (d/add-class! main "overflow-y-auto"))
-
-                      (editor-handler/clear-selection! e)))
-
      (mixins/listen state js/window "contextmenu"
                     (fn [e]
                       (let [target (gobj/get e "target")
@@ -160,7 +168,8 @@
                                               :left (str client-x "px")
                                               :top (str client-y "px")))))
 
-                          (state/in-selection-mode?)
+                          (and (state/in-selection-mode?)
+                               (seq (state/get-selection-blocks)))
                           (do
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
@@ -231,10 +240,23 @@
   (when (> (gobj/get js/window "innerWidth") 1024)
     (let [blocks (d/by-class "ls-block")]
       (doseq [block blocks]
-        (if (and (not (d/sel1 block "img"))
-                 (not (d/sel1 block "iframe")))
+        (if (and
+             (not (d/sel1 block "img"))
+             (not (d/sel1 block "iframe")))
           (d/add-class! block "fixed-width")
           (d/remove-class! block "fixed-width"))))))
+
+(defn- set-draw-iframe-style!
+  []
+  (let [width (gobj/get js/window "innerWidth")]
+    (when (>= width 1024)
+      (let [draws (d/by-class "draw-iframe")
+            width (- width 200)]
+        (doseq [draw draws]
+          (d/set-style! draw :width (str width "px"))
+          (let [height (max 700 (/ width 2))]
+            (d/set-style! draw :height (str height "px")))
+          (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
 
 (rum/defcs content < rum/reactive
   {:will-mount (fn [state]
@@ -242,10 +264,14 @@
                  state)
    :did-mount (fn [state]
                 (set-fixed-width!)
+                (set-draw-iframe-style!)
+                (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-fixed-width!)
+                 (set-draw-iframe-style!)
                  (lazy-load-js state)
+                 (image-handler/render-local-images!)
                  state)}
   [state id {:keys [format
                     config
@@ -254,11 +280,12 @@
                     on-click
                     on-hide]
              :as option}]
-  (let [in-selection-mode? (state/sub :selection/mode)]
+  (let [in-selection-mode? (state/sub :selection/mode)
+        selected-blocks (state/sub :selection/blocks)]
     (if hiccup
       [:div
        (hiccup-content id option)
-       (when in-selection-mode?
+       (when (and in-selection-mode? (seq selected-blocks))
          (hidden-selection))]
       (let [format (format/normalize format)]
         (non-hiccup-content id content on-click on-hide config format)))))

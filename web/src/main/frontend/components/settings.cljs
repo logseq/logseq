@@ -64,14 +64,17 @@
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
-        logged? (state/logged?)]
+        logged? (state/logged?)
+        current-repo (state/get-current-repo)
+        developer-mode? (state/sub [:ui/developer-mode?])]
     [:div#settings
      [:h1.title "Settings"]
 
      [:div.pl-1
       ;; config.edn
-      [:a {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}
-       "Edit config.edn (for current repo)"]
+      (when current-repo
+        [:a {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}
+         "Edit config.edn (for current repo)"])
 
       (when logged? [:hr])
 
@@ -91,7 +94,7 @@
                              (user-handler/set-preferred-format! format)))}
              (for [format [:org :markdown]]
                [:option (cond->
-                            {:key (name format)}
+                         {:key (name format)}
                           (= format preferred-format)
                           (assoc :selected "selected"))
                 (string/capitalize (name format))])]]]]
@@ -104,44 +107,22 @@
             [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
              {:on-change (fn [e]
                            (let [workflow (-> (util/evalue e)
-                                            (string/lower-case)
-                                            keyword)
+                                              (string/lower-case)
+                                              keyword)
                                  workflow (if (= workflow :now/later)
                                             :now
                                             :todo)]
                              (user-handler/set-preferred-workflow! workflow)))}
              (for [workflow [:now :todo]]
                [:option (cond->
-                            {:key (name workflow)}
+                         {:key (name workflow)}
                           (= workflow preferred-workflow)
                           (assoc :selected "selected"))
                 (if (= workflow :now)
                   "NOW/LATER"
                   "TODO/DOING")])]]]]
-         [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-           {:for "pat"}
-           "Github personal access token"]
-          [:div.mt-1.sm:mt-0.sm:col-span-2
-           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-            [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
-             {:default-value github-token
-              :type "password"
-              :autocomplete "new-password"
-              :on-blur (fn [event]
-                         (when-let [token (util/evalue event)]
-                           (when-not (string/blank? token)
-                             (user-handler/set-github-token! token false)
-                             (notification/show! "Github personal access token updated successfully!" :success))))
-              :on-key-press (fn [event]
-                              (let [k (gobj/get event "key")]
-                                (if (= "Enter" k)
-                                  (when-let [token (util/evalue event)]
-                                    (when-not (string/blank? token)
-                                      (user-handler/set-github-token! token false)
-                                      (notification/show! "Github personal access token updated successfully!" :success))))))}]]]]
 
-         [:hr ]
+         [:hr]
 
          (ui/admonition
           :important
@@ -167,4 +148,18 @@
                                 (if (= "Enter" k)
                                   (when-let [server (util/evalue event)]
                                     (user-handler/set-cors! server)
-                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]])]]))
+                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+         
+         [:hr]
+         
+         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "developer_mode"}
+           "Developer mode"]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            (ui/button (if developer-mode? "Disable developer mode" "Enable developer mode")
+             :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
+         
+         [:br]
+         "Developer mode helps contributors and extension developers test their integration with Logseq more efficient."])]]))

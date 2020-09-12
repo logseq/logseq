@@ -3,6 +3,7 @@
             [goog.object :as gobj]
             [frontend.rum :as r]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.fs :as fs]
             [frontend.mixins :as mixins]
             [frontend.storage :as storage]
             [frontend.components.svg :as svg]
@@ -12,7 +13,16 @@
             [frontend.date :as date]
             [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.draw :as draw]
+            [frontend.handler.draw :as draw :refer
+             [*files
+              *current-file
+              *current-title
+              *file-loading?
+              *elements
+              *unsaved?
+              *search-files
+              *saving-title
+              *excalidraw]]
             [frontend.handler.file :as file]
             [frontend.ui :as ui]
             [frontend.loader :as loader]
@@ -80,17 +90,6 @@
   [value]
   (storage/set-json (str (state/get-current-repo) "-" "last-app-state") value))
 
-(defonce *files (atom nil))
-(defonce *current-file (atom nil))
-(defonce *current-title (atom ""))
-(defonce *file-loading? (atom nil))
-(defonce *elements (atom nil))
-(defonce *unsaved? (atom false))
-(defonce *search-files (atom []))
-(defonce *saving-title (atom nil))
-
-(defonce *excalidraw (atom nil))
-
 (defn set-excalidraw-component!
   []
   (reset! *excalidraw (r/adapt-class
@@ -121,12 +120,6 @@
         (notification/show!
          (util/format "Could not load this invalid excalidraw file")
          :error)))))
-
-(defn title->file-name
-  [title]
-  (when (not (string/blank? title))
-    (let [title (string/lower-case (string/replace title " " "-"))]
-      (str (date/get-date-time-string-2) "-" title ".excalidraw"))))
 
 (defn get-file-title
   [file]
@@ -161,7 +154,7 @@
                      file
                      @*current-file
                      (:file option)
-                     (title->file-name title)))
+                     (draw/title->file-name title)))
               data (serialize-as-json elements app-state)]
           (when file
             (draw/save-excalidraw! file data
@@ -197,7 +190,7 @@
 (defn- rename-file!
   [file new-title]
   (when-not (string/blank? new-title)
-    (let [new-file (title->file-name new-title)]
+    (let [new-file (draw/title->file-name new-title)]
       (when-not (= (string/trim file) (string/trim new-file))
         (save-excalidraw!
          {} {} new-file
@@ -453,14 +446,15 @@
 (rum/defcs draw-2 < rum/reactive
   {:init (fn [state]
            (let [repo (storage/get :git/current-repo)]
-             (when-let [last-title (get-last-title repo)]
-               (reset! *current-title last-title))
-             (when-let [last-file (or
-                                   (get-in (first (:rum/args state))
-                                           [:query-params :file])
-                                   (get-last-file repo))]
-               (reset! *current-file last-file)
-               (reset! *current-title (get-file-title last-file))))
+
+             (let [current-title (get-last-title repo)]
+               (reset! *current-title current-title))
+             (let [current-file (or
+                                 (get-in (first (:rum/args state))
+                                         [:query-params :file])
+                                 (get-last-file repo))]
+               (reset! *current-file current-file)
+               (reset! *current-title (get-file-title current-file))))
 
            (if (loaded?)
              (set-excalidraw-component!)

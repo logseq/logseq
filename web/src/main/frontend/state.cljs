@@ -5,12 +5,18 @@
             [clojure.string :as string]
             [medley.core :as medley]
             [goog.object :as gobj]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [dommy.core :as dom]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
+            [clojure.core.async :as async]))
 
 (defonce state
   (atom
    {:route-match nil
     :today nil
+    :daily/migrating? nil
+    :db/batch-txs (async/chan 100)
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -21,6 +27,11 @@
                          (storage/get "git-changed-files")
                          {})
     :indexeddb/support? true
+    ;; TODO: save in local storage so that if :changed? is true when user
+    ;; reloads the browser, the app should re-index the repo (another way
+    ;; is to save all the tx data since :last-stored-at)
+    ;; repo -> {:last-stored-at :last-modified-at}
+    :repo/persist-status {}
     :me nil
     :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
@@ -35,6 +46,7 @@
     :search/result nil
 
     :ui/sidebar-open? false
+    :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
     ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
@@ -43,11 +55,14 @@
     :ui/root-component nil
     :ui/custom-query-components {}
     :ui/show-recent? false
+    :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
+                            false)
     :document/mode? (or (storage/get :document/mode?) false)
 
     :github/contents {}
     :config {}
     :editor/show-page-search? false
+    :editor/show-page-search-hashtag? false
     :editor/show-date-picker? false
     ;; With label or other data
     :editor/show-input nil
@@ -60,11 +75,9 @@
 
     :selection/mode false
     :selection/blocks []
+    :selection/start-block nil
     :custom-context-menu/show? false
     :custom-context-menu/links nil
-
-    ;; encrypted github token
-    :encrypt/token (storage/get :encrypt/token)
 
     ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
@@ -141,6 +154,10 @@
   (if (= (get-preferred-workflow) :now)
     "LATER"
     "TODO"))
+
+(defn hide-file?
+  []
+  (:hide-file-in-page? (get-config)))
 
 (defn get-repos
   []
@@ -286,10 +303,18 @@
 
 (defn set-editor-show-page-search
   [value]
-  (set-state! :editor/show-page-search? value))
+  (set-state! :editor/show-page-search? value)
+  (set-state! :editor/show-page-search-hashtag? false))
+(defn set-editor-show-page-search-hashtag
+  [value]
+  (set-state! :editor/show-page-search? value)
+  (set-state! :editor/show-page-search-hashtag? value))
 (defn get-editor-show-page-search
   []
   (get @state :editor/show-page-search?))
+(defn get-editor-show-page-search-hashtag
+  []
+  (get @state :editor/show-page-search-hashtag?))
 (defn set-editor-show-block-search
   [value]
   (set-state! :editor/show-block-search? value))
@@ -315,6 +340,14 @@
          (fn [m]
            (and input-id {input-id true}))))
 
+(defn set-selection-start-block!
+  [start-block]
+  (swap! state assoc :selection/start-block start-block))
+
+(defn get-selection-start-block
+  []
+  (get @state :selection/start-block))
+
 (defn set-selection-blocks!
   [blocks]
   (when (seq blocks)
@@ -322,12 +355,20 @@
            :selection/mode true
            :selection/blocks blocks)))
 
+(defn into-selection-mode!
+  []
+  (swap! state assoc :selection/mode true))
+
 (defn clear-selection!
   []
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
          :selection/up? nil))
+
+(defn clear-selection-blocks!
+  []
+  (swap! state assoc :selection/blocks nil))
 
 (defn get-selection-blocks
   []
@@ -339,6 +380,7 @@
 
 (defn conj-selection-block!
   [block up?]
+  (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (conj (:selection/blocks @state) block)
@@ -378,24 +420,36 @@
   (storage/set :git/clone-repo repo))
 
 (defn set-github-token!
-  [token]
-  (swap! state assoc-in [:me :access-token] token))
+  [repo token]
+  (when token
+    (swap! state update-in [:me :repos]
+           (fn [repos]
+             (map (fn [r]
+                    (if (= repo (:url r))
+                      (assoc r :token token)
+                      repo)) repos)))))
 
-(defn get-encrypted-token
-  []
-  (:encrypt/token @state))
+(defn set-github-installation-tokens!
+  [tokens]
+  (when (seq tokens)
+    (let [tokens (medley/map-keys name tokens)
+          repos (get-in @state [:me :repos])]
+      (when (seq repos)
+        (let [repos (mapv (fn [{:keys [installation_id] :as r}]
+                            (if-let [token (get tokens installation_id)]
+                              (assoc r :token token)
+                              r)) repos)]
+          (swap! state assoc-in [:me :repos] repos))))))
 
-(defn set-encrypt-token!
-  [encrypted]
-  (when encrypted
-    (set-state! :encrypt/token encrypted)
-    (storage/set :encrypt/token encrypted)))
-
-(defn clear-encrypt-token!
-  []
-  (set-state! :encrypt/token nil)
-  (storage/remove :encrypt/token))
-
+(defn get-github-token
+  ([]
+   (get-github-token (get-current-repo)))
+  ([repo]
+   (when repo
+     (let [repos (get-in @state [:me :repos])]
+       (-> (filter #(= repo (:url %)) repos)
+           first
+           :token)))))
 
 (defn toggle-sidebar-open?!
   []
@@ -456,6 +510,10 @@
   []
   (get @state :editor/block))
 
+(defn set-last-pos!
+  [new-pos]
+  (reset! state (assoc @state :editor/last-saved-cursor new-pos)))
+
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
@@ -466,6 +524,12 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn toggle-theme!
+  []
+  (let [theme (:ui/theme @state)
+        theme' (if (= theme "dark") "white" "dark")]
+    (set-theme! theme')))
 
 (defn- file-content-key
   [repo path]
@@ -576,6 +640,11 @@
                  (fn [files] (distinct (conj files file))))
   (storage/set "git-changed-files" (:repo/changed-files @state)))
 
+(defn reset-changed-files!
+  [files]
+  (when-let [repo (get-current-repo)]
+    (swap! state assoc-in [:repo/changed-files repo] files)))
+
 (defn clear-changed-files!
   [repo]
   (set-state! [:repo/changed-files repo] nil)
@@ -585,10 +654,6 @@
 (defn get-changed-files
   [repo]
   (get-in @state [:repo/changed-files repo]))
-
-(defn get-github-token
-  []
-  (get-in @state [:me :access-token]))
 
 (defn set-modal!
   [modal-panel-content]
@@ -601,3 +666,59 @@
   (swap! state assoc
          :modal/show? false
          :modal/panel-content nil))
+
+(defn get-journal-basis
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (when-let [basis (get-in @state [:config repo :journal-basis])]
+       (keyword (string/lower-case (str basis)))))
+   :monthly))
+
+(defn update-repo-last-stored-at!
+  [repo]
+  (swap! state assoc-in [:repo/persist-status repo :last-stored-at] (util/time-ms)))
+
+(defn get-repo-persist-status
+  []
+  (:repo/persist-status @state))
+
+(defn mark-repo-as-changed!
+  [repo _tx-id]
+  (swap! state assoc-in [:repo/persist-status repo :last-modified-at] (util/time-ms)))
+
+(defn add-tx!
+  ;; TODO: replace f with data for batch transactions
+  [f]
+  (when f
+    (swap! state update :db/batch-txs (fn [chan]
+                                        (async/put! chan f)
+                                        chan))))
+
+(defn get-db-batch-txs-chan
+  []
+  (:db/batch-txs @state))
+
+(defn repos-need-to-be-stored?
+  []
+  (let [status (vals (get-repo-persist-status))]
+    (some (fn [{:keys [last-stored-at last-modified-at]}]
+            (> last-modified-at last-stored-at))
+          status)))
+
+(defn get-left-sidebar-open
+  []
+  (get-in @state [:ui/left-sidebar-open?]))
+
+(defn set-left-sidebar-open!
+  [value]
+  (set-state! :ui/left-sidebar-open? value))
+
+(defn set-daily-migrating!
+  [value]
+  (set-state! :daily/migrating? value))
+
+(defn set-developer-mode!
+  [value]
+  (set-state! :ui/developer-mode? value)
+  (storage/set "developer-mode" (str value)))

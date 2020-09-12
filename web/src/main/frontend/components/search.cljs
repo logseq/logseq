@@ -5,6 +5,7 @@
             [frontend.handler.route :as route]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.db :as db]
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -69,13 +70,32 @@
 
                       :page
                       (route/redirect! {:to :page
-                                          :path-params {:name (util/encode-str data)}})
+                                        :path-params {:name (util/encode-str data)}})
 
                       :block
                       (let [page (:page/name (:block/page data))
                             path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
                         (route/redirect-with-fragment! path))
                       nil))
+       :on-shift-chosen (fn [{:keys [type data]}]
+                          (case type
+                            :page
+                            (let [page (db/entity [:page/name data])]
+                              (state/sidebar-add-block!
+                               (state/get-current-repo)
+                               (:db/id page)
+                               :page
+                               {:page page}))
+
+                            :block
+                            (let [block (db/entity [:block/uuid (:block/uuid data)])]
+                              (state/sidebar-add-block!
+                               (state/get-current-repo)
+                               (:db/id block)
+                               :block
+                               block))
+
+                            nil))
        :item-render (fn [{:keys [type data]}]
                       (case type
                         :new-page
@@ -108,32 +128,32 @@
         show-result? (boolean (seq search-result))]
     [:div#search.flex-1.flex.ml-0.md:ml-12
      [:div.flex.md:ml-0
-       [:label.sr-only {:for "search_field"} "Search"]
-       [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
-        [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
-         [:svg.h-5.w-5
-          {:view-box "0 0 20 20", :fill "currentColor"}
-          [:path
-           {:d
-            "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z",
-            :clip-rule "evenodd",
-            :fill-rule "evenodd"}]]]
-        [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.bg-base-3.sm:bg-transparent
+      [:label.sr-only {:for "search_field"} "Search"]
+      [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
+       [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
+        [:svg.h-5.w-5
+         {:view-box "0 0 20 20", :fill "currentColor"}
+         [:path
+          {:d
+           "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z",
+           :clip-rule "evenodd",
+           :fill-rule "evenodd"}]]]
+       [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.bg-base-3.sm:bg-transparent
 
-         {:style {:padding-left "2rem"}
-          :placeholder "Search"
-          :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-          :default-value ""
-          :on-change (fn [e]
-                       (let [value (util/evalue e)]
-                         (if (string/blank? value)
-                           (search-handler/clear-search!)
-                           (do
-                             (state/set-q! value)
-                             (search-handler/search value)))))}]
-        (when-not (string/blank? search-q)
-          (ui/css-transition
-           {:class-names "fade"
-            :timeout {:enter 500
-                      :exit 300}}
-           (search-auto-complete search-result search-q)))]]]))
+        {:style {:padding-left "2rem"}
+         :placeholder "Search"
+         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+         :default-value ""
+         :on-change (fn [e]
+                      (let [value (util/evalue e)]
+                        (if (string/blank? value)
+                          (search-handler/clear-search!)
+                          (do
+                            (state/set-q! value)
+                            (search-handler/search value)))))}]
+       (when-not (string/blank? search-q)
+         (ui/css-transition
+          {:class-names "fade"
+           :timeout {:enter 500
+                     :exit 300}}
+          (search-auto-complete search-result search-q)))]]]))

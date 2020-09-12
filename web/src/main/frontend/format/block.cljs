@@ -8,7 +8,8 @@
             [frontend.config :as config]
             [datascript.core :as d]
             [clojure.set :as set]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [frontend.format.mldoc :as mldoc]))
 
 (defn heading-block?
   [block]
@@ -24,22 +25,30 @@
 
 (defn get-page-reference
   [block]
-  (when (and (vector? block) (= "Link" (first block)))
+  (cond
+    (and (vector? block) (= "Link" (first block)))
     (let [typ (first (:url (second block)))]
       (or
        (and
         (= typ "Search")
         (not (contains? #{\# \* \/ \( \[} (first (second (:url (second block))))))
         (let [page (second (:url (second block)))]
-          (when (and (not (string/starts-with? page "http"))
-                     (not (string/starts-with? page "file"))
+          (when (and (not (util/starts-with? page "http"))
+                     (not (util/starts-with? page "file"))
                      (not (string/ends-with? page ".html")))
             page)))
 
        (and
         (= typ "Complex")
         (= (:protocol (second (:url (second block)))) "file")
-        (:link (second (:url (second block)))))))))
+        (:link (second (:url (second block)))))))
+
+    (and (vector? block) (= "Nested_link" (first block)))
+    (let [content (:content (last block))]
+      (subs content 2 (- (count content) 2)))
+
+    :else
+    nil))
 
 (defn get-block-reference
   [block]
@@ -48,12 +57,6 @@
                            (last block))]
     (when (util/uuid-string? block-id)
       block-id)))
-
-(defn task-block?
-  [block]
-  (and
-   (heading-block? block)
-   (some? (:marker (second block)))))
 
 ;; FIXME:
 (defn extract-title
@@ -82,7 +85,9 @@
 
 (defn extract-properties
   [[_ properties] start-pos end-pos]
-  {:properties (into {} properties)
+  {:properties (->> (into {} properties)
+                    (medley/map-vals (fn [v]
+                                       (and v (string/trim v)))))
    :start-pos start-pos
    :end-pos end-pos})
 
@@ -129,13 +134,16 @@
                                    [:block/uuid (medley/uuid id)])
                                  ref-blocks)))))
 
+(defn block-keywordize
+  [block]
+  (medley/map-keys
+   (fn [k] (keyword "block" k))
+   block))
+
 (defn safe-blocks
   [blocks]
   (map (fn [block]
-         (let [block (util/remove-nils block)]
-           (medley/map-keys
-            (fn [k] (keyword "block" k))
-            block)))
+         (block-keywordize (util/remove-nils block)))
     blocks))
 
 (defn collect-block-tags
@@ -146,9 +154,9 @@
 
 (defn extract-blocks
   [blocks last-pos encoded-content]
-  (let [block-refs (atom [])
-        blocks
-        (loop [headings []
+  (let [[block-refs blocks]
+        (loop [block-refs []
+               headings []
                block-body []
                blocks (reverse blocks)
                timestamps {}
@@ -163,16 +171,17 @@
                 (paragraph-timestamp-block? block)
                 (let [timestamp (extract-timestamp block)
                       timestamps' (conj timestamps timestamp)]
-                  (recur headings block-body (rest blocks) timestamps' properties last-pos last-level children))
+                  (recur block-refs headings block-body (rest blocks) timestamps' properties last-pos last-level children))
 
                 (properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]
-                  (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
+                  (recur block-refs headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
                 (let [id (or (when-let [custom-id (get-in properties [:properties "CUSTOM_ID"])]
-                               (when (util/uuid-string? custom-id)
-                                 (uuid custom-id)))
+                               (let [custom-id (string/trim custom-id)]
+                                 (when (util/uuid-string? custom-id)
+                                   (uuid custom-id))))
                              (d/squuid))
                       block (second block)
                       level (:level block)
@@ -200,19 +209,18 @@
                       block (collect-block-tags block)
                       block (with-page-refs block)
                       block (with-block-refs block)
-                      _ (swap! block-refs
-                               (fn [refs]
-                                 (->> (concat refs (:ref-blocks block))
-                                      (remove nil?)
-                                      (distinct))))
+                      block-refs (into block-refs (:ref-blocks block))
                       last-pos' (get-in block [:meta :start-pos])]
-                  (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
+                  (recur block-refs (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
 
                 :else
                 (let [block-body' (conj block-body block)]
-                  (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
-            (-> (reverse headings)
-                safe-blocks)))]
+                  (recur block-refs headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
+            [(->> block-refs
+                  (remove nil?)
+                  (distinct))
+             (-> (reverse headings)
+                 safe-blocks)]))]
     (let [first-block (first blocks)
           first-block-start-pos (get-in first-block [:block/meta :start-pos])
           blocks (if (and
@@ -223,22 +231,24 @@
                     (merge
                      (let [content (utf8/substring encoded-content 0 first-block-start-pos)
                            uuid (d/squuid)]
-                       {:block/uuid uuid
-                        :block/content content
-                        :block/anchor (str uuid)
-                        :block/level 2
-                        :block/meta {:start-pos 0
-                                     :end-pos (or first-block-start-pos
-                                                  (utf8/length encoded-content))}
-                        :block/body (take-while (fn [block] (not (heading-block? block))) blocks)
-                        :block/pre-block? true})
+                       (->
+                        {:uuid uuid
+                         :content content
+                         :anchor (str uuid)
+                         :level 2
+                         :meta {:start-pos 0
+                                :end-pos (or first-block-start-pos
+                                             (utf8/length encoded-content))}
+                         :body (take-while (fn [block] (not (heading-block? block))) blocks)
+                         :pre-block? true}
+                        (block-keywordize)))
                      (select-keys first-block [:block/file :block/format :block/page]))
                     blocks)
                    blocks)
           block-refs (mapv
                       (fn [[_ block-uuid]]
                         {:block/uuid block-uuid})
-                      @block-refs)]
+                      block-refs)]
       [block-refs blocks])))
 
 (defn- page-with-journal
@@ -254,7 +264,7 @@
          :page/original-name original-page-name}))))
 
 (defn parse-block
-  [{:block/keys [uuid content meta file page] :as block} format]
+  [{:block/keys [uuid content meta file page pre-block?] :as block} format]
   (when-not (string/blank? content)
     (let [ast (format/to-edn content format nil)
           start-pos (:start-pos meta)
@@ -319,35 +329,3 @@
        (rest args)
        (inc n))
       s)))
-
-(comment
-  (defn sort-tasks
-    [blocks]
-    (let [markers ["NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAITING" "WAIT" "DONE" "CANCELED" "CANCELLED"]
-          markers (zipmap markers (reverse (range 1 (count markers))))
-          priorities ["A" "B" "C" "D" "E" "F" "G"]
-          priorities (zipmap priorities (reverse (range 1 (count priorities))))]
-      (sort (fn [t1 t2]
-              (let [m1 (get markers (:block/marker t1) 0)
-                    m2 (get markers (:block/marker t2) 0)
-                    p1 (get priorities (:block/priority t1) 0)
-                    p2 (get priorities (:block/priority t2) 0)]
-                (cond
-                  (and (= m1 m2)
-                       (= p1 p2))
-                  (compare (str (:block/title t1))
-                           (str (:block/title t2)))
-
-                  (= m1 m2)
-                  (> p1 p2)
-                  :else
-                  (> m1 m2))))
-            blocks)))
-
-  (def file-content "# Aug 1st, 2020\n# Aug 2nd, 2020\n# Aug 3rd, 2020\n# Aug 4th, 2020\n# Aug 5th, 2020\n# Aug 6th, 2020\n# Aug 7th, 2020\n# Aug 8th, 2020\n# Aug 9th, 2020\n# Aug 10th, 2020\n# Aug 11th, 2020\n# Aug 12th, 2020\n# Aug 13th, 2020\n# Aug 14th, 2020\n# Aug 15th, 2020\n# Aug 16th, 2020\n# Aug 17th, 2020\n# Aug 18th, 2020\n# Aug 19th, 2020\n# Aug 20th, 2020\n# Aug 21st, 2020\n# Aug 22nd, 2020\n# Aug 23rd, 2020\n# Aug 24th, 2020\n# Aug 25th, 2020\n# Aug 26th, 2020\n# Aug 27th, 2020\n# Aug 28th, 2020\n# Aug 29th, 2020\n# Aug 30th, 2020\n# Aug 31st, 2020\n")
-
-  (def ast (frontend.format.mldoc/->edn file-content (frontend.format.mldoc/default-config :markdown)))
-
-  (let [utf8-content (utf8/encode file-content)]
-    (extract-blocks ast (utf8/length utf8-content) utf8-content))
-  )

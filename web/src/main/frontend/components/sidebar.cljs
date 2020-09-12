@@ -21,6 +21,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
@@ -44,7 +45,8 @@
 
 (rum/defc sidebar-nav
   [route-match close-modal-fn]
-  (let [active? (fn [route] (= route (get-in route-match [:data :name])))
+  (let [white? (= "white" (state/sub :ui/theme))
+        active? (fn [route] (= route (get-in route-match [:data :name])))
         page-active? (fn [page]
                        (= page (get-in route-match [:parameters :path :name])))]
     [:nav.flex-1
@@ -60,9 +62,11 @@
                "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
                (active? :all-files)
                close-modal-fn)
-     [:div.pl-4.pr-4 {:style {:height 1
-                              :background-color "rgb(57, 75, 89)"
-                              :margin 12}}]]))
+     ;; [:div.pl-4.pr-4 {:style {:height 1
+     ;;                          :background-color (if white? "#f0f8ff" "#073642")
+     ;;                          :margin 12}}]
+     ;; (right-sidebar/contents)
+     ]))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
@@ -77,12 +81,17 @@
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)
-        token (state/sub :encrypt/token)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.max-w-7xl.mx-auto
-       (cond
-         (and (not logged?) (seq latest-journals))
-         (journal/journals latest-journals)
+        token (state/sub :encrypt/token)
+        ;; TODO: remove this
+        daily-migrating? (state/sub [:daily/migrating?])]
+           (rum/with-context [[t] i18n/*tongue-context*]
+    [:div.max-w-7xl.mx-auto
+     (cond
+       daily-migrating?
+       (ui/loading "Migrating to daily notes")
+
+       (and (not logged?) (seq latest-journals))
+       (journal/journals latest-journals)
 
          (and logged? (not preferred-format))
          (widgets/choose-preferred-format)
@@ -90,11 +99,6 @@
        ;; TODO: delay this
          (and logged? (nil? (:email me)))
          (settings/set-email)
-
-       ;; TODO: delay this
-       ;; personal token
-         (and logged? (nil? token))
-         (widgets/set-personal-access-token)
 
          cloning?
          (ui/loading (t :cloning))
@@ -133,9 +137,35 @@
   ;; TODO: move this to keyboards
   (mixins/event-mixin
    (fn [state]
+     (mixins/listen state js/window "click"
+                    (fn [e]
+                      ;; hide context menu
+                      (state/hide-custom-context-menu!)
+
+                      ;; enable scroll
+                      (let [main (d/by-id "main-content")]
+                        (d/remove-class! main "overflow-hidden")
+                        (d/add-class! main "overflow-y-auto"))
+                      (if-not (state/get-selection-start-block)
+                        (editor-handler/clear-selection! e)
+                        (state/set-selection-start-block! nil))))
+
      (mixins/on-key-down
       state
-      {;; ?
+      {
+       ;; esc
+       27 (fn [_state e]
+            (editor-handler/clear-selection! e))
+
+       ;; shift+up
+       38 (fn [state e]
+            (editor-handler/on-select-block state e true))
+
+       ;; shift+down
+       40 (fn [state e]
+            (editor-handler/on-select-block state e false))
+
+       ;; ?
        191 (fn [state e]
              (when-not (util/input? (gobj/get e "target"))
                (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))
@@ -147,13 +177,17 @@
                        (not (gobj/get e "altKey")))
               (when-let [repo-url (state/get-current-repo)]
                 (if (and
-                     ;; (db/get-key-value repo-url :git/write-permission?)
                      (not (state/get-edit-input-id))
                      (seq (state/get-changed-files repo-url)))
-                  (state/set-modal! commit/add-commit-message)
+                  (do
+                    (util/stop e)
+                    (state/set-modal! commit/add-commit-message))
                   (notification/show! "No changed files yet!" :warning)))))}
       (fn [e key-code]
         nil))))
+  {:did-mount (fn [state]
+                (handler/set-save-before-unload!)
+                state)}
   (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
@@ -207,7 +241,7 @@
           [:svg.h-6.w-6
           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
           [:path
-            {:d "M4 6h16M4 12h16M4 18h7"
+           {:d "M4 6h16M4 12h16M4 18h7"
             :stroke-width "2"
             :stroke-linejoin "round"
             :stroke-linecap "round"}]]]
@@ -235,7 +269,7 @@
               :target "_blank"}
               svg/external-link])
 
-          (when (and page? current-repo)
+          (when (and page? current-repo (not config/mobile?))
             (let [page (get-in route-match [:path-params :name])
                   page (string/lower-case (util/url-decode page))
                   page (db/entity [:page/name page])]
@@ -273,11 +307,14 @@
                 (when current-repo
                   {:title (t :all-files)
                   :options {:href "/all-files"}})
-                (when current-repo
-                  {:title (t :settings)
+               (when logged?
+                 {:title (t :settings)
                   :options {:href "/settings"}})
-                {:title [:div.flex-row.flex.justify-between.items-center
-                        [:span (t :join-community)]
+               (when current-repo
+                 {:title "Import"
+                  :options {:href "/import"}})
+               {:title [:div.flex-row.flex.justify-between.items-center
+                        [:span "Join the community"]
                         svg/discord]
                 :options {:href "https://discord.gg/KpN4eHY"
                           :title (t :discord-title)
@@ -291,8 +328,18 @@
           [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
             {:on-click (fn []
                         (state/toggle-sidebar-open?!))}
-            (svg/menu)]]]]
-        [:div#main-content.flex.wrapper.overflow-y-auto {:style {:height "100vh"}}
+           (svg/menu)]]]]
+
+       [:div#main-content.flex.wrapper.overflow-y-auto {:style {:height "100vh"}}
+        (when-not config/mobile?
+            [:div#sidebar-nav-wrapper.flex-col.pt-4
+             {:style {:flex (if (state/get-left-sidebar-open)
+                              "0 1 20%"
+                              "0 0 0px")
+                      :border-right (str "1px solid "
+                                         (if white? "#f0f8ff" "#073642"))}}
+             (when (state/sub :ui/left-sidebar-open?)
+               (sidebar-nav route-match nil))])
         [:div.flex.#main-content-container.justify-center
           {:class (if global-graph-pages?
                     "initial"
@@ -300,12 +347,14 @@
           :style {:position "relative"
                   :flex "1 1 65%"
                   :width "100vw"}}
-          [:div.flex-1 {:style (cond->
-                                {:max-width 640}
-                                (or global-graph-pages?
-                                    (and (not logged?)
-                                          home?))
-                                (dissoc :max-width))}
+         [:div.flex-1
+          {:style (cond->
+                   {:max-width 640}
+                    (or global-graph-pages?
+                        (and (not logged?)
+                             home?)
+                        (contains? #{:all-files :all-pages} route-name))
+                    (dissoc :max-width))}
           (cond
             (not indexeddb-support?)
             nil
@@ -317,9 +366,10 @@
 
             :else
             [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
-              main-content])]]
-        (right-sidebar/sidebar)]
-        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
+             main-content])]]
+        (when-not config/mobile?
+          (right-sidebar/sidebar))]
+       [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:href "/"
           :on-click (fn []
                       (util/scroll-to-top)
@@ -329,13 +379,21 @@
                   :left 16
                   :z-index 111}}
         (svg/logo (not white?))]
-        (ui/notification)
-        (ui/modal)
-        (custom-context-menu)
-        [:a#download.hidden]
-        [:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-        {:style {:right 24}
-          :title (t :help-shortcut-title)
-          :on-click (fn []
-                      (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-        "?"]]]])))
+       (ui/notification)
+       (ui/modal)
+       (custom-context-menu)
+       [:a#download.hidden]
+       ;; (when-not config/mobile?
+       ;;   [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+       ;;    {:style {:right 24}
+       ;;     :title "Click to check shortcuts and other tips"
+       ;;     :on-click (fn []
+       ;;                 (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+       ;;    "?"]
+       ;;   [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+       ;;    {:style {:left 24}
+       ;;     :title "Click to show/hide sidebar"
+       ;;     :on-click (fn []
+       ;;                 (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
+       ;;    (if (state/sub :ui/left-sidebar-open?) "<" ">")]])
+       ]]])))

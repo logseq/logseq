@@ -6,7 +6,8 @@
             [frontend.components.page :as page]
             [frontend.components.diff :as diff]
             [frontend.components.draw :as draw]
-            [frontend.components.settings :as settings]))
+            [frontend.components.settings :as settings]
+            [frontend.components.external :as external]))
 
 (def routes
   [["/"
@@ -55,4 +56,8 @@
 
    ["/settings"
     {:name :settings
-     :view settings/settings}]])
+     :view settings/settings}]
+
+   ["/import"
+    {:name :import
+     :view external/import-cp}]])

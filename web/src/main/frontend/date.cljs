@@ -20,6 +20,7 @@
   []
   (conj
    #{"MMM do, yyyy"
+     "MMMM do, yyyy"
      "E, MM/dd/yyyy"
      "E, yyyy/MM/dd"
      "EEE, MM/dd/yyyy"
@@ -93,8 +94,10 @@
   ([]
    (ymd (js/Date.)))
   ([date]
+   (ymd date "/"))
+  ([date sep]
    (let [{:keys [year month day]} (year-month-day-padded (get-date date))]
-     (str year "/" month "/" day))))
+     (str year sep month sep day))))
 
 (defn get-local-date
   []
@@ -129,8 +132,10 @@
 
 (defn current-journal-path
   [preferred-format]
-  (let [{:keys [year month]} (get-date)]
-    (journals-path year month preferred-format)))
+  (when preferred-format
+    (let [{:keys [year month]} (get-date)
+          preferred-format preferred-format]
+      (journals-path year month preferred-format))))
 
 (defn valid?
   [s]
@@ -145,37 +150,39 @@
 (defn valid-journal-title?
   [title]
   (and title
-       (or
-        (valid? (string/capitalize title))
-        (not (js/isNaN (js/Date.parse title))))))
+       (valid? (string/capitalize title))))
+
+(defn journal-title->
+  [journal-title then-fn]
+  (when-not (string/blank? journal-title)
+    (when-let [time (->> (map
+                          (fn [formatter]
+                            (try
+                              (tf/parse (tf/formatter formatter) journal-title)
+                              (catch js/Error _e
+                                nil)))
+                          (journal-title-formatters))
+                         (filter some?)
+                         first)]
+      (then-fn time))))
 
 (defn journal-title->int
   [journal-title]
-  (when-not (string/blank? journal-title)
-    (when-let [time (->> (map
-                      (fn [formatter]
-                        (try
-                          (tf/parse (tf/formatter formatter) journal-title)
-                          (catch js/Error _e
-                            nil)))
-                      (journal-title-formatters))
-                    (filter some?)
-                    first)]
-      (util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") time)))))
+  (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))
 
 (defn journal-title->long
   [journal-title]
-  (when-not (string/blank? journal-title)
-    (when-let [time (->> (map
-                      (fn [formatter]
-                        (try
-                          (tf/parse (tf/formatter formatter) journal-title)
-                          (catch js/Error _e
-                            nil)))
-                      (journal-title-formatters))
-                    (filter some?)
-                    first)]
-      (tc/to-long time))))
+  (journal-title-> journal-title #(tc/to-long %)))
+
+(def default-journal-title-formatter (tf/formatter "yyyy_MM_dd"))
+
+(defn journal-title->default
+  [journal-title]
+  (journal-title-> journal-title #(tf/unparse default-journal-title-formatter %)))
+
+(defn journal-title->custom-format
+  [journal-title]
+  (journal-title-> journal-title format))
 
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))

@@ -352,9 +352,14 @@
      #{"DETAILS" "SUMMARY"}
      (gobj/get node "tagName"))))
 
+;; Debug
+(defn starts-with?
+  [s substr]
+  (string/starts-with? s substr))
+
 (defn journal?
   [path]
-  (string/starts-with? path "journals/"))
+  (starts-with? path "journals/"))
 
 (defn drop-first-line
   [s]
@@ -532,6 +537,24 @@
      (.getDate local-date-time)
      0 0 0 0)))
 
+(defn safe-subvec [xs start end]
+  (if (or (neg? start)
+          (> end (count xs)))
+    []
+    (subvec xs start end)))
+
+(defn get-nodes-between-two-nodes
+  [id1 id2 class]
+  (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
+    (let [id #(gobj/get % "id")
+          node-1 (gdom/getElement id1)
+          node-2 (gdom/getElement id2)
+          idx-1 (.indexOf nodes node-1)
+          idx-2 (.indexOf nodes node-2)
+          start (min idx-1 idx-2)
+          end (inc (max idx-1 idx-2))]
+      (safe-subvec (vec nodes) start end))))
+
 (defn rec-get-block-node
   [node]
   (if (and node (d/has-class? node "ls-block"))
@@ -672,17 +695,21 @@
 
 (defn get-prev-block-with-same-level
   [block]
-  (when-let [blocks (d/by-class "ls-block")]
-    (when-let [index (.indexOf blocks block)]
-      (let [level (d/attr block "level")]
-        (when (> index 0)
-          (loop [idx (dec index)]
-            (if (>= idx 0)
-              (let [block (nth blocks idx)]
-                (if (= level (d/attr block "level"))
-                  block
-                  (recur (dec idx))))
-              nil)))))))
+  (let [id (gobj/get block "id")
+        prefix (re-find #"ls-block-[\d]+" id)]
+    (when-let [blocks (d/by-class "ls-block")]
+     (when-let [index (.indexOf blocks block)]
+       (let [level (d/attr block "level")]
+         (when (> index 0)
+           (loop [idx (dec index)]
+             (if (>= idx 0)
+               (let [block (nth blocks idx)
+                     prefix-match? (starts-with? (gobj/get block "id") prefix)]
+                 (if (and prefix-match?
+                          (= level (d/attr block "level")))
+                   block
+                   (recur (dec idx))))
+               nil))))))))
 
 (defn get-next-block-with-same-level
   [block]
@@ -760,7 +787,10 @@
   (->> (map (fn [tag]
               (let [tag (-> (string/trim tag)
                             (string/lower-case)
-                            (string/replace #"\s+" "-"))]
+                            (string/replace #"\s+" "-")
+                            (string/replace #"#" "")
+                            (string/replace "[" "")
+                            (string/replace "]" ""))]
                 (if (tag-valid? tag)
                   {:db/id tag
                    :tag/name tag})))
@@ -813,18 +843,25 @@
     keyboard-shortcut))
 
 (defn default-content-with-title
-  [text-format title]
-  (let [contents? (= (string/lower-case title) "contents")]
-    (case (name text-format)
-      "org"
-      (if contents?
-        (format "** [[]]" title)
-        (format "#+TITLE: %s\n\n** " title))
-      "markdown"
-      (if contents?
-        (format "## [[]]" title)
-        (format "---\ntitle: %s\n---\n\n## " title))
-      "")))
+  ([text-format title]
+   (default-content-with-title text-format title true))
+  ([text-format title new-block?]
+   (let [contents? (= (string/lower-case title) "contents")
+         properties (case (name text-format)
+                      "org"
+                      (format "#+TITLE: %s" title)
+                      "markdown"
+                      (format "---\ntitle: %s\n---" title)
+                      "")
+         new-block (case (name text-format)
+                     "org"
+                     "** "
+                     "markdown"
+                     "## "
+                     "")]
+     (if contents?
+       new-block
+       (str properties "\n\n" (if new-block? new-block))))))
 
 (defn get-first-block-by-id
   [block-id]

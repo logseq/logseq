@@ -64,8 +64,7 @@
       "https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA"
       :alt "screenshot"}]
 
-    [:div.flex.flex-col.ls-block
-
+    [:div.flex.flex-col.ls-block.intro-docs
      [:h2 {} "Where are my notes saved?"]
      [:p
       {}
@@ -78,41 +77,26 @@
      [:h3 {} "1. Sync between multiple devices"]
      [:p
       {}
-      "Currently, we only support syncing through Github, more options (e.g.Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon."]
+      "Currently, we only support syncing through Github, more options (Self-host git, WebDAV, Google Drive, etc.) will be added soon."]
      [:p
-      {}
-      "We are using an excellent web git client called "
-      [:a
-       {:href "https://logseq.com/blog/isomorphic-git.org"
-        :target "_blank"}
-       "Isomorphic-git.org"]
-      "."]
-     [:h4 {} "Step 1"]
-     [:p {} "Click the button " [:i {} "Login with Github"] "."]
-     [:h4 {} "Step 2"]
-     [:p
-      {}
-      "Set your Github personal access token, the token will be encrypted and stored in the browser local storage, our server will never store it."]
-     [:p
-      {}
-      "If you know nothing about either Git or the personal access token, no worries, just follow the steps here: "
-      [:a
-       {:href
-        "https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-"
-        :target "_blank"}
-       "https://logseq.com/blog/faq#How"
-       [:i {} "to"]
-       "create"
-       [:i {} "a"]
-       "Github"
-       [:i {} "personal"]
-       "access_token-3f-"]]
-     [:h4 {} "Step 3"]
-     [:p {} "Start writing!"]
+      "Check out this awesome video by "
+      [:a {:href "https://twitter.com/EdTravelling"
+           :target "_blank"}
+       "@EdTravelling"]
+      ":"]
+     [:iframe
+      {:allowfullscreen "allowfullscreen",
+       :allow
+       "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture",
+       :frameborder "0",
+       :src "https://www.youtube.com/embed/Vw-x7yTTO0s",
+       :height "367",
+       :width "653"}]
+
      [:h3 {} "2. Use it locally (no need to login)"]
      [:p
       {}
-      "Just remember to backup your notes periodically!"]
+      "Remember to backup your notes periodically!"]
      [:h2 {} "Features"]
      [:ul
       {}
@@ -197,7 +181,7 @@
             :target "_blank"} "Workflowy"]]
       [:li
        [:a
-        {:href "https://logseq.com/blog/clojure.org"
+        {:href "https://clojure.org"
          :target "_blank"}
         "Clojure && Clojurescript"]
        " - A dynamic, functional, general-purpose programming language"]
@@ -216,18 +200,19 @@
        ", the document "
        [:a {:href "https://github.com/mldoc/mldoc"
             :target "_blank"} "parser"]
-       " is built on Angstrom."]
+       " is built on Angstrom."]
       [:li
        [:a {:href "https://github.com/talex5/cuekeeper"
             :target "_blank"} "Cuekeeper"]
-       " - Browser-based GTD (TODO list) system."]
+       " - Browser-based GTD (TODO list) system."]
       [:li
        [:a {:href "https://github.com/borkdude/sci"
             :target "_blank"} "sci"]
-       " - Small Clojure Interpreter"]
+       " - Small Clojure Interpreter"]
       [:li
        [:a {:href "https://isomorphic-git.org/"
-            :target "_blank"} "isomorphic-git"]]]]]])
+            :target "_blank"} "isomorphic-git"]
+       " - A pure JavaScript implementation of git for node and browsers!"]]]]])
 
 (defn help
   []
@@ -264,7 +249,7 @@
     [:li
      [:a {:href "https://discord.gg/KpN4eHY"
           :target "_blank"}
-      [:div.flex-row.flex.items-center
+      [:div.flex-row.inline-flex.items-center
        [:span.mr-1 "Discord community"]
        svg/discord]]]
     [:li
@@ -316,6 +301,7 @@
        [:tr [:td "Context Menu"] [:td "Right Click"]]
        [:tr [:td "Fold/Unfold blocks (when not in edit mode)"] [:td "Tab"]]
        [:tr [:td "Toggle document mode"] [:td "Ctrl-Alt-d"]]
+       [:tr [:td "Toggle between dark/light theme"] [:td "Ctrl-Alt-t"]]
        [:tr [:td "Toggle right sidebar"] [:td "Ctrl-Alt-r"]]
        [:tr [:td "Jump to Journals"] [:td "Alt-j"]]]]
      [:table

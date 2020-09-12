@@ -21,9 +21,11 @@
   (util/format "[[%s]]" page))
 
 (def link-steps [[:editor/input (str slash "link")]
-                 [:editor/show-input [{:id :link
+                 [:editor/show-input [{:command :link
+                                       :id :link
                                        :placeholder "Link"}
-                                      {:id :label
+                                      {:command :link
+                                       :id :label
                                        :placeholder "Label"}]]])
 
 (defn ->marker
@@ -95,6 +97,10 @@
      ["A" (->priority "A")]
      ["B" (->priority "B")]
      ["C" (->priority "C")]
+     ["Draw" [[:editor/input "/draw "]
+              [:editor/show-input [{:command :draw
+                                    :id :title
+                                    :placeholder "Draw title"}]]]]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
      ["Tomorrow" (->page-reference (date/tomorrow))]
@@ -366,6 +372,9 @@
 
 (defmethod handle-step :editor/search-page [[_]]
   (state/set-editor-show-page-search true))
+
+(defmethod handle-step :editor/search-page-hashtag [[_]]
+  (state/set-editor-show-page-search-hashtag true))
 
 (defmethod handle-step :editor/search-block [[_ type]]
   (state/set-editor-show-block-search true))

@@ -30,8 +30,10 @@
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.graph :as graph]
+            [frontend.format.mldoc :as mldoc]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [cljs.pprint :as pprint]))
 
 (defn- get-page-name
   [state]
@@ -51,16 +53,16 @@
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
         page-blocks (db/with-dummy-block raw-page-blocks format
-                        (if (empty? raw-page-blocks)
-                          (let [content (db/get-file repo file-path)]
-                            {:block/page {:db/id (:db/id page)}
-                             :block/file {:db/id (:db/id (:page/file page))}
-                             :block/meta
-                             (let [file-id (:db/id (:page/file page))]
-                               {:start-pos (utf8/length (utf8/encode content))
-                                :end-pos nil})}))
-                        journal?)
-        start-level (if journal? 2 1)
+                      (if (empty? raw-page-blocks)
+                        (let [content (db/get-file repo file-path)]
+                          {:block/page {:db/id (:db/id page)}
+                           :block/file {:db/id (:db/id (:page/file page))}
+                           :block/meta
+                           (let [file-id (:db/id (:page/file page))]
+                             {:start-pos (utf8/length (utf8/encode content))
+                              :end-pos nil})}))
+                      journal?)
+        start-level (or (:block/level (first page-blocks)) 1)
         hiccup-config {:id encoded-page-name
                        :start-level start-level
                        :sidebar? sidebar?
@@ -98,10 +100,11 @@
   (when (and today? (not sidebar?))
     (let [queries (state/sub [:config repo :default-queries :journals])]
       (when (seq queries)
-        [:div#today-queries.mt-10.ml-2
+        [:div#today-queries.mt-10
          (for [{:keys [title] :as query} queries]
            (rum/with-key
-             (hiccup/custom-query {:start-level 2} query)
+             (hiccup/custom-query {:start-level 2
+                                   :attr {:class "mt-10"}} query)
              (str repo "-custom-query-" (cljs.core/random-uuid))))]))))
 
 (defn- delete-page!
@@ -182,6 +185,20 @@
   (fn [close-fn]
     (rename-page-dialog-inner page-name close-fn)))
 
+(defn tagged-pages
+  [repo tag]
+  (let [pages (db/get-tag-pages repo tag)]
+    (when (seq pages)
+      [:div.references.mt-6.flex-1.flex-row
+       [:div.content
+        (ui/foldable
+         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag)]
+         [:ul.mt-2
+          (for [[original-name name] pages]
+            [:li {:key (str "tagged-page-" name)}
+             [:a {:href (str "/page/" (util/encode-str name))}
+              original-name]])])]])))
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
   (db-mixins/clear-query-cache
@@ -204,6 +221,7 @@
         repo (or repo current-repo)
         encoded-page-name (get-page-name state)
         page-name (string/lower-case (util/url-decode encoded-page-name))
+        path-page-name page-name
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
         format (db/get-page-format page-name)
@@ -238,36 +256,50 @@
             file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
             today? (and
                     journal?
-                    (= page-name (string/lower-case (date/journal-name))))]
+                    (= page-name (string/lower-case (date/journal-name))))
+            developer-mode? (state/sub [:ui/developer-mode?])]
         [:div.flex-1.page.relative
          [:div.relative
           (when (and (not block?) (not sidebar?))
             (let [links (->>
-                         (when file
-                           [{:title "Re-index this page"
+                         [(when file
+                            {:title "Re-index this page"
                              :options {:on-click (fn []
-                                                   (file/re-index! file))}}
-                            {:title "Copy the whole page as JSON"
+                                                   (file/re-index! file))}})
+                          (when-not journal?
+                            {:title "Add to Contents"
+                            :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+                          (when-not journal?
+                            {:title "Rename page"
+                             :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
+                          (when-not journal?
+                            {:title "Delete page"
+                             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+                          (when (and (not journal?) file)
+                            {:title "Publish this page on Logseq"
                              :options {:on-click (fn []
-                                                   (export-handler/copy-page-as-json! page-name))}}
-                            (when-not journal?
-                              {:title "Rename page"
-                               :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
-                            (when-not journal?
-                              {:title "Delete page (will delete the file too)"
-                               :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-                            (when-not journal?
-                              {:title "Publish this page on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page! page-name project/add-project))}})
-                            (when-not journal?
-                              {:title "Publish this page as a slide on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page-as-slide! page-name project/add-project))}})
-                            (when-not journal?
-                              {:title "Un-publish this page on Logseq"
-                               :options {:on-click (fn []
-                                                     (page-handler/unpublish-page! page-name))}})])
+                                                   (page-handler/publish-page! page-name project/add-project))}})
+                          (when (and (not journal?) file)
+                            {:title "Publish this page as a slide on Logseq"
+                             :options {:on-click (fn []
+                                                   (page-handler/publish-page-as-slide! page-name project/add-project))}})
+                          (when (and (not journal?) file)
+                            {:title "Un-publish this page on Logseq"
+                             :options {:on-click (fn []
+                                                   (page-handler/unpublish-page! page-name))}})
+                          (when developer-mode?
+                            {:title "(Dev) Show page data"
+                             :options {:on-click (fn []
+                                                   (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                                     (println page-data)
+                                                     (notification/show!
+                                                      [:div
+                                                       [:pre.code page-data]
+                                                       [:br]
+                                                       (ui/button "Copy to clipboard"
+                                                                  :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                      :success
+                                                      false)))}})]
                          (remove nil?))]
               (when (seq links)
                 (ui/dropdown-with-links
@@ -293,10 +325,21 @@
                                   :page
                                   {:page page}))))}
              [:h1.title {:style {:margin-left -2}}
-              page-original-name]])
+              (if page-original-name
+                (if (and (string/includes? page-original-name "[[")
+                         (string/includes? page-original-name "]]"))
+                  (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
+                    (hiccup/block-cp {} (ffirst ast)))
+                  page-original-name)
+                (or
+                 page-name
+                 path-page-name))]])
           [:div
            [:div.content
-            (when (and file-path (not sidebar?) (not journal?) (not block?))
+            (when (and file-path
+                       (not sidebar?)
+                       (not block?)
+                       (not (state/hide-file?)))
               [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
                [:span.opacity-50 "File: "]
                [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
@@ -312,7 +355,6 @@
                     [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
                      item])])))
 
-
            (when (and block? (not sidebar?))
              [:div.mb-4
               (block/block-parents repo block-id format)])
@@ -321,6 +363,8 @@
 
          (when-not block?
            (today-queries repo today? sidebar?))
+
+         (tagged-pages repo page-name)
 
          ;; referenced blocks
          [:div {:key "page-references"}
@@ -377,7 +421,7 @@
 (rum/defc all-pages < rum/reactive
   {:did-mount (fn [state]
                 (let [current-repo (state/sub :git/current-repo)]
-                  (db/remove-orphaned-pages! current-repo))
+                  (js/setTimeout #(db/remove-orphaned-pages! current-repo) 0))
                 state)}
   []
   (let [current-repo (state/sub :git/current-repo)]

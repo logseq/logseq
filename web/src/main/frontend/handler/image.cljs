@@ -10,15 +10,15 @@
             [goog.dom :as gdom]))
 
 (defn render-local-images!
-  [node]
-  (let [images (array-seq (gdom/getElementsByTagName "img" node))
+  []
+  (let [images (array-seq (gdom/getElementsByTagName "img"))
         get-src (fn [image] (.getAttribute image "src"))
         local-images (filter
                       (fn [image]
                         (let [src (get-src image)]
                           (and src
-                               (not (or (string/starts-with? src "http://")
-                                        (string/starts-with? src "https://"))))))
+                               (not (or (util/starts-with? src "http://")
+                                        (util/starts-with? src "https://"))))))
                       images)]
     (doseq [img local-images]
       (gobj/set img
