@@ -43,7 +43,7 @@
     (ui/button
       "Re-index"
       {:on-click (fn []
-                   (repo-handler/rebuild-index! repo)
+                   (repo-handler/rebuild-index! {:url repo})
                    (js/setTimeout
                     (fn []
                       (route-handler/redirect! {:to :home}))
