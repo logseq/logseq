@@ -10,6 +10,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.migration :as migration-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
             [frontend.history :as history]
             [frontend.ui :as ui]))
@@ -30,12 +31,35 @@
                           (repo-handler/create-today-journal-if-not-exists repo)))))
                   1000))
 
+;; FIXME: migration
+(defn db-schema-changed-handler
+  [repo]
+  (notification/show!
+   [:p
+    "There's some database schema changes, please backup and sync your notes first!"
+    [:br]
+    "Click the following button to re-index your notes."
+    [:br]
+    (ui/button
+      "Re-index"
+      {:on-click (fn []
+                   (repo-handler/rebuild-index! repo)
+                   (js/setTimeout
+                    (fn []
+                      (route-handler/redirect! {:to :home}))
+                    500))})]
+   :error
+   false))
+
 ;; Avoid introducing core.async for smaller bundle size for now
 (defn restore-and-setup!
   [me repos logged?]
   ;; wait until pfs is loaded
   (let [pfs-loaded? (atom js/window.pfs)
         interval (atom nil)
+        db-schema-changed-handler (if (state/logged?)
+                                    db-schema-changed-handler
+                                    (fn [_] nil))
         inner-fn (fn []
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
@@ -43,12 +67,8 @@
                      (-> (p/all (db/restore! (assoc me :repos repos)
                                              (fn [repo]
                                                (file-handler/restore-config! repo false)
-                                               (js/setTimeout #(history/init-history! repo) 1000)
-                                               ;; (when (and (state/logged?)
-                                               ;;            (db/cloned? repo)
-                                               ;;            (not (db/get-today-journal repo)))
-                                               ;;   (repo-handler/read-repair-journals! repo))
-                                               )))
+                                               (js/setTimeout #(history/init-history! repo) 1000))
+                                             db-schema-changed-handler))
                          (p/then
                           (fn []
                             (if (and (not logged?)

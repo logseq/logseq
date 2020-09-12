@@ -1739,11 +1739,12 @@
         db-conn (d/create-conn db-schema/schema)]
     (swap! conns assoc files-db-name files-db-conn)
     (swap! conns assoc db-name db-conn)
+    (d/transact! db-conn [{:schema/version db-schema/version}])
     (when me
       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))))
 
 (defn restore!
-  [{:keys [repos] :as me} restore-config-handler]
+  [{:keys [repos] :as me} restore-config-handler db-schema-changed-handler]
   (let [logged? (:name me)]
     (doall
      (for [{:keys [url]} repos]
@@ -1760,17 +1761,18 @@
                   _ (when stored
                       (let [stored-db (string->db stored)
                             attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (when (= (:schema stored-db) db-schema/files-db-schema) ;; check for code update
-                          (reset-conn! db-conn attached-db))))
+                        (reset-conn! db-conn attached-db)))
                   db-name (datascript-db repo)
                   db-conn (d/create-conn db-schema/schema)
+                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
                   _ (swap! conns assoc db-name db-conn)
                   stored (.getItem localforage-instance db-name)
                   _ (if stored
                       (let [stored-db (string->db stored)
                             attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (when (= (:schema stored-db) db-schema/schema) ;; check for code update
-                          (reset-conn! db-conn attached-db)))
+                        (reset-conn! db-conn attached-db)
+                        (when (not= (:schema stored-db) db-schema/schema) ;; check for code update
+                          (db-schema-changed-handler repo)))
                       (when logged?
                         (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
                   _ (restore-config-handler repo)])))))))

@@ -58,12 +58,6 @@
     (when (util/uuid-string? block-id)
       block-id)))
 
-(defn task-block?
-  [block]
-  (and
-   (heading-block? block)
-   (some? (:marker (second block)))))
-
 ;; FIXME:
 (defn extract-title
   [block]

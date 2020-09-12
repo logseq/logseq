@@ -1,24 +1,25 @@
 (ns frontend.db-schema)
 
+(defonce version "0.0.1")
+
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
    :file/content {}})
 
 ;; A page can corresponds to multiple files (same title),
 ;; a month journal file can have multiple pages,
-;; also, each block can be treated as a page if we support
-;; "zoom edit".
+;; also, each block can be treated as a page too.
 (def schema
-  {:db/ident        {:db/unique :db.unique/identity}
+  {:schema/version {}
+   :db/ident        {:db/unique :db.unique/identity}
 
    ;; user
    :me/name  {}
    :me/email {}
    :me/avatar {}
 
-   ;; local, github, dropbox, etc.
+   ;; TODO: local, github, dropbox, etc.
    :db/type {}
-   :encrypted-token {}
 
    ;; Git
    :repo/url        {:db/unique :db.unique/identity}
@@ -58,7 +59,6 @@
    ;; ;; Maybe we should add daily journal or weekly journal later.
 
    ;; block
-   :block/type   {}
    :block/uuid   {:db/unique      :db.unique/identity}
    :block/file   {:db/valueType   :db.type/ref}
    :block/format {}
