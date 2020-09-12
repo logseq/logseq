@@ -83,6 +83,10 @@
     :sidebar/blocks '()
     
     :preferred-language (storage/get :preferred-language)
+
+    ;; all notification contents as k-v pairs
+    :notification/contents {}
+
     }))
 
 (defn get-route-match
@@ -158,6 +162,10 @@
 (defn hide-file?
   []
   (:hide-file-in-page? (get-config)))
+
+(defn page-name-order
+  []
+  (:page-name-order (get-config)))
 
 (defn get-repos
   []
@@ -723,3 +731,8 @@
   [value]
   (set-state! :ui/developer-mode? value)
   (storage/set "developer-mode" (str value)))
+
+(defn get-notification-contents
+  []
+  (get-in @state [:notification/contents]))
+

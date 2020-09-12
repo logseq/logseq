@@ -329,3 +329,13 @@
        (rest args)
        (inc n))
       s)))
+
+(defn break-line-paragraph?
+  [[typ break-lines]]
+  (and (= typ "Paragraph")
+       (every? #(= % ["Break_Line"]) break-lines)))
+
+(defn trim-break-lines!
+  [ast]
+  (->> (drop-while break-line-paragraph? ast)
+       (take-while (complement break-line-paragraph?))))
