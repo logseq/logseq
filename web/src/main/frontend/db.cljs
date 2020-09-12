@@ -1160,8 +1160,9 @@
                              (string/replace "_" " ")
                              (util/capitalize-all))))]
         (or directive-name
-            first-block-name
-            file-name)))))
+            (if (= (state/page-name-order) "file")
+              (or file-name first-block-name)
+              (or first-block-name file-name)))))))
 
 (defn get-block-content
   [utf8-content block]

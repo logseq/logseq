@@ -157,6 +157,10 @@
   []
   (:hide-file-in-page? (get-config)))
 
+(defn page-name-order
+  []
+  (:page-name-order (get-config)))
+
 (defn get-repos
   []
   (get-in @state [:me :repos]))
