@@ -213,7 +213,11 @@
         title (date/today)
         file-name (date/journal-title->default title)
         default-content (util/default-content-with-title format title false)
-        content (if-let [template (state/get-journal-template)]
+        template (state/get-journal-template)
+        template (if (and template
+                          (not (string/blank? template)))
+                   template)
+        content (if template
                   (str default-content template)
                   (util/default-content-with-title format title true))
         path (str config/default-journals-directory "/" file-name "."
