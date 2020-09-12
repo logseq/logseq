@@ -102,6 +102,7 @@
   [edn-data]
   (load-all-refed-uids! edn-data)
   (let [files (map ->file edn-data)
+        files (remove #(nil? (:title %)) files)
         files (group-by (fn [f] (string/lower-case (:title f)))
                         files)]
     (map
