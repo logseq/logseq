@@ -81,6 +81,9 @@
 
     ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
+    
+    ;; all notification contents as k-v pairs
+    :notification/contents {}
     }))
 
 (defn get-route-match
@@ -720,3 +723,8 @@
   [value]
   (set-state! :ui/developer-mode? value)
   (storage/set "developer-mode" (str value)))
+
+(defn get-notification-contents
+  []
+  (get-in @state [:notification/contents]))
+

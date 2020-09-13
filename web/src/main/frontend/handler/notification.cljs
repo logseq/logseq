@@ -1,21 +1,21 @@
 (ns frontend.handler.notification
-  (:require [frontend.state :as state]))
+  (:require [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defn clear!
-  [e]
-  (swap! state/state assoc
-         :notification/show? false
-         :notification/content nil
-         :notification/status nil))
+  [uid]
+  (let [contents (state/get-notification-contents)]
+    (state/set-state! :notification/contents (dissoc contents uid))))
 
 (defn show!
   ([content status]
    (show! content status true))
   ([content status clear?]
-   (swap! state/state assoc
-          :notification/show? true
-          :notification/content content
-          :notification/status status)
+   (let [contents (state/get-notification-contents)
+         uid (keyword (util/unique-id))]
+     (state/set-state! :notification/contents (assoc contents 
+                                                     uid {:content content
+                                                          :status status}))
 
-   (when clear?
-     (js/setTimeout clear! 3000))))
+     (when clear?
+       (js/setTimeout #(clear! uid) 3000)))))
