@@ -7,6 +7,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
+            [frontend.tools.tongue :as tongue]
             [clojure.string :as string]
             [goog.object :as gobj]))
 
@@ -62,6 +63,7 @@
   []
   (let [preferred-format (keyword (state/sub [:me :preferred_format]))
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
+        preferred-language (state/sub [:preferred-language])
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
@@ -121,6 +123,24 @@
                 (if (= workflow :now)
                   "NOW/LATER"
                   "TODO/DOING")])]]]]
+         [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "preferred_language"}
+           "Language / 语言选择"]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
+             {:on-change (fn [e]
+                           (let [lang (util/evalue e)
+                                 lang-val (filter (fn [el] (if (= (:label el) lang) true nil)) tongue/languages)
+                                 lang-val (name (:value(first lang-val)))]
+                             (state/set-preferred-language! lang-val)))}
+             (for [language tongue/languages]
+               [:option (cond->
+                         {:key (:value language)}
+                          (= (name (:value language)) preferred-language)
+                          (assoc :selected "selected"))
+                (:label language)])]]]]
 
          [:hr]
 
