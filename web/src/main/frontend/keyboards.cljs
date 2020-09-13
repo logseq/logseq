@@ -7,7 +7,9 @@
             [frontend.state :as state]
             [goog.events.KeyCodes :as codes]
             [frontend.util :as util]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            ["mousetrap" :as mousetrap]
+            [goog.object :as gobj]))
 
 ;; KeyCodes.QUESTION_MARK
 
@@ -49,17 +51,20 @@
 ;; Markdown
 ;; Block
 
-(defonce keyboards
+(defonce shortcuts
   (->>
    {
     "tab" (editor-handler/on-tab :right)
     "shift+tab" (editor-handler/on-tab :left)
-    "ctrl+alt+d" state/toggle-document-mode!
     "ctrl+z" history-handler/undo!
     "ctrl+y" history-handler/redo!
-    "ctrl+alt+t" state/toggle-theme!
-    "ctrl+alt+r" ui-handler/toggle-right-sidebar!
-    "ctrl+alt+e" state/toggle-new-block-shortcut!
+
+    ;; Toggle
+    "t d" state/toggle-document-mode!
+    "t t" state/toggle-theme!
+    "t r" ui-handler/toggle-right-sidebar!
+    "t e" state/toggle-new-block-shortcut!
+
     "ctrl+u" route-handler/go-to-search!
     "alt+j" route-handler/go-to-journals!
     "alt+right" editor-handler/zoom-in!
@@ -74,3 +79,10 @@
     "ctrl+k" editor-handler/html-link-format!
     "ctrl+h" editor-handler/highlight-format!}
    (medley/map-keys util/->system-modifier)))
+
+(defonce bind! (gobj/get mousetrap "bind"))
+
+(defn bind-shortcuts!
+  []
+  (doseq [[k f] shortcuts]
+    (bind! k f)))

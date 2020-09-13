@@ -185,8 +185,8 @@
         nil))))
   {:did-mount (fn [state]
                 (handler/set-save-before-unload!)
+                (keyboards/bind-shortcuts!)
                 state)}
-  (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)

@@ -23,6 +23,7 @@
         "diff": "^4.0.2",
         "dropbox": "^5.2.0",
         "localforage": "^1.7.3",
+        "mousetrap": "^1.6.5",
         "react": "^16.12.0",
         "react-dom": "^16.12.0",
         "react-textarea-autosize": "^8.0.1",

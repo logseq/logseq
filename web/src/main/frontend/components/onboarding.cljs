@@ -300,9 +300,10 @@
        [:tr [:td "Open Link in Sidebar"] [:td "Shift-Click"]]
        [:tr [:td "Context Menu"] [:td "Right Click"]]
        [:tr [:td "Fold/Unfold blocks (when not in edit mode)"] [:td "Tab"]]
-       [:tr [:td "Toggle document mode"] [:td "Ctrl-Alt-d"]]
-       [:tr [:td "Toggle between dark/light theme"] [:td "Ctrl-Alt-t"]]
-       [:tr [:td "Toggle right sidebar"] [:td "Ctrl-Alt-r"]]
+       [:tr [:td "Toggle document mode"] [:td "t d"]]
+       [:tr [:td "Toggle between dark/light theme"] [:td "t t"]]
+       [:tr [:td "Toggle right sidebar"] [:td "t r"]]
+       [:tr [:td "Toggle Enter/Alt+Enter for inserting new block"] [:td "t e"]]
        [:tr [:td "Jump to Journals"] [:td "Alt-j"]]]]
      [:table
       [:thead
