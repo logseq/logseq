@@ -59,6 +59,7 @@
     "ctrl+y" history-handler/redo!
     "ctrl+alt+t" state/toggle-theme!
     "ctrl+alt+r" ui-handler/toggle-right-sidebar!
+    "ctrl+alt+e" state/toggle-new-block-shortcut!
     "ctrl+u" route-handler/go-to-search!
     "alt+j" route-handler/go-to-journals!
     "alt+right" editor-handler/zoom-in!

@@ -364,8 +364,7 @@
                         (do
                           (util/stop e)
                           (editor-handler/adjust-block-level! state :left))
-                        (let [shortcut (when-let [v (state/get-shortcut repo :editor/new-block)]
-                                         (string/lower-case (string/trim v)))
+                        (let [shortcut (state/get-new-block-shortcut)
                               insert? (cond
                                         config/mobile?
                                         true

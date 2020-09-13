@@ -379,17 +379,18 @@
        (ui/modal)
        (custom-context-menu)
        [:a#download.hidden]
-       ;; (when-not config/mobile?
-       ;;   [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-       ;;    {:style {:right 24}
-       ;;     :title "Click to check shortcuts and other tips"
-       ;;     :on-click (fn []
-       ;;                 (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-       ;;    "?"]
-       ;;   [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-       ;;    {:style {:left 24}
-       ;;     :title "Click to show/hide sidebar"
-       ;;     :on-click (fn []
-       ;;                 (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
-       ;;    (if (state/sub :ui/left-sidebar-open?) "<" ">")]])
+       (when-not config/mobile?
+         [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+          {:style {:right 24}
+           :title "Click to check shortcuts and other tips"
+           :on-click (fn []
+                       (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+          "?"]
+         ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+         ;;  {:style {:left 24}
+         ;;   :title "Click to show/hide sidebar"
+         ;;   :on-click (fn []
+         ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
+         ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
+          ])
        ]]]))
