@@ -10,6 +10,8 @@
 (defn show!
   ([content status]
    (show! content status true nil))
+  ([content status clear?]
+   (show! content status clear? nil))
   ([content status clear? uid]
    (let [contents (state/get-notification-contents)
          uid (or uid (keyword (util/unique-id)))]
