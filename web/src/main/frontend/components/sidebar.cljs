@@ -129,6 +129,14 @@
        ;; (custom-context-menu-content)
        ))))
 
+(rum/defc new-block-mode < rum/reactive
+  []
+  (when-let [alt-enter? (= "alt+enter" (state/sub [:shortcuts :editor/new-block]))]
+    [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
+     {:title "Press Alt + Enter to insert a new block, Shift + Enter for new line. You can also click to disable it"
+      :on-click state/toggle-new-block-shortcut!}
+     "Alt + Enter"]))
+
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -187,6 +195,7 @@
                 (handler/set-save-before-unload!)
                 (keyboards/bind-shortcuts!)
                 state)}
+  (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         me (state/sub :me)
@@ -246,6 +255,8 @@
            (search/search)
            [:div.flex.md:ml-0])
          [:div.ml-4.flex.items-center.md:ml-6
+          (new-block-mode)
+
           (when-not logged?
             [:a.text-sm.font-medium.login
              {:href "/login/github"

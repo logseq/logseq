@@ -729,14 +729,14 @@
 
 (defn get-new-block-shortcut
   []
-  (let [shortcut (get-in @state [:shortcut :editor/new-block])]
+  (let [shortcut (get-in @state [:shortcuts :editor/new-block])]
     (if (and shortcut (contains? #{"enter" "alt+enter"} (string/lower-case shortcut)))
       shortcut
       "enter")))
 
 (defn set-new-block-shortcut!
   [value]
-  (set-state! [:shortcut :editor/new-block] value))
+  (set-state! [:shortcuts :editor/new-block] value))
 
 (defn toggle-new-block-shortcut!
   []

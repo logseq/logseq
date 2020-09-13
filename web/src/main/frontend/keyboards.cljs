@@ -51,20 +51,13 @@
 ;; Markdown
 ;; Block
 
-(defonce shortcuts
+(defonce keyboards
   (->>
    {
     "tab" (editor-handler/on-tab :right)
     "shift+tab" (editor-handler/on-tab :left)
     "ctrl+z" history-handler/undo!
     "ctrl+y" history-handler/redo!
-
-    ;; Toggle
-    "t d" state/toggle-document-mode!
-    "t t" state/toggle-theme!
-    "t r" ui-handler/toggle-right-sidebar!
-    "t e" state/toggle-new-block-shortcut!
-
     "ctrl+u" route-handler/go-to-search!
     "alt+j" route-handler/go-to-journals!
     "alt+right" editor-handler/zoom-in!
@@ -80,9 +73,18 @@
     "ctrl+h" editor-handler/highlight-format!}
    (medley/map-keys util/->system-modifier)))
 
+(defonce chords
+  {
+   ;; Toggle
+   "t d" state/toggle-document-mode!
+   "t t" state/toggle-theme!
+   "t r" ui-handler/toggle-right-sidebar!
+   "t e" state/toggle-new-block-shortcut!
+   })
+
 (defonce bind! (gobj/get mousetrap "bind"))
 
 (defn bind-shortcuts!
   []
-  (doseq [[k f] shortcuts]
+  (doseq [[k f] chords]
     (bind! k f)))
