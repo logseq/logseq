@@ -639,7 +639,7 @@
               :margin-top (if (and heading? (<= level 6))
                             (case level
                               1
-                              10
+                              32
                               2
                               22
                               18)
