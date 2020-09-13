@@ -31,26 +31,6 @@
                           (repo-handler/create-today-journal-if-not-exists repo)))))
                   1000))
 
-;; FIXME: migration
-(defn db-schema-changed-handler
-  [repo]
-  (notification/show!
-   [:p
-    "There's some database schema changes, please backup and sync your notes first!"
-    [:br]
-    "Click the following button to re-index your notes."
-    [:br]
-    (ui/button
-      "Re-index"
-      {:on-click (fn []
-                   (repo-handler/rebuild-index! {:url repo})
-                   (js/setTimeout
-                    (fn []
-                      (route-handler/redirect! {:to :home}))
-                    500))})]
-   :error
-   false))
-
 ;; Avoid introducing core.async for smaller bundle size for now
 (defn restore-and-setup!
   [me repos logged?]
@@ -58,7 +38,7 @@
   (let [pfs-loaded? (atom js/window.pfs)
         interval (atom nil)
         db-schema-changed-handler (if (state/logged?)
-                                    db-schema-changed-handler
+                                    repo-handler/rebuild-index!
                                     (fn [_] nil))
         inner-fn (fn []
                    (when (and @interval js/window.pfs)

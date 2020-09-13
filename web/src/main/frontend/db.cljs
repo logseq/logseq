@@ -1773,7 +1773,7 @@
                             attached-db (d/db-with stored-db [(me-tx stored-db me)])]
                         (reset-conn! db-conn attached-db)
                         (when (not= (:schema stored-db) db-schema/schema) ;; check for code update
-                          (db-schema-changed-handler repo)))
+                          (db-schema-changed-handler {:url repo})))
                       (when logged?
                         (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
                   _ (restore-config-handler repo)])))))))
