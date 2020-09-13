@@ -62,6 +62,7 @@
    :block/uuid   {:db/unique      :db.unique/identity}
    :block/file   {:db/valueType   :db.type/ref}
    :block/format {}
+   :block/title {}
    ;; belongs to which page
    :block/page   {:db/valueType   :db.type/ref}
    ;; referenced pages
@@ -87,7 +88,6 @@
    ;; Any suggestions?
    :block/created-at {}
    :block/last-modified-at {}
-
    :block/body {}
    :block/pre-block? {}
    :block/collapsed? {}

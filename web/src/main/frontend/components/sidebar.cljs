@@ -131,6 +131,14 @@
        ;; (custom-context-menu-content)
        ))))
 
+(rum/defc new-block-mode < rum/reactive
+  []
+  (when-let [alt-enter? (= "alt+enter" (state/sub [:shortcuts :editor/new-block]))]
+    [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
+     {:title "Press Alt + Enter to insert a new block, Shift + Enter for new line. You can also click to disable it"
+      :on-click state/toggle-new-block-shortcut!}
+     "Alt + Enter"]))
+
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -187,6 +195,7 @@
         nil))))
   {:did-mount (fn [state]
                 (handler/set-save-before-unload!)
+                (keyboards/bind-shortcuts!)
                 state)}
   (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
@@ -246,10 +255,12 @@
             :stroke-linejoin "round"
             :stroke-linecap "round"}]]]
         [:div.flex-1.px-4.flex.justify-between
-          (if current-repo
-            (search/search)
-            [:div.flex.md:ml-0])
-          [:div.ml-4.flex.items-center.md:ml-6
+         (if current-repo
+           (search/search)
+           [:div.flex.md:ml-0])
+         [:div.ml-4.flex.items-center.md:ml-6
+          (new-block-mode)
+
           (when-not logged?
             [:a.text-sm.font-medium.login
               {:href "/login/github"
@@ -383,17 +394,18 @@
        (ui/modal)
        (custom-context-menu)
        [:a#download.hidden]
-       ;; (when-not config/mobile?
-       ;;   [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-       ;;    {:style {:right 24}
-       ;;     :title "Click to check shortcuts and other tips"
-       ;;     :on-click (fn []
-       ;;                 (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-       ;;    "?"]
-       ;;   [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-       ;;    {:style {:left 24}
-       ;;     :title "Click to show/hide sidebar"
-       ;;     :on-click (fn []
-       ;;                 (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
-       ;;    (if (state/sub :ui/left-sidebar-open?) "<" ">")]])
+       (when-not config/mobile?
+         [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+          {:style {:right 24}
+           :title "Click to check shortcuts and other tips"
+           :on-click (fn []
+                       (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+          "?"]
+         ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+         ;;  {:style {:left 24}
+         ;;   :title "Click to show/hide sidebar"
+         ;;   :on-click (fn []
+         ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
+         ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
+          ])
        ]]])))

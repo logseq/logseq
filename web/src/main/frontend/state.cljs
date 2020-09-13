@@ -45,6 +45,9 @@
     :search/q ""
     :search/result nil
 
+    ;; custom shortcuts
+    :shortcuts {:editor/new-block "enter"}
+
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
@@ -305,10 +308,6 @@
 (defn set-q!
   [value]
   (set-state! :search/q value))
-
-(defn set-config!
-  [repo-url value]
-  (set-state! [:config repo-url] value))
 
 (defn set-editor-show-page-search
   [value]
@@ -736,3 +735,26 @@
   []
   (get-in @state [:notification/contents]))
 
+(defn get-new-block-shortcut
+  []
+  (let [shortcut (get-in @state [:shortcuts :editor/new-block])]
+    (if (and shortcut (contains? #{"enter" "alt+enter"} (string/lower-case shortcut)))
+      shortcut
+      "enter")))
+
+(defn set-new-block-shortcut!
+  [value]
+  (set-state! [:shortcuts :editor/new-block] value))
+
+(defn toggle-new-block-shortcut!
+  []
+  (if-let [enter? (= "enter" (get-new-block-shortcut))]
+    (set-new-block-shortcut! "alt+enter")
+    (set-new-block-shortcut! "enter")))
+
+(defn set-config!
+  [repo-url value]
+  (set-state! [:config repo-url] value)
+  (set-new-block-shortcut!
+   (or (get-shortcut repo-url :editor/new-block)
+       "enter")))
