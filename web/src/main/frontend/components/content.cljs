@@ -60,65 +60,79 @@
       :on-click editor-handler/bulk-make-todos}
      (str "Make " (state/get-preferred-todo) "s"))]])
 
+(defonce block-background-colors
+  #{"#FF6F61"
+    "#6B5B95"
+    "#88B04B"
+    "#DD4124"
+    "#D65076"
+    "#45B8AC"
+    "#EFC050"})
+
 (rum/defc block-context-menu-content
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
     (let [heading (get-in block [:block/properties "heading"])
           heading? (= heading "true")]
       [:div#custom-context-menu.w-64.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
-      [:div.py-1.rounded-md.bg-base-3.shadow-xs
-       (ui/menu-link
-        {:key "Convert heading"
-         :on-click (fn [_e]
-                     (editor-handler/set-block-as-a-heading! block-id (not heading?)))}
-        (if heading?
-          "Convert back to a block"
-          "Convert to a heading"))
+       [:div.py-1.rounded-md.bg-base-3.shadow-xs
+        [:div.flex-row.flex.justify-between.p-4.shadow-sm
+         (for [color block-background-colors]
+           [:a.rounded-full.p-2 {:style {:background-color color}
+                                 :on-click (fn [_e]
+                                             (editor-handler/set-block-property! block-id "background-color" color))}])]
+        (ui/menu-link
+         {:key "Convert heading"
+          :on-click (fn [_e]
+                      (editor-handler/set-block-as-a-heading! block-id (not heading?)))}
+         (if heading?
+           "Convert back to a block"
+           "Convert to a heading"))
 
-       (ui/menu-link
-        {:key "Open in sidebar"
-         :on-click (fn [_e]
-                     (editor-handler/open-block-in-sidebar! block-id))}
-        "Open in sidebar")
+        (ui/menu-link
+         {:key "Open in sidebar"
+          :on-click (fn [_e]
+                      (editor-handler/open-block-in-sidebar! block-id))}
+         "Open in sidebar")
 
-       (ui/menu-link
-        {:key "Copy block ref"
-         :on-click (fn [_e]
-                     (editor-handler/copy-block-ref! block-id))}
-        "Copy block ref")
+        (ui/menu-link
+         {:key "Copy block ref"
+          :on-click (fn [_e]
+                      (editor-handler/copy-block-ref! block-id))}
+         "Copy block ref")
 
-       (ui/menu-link
-        {:key "Copy as text"
-         :on-click (fn [_e]
-                     (export-handler/copy-block! block-id))}
-        "Copy as TEXT")
-       (ui/menu-link
-        {:key "Copy as JSON"
-         :on-click (fn [_e]
-                     (export-handler/copy-block-as-json! block-id))}
-        "Copy as JSON")
+        (ui/menu-link
+         {:key "Copy as text"
+          :on-click (fn [_e]
+                      (export-handler/copy-block! block-id))}
+         "Copy as TEXT")
+        (ui/menu-link
+         {:key "Copy as JSON"
+          :on-click (fn [_e]
+                      (export-handler/copy-block-as-json! block-id))}
+         "Copy as JSON")
 
-       (ui/menu-link
-        {:key "Cut"
-         :on-click (fn [_e]
-                     (editor-handler/cut-block! block-id))}
-        "Cut")
-       (when (state/sub [:ui/developer-mode?])
-         (ui/menu-link
-          {:key "(Dev) Show block data"
-           :on-click (fn []
-                       (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                         (println block-data)
-                         (notification/show!
-                          [:div
-                           [:pre.code block-data]
-                           [:br]
-                           (ui/button "Copy to clipboard"
-                             :on-click #(.writeText js/navigator.clipboard block-data))]
-                          :success
-                          false)))}
-          "(Dev) Show block data")
-         )]])))
+        (ui/menu-link
+         {:key "Cut"
+          :on-click (fn [_e]
+                      (editor-handler/cut-block! block-id))}
+         "Cut")
+        (when (state/sub [:ui/developer-mode?])
+          (ui/menu-link
+           {:key "(Dev) Show block data"
+            :on-click (fn []
+                        (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
+                          (println block-data)
+                          (notification/show!
+                           [:div
+                            [:pre.code block-data]
+                            [:br]
+                            (ui/button "Copy to clipboard"
+                              :on-click #(.writeText js/navigator.clipboard block-data))]
+                           :success
+                           false)))}
+           "(Dev) Show block data")
+          )]])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after

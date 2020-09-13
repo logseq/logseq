@@ -842,7 +842,8 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         contents? (= (:id config) "contents")
-        heading? (= (get properties "heading") "true")]
+        heading? (= (get properties "heading") "true")
+        bg-color (get properties "background-color")]
     (when level
       (let [element (if (and (<= level 6) heading?)
                       (keyword (str "h" level))
@@ -854,7 +855,12 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (string/lower-case marker)}))
+            {:class (string/lower-case marker)})
+          (when bg-color
+            {:style {:background-color bg-color
+                     :padding-left 6
+                     :padding-right 6
+                     :color "#FFFFFF"}}))
          (remove-nils
           (concat
            [(when-not slide? checkbox)
