@@ -200,6 +200,7 @@
   (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
+        prefered-language (keyword (state/sub :preferred-language))
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         theme (state/sub :ui/theme)
@@ -211,7 +212,6 @@
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)]
-
     (rum/with-context [[t] i18n/*tongue-context*]
     [:div {:class (if white? "white-theme" "dark-theme")
             :on-click (fn []
@@ -318,9 +318,8 @@
                 (when current-repo
                   {:title (t :all-files)
                   :options {:href "/all-files"}})
-               (when logged?
-                 {:title (t :settings)
-                  :options {:href "/settings"}})
+               {:title (t :settings)
+                :options {:href "/settings"}}
                (when current-repo
                  {:title (t :import)
                   :options {:href "/import"}})
