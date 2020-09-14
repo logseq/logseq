@@ -218,118 +218,119 @@
 
 (defn help
   []
+  (rum/with-context [[t] i18n/*tongue-context*]
   [:div.help.ml-2.mt-1
    [:ul
     [:li
      [:a {:href "https://logseq.com/blog/about"
           :target "_blank"}
-      "About Logseq"]]
+      (t :help/about)]]
     [:li
      [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
           :target "_blank"}
-      "Bug report"]]
+      (t :help/bug)]]
     [:li
      [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="
           :target "_blank"}
-      "Feature request"]]
+      (t :help/feature)]]
     [:li
      [:a {:href "/blog/changelog"
           :target "_blank"}
-      "Changelog"]]
+      (t :help/changelog)]]
     [:li
      [:a {:href "/blog"
           :target "_blank"}
-      "Logseq Blog"]]
+      (t :help/blog)]]
     [:li
      [:a {:href "/blog/privacy-policy"
           :target "_blank"}
-      "Privacy policy"]]
+      (t :help/privacy)]]
     [:li
      [:a {:href "/blog/terms"
           :target "_blank"}
-      "Terms"]]
+      (t :help/terms)]]
     [:li
      [:a {:href "https://discord.gg/KpN4eHY"
           :target "_blank"}
       [:div.flex-row.inline-flex.items-center
-       [:span.mr-1 "Discord community"]
+       [:span.mr-1 (t :help/community)]
        svg/discord]]]
     [:li
-     "Keyboard Shortcuts"
+     (t :help/shortcuts)
      [:table
       [:thead
        [:tr
-        [:th [:b "Triggers"]]
-        [:th "Shortcut"]]]
+        [:th [:b (t :help/shortcuts-triggers)]]
+        [:th (t :help/shortcut)]]]
       [:tbody
-       [:tr [:td "Slash Autocomplete"] [:td "/"]]
-       [:tr [:td "Block content (Src, Quote, Query, etc) Autocomplete"] [:td "<"]]
-       [:tr [:td "Page reference Autocomplete"] [:td "[[]]"]]
-       [:tr [:td "Block Reference"] [:td "(())"]]]]
+       [:tr [:td (t :help/slash-autocomplete)] [:td "/"]]
+       [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
+       [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
+       [:tr [:td (t :help/block-reference)] [:td "(())"]]]]
      [:table
       [:thead
        [:tr
-        [:th [:span [:b "Key Commands"]
-              " (working with lists)"]]
-        [:th "Shortcut"]]]
+        [:th [:span [:b (t :help/key-commands)]
+              (t :help/working-with-lists)]]
+        [:th (t :help/shortcut)]]]
       [:tbody
-       [:tr [:td "Indent Block Tab"] [:td "Tab"]]
-       [:tr [:td "Unindent Block"] [:td "Shift-Tab"]]
-       [:tr [:td "Move Block Up"] [:td "Alt-Shift-Up"]]
-       [:tr [:td "Move Block Down"] [:td "Alt-Shift-Down"]]
-       [:tr [:td "Create New Block"] [:td "Enter"]]
-       [:tr [:td "New Line in Block"] [:td "Shift-Enter"]]
-       [:tr [:td "Undo"] [:td "Ctrl-z"]]
-       [:tr [:td "Redo"] [:td "Ctrl-y"]]
-       [:tr [:td "Zoom In"] [:td "Alt-Right"]]
-       [:tr [:td "Zoom out"] [:td "Alt-left"]]
-       [:tr [:td "Follow link under cursor"] [:td "Ctrl-o"]]
-       [:tr [:td "Open link in Sidebar"] [:td "Ctrl-shift-o"]]
-       [:tr [:td "Expand"] [:td "Ctrl-Down"]]
-       [:tr [:td "Collapse"] [:td "Ctrl-Up"]]
-       [:tr [:td "Select Block Above"] [:td "Shift-Up"]]
-       [:tr [:td "Select Block Below"] [:td "Shift-Down"]]
-       [:tr [:td "Select All Blocks"] [:td "Ctrl-Shift-a"]]]]
+       [:tr [:td (t :help/indent-block-tab)] [:td "Tab"]]
+       [:tr [:td (t :help/unindent-block)] [:td "Shift-Tab"]]
+       [:tr [:td (t :help/move-block-up)] [:td "Alt-Shift-Up"]]
+       [:tr [:td (t :help/move-block-down)] [:td "Alt-Shift-Down"]]
+       [:tr [:td (t :help/create-new-block)] [:td "Enter"]]
+       [:tr [:td (t :help/new-line-in-block)] [:td "Shift-Enter"]]
+       [:tr [:td (t :undo)] [:td "Ctrl-z"]]
+       [:tr [:td (t :redo)] [:td "Ctrl-y"]]
+       [:tr [:td (t :help/zoom-in)] [:td "Alt-Right"]]
+       [:tr [:td (t :help/zoom-out)] [:td "Alt-left"]]
+       [:tr [:td (t :help/follow-link-under-cursor)] [:td "Ctrl-o"]]
+       [:tr [:td (t :help/open-link-in-sidebar)] [:td "Ctrl-shift-o"]]
+       [:tr [:td (t :expand)] [:td "Ctrl-Down"]]
+       [:tr [:td (t :collapse)] [:td "Ctrl-Up"]]
+       [:tr [:td (t :select-block-above)] [:td "Shift-Up"]]
+       [:tr [:td (t :select-block-below)] [:td "Shift-Down"]]
+       [:tr [:td (t :select-all-blocks)] [:td "Ctrl-Shift-a"]]]]
      [:table
       [:thead
        [:tr
-        [:th [:b "General"]]
-        [:th "Shortcut"]]]
+        [:th [:b (t :general)]]
+        [:th (t :help/shortcut)]]]
       [:tbody
-       [:tr [:td "Toggle help"] [:td "?"]]
-       [:tr [:td "Git commit message"] [:td "c"]]
-       [:tr [:td "Full Text Search"] [:td "Ctrl-u"]]
-       [:tr [:td "Open Link in Sidebar"] [:td "Shift-Click"]]
-       [:tr [:td "Context Menu"] [:td "Right Click"]]
-       [:tr [:td "Fold/Unfold blocks (when not in edit mode)"] [:td "Tab"]]
-       [:tr [:td "Toggle document mode"] [:td "t d"]]
-       [:tr [:td "Toggle between dark/light theme"] [:td "t t"]]
-       [:tr [:td "Toggle right sidebar"] [:td "t r"]]
-       [:tr [:td "Toggle Enter/Alt+Enter for inserting new block"] [:td "t e"]]
-       [:tr [:td "Jump to Journals"] [:td "Alt-j"]]]]
+       [:tr [:td (t :help/toggle)] [:td "?"]]
+       [:tr [:td (t :help/git-commit-message)] [:td "c"]]
+       [:tr [:td (t :help/full-text-search)] [:td "Ctrl-u"]]
+       [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
+       [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
+       [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
+       [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
+       [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
+       [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
+       [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
+       [:tr [:td (t :help/jump-to-journals)] [:td "Alt-j"]]]]
      [:table
       [:thead
        [:tr
-        [:th [:b "Formatting"]]
-        [:th "Shortcut"]]]
+        [:th [:b (t :formatting)]]
+        [:th (t :help/shortcut)]]]
       [:tbody
-       [:tr [:td "Bold"] [:td "Ctrl-b"]]
-       [:tr [:td "Italics"] [:td "Ctrl-i"]]
-       [:tr [:td "Html Link"] [:td "Ctrl-k"]]
-       [:tr [:td "Highlight"] [:td "Ctrl-h"]]]]]
+       [:tr [:td (t :bold)] [:td "Ctrl-b"]]
+       [:tr [:td (t :italics)] [:td "Ctrl-i"]]
+       [:tr [:td (t :html-link)] [:td "Ctrl-k"]]
+       [:tr [:td (t :highlight)] [:td "Ctrl-h"]]]]]
 
     [:li
-     "Markdown syntax"
+     (t :help/markdown-syntax)
      [:table
       [:tbody
-       [:tr [:td "**Bold**"] [:td.text-right [:b "Bold"]]]
-       [:tr [:td "_Italics_"] [:td.text-right [:i "Italics"]]]
-       [:tr [:td "~~Strikethrough~~"] [:td.text-right [:del "Strikethrough"]]]
-       [:tr [:td "^^highlight^^"] [:td.text-right [:mark "highlight"]]]
+       [:tr [:td (str "**" (t :bold) "**")] [:td.text-right [:b (t :bold)]]]
+       [:tr [:td (str "_" (t :italics) "_")] [:td.text-right [:i (t :italics)]]]
+       [:tr [:td (str "~~" (t :strikethrough) "~~")] [:td.text-right [:del (t :strikethrough)]]]
+       [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
        [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
                                                   "help-latex"
                                                   "E = mc^2" true false)]]
-       [:tr [:td "`Code`"] [:td.text-right [:code "Code"]]]
+       [:tr [:td (str "`" (t :code) "`")] [:td.text-right [:code (t :code)]]]
        [:tr [:td [:pre "```clojure
   (println \"Hello world!\")
 ```"]] [:td.text-right
@@ -350,17 +351,17 @@
                 :alt "image"}]]]]]]
 
     [:li
-     "Org mode syntax"
+     (t :help/org-mode-syntax)
      [:table
       [:tbody
-       [:tr [:td "*Bold*"] [:td.text-right [:b "Bold"]]]
-       [:tr [:td "/Italics/"] [:td.text-right [:i "Italics"]]]
-       [:tr [:td "+Strikethrough+"] [:td.text-right [:del "Strikethrough"]]]
-       [:tr [:td "^^highlight^^"] [:td.text-right [:mark "highlight"]]]
+       [:tr [:td (str "*" (t :bold) "*")] [:td.text-right [:b (t :bold)]]]
+       [:tr [:td (str "/" (t :italics) "/")] [:td.text-right [:i (t :italics)]]]
+       [:tr [:td (str "+" (t :strikethrough) "+")] [:td.text-right [:del (t :strikethrough)]]]
+       [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
        [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
                                                   "help-latex"
                                                   "E = mc^2" true false)]]
-       [:tr [:td "~Code~"] [:td.text-right [:code "Code"]]]
+       [:tr [:td "~Code~"] [:td.text-right [:code (t :code)]]]
        [:tr [:td [:pre "#+BEGIN_SRC clojure
   (println \"Hello world!\")
 #+END_SRC"]] [:td.text-right
@@ -378,4 +379,4 @@
                         :width 64
                         :height 64}
                 :src "https://logseq.com/static/img/logo.png"
-                :alt "image"}]]]]]]]])
+                :alt "image"}]]]]]]]]))
