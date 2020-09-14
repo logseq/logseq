@@ -472,15 +472,16 @@
                                     (when-not (string/blank? title)
                                       (page-handler/create! title)))))))
   [state]
-  (let [title (get state ::title)]
-    [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}
-     [:div.mt-10.mb-2 {:style {:font-size "1.5rem"}}
-      "What's your new page title?"]
-     [:input#page-title.focus:outline-none.ml-1.text-gray-900
-      {:style {:border "none"
-               :font-size "1.8rem"
-               :max-width 300}
-       :auto-focus true
-       :auto-complete "off"
-       :on-change (fn [e]
-                    (reset! title (util/evalue e)))}]]))
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [title (get state ::title)]
+     [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}
+      [:div.mt-10.mb-2 {:style {:font-size "1.5rem"}}
+       (t :page/new-title)]
+      [:input#page-title.focus:outline-none.ml-1.text-gray-900
+       {:style {:border "none"
+                :font-size "1.8rem"
+                :max-width 300}
+        :auto-focus true
+        :auto-complete "off"
+        :on-change (fn [e]
+                     (reset! title (util/evalue e)))}]])))

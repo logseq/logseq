@@ -84,19 +84,19 @@
         token (state/sub :encrypt/token)
         ;; TODO: remove this
         daily-migrating? (state/sub [:daily/migrating?])]
-           (rum/with-context [[t] i18n/*tongue-context*]
-    [:div.max-w-7xl.mx-auto
-     (cond
-       daily-migrating?
-       (ui/loading "Migrating to daily notes")
+    (rum/with-context [[t] i18n/*tongue-context*]
+      [:div.max-w-7xl.mx-auto
+       (cond
+         daily-migrating?
+         (ui/loading "Migrating to daily notes")
 
-       (and (not logged?) (seq latest-journals))
-       (journal/journals latest-journals)
+         (and (not logged?) (seq latest-journals))
+         (journal/journals latest-journals)
 
          (and logged? (not preferred-format))
          (widgets/choose-preferred-format)
 
-       ;; TODO: delay this
+         ;; TODO: delay this
          (and logged? (nil? (:email me)))
          (settings/set-email)
 
@@ -115,7 +115,7 @@
          (and logged? (empty? (:repos me)))
          (widgets/add-repo)
 
-       ;; FIXME: why will this happen?
+         ;; FIXME: why will this happen?
          :else
          [:div])])))
 
@@ -200,6 +200,7 @@
   (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
+        prefered-language (keyword (state/sub :preferred-language))
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
         theme (state/sub :ui/theme)
@@ -211,138 +212,136 @@
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)]
-
     (rum/with-context [[t] i18n/*tongue-context*]
-    [:div {:class (if white? "white-theme" "dark-theme")
-            :on-click (fn []
-                        (editor-handler/unhighlight-block!))}
-      [:div.h-screen.flex.overflow-hidden.bg-base-3
-      [:div.md:hidden
-        [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
-        {:class (if @open?
-                  "opacity-75 pointer-events-auto"
-                  "opacity-0 pointer-events-none")
-          :on-click close-fn}]
-        [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
-        {:class (if @open?
-                  "translate-x-0"
-                  "-translate-x-full")
-          :style {:background-color "#002b36"}}
-        (if @open?
-          [:div.absolute.top-0.right-0.-mr-14.p-1
-            [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
-            {:on-click close-fn}
-            [:svg.h-6.w-6.text-white
-              {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-              [:path
-              {:d "M6 18L18 6M6 6l12 12"
-                :stroke-width "2"
-                :stroke-linejoin "round"
-                :stroke-linecap "round"}]]]])
-        [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
-          (widgets/repos false)]
-        [:div.flex-1.h-0.overflow-y-auto
-          (sidebar-nav route-match close-fn)]]]
-      [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-        [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
-        [:button.px-4.focus:outline-none.md:hidden.menu
-          {:on-click open-fn}
-          [:svg.h-6.w-6
-          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-          [:path
-           {:d "M4 6h16M4 12h16M4 18h7"
-            :stroke-width "2"
-            :stroke-linejoin "round"
-            :stroke-linecap "round"}]]]
-        [:div.flex-1.px-4.flex.justify-between
-         (if current-repo
-           (search/search)
-           [:div.flex.md:ml-0])
-         [:div.ml-4.flex.items-center.md:ml-6
-          (new-block-mode)
+      [:div {:class (if white? "white-theme" "dark-theme")
+             :on-click (fn []
+                         (editor-handler/unhighlight-block!))}
+       [:div.h-screen.flex.overflow-hidden.bg-base-3
+        [:div.md:hidden
+         [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
+          {:class (if @open?
+                    "opacity-75 pointer-events-auto"
+                    "opacity-0 pointer-events-none")
+           :on-click close-fn}]
+         [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
+          {:class (if @open?
+                    "translate-x-0"
+                    "-translate-x-full")
+           :style {:background-color "#002b36"}}
+          (if @open?
+            [:div.absolute.top-0.right-0.-mr-14.p-1
+             [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+              {:on-click close-fn}
+              [:svg.h-6.w-6.text-white
+               {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+               [:path
+                {:d "M6 18L18 6M6 6l12 12"
+                 :stroke-width "2"
+                 :stroke-linejoin "round"
+                 :stroke-linecap "round"}]]]])
+          [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
+           (widgets/repos false)]
+          [:div.flex-1.h-0.overflow-y-auto
+           (sidebar-nav route-match close-fn)]]]
+        [:div.flex.flex-col.w-0.flex-1.overflow-hidden
+         [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
+          [:button.px-4.focus:outline-none.md:hidden.menu
+           {:on-click open-fn}
+           [:svg.h-6.w-6
+            {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+            [:path
+             {:d "M4 6h16M4 12h16M4 18h7"
+              :stroke-width "2"
+              :stroke-linejoin "round"
+              :stroke-linecap "round"}]]]
+          [:div.flex-1.px-4.flex.justify-between
+           (if current-repo
+             (search/search)
+             [:div.flex.md:ml-0])
+           [:div.ml-4.flex.items-center.md:ml-6
+            (new-block-mode)
 
-          (when-not logged?
-            [:a.text-sm.font-medium.login
-              {:href "/login/github"
-              :on-click (fn []
-                          (storage/remove :git/current-repo))}
-              (t :login-github)])
+            (when-not logged?
+              [:a.text-sm.font-medium.login
+               {:href "/login/github"
+                :on-click (fn []
+                            (storage/remove :git/current-repo))}
+               (t :login-github)])
 
-          (widgets/sync-status)
+            (widgets/sync-status)
 
-          [:div.repos.hidden.md:block
-            (widgets/repos true)]
+            [:div.repos.hidden.md:block
+             (widgets/repos true)]
 
-          (when-let [project (and current-repo (state/get-current-project))]
-            [:a.opacity-50.hover:opacity-100.ml-4
-              {:title (str (t :go-to) "/" project)
-              :href (str config/website "/" project)
-              :target "_blank"}
-              svg/external-link])
+            (when-let [project (and current-repo (state/get-current-project))]
+              [:a.opacity-50.hover:opacity-100.ml-4
+               {:title (str (t :go-to) "/" project)
+                :href (str config/website "/" project)
+                :target "_blank"}
+               svg/external-link])
 
-          (when (and page? current-repo (not config/mobile?))
-            (let [page (get-in route-match [:path-params :name])
-                  page (string/lower-case (util/url-decode page))
-                  page (db/entity [:page/name page])]
-              (page/presentation current-repo page (:journal? page))))
+            (when (and page? current-repo (not config/mobile?))
+              (let [page (get-in route-match [:path-params :name])
+                    page (string/lower-case (util/url-decode page))
+                    page (db/entity [:page/name page])]
+                (page/presentation current-repo page (:journal? page))))
 
-          [:a {:title (t :excalidraw-title)
-                :href "/draw"
-                :style {:margin-left 8
-                        :margin-right 4}}
-            [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
-            (svg/excalidraw-logo)]]
-          (ui/dropdown-with-links
-            (fn [{:keys [toggle-fn]}]
-              [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7
-              {:on-click toggle-fn}
-              (if-let [avatar (:avatar me)]
-                [:img.h-7.w-7.rounded-full
-                  {:src avatar}]
-                [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
-                  [:a svg/user]])])
-            (let [logged? (:name me)]
-              (->>
-              [(when current-repo
-                  {:title (t :new-page)
-                  :options {:href "/new-page"}})
-                (when current-repo
-                  {:title (t :graph)
-                  :options {:href "/graph"}})
-                (when logged?
-                  {:title (t :all-repos)
-                  :options {:href "/repos"}})
-                (when current-repo
-                  {:title (t :all-pages)
-                  :options {:href "/all-pages"}})
-                (when current-repo
-                  {:title (t :all-files)
-                  :options {:href "/all-files"}})
-               (when logged?
+            [:a {:title (t :excalidraw-title)
+                 :href "/draw"
+                 :style {:margin-left 8
+                         :margin-right 4}}
+             [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
+              (svg/excalidraw-logo)]]
+            (ui/dropdown-with-links
+             (fn [{:keys [toggle-fn]}]
+               [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7
+                {:on-click toggle-fn}
+                (if-let [avatar (:avatar me)]
+                  [:img.h-7.w-7.rounded-full
+                   {:src avatar}]
+                  [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
+                   [:a svg/user]])])
+             (let [logged? (:name me)]
+               (->>
+                [(when current-repo
+                   {:title (t :new-page)
+                    :options {:href "/new-page"}})
+                 (when current-repo
+                   {:title (t :graph)
+                    :options {:href "/graph"}})
+                 (when logged?
+                   {:title (t :all-repos)
+                    :options {:href "/repos"}})
+                 (when current-repo
+                   {:title (t :all-pages)
+                    :options {:href "/all-pages"}})
+                 (when current-repo
+                   {:title (t :all-files)
+                    :options {:href "/all-files"}})
                  {:title (t :settings)
-                  :options {:href "/settings"}})
-               (when current-repo
-                 {:title (t :import)
-                  :options {:href "/import"}})
-               {:title [:div.flex-row.flex.justify-between.items-center
-                        [:span (t :join-community)]
-                        svg/discord]
-                :options {:href "https://discord.gg/KpN4eHY"
-                          :title (t :discord-title)
-                          :target "_blank"}}
-                (when logged?
-                  {:title (t :sign-out)
-                  :options {:on-click user-handler/sign-out!}})]
-              (remove nil?)))
-            {})
+                  :options {:href "/settings"}}
+                 (when current-repo
+                   {:title (t :import)
+                    :options {:href "/import"}})
+                 {:title [:div.flex-row.flex.justify-between.items-center
+                          [:span (t :join-community)]
+                          svg/discord]
+                  :options {:href "https://discord.gg/KpN4eHY"
+                            :title (t :discord-title)
+                            :target "_blank"}}
+                 (when logged?
+                   {:title (t :sign-out)
+                    :options {:on-click user-handler/sign-out!}})]
+                (remove nil?)))
+             {})
 
-          [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
-            {:on-click (fn []
-                        (state/toggle-sidebar-open?!))}
-           (svg/menu)]]]]
+            [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
+             {:on-click (fn []
+                          (state/toggle-sidebar-open?!))}
+             (svg/menu)]]]]
 
-       [:div#main-content.flex.wrapper.overflow-y-auto {:style {:height "100vh"}}
-        (when-not config/mobile?
+         [:div#main-content.flex.wrapper.overflow-y-auto {:style {:height "100vh"}}
+          (when-not config/mobile?
             [:div#sidebar-nav-wrapper.flex-col.pt-4
              {:style {:flex (if (state/get-left-sidebar-open)
                               "0 1 20%"
@@ -351,61 +350,61 @@
                                          (if white? "#f0f8ff" "#073642"))}}
              (when (state/sub :ui/left-sidebar-open?)
                (sidebar-nav route-match nil))])
-        [:div.flex.#main-content-container.justify-center
-          {:class (if global-graph-pages?
-                    "initial"
-                    (util/hiccup->class ".mx-6.my-12"))
-          :style {:position "relative"
-                  :flex "1 1 65%"
-                  :width "100vw"}}
-         [:div.flex-1
-          {:style (cond->
-                   {:max-width 640}
-                    (or global-graph-pages?
-                        (and (not logged?)
-                             home?)
-                        (contains? #{:all-files :all-pages} route-name))
-                    (dissoc :max-width))}
-          (cond
-            (not indexeddb-support?)
-            nil
+          [:div.flex.#main-content-container.justify-center
+           {:class (if global-graph-pages?
+                     "initial"
+                     (util/hiccup->class ".mx-6.my-12"))
+            :style {:position "relative"
+                    :flex "1 1 65%"
+                    :width "100vw"}}
+           [:div.flex-1
+            {:style (cond->
+                        {:max-width 640}
+                      (or global-graph-pages?
+                          (and (not logged?)
+                               home?)
+                          (contains? #{:all-files :all-pages} route-name))
+                      (dissoc :max-width))}
+            (cond
+              (not indexeddb-support?)
+              nil
 
-            db-restoring?
-            [:div.mt-20
-              [:div.ls-center
-              (ui/loading (t :loading))]]
+              db-restoring?
+              [:div.mt-20
+               [:div.ls-center
+                (ui/loading (t :loading))]]
 
-            :else
-            [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
-             main-content])]]
-        (when-not config/mobile?
-          (right-sidebar/sidebar))]
-       [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
-        {:href "/"
-          :on-click (fn []
-                      (util/scroll-to-top)
-                      (state/set-journals-length! 1))
-          :style {:position "absolute"
-                  :top 12
-                  :left 16
-                  :z-index 111}}
-        (svg/logo (not white?))]
-       (ui/notification)
-       (ui/modal)
-       (custom-context-menu)
-       [:a#download.hidden]
-       (when-not config/mobile?
-         [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-          {:style {:right 24}
-           :title "Click to check shortcuts and other tips"
+              :else
+              [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
+               main-content])]]
+          (when-not config/mobile?
+            (right-sidebar/sidebar))]
+         [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
+          {:href "/"
            :on-click (fn []
-                       (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-          "?"]
-         ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-         ;;  {:style {:left 24}
-         ;;   :title "Click to show/hide sidebar"
-         ;;   :on-click (fn []
-         ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
-         ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-          ])
-       ]]])))
+                       (util/scroll-to-top)
+                       (state/set-journals-length! 1))
+           :style {:position "absolute"
+                   :top 12
+                   :left 16
+                   :z-index 111}}
+          (svg/logo (not white?))]
+         (ui/notification)
+         (ui/modal)
+         (custom-context-menu)
+         [:a#download.hidden]
+         (when-not config/mobile?
+           [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+             {:style {:right 24}
+              :title "Click to check shortcuts and other tips"
+              :on-click (fn []
+                          (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+             "?"]
+            ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+            ;;  {:style {:left 24}
+            ;;   :title "Click to show/hide sidebar"
+            ;;   :on-click (fn []
+            ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
+            ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
+            ])
+         ]]])))

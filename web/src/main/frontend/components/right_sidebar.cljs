@@ -247,10 +247,10 @@
 
           [:div.mr-4.text-sm
            (let [theme (if dark? "white" "dark")]
-             [:a {:title (t :switch-theme theme)
+             [:a {:title (t :right-side-bar/switch-theme theme)
                   :on-click (fn []
                               (state/set-theme! theme))}
-              (t :right-side-bar/theme theme)])]
+              (t :right-side-bar/theme (t (keyword theme)))])]
 
           [:div.mr-4.text-sm
            [:a {:on-click (fn [_e]
