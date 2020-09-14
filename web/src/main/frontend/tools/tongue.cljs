@@ -9,8 +9,8 @@
 ;; - [ ] Localizing Dates
 
 (def dicts
-  {:en {:on-boaring/title "Hi, welcome to Logseq!"
-        :on-boaring/notice "Notice that this project is in its early days and under quick development, files might be corrupted."
+  {:en {:on-boarding/title "Hi, welcome to Logseq!"
+        :on-boarding/notice "Notice that this project is in its early days and under quick development, files might be corrupted."
         :right-side-bar/help "Help"
         :right-side-bar/switch-theme "Switch to {1} theme"
         :right-side-bar/theme "{1} theme"
@@ -143,8 +143,8 @@
         :or "or"
         :download "Download"}
 
-   :zh-CN {:on-boaring/title "你好，欢迎使用 Logseq！"
-           :on-boaring/notice "请注意，本项目正在快速开发中，存在文件损坏的风险。"
+   :zh-CN {:on-boarding/title "你好，欢迎使用 Logseq！"
+           :on-boarding/notice "请注意，本项目正在快速开发中，存在文件损坏的风险。"
            :right-side-bar/help "帮助"
            :right-side-bar/switch-theme "切换到 {1} 主题"
            :right-side-bar/theme "{1} 主题"
