@@ -84,9 +84,12 @@
 
     ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
+    
+    :preferred-language (storage/get :preferred-language)
 
     ;; all notification contents as k-v pairs
     :notification/contents {}
+
     }))
 
 (defn get-route-match
@@ -185,6 +188,11 @@
 (defn set-preferred-workflow!
   [workflow]
   (swap! state assoc-in [:me :preferred_workflow] (name workflow)))
+
+(defn set-preferred-language!
+  [language]
+  (set-state! :preferred-language (name language))
+  (storage/set :preferred-language (name language)))
 
 (defn delete-repo!
   [repo]
