@@ -396,7 +396,7 @@
          (when-not config/mobile?
            [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
              {:style {:right 24}
-              :title "Click to check shortcuts and other tips"
+              :title (t :help-shortcut-title)
               :on-click (fn []
                           (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
              "?"]
