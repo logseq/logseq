@@ -496,7 +496,7 @@
                               blocks (db/recompute-block-children repo block blocks)
                               after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
                               blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
-                              [before-part after-part] (split-with #(not= (:block/uuid (first blocks)) (:block/uuid %)) @blocks-atom)
+                              [before-part after-part] (and blocks-atom (split-with #(not= (:block/uuid (first blocks)) (:block/uuid %)) @blocks-atom))
                               after-part (rest after-part)]
                           ;; Replace with batch transactions
                           (state/add-tx!
@@ -513,8 +513,9 @@
 
                           (let [blocks (remove (fn [block]
                                                  (nil? (:block/content block))) blocks)]
-                            (reset! blocks-atom (->> (concat before-part blocks after-part)
-                                                     (remove nil?)))
+                            (when blocks-atom
+                              (reset! blocks-atom (->> (concat before-part blocks after-part)
+                                                       (remove nil?))))
                             (when ok-handler
                               (let [first-block (first blocks)
                                     last-block (last blocks)]
