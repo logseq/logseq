@@ -141,13 +141,16 @@
         :excalidraw-title "Draw with Excalidraw"
         :go-to "Go to "
         :or "or"
-        :download "Download"}
+        :download "Download"
+        :language "Language"
+        :white "White"
+        :dark "Black"}
 
    :zh-CN {:on-boarding/title "你好，欢迎使用 Logseq！"
            :on-boarding/notice "请注意，本项目正在快速开发中，存在文件损坏的风险。"
            :right-side-bar/help "帮助"
-           :right-side-bar/switch-theme "切换到 {1} 主题"
-           :right-side-bar/theme "{1} 主题"
+           :right-side-bar/switch-theme "切换到{1}主题"
+           :right-side-bar/theme "{1}主题"
            :right-side-bar/page "页面图谱"
            :right-side-bar/recent "最近"
            :right-side-bar/contents "目录"
@@ -275,7 +278,10 @@
            :excalidraw-title "用 Excalidraw 画图"
            :go-to "转到"
            :or "或"
-           :download "下载"}
+           :download "下载"
+           :language "语言"
+           :white "白色"
+           :dark "黑色"}
 
   :tongue/fallback :en})
 

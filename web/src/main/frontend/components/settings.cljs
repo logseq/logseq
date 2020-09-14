@@ -78,7 +78,7 @@
        [:div.mb-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5.pl-1
         [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
          {:for "preferred_language"}
-         "Language"]
+         (t :language)]
         [:div.mt-1.sm:mt-0.sm:col-span-2
          [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
           [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
