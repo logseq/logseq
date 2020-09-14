@@ -7,8 +7,10 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
+            [frontend.tools.tongue :as tongue]
             [clojure.string :as string]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.context.i18n :as i18n]))
 
 (rum/defcs set-email < (rum/local "" ::email)
   [state]
@@ -62,19 +64,21 @@
   []
   (let [preferred-format (keyword (state/sub [:me :preferred_format]))
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
+        preferred-language (state/sub [:preferred-language])
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
         current-repo (state/get-current-repo)
         developer-mode? (state/sub [:ui/developer-mode?])]
+    (rum/with-context [[t] i18n/*tongue-context*]
     [:div#settings
-     [:h1.title "Settings"]
+     [:h1.title (t :settings)]
 
      [:div.pl-1
       ;; config.edn
       (when current-repo
         [:a {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}
-         "Edit config.edn (for current repo)"])
+         (t :settings-page/edit-config-edn)])
 
       (when logged? [:hr])
 
@@ -83,7 +87,7 @@
          [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
           [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
            {:for "preferred_format"}
-           "Preferred file format"]
+           (t :settings-page/preferred-file-format)]
           [:div.mt-1.sm:mt-0.sm:col-span-2
            [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
             [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
@@ -101,7 +105,7 @@
          [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
           [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
            {:for "preferred_workflow"}
-           "Preferred workflow"]
+           (t :settings-page/preferred-workflow)]
           [:div.mt-1.sm:mt-0.sm:col-span-2
            [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
             [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
@@ -121,12 +125,30 @@
                 (if (= workflow :now)
                   "NOW/LATER"
                   "TODO/DOING")])]]]]
+         [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "preferred_language"}
+           "Language / 语言选择"]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
+             {:on-change (fn [e]
+                           (let [lang (util/evalue e)
+                                 lang-val (filter (fn [el] (if (= (:label el) lang) true nil)) tongue/languages)
+                                 lang-val (name (:value(first lang-val)))]
+                             (state/set-preferred-language! lang-val)))}
+             (for [language tongue/languages]
+               [:option (cond->
+                         {:key (:value language)}
+                          (= (name (:value language)) preferred-language)
+                          (assoc :selected "selected"))
+                (:label language)])]]]]
 
          [:hr]
 
          (ui/admonition
           :important
-          [:p "Don't use other people's proxy servers. It's very dangerous, which could make your token and notes stolen. Logseq will not be responsible for this loss if you use other people's proxy servers. You can deploy it yourself, check "
+          [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
            [:a {:href "https://github.com/isomorphic-git/cors-proxy"
                 :target "_blank"}
             "https://github.com/isomorphic-git/cors-proxy"]])
@@ -134,7 +156,7 @@
          [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
           [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
            {:for "cors"}
-           "Custom CORS proxy server"]
+           (t :settings-page/custom-cors-proxy-server)]
           [:div.mt-1.sm:mt-0.sm:col-span-2
            [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
             [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
@@ -155,11 +177,11 @@
          [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
           [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
            {:for "developer_mode"}
-           "Developer mode"]
+           (t :settings-page/developer-mode)]
           [:div.mt-1.sm:mt-0.sm:col-span-2
            [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-            (ui/button (if developer-mode? "Disable developer mode" "Enable developer mode")
+            (ui/button (if developer-mode? (t :settings-page/disable-developer-mode) (t :settings-page/enable-developer-mode))
              :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
          
          [:br]
-         "Developer mode helps contributors and extension developers test their integration with Logseq more efficient."])]]))
+         (t :settings-page/developer-mode-desc)])]])))

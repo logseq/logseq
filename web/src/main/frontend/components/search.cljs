@@ -15,7 +15,8 @@
             [clojure.string :as string]
             [goog.crypt.base64 :as b64]
             [goog.object :as gobj]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.context.i18n :as i18n]))
 
 (rum/defc dropdown-content-wrapper [state content]
   [:div.origin-top-left.absolute.left-0.mt-0.rounded-md.shadow-lg
@@ -126,9 +127,10 @@
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
         show-result? (boolean (seq search-result))]
+     (rum/with-context [[t] i18n/*tongue-context*]
     [:div#search.flex-1.flex.ml-0.md:ml-12
      [:div.flex.md:ml-0
-      [:label.sr-only {:for "search_field"} "Search"]
+      [:label.sr-only {:for "search_field"} (t :search)]
       [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
        [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
         [:svg.h-5.w-5
@@ -141,7 +143,7 @@
        [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.bg-base-3.sm:bg-transparent
 
         {:style {:padding-left "2rem"}
-         :placeholder "Search"
+         :placeholder (t :search)
          :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
          :default-value ""
          :on-change (fn [e]
@@ -156,4 +158,4 @@
           {:class-names "fade"
            :timeout {:enter 500
                      :exit 300}}
-          (search-auto-complete search-result search-q)))]]]))
+          (search-auto-complete search-result search-q)))]]])))

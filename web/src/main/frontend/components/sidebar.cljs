@@ -26,7 +26,8 @@
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
             [clojure.string :as string]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.context.i18n :as i18n]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -83,6 +84,7 @@
         token (state/sub :encrypt/token)
         ;; TODO: remove this
         daily-migrating? (state/sub [:daily/migrating?])]
+           (rum/with-context [[t] i18n/*tongue-context*]
     [:div.max-w-7xl.mx-auto
      (cond
        daily-migrating?
@@ -91,31 +93,31 @@
        (and (not logged?) (seq latest-journals))
        (journal/journals latest-journals)
 
-       (and logged? (not preferred-format))
-       (widgets/choose-preferred-format)
+         (and logged? (not preferred-format))
+         (widgets/choose-preferred-format)
 
        ;; TODO: delay this
-       (and logged? (nil? (:email me)))
-       (settings/set-email)
+         (and logged? (nil? (:email me)))
+         (settings/set-email)
 
-       cloning?
-       (ui/loading "Cloning")
+         cloning?
+         (ui/loading (t :cloning))
 
-       (seq latest-journals)
-       (journal/journals latest-journals)
+         (seq latest-journals)
+         (journal/journals latest-journals)
 
-       importing-to-db?
-       (ui/loading "Parsing files")
+         importing-to-db?
+         (ui/loading (t :parsing-files))
 
-       loading-files?
-       (ui/loading "Loading files")
+         loading-files?
+         (ui/loading (t :loading-files))
 
-       (and logged? (empty? (:repos me)))
-       (widgets/add-repo)
+         (and logged? (empty? (:repos me)))
+         (widgets/add-repo)
 
        ;; FIXME: why will this happen?
-       :else
-       [:div])]))
+         :else
+         [:div])])))
 
 (rum/defc custom-context-menu < rum/reactive
   []
@@ -209,41 +211,43 @@
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)]
+
+    (rum/with-context [[t] i18n/*tongue-context*]
     [:div {:class (if white? "white-theme" "dark-theme")
-           :on-click (fn []
-                       (editor-handler/unhighlight-block!))}
-     [:div.h-screen.flex.overflow-hidden.bg-base-3
+            :on-click (fn []
+                        (editor-handler/unhighlight-block!))}
+      [:div.h-screen.flex.overflow-hidden.bg-base-3
       [:div.md:hidden
-       [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
+        [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
         {:class (if @open?
                   "opacity-75 pointer-events-auto"
                   "opacity-0 pointer-events-none")
-         :on-click close-fn}]
-       [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
+          :on-click close-fn}]
+        [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
         {:class (if @open?
                   "translate-x-0"
                   "-translate-x-full")
-         :style {:background-color "#002b36"}}
+          :style {:background-color "#002b36"}}
         (if @open?
           [:div.absolute.top-0.right-0.-mr-14.p-1
-           [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+            [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
             {:on-click close-fn}
             [:svg.h-6.w-6.text-white
-             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-             [:path
-              {:d "M6 18L18 6M6 6l12 12",
-               :stroke-width "2",
-               :stroke-linejoin "round",
-               :stroke-linecap "round"}]]]])
+              {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
+              [:path
+              {:d "M6 18L18 6M6 6l12 12"
+                :stroke-width "2"
+                :stroke-linejoin "round"
+                :stroke-linecap "round"}]]]])
         [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
-         (widgets/repos false)]
+          (widgets/repos false)]
         [:div.flex-1.h-0.overflow-y-auto
-         (sidebar-nav route-match close-fn)]]]
+          (sidebar-nav route-match close-fn)]]]
       [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-       [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
+        [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
         [:button.px-4.focus:outline-none.md:hidden.menu
-         {:on-click open-fn}
-         [:svg.h-6.w-6
+          {:on-click open-fn}
+          [:svg.h-6.w-6
           {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
           [:path
            {:d "M4 6h16M4 12h16M4 18h7"
@@ -259,22 +263,22 @@
 
           (when-not logged?
             [:a.text-sm.font-medium.login
-             {:href "/login/github"
+              {:href "/login/github"
               :on-click (fn []
                           (storage/remove :git/current-repo))}
-             "Login with GitHub"])
+              (t :login-github)])
 
           (widgets/sync-status)
 
           [:div.repos.hidden.md:block
-           (widgets/repos true)]
+            (widgets/repos true)]
 
           (when-let [project (and current-repo (state/get-current-project))]
             [:a.opacity-50.hover:opacity-100.ml-4
-             {:title (str "Go to /" project)
+              {:title (str (t :go-to) "/" project)
               :href (str config/website "/" project)
               :target "_blank"}
-             svg/external-link])
+              svg/external-link])
 
           (when (and page? current-repo (not config/mobile?))
             (let [page (get-in route-match [:path-params :name])
@@ -282,58 +286,58 @@
                   page (db/entity [:page/name page])]
               (page/presentation current-repo page (:journal? page))))
 
-          [:a {:title "Draw with Excalidraw"
-               :href "/draw"
-               :style {:margin-left 8
-                       :margin-right 4}}
-           [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
+          [:a {:title (t :excalidraw-title)
+                :href "/draw"
+                :style {:margin-left 8
+                        :margin-right 4}}
+            [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
             (svg/excalidraw-logo)]]
           (ui/dropdown-with-links
-           (fn [{:keys [toggle-fn]}]
-             [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7
+            (fn [{:keys [toggle-fn]}]
+              [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7
               {:on-click toggle-fn}
               (if-let [avatar (:avatar me)]
                 [:img.h-7.w-7.rounded-full
-                 {:src avatar}]
+                  {:src avatar}]
                 [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
-                 [:a svg/user]])])
-           (let [logged? (:name me)]
-             (->>
+                  [:a svg/user]])])
+            (let [logged? (:name me)]
+              (->>
               [(when current-repo
-                 {:title "New page"
+                  {:title (t :new-page)
                   :options {:href "/new-page"}})
-               (when current-repo
-                 {:title "Graph"
+                (when current-repo
+                  {:title (t :graph)
                   :options {:href "/graph"}})
-               (when logged?
-                 {:title "All repos"
+                (when logged?
+                  {:title (t :all-repos)
                   :options {:href "/repos"}})
-               (when current-repo
-                 {:title "All pages"
+                (when current-repo
+                  {:title (t :all-pages)
                   :options {:href "/all-pages"}})
-               (when current-repo
-                 {:title "All files"
+                (when current-repo
+                  {:title (t :all-files)
                   :options {:href "/all-files"}})
                (when logged?
-                 {:title "Settings"
+                 {:title (t :settings)
                   :options {:href "/settings"}})
                (when current-repo
-                 {:title "Import"
+                 {:title (t :import)
                   :options {:href "/import"}})
                {:title [:div.flex-row.flex.justify-between.items-center
-                        [:span "Join the community"]
+                        [:span (t :join-community)]
                         svg/discord]
                 :options {:href "https://discord.gg/KpN4eHY"
-                          :title "Our discord group!"
+                          :title (t :discord-title)
                           :target "_blank"}}
-               (when logged?
-                 {:title "Sign out"
+                (when logged?
+                  {:title (t :sign-out)
                   :options {:on-click user-handler/sign-out!}})]
               (remove nil?)))
-           {})
+            {})
 
           [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
-           {:on-click (fn []
+            {:on-click (fn []
                         (state/toggle-sidebar-open?!))}
            (svg/menu)]]]]
 
@@ -348,9 +352,9 @@
              (when (state/sub :ui/left-sidebar-open?)
                (sidebar-nav route-match nil))])
         [:div.flex.#main-content-container.justify-center
-         {:class (if global-graph-pages?
-                   "initial"
-                   (util/hiccup->class ".mx-6.my-12"))
+          {:class (if global-graph-pages?
+                    "initial"
+                    (util/hiccup->class ".mx-6.my-12"))
           :style {:position "relative"
                   :flex "1 1 65%"
                   :width "100vw"}}
@@ -368,8 +372,8 @@
 
             db-restoring?
             [:div.mt-20
-             [:div.ls-center
-              (ui/loading "Loading")]]
+              [:div.ls-center
+              (ui/loading (t :loading))]]
 
             :else
             [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
@@ -378,13 +382,13 @@
           (right-sidebar/sidebar))]
        [:a.opacity-70.hover:opacity-100.absolute.hidden.md:block
         {:href "/"
-         :on-click (fn []
-                     (util/scroll-to-top)
-                     (state/set-journals-length! 1))
-         :style {:position "absolute"
-                 :top 12
-                 :left 16
-                 :z-index 111}}
+          :on-click (fn []
+                      (util/scroll-to-top)
+                      (state/set-journals-length! 1))
+          :style {:position "absolute"
+                  :top 12
+                  :left 16
+                  :z-index 111}}
         (svg/logo (not white?))]
        (ui/notification)
        (ui/modal)
@@ -404,4 +408,4 @@
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
           ])
-       ]]]))
+       ]]])))

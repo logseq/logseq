@@ -3,7 +3,7 @@
             [frontend.state :as state]
             [frontend.components.sidebar :as sidebar]
             [frontend.ui :as ui]
-            [frontend.storage :as storage]))
+            [frontend.context.i18n :as i18n]))
 
 (rum/defc route-view
   [view route-match]
@@ -14,14 +14,15 @@
                 (state/set-root-component! (:rum/react-component state))
                 state)}
   []
-  (when-let [route-match (state/sub :route-match)]
-    (let [route-name (get-in route-match [:data :name])]
-      (if-let [view (:view (:data route-match))]
-        (if (= :draw route-name)
-          (view route-match)
-          (sidebar/sidebar
-           route-match
-           (view route-match)))
+   (when-let [route-match (state/sub :route-match)]
+     (i18n/tongue-provider 
+      (let [route-name (get-in route-match [:data :name])]
+       (if-let [view (:view (:data route-match))]
+         (if (= :draw route-name)
+           (view route-match)
+           (sidebar/sidebar
+            route-match
+            (view route-match)))
 
         ;; FIXME: disable for now
         ;; (let [route-name (get-in route-match [:data :name])
@@ -40,4 +41,4 @@
         ;;           :timeout {:enter 300
         ;;                     :exit 200}}
         ;;          (route-view view route-match)))))))
-        [:div "404 Page"]))))
+         [:div "404 Page"])))))

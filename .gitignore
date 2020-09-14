@@ -32,6 +32,7 @@ tauri-release/
 .nrepl-*
 .DS_Store
 report.html
+strings.csv
 /resources/static/css/tailwind.min.css
 resources/static/style.css
 
