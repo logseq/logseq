@@ -144,7 +144,8 @@
         :download "Download"
         :language "Language"
         :white "White"
-        :dark "Black"}
+        :dark "Black"
+        :remove-background "Remove background"}
 
    :zh-CN {:on-boarding/title "你好，欢迎使用 Logseq！"
            :on-boarding/notice "请注意，本项目正在快速开发中，存在文件损坏的风险。"
@@ -281,7 +282,8 @@
            :download "下载"
            :language "语言"
            :white "白色"
-           :dark "黑色"}
+           :dark "黑色"
+           :remove-background "去除背景"}
 
   :tongue/fallback :en})
 

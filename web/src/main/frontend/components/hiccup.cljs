@@ -37,7 +37,8 @@
             [cljs-bean.core :as bean]
             [frontend.handler.image :as image-handler]
             [frontend.format.mldoc :as mldoc]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.utf8 :as utf8]))
 
 ;; local state
 (defonce *block-children
@@ -928,7 +929,8 @@
                                (let [cursor-range (util/caret-range (gdom/getElement block-id))]
                                  (state/set-editing!
                                   edit-input-id
-                                  (text/remove-level-spaces content format)
+                                  (->> (text/remove-level-spaces content format)
+                                       (text/remove-properties! block))
                                   block
                                   cursor-range))
                                (util/stop e))))
