@@ -21,7 +21,8 @@
             [goog.object :as gobj]
             [frontend.date :as date]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [frontend.context.i18n :as i18n]))
 
 (defn- get-path
   [state]
@@ -32,16 +33,17 @@
 
 (rum/defc files < rum/reactive
   []
+(rum/with-context [[tongue] i18n/*tongue-context*]
   [:div.flex-1.overflow-hidden
    [:h1.title
-    "All files"]
+    (tongue :all-files)]
    (when-let [current-repo (state/sub :git/current-repo)]
      (let [files (db/get-files current-repo)]
        [:table.table-auto
         [:thead
          [:tr
-          [:th "File name"]
-          [:th "Last modified at"]
+          [:th (tongue :file/name)]
+          [:th (tongue :file/last-modified-at)]
           [:th ""]]]
         [:tbody
          (for [[file modified-at] files]
@@ -55,14 +57,14 @@
                  file])]
               [:td [:span.text-gray-500.text-sm
                     (if (zero? modified-at)
-                      "No data"
+                      (tongue :file/no-data)
                       (date/get-date-time-string
                        (t/to-default-time-zone (tc/to-date-time modified-at))))]]
 
               [:td [:a.text-sm
                     {:on-click (fn [e]
                                  (export-handler/download-file! file))}
-                    [:span "Download"]]]]))]]))])
+                    [:span (tongue :download)]]]]))]]))]))
 
 (rum/defcs file < rum/reactive
   [state]
@@ -81,6 +83,7 @@
                                                              :on-hide (save-file-handler content)}))))
         page (db/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
+    (rum/with-context [[tongue] i18n/*tongue-context*]
     [:div.file {:id (str "file-" encoded-path)}
      [:h1.title
       path]
@@ -101,7 +104,7 @@
 
      (when (and config? (state/logged?))
        [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
-        "Sync project settings"])
+        (tongue :project/sync-settings)])
 
      (cond
        ;; image type
@@ -112,4 +115,4 @@
        (edit-raw-handler)
 
        :else
-       [:div "Format ." (name format) " is not supported."])]))
+       [:div (tongue :file/format-not-supported (name format))])])))
