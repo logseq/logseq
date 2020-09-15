@@ -4,7 +4,10 @@
             [reitit.frontend.history :as rfh]
             [frontend.state :as state]
             [goog.dom :as gdom]
-            [frontend.handler.ui :as ui-handler]))
+            [frontend.handler.ui :as ui-handler]
+            [frontend.db :as db]
+            [medley.core :as medley]
+            [frontend.text :as text]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -43,7 +46,17 @@
     :new-page
     "Create a new page"
     :page
-    (util/capitalize-all (util/url-decode (:name path-params)))
+    (let [name (:name path-params)
+          block? (util/uuid-string? name)]
+      (if block?
+        (if-let [block (db/entity [:block/uuid (medley/uuid name)])]
+          (let [content (text/remove-level-spaces (:block/content block)
+                                                  (:block/format block))]
+            (if (> (count content) 48)
+              (str (subs content 0 48) "...")
+              content))
+          "Page no longer exists!!")
+        (util/capitalize-all (util/url-decode name))))
     :tag
     (str "#" (util/url-decode (:name path-params)))
     :diff
