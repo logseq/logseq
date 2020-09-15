@@ -317,12 +317,13 @@
         pre-str (str heading-pattern heading-pattern)
         new-content (if last-empty? (str pre-str " [[" page-name "]]") (str (:block/content last-block) pre-str " [[" page-name "]]"))]
     (editor-handler/insert-new-block-aux!
-     "Contents"
      last-block
      new-content
-     false
-     (fn [[_first-block last-block _new-block-content]]
-       (notification/show! "Added to contents!" :success)
-       (editor-handler/clear-when-saved!))
-     true
-     2)))
+     {:create-new-block? false
+      :ok-handler
+      (fn [[_first-block last-block _new-block-content]]
+        (notification/show! "Added to contents!" :success)
+        (editor-handler/clear-when-saved!))
+      :with-level? true
+      :new-level 2
+      :current-page "Contents"})))

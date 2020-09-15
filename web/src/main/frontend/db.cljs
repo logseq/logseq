@@ -152,6 +152,10 @@
   [repo page-id]
   (:result (get @query-state [repo :page/blocks page-id])))
 
+(defn get-block-blocks-cache-atom
+  [repo block-id]
+  (:result (get @query-state [repo :block/block block-id])))
+
 (defn remove-q!
   [k]
   (swap! query-state dissoc k))
