@@ -291,8 +291,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                              {:block/uuid uuid
-                               :block/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -754,20 +754,24 @@
                   block-parent (gdom/getElement block-parent-id)
                   sibling-block (get-prev-block-non-collapsed block-parent)]
               (delete-block-aux! block dummy?)
-              (when sibling-block
-                (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-                  (when repo
-                    (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-                      (let [original-content (util/trim-safe (:block/content block))
-                            new-value (str original-content value)
-                            pos (max
-                                 (if original-content
-                                   (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
-                                   0)
-                                 0)]
-                        (save-block-if-changed! block new-value)
-                        (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
-                          (edit-block! block pos format id))))))))))))))
+              (let [edit-block (atom nil)]
+                (when sibling-block
+                  (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+                    (when repo
+                      (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+                        (let [original-content (util/trim-safe (:block/content block))
+                              new-value (str original-content value)
+                              pos (max
+                                   (if original-content
+                                     (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
+                                     0)
+                                   0)]
+                          (save-block-if-changed! block new-value)
+                          (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
+                            (reset! edit-block block)
+                            (edit-block! block pos format id)))))))
+                (when-not @edit-block
+                  (state/clear-edit!))))))))))
 
 (defn delete-blocks!
   [repo block-uuids]
