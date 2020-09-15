@@ -96,7 +96,7 @@
                  (if pulling?
                    [:span.lds-dual-ring.mt-1])]
                 [:p.pt-2.text-sm.opacity-50
-                 (t :git/version) version/version]]]))])))))
+                 (t :git/version) (str " " version/version)]]]))])))))
 
 (rum/defc repos < rum/reactive
   [head? on-click]
