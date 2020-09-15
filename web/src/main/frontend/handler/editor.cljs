@@ -371,7 +371,6 @@
                        (if (= format "markdown") "md" format))
                  file-path (str "/" path)
                  dir (util/get-repo-dir repo)]
-             (prn {:file-path file-path})
              (p/let [exists? (fs/file-exists? dir file-path)]
                (if exists?
                  (notification/show!
@@ -500,23 +499,25 @@
                               after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
                               blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
                               [before-part after-part] (and blocks-atom (split-with #(not= (:block/uuid (first blocks)) (:block/uuid %)) @blocks-atom))
-                              after-part (rest after-part)]
+                              after-part (rest after-part)
+                              transact-fn (fn []
+                                            (repo-handler/transact-react-and-alter-file!
+                                             repo
+                                             (concat
+                                              pages
+                                              blocks
+                                              after-blocks)
+                                             {:key :block/change
+                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
+                                             [[file-path new-content]]))]
                           ;; Replace with batch transactions
-                          (state/add-tx!
-                           (fn []
-                             (repo-handler/transact-react-and-alter-file!
-                              repo
-                              (concat
-                               pages
-                               blocks
-                               after-blocks)
-                              {:key :block/change
-                               :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                              [[file-path new-content]])))
+                          (if (db/transact-async?)
+                            (state/add-tx! transact-fn)
+                            (transact-fn))
 
                           (let [blocks (remove (fn [block]
                                                  (nil? (:block/content block))) blocks)]
-                            (when blocks-atom
+                            (when (and (db/transact-async?) blocks-atom)
                               (reset! blocks-atom (->> (concat before-part blocks after-part)
                                                        (remove nil?))))
                             (when ok-handler

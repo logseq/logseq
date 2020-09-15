@@ -31,6 +31,12 @@
                 :sidebar/idx idx
                 :repo repo})))
 
+(rum/defc page-cp < rum/reactive
+  [repo page-name]
+  (page/page {:parameters {:path {:name page-name}}
+              :sidebar? true
+              :repo repo}))
+
 (defn page-graph
   [page]
   (let [theme (:ui/theme @state/state)
@@ -130,9 +136,7 @@
       [[:a {:href (str "/page/" (util/url-encode page-name))}
         (util/capitalize-all page-name)]
        [:div.ml-2
-        (page/page {:parameters {:path {:name page-name}}
-                    :sidebar? true
-                    :repo repo})]])
+        (page-cp repo page-name)]])
 
     :page-presentation
     (let [page-name (get-in block-data [:page :page/name])

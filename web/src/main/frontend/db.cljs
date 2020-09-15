@@ -138,6 +138,7 @@
   []
   (reset! query-state {}))
 
+;; TODO: Add components which subscribed to a specific query
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn]
   (swap! query-state assoc k {:query query
@@ -2196,6 +2197,21 @@
         (f))
       (recur))))
 
+(defonce blocks-count-cache (atom nil))
+(defn blocks-count
+  ([]
+   (blocks-count true))
+  ([cache?]
+   (if (and cache? @blocks-count-cache)
+     @blocks-count-cache
+     (let [n (count (d/datoms (get-conn) :avet :block/uuid))]
+       (reset! blocks-count-cache n)
+       n))))
+
+(defn transact-async?
+  []
+  (>= (blocks-count) 1000))
+
 (comment
   (defn debug!
     []
@@ -2209,13 +2225,4 @@
                :git/latest-commit (get-key-value repo :git/latest-commit)
                :git/error (get-key-value repo :git/error)})
             repos)))
-
-  (defn blocks-count
-    []
-    (->
-     (d/q '[:find (count ?h)
-            :where
-            [?h :block/uuid]]
-       (get-conn ))
-     ffirst))
   )
