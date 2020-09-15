@@ -131,6 +131,7 @@
   (reset! conn db))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
+;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
 
 (defn clear-query-state!
@@ -1475,18 +1476,7 @@
   ([blocks format default-option journal?]
    (let [format (or format (state/get-preferred-format) :markdown)]
      (cond
-       (and journal?
-            (seq blocks)
-            (when-let [title (second (first (:block/title (first blocks))))]
-              (date/valid-journal-title? title))
-            (> (count blocks) 1))
-       (rest blocks)                  ; remove journal titles
-
-       (and journal? (seq blocks) (not (date/valid-journal-title? (second (first (:block/title (first blocks)))))))
-       blocks
-
-       (and (not journal?)
-            (seq blocks)
+       (and (seq blocks)
             (or (and (> (count blocks) 1)
                      (:block/pre-block? (first blocks)))
                 (and (>= (count blocks) 1)
@@ -1511,11 +1501,8 @@
                              :block/dummy? true
                              :block/marker nil
                              :block/pre-block? false})
-                          default-option)
-             blocks (vec (concat blocks [dummy]))]
-         (if (and journal? (> (count blocks) 1))
-           (rest blocks)
-           blocks))))))
+                          default-option)]
+         (vec (concat blocks [dummy])))))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages

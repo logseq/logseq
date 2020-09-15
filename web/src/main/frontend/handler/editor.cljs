@@ -759,50 +759,65 @@
                   block-parent (gdom/getElement block-parent-id)
                   sibling-block (get-prev-block-non-collapsed block-parent)]
               (delete-block-aux! block dummy?)
-              (when sibling-block
-                (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-                  (when repo
-                    (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-                      (let [original-content (util/trim-safe (:block/content block))
-                            new-value (str original-content value)
-                            pos (max
-                                 (if original-content
-                                   (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
-                                   0)
-                                 0)]
-                        (save-block-if-changed! block new-value)
-                        (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
-                          (edit-block! block pos format id))))))))))))))
+              (let [edit-block (atom nil)]
+                (when sibling-block
+                  (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+                    (when repo
+                      (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+                        (let [original-content (util/trim-safe (:block/content block))
+                              new-value (str original-content value)
+                              pos (max
+                                   (if original-content
+                                     (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
+                                     0)
+                                   0)]
+                          (save-block-if-changed! block new-value)
+                          (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
+                            (reset! edit-block block)
+                            (edit-block! block pos format id)))))))
+                (when-not @edit-block
+                  (state/clear-edit!))))))))))
 
 (defn delete-blocks!
   [repo block-uuids]
   (when (seq block-uuids)
-    (let [blocks (db/pull-many repo '[*] (mapv (fn [id]
-                                                 [:block/uuid id])
-                                               block-uuids))
-          first-block (first blocks)
-          last-block (last blocks)
-          file (db/entity repo (:db/id (:block/file first-block)))
-          file-path (:file/path file)
-          file-content (db/get-file repo file-path)
-          start-pos (:start-pos (:block/meta first-block))
-          end-pos (:end-pos (:block/meta last-block))
-          after-blocks (rebuild-after-blocks repo file end-pos start-pos)
-          new-content (utf8/delete! file-content start-pos end-pos)
-          tx-data (concat
-                   (mapv
-                    (fn [uuid]
-                      [:db.fn/retractEntity [:block/uuid uuid]])
-                    block-uuids)
-                   after-blocks
-                   [{:file/path file-path}])]
-      (repo-handler/transact-react-and-alter-file!
-       repo
-       tx-data
-       {:key :block/change
-        :data blocks}
-       [[file-path new-content]])
-      (ui-handler/re-render-root!))))
+    (let [current-page (state/get-current-page)
+          top-block-id (and current-page
+                            (util/uuid-string? current-page)
+                            (medley/uuid current-page))
+          top-block? (and top-block-id
+                          (= top-block-id (first block-uuids)))]
+      (let [blocks (db/pull-many repo '[*] (mapv (fn [id]
+                                                   [:block/uuid id])
+                                                 block-uuids))
+            page (db/entity repo (:db/id (:block/page (first blocks))))
+            first-block (first blocks)
+            last-block (last blocks)
+            file (db/entity repo (:db/id (:block/file first-block)))
+            file-path (:file/path file)
+            file-content (db/get-file repo file-path)
+            start-pos (:start-pos (:block/meta first-block))
+            end-pos (:end-pos (:block/meta last-block))
+            after-blocks (rebuild-after-blocks repo file end-pos start-pos)
+            new-content (utf8/delete! file-content start-pos end-pos)
+            retract-blocks-tx (mapv
+                               (fn [uuid]
+                                 [:db.fn/retractEntity [:block/uuid uuid]])
+                               block-uuids)
+            tx-data (concat
+                     retract-blocks-tx
+                     after-blocks
+                     [{:file/path file-path}])]
+        (repo-handler/transact-react-and-alter-file!
+         repo
+         tx-data
+         {:key :block/change
+          :data blocks}
+         [[file-path new-content]])
+        (if top-block?
+          (route-handler/redirect! {:to :page
+                                    :path-params {:name (:page/name page)}})
+          (ui-handler/re-render-root!))))))
 
 (defn remove-block-property!
   [block-id key]
@@ -920,7 +935,8 @@
                                          0)))
                                    >
                                    matches))]
-              (subs page 2 (- (count page) 2)))))))))
+              (when page
+                (subs page 2 (- (count page) 2))))))))))
 
 (defn follow-link-under-cursor!
   []

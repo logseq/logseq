@@ -239,10 +239,10 @@
                     (when (gobj/get e "shiftKey")
                       (when-let [page-entity (db/entity [:page/name page])]
                         (state/sidebar-add-block!
-                        (state/get-current-repo)
-                        (:db/id page-entity)
-                        :page
-                        {:page page-entity}))))}
+                         (state/get-current-repo)
+                         (:db/id page-entity)
+                         :page
+                         {:page page-entity}))))}
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
@@ -289,11 +289,6 @@
 (declare blocks-container)
 
 (rum/defc block-embed < rum/reactive
-  (db-mixins/clear-query-cache
-   (fn [state]
-     (let [repo (state/get-current-repo)
-           block-id (last (:rum/args state))]
-       [repo :block/block block-id])))
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
     [:div.embed-block.bg-base-2 {:style {:z-index 2}}
@@ -302,12 +297,6 @@
       (blocks-container blocks (assoc config :embed? true))]]))
 
 (rum/defc page-embed < rum/reactive
-  (db-mixins/clear-query-cache
-   (fn [state]
-     (let [repo (state/get-current-repo)
-           page-name (last (:rum/args state))
-           page-id (:db/id (db/entity [:page/name page-name]))]
-       [repo :page/blocks page-id])))
   [config page-name]
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
@@ -974,9 +963,9 @@
          ;; TODO: consistent id instead of the idx (since it could be changed later)
          (let [body (block/trim-break-lines! (:block/body block))]
            (for [[idx child] (medley/indexed body)]
-            (when-let [block (block-cp config child)]
-              (rum/with-key (block-child block)
-                (str uuid "-" idx)))))])]
+             (when-let [block (block-cp config child)]
+               (rum/with-key (block-child block)
+                 (str uuid "-" idx)))))])]
      (when (and block-refs-count (> block-refs-count 0))
        [:div
         [:a.block.py-0.px-2.rounded.bg-base-2.opacity-50.hover:opacity-100

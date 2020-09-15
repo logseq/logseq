@@ -406,12 +406,19 @@
                    deleted (and (> current-pos 0)
                                 (util/nth-safe value (dec current-pos)))
                    selected-start (gobj/get node "selectionStart")
-                   selected-end (gobj/get node "selectionEnd")]
+                   selected-end (gobj/get node "selectionEnd")
+                   block-id (:block-id (first (:rum/args state)))
+                   page (state/get-current-page)]
                (cond
                  (not= selected-start selected-end)
                  nil
 
-                 (and (zero? current-pos))
+                 (and (zero? current-pos)
+                      ;; not the top block in a block page
+                      (not (and page
+                                (util/uuid-string? page)
+                                (= (medley/uuid page) block-id))))
+
                  (editor-handler/delete-block! state repo e)
 
                  (and (> current-pos 1)

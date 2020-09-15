@@ -202,17 +202,6 @@
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
-  (db-mixins/clear-query-cache
-   (fn [state]
-     (let [repo (or (:repo (first (:rum/args state))) (state/get-current-repo))
-           encoded-page-name (get-page-name state)]
-       (when-not (string/blank? encoded-page-name)
-         (let [page-name (string/lower-case (util/url-decode encoded-page-name))
-               block? (util/uuid-string? page-name)]
-           (if block?
-             [repo :block/block (uuid page-name)]
-             (when-let [page-id (db/entity repo [:page/name page-name])]
-               [repo :page/blocks page-id])))))))
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
                 state)
