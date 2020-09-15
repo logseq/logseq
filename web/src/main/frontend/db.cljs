@@ -1161,10 +1161,10 @@
                                   (str (last (first (:title first-block)))))
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (when-let [file-name (first (util/split-last "." file-name))]
-                         (-> file-name
-                             (string/replace "-" " ")
-                             (string/replace "_" " ")
-                             (util/capitalize-all))))]
+                          (-> file-name
+                              (string/replace "-" " ")
+                              (string/replace "_" " ")
+                              (util/capitalize-all))))]
         (or directive-name
             (if (= (state/page-name-order) "file")
               (or file-name first-block-name)
@@ -1232,16 +1232,16 @@
                            page-list (when-let [list-content (:list directives)]
                                        (extract-page-list list-content))]
                        (cond->
-                           (util/remove-nils
-                            {:page/name (string/lower-case page)
-                             :page/original-name page
-                             :page/file [:file/path file]
-                             :page/journal? journal?
-                             :page/journal-day (if journal?
-                                                 (date/journal-title->int (string/capitalize page))
-                                                 0)
-                             :page/created-at journal-date-long
-                             :page/last-modified-at journal-date-long})
+                         (util/remove-nils
+                          {:page/name (string/lower-case page)
+                           :page/original-name page
+                           :page/file [:file/path file]
+                           :page/journal? journal?
+                           :page/journal-day (if journal?
+                                               (date/journal-title->int (string/capitalize page))
+                                               0)
+                           :page/created-at journal-date-long
+                           :page/last-modified-at journal-date-long})
                          (seq directives)
                          (assoc :page/directives directives)
 
@@ -1406,8 +1406,8 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                               {:file/path file
-                                :file/last-modified-at t}
+                             {:file/path file
+                              :file/last-modified-at t}
                              new?
                              (assoc :file/created-at t)))])]
       (transact! repo-url tx))))
@@ -1479,7 +1479,14 @@
   ([blocks format]
    (with-dummy-block blocks format {} false))
   ([blocks format default-option journal?]
-   (let [format (or format (state/get-preferred-format) :markdown)]
+   (let [format (or format (state/get-preferred-format) :markdown)
+         blocks (if (and journal?
+                         (seq blocks)
+                         (when-let [title (second (first (:block/title (first blocks))))]
+                           (date/valid-journal-title? title)))
+                  (rest blocks)
+                  blocks)
+         blocks (vec blocks)]
      (cond
        (and (seq blocks)
             (or (and (> (count blocks) 1)
@@ -1507,7 +1514,7 @@
                              :block/marker nil
                              :block/pre-block? false})
                           default-option)]
-         (vec (concat blocks [dummy])))))))
+         (conj blocks dummy))))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
@@ -1789,13 +1796,13 @@
   [dark? current-page edges nodes]
   (mapv (fn [p]
           (cond->
-              {:id p
-               :name p
-               :val (get-connections p edges)
-               :autoColorBy "group"
-               :group (js/Math.ceil (* (js/Math.random) 12))
-               :color "#222222"
-               }
+            {:id p
+             :name p
+             :val (get-connections p edges)
+             :autoColorBy "group"
+             :group (js/Math.ceil (* (js/Math.random) 12))
+             :color "#222222"
+             }
             dark?
             (assoc :color "#8abbbb")
             (= p current-page)
@@ -1933,7 +1940,7 @@
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
-                             h
+                           h
                            (not (:block/dummy? h))
                            (dissoc h :block/meta))) col)
         parent? (fn [item children]

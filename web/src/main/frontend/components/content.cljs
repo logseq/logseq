@@ -87,7 +87,7 @@
                             (editor-handler/set-block-property! block-id "background-color" color))}
                [:div.heading-bg {:style {:background-color color}}]])]
            [:a {:title (t :remove-background)
-                :style {:margin-right 10
+                :style {:margin-right 16
                         :margin-top 1}
                 :on-click (fn [_e]
                             (editor-handler/remove-block-property! block-id "background-color"))}

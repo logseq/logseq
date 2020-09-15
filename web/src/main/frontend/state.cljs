@@ -84,7 +84,7 @@
 
     ;; pages or blocks in the right sidebar
     :sidebar/blocks '()
-    
+
     :preferred-language (storage/get :preferred-language)
 
     ;; all notification contents as k-v pairs
