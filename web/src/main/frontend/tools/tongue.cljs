@@ -244,7 +244,8 @@
         :download "Download"
         :language "Language"
         :white "White"
-        :dark "Black"}
+        :dark "Black"
+        :remove-background "Remove background"}
 
    :zh-CN {:on-boarding/title "你好，欢迎使用 Logseq！"
            :on-boarding/sharing "分享"
@@ -481,7 +482,8 @@
            :download "下载"
            :language "语言"
            :white "亮色"
-           :dark "暗黑"}
+           :dark "暗黑"
+           :remove-background "去除背景"}
 
    :af {:on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "meedeling"

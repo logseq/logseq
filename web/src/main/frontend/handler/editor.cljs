@@ -323,7 +323,7 @@
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
-  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block} value indent-left?]
+  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks properties] :as block} value indent-left?]
    (let [repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (with-block-meta repo block)
@@ -347,7 +347,9 @@
                  value)
          new-directives (if permalink-changed?
                           (assoc new-directives :old_permalink (:permalink old-directives))
-                          new-directives)]
+                          new-directives)
+         value (text/remove-properties! block value)
+         value (text/rejoin-properties value properties)]
      (when (not= (string/trim content) (string/trim value)) ; block content changed
        (let [file (db/entity repo (:db/id file))]
          (cond
@@ -462,7 +464,7 @@
    (insert-new-block-aux! (state/get-current-page) block value create-new-block? ok-handler with-level? nil))
   ([block value create-new-block? ok-handler with-level? new-level]
    (insert-new-block-aux! (state/get-current-page) block value create-new-block? ok-handler with-level? new-level))
-  ([current-page {:block/keys [ uuid content meta file dummy? level repo page format collapsed?] :as block} value create-new-block? ok-handler with-level? new-level]
+  ([current-page {:block/keys [ uuid content meta file dummy? level repo page format properties collapsed?] :as block} value create-new-block? ok-handler with-level? new-level]
    (let [block-page? (and current-page (util/uuid-string? current-page))
          block-self? (= uuid (and block-page? (medley/uuid current-page)))
          input (gdom/getElement (state/get-edit-input-id))
@@ -491,12 +493,13 @@
                         (let [value (if create-new-block?
                                       (str v1 "\n" v2)
                                       value)
+                              value (text/rejoin-properties value properties)
                               [new-content value] (new-file-content block file-content value)
                               {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
                               blocks (db/recompute-block-children repo block blocks)
                               after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
                               blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
-                              [before-part after-part] (split-with #(not= (:block/uuid (first blocks)) (:block/uuid %)) @blocks-atom)
+                              [before-part after-part] (and blocks-atom (split-with #(not= (:block/uuid (first blocks)) (:block/uuid %)) @blocks-atom))
                               after-part (rest after-part)]
                           ;; Replace with batch transactions
                           (state/add-tx!
@@ -513,8 +516,9 @@
 
                           (let [blocks (remove (fn [block]
                                                  (nil? (:block/content block))) blocks)]
-                            (reset! blocks-atom (->> (concat before-part blocks after-part)
-                                                     (remove nil?)))
+                            (when blocks-atom
+                              (reset! blocks-atom (->> (concat before-part blocks after-part)
+                                                       (remove nil?))))
                             (when ok-handler
                               (let [first-block (first blocks)
                                     last-block (last blocks)]
@@ -603,6 +607,7 @@
                   :block/content ""})
           {:block/keys [content]} block
           content (string/trim (text/remove-level-spaces content format))
+          content (text/remove-properties! block content)
           content-length (count content)
           text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
                        content
@@ -814,54 +819,34 @@
                                     :path-params {:name (:page/name page)}})
           (ui-handler/re-render-root!))))))
 
+(defn remove-block-property!
+  [block-id key]
+  (let [block-id (if (string? block-id) (uuid block-id) block-id)
+        key (string/lower-case (str key))]
+    (when-let [block (db/pull [:block/uuid block-id])]
+      (let [{:block/keys [content properties]} block]
+        (when (get properties key)
+          (let [new-block (update block :block/properties dissoc key)]
+            (save-block-if-changed! new-block content)))))))
+
 (defn set-block-property!
   [block-id key value]
   (let [block-id (if (string? block-id) (uuid block-id) block-id)
-        key (string/upper-case (name key))
-        value (name value)]
+        key (string/lower-case (str key))
+        value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
-      (let [{:block/keys [file page content properties properties-meta meta]} block
-            {:keys [start-pos end-pos]} properties-meta
-            start-pos (- start-pos (:start-pos meta))]
+      (let [{:block/keys [content properties]} block]
         (cond
           (and (get properties key)
                (= (string/trim (get properties key)) value))
           nil
 
-          (and start-pos end-pos (> end-pos start-pos))
-          (let [encoded (utf8/encode content)
-                properties (utf8/substring encoded start-pos end-pos)
-                lines (string/split-lines properties)
-                property-check? #(re-find (re-pattern
-                                           (util/format ":%s:" key))
-                                          %)
-                has-property? (some property-check? lines)]
-            (when-not (and has-property?
-                           (some #(string/includes? % (str ":" key ": " value)) lines)) ; same key-value, skip it
-              (let [properties (if has-property?
-                                 (str
-                                  (->> (map (fn [line]
-                                              (if (property-check? line)
-                                                (util/format "   :%s: %s" key value)
-                                                line)) lines)
-                                       (string/join "\n"))
-                                  "\n")
-                                 (str properties
-                                      (util/format "\n   :%s: %s\n" key value)))
-                    prefix (utf8/substring encoded 0 start-pos)
-                    postfix (when (> (:end-pos meta) end-pos)
-                              (utf8/substring encoded end-pos (:end-pos meta)))
-                    new-content (str prefix properties postfix)]
-                (save-block-if-changed! block new-content))))
-
           :else
-          (let [properties (util/format
-                            "\n   :PROPERTIES:\n   :%s: %s\n   :END:\n"
-                            key value)
-                [block-line & others] (string/split-lines content)
-                new-content (str block-line properties
-                                 (string/join "\n" others))]
-            (save-block-if-changed! block new-content)))))))
+          (let [new-block (let [properties (:block/properties block)]
+                            (if (seq properties)
+                              (assoc block :block/properties (assoc properties key value))
+                              (assoc block :block/properties {key value})))]
+            (save-block-if-changed! new-block content)))))))
 
 (defn clear-selection!
   [_e]
@@ -1610,3 +1595,7 @@
     (when-let [input (gdom/getElement id)]
       (.focus input)
       (util/move-cursor-to input saved-cursor))))
+
+(defn set-block-as-a-heading!
+  [block-id value]
+  (set-block-property! block-id "heading" value))

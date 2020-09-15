@@ -86,6 +86,8 @@
 (defn extract-properties
   [[_ properties] start-pos end-pos]
   {:properties (->> (into {} properties)
+                    (medley/map-keys (fn [k]
+                                       (and k (string/trim (string/lower-case k)))))
                     (medley/map-vals (fn [v]
                                        (and v (string/trim v)))))
    :start-pos start-pos
@@ -178,7 +180,7 @@
                   (recur block-refs headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
-                (let [id (or (when-let [custom-id (get-in properties [:properties "CUSTOM_ID"])]
+                (let [id (or (when-let [custom-id (get-in properties [:properties "custom_id"])]
                                (let [custom-id (string/trim custom-id)]
                                  (when (util/uuid-string? custom-id)
                                    (uuid custom-id))))
@@ -291,7 +293,7 @@
                                   ;; Preserve the original block id
                                   (when (and (zero? idx)
                                              ;; not custom-id
-                                             (not (get-in block [:block/properties "CUSTOM_ID"])))
+                                             (not (get-in block [:block/properties "custom_id"])))
                                     {:block/uuid uuid})
                                   (when (seq ref-pages)
                                     {:block/ref-pages

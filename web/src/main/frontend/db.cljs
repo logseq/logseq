@@ -1676,6 +1676,7 @@
            seq-flatten
            (pull-many '[:block/uuid
                         :block/content
+                        :block/properties
                         :block/format
                         {:block/page [:page/name]}])))))
 

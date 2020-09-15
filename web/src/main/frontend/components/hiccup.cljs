@@ -37,7 +37,8 @@
             [cljs-bean.core :as bean]
             [frontend.handler.image :as image-handler]
             [frontend.format.mldoc :as mldoc]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.utf8 :as utf8]))
 
 ;; local state
 (defonce *block-children
@@ -621,10 +622,18 @@
         collapsed? (state/sub [:ui/collapsed-blocks uuid])
         collapsed? (and has-child? collapsed?)
         control-show (util/react (rum/cursor *control-show? block-id))
-        dark? (= "dark" (state/sub :ui/theme))]
+        dark? (= "dark" (state/sub :ui/theme))
+        heading? (= (get (:block/properties block) "heading") "true")]
     [:div.hd-control.mr-2.flex.flex-row.items-center
      {:style {:height 24
-              ;; :padding-left 9
+              :margin-top (if (and heading? (<= level 6))
+                            (case level
+                              1
+                              32
+                              2
+                              22
+                              18)
+                            0)
               :float "left"}}
 
      [:a.block-control
@@ -677,7 +686,8 @@
                     (when (and (:document/mode? config)
                                (not collapsed?))
                       "hide-inner-bullet"))}
-       [:span.bullet {:blockid (str uuid)}]]]]))
+       [:span.bullet {:blockid (str uuid)
+                      :class (if heading? "bullet-heading" "")}]]]]))
 
 (defn- build-id
   [config ref? sidebar? embed?]
@@ -807,7 +817,7 @@
            tags))))
 
 (defn build-block-part
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker level priority anchor meta format content pre-block? dummy? block-refs-count page]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker level priority anchor meta format content pre-block? dummy? block-refs-count page properties]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -821,17 +831,26 @@
         marker-cp (marker-cp t)
         priority (priority-cp t)
         tags (block-tags-cp t)
-        contents? (= (:id config) "contents")]
+        contents? (= (:id config) "contents")
+        heading? (= (get properties "heading") "true")
+        bg-color (get properties "background-color")]
     (when level
-      (let [element (if (<= level 6)
+      (let [element (if (and (<= level 6) heading?)
                       (keyword (str "h" level))
                       :div)]
         (->elem
          element
          (merge
           {:id anchor}
-          (when marker
-            {:class (string/lower-case marker)}))
+          (when (and marker
+                     (not (string/blank? marker))
+                     (not= "nil" marker))
+            {:class (string/lower-case marker)})
+          (when bg-color
+            {:style {:background-color bg-color
+                     :padding-left 6
+                     :padding-right 6
+                     :color "#FFFFFF"}}))
          (remove-nils
           (concat
            [(when-not slide? checkbox)
@@ -899,7 +918,8 @@
                                (let [cursor-range (util/caret-range (gdom/getElement block-id))]
                                  (state/set-editing!
                                   edit-input-id
-                                  (text/remove-level-spaces content format)
+                                  (->> (text/remove-level-spaces content format)
+                                       (text/remove-properties! block))
                                   block
                                   cursor-range))
                                (util/stop e))))
@@ -993,7 +1013,7 @@
                   (when collapsed?
                     (expand/collapse! block))
                   state))}
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx] :as block}]
+  [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties] :as block}]
   (let [ref? (boolean (:ref? config))
         ref-child? (:ref-child? config)
         sidebar? (boolean (:sidebar? config))

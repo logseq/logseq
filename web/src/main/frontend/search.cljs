@@ -89,8 +89,10 @@
                        ;; (fn [content]
                        ;;   (> (score q (.toLowerCase content)) 0))
                        limit)]
-           (map (fn [{:block/keys [content format] :as block}]
-                  (assoc block :block/content (text/remove-level-spaces content format))) blocks)))))))
+           (map (fn [{:block/keys [content format properties] :as block}]
+                  (assoc block :block/content
+                         (->> (text/remove-level-spaces content format)
+                              (text/remove-properties! block)))) blocks)))))))
 
 (defn page-search
   ([q]

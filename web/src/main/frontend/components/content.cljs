@@ -18,7 +18,9 @@
             [clojure.string :as string]
             [cljs.pprint :as pprint]
             [frontend.handler.notification :as notification]
-            [frontend.components.editor :as editor]))
+            [frontend.components.editor :as editor]
+            [frontend.components.svg :as svg]
+            [frontend.context.i18n :as i18n]))
 
 (defn- set-format-js-loading!
   [format value]
@@ -60,56 +62,88 @@
       :on-click editor-handler/bulk-make-todos}
      (str "Make " (state/get-preferred-todo) "s"))]])
 
+(def block-background-colors
+  ["rgb(83, 62, 125)"
+   "rgb(73, 125, 70)"
+   "rgb(120, 127, 151)"
+   "rgb(151, 134, 38)"
+   "rgb(73, 118, 123)"
+   "rgb(38, 76, 155)"
+   "rgb(121, 62, 62)"])
+
 (rum/defc block-context-menu-content
   [block-id]
-  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
-   [:div.py-1.rounded-md.bg-base-3.shadow-xs
-    (ui/menu-link
-     {:key "Copy block ref"
-      :on-click (fn [_e]
-                  (editor-handler/copy-block-ref! block-id))}
-     "Copy block ref")
-    (ui/menu-link
-     {:key "Focus on block"
-      :on-click (fn [_e]
-                  (editor-handler/focus-on-block! block-id))}
-     "Focus on block")
-    (ui/menu-link
-     {:key "Open in sidebar"
-      :on-click (fn [_e]
-                  (editor-handler/open-block-in-sidebar! block-id))}
-     "Open in sidebar")
-    (ui/menu-link
-     {:key "Cut"
-      :on-click (fn [_e]
-                  (editor-handler/cut-block! block-id))}
-     "Cut")
-    (ui/menu-link
-     {:key "Copy"
-      :on-click (fn [_e]
-                  (export-handler/copy-block! block-id))}
-     "Copy")
-    (ui/menu-link
-     {:key "Copy as JSON"
-      :on-click (fn [_e]
-                  (export-handler/copy-block-as-json! block-id))}
-     "Copy as JSON")
-    (when (state/sub [:ui/developer-mode?])
-      (ui/menu-link
-       {:key "(Dev) Show block data"
-       :on-click (fn []
-                   (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                     (println block-data)
-                     (notification/show!
-                      [:div
-                       [:pre.code block-data]
-                       [:br]
-                       (ui/button "Copy to clipboard"
-                                  :on-click #(.writeText js/navigator.clipboard block-data))]
-                      :success
-                      false)))}
-       "(Dev) Show block data")
-      )]])
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (when-let [block (db/entity [:block/uuid block-id])]
+      (let [heading (get-in block [:block/properties "heading"])
+            heading? (= heading "true")]
+        [:div#custom-context-menu.w-64.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
+         [:div.py-1.rounded-md.bg-base-3.shadow-xs
+          [:div.flex-row.flex.justify-between.py-4.pl-2
+           [:div.flex-row.flex.justify-between
+            (for [color block-background-colors]
+              [:a.m-2.shadow-sm
+               {:on-click (fn [_e]
+                            (editor-handler/set-block-property! block-id "background-color" color))}
+               [:div.heading-bg {:style {:background-color color}}]])]
+           [:a {:title (t :remove-background)
+                :style {:margin-right 10
+                        :margin-top 1}
+                :on-click (fn [_e]
+                            (editor-handler/remove-block-property! block-id "background-color"))}
+            svg/close]]
+          (ui/menu-link
+           {:key "Convert heading"
+            :on-click (fn [_e]
+                        (editor-handler/set-block-as-a-heading! block-id (not heading?)))}
+           (if heading?
+             "Convert back to a block"
+             "Convert to a heading"))
+
+          (ui/menu-link
+           {:key "Open in sidebar"
+            :on-click (fn [_e]
+                        (editor-handler/open-block-in-sidebar! block-id))}
+           "Open in sidebar")
+
+          (ui/menu-link
+           {:key "Copy block ref"
+            :on-click (fn [_e]
+                        (editor-handler/copy-block-ref! block-id))}
+           "Copy block ref")
+
+          (ui/menu-link
+           {:key "Copy as text"
+            :on-click (fn [_e]
+                        (export-handler/copy-block! block-id))}
+           "Copy as TEXT")
+          (ui/menu-link
+           {:key "Copy as JSON"
+            :on-click (fn [_e]
+                        (export-handler/copy-block-as-json! block-id))}
+           "Copy as JSON")
+
+          (ui/menu-link
+           {:key "Cut"
+            :on-click (fn [_e]
+                        (editor-handler/cut-block! block-id))}
+           "Cut")
+          (when (state/sub [:ui/developer-mode?])
+            (ui/menu-link
+             {:key "(Dev) Show block data"
+              :on-click (fn []
+                          (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
+                            (println block-data)
+                            (notification/show!
+                             [:div
+                              [:pre.code block-data]
+                              [:br]
+                              (ui/button "Copy to clipboard"
+                                :on-click #(.writeText js/navigator.clipboard block-data))]
+                             :success
+                             false)))}
+             "(Dev) Show block data")
+            )]]))))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -157,11 +191,6 @@
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
                                   client-y (gobj/get e "clientY")]
-                              (let [main (d/by-id "main-content")]
-                                ;; disable scroll
-                                (d/remove-class! main "overflow-y-auto")
-                                (d/add-class! main "overflow-hidden"))
-
                               (state/show-custom-context-menu! (block-context-menu-content (cljs.core/uuid block-id)))
                               (when-let [context-menu (d/by-id "custom-context-menu")]
                                 (d/set-style! context-menu
@@ -174,11 +203,6 @@
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
                                   client-y (gobj/get e "clientY")]
-                              (let [main (d/by-id "main-content")]
-                                ;; disable scroll
-                                (d/remove-class! main "overflow-y-auto")
-                                (d/add-class! main "overflow-hidden"))
-
                               (state/show-custom-context-menu! (custom-context-menu-content))
                               (when-let [context-menu (d/by-id "custom-context-menu")]
                                 (d/set-style! context-menu
