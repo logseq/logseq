@@ -772,32 +772,43 @@
 (defn delete-blocks!
   [repo block-uuids]
   (when (seq block-uuids)
-    (let [blocks (db/pull-many repo '[*] (mapv (fn [id]
-                                                 [:block/uuid id])
-                                               block-uuids))
-          first-block (first blocks)
-          last-block (last blocks)
-          file (db/entity repo (:db/id (:block/file first-block)))
-          file-path (:file/path file)
-          file-content (db/get-file repo file-path)
-          start-pos (:start-pos (:block/meta first-block))
-          end-pos (:end-pos (:block/meta last-block))
-          after-blocks (rebuild-after-blocks repo file end-pos start-pos)
-          new-content (utf8/delete! file-content start-pos end-pos)
-          tx-data (concat
-                   (mapv
-                    (fn [uuid]
-                      [:db.fn/retractEntity [:block/uuid uuid]])
-                    block-uuids)
-                   after-blocks
-                   [{:file/path file-path}])]
-      (repo-handler/transact-react-and-alter-file!
-       repo
-       tx-data
-       {:key :block/change
-        :data blocks}
-       [[file-path new-content]])
-      (ui-handler/re-render-root!))))
+    (let [current-page (state/get-current-page)
+          top-block-id (and current-page
+                            (util/uuid-string? current-page)
+                            (medley/uuid current-page))
+          top-block? (and top-block-id
+                          (= top-block-id (first block-uuids)))]
+      (let [blocks (db/pull-many repo '[*] (mapv (fn [id]
+                                                   [:block/uuid id])
+                                                 block-uuids))
+            page (db/entity repo (:db/id (:block/page (first blocks))))
+            first-block (first blocks)
+            last-block (last blocks)
+            file (db/entity repo (:db/id (:block/file first-block)))
+            file-path (:file/path file)
+            file-content (db/get-file repo file-path)
+            start-pos (:start-pos (:block/meta first-block))
+            end-pos (:end-pos (:block/meta last-block))
+            after-blocks (rebuild-after-blocks repo file end-pos start-pos)
+            new-content (utf8/delete! file-content start-pos end-pos)
+            retract-blocks-tx (mapv
+                               (fn [uuid]
+                                 [:db.fn/retractEntity [:block/uuid uuid]])
+                               block-uuids)
+            tx-data (concat
+                     retract-blocks-tx
+                     after-blocks
+                     [{:file/path file-path}])]
+        (repo-handler/transact-react-and-alter-file!
+         repo
+         tx-data
+         {:key :block/change
+          :data blocks}
+         [[file-path new-content]])
+        (if top-block?
+          (route-handler/redirect! {:to :page
+                                    :path-params {:name (:page/name page)}})
+          (ui-handler/re-render-root!))))))
 
 (defn set-block-property!
   [block-id key value]
@@ -935,7 +946,8 @@
                                          0)))
                                    >
                                    matches))]
-              (subs page 2 (- (count page) 2)))))))))
+              (when page
+                (subs page 2 (- (count page) 2))))))))))
 
 (defn follow-link-under-cursor!
   []
