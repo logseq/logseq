@@ -266,11 +266,7 @@
    tx
    transact-option)
   (when (seq files)
-    (file-handler/alter-files repo files))
-  ;; (doseq [[file-path new-content] files]
-  ;;   (file-handler/alter-file repo file-path new-content {:reset? false
-  ;;                                                        :re-render-root? false}))
-  )
+    (file-handler/alter-files repo files)))
 
 (defn persist-repo-metadata!
   [repo]

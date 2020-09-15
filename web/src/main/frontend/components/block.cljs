@@ -13,7 +13,8 @@
          page (db/get-block-page repo block-id)
          page-name (:page/name page)]
      (when (or (seq parents)
-               show-page?)
+               show-page?
+               page-name)
        [:div.block-parents.flex-row.flex
         (when show-page?
           [:a {:href (str "/page/" (util/encode-str page-name))}

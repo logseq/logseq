@@ -153,7 +153,6 @@
                (js/console.error error))))
           files)))
       (p/then (fn [_result]
-                (ui-handler/re-render-root!)
                 (history/add-history!
                  [:git/repo repo]
                  {:db (d/db (db/get-conn repo false))

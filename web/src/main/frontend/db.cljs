@@ -131,6 +131,7 @@
   (reset! conn db))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
+;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
 
 (defn clear-query-state!
