@@ -86,14 +86,15 @@
              :target "_blank"}
          "@EdTravelling"]
         ":"]
-       [:iframe
-        {:allowfullscreen "allowfullscreen"
-         :allow
-         "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-         :frameborder "0"
-         :src "https://www.youtube.com/embed/Vw-x7yTTO0s"
-         :height "367"
-         :width "653"}]
+       [:div.videoWrapper
+        [:iframe
+         {:allowfullscreen "allowfullscreen"
+          :allow
+          "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+          :frameborder "0"
+          :src "https://www.youtube.com/embed/Vw-x7yTTO0s"
+          :height "367"
+          :width "653"}]]
 
        [:h3 {} (t :on-boarding/use-2)]
        [:p
