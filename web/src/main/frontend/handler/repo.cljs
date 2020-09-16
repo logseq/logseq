@@ -392,7 +392,6 @@
                     (state/clear-changed-files! repo-url))
                   (fn [error]
                     (js/console.error error)
-                    (js/console.dir error)
                     (let [permission? (or (string/includes? (str error) "401")
                                           (string/includes? (str error) "404"))]
                       (cond
@@ -408,7 +407,21 @@
                           (git-handler/set-git-error! repo-url error)
                           (if permission?
                             (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-                            (show-diff-error! repo-url))
+                            (git-handler/get-latest-commit
+                             repo-url
+                             (fn [commit]
+                               (let [local-oid (gobj/get commit "oid")
+                                     remote-oid (db/get-key-value repo-url :git/latest-commit)]
+                                 (p/let [result (git/get-local-diffs repo-url remote-oid local-oid)]
+                                   (if (seq result)
+                                     (show-diff-error! repo-url)
+                                     (notification/show!
+                                      [:p.content
+                                       (util/format "Failed to push to %s. " repo-url)
+                                       [:span.text-gray-700.mr-2
+                                        (str error)]]
+                                      :error
+                                      false)))))))
                           (p/let [result (git/fetch repo-url (state/get-github-token repo-url))
                                   {:keys [fetchHead]} (bean/->clj result)]
                             (git-handler/set-latest-commit! repo-url fetchHead))))))))))))))))
@@ -521,7 +534,8 @@
              :or {pull-now? true}}]
   (periodically-pull repo-url pull-now?)
   (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-             (not config/dev?))
+             ;; (not config/dev?)
+             )
     (periodically-push-tasks repo-url)))
 
 (defn create-repo!
