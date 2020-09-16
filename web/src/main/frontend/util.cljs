@@ -875,3 +875,9 @@
     (let [block-id (str block-id)]
       (when (uuid-string? block-id)
         (first (array-seq (js/document.getElementsByClassName block-id)))))))
+
+(defn page-name-sanity
+  [page-name]
+  (-> page-name
+      (string/replace #"\s+" "_")
+      (string/replace "/" "_")))

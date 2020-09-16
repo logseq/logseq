@@ -36,8 +36,7 @@
               page (string/lower-case title)
               path (str (if journal-page?
                           (date/journal-title->default title)
-                          (-> page
-                              (string/replace #"\s+" "_")))
+                          (util/page-name-sanity page))
                         "."
                         (if (= format "markdown") "md" format))
               path (str directory "/" path)
