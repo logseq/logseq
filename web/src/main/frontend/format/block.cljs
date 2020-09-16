@@ -283,7 +283,6 @@
                                   {:block/meta meta
                                    :block/marker (get block :block/marker "nil")
                                    :block/properties (get block :block/properties [])
-                                   :block/properties-meta (get block :block/properties-meta [])
                                    :block/file file
                                    :block/format format
                                    :block/page page

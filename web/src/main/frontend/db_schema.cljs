@@ -82,7 +82,6 @@
    ;; :start-pos :end-pos
    :block/meta {}
    :block/properties {}
-   :block/properties-meta {}
 
    ;; TODO: To make this really working, every block needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
    ;; Any suggestions?
