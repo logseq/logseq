@@ -194,7 +194,6 @@
       (fn [e key-code]
         nil))))
   {:did-mount (fn [state]
-                (handler/set-save-before-unload!)
                 (keyboards/bind-shortcuts!)
                 state)}
   (mixins/keyboards-mixin keyboards/keyboards)

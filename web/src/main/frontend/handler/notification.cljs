@@ -15,9 +15,11 @@
   ([content status clear? uid]
    (let [contents (state/get-notification-contents)
          uid (or uid (keyword (util/unique-id)))]
-     (state/set-state! :notification/contents (assoc contents 
+     (state/set-state! :notification/contents (assoc contents
                                                      uid {:content content
                                                           :status status}))
 
      (when clear?
-       (js/setTimeout #(clear! uid) 3000)))))
+       (js/setTimeout #(clear! uid) 3000))
+
+     uid)))

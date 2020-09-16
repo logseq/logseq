@@ -91,18 +91,21 @@
   (.addEventListener js/window "beforeunload"
                      (fn [e]
                        (when (state/repos-need-to-be-stored?)
-                         (notification/show!
-                          [:div
-                           [:p "It seems that you have some unsaved changes!"]
-                           (ui/button "Save"
-                             :on-click (fn [e]
-                                         (persist-repo-to-indexeddb!)
-                                         (notification/show!
-                                          "Saved successfully!"
-                                          :success)))]
-                          ;; replace with :warning
-                          :error
-                          false)
+                         (let [notification-id (atom nil)]
+                           (let [id (notification/show!
+                                     [:div
+                                      [:p "It seems that you have some unsaved changes!"]
+                                      (ui/button "Save"
+                                        :on-click (fn [e]
+                                                    (persist-repo-to-indexeddb!)
+                                                    (notification/show!
+                                                     "Saved successfully!"
+                                                     :success)
+                                                    (and @notification-id (notification/clear! @notification-id))))]
+                                     ;; replace with :warning
+                                     :error
+                                     false)]
+                             (reset! notification-id id)))
                          (let [message "\\o/"]
                            (set! (.-returnValue (or e js/window.event)) message)
                            message)))))
@@ -127,4 +130,5 @@
 
     (periodically-persist-repo-to-indexeddb!)
 
-    (db/run-batch-txs!)))
+    (db/run-batch-txs!))
+  (set-save-before-unload!))
