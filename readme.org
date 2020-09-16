@@ -38,7 +38,7 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
         1. C-c M-j and select "clojure-cli"
         2. input "(go)" in the clojure repl
      #+END_EXAMPLE
-
+     (Note: to specify an alias from within emacs you can follow either option suggested [[https://github.com/clojure-emacs/cider/issues/2396][here]])
 **** Using in Cli
      #+BEGIN_EXAMPLE
         1. clj -A:dev
