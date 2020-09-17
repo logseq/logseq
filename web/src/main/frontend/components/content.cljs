@@ -112,11 +112,18 @@
                         (editor-handler/copy-block-ref! block-id))}
            "Copy block ref")
 
+          ;; (ui/menu-link
+          ;;  {:key "Make template"
+          ;;   :on-click (fn [_e]
+          ;;               (editor-handler/copy-block-ref! block-id))}
+          ;;  "Make template")
+
           (ui/menu-link
            {:key "Copy as text"
             :on-click (fn [_e]
                         (export-handler/copy-block! block-id))}
            "Copy as TEXT")
+
           (ui/menu-link
            {:key "Copy as JSON"
             :on-click (fn [_e]
@@ -128,6 +135,7 @@
             :on-click (fn [_e]
                         (editor-handler/cut-block! block-id))}
            "Cut")
+
           (when (state/sub [:ui/developer-mode?])
             (ui/menu-link
              {:key "(Dev) Show block data"

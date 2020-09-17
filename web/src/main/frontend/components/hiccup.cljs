@@ -900,8 +900,23 @@
     [:div.pre-block.bg-base-2.p-2
      (blocks-cp config ast)]))
 
+(def hidden-properties
+  #{"custom-id" "heading" "background-color"})
+
+(rum/defc properties-cp
+  [block]
+  (let [properties (apply dissoc (:block/properties block) hidden-properties)]
+    [:div.mt-2
+     [:span.text-sm.font-medium.opacity-50
+      "Properties:"]
+     [:ul.mt-1
+      (for [[k v] properties]
+        [:li
+         [:b.mr-1.mb-1.text-sm (str k ":")]
+         v])]]))
+
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? properties collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
@@ -919,7 +934,8 @@
                                  (state/set-editing!
                                   edit-input-id
                                   (->> (text/remove-level-spaces content format)
-                                       (text/remove-properties! block))
+                                       ;; (text/remove-properties! block)
+                                       )
                                   block
                                   cursor-range))
                                (util/stop e))))
@@ -957,6 +973,12 @@
 
       (when (and dragging? (not slide?))
         (dnd-separator block 0 -4 false true))
+
+      (when (and (seq properties)
+                 (let [ks (map string/lower-case (keys properties))
+                       hidden? (every? hidden-properties ks)]
+                   (not hidden?)))
+        (properties-cp block))
 
       (when (and (not pre-block?) (seq body))
         [:div.block-body {:style {:display (if collapsed? "none" "")}}
