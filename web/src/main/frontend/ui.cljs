@@ -154,7 +154,7 @@
 (rum/defc notification < rum/reactive
   []
   (let [contents (state/sub :notification/contents)]
-   (transition-group 
+   (transition-group
     {:class-name "notifications"}
     (doall (map (fn [el]
                   (let [k (first el)
@@ -185,27 +185,33 @@
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
 
+;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
-  [on-load]
+  [on-load on-top-reached]
   (let [node (main-node)
         full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) 100)]
-    (when bottom-reached?
-      (on-load))))
+        bottom-reached? (<= (- full-height scroll-top client-height) 100)
+        top-reached? (= scroll-top 0)]
+    (when (and bottom-reached? on-load)
+      (on-load))
+    (when (and top-reached? on-top-reached)
+      (on-top-reached))))
 
 (defn attach-listeners
   "Attach scroll and resize listeners."
   [state]
   (let [opts (-> state :rum/args second)
-        debounced-on-scroll (util/debounce 500 #(on-scroll (:on-load opts)))]
+        debounced-on-scroll (util/debounce 500 #(on-scroll
+                                                 (:on-load opts) ; bottom reached
+                                                 (:on-top-reached opts)))]
     (mixins/listen state (main-node) :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state body {:keys [on-load]
+  [state body {:keys [on-load on-top-reached]
                :as opts}]
   body)
 

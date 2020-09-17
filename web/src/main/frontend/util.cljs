@@ -312,11 +312,15 @@
                                top))
                       :behavior "smooth"})))))
 
+(defn scroll-to
+  [pos]
+  (.scroll (gdom/getElement "main-content")
+           #js {:top pos
+                :behavior "smooth"}))
+
 (defn scroll-to-top
   []
-  (.scroll (gdom/getElement "main-content")
-           #js {:top 0
-                :behavior "smooth"}))
+  (scroll-to 0))
 
 (defn url-encode
   [string]

@@ -51,6 +51,11 @@
 (defonce *move-to-top?
   (atom false))
 
+;; TODO: Improve blocks grouped by pages
+(defonce max-blocks-per-page 200)
+(defonce virtual-list-scroll-step 150)
+(defonce virtual-list-previous 50)
+
 (defonce container-ids (atom {}))
 (defonce container-idx (atom 0))
 
@@ -1522,22 +1527,75 @@
   [config col]
   (map #(block-cp config %) col))
 
-(defn build-blocks
-  [blocks config]
-  (let [blocks (db/blocks->vec-tree blocks)]
-    (when (seq blocks)
-      (let [first-id (:block/uuid (first blocks))]
-        (for [item blocks]
-          (let [item (-> (if (:block/dummy? item)
-                           item
-                           (dissoc item :block/meta)))
-                item (if (= first-id (:block/uuid item))
-                       (assoc item :block/idx 0)
-                       item)
-                config (assoc config :block/uuid (:block/uuid item))]
-            (rum/with-key
-              (block-container config item)
-              (:block/uuid item))))))))
+(rum/defcs build-blocks < rum/reactive
+  {:init (fn [state]
+           (let [blocks (first (:rum/args state))
+                 segment-data (if (> (count blocks) max-blocks-per-page)
+                                (take max-blocks-per-page blocks)
+                                blocks)]
+             (assoc state
+                    ::segment (atom segment-data)
+                    ::idx (atom 0))))
+   :did-update (fn [state]
+                 (let [blocks (first (:rum/args state))
+                       segment (get state ::segment)
+                       idx (get state ::idx)]
+                   (when (and
+                          (seq @segment)
+                          (> (count blocks) max-blocks-per-page))
+                     (reset! segment (->> blocks
+                                          (drop @idx)
+                                          (take max-blocks-per-page))))
+                   state))}
+  [state blocks config]
+  (let [segment (get state ::segment)
+        idx (get state ::idx)]
+    (let [blocks-cp (fn [blocks segment?]
+                      (let [first-id (:block/uuid (first blocks))]
+                        (for [item blocks]
+                          (let [item (-> (if (:block/dummy? item)
+                                           item
+                                           (dissoc item :block/meta)))
+                                item (if (= first-id (:block/uuid item))
+                                       (assoc item :block/idx 0)
+                                       item)
+                                config (assoc config :block/uuid (:block/uuid item))]
+                            (rum/with-key
+                              (block-container config item)
+                              (:block/uuid item))))))]
+      (if (> (count blocks) max-blocks-per-page)
+        (ui/infinite-list
+         (blocks-cp (rum/react segment) true)
+         {:on-load (fn []
+                     (when (= (count @segment) max-blocks-per-page)
+                       (if (zero? @idx)
+                         (reset! idx (dec max-blocks-per-page))
+                         (swap! idx + virtual-list-scroll-step))
+                       (let [tail (take-last virtual-list-previous @segment)
+                             new-segment (->> blocks
+                                              (drop (inc @idx))
+                                              (take virtual-list-scroll-step))]
+                         (reset! segment
+                                 (->> (concat tail new-segment)
+                                      (remove nil?))))))
+          :on-top-reached (fn []
+                            (when (> @idx 0)
+                              (if (> @idx (dec max-blocks-per-page))
+                                (swap! idx - max-blocks-per-page)
+                                (reset! idx 0))
+                              (if (zero? @idx)
+                                (reset! segment
+                                        (take max-blocks-per-page blocks))
+                                (let [tail (take virtual-list-previous @segment)
+                                      prev (->> blocks
+                                                (drop (inc @idx))
+                                                (take virtual-list-scroll-step))]
+                                  (reset! segment
+                                          (->> (concat prev tail)
+                                               (remove nil?)))
+                                  (util/scroll-to 100)))))})
+        (let [blocks (db/blocks->vec-tree blocks)]
+          (blocks-cp blocks false))))))
 
 (defn build-slide-sections
   ([blocks config]
@@ -1570,13 +1628,14 @@
   (let [blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
         ref? (:ref? config)]
-    [:div.blocks-container.flex-1
-     {:style {:margin-left (cond
-                             sidebar?
-                             0
-                             :else
-                             -18)}}
-     (build-blocks blocks config)]))
+    (when (seq blocks)
+      [:div.blocks-container.flex-1
+       {:style {:margin-left (cond
+                               sidebar?
+                               0
+                               :else
+                               -18)}}
+       (build-blocks blocks config)])))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

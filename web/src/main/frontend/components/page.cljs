@@ -350,6 +350,7 @@
              (when (and block? (not sidebar?))
                [:div.mb-4
                 (block/block-parents repo block-id format)])
+
              ;; blocks
              (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]
 
