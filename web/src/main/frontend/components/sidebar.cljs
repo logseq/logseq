@@ -139,6 +139,18 @@
       :on-click state/toggle-new-block-shortcut!}
      "Alt + Enter"]))
 
+(rum/defc help-button < rum/reactive
+  []
+  (when-not (state/sub :ui/sidebar-open?)
+    ;; TODO: remove with-context usage
+    (rum/with-context [[t] i18n/*tongue-context*]
+      [:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
+       {:style {:right 24}
+        :title (t :help-shortcut-title)
+        :on-click (fn []
+                    (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+       "?"])))
+
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -358,7 +370,7 @@
                     :width "100vw"}}
            [:div.flex-1
             {:style (cond->
-                        {:max-width 640}
+                      {:max-width 640}
                       (or global-graph-pages?
                           (and (not logged?)
                                home?)
@@ -393,12 +405,8 @@
          (custom-context-menu)
          [:a#download.hidden]
          (when-not config/mobile?
-           [[:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-             {:style {:right 24}
-              :title (t :help-shortcut-title)
-              :on-click (fn []
-                          (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-             "?"]
+           [
+            (help-button)
             ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
             ;;  {:style {:left 24}
             ;;   :title "Click to show/hide sidebar"

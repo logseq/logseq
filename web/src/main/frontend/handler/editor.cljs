@@ -291,8 +291,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                                {:block/uuid uuid
-                                 :block/meta new-meta}
+                              {:block/uuid uuid
+                               :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -348,8 +348,7 @@
          new-directives (if permalink-changed?
                           (assoc new-directives :old_permalink (:permalink old-directives))
                           new-directives)
-         value (text/remove-properties! block value)
-         value (text/rejoin-properties value properties)]
+         value (text/re-construct-block-properties block value properties)]
      (when (not= (string/trim content) (string/trim value)) ; block content changed
        (let [file (db/entity repo (:db/id file))]
          (cond
@@ -490,7 +489,7 @@
                        (let [value (if create-new-block?
                                      (str v1 "\n" v2)
                                      value)
-                             value (text/rejoin-properties value properties)
+                             value (text/re-construct-block-properties block value properties)
                              [new-content value] (new-file-content block file-content value)
                              {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
                              blocks (db/recompute-block-children repo block blocks)
@@ -613,23 +612,28 @@
      :pos pos}))
 
 (defn edit-block!
-  [block prev-pos format id]
-  (when-let [block-id (:block/uuid block)]
-    (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
-          block (or
-                 block
-                 (db/pull [:block/uuid block-id])
-                 ;; dummy?
-                 {:block/uuid block-id
-                  :block/content ""})
-          {:block/keys [content]} block
-          content (string/trim (text/remove-level-spaces content format))
-          content (text/remove-properties! block content)
-          content-length (count content)
-          text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
-                       content
-                       (subs content 0 prev-pos))]
-      (state/set-editing! edit-input-id content block text-range))))
+  ([block prev-pos format id]
+   (edit-block! block prev-pos format id nil))
+  ([block prev-pos format id custom-content]
+   (when-let [block-id (:block/uuid block)]
+     (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
+           block (or
+                  block
+                  (db/pull [:block/uuid block-id])
+                  ;; dummy?
+                  {:block/uuid block-id
+                   :block/content ""})
+           {:block/keys [content properties]} block
+           content (or custom-content content)
+           content (string/trim (text/remove-level-spaces content format))
+           content (if (and (seq properties) (text/properties-hidden? properties))
+                     (text/remove-properties! block content)
+                     content)
+           content-length (count content)
+           text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
+                        content
+                        (subs content 0 prev-pos))]
+       (state/set-editing! edit-input-id content block text-range)))))
 
 (defn- insert-new-block!
   [state]
@@ -1162,7 +1166,7 @@
    "`" "`"
    "~" "~"
    "*" "*"
-   "_" "_"
+   ;; "_" "_"
    "^" "^"})
 
 (def reversed-autopair-map

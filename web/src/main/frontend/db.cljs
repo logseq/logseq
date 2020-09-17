@@ -177,6 +177,8 @@
    (when-let [db (get-conn repo)]
      (d/entity db id-or-lookup-ref))))
 
+(def touch d/touch)
+
 (defn get-current-page
   []
   (let [match (:route-match @state/state)
@@ -1058,6 +1060,15 @@
                 [?t :block/uuid ?tid]
                 (parent ?e2 ?tid)]])
            (seq-flatten)))))
+
+;; FIXME: :block/children should contain all
+(defn get-block-children-unsafe
+  [repo block-uuid]
+  (when-let [conn (get-conn repo)]
+    (let [ids (:block/children (entity repo [:block/uuid block-uuid]))]
+      (when (seq ids)
+        (pull-many repo '[*]
+                   (map (fn [id] [:block/uuid id]) ids))))))
 
 (defn get-block-children
   [repo block-uuid]

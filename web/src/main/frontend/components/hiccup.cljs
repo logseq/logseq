@@ -833,7 +833,7 @@
         tags (block-tags-cp t)
         contents? (= (:id config) "contents")
         heading? (= (get properties "heading") "true")
-        bg-color (get properties "background-color")]
+        bg-color (get properties "background_color")]
     (when level
       (let [element (if (and (<= level 6) heading?)
                       (keyword (str "h" level))
@@ -898,10 +898,26 @@
   (let [ast (mldoc/->edn content (mldoc/default-config format))
         ast (map first ast)]
     [:div.pre-block.bg-base-2.p-2
-     (blocks-cp config ast)]))
+     (blocks-cp (assoc config :block/format format) ast)]))
+
+(defn property-value
+  [format v]
+  (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+    [:div.inline (map-inline {} inline-list)]))
+
+(rum/defc properties-cp
+  [block]
+  (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
+    (when (seq properties)
+      [:div.text-sm.opacity-80.my-1.bg-base-4.p-2
+       (for [[k v] properties]
+         [:div.my-1
+          [:b k]
+          [:span.mr-1 ":"]
+          (property-value (:block/format block) v)])])))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? properties collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
@@ -915,11 +931,13 @@
                                                 (d/has-class? target "fn")))
                                (editor-handler/clear-selection! nil)
                                (editor-handler/unhighlight-block!)
-                               (let [cursor-range (util/caret-range (gdom/getElement block-id))]
+                               (let [cursor-range (util/caret-range (gdom/getElement block-id))
+                                     properties-hidden? (text/properties-hidden? properties)
+                                     content (text/remove-level-spaces content format)
+                                     content (if properties-hidden? (text/remove-properties! block content) content)]
                                  (state/set-editing!
                                   edit-input-id
-                                  (->> (text/remove-level-spaces content format)
-                                       (text/remove-properties! block))
+                                  content
                                   block
                                   cursor-range))
                                (util/stop e))))
@@ -957,6 +975,11 @@
 
       (when (and dragging? (not slide?))
         (dnd-separator block 0 -4 false true))
+
+      (when (and (seq properties)
+                 (let [hidden? (text/properties-hidden? properties)]
+                   (not hidden?)))
+        (properties-cp block))
 
       (when (and (not pre-block?) (seq body))
         [:div.block-body {:style {:display (if collapsed? "none" "")}}
@@ -1116,8 +1139,8 @@
          (merge attrs))
 
        (if (and ref? (not ref-child?))
-         (when-let [block-parents (block-comp/block-parents repo uuid format false)]
-           [:div.my-2.opacity-50.ml-7 block-parents]))
+         (when-let [comp (block-comp/block-parents repo uuid format false)]
+           [:div.my-2.opacity-50.ml-7 comp]))
 
        (dnd-separator-wrapper block slide? (zero? idx))
 
@@ -1137,7 +1160,7 @@
                   (:block/uuid child)))))])
 
        (when (and ref? (not ref-child?))
-         (let [children (db/get-block-children repo uuid)]
+         (let [children (db/get-block-children-unsafe repo uuid)]
            (when (seq children)
              [:div.ref-children.ml-12
               (blocks-container children (assoc config
@@ -1356,22 +1379,25 @@
     (match item
       ["Directives" m]
       [:div.directives
-       (for [[k v] m]
-         (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-                    (not (= k :title)))
-           [:div.directive
-            [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
-            (if (coll? v)
-              (for [item v]
-                (if (= k :tags)
-                  (let [tag (-> item
-                                (string/replace "[" "")
-                                (string/replace "]" "")
-                                (string/replace "#" ""))]
-                    [:a.tag.mr-1 {:href (str "/page/" tag)}
-                     tag])
-                  [:span item]))
-              [:span v])]))]
+       (let [format (:block/format config)]
+         (for [[k v] m]
+           (when (and (not (and (= k :macros) (empty? v))) ; empty macros
+                      (not (= k :title)))
+             [:div.directive
+              [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
+              (if (coll? v)
+                (for [item v]
+                  (if (= k :tags)
+                    (if (string/includes? item "[[")
+                      (property-value format item)
+                      (let [tag (-> item
+                                    (string/replace "[" "")
+                                    (string/replace "]" "")
+                                    (string/replace "#" ""))]
+                        [:a.tag.mr-1 {:href (str "/page/" tag)}
+                         tag]))
+                    (property-value format v)))
+                (property-value format v))])))]
 
       ["Paragraph" l]
       ;; TODO: speedup

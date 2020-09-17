@@ -26,6 +26,11 @@
   (when (loaded?)
     (.parseJson js/window.Mldoc content (or config default-config))))
 
+(defn inline-parse-json
+  [text config]
+  (when (loaded?)
+    (.parseInlineJson js/window.Mldoc text (or config default-config))))
+
 ;; E.g "Foo Bar \"Bar Baz\""
 (defn- sep-by-quote-or-space-or-comma
   [s]
@@ -140,6 +145,17 @@
           (parse-json config)
           (util/json->clj)
           (collect-page-directives)))
+    (catch js/Error _e
+      [])))
+
+(defn inline->edn
+  [text config]
+  (try
+    (if (string/blank? text)
+      {}
+      (-> text
+          (inline-parse-json config)
+          (util/json->clj)))
     (catch js/Error _e
       [])))
 
