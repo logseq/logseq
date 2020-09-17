@@ -88,12 +88,13 @@
                {:on-click (fn [_e]
                             (editor-handler/set-block-property! block-id "background_color" color))}
                [:div.heading-bg {:style {:background-color color}}]])]
-           [:a {:title (t :remove-background)
-                :style {:margin-right 16
-                        :margin-top 1}
-                :on-click (fn [_e]
-                            (editor-handler/remove-block-property! block-id "background_color"))}
-            svg/close]]
+           [:a.text-sm
+            {:title (t :remove-background)
+             :style {:margin-right 14
+                     :margin-top 4}
+             :on-click (fn [_e]
+                         (editor-handler/remove-block-property! block-id "background_color"))}
+            "Clear"]]
           (ui/menu-link
            {:key "Convert heading"
             :on-click (fn [_e]
