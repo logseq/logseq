@@ -177,6 +177,8 @@
    (when-let [db (get-conn repo)]
      (d/entity db id-or-lookup-ref))))
 
+(def touch d/touch)
+
 (defn get-current-page
   []
   (let [match (:route-match @state/state)

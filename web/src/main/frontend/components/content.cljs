@@ -20,7 +20,8 @@
             [frontend.handler.notification :as notification]
             [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [frontend.text :as text]))
 
 (defn- set-format-js-loading!
   [format value]
@@ -72,10 +73,11 @@
    "rgb(121, 62, 62)"])
 
 (rum/defc block-context-menu-content
-  [block-id]
+  [target block-id]
   (rum/with-context [[t] i18n/*tongue-context*]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [heading (get-in block [:block/properties "heading"])
+      (let [properties (:block/properties block)
+            heading (get properties "heading")
             heading? (= heading "true")]
         [:div#custom-context-menu.w-64.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 2}}
          [:div.py-1.rounded-md.bg-base-3.shadow-xs
@@ -84,13 +86,13 @@
             (for [color block-background-colors]
               [:a.m-2.shadow-sm
                {:on-click (fn [_e]
-                            (editor-handler/set-block-property! block-id "background-color" color))}
+                            (editor-handler/set-block-property! block-id "background_color" color))}
                [:div.heading-bg {:style {:background-color color}}]])]
            [:a {:title (t :remove-background)
                 :style {:margin-right 16
                         :margin-top 1}
                 :on-click (fn [_e]
-                            (editor-handler/remove-block-property! block-id "background-color"))}
+                            (editor-handler/remove-block-property! block-id "background_color"))}
             svg/close]]
           (ui/menu-link
            {:key "Convert heading"
@@ -99,6 +101,24 @@
            (if heading?
              "Convert back to a block"
              "Convert to a heading"))
+
+          (when-not (text/contains-properties? (:block/content block))
+            (ui/menu-link
+             {:key "Add a property"
+              :on-click (fn [_e]
+                          (when-let [block-node (util/rec-get-block-node target)]
+                            (let [block-dom-id (gobj/get block-node "id")
+                                  edit-input-id (string/replace block-dom-id "ls-block" "edit-block")
+                                  content (-> (:block/content block)
+                                              (text/rejoin-properties {"" ""} false))
+                                  content-without-level (text/remove-level-spaces content (:block/format block))
+                                  pos (string/index-of content-without-level ": \n:END:")]
+                              (editor-handler/edit-block! (db/touch block)
+                                                          pos
+                                                          (:block/format block)
+                                                          edit-input-id
+                                                          content))))}
+             "Add a property"))
 
           (ui/menu-link
            {:key "Open in sidebar"
@@ -199,7 +219,7 @@
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
                                   client-y (gobj/get e "clientY")]
-                              (state/show-custom-context-menu! (block-context-menu-content (cljs.core/uuid block-id)))
+                              (state/show-custom-context-menu! (block-context-menu-content target (cljs.core/uuid block-id)))
                               (when-let [context-menu (d/by-id "custom-context-menu")]
                                 (d/set-style! context-menu
                                               :left (str client-x "px")

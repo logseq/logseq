@@ -833,7 +833,7 @@
         tags (block-tags-cp t)
         contents? (= (:id config) "contents")
         heading? (= (get properties "heading") "true")
-        bg-color (get properties "background-color")]
+        bg-color (get properties "background_color")]
     (when level
       (let [element (if (and (<= level 6) heading?)
                       (keyword (str "h" level))
@@ -900,20 +900,19 @@
     [:div.pre-block.bg-base-2.p-2
      (blocks-cp config ast)]))
 
-(def hidden-properties
-  #{"custom-id" "heading" "background-color"})
-
 (rum/defc properties-cp
   [block]
-  (let [properties (apply dissoc (:block/properties block) hidden-properties)]
-    [:div.mt-2
-     [:span.text-sm.font-medium.opacity-50
-      "Properties:"]
-     [:ul.mt-1
-      (for [[k v] properties]
-        [:li
-         [:b.mr-1.mb-1.text-sm (str k ":")]
-         v])]]))
+  (let [properties (apply dissoc (:block/properties block) text/hidden-properties)
+        ;; properties (remove (fn [[k _v]] (string/blank? k)) properties)
+        ]
+    (when (seq properties)
+      [:div.text-sm.opacity-80.my-1.bg-base-4.p-2
+       (for [[k v] properties]
+         [:div.my-1
+          [:b k]
+          [:span.mr-1 ":"]
+          ;; TODO: inline parsing
+          v])])))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? properties collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
@@ -930,12 +929,13 @@
                                                 (d/has-class? target "fn")))
                                (editor-handler/clear-selection! nil)
                                (editor-handler/unhighlight-block!)
-                               (let [cursor-range (util/caret-range (gdom/getElement block-id))]
+                               (let [cursor-range (util/caret-range (gdom/getElement block-id))
+                                     properties-hidden? (text/properties-hidden? properties)
+                                     content (text/remove-level-spaces content format)
+                                     content (if properties-hidden? (text/remove-properties! block content) content)]
                                  (state/set-editing!
                                   edit-input-id
-                                  (->> (text/remove-level-spaces content format)
-                                       ;; (text/remove-properties! block)
-                                       )
+                                  content
                                   block
                                   cursor-range))
                                (util/stop e))))
@@ -975,8 +975,7 @@
         (dnd-separator block 0 -4 false true))
 
       (when (and (seq properties)
-                 (let [ks (map string/lower-case (keys properties))
-                       hidden? (every? hidden-properties ks)]
+                 (let [hidden? (text/properties-hidden? properties)]
                    (not hidden?)))
         (properties-cp block))
 
