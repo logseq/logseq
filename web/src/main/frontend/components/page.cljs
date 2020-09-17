@@ -289,7 +289,7 @@
                                                          [:pre.code page-data]
                                                          [:br]
                                                          (ui/button "Copy to clipboard"
-                                                                    :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                           :on-click #(.writeText js/navigator.clipboard page-data))]
                                                         :success
                                                         false)))}})]
                            (remove nil?))]
@@ -350,7 +350,7 @@
              (when (and block? (not sidebar?))
                [:div.mb-4
                 (block/block-parents repo block-id format)])
-           ;; blocks
+             ;; blocks
              (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]
 
            (when-not block?
@@ -358,12 +358,13 @@
 
            (tagged-pages repo page-name)
 
-         ;; referenced blocks
+           ;; referenced blocks
            [:div {:key "page-references"}
             (reference/references route-page-name false)]
 
            [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references route-page-name)]])))))
+            (reference/unlinked-references route-page-name)]
+           ])))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 
@@ -433,17 +434,17 @@
                (let [encoded-page (util/encode-str page)]
                  [:tr {:key encoded-page}
                   [:td [:a.text-gray-700 {:on-click (fn [e]
-                                                    (util/stop e)
-                                                    (let [repo (state/get-current-repo)
-                                                          page (db/pull repo '[*] [:page/name (string/lower-case page)])]
-                                                      (when (gobj/get e "shiftKey")
-                                                        (state/sidebar-add-block!
-                                                         repo
-                                                         (:db/id page)
-                                                         :page
-                                                         {:page page}))))
-                                        :href (str "/page/" encoded-page)}
-                      page]]
+                                                      (util/stop e)
+                                                      (let [repo (state/get-current-repo)
+                                                            page (db/pull repo '[*] [:page/name (string/lower-case page)])]
+                                                        (when (gobj/get e "shiftKey")
+                                                          (state/sidebar-add-block!
+                                                           repo
+                                                           (:db/id page)
+                                                           :page
+                                                           {:page page}))))
+                                          :href (str "/page/" encoded-page)}
+                        page]]
                   [:td [:span.text-gray-500.text-sm
                         (if (zero? modified-at)
                           (t :file/no-data)
@@ -463,14 +464,14 @@
   [state]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [title (get state ::title)]
-     [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}
-      [:div.mt-10.mb-2 {:style {:font-size "1.5rem"}}
-       (t :page/new-title)]
-      [:input#page-title.focus:outline-none.ml-1.text-gray-900
-       {:style {:border "none"
-                :font-size "1.8rem"
-                :max-width 300}
-        :auto-focus true
-        :auto-complete "off"
-        :on-change (fn [e]
-                     (reset! title (util/evalue e)))}]])))
+      [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}
+       [:div.mt-10.mb-2 {:style {:font-size "1.5rem"}}
+        (t :page/new-title)]
+       [:input#page-title.focus:outline-none.ml-1.text-gray-900
+        {:style {:border "none"
+                 :font-size "1.8rem"
+                 :max-width 300}
+         :auto-focus true
+         :auto-complete "off"
+         :on-change (fn [e]
+                      (reset! title (util/evalue e)))}]])))

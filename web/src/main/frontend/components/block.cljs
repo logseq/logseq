@@ -15,26 +15,31 @@
      (when (or (seq parents)
                show-page?
                page-name)
-       [:div.block-parents.flex-row.flex
-        (when show-page?
-          [:a {:href (str "/page/" (util/encode-str page-name))}
-           (or (:page/original-name page)
-               (:page/name page))])
+       (let [parents-atom (atom parents)
+             component [:div.block-parents.flex-row.flex
+                        (when show-page?
+                          [:a {:href (str "/page/" (util/encode-str page-name))}
+                           (or (:page/original-name page)
+                               (:page/name page))])
 
-        (when (and show-page? (seq parents))
-          [:span.mx-2.opacity-50 "⮞"])
+                        (when (and show-page? (seq parents))
+                          [:span.mx-2.opacity-50 "⮞"])
 
-        (when (seq parents)
-          (let [parents (for [{:block/keys [uuid content]} parents]
-                          (let [title (->> (take 24
-                                                 (-> (string/split content #"\n")
-                                                     first
-                                                     (text/remove-level-spaces format)))
-                                           (apply str))]
-                            (when (and (not (string/blank? title))
-                                       (not= (string/lower-case page-name) (string/lower-case title)))
-                              [:a {:href (str "/page/" uuid)}
-                               title])))
-                parents (remove nil? parents)]
-            (interpose [:span.mx-2.opacity-50 "⮞"]
-                       parents)))]))))
+                        (when (seq parents)
+                          (let [parents (for [{:block/keys [uuid content]} parents]
+                                          (let [title (->> (take 24
+                                                                 (-> (string/split content #"\n")
+                                                                     first
+                                                                     (text/remove-level-spaces format)))
+                                                           (apply str))]
+                                            (when (and (not (string/blank? title))
+                                                       (not= (string/lower-case page-name) (string/lower-case title)))
+                                              [:a {:href (str "/page/" uuid)}
+                                               title])))
+                                parents (remove nil? parents)]
+                            (reset! parents-atom parents)
+                            (when (seq parents)
+                              (interpose [:span.mx-2.opacity-50 "⮞"]
+                                         parents))))]]
+         (when (seq @parents-atom)
+           component))))))

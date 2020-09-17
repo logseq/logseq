@@ -472,7 +472,7 @@
                   (->elem
                    :a
                    (cond->
-                     {:href href}
+                       {:href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -485,8 +485,8 @@
             (->elem
              :a
              (cond->
-               {:href href
-                :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -1125,22 +1125,22 @@
     (when-not pre-block-only-title?
       [:div.ls-block.flex.flex-col.pt-1
        (cond->
-         {:id block-id
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-block? " pre-block"))
-          :blockid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
+           {:id block-id
+            :style {:position "relative"}
+            :class (str uuid
+                        (when dummy? " dummy")
+                        (when (and collapsed? has-child?) " collapsed")
+                        (when pre-block? " pre-block"))
+            :blockid (str uuid)
+            :repo repo
+            :level level
+            :haschild (str has-child?)}
          (not slide?)
          (merge attrs))
 
        (if (and ref? (not ref-child?))
-         (when-let [block-parents (block-comp/block-parents repo uuid format false)]
-           [:div.my-2.opacity-50.ml-7 block-parents]))
+         (when-let [comp (block-comp/block-parents repo uuid format false)]
+           [:div.my-2.opacity-50.ml-7 comp]))
 
        (dnd-separator-wrapper block slide? (zero? idx))
 
@@ -1160,7 +1160,7 @@
                   (:block/uuid child)))))])
 
        (when (and ref? (not ref-child?))
-         (let [children (db/get-block-children repo uuid)]
+         (let [children (db/get-block-children-unsafe repo uuid)]
            (when (seq children)
              [:div.ref-children.ml-12
               (blocks-container children (assoc config
@@ -1381,23 +1381,23 @@
       [:div.directives
        (let [format (:block/format config)]
          (for [[k v] m]
-          (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-                     (not (= k :title)))
-            [:div.directive
-             [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
-             (if (coll? v)
-               (for [item v]
-                 (if (= k :tags)
-                   (if (string/includes? item "[[")
-                     (property-value format item)
-                     (let [tag (-> item
-                                  (string/replace "[" "")
-                                  (string/replace "]" "")
-                                  (string/replace "#" ""))]
-                      [:a.tag.mr-1 {:href (str "/page/" tag)}
-                       tag]))
-                   (property-value format v)))
-               (property-value format v))])))]
+           (when (and (not (and (= k :macros) (empty? v))) ; empty macros
+                      (not (= k :title)))
+             [:div.directive
+              [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
+              (if (coll? v)
+                (for [item v]
+                  (if (= k :tags)
+                    (if (string/includes? item "[[")
+                      (property-value format item)
+                      (let [tag (-> item
+                                    (string/replace "[" "")
+                                    (string/replace "]" "")
+                                    (string/replace "#" ""))]
+                        [:a.tag.mr-1 {:href (str "/page/" tag)}
+                         tag]))
+                    (property-value format v)))
+                (property-value format v))])))]
 
       ["Paragraph" l]
       ;; TODO: speedup
