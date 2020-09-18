@@ -207,11 +207,7 @@
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
                 (editor-handler/open-last-block!)
-                state)
-   :did-update (fn [state]
-                 (ui-handler/scroll-and-highlight! state)
-                 (editor-handler/open-last-block!)
-                 state)}
+                state)}
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         repo (or repo current-repo)

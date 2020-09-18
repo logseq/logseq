@@ -115,6 +115,8 @@
                          [:editor/search-block :reference]]]
      ["Block Embed" (embed-block)]
      ["Link" link-steps]
+     ["Template" [[:editor/input "/" nil]
+                        [:editor/search-template]]]
      ;; same as link
      ["Image Link" link-steps]
      (when (state/logged?)
@@ -378,6 +380,9 @@
 
 (defmethod handle-step :editor/search-block [[_ type]]
   (state/set-editor-show-block-search true))
+
+(defmethod handle-step :editor/search-template [[_]]
+  (state/set-editor-show-template-search true))
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input option))

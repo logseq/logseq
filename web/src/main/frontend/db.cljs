@@ -1243,16 +1243,16 @@
                            page-list (when-let [list-content (:list directives)]
                                        (extract-page-list list-content))]
                        (cond->
-                         (util/remove-nils
-                          {:page/name (string/lower-case page)
-                           :page/original-name page
-                           :page/file [:file/path file]
-                           :page/journal? journal?
-                           :page/journal-day (if journal?
-                                               (date/journal-title->int (string/capitalize page))
-                                               0)
-                           :page/created-at journal-date-long
-                           :page/last-modified-at journal-date-long})
+                           (util/remove-nils
+                            {:page/name (string/lower-case page)
+                             :page/original-name page
+                             :page/file [:file/path file]
+                             :page/journal? journal?
+                             :page/journal-day (if journal?
+                                                 (date/journal-title->int (string/capitalize page))
+                                                 0)
+                             :page/created-at journal-date-long
+                             :page/last-modified-at journal-date-long})
                          (seq directives)
                          (assoc :page/directives directives)
 
@@ -1417,8 +1417,8 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                             {:file/path file
-                              :file/last-modified-at t}
+                               {:file/path file
+                                :file/last-modified-at t}
                              new?
                              (assoc :file/created-at t)))])]
       (transact! repo-url tx))))
@@ -1807,13 +1807,13 @@
   [dark? current-page edges nodes]
   (mapv (fn [p]
           (cond->
-            {:id p
-             :name p
-             :val (get-connections p edges)
-             :autoColorBy "group"
-             :group (js/Math.ceil (* (js/Math.random) 12))
-             :color "#222222"
-             }
+              {:id p
+               :name p
+               :val (get-connections p edges)
+               :autoColorBy "group"
+               :group (js/Math.ceil (* (js/Math.random) 12))
+               :color "#222222"
+               }
             dark?
             (assoc :color "#8abbbb")
             (= p current-page)
@@ -1951,7 +1951,7 @@
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
-                           h
+                             h
                            (not (:block/dummy? h))
                            (dissoc h :block/meta))) col)
         parent? (fn [item children]
@@ -1981,7 +1981,7 @@
                             other-children)]
               (recur others children))))))))
 
-;; recursively with children content
+;; recursively with children content for tree
 (defn get-block-content-rec
   ([block]
    (get-block-content-rec block (fn [block] (:block/content block))))
@@ -1995,6 +1995,16 @@
               form)
             block)]
      (apply util/join-newline @contents))))
+
+;; with children content
+(defn get-block-full-content
+  ([repo block-id]
+   (get-block-full-content repo block-id (fn [block] (:block/content block))))
+  ([repo block-id transform-fn]
+   (let [blocks (get-block-and-children repo block-id false)]
+     (->> blocks
+          (map transform-fn)
+          (apply util/join-newline)))))
 
 (defn get-block-end-pos-rec
   [repo block]
@@ -2229,6 +2239,31 @@
      (let [n (count (d/datoms (get-conn) :avet :block/uuid))]
        (reset! blocks-count-cache n)
        n))))
+
+;; get all
+(defn get-all-templates
+  []
+  (let [pred (fn [db properties]
+               (some? (get properties "template")))]
+    (->> (d/q
+           '[:find ?b ?p
+             :in $ ?pred
+             :where
+             [?b :block/properties ?p]
+             [(?pred $ ?p)]]
+           (get-conn)
+           pred)
+         (map (fn [[e m]]
+                [(get m "template") e]))
+         (into {}))))
+
+(defn template-exists?
+  [title]
+  (when title
+    (let [templates (keys (get-all-templates))]
+      (when (seq templates)
+        (let [templates (map string/lower-case templates)]
+          (contains? (set templates) (string/lower-case title)))))))
 
 (defn transact-async?
   []

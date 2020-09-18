@@ -72,6 +72,39 @@
    "rgb(38, 76, 155)"
    "rgb(121, 62, 62)"])
 
+(rum/defcs block-template <
+  (rum/local false ::edit?)
+  (rum/local "" ::input)
+  [state block-id]
+  (let [edit? (get state ::edit?)
+        input (get state ::input)]
+    (if @edit?
+      (do
+        (state/clear-edit!)
+        [:div.px-4.py-2 {:on-click (fn [e] (util/stop e))}
+         [:p "What's the template's name?"]
+         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.text-gray-700
+          {:auto-focus true
+           :on-change (fn [e]
+                        (reset! input (util/evalue e)))}]
+         (ui/button "Submit"
+           :on-click (fn []
+                       (let [title (string/trim @input)]
+                         (when (not (string/blank? title))
+                           (if (db/template-exists? title)
+                             (notification/show!
+                              [:p "Template already exists!"]
+                              :error)
+                             (do
+                               (editor-handler/set-block-property! block-id "template" title)
+                               (state/hide-custom-context-menu!)))))))])
+      (ui/menu-link
+       {:key "Make template"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (reset! edit? true))}
+       "Make template"))))
+
 (rum/defc block-context-menu-content
   [target block-id]
   (rum/with-context [[t] i18n/*tongue-context*]
@@ -147,6 +180,8 @@
             :on-click (fn [_e]
                         (editor-handler/copy-block-ref! block-id))}
            "Copy block ref")
+
+          (block-template block-id)
 
           ;; (ui/menu-link
           ;;  {:key "Make template"

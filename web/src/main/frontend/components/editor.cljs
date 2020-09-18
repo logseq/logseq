@@ -33,6 +33,7 @@
             [cljs-time.coerce :as tc]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.search :as search]
+            [frontend.text :as text]
             ["/frontend/utils" :as utils]))
 
 (rum/defc commands < rum/reactive
@@ -41,6 +42,7 @@
              @*slash-caret-pos
              (not (state/sub :editor/show-page-search?))
              (not (state/sub :editor/show-block-search?))
+             (not (state/sub :editor/show-template-search?))
              (not (state/sub :editor/show-input))
              (not (state/sub :editor/show-date-picker?)))
     (let [matched (util/react *matched-commands)]
@@ -51,7 +53,7 @@
                      (let [command-steps (get (into {} matched) chosen)
                            restore-slash? (and
                                            (not (contains? (set (map first command-steps)) :editor/input))
-                                           (not (contains? #{"Date Picker"} chosen)))]
+                                           (not (contains? #{"Date Picker" "Template"} chosen)))]
                        (editor-handler/insert-command! id command-steps
                                                        format
                                                        {:restore? restore-slash?})))
@@ -158,6 +160,59 @@
                            (subs content 0 64))
             :class "black"}))))))
 
+(rum/defc template-search < rum/reactive
+  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
+  [id format]
+  (when (state/sub :editor/show-template-search?)
+    (let [pos (:editor/last-saved-cursor @state/state)
+          input (gdom/getElement id)]
+      (when input
+        (let [current-pos (:pos (util/get-caret-pos input))
+              edit-content (state/sub [:editor/content id])
+              edit-block (state/sub :editor/block)
+              q (or
+                 (when (>= (count edit-content) current-pos)
+                   (subs edit-content pos current-pos))
+                 "")
+              matched-templates (editor-handler/get-matched-templates q)
+              chosen-handler (fn [[template db-id] _click?]
+                               (if-let [block (db/entity db-id)]
+                                 (let [properties' (dissoc (:block/properties block) "custom_id" "template")
+                                       new-level (:block/level edit-block)
+                                       template-parent-level (:block/level block)
+                                       pattern (config/get-block-pattern format)
+                                       content
+                                       (db/get-block-full-content
+                                        (state/get-current-repo)
+                                        (:block/uuid block)
+                                        (fn [{:block/keys [level content]}]
+                                          (let [new-level (+ new-level (- level template-parent-level))]
+                                            (string/replace-first content
+                                                                  (apply str (repeat level pattern))
+                                                                  (apply str (repeat new-level pattern))))))
+                                       content (-> (text/remove-properties! content)
+                                                   (text/rejoin-properties properties'))
+                                       content (if (string/includes? (string/trim edit-content) "\n")
+                                                 content
+                                                 (text/remove-level-spaces content format))]
+                                   (state/set-editor-show-template-search false)
+                                   (editor-handler/insert-command! id
+                                                                   content
+                                                                   format
+                                                                   {})))
+                               (when-let [input (gdom/getElement id)]
+                                 (.focus input)))
+              non-exist-handler (fn [_state]
+                                  (state/set-editor-show-template-search false))]
+          (ui/auto-complete
+           matched-templates
+           {:on-chosen chosen-handler
+            :on-enter non-exist-handler
+            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a template"]
+            :item-render (fn [[template _block-db-id]]
+                           template)
+            :class "black"}))))))
+
 (rum/defc date-picker < rum/reactive
   [id format]
   (when (state/sub :editor/show-date-picker?)
@@ -178,15 +233,15 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div.bg-base-2 {:style {:position "fixed"
-                 :bottom 0
-                 :width "100%"
-                 :left 0
-                 :justify-content "center"
-                 :height "2.5rem"
-                 :display "flex"
-                 :align-items "center"
-                 ;; This element should be the upper-most in most situations
-                 :z-index 99999999}}
+                           :bottom 0
+                           :width "100%"
+                           :left 0
+                           :justify-content "center"
+                           :height "2.5rem"
+                           :display "flex"
+                           :align-items "center"
+                           ;; This element should be the upper-most in most situations
+                           :z-index 99999999}}
    [:button
     {:style {:padding "5px"}
      :on-click #(editor-handler/adjust-block-level! parent-state :right)}
@@ -456,7 +511,7 @@
                      :else
                      nil))
 
-                  ;; deleting hashtag
+                 ;; deleting hashtag
                  (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
                  (state/set-editor-show-page-search-hashtag false)
 
@@ -666,6 +721,11 @@
 
      (transition-cp
       (block-search id format)
+      true
+      *slash-caret-pos)
+
+     (transition-cp
+      (template-search id format)
       true
       *slash-caret-pos)
 

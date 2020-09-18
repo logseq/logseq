@@ -596,6 +596,7 @@
   (state/set-editor-show-date-picker false)
   (state/set-editor-show-page-search false)
   (state/set-editor-show-block-search false)
+  (state/set-editor-show-template-search false)
   (commands/restore-state true))
 
 (defn get-state
@@ -635,7 +636,7 @@
            content (string/trim (text/remove-level-spaces content format))
            properties (or custom-properties properties)
            content (if (and (seq properties) (text/properties-hidden? properties))
-                     (text/remove-properties! block content)
+                     (text/remove-properties! content)
                      content)
            content-length (count content)
            text-range (if (or (= :max pos) (<= content-length pos))
@@ -1267,6 +1268,10 @@
           (:block/uuid h)))
      (search/search q 21))))
 
+(defn get-matched-templates
+  [q]
+  (search/template-search q))
+
 (defn get-matched-commands
   [input]
   (try
@@ -1309,6 +1314,7 @@
       (state/get-editor-show-input)
       (state/get-editor-show-page-search)
       (state/get-editor-show-block-search)
+      (state/get-editor-show-template-search)
       (state/get-editor-show-date-picker)))
 
 (defn get-previous-input-char

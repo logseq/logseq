@@ -25,7 +25,7 @@
          (every? hidden-properties ks))))
 
 (defn remove-properties!
-  [block content]
+  [content]
   (let [lines (string/split-lines content)
         [title-lines properties-and-body] (split-with (fn [l] (not (string/starts-with? (string/upper-case (string/triml l)) ":PROPERTIES:"))) lines)
         body (drop-while (fn [l]
@@ -71,5 +71,5 @@
            (= (:block/properties (db/entity [:block/uuid (:block/uuid block)]))
               properties))
     content
-    (-> (remove-properties! block content)
+    (-> (remove-properties! content)
         (rejoin-properties properties))))

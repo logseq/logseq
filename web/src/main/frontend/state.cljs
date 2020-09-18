@@ -325,6 +325,12 @@
 (defn get-editor-show-block-search
   []
   (get @state :editor/show-block-search?))
+(defn set-editor-show-template-search
+  [value]
+  (set-state! :editor/show-template-search? value))
+(defn get-editor-show-template-search
+  []
+  (get @state :editor/show-template-search?))
 (defn set-editor-show-date-picker
   [value]
   (set-state! :editor/show-date-picker? value))

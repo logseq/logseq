@@ -934,7 +934,7 @@
                                (let [cursor-range (util/caret-range (gdom/getElement block-id))
                                      properties-hidden? (text/properties-hidden? properties)
                                      content (text/remove-level-spaces content format)
-                                     content (if properties-hidden? (text/remove-properties! block content) content)]
+                                     content (if properties-hidden? (text/remove-properties! content) content)]
                                  (state/set-editing!
                                   edit-input-id
                                   content
