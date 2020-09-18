@@ -108,10 +108,11 @@
                    {})
           directives (->> (remove (fn [x] (= :macro (first x))) directives)
                           (into {}))
+          directives (if (:roam_alias directives)
+                       (assoc directives :alias (:roam_alias directives))
+                       directives)
           directives (if (seq directives)
                        (cond-> directives
-                         (:roam_alias directives)
-                         (assoc :alias (:roam_alias directives))
                          (:roam_key directives)
                          (assoc :key (:roam_key directives))
                          (:alias directives)
