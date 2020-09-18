@@ -624,10 +624,17 @@
      (ui/textarea
       {:id id
        :value (or content "")
+       :on-click (fn [_e]
+                   (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+                     (state/set-edit-pos! current-pos)))
+       :on-key-down (fn [_e]
+                      (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+                        (state/set-edit-pos! current-pos)))
        :on-change (fn [e]
                     (let [value (util/evalue e)
                           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
                       (state/set-edit-content! id value)
+                      (state/set-edit-pos! current-pos)
                       (let [input (gdom/getElement id)
                             last-input-char (util/nth-safe value (dec current-pos))]
                         (case last-input-char

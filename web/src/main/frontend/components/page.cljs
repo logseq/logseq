@@ -1,5 +1,6 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
+            [medley.core :as medley]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler :as handler]
             [frontend.handler.file :as file]
@@ -12,6 +13,7 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
+            [dommy.core :as d]
             [frontend.components.hiccup :as hiccup]
             [frontend.components.block :as block]
             [frontend.components.reference :as reference]
@@ -204,8 +206,12 @@
 (rum/defcs page < rum/reactive
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
+                (editor-handler/open-last-block!)
                 state)
-   :did-update ui-handler/scroll-and-highlight!}
+   :did-update (fn [state]
+                 (ui-handler/scroll-and-highlight! state)
+                 (editor-handler/open-last-block!)
+                 state)}
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         repo (or repo current-repo)
@@ -363,8 +369,7 @@
             (reference/references route-page-name false)]
 
            [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references route-page-name)]
-           ])))))
+            (reference/unlinked-references route-page-name)]])))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 

@@ -71,10 +71,10 @@
     :editor/show-input nil
     :editor/last-saved-cursor nil
     :editor/editing? nil
+    :editor/pos 0
     :editor/content {}
     :editor/block nil
     :cursor-range nil
-    :cursor-pos nil
 
     :selection/mode false
     :selection/blocks []
@@ -269,10 +269,6 @@
   [range]
   (set-state! :cursor-range range))
 
-(defn set-cursor-pos!
-  [value]
-  (set-state! :cursor-pos value))
-
 (defn cloning?
   []
   (:repo/cloning? @state))
@@ -347,6 +343,14 @@
   (swap! state update :editor/editing?
          (fn [m]
            (and input-id {input-id true}))))
+
+(defn set-edit-pos!
+  [pos]
+  (set-state! :editor/pos pos))
+
+(defn get-edit-pos
+  []
+  (:editor/pos @state))
 
 (defn set-selection-start-block!
   [start-block]

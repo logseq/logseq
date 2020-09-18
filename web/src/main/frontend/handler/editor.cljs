@@ -291,8 +291,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                              {:block/uuid uuid
-                               :block/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -1636,3 +1636,23 @@
 (defn set-block-as-a-heading!
   [block-id value]
   (set-block-property! block-id "heading" value))
+
+;; Should preserve the cursor too.
+(defn open-last-block!
+  []
+  (let [edit-id (state/get-edit-input-id)
+        last-pos (state/get-edit-pos)
+        block-id (when edit-id (subs edit-id (- (count edit-id) 36)))]
+    (let [last-edit-block (first (array-seq (js/document.getElementsByClassName block-id)))
+          first-block (first (array-seq (js/document.getElementsByClassName "ls-block")))
+          node (or last-edit-block first-block)
+          block-id (d/attr node "blockid")
+          edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")]
+      (when block-id
+        (let [block-id (medley/uuid block-id)]
+          (when-let [block (db/entity [:block/uuid block-id])]
+            (edit-block! block
+                         (or (and last-edit-block last-pos)
+                             :max)
+                         (:block/format block)
+                         edit-block-id)))))))

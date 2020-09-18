@@ -28,16 +28,16 @@
 
      [:div.mt-4.ml-1
       (ui/button
-       "Markdown"
-       :on-click
-       #(user-handler/set-preferred-format! :markdown))
+        "Markdown"
+        :on-click
+        #(user-handler/set-preferred-format! :markdown))
 
       [:span.ml-2.mr-2 "-OR-"]
 
       (ui/button
-       "Org Mode"
-       :on-click
-       #(user-handler/set-preferred-format! :org))]]))
+        "Org Mode"
+        :on-click
+        #(user-handler/set-preferred-format! :org))]]))
 
 (rum/defc sync-status < rum/reactive
   []
@@ -79,10 +79,10 @@
                          {:on-click (fn [e]
                                       (export-handler/download-file! file))}
                          [:span (t :download)]]]])]]
-              ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
+                  ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
                   [:div.flex.flex-row.justify-between.align-items.mt-2
                    (ui/button (t :git/push)
-                              :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                     :on-click (fn [] (state/set-modal! commit/add-commit-message)))
                    (if pushing?
                      [:span.lds-dual-ring.mt-1])]]
                  [:p (t :git/local-changes-synced)])
@@ -92,7 +92,7 @@
                  last-pulled-at]
                 [:div.flex.flex-row.justify-between.align-items
                  (ui/button (t :git/pull)
-                            :on-click (fn [] (repo-handler/pull-current-repo)))
+                   :on-click (fn [] (repo-handler/pull-current-repo)))
                  (if pulling?
                    [:span.lds-dual-ring.mt-1])]
                 [:p.pt-2.text-sm.opacity-50
@@ -137,27 +137,35 @@
                 :target "_blank"}
                (get-repo-name-f current-repo)])))))))
 
-(rum/defc add-repo < rum/reactive
-  []
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (let [repo-url (state/sub :git/clone-repo)]
+(rum/defcs add-repo <
+  (rum/local "" ::repo)
+  [state]
+  (let [repo (get state ::repo)]
+    (rum/with-context [[t] i18n/*tongue-context*]
       [:div.p-8.flex.items-center.justify-center
        [:div.w-full.mx-auto
         [:div
          [:div
           [:h1.title.mb-1
            (t :git/add-repo-prompt)]
+          (ui/admonition :warning
+                         [:p "Make sure that you've created this repo on GitHub."])
           [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
            [:input#repo.form-input.block.w-full.sm:text-sm.sm:leading-5
             {:autoFocus true
              :placeholder "https://github.com/username/repo"
              :on-change (fn [e]
-                          (state/set-git-clone-repo! (util/evalue e)))}]]]]
+                          (reset! repo (util/evalue e)))}]]]]
 
         (ui/button
-         (t :git/add-repo-prompt-confirm)
-         :on-click
-         (fn []
-           (when (util/starts-with? repo-url "https://github.com/")
-             (let [repo-url (string/replace repo-url ".git" "")]
-               (repo-handler/create-repo! repo-url)))))]])))
+          (t :git/add-repo-prompt-confirm)
+          :on-click
+          (fn []
+            (let [repo @repo]
+              (if (util/starts-with? repo "https://github.com/")
+                (let [repo-url (string/replace repo ".git" "")]
+                  (repo-handler/create-repo! repo))
+                (notification/show!
+                 [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
+                 :error
+                 false)))))]])))
