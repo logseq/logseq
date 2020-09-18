@@ -42,10 +42,12 @@
   []
   (state/toggle-sidebar-open?!))
 
+
+;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
 (defn re-render-root!
   []
   (when-let [component (state/get-root-component)]
-    (db/clear-query-state!)
+    ;; (db/clear-query-state!)
     (rum/request-render component)
     (doseq [component (state/get-custom-query-components)]
       (rum/request-render component))))

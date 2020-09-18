@@ -41,5 +41,5 @@
                             (when (seq parents)
                               (interpose [:span.mx-2.opacity-50 "⮞"]
                                          parents))))]]
-         (when (seq @parents-atom)
+         (when (or (seq @parents-atom) show-page?)
            component))))))
