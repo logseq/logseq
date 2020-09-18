@@ -323,7 +323,7 @@
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
-  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks properties] :as block} value indent-left?]
+  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks properties] :as block} value {:keys [indent-left? custom-properties]}]
    (let [repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (with-block-meta repo block)
@@ -348,7 +348,13 @@
          new-directives (if permalink-changed?
                           (assoc new-directives :old_permalink (:permalink old-directives))
                           new-directives)
-         value (text/re-construct-block-properties block value properties)]
+         value (cond
+                 (and (seq (:block/properties block)) (not (text/contains-properties? value))) ; properties removed
+                 value
+                 (seq custom-properties)
+                 (text/re-construct-block-properties block value custom-properties)
+                 :else
+                 value)]
      (when (not= (string/trim content) (string/trim value)) ; block content changed
        (let [file (db/entity repo (:db/id file))]
          (cond
@@ -611,10 +617,11 @@
      :value value
      :pos pos}))
 
+;; id: block dom id, "ls-block-counter-uuid"
 (defn edit-block!
-  ([block prev-pos format id]
-   (edit-block! block prev-pos format id nil))
-  ([block prev-pos format id custom-content]
+  ([block pos format id]
+   (edit-block! block pos format id nil))
+  ([block pos format id {:keys [custom-content custom-properties]}]
    (when-let [block-id (:block/uuid block)]
      (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
            block (or
@@ -626,13 +633,14 @@
            {:block/keys [content properties]} block
            content (or custom-content content)
            content (string/trim (text/remove-level-spaces content format))
+           properties (or custom-properties properties)
            content (if (and (seq properties) (text/properties-hidden? properties))
                      (text/remove-properties! block content)
                      content)
            content-length (count content)
-           text-range (if (or (= :max prev-pos) (<= content-length prev-pos))
+           text-range (if (or (= :max pos) (<= content-length pos))
                         content
-                        (subs content 0 prev-pos))]
+                        (subs content 0 pos))]
        (state/set-editing! edit-input-id content block text-range)))))
 
 (defn- insert-new-block!
@@ -848,8 +856,8 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content properties]} block]
         (when (get properties key)
-          (let [new-block (update block :block/properties dissoc key)]
-            (save-block-if-changed! new-block content)))))))
+          (save-block-if-changed! block content
+                                  {:custom-properties (dissoc properties key)}))))))
 
 (defn set-block-property!
   [block-id key value]
@@ -864,11 +872,12 @@
           nil
 
           :else
-          (let [new-block (let [properties (:block/properties block)]
-                            (if (seq properties)
-                              (assoc block :block/properties (assoc properties key value))
-                              (assoc block :block/properties {key value})))]
-            (save-block-if-changed! new-block content)))))))
+          (let [properties (:block/properties block)
+                properties' (if (seq properties)
+                              (assoc properties key value)
+                              {key value})]
+            (save-block-if-changed! block content
+                                    {:custom-properties properties'})))))))
 
 (defn clear-selection!
   [_e]
@@ -1349,7 +1358,8 @@
         new-value (block/with-levels value format (assoc block :block/level final-level))]
     (when (<= (- final-level previous-level) 1)
       (set-last-edit-block! (:block/uuid block) value)
-      (save-block-if-changed! block new-value (= direction :left)))))
+      (save-block-if-changed! block new-value
+                              {:indent-left? (= direction :left)}))))
 
 (defn adjust-blocks-level!
   [blocks direction])

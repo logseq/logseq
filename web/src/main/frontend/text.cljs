@@ -20,8 +20,9 @@
 
 (defn properties-hidden?
   [properties]
-  (let [ks (map string/lower-case (keys properties))]
-    (every? hidden-properties ks)))
+  (and (seq properties)
+       (let [ks (map string/lower-case (keys properties))]
+         (every? hidden-properties ks))))
 
 (defn remove-properties!
   [block content]

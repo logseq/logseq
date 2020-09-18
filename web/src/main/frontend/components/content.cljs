@@ -103,23 +103,38 @@
              "Convert back to a block"
              "Convert to a heading"))
 
-          (when-not (text/contains-properties? (:block/content block))
-            (ui/menu-link
-             {:key "Add a property"
-              :on-click (fn [_e]
-                          (when-let [block-node (util/rec-get-block-node target)]
-                            (let [block-dom-id (gobj/get block-node "id")
-                                  edit-input-id (string/replace block-dom-id "ls-block" "edit-block")
-                                  content (-> (:block/content block)
-                                              (text/rejoin-properties {"" ""} false))
-                                  content-without-level (text/remove-level-spaces content (:block/format block))
-                                  pos (string/index-of content-without-level ": \n:END:")]
-                              (editor-handler/edit-block! (db/touch block)
-                                                          pos
-                                                          (:block/format block)
-                                                          edit-input-id
-                                                          content))))}
-             "Add a property"))
+          (let [empty-properties? (not (text/contains-properties? (:block/content block)))
+                all-hidden? (text/properties-hidden? (:block/properties block))]
+            (when (or empty-properties? all-hidden?)
+              (ui/menu-link
+               {:key "Add a property"
+                :on-click (fn [_e]
+                            (when-let [block-node (util/rec-get-block-node target)]
+                              (let [block-dom-id (gobj/get block-node "id")
+                                    edit-input-id (string/replace block-dom-id "ls-block" "edit-block")
+                                    content (:block/content block)
+                                    content (cond
+                                              empty-properties?
+                                              (text/rejoin-properties content {"" ""} false)
+                                              all-hidden?
+                                              (let [idx (string/index-of content "\n:END:")]
+                                                (str
+                                                 (subs content 0 idx)
+                                                 "\n:: "
+                                                 (subs content idx)))
+                                              :else
+                                              content)
+                                    content-without-level (text/remove-level-spaces content (:block/format block))
+                                    pos (string/index-of content-without-level ": \n:END:")]
+                                (editor-handler/edit-block! block
+                                                            pos
+                                                            (:block/format block)
+                                                            edit-input-id
+                                                            (cond-> {:custom-content content}
+                                                              all-hidden?
+                                                              (assoc :custom-properties
+                                                                     (assoc (:block/properties block) "" "")))))))}
+               "Add a property")))
 
           (ui/menu-link
            {:key "Open in sidebar"
