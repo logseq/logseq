@@ -26,13 +26,15 @@ Logseq is hugely inspired by [Roam Research](https://roamresearch.com/), [Org Mo
 
 # How do I use it?
 
-1. Visit https://logseq.com/
+1. Make sure you have both a GitHub account and already created a repo (could be an old one too).
 
-2. Click the button Login with Github. *We are using an excellent web git client called Isomorphic-git.org. More sync  options(e.g. Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon.*
+2. Visit https://logseq.com/
 
-3. Install Logseq app on your selected repo.
+3. Click the button Login with Github. *We are using an excellent web git client called Isomorphic-git.org. More sync  options(e.g. Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon.*
 
-4. Start writing and have fun!
+4. Install Logseq app on your selected repo.
+
+5. Start writing and have fun!
 
 # Learn more:
 - Our blog: https://logseq.com/blog - Please be sure to visit our About page [here](https://logseq.com/blog/about) for the latest updates on the app.
