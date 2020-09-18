@@ -206,11 +206,10 @@
 (rum/defcs page < rum/reactive
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
-                (editor-handler/open-last-block!)
+                (editor-handler/open-last-block! false)
                 state)
    :did-update (fn [state]
                  (ui-handler/scroll-and-highlight! state)
-                 (editor-handler/open-last-block!)
                  state)}
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)

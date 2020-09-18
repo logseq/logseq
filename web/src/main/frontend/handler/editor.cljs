@@ -1639,17 +1639,18 @@
 
 ;; Should preserve the cursor too.
 (defn open-last-block!
-  []
+  [journal?]
   (let [edit-id (state/get-edit-input-id)
         last-pos (state/get-edit-pos)
         block-id (when edit-id (subs edit-id (- (count edit-id) 36)))]
     (let [last-edit-block (first (array-seq (js/document.getElementsByClassName block-id)))
           first-block (first (array-seq (js/document.getElementsByClassName "ls-block")))
-          node (or last-edit-block first-block)
-          block-id (d/attr node "blockid")
-          edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")]
-      (when block-id
-        (let [block-id (medley/uuid block-id)]
+          node (or last-edit-block
+                   (and (not journal?) first-block))]
+      (when node
+        (let [block-id (and node (d/attr node "blockid"))
+              edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
+              block-id (medley/uuid block-id)]
           (when-let [block (db/entity [:block/uuid block-id])]
             (edit-block! block
                          (or (and last-edit-block last-pos)

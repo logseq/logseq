@@ -96,11 +96,8 @@
 
 (rum/defc journals <
   {:did-mount (fn [state]
-                (editor/open-last-block!)
-                state)
-   :did-update (fn [state]
-                 (editor/open-last-block!)
-                 state)}
+                (editor/open-last-block! true)
+                state)}
   [latest-journals]
   [:div#journals
    (ui/infinite-list
