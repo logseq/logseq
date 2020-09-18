@@ -1167,6 +1167,10 @@
                          100)]
           (reset! *image-uploading-process process)))))))
 
+;; Editor should track some useful information, like editor modes.
+;; For example:
+;; 1. Which file format is it, markdown or org mode?
+;; 2. Is it in the properties area? Then we can enable the ":" autopair
 (def autopair-map
   {"[" "]"
    "{" "}"
@@ -1176,6 +1180,7 @@
    "~" "~"
    "*" "*"
    ;; "_" "_"
+   ":" ":"                              ; TODO: only properties editing and org mode tag
    "^" "^"})
 
 (def reversed-autopair-map
