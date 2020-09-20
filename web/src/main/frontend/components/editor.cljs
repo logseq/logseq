@@ -70,20 +70,6 @@
                                                      {:last-pattern commands/angle-bracket}))
         :class "black"}))))
 
-(defn- get-search-q
-  []
-  (when-let [id (state/get-edit-input-id)]
-    (when-let [input (gdom/getElement id)]
-      (let [current-pos (:pos (util/get-caret-pos input))
-            pos (:editor/last-saved-cursor @state/state)
-            edit-content (state/sub [:editor/content id])]
-        (or
-         @editor-handler/*selected-text
-         (when (state/get-editor-show-page-search-hashtag)
-           (util/safe-subs edit-content pos current-pos))
-         (when (> (count edit-content) current-pos)
-           (util/safe-subs edit-content pos current-pos)))))))
-
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id format]
@@ -586,19 +572,7 @@
                       :else
                       (reset! *matched-block-commands matched-block-commands))
                     (reset! *show-block-commands false))))
-
-              (when (or (state/get-editor-show-page-search)
-                        (state/get-editor-show-block-search))
-                (when-let [q (get-search-q)]
-                  (let [value (gobj/get input "value")
-                        pos (:editor/last-saved-cursor @state/state)
-                        current-pos (:pos (util/get-caret-pos input))]
-                    (when (or (< current-pos pos)
-                              (string/includes? q "]")
-                              (string/includes? q ")"))
-                      (state/set-editor-show-block-search false)
-                      (state/set-editor-show-page-search false)
-                      (state/set-editor-show-page-search-hashtag false))))))))))))
+              (editor-handler/close-autocomplete-if-outside input))))))))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
@@ -662,8 +636,10 @@
       {:id id
        :value (or content "")
        :on-click (fn [_e]
-                   (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                     (state/set-edit-pos! current-pos)))
+                   (let [input (gdom/getElement id)
+                         current-pos (:pos (util/get-caret-pos input))]
+                     (state/set-edit-pos! current-pos)
+                     (editor-handler/close-autocomplete-if-outside input)))
        :on-key-down (fn [_e]
                       (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
                         (state/set-edit-pos! current-pos)))

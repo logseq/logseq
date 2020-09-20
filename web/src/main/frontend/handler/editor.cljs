@@ -327,7 +327,8 @@
         first-block (-> content-without-level-spaces
                         (format/to-edn format)
                         ffirst)]
-    (if (or (block/paragraph-block? first-block)
+    (if (or (block/heading-block? first-block)
+            (block/paragraph-block? first-block)
             (block/hiccup-block? first-block)
             (block/definition-list-block? first-block))
       content
@@ -1683,3 +1684,30 @@
                              :max)
                          (:block/format block)
                          edit-block-id)))))))
+
+(defn get-search-q
+  []
+  (when-let [id (state/get-edit-input-id)]
+    (when-let [input (gdom/getElement id)]
+      (let [current-pos (:pos (util/get-caret-pos input))
+            pos (:editor/last-saved-cursor @state/state)
+            edit-content (state/sub [:editor/content id])]
+        (or
+         @*selected-text
+         (util/safe-subs edit-content pos current-pos))))))
+
+(defn close-autocomplete-if-outside
+  [input]
+  (when (or (state/get-editor-show-page-search)
+            (state/get-editor-show-page-search-hashtag)
+            (state/get-editor-show-block-search))
+    (when-let [q (get-search-q)]
+      (let [value (gobj/get input "value")
+            pos (:editor/last-saved-cursor @state/state)
+            current-pos (:pos (util/get-caret-pos input))]
+        (when (or (< current-pos pos)
+                  (string/includes? q "]")
+                  (string/includes? q ")"))
+          (state/set-editor-show-block-search false)
+          (state/set-editor-show-page-search false)
+          (state/set-editor-show-page-search-hashtag false))))))
