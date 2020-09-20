@@ -138,6 +138,15 @@
   []
   (reset! query-state {}))
 
+;; remove block refs, block embeds, page embeds
+(defn clear-query-state-without-refs-and-embeds!
+  []
+  (let [state @query-state
+        state (->> (filter (fn [[[_repo k] v]]
+                             (contains? #{:blocks :block/block :page/blocks} k)) state)
+                   (into {}))]
+    (reset! query-state state)))
+
 ;; TODO: Add components which subscribed to a specific query
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn]

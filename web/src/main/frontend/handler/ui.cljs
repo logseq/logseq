@@ -47,8 +47,7 @@
 (defn re-render-root!
   []
   (when-let [component (state/get-root-component)]
-    ;; FIXME: Don't clear block embeds and page embeds
-    (db/clear-query-state!)
+    (db/clear-query-state-without-refs-and-embeds!)
     (rum/request-render component)
     (doseq [component (state/get-custom-query-components)]
       (rum/request-render component))))

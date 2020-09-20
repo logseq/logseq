@@ -308,9 +308,8 @@
         blocks (db/get-page-blocks (state/get-current-repo) page-name)]
     [:div.embed-page.py-2.my-2.px-3.bg-base-2
      [:p
-      [:code "Embed page:"]
-      [:a.ml-2 {:href (str "/page/" (util/encode-str page-name))}
-       (or page-original-name page-name)]]
+      [:code.mr-2 "Embed page:"]
+      (page-cp config {:page/name page-name})]
      (blocks-container blocks (assoc config :embed? true))]))
 
 (defn- get-label-text

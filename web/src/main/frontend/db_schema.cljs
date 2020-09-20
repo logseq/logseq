@@ -71,6 +71,10 @@
    ;; referenced blocks
    :block/ref-blocks {:db/valueType   :db.type/ref
                       :db/cardinality :db.cardinality/many}
+   :block/embed-blocks {:db/valueType   :db.type/ref
+                        :db/cardinality :db.cardinality/many}
+   :block/embed-pages {:db/valueType   :db.type/ref
+                       :db/cardinality :db.cardinality/many}
    :block/content {}
    :block/anchor {}
    :block/marker {}
