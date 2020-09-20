@@ -330,10 +330,7 @@
     (if (or (block/paragraph-block? first-block)
             (block/hiccup-block? first-block))
       content
-      (str (->> (repeat (:block/level block) (config/get-block-pattern format))
-                (apply str)) ; empty heading
-           "\n"
-           (string/triml content-without-level-spaces)))))
+      (text/append-newline-after-level-spaces content format))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -502,11 +499,14 @@
                    (inc level)
                    :else
                    level)
-        v2 (if (string/blank? v2)
-             (str (config/default-empty-block format v2-level) " " v2)
-             (rebuild-block-content {:block/level v2-level}
-                                    (text/remove-level-spaces v2 format)
-                                    format))
+        v2 (if (and v2 (string/starts-with? v2 (config/get-block-pattern format)))
+             v2
+             (str
+              (config/default-empty-block format v2-level)
+              " "
+              (rebuild-block-content {:block/level v2-level}
+                                     v2
+                                     format)))
         block (with-block-meta repo block)
         format (:block/format block)
         page (db/entity repo (:db/id page))
@@ -516,8 +516,8 @@
                                      (str v1 "\n" v2)
                                      value)
                              value (text/re-construct-block-properties block value properties)
-                             [new-content value] (new-file-content block file-content value)
                              value (rebuild-block-content block value format)
+                             [new-content value] (new-file-content block file-content value)
                              {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
                              blocks (db/recompute-block-children repo block blocks)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
