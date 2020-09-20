@@ -553,6 +553,14 @@
     []
     (subvec xs start end)))
 
+(defn safe-subs
+  ([s start]
+   (let [c (count s)]
+     (safe-subs s start c)))
+  ([s start end]
+   (let [c (count s)]
+     (subs s (min c start) (min c end)))))
+
 (defn get-nodes-between-two-nodes
   [id1 id2 class]
   (when-let [nodes (array-seq (js/document.getElementsByClassName class))]

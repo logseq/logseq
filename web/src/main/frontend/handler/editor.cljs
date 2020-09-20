@@ -321,21 +321,25 @@
      (mapv (fn [ref] [:db/retract eid :block/ref-blocks ref]) retracted-blocks))))
 
 (defn- rebuild-block-content
-  "We'll create an empty heading if the first parsed ast element is neither a paragraph or hiccup."
-  [block content format]
+  "We'll create an empty heading if the first parsed ast element is not a paragraph, definition list or some hiccup."
+  [content format]
   (let [content-without-level-spaces (text/remove-level-spaces content format)
         first-block (-> content-without-level-spaces
                         (format/to-edn format)
                         ffirst)]
     (if (or (block/paragraph-block? first-block)
-            (block/hiccup-block? first-block))
+            (block/hiccup-block? first-block)
+            (block/definition-list-block? first-block))
       content
       (text/append-newline-after-level-spaces content format))))
 
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
-  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks properties] :as block} value {:keys [indent-left? custom-properties]}]
+  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks properties] :as block}
+    value
+    {:keys [indent-left? custom-properties rebuild-content?]
+     :or {rebuild-content? true}}]
    (let [repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (with-block-meta repo block)
@@ -408,7 +412,7 @@
                  format (format/get-format file-path)
                  file-content (db/get-file repo file-path)
                  value (get-block-new-value block file-content value)
-                 value (rebuild-block-content block value format)
+                 value (if rebuild-content? (rebuild-block-content value format) value)
                  block (assoc block :block/content value)
                  {:keys [blocks pages start-pos end-pos]} (if pre-block?
                                                             (let [new-end-pos (utf8/length (utf8/encode value))]
@@ -499,14 +503,12 @@
                    (inc level)
                    :else
                    level)
-        v2 (if (and v2 (string/starts-with? v2 (config/get-block-pattern format)))
+        v2 (if (and v2
+                    (re-find (re-pattern (util/format "^[%s]+\\s+" (config/get-block-pattern format))) v2))
              v2
-             (str
-              (config/default-empty-block format v2-level)
-              " "
-              (rebuild-block-content {:block/level v2-level}
-                                     v2
-                                     format)))
+             (rebuild-block-content
+              (str (config/default-empty-block format v2-level) " " v2)
+              format))
         block (with-block-meta repo block)
         format (:block/format block)
         page (db/entity repo (:db/id page))
@@ -516,7 +518,7 @@
                                      (str v1 "\n" v2)
                                      value)
                              value (text/re-construct-block-properties block value properties)
-                             value (rebuild-block-content block value format)
+                             value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
                              {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
                              blocks (db/recompute-block-children repo block blocks)
@@ -690,7 +692,8 @@
           (clear-when-saved!)))
       :with-level? (if last-child true false)
       :new-level (and last-child (:block/level block))
-      :blocks-container-id (:id config)})))
+      :blocks-container-id (:id config)
+      :current-page (state/get-current-page)})))
 
 ;; TODO: utf8 encode performance
 (defn check
@@ -816,7 +819,7 @@
                     (when repo
                       (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
                         (let [original-content (util/trim-safe (:block/content block))
-                              new-value (str original-content value)
+                              new-value (str original-content " " (string/triml value))
                               pos (max
                                    (if original-content
                                      (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
@@ -827,7 +830,8 @@
                             (reset! edit-block block)
                             (edit-block! block pos format id)))))))
                 (when-not @edit-block
-                  (state/clear-edit!))))))))))
+                  (state/clear-edit!)))
+              )))))))
 
 (defn delete-blocks!
   [repo block-uuids]
@@ -898,7 +902,8 @@
                               (assoc properties key value)
                               {key value})]
             (save-block-if-changed! block content
-                                    {:custom-properties properties'})))))))
+                                    {:custom-properties properties'
+                                     :rebuild-content? false})))))))
 
 (defn clear-selection!
   [_e]

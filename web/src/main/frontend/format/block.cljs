@@ -83,11 +83,18 @@
    (vector? block)
    (= "Timestamp" (first block))))
 
-(defn- properties-block?
+(defn properties-block?
   [block]
   (and
    (vector? block)
    (= "Property_Drawer" (first block))))
+
+(defn definition-list-block?
+  [block]
+  (and
+   (vector? block)
+   (= "List" (first block))
+   (:name (first (second block)))))
 
 (defn extract-properties
   [[_ properties] start-pos end-pos]

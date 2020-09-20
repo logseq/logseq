@@ -70,6 +70,20 @@
                                                      {:last-pattern commands/angle-bracket}))
         :class "black"}))))
 
+(defn- get-search-q
+  []
+  (when-let [id (state/get-edit-input-id)]
+    (when-let [input (gdom/getElement id)]
+      (let [current-pos (:pos (util/get-caret-pos input))
+            pos (:editor/last-saved-cursor @state/state)
+            edit-content (state/sub [:editor/content id])]
+        (or
+         @editor-handler/*selected-text
+         (when (state/get-editor-show-page-search-hashtag)
+           (util/safe-subs edit-content pos current-pos))
+         (when (> (count edit-content) current-pos)
+           (util/safe-subs edit-content pos current-pos)))))))
+
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id format]
@@ -82,9 +96,9 @@
               q (or
                  @editor-handler/*selected-text
                  (when (state/sub :editor/show-page-search-hashtag?)
-                   (subs edit-content pos current-pos))
+                   (util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (subs edit-content pos current-pos)))
+                   (util/safe-subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
@@ -178,15 +192,15 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div.bg-base-2 {:style {:position "fixed"
-                 :bottom 0
-                 :width "100%"
-                 :left 0
-                 :justify-content "center"
-                 :height "2.5rem"
-                 :display "flex"
-                 :align-items "center"
-                 ;; This element should be the upper-most in most situations
-                 :z-index 99999999}}
+                           :bottom 0
+                           :width "100%"
+                           :left 0
+                           :justify-content "center"
+                           :height "2.5rem"
+                           :display "flex"
+                           :align-items "center"
+                           ;; This element should be the upper-most in most situations
+                           :z-index 99999999}}
    [:button
     {:style {:padding "5px"}
      :on-click #(editor-handler/adjust-block-level! parent-state :right)}
@@ -271,12 +285,12 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                    {:key (str "modal-input-" (name id))
-                     :id (str "modal-input-" (name id))
-                     :type (or type "text")
-                     :on-change (fn [e]
-                                  (swap! input-value assoc id (util/evalue e)))
-                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                  {:key (str "modal-input-" (name id))
+                   :id (str "modal-input-" (name id))
+                   :type (or type "text")
+                   :on-change (fn [e]
+                                (swap! input-value assoc id (util/evalue e)))
+                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder))
                 (dissoc input-item :id))]])
@@ -351,14 +365,14 @@
         {
          ;; enter
          13 (fn [state e]
-              (when-not (gobj/get e "ctrlKey")
+              (when (and (not (gobj/get e "ctrlKey"))
+                         (not (editor-handler/in-auto-complete? input)))
                 (let [{:keys [block config]} (get-state state)]
                   (when (and block
                              (not (:ref? config))
                              (not (:custom-query? config))) ; in reference section
                     (let [content (state/get-edit-content)]
                       (if (and
-                           (not (editor-handler/in-auto-complete? input))
                            (> (:block/level block) 2)
                            (string/blank? content))
                         (do
@@ -456,7 +470,7 @@
                      :else
                      nil))
 
-                  ;; deleting hashtag
+                 ;; deleting hashtag
                  (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
                  (state/set-editor-show-page-search-hashtag false)
 
@@ -477,8 +491,18 @@
                                                       (util/move-cursor-to input pos))
                                                    0)))))))}
         (fn [e key-code]
-          (let [key (gobj/get e "key")]
+          (let [key (gobj/get e "key")
+                value (gobj/get input "value")]
             (cond
+              (or
+               (and (= key "#")
+                    (let [pos (:pos (util/get-caret-pos input))]
+                      (and
+                       (> pos 0)
+                       (= "#" (util/nth-safe value (dec pos))))))
+               (= key " "))
+              (state/set-editor-show-page-search-hashtag false)
+
               (and
                (not= key-code 8) ;; backspace
                (or
@@ -561,7 +585,20 @@
 
                       :else
                       (reset! *matched-block-commands matched-block-commands))
-                    (reset! *show-block-commands false)))))))))))
+                    (reset! *show-block-commands false))))
+
+              (when (or (state/get-editor-show-page-search)
+                        (state/get-editor-show-block-search))
+                (when-let [q (get-search-q)]
+                  (let [value (gobj/get input "value")
+                        pos (:editor/last-saved-cursor @state/state)
+                        current-pos (:pos (util/get-caret-pos input))]
+                    (when (or (< current-pos pos)
+                              (string/includes? q "]")
+                              (string/includes? q ")"))
+                      (state/set-editor-show-block-search false)
+                      (state/set-editor-show-page-search false)
+                      (state/set-editor-show-page-search-hashtag false))))))))))))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
