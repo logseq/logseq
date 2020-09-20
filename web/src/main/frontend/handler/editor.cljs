@@ -291,8 +291,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                                {:block/uuid uuid
-                                 :block/meta new-meta}
+                              {:block/uuid uuid
+                               :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -324,10 +324,11 @@
   "We'll create an empty heading if the first parsed ast element is neither a paragraph or hiccup."
   [block content format]
   (let [content-without-level-spaces (text/remove-level-spaces content format)
-        ast-without-heading-pattern (-> content-without-level-spaces
-                                        (format/to-edn format))]
-    (if (or (block/paragraph-block? ast-without-heading-pattern)
-            (block/hiccup-block? ast-without-heading-pattern))
+        first-block (-> content-without-level-spaces
+                        (format/to-edn format)
+                        ffirst)]
+    (if (or (block/paragraph-block? first-block)
+            (block/hiccup-block? first-block))
       content
       (str (->> (repeat (:block/level block) (config/get-block-pattern format))
                 (apply str)) ; empty heading
@@ -412,14 +413,13 @@
                  value (get-block-new-value block file-content value)
                  value (rebuild-block-content block value format)
                  block (assoc block :block/content value)
-                 ast (format/to-edn value format)
                  {:keys [blocks pages start-pos end-pos]} (if pre-block?
                                                             (let [new-end-pos (utf8/length (utf8/encode value))]
                                                               {:blocks [(assoc-in block [:block/meta :end-pos] new-end-pos)]
                                                                :pages []
                                                                :start-pos 0
                                                                :end-pos new-end-pos})
-                                                            (block/parse-block block format ast))
+                                                            (block/parse-block block format))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)
                  ;; _ (prn {:block-children-content block-children-content
@@ -502,7 +502,11 @@
                    (inc level)
                    :else
                    level)
-        v2 (str (config/default-empty-block format v2-level) " " v2)
+        v2 (if (string/blank? v2)
+             (str (config/default-empty-block format v2-level) " " v2)
+             (rebuild-block-content {:block/level v2-level}
+                                    (text/remove-level-spaces v2 format)
+                                    format))
         block (with-block-meta repo block)
         format (:block/format block)
         page (db/entity repo (:db/id page))
