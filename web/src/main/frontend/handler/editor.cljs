@@ -320,6 +320,20 @@
      (mapv (fn [ref] [:db/retract eid :block/ref-pages ref]) retracted-pages)
      (mapv (fn [ref] [:db/retract eid :block/ref-blocks ref]) retracted-blocks))))
 
+(defn- rebuild-block-content
+  "We'll create an empty heading if the first parsed ast element is neither a paragraph or hiccup."
+  [block content format]
+  (let [content-without-level-spaces (text/remove-level-spaces content format)
+        ast-without-heading-pattern (-> content-without-level-spaces
+                                        (format/to-edn format))]
+    (if (or (block/paragraph-block? ast-without-heading-pattern)
+            (block/hiccup-block? ast-without-heading-pattern))
+      content
+      (str (->> (repeat (:block/level block) (config/get-block-pattern format))
+                (apply str)) ; empty heading
+           "\n"
+           (string/triml content-without-level-spaces)))))
+
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
@@ -396,14 +410,16 @@
                  format (format/get-format file-path)
                  file-content (db/get-file repo file-path)
                  value (get-block-new-value block file-content value)
+                 value (rebuild-block-content block value format)
                  block (assoc block :block/content value)
+                 ast (format/to-edn value format)
                  {:keys [blocks pages start-pos end-pos]} (if pre-block?
                                                             (let [new-end-pos (utf8/length (utf8/encode value))]
                                                               {:blocks [(assoc-in block [:block/meta :end-pos] new-end-pos)]
                                                                :pages []
                                                                :start-pos 0
                                                                :end-pos new-end-pos})
-                                                            (block/parse-block block format))
+                                                            (block/parse-block block format ast))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)
                  ;; _ (prn {:block-children-content block-children-content
@@ -497,6 +513,7 @@
                                      value)
                              value (text/re-construct-block-properties block value properties)
                              [new-content value] (new-file-content block file-content value)
+                             value (rebuild-block-content block value format)
                              {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
                              blocks (db/recompute-block-children repo block blocks)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)

@@ -48,11 +48,13 @@
          content)))))
 
 (defn to-edn
-  [content format config]
-  (let [config (or config (get-default-config format))]
-    (if-let [record (get-format-record format)]
-      (protocol/toEdn record content config)
-      nil)))
+  ([content format]
+   (to-edn content format (get-default-config format)))
+  ([content format config]
+   (let [config (or config (get-default-config format))]
+     (if-let [record (get-format-record format)]
+       (protocol/toEdn record content config)
+       nil))))
 
 (defn loaded?
   [format]
