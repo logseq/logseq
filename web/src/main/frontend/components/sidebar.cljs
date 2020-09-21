@@ -339,36 +339,45 @@
                (->>
                 [(when current-repo
                    {:title (t :new-page)
-                    :options {:href "/new-page"}})
+                    :options {:href "/new-page"}
+                    :icon svg/plus-sm})
                  (when current-repo
                    {:title (t :graph)
-                    :options {:href "/graph"}})
+                    :options {:href "/graph"}
+                    :icon svg/graph-sm})
                  (when logged?
                    {:title (t :all-repos)
-                    :options {:href "/repos"}})
+                    :options {:href "/repos"}
+                    :icon svg/repos-sm})
                  (when current-repo
                    {:title (t :all-pages)
-                    :options {:href "/all-pages"}})
+                    :options {:href "/all-pages"}
+                    :icon svg/pages-sm})
                  (when current-repo
                    {:title (t :all-files)
-                    :options {:href "/all-files"}})
+                    :options {:href "/all-files"}
+                    :icon svg/folder-sm})
                  (when (and default-home current-repo)
                    {:title (t :all-journals)
-                    :options {:href "/all-journals"}})
+                    :options {:href "/all-journals"}
+                    :icon svg/calendar-sm})
                  {:title (t :settings)
-                  :options {:href "/settings"}}
+                  :options {:href "/settings"}
+                  :icon svg/settings-sm}
                  (when current-repo
                    {:title (t :import)
-                    :options {:href "/import"}})
+                    :options {:href "/import"}
+                    :icon svg/import-sm})
                  {:title [:div.flex-row.flex.justify-between.items-center
-                          [:span (t :join-community)]
-                          svg/discord]
+                          [:span (t :join-community)]]
                   :options {:href "https://discord.gg/KpN4eHY"
                             :title (t :discord-title)
-                            :target "_blank"}}
+                            :target "_blank"}
+                  :icon svg/discord}
                  (when logged?
                    {:title (t :sign-out)
-                    :options {:on-click user-handler/sign-out!}})]
+                    :options {:on-click user-handler/sign-out!}
+                    :icon svg/logout-sm})]
                 (remove nil?)))
              {})
 

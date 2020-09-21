@@ -43,7 +43,7 @@
           (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
 (rum/defc menu-link
-  [options child]
+  [options child icon]
   [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link.overflow-hidden
    options
    child])
@@ -55,16 +55,17 @@
    (fn [{:keys [close-fn] :as state}]
      [:div.py-1.rounded-md.shadow-xs.bg-base-3
       (when links-header links-header)
-      (for [{:keys [options title]} links]
+      (for [{:keys [options title icon]} links]
         (let [new-options
               (assoc options
                      :on-click (fn [e]
                                  (when-let [on-click-fn (:on-click options)]
                                    (on-click-fn e))
                                  (close-fn)
-                                 ))]
+                                 ))
+              child [:div {:style {:display "flex" :flex-direction "row"}} [:div {:style {:margin-right "8px"}} title] [:div {:style {:position "absolute" :right "8px"}} icon]]]
           (rum/with-key
-            (menu-link new-options title)
+            (menu-link new-options child)
             (cljs.core/random-uuid))))])
    modal-class))
 

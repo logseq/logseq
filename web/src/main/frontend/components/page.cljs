@@ -108,7 +108,7 @@
            (rum/with-key
              (hiccup/custom-query {:start-level 2
                                    :attr {:class "mt-10"}} query)
-             (str repo "-custom-query-" (cljs.core/random-uuid))))]))))
+             (str repo "-custom-query-" (:query query))))]))))
 
 (defn- delete-page!
   [page-name]
