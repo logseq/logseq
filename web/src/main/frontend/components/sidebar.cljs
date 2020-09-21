@@ -71,11 +71,10 @@
 
 (defn get-default-home-if-valid
   []
-  (let [default-home (:default-home (:config @state/state))]
-    (when (and default-home
-               (db/entity (state/get-current-repo) [:page/name (string/lower-case (:page default-home))])))
-    default-home
-    nil))
+  (when-let [default-home (state/get-default-home)]
+    (when-let [page (:page default-home)]
+      (when (db/entity [:page/name (string/lower-case page)])
+        default-home))))
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
@@ -100,6 +99,19 @@
          daily-migrating?
          (ui/loading "Migrating to daily notes")
 
+         default-home
+         (do
+           ;; if there is sidebar item, update
+           (when (:sidebar default-home)
+             (doall (map (fn [el]
+                           (case (:type el)
+                             :contents
+                             (state/sidebar-add-block! current-repo "contents" :contents nil)
+
+                             nil)) (:sidebar default-home))))
+           (route-handler/redirect! {:to :page
+                                     :path-params {:name (util/encode-str (:page default-home))}}))
+
          (and (not logged?) (seq latest-journals))
          (journal/journals latest-journals)
 
@@ -113,21 +125,8 @@
          cloning?
          (ui/loading (t :cloning))
 
-         (and (not default-home) (seq latest-journals))
+         (seq latest-journals)
          (journal/journals latest-journals)
-
-         default-home
-         (do
-           ;; if there is sidebar item, update
-           (when (:sidebar default-home)
-            (doall (map (fn [el]
-                          (case (:type el)
-                            :contents
-                            (state/sidebar-add-block! current-repo "contents" :contents nil)
-
-                            nil)) (:sidebar default-home))))
-           (route-handler/redirect! {:to :page
-                                     :path-params {:name (util/encode-str (:page default-home))}}))
 
          importing-to-db?
          (ui/loading (t :parsing-files))
@@ -397,7 +396,7 @@
                     :width "100vw"}}
            [:div.flex-1
             {:style (cond->
-                      {:max-width 640}
+                        {:max-width 640}
                       (or global-graph-pages?
                           (and (not logged?)
                                home?)

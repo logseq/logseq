@@ -135,6 +135,10 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defn get-default-home
+  []
+  (:default-home (get-config)))
+
 (defn get-preferred-format
   []
   (keyword
