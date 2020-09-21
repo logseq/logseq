@@ -6,6 +6,7 @@
             [frontend.components.page :as page]
             [frontend.components.diff :as diff]
             [frontend.components.draw :as draw]
+            [frontend.components.journal :as journal]
             [frontend.components.settings :as settings]
             [frontend.components.external :as external]))
 
@@ -60,4 +61,8 @@
 
    ["/import"
     {:name :import
-     :view external/import-cp}]])
+     :view external/import-cp}]
+   
+   ["/all-journals"
+    {:name :all-journals
+     :view journal/all-journals}]])

@@ -41,6 +41,8 @@
     "All files"
     :all-pages
     "All pages"
+    :all-journals
+    "All journals"
     :file
     (str "File " (util/url-decode (:path path-params)))
     :new-page

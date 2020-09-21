@@ -22,6 +22,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
@@ -73,6 +74,7 @@
   []
   (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
+        default-home (:default-home (state/get-config))
         importing-to-db? (state/sub :repo/importing-to-db?)
         loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)
@@ -103,8 +105,21 @@
          cloning?
          (ui/loading (t :cloning))
 
-         (seq latest-journals)
+         (and (not default-home) (seq latest-journals))
          (journal/journals latest-journals)
+
+         default-home
+         (do
+           ;; if there is sidebar item, update
+           (when (:sidebar default-home)
+            (doall (map (fn [el]
+                          (case (:type el)
+                            :contents
+                            (state/sidebar-add-block! current-repo "contents" :contents nil)
+
+                            nil)) (:sidebar default-home))))
+           (route-handler/redirect! {:to :page
+                                     :path-params {:name (util/encode-str (:page default-home))}}))
 
          importing-to-db?
          (ui/loading (t :parsing-files))
@@ -222,7 +237,8 @@
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
-        home? (= :home route-name)]
+        home? (= :home route-name)
+        default-home (:default-home (state/get-config))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div {:class (if white? "white-theme" "dark-theme")
              :on-click (fn []
@@ -329,6 +345,9 @@
                  (when current-repo
                    {:title (t :all-files)
                     :options {:href "/all-files"}})
+                 (when (and default-home current-repo)
+                   {:title (t :all-journals)
+                    :options {:href "/all-journals"}})
                  {:title (t :settings)
                   :options {:href "/settings"}}
                  (when current-repo
