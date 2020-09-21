@@ -334,6 +334,42 @@
       content
       (text/append-newline-after-level-spaces content format))))
 
+;; id: block dom id, "ls-block-counter-uuid"
+(defn edit-block!
+  ([block pos format id]
+   (edit-block! block pos format id nil))
+  ([block pos format id {:keys [custom-content custom-properties]}]
+   (when-let [block-id (:block/uuid block)]
+     (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
+           block (or
+                  block
+                  (db/pull [:block/uuid block-id])
+                  ;; dummy?
+                  {:block/uuid block-id
+                   :block/content ""})
+           {:block/keys [content properties]} block
+           content (or custom-content content)
+           content (string/trim (text/remove-level-spaces content format))
+           properties (or custom-properties properties)
+           content (if (and (seq properties) (text/properties-hidden? properties))
+                     (text/remove-properties! block content)
+                     content)
+           content-length (count content)
+           text-range (if (or (= :max pos) (<= content-length pos))
+                        content
+                        (subs content 0 pos))]
+       (state/set-editing! edit-input-id content block text-range)))))
+
+(defn edit-last-block-for-new-page!
+  [last-block pos]
+  (when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
+    (edit-block! last-block
+                 pos
+                 (:block/format last-block)
+                 (string/replace (gobj/get first-block "id")
+                                 "ls-block"
+                                 "edit-block"))))
+
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
@@ -405,7 +441,12 @@
                      (db/reset-file! repo path (str content
                                                     (text/remove-level-spaces value (keyword format))))
                      (git-handler/git-add repo path)
-                     (ui-handler/re-render-root!))))))
+                     (ui-handler/re-render-root!)
+
+                     ;; Continue to edit the last block
+                     (let [blocks (db/get-page-blocks repo (:page/name page))
+                           last-block (last blocks)]
+                       (edit-last-block-for-new-page! last-block :max)))))))
 
            (and file page)
            (let [file (db/entity repo (:db/id file))
@@ -604,7 +645,11 @@
                                      "\n"
                                      v2))
                 (git-handler/git-add repo path)
-                (ui-handler/re-render-root!))))))
+                (ui-handler/re-render-root!)
+                ;; Continue to edit the last block
+                (let [blocks (db/get-page-blocks repo (:page/name page))
+                      last-block (last blocks)]
+                  (edit-last-block-for-new-page! last-block 0)))))))
 
       file
       (let [file-path (:file/path file)
@@ -640,32 +685,6 @@
      :node node
      :value value
      :pos pos}))
-
-;; id: block dom id, "ls-block-counter-uuid"
-(defn edit-block!
-  ([block pos format id]
-   (edit-block! block pos format id nil))
-  ([block pos format id {:keys [custom-content custom-properties]}]
-   (when-let [block-id (:block/uuid block)]
-     (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
-           block (or
-                  block
-                  (db/pull [:block/uuid block-id])
-                  ;; dummy?
-                  {:block/uuid block-id
-                   :block/content ""})
-           {:block/keys [content properties]} block
-           content (or custom-content content)
-           content (string/trim (text/remove-level-spaces content format))
-           properties (or custom-properties properties)
-           content (if (and (seq properties) (text/properties-hidden? properties))
-                     (text/remove-properties! block content)
-                     content)
-           content-length (count content)
-           text-range (if (or (= :max pos) (<= content-length pos))
-                        content
-                        (subs content 0 pos))]
-       (state/set-editing! edit-input-id content block text-range)))))
 
 (defn- insert-new-block!
   [state]
