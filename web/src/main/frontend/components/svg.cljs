@@ -85,10 +85,6 @@
       :stroke "currentColor"
       :d d}]]))
 
-(defn- hero-icon-sm
-  [d]
-  )
-
 (def user
   [:svg
    {:stroke-linejoin "round"
