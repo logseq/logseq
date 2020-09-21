@@ -69,12 +69,20 @@
      ;; (right-sidebar/contents)
      ]))
 
+(defn get-default-home-if-valid
+  []
+  (let [default-home (:default-home (:config @state/state))]
+    (when (and default-home
+               (db/entity (state/get-current-repo) [:page/name (string/lower-case (:page default-home))])))
+    default-home
+    nil))
+
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   []
   (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
-        default-home (:default-home (state/get-config))
+        default-home (get-default-home-if-valid)
         importing-to-db? (state/sub :repo/importing-to-db?)
         loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)
@@ -238,7 +246,7 @@
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
-        default-home (:default-home (state/get-config))]
+        default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div {:class (if white? "white-theme" "dark-theme")
              :on-click (fn []
