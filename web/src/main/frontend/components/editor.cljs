@@ -486,7 +486,8 @@
                       (and
                        (> pos 0)
                        (= "#" (util/nth-safe value (dec pos))))))
-               (= key " "))
+               (and (= key " ")
+                    (state/get-editor-show-page-search-hashtag)))
               (state/set-editor-show-page-search-hashtag false)
 
               (and

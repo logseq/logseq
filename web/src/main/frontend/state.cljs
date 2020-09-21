@@ -313,6 +313,7 @@
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? value))
+
 (defn get-editor-show-page-search
   []
   (get @state :editor/show-page-search?))
