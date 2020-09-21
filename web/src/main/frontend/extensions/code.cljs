@@ -15,12 +15,12 @@
                 (highlight! state)
                 state)}
   [state id attr code]
-  [:pre.code
+  [:pre.code.pre-wrap-white-space
    [:code (assoc attr :id id)
     code]])
 
 (defn html-export
   [attr code]
-  [:pre
+  [:pre.pre-wrap-white-space
    [:code attr
     code]])

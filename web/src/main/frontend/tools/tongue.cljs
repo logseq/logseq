@@ -221,7 +221,7 @@
         :re-index "Re-index"
         :export-json "Export as JSON"
         :unlink "unlink"
-        :search "Search"
+        :search "Search or Create Page"
         :new-page "New page"
         :graph "Graph"
         :all-repos "All repos"

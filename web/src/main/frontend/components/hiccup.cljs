@@ -1433,7 +1433,7 @@
         (latex/html-export s true true)
         (latex/latex (str (dc/squuid)) s true true))
       ["Example" l]
-      [:pre
+      [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Src" options]
       (let [{:keys [language options lines]} options
