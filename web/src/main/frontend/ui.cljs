@@ -63,7 +63,12 @@
                                    (on-click-fn e))
                                  (close-fn)
                                  ))
-              child [:div {:style {:display "flex" :flex-direction "row"}} [:div {:style {:margin-right "8px"}} title] [:div {:style {:position "absolute" :right "8px"}} icon]]]
+              child [:div
+                     {:style {:display "flex" :flex-direction "row"}}
+                     [:div {:style {:margin-right "8px"}} title]
+                     ;; [:div {:style {:position "absolute" :right "8px"}}
+                     ;;  icon]
+                     ]]
           (rum/with-key
             (menu-link new-options child)
             (cljs.core/random-uuid))))])

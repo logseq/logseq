@@ -338,10 +338,6 @@
              (let [logged? (:name me)]
                (->>
                 [(when current-repo
-                   {:title (t :new-page)
-                    :options {:href "/new-page"}
-                    :icon svg/plus-sm})
-                 (when current-repo
                    {:title (t :graph)
                     :options {:href "/graph"}
                     :icon svg/graph-sm})
