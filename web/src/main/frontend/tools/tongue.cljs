@@ -227,6 +227,7 @@
         :all-repos "All repos"
         :all-pages "All pages"
         :all-files "All files"
+        :all-journals "All journals"
         :settings "Settings"
         :import "Import"
         :join-community "Join the community"
