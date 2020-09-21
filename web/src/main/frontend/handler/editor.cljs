@@ -373,13 +373,14 @@
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
-  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks properties] :as block}
+  ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
     {:keys [indent-left? custom-properties rebuild-content?]
      :or {rebuild-content? true}}]
    (let [repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
-         block (with-block-meta repo block)
+         block (assoc (with-block-meta repo block)
+                      :block/properties (:block/properties e))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
          [old-directives new-directives] (when pre-block?
@@ -402,10 +403,13 @@
                           (assoc new-directives :old_permalink (:permalink old-directives))
                           new-directives)
          value (cond
-                 (and (seq (:block/properties block)) (not (text/contains-properties? value))) ; properties removed
-                 value
-                 (seq custom-properties)
+                 custom-properties
                  (text/re-construct-block-properties block value custom-properties)
+
+                 (and (seq (:block/properties block))
+                      (text/properties-hidden? (:block/properties block)))
+                 (text/re-construct-block-properties block value (:block/properties block))
+
                  :else
                  value)]
      (when (not= (string/trim content) (string/trim value)) ; block content changed
@@ -441,6 +445,7 @@
                      (db/reset-file! repo path (str content
                                                     (text/remove-level-spaces value (keyword format))))
                      (git-handler/git-add repo path)
+
                      (ui-handler/re-render-root!)
 
                      ;; Continue to edit the last block
@@ -454,7 +459,9 @@
                  format (format/get-format file-path)
                  file-content (db/get-file repo file-path)
                  value (get-block-new-value block file-content value)
-                 value (if rebuild-content? (rebuild-block-content value format) value)
+                 value (if rebuild-content?
+                         (rebuild-block-content value format)
+                         value)
                  block (assoc block :block/content value)
                  {:keys [blocks pages start-pos end-pos]} (if pre-block?
                                                             (let [new-end-pos (utf8/length (utf8/encode value))]
@@ -515,9 +522,7 @@
                 modified-time)
                {:key :block/change
                 :data (map (fn [block] (assoc block :block/page page)) blocks)}
-               [[file-path new-content]]))
-             (when (or (seq retract-refs) pre-block?)
-               (ui-handler/re-render-root!)))
+               [[file-path new-content]])))
 
            :else
            nil))))))
@@ -646,6 +651,7 @@
                                      v2))
                 (git-handler/git-add repo path)
                 (ui-handler/re-render-root!)
+
                 ;; Continue to edit the last block
                 (let [blocks (db/get-page-blocks repo (:page/name page))
                       last-block (last blocks)]
@@ -816,9 +822,7 @@
             after-blocks)
            {:key :block/change
             :data [block]}
-           [[file-path new-content]])
-          (when (or (seq ref-pages) (seq ref-blocks))
-            (ui-handler/re-render-root!)))))))
+           [[file-path new-content]]))))))
 
 (defn delete-block!
   [state repo e]
@@ -889,10 +893,9 @@
          {:key :block/change
           :data blocks}
          [[file-path new-content]])
-        (if top-block?
+        (when top-block?
           (route-handler/redirect! {:to :page
-                                    :path-params {:name (:page/name page)}})
-          (ui-handler/re-render-root!))))))
+                                    :path-params {:name (:page/name page)}}))))))
 
 (defn remove-block-property!
   [block-id key]

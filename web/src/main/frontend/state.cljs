@@ -56,6 +56,7 @@
     :ui/collapsed-blocks {}
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
+    :ui/file-component nil
     :ui/custom-query-components {}
     :ui/show-recent? false
     :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
@@ -565,6 +566,18 @@
 (defn get-root-component
   []
   (get @state :ui/root-component))
+
+(defn set-file-component!
+  [component]
+  (set-state! :ui/file-component component))
+
+(defn clear-file-component!
+  []
+  (set-state! :ui/file-component nil))
+
+(defn get-file-component
+  []
+  (get @state :ui/file-component))
 
 (defn set-journals-length!
   [value]

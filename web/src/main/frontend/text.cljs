@@ -20,7 +20,9 @@
                    "^[%s]+\\s?"
                    (config/get-block-pattern format))
           matched-text (re-find (re-pattern pattern) text)]
-      (string/replace-first text matched-text (str (string/trimr matched-text) "\n")))))
+      (if matched-text
+        (string/replace-first text matched-text (str (string/trimr matched-text) "\n"))
+        text))))
 
 ;; properties
 

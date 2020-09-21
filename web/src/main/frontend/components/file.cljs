@@ -67,6 +67,12 @@
                     [:span (tongue :download)]]]]))]]))]))
 
 (rum/defcs file < rum/reactive
+  {:did-mount (fn [state]
+                (state/set-file-component! (:rum/react-component state))
+                state)
+   :will-unmount (fn [state]
+                   (state/clear-file-component!)
+                   state)}
   [state]
   (let [[encoded-path path] (get-path state)
         format (format/get-format path)
