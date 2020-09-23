@@ -1995,7 +1995,7 @@
                             other-children)]
               (recur others children))))))))
 
-;; recursively with children content
+;; recursively with children content for tree
 (defn get-block-content-rec
   ([block]
    (get-block-content-rec block (fn [block] (:block/content block))))
@@ -2009,6 +2009,16 @@
               form)
             block)]
      (apply util/join-newline @contents))))
+
+;; with children content
+(defn get-block-full-content
+  ([repo block-id]
+   (get-block-full-content repo block-id (fn [block] (:block/content block))))
+  ([repo block-id transform-fn]
+   (let [blocks (get-block-and-children repo block-id false)]
+     (->> blocks
+          (map transform-fn)
+          (apply util/join-newline)))))
 
 (defn get-block-end-pos-rec
   [repo block]
@@ -2243,6 +2253,30 @@
      (let [n (count (d/datoms (get-conn) :avet :block/uuid))]
        (reset! blocks-count-cache n)
        n))))
+
+(defn get-all-templates
+  []
+  (let [pred (fn [db properties]
+               (some? (get properties "template")))]
+    (->> (d/q
+           '[:find ?b ?p
+             :in $ ?pred
+             :where
+             [?b :block/properties ?p]
+             [(?pred $ ?p)]]
+           (get-conn)
+           pred)
+         (map (fn [[e m]]
+                [(get m "template") e]))
+         (into {}))))
+
+(defn template-exists?
+  [title]
+  (when title
+    (let [templates (keys (get-all-templates))]
+      (when (seq templates)
+        (let [templates (map string/lower-case templates)]
+          (contains? (set templates) (string/lower-case title)))))))
 
 (defn rebuild-page-blocks-children
   "For performance reason, we can update the :block/children value after every operation,

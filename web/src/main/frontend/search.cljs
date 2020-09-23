@@ -92,7 +92,7 @@
            (map (fn [{:block/keys [content format properties] :as block}]
                   (assoc block :block/content
                          (->> (text/remove-level-spaces content format)
-                              (text/remove-properties! block)))) blocks)))))))
+                              (text/remove-properties!)))) blocks)))))))
 
 (defn page-search
   ([q]
@@ -103,3 +103,13 @@
        (let [pages (db/get-pages (state/get-current-repo))]
          (when (seq pages)
            (fuzzy-search pages q :limit limit)))))))
+
+(defn template-search
+  ([q]
+   (template-search q 10))
+  ([q limit]
+   (let [q (clean-str q)]
+     (let [templates (db/get-all-templates)]
+       (when (seq templates)
+         (let [result (fuzzy-search (keys templates) q :limit limit)]
+           (vec (select-keys templates result))))))))
