@@ -996,20 +996,25 @@
 
 (defn get-page-blocks
   ([page]
-   (get-page-blocks (state/get-current-repo) page))
+   (get-page-blocks (state/get-current-repo) page nil))
   ([repo-url page]
+   (get-page-blocks repo-url page nil))
+  ([repo-url page {:keys [use-cache? pull-keys]
+                   :or {use-cache? true
+                        pull-keys '[*]}}]
    (let [page (string/lower-case page)
-         page-id (:db/id (entity repo-url [:page/name page]))
+         page-id (or (:db/id (entity repo-url [:page/name page]))
+                     (:db/id (entity repo-url [:page/original-name page])))
          db (get-conn repo-url)]
      (when page-id
        (some->
         (q repo-url [:page/blocks page-id]
-          {:use-cache? true
+          {:use-cache? use-cache?
            :transform-fn #(page-blocks-transform repo-url %)
            :query-fn (fn [db]
                        (let [datoms (d/datoms db :avet :block/page page-id)
                              block-eids (mapv :e datoms)]
-                         (pull-many repo-url '[*] block-eids)))}
+                         (pull-many repo-url pull-keys block-eids)))}
           nil)
         react)))))
 
@@ -1252,16 +1257,16 @@
                            page-list (when-let [list-content (:list directives)]
                                        (extract-page-list list-content))]
                        (cond->
-                         (util/remove-nils
-                          {:page/name (string/lower-case page)
-                           :page/original-name page
-                           :page/file [:file/path file]
-                           :page/journal? journal?
-                           :page/journal-day (if journal?
-                                               (date/journal-title->int (string/capitalize page))
-                                               0)
-                           :page/created-at journal-date-long
-                           :page/last-modified-at journal-date-long})
+                           (util/remove-nils
+                            {:page/name (string/lower-case page)
+                             :page/original-name page
+                             :page/file [:file/path file]
+                             :page/journal? journal?
+                             :page/journal-day (if journal?
+                                                 (date/journal-title->int (string/capitalize page))
+                                                 0)
+                             :page/created-at journal-date-long
+                             :page/last-modified-at journal-date-long})
                          (seq directives)
                          (assoc :page/directives directives)
 
@@ -1426,8 +1431,8 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                             {:file/path file
-                              :file/last-modified-at t}
+                               {:file/path file
+                                :file/last-modified-at t}
                              new?
                              (assoc :file/created-at t)))])]
       (transact! repo-url tx))))
@@ -1816,13 +1821,13 @@
   [dark? current-page edges nodes]
   (mapv (fn [p]
           (cond->
-            {:id p
-             :name p
-             :val (get-connections p edges)
-             :autoColorBy "group"
-             :group (js/Math.ceil (* (js/Math.random) 12))
-             :color "#222222"
-             }
+              {:id p
+               :name p
+               :val (get-connections p edges)
+               :autoColorBy "group"
+               :group (js/Math.ceil (* (js/Math.random) 12))
+               :color "#222222"
+               }
             dark?
             (assoc :color "#8abbbb")
             (= p current-page)
@@ -1960,7 +1965,7 @@
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
-                           h
+                             h
                            (not (:block/dummy? h))
                            (dissoc h :block/meta))) col)
         parent? (fn [item children]
@@ -2071,7 +2076,7 @@
     (get-conn)))
 
 ;; recursive query might be slow, need benchmarks
-;; Could replace this with a recursive call, see below
+;; Could replace this with a recursive call or , see below
 (defn get-block-parents-rec
   [repo block-id depth]
   (when-let [conn (get-conn repo)]
@@ -2239,6 +2244,50 @@
        (reset! blocks-count-cache n)
        n))))
 
+(defn rebuild-page-blocks-children
+  "For performance reason, we can update the :block/children value after every operation,
+  but it's hard to make sure that it's correct, also it needs more time to implement it.
+  We can improve it if the performance is really an issue."
+  [repo page]
+  (let [blocks (->>
+                (get-page-blocks repo page {:pull-keys '[:block/uuid :block/level :block/pre-block?]})
+                (remove :block/pre-block?)
+                (map #(select-keys % [:block/uuid :block/level]))
+                (reverse))]
+    (loop [blocks blocks
+           tx []
+           children {}
+           last-level 10000]
+      (if (seq blocks)
+        (let [[{:block/keys [uuid level] :as block} & others] blocks
+              [tx children] (cond
+                              (< level last-level)        ; parent
+                              (let [cur-children (get children last-level)
+                                    tx (if (seq cur-children)
+                                         (conj tx {:block/uuid (:block/uuid block)
+                                                   :block/children cur-children})
+                                         tx)
+                                    children (-> children
+                                                 (dissoc last-level)
+                                                 (update level conj uuid))]
+                                [tx children])
+
+                              (> level last-level)        ; child of sibling
+                              (let [children (update children level conj uuid)]
+                                [tx children])
+
+                              :else                       ; sibling
+                              (let [children (update children last-level conj uuid)]
+                                [tx children]))]
+          (recur others tx children level))
+        ;; TODO: add top-level children to the "Page" block (we might remove the Page from db schema)
+        (when (seq tx)
+          (let [delete-tx (map (fn [block]
+                                 [:db/retract [:block/uuid (:block/uuid block)] :block/children])
+                            tx)]
+            (->> (concat delete-tx tx)
+                 (remove nil?))))))))
+
 (defn transact-async?
   []
   (>= (blocks-count) 1000))
@@ -2255,5 +2304,4 @@
                :git/status (get-key-value repo :git/status)
                :git/latest-commit (get-key-value repo :git/latest-commit)
                :git/error (get-key-value repo :git/error)})
-            repos)))
-  )
+            repos))))

@@ -261,10 +261,17 @@
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]
-  (db/transact-react!
-   repo
-   tx
-   transact-option)
+  (let [files (remove nil? files)
+        pages (->> (map db/get-file-page (map first files))
+                   (remove nil?))]
+    (db/transact-react!
+     repo
+     tx
+     transact-option)
+    (when (seq pages)
+      (let [children-tx (mapcat #(db/rebuild-page-blocks-children repo %) pages)]
+       (when (seq children-tx)
+         (db/transact! repo children-tx)))))
   (when (seq files)
     (file-handler/alter-files repo files)))
 

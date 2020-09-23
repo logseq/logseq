@@ -1144,7 +1144,7 @@
 
        (if (and ref? (not ref-child?))
          (when-let [comp (block-comp/block-parents repo uuid format false)]
-           [:div.my-2.opacity-50.ml-7 comp]))
+           [:div.my-2.opacity-50.ml-4 comp]))
 
        (dnd-separator-wrapper block slide? (zero? idx))
 

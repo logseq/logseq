@@ -140,6 +140,10 @@
   []
   (:default-home (get-config)))
 
+(defn custom-home-page?
+  []
+  (some? (:page (get-default-home))))
+
 (defn get-preferred-format
   []
   (keyword

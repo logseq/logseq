@@ -87,5 +87,8 @@
 (defn go-to-journals!
   []
   (state/set-journals-length! 1)
-  (redirect! {:to :home})
+  (let [route (if (state/custom-home-page?)
+                :all-journals
+                :home)]
+    (redirect! {:to route}))
   (util/scroll-to-top))
