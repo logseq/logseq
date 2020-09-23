@@ -166,13 +166,13 @@
   [format]
   "^")
 
-(defn get-empty-link-and-back-pos
+(defn get-empty-link-and-forward-pos
   [format]
   (case format
     :org
-    ["[[][]]" 4]
+    ["[[][]]" 2]
     :markdown
-    ["[]()" 3]
+    ["[]()" 1]
     ["" 0]))
 
 (defn with-default-link
@@ -180,10 +180,10 @@
   (case format
     :org
     [(util/format "[[%s][]]" link)
-     2]
+     (+ 4 (count link))]
     :markdown
     [(util/format "[](%s)" link)
-     (+ 3 (count link))]
+     1]
     ["" 0]))
 
 (defn with-default-label
@@ -191,10 +191,10 @@
   (case format
     :org
     [(util/format "[[][%s]]" label)
-     (+ 4 (count label))]
+     2]
     :markdown
     [(util/format "[%s]()" label)
-     1]
+     (+ 3 (count label))]
     ["" 0]))
 
 (defn directives-wrapper

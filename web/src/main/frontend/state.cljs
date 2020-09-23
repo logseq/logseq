@@ -56,6 +56,7 @@
     :ui/collapsed-blocks {}
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
+    :ui/file-component nil
     :ui/custom-query-components {}
     :ui/show-recent? false
     :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
@@ -134,6 +135,14 @@
    (get-config (get-current-repo)))
   ([repo-url]
    (get-in @state [:config repo-url])))
+
+(defn get-default-home
+  []
+  (:default-home (get-config)))
+
+(defn custom-home-page?
+  []
+  (some? (:page (get-default-home))))
 
 (defn get-preferred-format
   []
@@ -313,6 +322,7 @@
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? value))
+
 (defn get-editor-show-page-search
   []
   (get @state :editor/show-page-search?))
@@ -566,6 +576,18 @@
 (defn get-root-component
   []
   (get @state :ui/root-component))
+
+(defn set-file-component!
+  [component]
+  (set-state! :ui/file-component component))
+
+(defn clear-file-component!
+  []
+  (set-state! :ui/file-component nil))
+
+(defn get-file-component
+  []
+  (get @state :ui/file-component))
 
 (defn set-journals-length!
   [value]

@@ -108,7 +108,7 @@
            (rum/with-key
              (hiccup/custom-query {:start-level 2
                                    :attr {:class "mt-10"}} query)
-             (str repo "-custom-query-" (cljs.core/random-uuid))))]))))
+             (str repo "-custom-query-" (:query query))))]))))
 
 (defn- delete-page!
   [page-name]
@@ -206,8 +206,11 @@
 (rum/defcs page < rum/reactive
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
-                (editor-handler/open-last-block!)
-                state)}
+                (editor-handler/open-last-block! false)
+                state)
+   :did-update (fn [state]
+                 (ui-handler/scroll-and-highlight! state)
+                 state)}
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         repo (or repo current-repo)
@@ -352,6 +355,7 @@
              (when (and block? (not sidebar?))
                [:div.mb-4
                 (block/block-parents repo block-id format)])
+
              ;; blocks
              (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]
 

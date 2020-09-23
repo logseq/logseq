@@ -19,20 +19,24 @@
                      #js {:displayMode display?
                           :throwOnError false})))
 
+(defn- load-and-render!
+  [state]
+  (if (loaded?)
+    (do
+      (reset! *loading? false)
+      (render! state))
+    (do
+      (reset! *loading? true)
+      (loader/load
+       (config/asset-uri "/static/js/katex.min.js")
+       (fn []
+         (reset! *loading? false)
+         (render! state)))))
+  state)
+
 (rum/defc latex < rum/reactive
-  {:did-mount (fn [state]
-                (if (loaded?)
-                  (do
-                    (reset! *loading? false)
-                    (render! state))
-                  (do
-                    (reset! *loading? true)
-                    (loader/load
-                     (config/asset-uri "/static/js/katex.min.js")
-                     (fn []
-                       (reset! *loading? false)
-                       (render! state)))))
-                state)}
+  {:did-mount load-and-render!
+   :did-update load-and-render!}
   [id s block? display?]
   (let [loading? (rum/react *loading?)]
     (when loading?

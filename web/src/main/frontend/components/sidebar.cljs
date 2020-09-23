@@ -22,6 +22,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
@@ -68,11 +69,19 @@
      ;; (right-sidebar/contents)
      ]))
 
+(defn get-default-home-if-valid
+  []
+  (when-let [default-home (state/get-default-home)]
+    (when-let [page (:page default-home)]
+      (when (db/entity [:page/name (string/lower-case page)])
+        default-home))))
+
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   []
   (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
+        default-home (get-default-home-if-valid)
         importing-to-db? (state/sub :repo/importing-to-db?)
         loading-files? (state/sub :repo/loading-files?)
         me (state/sub :me)
@@ -89,6 +98,19 @@
        (cond
          daily-migrating?
          (ui/loading "Migrating to daily notes")
+
+         default-home
+         (do
+           ;; if there is sidebar item, update
+           (when (:sidebar default-home)
+             (doall (map (fn [el]
+                           (case (:type el)
+                             :contents
+                             (state/sidebar-add-block! current-repo "contents" :contents nil)
+
+                             nil)) (:sidebar default-home))))
+           (route-handler/redirect! {:to :page
+                                     :path-params {:name (util/encode-str (:page default-home))}}))
 
          (and (not logged?) (seq latest-journals))
          (journal/journals latest-journals)
@@ -222,7 +244,8 @@
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
-        home? (= :home route-name)]
+        home? (= :home route-name)
+        default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div {:class (if white? "white-theme" "dark-theme")
              :on-click (fn []
@@ -315,34 +338,42 @@
              (let [logged? (:name me)]
                (->>
                 [(when current-repo
-                   {:title (t :new-page)
-                    :options {:href "/new-page"}})
-                 (when current-repo
                    {:title (t :graph)
-                    :options {:href "/graph"}})
+                    :options {:href "/graph"}
+                    :icon svg/graph-sm})
                  (when logged?
                    {:title (t :all-repos)
-                    :options {:href "/repos"}})
+                    :options {:href "/repos"}
+                    :icon svg/repos-sm})
                  (when current-repo
                    {:title (t :all-pages)
-                    :options {:href "/all-pages"}})
+                    :options {:href "/all-pages"}
+                    :icon svg/pages-sm})
                  (when current-repo
                    {:title (t :all-files)
-                    :options {:href "/all-files"}})
+                    :options {:href "/all-files"}
+                    :icon svg/folder-sm})
+                 (when (and default-home current-repo)
+                   {:title (t :all-journals)
+                    :options {:href "/all-journals"}
+                    :icon svg/calendar-sm})
                  {:title (t :settings)
-                  :options {:href "/settings"}}
+                  :options {:href "/settings"}
+                  :icon svg/settings-sm}
                  (when current-repo
                    {:title (t :import)
-                    :options {:href "/import"}})
+                    :options {:href "/import"}
+                    :icon svg/import-sm})
                  {:title [:div.flex-row.flex.justify-between.items-center
-                          [:span (t :join-community)]
-                          svg/discord]
+                          [:span (t :join-community)]]
                   :options {:href "https://discord.gg/KpN4eHY"
                             :title (t :discord-title)
-                            :target "_blank"}}
+                            :target "_blank"}
+                  :icon svg/discord}
                  (when logged?
                    {:title (t :sign-out)
-                    :options {:on-click user-handler/sign-out!}})]
+                    :options {:on-click user-handler/sign-out!}
+                    :icon svg/logout-sm})]
                 (remove nil?)))
              {})
 
@@ -370,7 +401,7 @@
                     :width "100vw"}}
            [:div.flex-1
             {:style (cond->
-                      {:max-width 640}
+                        {:max-width 640}
                       (or global-graph-pages?
                           (and (not logged?)
                                home?)

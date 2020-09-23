@@ -312,11 +312,15 @@
                                top))
                       :behavior "smooth"})))))
 
+(defn scroll-to
+  [pos]
+  (.scroll (gdom/getElement "main-content")
+           #js {:top pos
+                :behavior "smooth"}))
+
 (defn scroll-to-top
   []
-  (.scroll (gdom/getElement "main-content")
-           #js {:top 0
-                :behavior "smooth"}))
+  (scroll-to 0))
 
 (defn url-encode
   [string]
@@ -548,6 +552,14 @@
           (> end (count xs)))
     []
     (subvec xs start end)))
+
+(defn safe-subs
+  ([s start]
+   (let [c (count s)]
+     (safe-subs s start c)))
+  ([s start end]
+   (let [c (count s)]
+     (subs s (min c start) (min c end)))))
 
 (defn get-nodes-between-two-nodes
   [id1 id2 class]

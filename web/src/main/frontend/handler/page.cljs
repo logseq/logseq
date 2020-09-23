@@ -56,15 +56,10 @@
                                             :path-params {:name page}})
                   (let [blocks (db/get-page-blocks page)
                         last-block (last blocks)]
-                    (js/setTimeout
-                     #(when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
-                        (editor-handler/edit-block! last-block
-                                                    0
-                                                    (:block/format last-block)
-                                                    (string/replace (gobj/get first-block "id")
-                                                                    "ls-block"
-                                                                    "edit-block")))
-                     100)))))))))))
+                    (when last-block
+                      (js/setTimeout
+                       #(editor-handler/edit-last-block-for-new-page! last-block 0)
+                       100))))))))))))
 
 (defn page-add-directives!
   [page-name directives]

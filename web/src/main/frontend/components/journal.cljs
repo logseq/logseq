@@ -96,7 +96,7 @@
 
 (rum/defc journals <
   {:did-mount (fn [state]
-                (editor/open-last-block!)
+                (editor/open-last-block! true)
                 state)}
   [latest-journals]
   [:div#journals
@@ -106,3 +106,9 @@
        (journal-cp [journal-name format])])
     {:on-load (fn []
                 (handler/load-more-journals!))})])
+
+(rum/defc all-journals < rum/reactive
+  []
+  (let [journals-length (state/sub :journals-length)
+         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
+     (journals latest-journals)))

@@ -84,9 +84,9 @@
               q (or
                  @editor-handler/*selected-text
                  (when (state/sub :editor/show-page-search-hashtag?)
-                   (subs edit-content pos current-pos))
+                   (util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (subs edit-content pos current-pos)))
+                   (util/safe-subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
@@ -326,12 +326,12 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                    {:key (str "modal-input-" (name id))
-                     :id (str "modal-input-" (name id))
-                     :type (or type "text")
-                     :on-change (fn [e]
-                                  (swap! input-value assoc id (util/evalue e)))
-                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                  {:key (str "modal-input-" (name id))
+                   :id (str "modal-input-" (name id))
+                   :type (or type "text")
+                   :on-change (fn [e]
+                                (swap! input-value assoc id (util/evalue e)))
+                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder))
                 (dissoc input-item :id))]])
@@ -406,14 +406,14 @@
         {
          ;; enter
          13 (fn [state e]
-              (when-not (gobj/get e "ctrlKey")
+              (when (and (not (gobj/get e "ctrlKey"))
+                         (not (editor-handler/in-auto-complete? input)))
                 (let [{:keys [block config]} (get-state state)]
                   (when (and block
                              (not (:ref? config))
                              (not (:custom-query? config))) ; in reference section
                     (let [content (state/get-edit-content)]
                       (if (and
-                           (not (editor-handler/in-auto-complete? input))
                            (> (:block/level block) 2)
                            (string/blank? content))
                         (do
@@ -532,8 +532,19 @@
                                                       (util/move-cursor-to input pos))
                                                    0)))))))}
         (fn [e key-code]
-          (let [key (gobj/get e "key")]
+          (let [key (gobj/get e "key")
+                value (gobj/get input "value")]
             (cond
+              (or
+               (and (= key "#")
+                    (let [pos (:pos (util/get-caret-pos input))]
+                      (and
+                       (> pos 0)
+                       (= "#" (util/nth-safe value (dec pos))))))
+               (and (= key " ")
+                    (state/get-editor-show-page-search-hashtag)))
+              (state/set-editor-show-page-search-hashtag false)
+
               (and
                (not= key-code 8) ;; backspace
                (or
@@ -616,7 +627,8 @@
 
                       :else
                       (reset! *matched-block-commands matched-block-commands))
-                    (reset! *show-block-commands false)))))))))))
+                    (reset! *show-block-commands false))))
+              (editor-handler/close-autocomplete-if-outside input))))))))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
@@ -680,8 +692,10 @@
       {:id id
        :value (or content "")
        :on-click (fn [_e]
-                   (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                     (state/set-edit-pos! current-pos)))
+                   (let [input (gdom/getElement id)
+                         current-pos (:pos (util/get-caret-pos input))]
+                     (state/set-edit-pos! current-pos)
+                     (editor-handler/close-autocomplete-if-outside input)))
        :on-key-down (fn [_e]
                       (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
                         (state/set-edit-pos! current-pos)))

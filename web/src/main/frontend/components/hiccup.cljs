@@ -51,6 +51,11 @@
 (defonce *move-to-top?
   (atom false))
 
+;; TODO: Improve blocks grouped by pages
+(defonce max-blocks-per-page 200)
+(defonce virtual-list-scroll-step 150)
+(defonce virtual-list-previous 50)
+
 (defonce container-ids (atom {}))
 (defonce container-idx (atom 0))
 
@@ -303,9 +308,8 @@
         blocks (db/get-page-blocks (state/get-current-repo) page-name)]
     [:div.embed-page.py-2.my-2.px-3.bg-base-2
      [:p
-      [:code "Embed page:"]
-      [:a.ml-2 {:href (str "/page/" (util/encode-str page-name))}
-       (or page-original-name page-name)]]
+      [:code.mr-2 "Embed page:"]
+      (page-cp config {:page/name page-name})]
      (blocks-container blocks (assoc config :embed? true))]))
 
 (defn- get-label-text
@@ -1138,9 +1142,9 @@
          (not slide?)
          (merge attrs))
 
-       (if (and ref? (not ref-child?))
+       (when (and ref? (not ref-child?))
          (when-let [comp (block-comp/block-parents repo uuid format false)]
-           [:div.my-2.opacity-50.ml-7 comp]))
+           [:div.my-2.opacity-50.ml-4 comp]))
 
        (dnd-separator-wrapper block slide? (zero? idx))
 
@@ -1429,7 +1433,7 @@
         (latex/html-export s true true)
         (latex/latex (str (dc/squuid)) s true true))
       ["Example" l]
-      [:pre
+      [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Src" options]
       (let [{:keys [language options lines]} options
@@ -1500,6 +1504,12 @@
         (if html-export?
           (latex/html-export content true true)
           (latex/latex (str (dc/squuid)) content true true)))
+
+      ["Displayed_Math" content]
+      (if html-export?
+        (latex/html-export content true true)
+        (latex/latex (str (dc/squuid)) content true true))
+
       ["Footnote_Definition" name definition]
       (let [id (util/url-encode name)]
         [:div.footdef
@@ -1522,22 +1532,77 @@
   [config col]
   (map #(block-cp config %) col))
 
-(defn build-blocks
-  [blocks config]
-  (let [blocks (db/blocks->vec-tree blocks)]
-    (when (seq blocks)
-      (let [first-id (:block/uuid (first blocks))]
-        (for [item blocks]
-          (let [item (-> (if (:block/dummy? item)
-                           item
-                           (dissoc item :block/meta)))
-                item (if (= first-id (:block/uuid item))
-                       (assoc item :block/idx 0)
-                       item)
-                config (assoc config :block/uuid (:block/uuid item))]
-            (rum/with-key
-              (block-container config item)
-              (:block/uuid item))))))))
+(rum/defcs build-blocks < rum/reactive
+  {:init (fn [state]
+           (let [blocks (first (:rum/args state))
+                 segment-data (if (> (count blocks) max-blocks-per-page)
+                                (take max-blocks-per-page blocks)
+                                blocks)]
+             (assoc state
+                    ::segment (atom segment-data)
+                    ::idx (atom 0))))
+   :did-update (fn [state]
+                 (let [blocks (first (:rum/args state))
+                       segment (get state ::segment)
+                       idx (get state ::idx)]
+                   (when (and
+                          (seq @segment)
+                          (> (count blocks) max-blocks-per-page))
+                     (reset! segment (->> blocks
+                                          (drop @idx)
+                                          (take max-blocks-per-page))))
+                   state))}
+  [state blocks config]
+  (let [segment (get state ::segment)
+        idx (get state ::idx)
+        custom-query? (:custom-query? config)
+        ref? (:ref? config)]
+    (let [blocks-cp (fn [blocks segment?]
+                      (let [first-id (:block/uuid (first blocks))]
+                        (for [item blocks]
+                          (let [item (-> (if (:block/dummy? item)
+                                           item
+                                           (dissoc item :block/meta)))
+                                item (if (= first-id (:block/uuid item))
+                                       (assoc item :block/idx 0)
+                                       item)
+                                config (assoc config :block/uuid (:block/uuid item))]
+                            (rum/with-key
+                              (block-container config item)
+                              (:block/uuid item))))))]
+      (if (> (count blocks) max-blocks-per-page)
+        (ui/infinite-list
+         (blocks-cp (rum/react segment) true)
+         {:on-load (fn []
+                     (when (= (count @segment) max-blocks-per-page)
+                       (if (zero? @idx)
+                         (reset! idx (dec max-blocks-per-page))
+                         (swap! idx + virtual-list-scroll-step))
+                       (let [tail (take-last virtual-list-previous @segment)
+                             new-segment (->> blocks
+                                              (drop (inc @idx))
+                                              (take virtual-list-scroll-step))]
+                         (reset! segment
+                                 (->> (concat tail new-segment)
+                                      (remove nil?))))))
+          :on-top-reached (fn []
+                            (when (> @idx 0)
+                              (if (> @idx (dec max-blocks-per-page))
+                                (swap! idx - max-blocks-per-page)
+                                (reset! idx 0))
+                              (if (zero? @idx)
+                                (reset! segment
+                                        (take max-blocks-per-page blocks))
+                                (let [tail (take virtual-list-previous @segment)
+                                      prev (->> blocks
+                                                (drop (inc @idx))
+                                                (take virtual-list-scroll-step))]
+                                  (reset! segment
+                                          (->> (concat prev tail)
+                                               (remove nil?)))
+                                  (util/scroll-to 100)))))})
+        (let [blocks (if (or custom-query? ref?) blocks (db/blocks->vec-tree blocks))]
+          (blocks-cp blocks false))))))
 
 (defn build-slide-sections
   ([blocks config]
@@ -1570,13 +1635,14 @@
   (let [blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
         ref? (:ref? config)]
-    [:div.blocks-container.flex-1
-     {:style {:margin-left (cond
-                             sidebar?
-                             0
-                             :else
-                             -18)}}
-     (build-blocks blocks config)]))
+    (when (seq blocks)
+      [:div.blocks-container.flex-1
+       {:style {:margin-left (cond
+                               sidebar?
+                               0
+                               :else
+                               -18)}}
+       (build-blocks blocks config)])))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

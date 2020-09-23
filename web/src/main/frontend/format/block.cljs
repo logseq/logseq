@@ -65,11 +65,17 @@
       first
       second))
 
-(defn- paragraph-block?
+(defn paragraph-block?
   [block]
   (and
    (vector? block)
    (= "Paragraph" (first block))))
+
+(defn hiccup-block?
+  [block]
+  (and
+   (vector? block)
+   (= "Hiccup" (first block))))
 
 (defn- timestamp-block?
   [block]
@@ -77,11 +83,18 @@
    (vector? block)
    (= "Timestamp" (first block))))
 
-(defn- properties-block?
+(defn properties-block?
   [block]
   (and
    (vector? block)
    (= "Property_Drawer" (first block))))
+
+(defn definition-list-block?
+  [block]
+  (and
+   (vector? block)
+   (= "List" (first block))
+   (:name (first (second block)))))
 
 (defn extract-properties
   [[_ properties] start-pos end-pos]
@@ -266,52 +279,54 @@
          :page/original-name original-page-name}))))
 
 (defn parse-block
-  [{:block/keys [uuid content meta file page pre-block?] :as block} format]
-  (when-not (string/blank? content)
-    (let [ast (format/to-edn content format nil)
-          start-pos (:start-pos meta)
-          encoded-content (utf8/encode content)
-          content-length (utf8/length encoded-content)
-          [block-refs blocks] (extract-blocks ast content-length encoded-content)
-          ref-pages-atom (atom [])
-          blocks (doall
-                  (map-indexed
-                   (fn [idx {:block/keys [ref-pages ref-blocks meta] :as block}]
-                     (let [block (collect-block-tags block)
-                           block (merge
-                                  block
-                                  {:block/meta meta
-                                   :block/marker (get block :block/marker "nil")
-                                   :block/properties (get block :block/properties [])
-                                   :block/file file
-                                   :block/format format
-                                   :block/page page
-                                   :block/content (utf8/substring encoded-content
-                                                                  (:start-pos meta)
-                                                                  (:end-pos meta))}
-                                  ;; Preserve the original block id
-                                  (when (and (zero? idx)
-                                             ;; not custom-id
-                                             (not (get-in block [:block/properties "custom_id"])))
-                                    {:block/uuid uuid})
-                                  (when (seq ref-pages)
-                                    {:block/ref-pages
-                                     (mapv
-                                      (fn [page]
-                                        (let [page (page-with-journal page)]
-                                          (swap! ref-pages-atom conj page)
-                                          page))
-                                      ref-pages)}))]
-                       (-> block
-                           (assoc-in [:block/meta :start-pos] (+ (:start-pos meta) start-pos))
-                           (assoc-in [:block/meta :end-pos] (+ (:end-pos meta) start-pos)))))
-                   blocks))
-          pages (vec (distinct @ref-pages-atom))]
-      {:block-refs block-refs
-       :blocks blocks
-       :pages pages
-       :start-pos start-pos
-       :end-pos (+ start-pos content-length)})))
+  ([block format]
+   (parse-block block format nil))
+  ([{:block/keys [uuid content meta file page pre-block?] :as block} format ast]
+   (when-not (string/blank? content)
+     (let [ast (or ast (format/to-edn content format nil))
+           start-pos (:start-pos meta)
+           encoded-content (utf8/encode content)
+           content-length (utf8/length encoded-content)
+           [block-refs blocks] (extract-blocks ast content-length encoded-content)
+           ref-pages-atom (atom [])
+           blocks (doall
+                   (map-indexed
+                    (fn [idx {:block/keys [ref-pages ref-blocks meta] :as block}]
+                      (let [block (collect-block-tags block)
+                            block (merge
+                                   block
+                                   {:block/meta meta
+                                    :block/marker (get block :block/marker "nil")
+                                    :block/properties (get block :block/properties [])
+                                    :block/file file
+                                    :block/format format
+                                    :block/page page
+                                    :block/content (utf8/substring encoded-content
+                                                                   (:start-pos meta)
+                                                                   (:end-pos meta))}
+                                   ;; Preserve the original block id
+                                   (when (and (zero? idx)
+                                              ;; not custom-id
+                                              (not (get-in block [:block/properties "custom_id"])))
+                                     {:block/uuid uuid})
+                                   (when (seq ref-pages)
+                                     {:block/ref-pages
+                                      (mapv
+                                       (fn [page]
+                                         (let [page (page-with-journal page)]
+                                           (swap! ref-pages-atom conj page)
+                                           page))
+                                       ref-pages)}))]
+                        (-> block
+                            (assoc-in [:block/meta :start-pos] (+ (:start-pos meta) start-pos))
+                            (assoc-in [:block/meta :end-pos] (+ (:end-pos meta) start-pos)))))
+                    blocks))
+           pages (vec (distinct @ref-pages-atom))]
+       {:block-refs block-refs
+        :blocks blocks
+        :pages pages
+        :start-pos start-pos
+        :end-pos (+ start-pos content-length)}))))
 
 (defn with-levels
   [text format {:block/keys [level pre-block?]}]

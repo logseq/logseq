@@ -41,7 +41,7 @@
 
    :page/id         {:db/unique      :db.unique/identity}
    :page/name       {:db/unique      :db.unique/identity}
-   :page/original-name {}
+   :page/original-name {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
    :page/directives {}
    :page/alias      {:db/valueType   :db.type/ref
@@ -71,6 +71,10 @@
    ;; referenced blocks
    :block/ref-blocks {:db/valueType   :db.type/ref
                       :db/cardinality :db.cardinality/many}
+   :block/embed-blocks {:db/valueType   :db.type/ref
+                        :db/cardinality :db.cardinality/many}
+   :block/embed-pages {:db/valueType   :db.type/ref
+                       :db/cardinality :db.cardinality/many}
    :block/content {}
    :block/anchor {}
    :block/marker {}

@@ -43,7 +43,7 @@
           (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
 (rum/defc menu-link
-  [options child]
+  [options child icon]
   [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link.overflow-hidden
    options
    child])
@@ -55,16 +55,22 @@
    (fn [{:keys [close-fn] :as state}]
      [:div.py-1.rounded-md.shadow-xs.bg-base-3
       (when links-header links-header)
-      (for [{:keys [options title]} links]
+      (for [{:keys [options title icon]} links]
         (let [new-options
               (assoc options
                      :on-click (fn [e]
                                  (when-let [on-click-fn (:on-click options)]
                                    (on-click-fn e))
                                  (close-fn)
-                                 ))]
+                                 ))
+              child [:div
+                     {:style {:display "flex" :flex-direction "row"}}
+                     [:div {:style {:margin-right "8px"}} title]
+                     ;; [:div {:style {:position "absolute" :right "8px"}}
+                     ;;  icon]
+                     ]]
           (rum/with-key
-            (menu-link new-options title)
+            (menu-link new-options child)
             (cljs.core/random-uuid))))])
    modal-class))
 
@@ -154,7 +160,7 @@
 (rum/defc notification < rum/reactive
   []
   (let [contents (state/sub :notification/contents)]
-   (transition-group 
+   (transition-group
     {:class-name "notifications"}
     (doall (map (fn [el]
                   (let [k (first el)
@@ -185,27 +191,33 @@
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
 
+;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
-  [on-load]
+  [on-load on-top-reached]
   (let [node (main-node)
         full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) 100)]
-    (when bottom-reached?
-      (on-load))))
+        bottom-reached? (<= (- full-height scroll-top client-height) 100)
+        top-reached? (= scroll-top 0)]
+    (when (and bottom-reached? on-load)
+      (on-load))
+    (when (and top-reached? on-top-reached)
+      (on-top-reached))))
 
 (defn attach-listeners
   "Attach scroll and resize listeners."
   [state]
   (let [opts (-> state :rum/args second)
-        debounced-on-scroll (util/debounce 500 #(on-scroll (:on-load opts)))]
+        debounced-on-scroll (util/debounce 500 #(on-scroll
+                                                 (:on-load opts) ; bottom reached
+                                                 (:on-top-reached opts)))]
     (mixins/listen state (main-node) :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state body {:keys [on-load]
+  [state body {:keys [on-load on-top-reached]
                :as opts}]
   body)
 

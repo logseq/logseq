@@ -41,6 +41,8 @@
     "All files"
     :all-pages
     "All pages"
+    :all-journals
+    "All journals"
     :file
     (str "File " (util/url-decode (:path path-params)))
     :new-page
@@ -85,5 +87,8 @@
 (defn go-to-journals!
   []
   (state/set-journals-length! 1)
-  (redirect! {:to :home})
+  (let [route (if (state/custom-home-page?)
+                :all-journals
+                :home)]
+    (redirect! {:to route}))
   (util/scroll-to-top))
