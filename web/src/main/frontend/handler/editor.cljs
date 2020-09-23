@@ -101,13 +101,14 @@
 (defn html-link-format! []
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format value block edit-id input]} m
+          cur-pos (:pos (util/get-caret-pos input))
           empty-selection? (= selection-start selection-end)
           selection (subs value selection-start selection-end)
           selection-link? (and selection (or (util/starts-with? selection "http://")
                                              (util/starts-with? selection "https://")))
-          [content back-pos] (cond
+          [content forward-pos] (cond
                                empty-selection?
-                               (config/get-empty-link-and-back-pos format)
+                               (config/get-empty-link-and-forward-pos format)
 
                                selection-link?
                                (config/with-default-link format selection)
@@ -117,9 +118,10 @@
           new-value (str
                      (subs value 0 selection-start)
                      content
-                     (subs value selection-end))]
+                     (subs value selection-end))
+          cur-pos (or selection-start cur-pos)]
       (state/set-edit-content! edit-id new-value)
-      (util/cursor-move-back input back-pos))))
+      (util/move-cursor-to input (+ cur-pos forward-pos)))))
 
 (defn copy-block-ref!
   [block-id]
