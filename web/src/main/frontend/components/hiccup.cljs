@@ -1549,7 +1549,8 @@
   [state blocks config]
   (let [segment (get state ::segment)
         idx (get state ::idx)
-        custom-query? (:custom-query? config)]
+        custom-query? (:custom-query? config)
+        ref? (:ref? config)]
     (let [blocks-cp (fn [blocks segment?]
                       (let [first-id (:block/uuid (first blocks))]
                         (for [item blocks]
@@ -1594,7 +1595,7 @@
                                           (->> (concat prev tail)
                                                (remove nil?)))
                                   (util/scroll-to 100)))))})
-        (let [blocks (if custom-query? blocks (db/blocks->vec-tree blocks))]
+        (let [blocks (if (or custom-query? ref?) blocks (db/blocks->vec-tree blocks))]
           (blocks-cp blocks false))))))
 
 (defn build-slide-sections
