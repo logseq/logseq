@@ -1504,6 +1504,12 @@
         (if html-export?
           (latex/html-export content true true)
           (latex/latex (str (dc/squuid)) content true true)))
+
+      ["Displayed_Math" content]
+      (if html-export?
+        (latex/html-export content true true)
+        (latex/latex (str (dc/squuid)) content true true))
+
       ["Footnote_Definition" name definition]
       (let [id (util/url-encode name)]
         [:div.footdef
