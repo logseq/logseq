@@ -354,7 +354,7 @@
            content (string/trim (text/remove-level-spaces content format))
            properties (or custom-properties properties)
            content (if (and (seq properties) (text/properties-hidden? properties))
-                     (text/remove-properties! content)
+                     (text/remove-properties! block content)
                      content)
            content-length (count content)
            text-range (if (or (= :max pos) (<= content-length pos))
