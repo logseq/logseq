@@ -522,7 +522,10 @@
                 modified-time)
                {:key :block/change
                 :data (map (fn [block] (assoc block :block/page page)) blocks)}
-               [[file-path new-content]])))
+               [[file-path new-content]]))
+
+             (when (or (seq retract-refs) pre-block?)
+               (ui-handler/re-render-root!)))
 
            :else
            nil))))))
@@ -822,7 +825,10 @@
             after-blocks)
            {:key :block/change
             :data [block]}
-           [[file-path new-content]]))))))
+           [[file-path new-content]])
+
+          (when (or (seq ref-pages) (seq ref-blocks))
+            (ui-handler/re-render-root!)))))))
 
 (defn delete-block!
   [state repo e]
@@ -895,7 +901,8 @@
          [[file-path new-content]])
         (when top-block?
           (route-handler/redirect! {:to :page
-                                    :path-params {:name (:page/name page)}}))))))
+                                    :path-params {:name (:page/name page)}})
+          (ui-handler/re-render-root!))))))
 
 (defn remove-block-property!
   [block-id key]
