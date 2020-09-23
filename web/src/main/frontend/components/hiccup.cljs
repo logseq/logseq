@@ -1142,7 +1142,7 @@
          (not slide?)
          (merge attrs))
 
-       (if (and ref? (not ref-child?))
+       (when (and ref? (not ref-child?))
          (when-let [comp (block-comp/block-parents repo uuid format false)]
            [:div.my-2.opacity-50.ml-4 comp]))
 
@@ -1548,7 +1548,8 @@
                    state))}
   [state blocks config]
   (let [segment (get state ::segment)
-        idx (get state ::idx)]
+        idx (get state ::idx)
+        custom-query? (:custom-query? config)]
     (let [blocks-cp (fn [blocks segment?]
                       (let [first-id (:block/uuid (first blocks))]
                         (for [item blocks]
@@ -1593,7 +1594,7 @@
                                           (->> (concat prev tail)
                                                (remove nil?)))
                                   (util/scroll-to 100)))))})
-        (let [blocks (db/blocks->vec-tree blocks)]
+        (let [blocks (if custom-query? blocks (db/blocks->vec-tree blocks))]
           (blocks-cp blocks false))))))
 
 (defn build-slide-sections
