@@ -460,7 +460,7 @@
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
            :unlink "解除绑定"
-           :search "搜索"
+           :search "搜索或者创建新页面"
            :new-page "新页面"
            :graph "图谱"
            :all-repos "所有库"
