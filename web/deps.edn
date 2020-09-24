@@ -5,8 +5,8 @@
   ;; rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   datascript-transit          {:mvn/version "0.3.0"
                                :exclusions [datascript]}
-  datascript                  {:mvn/version "0.18.13"}
-  ;; datascript                  {:local/root "/home/tienson/codes/source/clj/datascript"}
+  datascript                  {:git/url "https://github.com/tiensonqin/datascript",
+                               :sha "7c2822565d9a114c7d8604c335af89de4640e2e5"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
