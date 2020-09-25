@@ -2301,9 +2301,9 @@
   We can improve it if the performance is really an issue."
   [repo page]
   (let [blocks (->>
-                (get-page-blocks-no-cache repo page {:pull-keys '[:block/uuid :block/level :block/pre-block?]})
+                (get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block?]})
                 (remove :block/pre-block?)
-                (map #(select-keys % [:block/uuid :block/level]))
+                (map #(select-keys % [:db/id :block/uuid :block/level]))
                 (reverse))]
     (loop [blocks blocks
            tx []
@@ -2315,7 +2315,7 @@
                               (< level last-level)        ; parent
                               (let [cur-children (get children last-level)
                                     tx (if (seq cur-children)
-                                         (conj tx {:block/uuid (:block/uuid block)
+                                         (conj tx {:db/id (:db/id block)
                                                    :block/children cur-children})
                                          tx)
                                     children (-> children
@@ -2334,7 +2334,7 @@
         ;; TODO: add top-level children to the "Page" block (we might remove the Page from db schema)
         (when (seq tx)
           (let [delete-tx (map (fn [block]
-                                 [:db/retract [:block/uuid (:block/uuid block)] :block/children])
+                                 [:db/retract (:db/id block) :block/children])
                             tx)]
             (->> (concat delete-tx tx)
                  (remove nil?))))))))
