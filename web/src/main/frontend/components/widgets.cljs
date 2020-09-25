@@ -161,7 +161,7 @@
           (t :git/add-repo-prompt-confirm)
           :on-click
           (fn []
-            (let [repo @repo]
+            (let [repo (util/lowercase-first @repo)]
               (if (util/starts-with? repo "https://github.com/")
                 (let [repo-url (string/replace repo ".git" "")]
                   (repo-handler/create-repo! repo))
