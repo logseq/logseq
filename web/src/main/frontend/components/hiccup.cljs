@@ -38,7 +38,8 @@
             [frontend.handler.image :as image-handler]
             [frontend.format.mldoc :as mldoc]
             [frontend.text :as text]
-            [frontend.utf8 :as utf8]))
+            [frontend.utf8 :as utf8]
+            [frontend.date :as date]))
 
 ;; local state
 (defonce *block-children
@@ -233,6 +234,9 @@
   [{:keys [html-export? label children] :as config} page]
   (when-let [page-name (:page/name page)]
     (let [original-page-name (get page :page/original-name page-name)
+          original-page-name (if (date/valid-journal-title? original-page-name)
+                               (string/capitalize original-page-name)
+                               original-page-name)
           page (string/lower-case page-name)
           href (if html-export?
                  (util/encode-str page)
@@ -551,12 +555,19 @@
         name]])
 
     ["Macro" options]
-    (let [{:keys [name arguments]} options]
+    (let [{:keys [name arguments]} options
+          arguments (if (and
+                         (>= (count arguments) 2)
+                         (and (string/starts-with? (first arguments) "[[")
+                              (string/ends-with? (last arguments) "]]"))) ; page reference
+                      (let [title (string/join ", " arguments)]
+                        [title])
+                      arguments)]
       (cond
         (= name "embed")
         (let [a (first arguments)]
           (cond
-            (and (util/starts-with? a "[[")
+            (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
             (let [page-name (-> (string/replace a "[[" "")
                                 (string/replace "]]" "")
@@ -564,7 +575,7 @@
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
-            (and (util/starts-with? a "((")
+            (and (string/starts-with? a "((")
                  (string/ends-with? a "))"))
             (when-let [s (-> (string/replace a "((" "")
                              (string/replace "))" "")
