@@ -2304,7 +2304,8 @@
                 (get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block?]})
                 (remove :block/pre-block?)
                 (map #(select-keys % [:db/id :block/uuid :block/level]))
-                (reverse))]
+                (reverse))
+        original-blocks blocks]
     (loop [blocks blocks
            tx []
            children {}
@@ -2315,8 +2316,13 @@
                               (< level last-level)        ; parent
                               (let [cur-children (get children last-level)
                                     tx (if (seq cur-children)
-                                         (conj tx {:db/id (:db/id block)
-                                                   :block/children cur-children})
+                                         (vec
+                                          (concat
+                                           tx
+                                           (map
+                                             (fn [child]
+                                               [:db/add (:db/id block) :block/children child])
+                                             cur-children)))
                                          tx)
                                     children (-> children
                                                  (dissoc last-level)
@@ -2335,7 +2341,7 @@
         (when (seq tx)
           (let [delete-tx (map (fn [block]
                                  [:db/retract (:db/id block) :block/children])
-                            tx)]
+                            original-blocks)]
             (->> (concat delete-tx tx)
                  (remove nil?))))))))
 

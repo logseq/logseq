@@ -1409,7 +1409,8 @@
 
 (defn adjust-block-level!
   [state direction]
-  (let [{:keys [block block-parent-id value]} (get-state state)
+  (let [{:keys [block block-parent-id value config]} (get-state state)
+        start-level (:start-level config)
         format (:block/format block)
         block-pattern (config/get-block-pattern format)
         level (:block/level block)
@@ -1427,7 +1428,13 @@
                                 level)
                       :else level)
         new-value (block/with-levels value format (assoc block :block/level final-level))]
-    (when (<= (- final-level previous-level) 1)
+    (when (and
+           (not (and (= direction :left)
+                     (and
+                      (get config :id)
+                      (util/uuid-string? (get config :id)))
+                     (<= final-level start-level)))
+           (<= (- final-level previous-level) 1))
       (set-last-edit-block! (:block/uuid block) value)
       (save-block-if-changed! block new-value
                               {:indent-left? (= direction :left)}))))
