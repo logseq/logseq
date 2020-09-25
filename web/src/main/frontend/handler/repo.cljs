@@ -268,10 +268,11 @@
      repo
      tx
      transact-option)
-    (when (seq pages)
-      (let [children-tx (mapcat #(db/rebuild-page-blocks-children repo %) pages)]
-       (when (seq children-tx)
-         (db/transact! repo children-tx)))))
+    ;; (when (seq pages)
+    ;;   (let [children-tx (mapcat #(db/rebuild-page-blocks-children repo %) pages)]
+    ;;    (when (seq children-tx)
+    ;;      (db/transact! repo children-tx))))
+    )
   (when (seq files)
     (file-handler/alter-files repo files)))
 

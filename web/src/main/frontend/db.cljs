@@ -1018,6 +1018,23 @@
           nil)
         react)))))
 
+(defn get-page-blocks-no-cache
+  ([page]
+   (get-page-blocks (state/get-current-repo) page nil))
+  ([repo-url page]
+   (get-page-blocks repo-url page nil))
+  ([repo-url page {:keys [pull-keys]
+                   :or {pull-keys '[*]}}]
+   (let [page (string/lower-case page)
+         page-id (or (:db/id (entity repo-url [:page/name page]))
+                     (:db/id (entity repo-url [:page/original-name page])))
+         db (get-conn repo-url)]
+     (when page-id
+       (let [datoms (d/datoms db :avet :block/page page-id)
+             block-eids (mapv :e datoms)]
+         (some->> (pull-many repo-url pull-keys block-eids)
+                  (page-blocks-transform repo-url)))))))
+
 (defn get-page-blocks-count
   [repo page-id]
   (when-let [db (get-conn repo)]
@@ -2284,7 +2301,7 @@
   We can improve it if the performance is really an issue."
   [repo page]
   (let [blocks (->>
-                (get-page-blocks repo page {:pull-keys '[:block/uuid :block/level :block/pre-block?]})
+                (get-page-blocks-no-cache repo page {:pull-keys '[:block/uuid :block/level :block/pre-block?]})
                 (remove :block/pre-block?)
                 (map #(select-keys % [:block/uuid :block/level]))
                 (reverse))]
