@@ -10,10 +10,60 @@
             [frontend.date :as date]
             [frontend.components.editor :as editor]
             [frontend.db-mixins :as db-mixins]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.components.svg :as svg]))
 
-(rum/defc references < rum/reactive db-mixins/query
-  [page-name marker? priority?]
+(rum/defc filter-dialog-inner < rum/reactive
+  [close-fn references filter-state]
+  [:div
+   [:div.sm:flex.sm:items-start
+    [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
+     (svg/filter-icon)]
+    [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+     [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+      "Filter"]]]
+
+   [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1
+    (for [reference references]
+      [:button {:key reference :style {:padding "0px 5px" :border-width "1px" :border-radius "5px" :color (let [filtered (get (rum/react filter-state) reference)]
+                                                                                                            (condp = filtered
+                                                                                                              true "green"
+                                                                                                              false "red"
+                                                                                                              ""))}
+                :on-click (fn [e]
+                            (swap! filter-state #(if (nil? (get @filter-state reference))
+                                                   (assoc % reference (not (.-shiftKey e)))
+                                                   (dissoc % reference))))}
+       reference])]])
+
+(defn filter-dialog
+  [references filter-state]
+  (fn [close-fn]
+    (filter-dialog-inner close-fn references filter-state)))
+
+(defn get-block-references
+  [ref-block]
+  (map #(if (= (first %) "Tag")
+          (second %)
+          (second (:url (second %))))
+       (filter
+        #(and
+          (some (partial = (first %)) ["Tag", "Link"])
+          (or (= (first %) "Tag") (= (first (:url (second %))) "Search")))
+        (:block/title (first (val ref-block))))))
+
+(defn in?
+  [elm coll]
+  (true? (some #(= elm %) coll)))
+
+(defn matches-filter
+  [references filter-state]
+  (every? #(= (in? (first %) references) (second %)) filter-state))
+
+(rum/defcs references < (rum/local {} ::filter)
+  [state page-name marker? priority?]
   (when page-name
     (let [block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
@@ -32,6 +82,9 @@
           scheduled-or-deadlines (if journal?
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
+          references (distinct (flatten (map get-block-references ref-blocks)))
+          filter-state (::filter state)
+          filtered-blocks (filter #(matches-filter (get-block-references %) (rum/react filter-state)) ref-blocks)
           n-ref (count ref-blocks)]
       (when (or (> n-ref 0)
                 (seq scheduled-or-deadlines))
@@ -53,10 +106,14 @@
                                  {:hiccup ref-hiccup}))]))
 
           (ui/foldable
-           [:h2.font-bold.opacity-50 (let []
-                                       (str n-ref " Linked References"))]
+           [:div.flex.flex-row.flex-1.justify-between
+            [:h2.font-bold.opacity-50 (let []
+                                        (str n-ref " Linked References"))]
+            [:a {:title "Filter"
+                 :on-click #(state/set-modal! (filter-dialog references filter-state))}
+             (svg/filter-icon)]]
            [:div.references-blocks
-            (let [ref-hiccup (block/->hiccup ref-blocks
+            (let [ref-hiccup (block/->hiccup filtered-blocks
                                              {:id page-name
                                               :start-level 2
                                               :ref? true
