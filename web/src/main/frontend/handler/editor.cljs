@@ -980,7 +980,9 @@
   []
   (when-let [blocks (seq (get-selected-blocks-with-children))]
     (let [repo (dom/attr (first blocks) "repo")
-          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
+          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))
           up? (state/selection-up?)
           content (some->> (db/get-blocks-contents repo ids)
                            (map :block/content))

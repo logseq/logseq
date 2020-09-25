@@ -441,7 +441,8 @@
           (= \# (first s))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
-          (= \* (first s))
+          (and (= \* (first s))
+               (not= \* (last s)))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
           (re-find #"^https://" s)
           (->elem :a {:href s}

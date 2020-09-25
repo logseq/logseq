@@ -263,27 +263,21 @@
                               {:title (t :page/re-index)
                                :options {:on-click (fn []
                                                      (file/re-index! file))}})
-                            (when-not journal?
-                              {:title (t :page/add-to-contents)
-                               :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
-                            (when-not journal?
-                              {:title (t :page/rename)
-                               :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
-                            (when-not journal?
-                              {:title (t :page/delete)
-                               :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-                            (when (and (not journal?) file)
-                              {:title (t :page/publish)
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page! page-name project/add-project))}})
-                            (when (and (not journal?) file)
-                              {:title (t :page/publish-as-slide)
-                               :options {:on-click (fn []
-                                                     (page-handler/publish-page-as-slide! page-name project/add-project))}})
-                            (when (and (not journal?) file)
-                              {:title (t :page/unpublish)
-                               :options {:on-click (fn []
-                                                     (page-handler/unpublish-page! page-name))}})
+                            {:title (t :page/add-to-contents)
+                             :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}}
+                            {:title (t :page/rename)
+                             :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}}
+                            {:title (t :page/delete)
+                             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}}
+                            {:title (t :page/publish)
+                             :options {:on-click (fn []
+                                                   (page-handler/publish-page! page-name project/add-project))}}
+                            {:title (t :page/publish-as-slide)
+                             :options {:on-click (fn []
+                                                   (page-handler/publish-page-as-slide! page-name project/add-project))}}
+                            {:title (t :page/unpublish)
+                             :options {:on-click (fn []
+                                                   (page-handler/unpublish-page! page-name))}}
                             (when developer-mode?
                               {:title "(Dev) Show page data"
                                :options {:on-click (fn []
