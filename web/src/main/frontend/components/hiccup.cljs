@@ -53,8 +53,8 @@
   (atom false))
 
 ;; TODO: Improve blocks grouped by pages
-(defonce max-blocks-per-page 200)
-(defonce virtual-list-scroll-step 150)
+(defonce max-blocks-per-page 500)
+(defonce virtual-list-scroll-step 450)
 (defonce virtual-list-previous 50)
 
 (defonce container-ids (atom {}))
