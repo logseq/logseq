@@ -476,7 +476,7 @@
            :cloning "Clone 中"
            :parsing-files "正在解析文件"
            :loading-files "正在加载文件"
-           :login-github "用 Github 登陆"
+           :login-github "用 Github 登录"
            :excalidraw-title "用 Excalidraw 画图"
            :go-to "转到"
            :or "或"
