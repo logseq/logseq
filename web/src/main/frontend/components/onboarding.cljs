@@ -218,7 +218,10 @@
          (t :on-boarding/isomorphic-git-desc)]]
 
        [:img {:src "/static/img/credits.png"
-              :alt "Created by Excalidraw"}]]]]))
+              :style {:margin "12px 0 0 0"}}]
+       [:p.opacity-50.hover:opacity-100 "Created by"
+        [:a.ml-1 {:href "https://excalidraw.com/"
+                  :target "_blank"} "Excalidraw"]]]]]))
 
 (defn help
   []
