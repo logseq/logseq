@@ -320,15 +320,9 @@
                     page (db/entity [:page/name page])]
                 (page/presentation current-repo page (:journal? page))))
 
-            [:a {:title (t :excalidraw-title)
-                 :href "/draw"
-                 :style {:margin-left 8
-                         :margin-right 4}}
-             [:button.p-1.rounded-full.focus:outline-none.focus:shadow-outline.pull
-              (svg/excalidraw-logo)]]
             (ui/dropdown-with-links
              (fn [{:keys [toggle-fn]}]
-               [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7
+               [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7.ml-2
                 {:on-click toggle-fn}
                 (if-let [avatar (:avatar me)]
                   [:img.h-7.w-7.rounded-full
@@ -345,6 +339,9 @@
                    {:title (t :all-repos)
                     :options {:href "/repos"}
                     :icon svg/repos-sm})
+                 {:title (t :excalidraw-title)
+                  :options {:href "/draw"}
+                  :icon (svg/excalidraw-logo)}
                  (when current-repo
                    {:title (t :all-pages)
                     :options {:href "/all-pages"}

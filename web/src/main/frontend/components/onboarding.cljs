@@ -215,7 +215,10 @@
         [:li
          [:a {:href "https://isomorphic-git.org/"
               :target "_blank"} "isomorphic-git"]
-         (t :on-boarding/isomorphic-git-desc)]]]]]))
+         (t :on-boarding/isomorphic-git-desc)]]
+
+       [:img {:src "/static/img/credits.png"
+              :alt "Created by Excalidraw"}]]]]))
 
 (defn help
   []
