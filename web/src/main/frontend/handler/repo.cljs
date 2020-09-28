@@ -546,7 +546,6 @@
                   (create-dummy-notes-page repo dummy-notes))
               _ (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
                       tutorial (string/replace-first tutorial "$today" (date/today))]
-                  (prn {:tutorial tutorial})
                   (create-today-journal-if-not-exists repo tutorial)
                   )
               _ (create-config-file-if-not-exists repo)
