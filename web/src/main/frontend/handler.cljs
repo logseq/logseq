@@ -31,7 +31,6 @@
                           (repo-handler/create-today-journal-if-not-exists repo)))))
                   1000))
 
-;; Avoid introducing core.async for smaller bundle size for now
 (defn restore-and-setup!
   [me repos logged?]
   ;; wait until pfs is loaded
@@ -102,8 +101,7 @@
                                                      "Saved successfully!"
                                                      :success)
                                                     (and @notification-id (notification/clear! @notification-id))))]
-                                     ;; replace with :warning
-                                     :error
+                                     :warning
                                      false)]
                              (reset! notification-id id)))
                          (let [message "\\o/"]

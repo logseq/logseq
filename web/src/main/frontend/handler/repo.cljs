@@ -28,6 +28,7 @@
             [cljs-time.core :as t]
             [cljs.reader :as reader]
             [clojure.string :as string]
+            [frontend.dicts :as dicts]
             ;; [clojure.set :as set]
             ))
 
@@ -206,32 +207,49 @@
         (db/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
-(defn create-today-journal-if-not-exists
-  [repo-url]
+(defn create-dummy-notes-page
+  [repo-url content]
   (let [repo-dir (util/get-repo-dir repo-url)
-        format (state/get-preferred-format)
-        title (date/today)
-        file-name (date/journal-title->default title)
-        default-content (util/default-content-with-title format title false)
-        template (state/get-journal-template)
-        template (if (and template
-                          (not (string/blank? template)))
-                   template)
-        content (if template
-                  (str default-content template)
-                  (util/default-content-with-title format title true))
-        path (str config/default-journals-directory "/" file-name "."
-                  (config/get-file-extension format))
-        file-path (str "/" path)
-        page-exists? (db/entity repo-url [:page/name (string/lower-case title)])]
-    (when-not page-exists?
-      (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
-                    (p/catch (fn [_e])))
-              file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-        (when (not file-exists?)
-          (db/reset-file! repo-url path content)
-          (ui-handler/re-render-root!)
-          (git-handler/git-add repo-url path))))))
+        path (str config/default-pages-directory "/how_to_make_dummy_notes.md")
+        file-path (str "/" path)]
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-pages-directory))
+                 (p/catch (fn [_e])))
+           _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+     (db/reset-file! repo-url path content))))
+
+(defn create-today-journal-if-not-exists
+  ([repo-url]
+   (create-today-journal-if-not-exists repo-url nil))
+  ([repo-url content]
+   (let [repo-dir (util/get-repo-dir repo-url)
+         format (state/get-preferred-format)
+         title (date/today)
+         file-name (date/journal-title->default title)
+         default-content (util/default-content-with-title format title false)
+         template (state/get-journal-template)
+         template (if (and template
+                           (not (string/blank? template)))
+                    template)
+         content (cond
+                   content
+                   content
+                   template
+                   (str default-content template)
+
+                   :else
+                   (util/default-content-with-title format title true))
+         path (str config/default-journals-directory "/" file-name "."
+                   (config/get-file-extension format))
+         file-path (str "/" path)
+         page-exists? (db/entity repo-url [:page/name (string/lower-case title)])]
+     (when-not page-exists?
+       (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
+                     (p/catch (fn [_e])))
+               file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+         (when (not file-exists?)
+           (db/reset-file! repo-url path content)
+           (ui-handler/re-render-root!)
+           (git-handler/git-add repo-url path)))))))
 
 (defn create-default-files!
   [repo-url]
@@ -415,20 +433,20 @@
                           (if permission?
                             (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
                             (-> (git-handler/get-latest-commit
-                              repo-url
-                              (fn [commit]
-                                (let [local-oid (gobj/get commit "oid")
-                                      remote-oid (db/get-key-value repo-url :git/latest-commit)]
-                                  (p/let [result (git/get-local-diffs repo-url remote-oid local-oid)]
-                                    (if (seq result)
-                                      (show-diff-error! repo-url)
-                                      (notification/show!
-                                       [:p.content
-                                        (util/format "Failed to push to %s. " repo-url)
-                                        [:span.text-gray-700.mr-2
-                                         (str error)]]
-                                       :error
-                                       false))))))
+                                 repo-url
+                                 (fn [commit]
+                                   (let [local-oid (gobj/get commit "oid")
+                                         remote-oid (db/get-key-value repo-url :git/latest-commit)]
+                                     (p/let [result (git/get-local-diffs repo-url remote-oid local-oid)]
+                                       (if (seq result)
+                                         (show-diff-error! repo-url)
+                                         (notification/show!
+                                          [:p.content
+                                           (util/format "Failed to push to %s. " repo-url)
+                                           [:span.text-gray-700.mr-2
+                                            (str error)]]
+                                          :error
+                                          false))))))
                                 (p/catch
                                     (fn [error]
                                       (notification/show!
@@ -524,7 +542,13 @@
                          (p/catch (fn [_e] nil)))
               _ (state/set-current-repo! repo)
               _ (db/start-db-conn! nil repo)
-              _ (create-today-journal-if-not-exists repo)
+              _ (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                  (create-dummy-notes-page repo dummy-notes))
+              _ (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                      tutorial (string/replace-first tutorial "$today" (date/today))]
+                  (prn {:tutorial tutorial})
+                  (create-today-journal-if-not-exists repo tutorial)
+                  )
               _ (create-config-file-if-not-exists repo)
               _ (create-contents-file repo)]
         (state/set-db-restoring! false)))

@@ -66,8 +66,10 @@
         repo (state/sub :git/current-repo)
         encoded-page-name (util/encode-str page)
         today? (= (string/lower-case title)
-                  (string/lower-case (date/journal-name)))]
-    [:div.flex-1.journal.page
+                  (string/lower-case (date/journal-name)))
+        intro? (and (not (state/logged?))
+                    today?)]
+    [:div.flex-1.journal.page {:class (if intro? "intro" "")}
      (ui/foldable
       [:a.initial-color.title
        {:href (str "/page/" encoded-page-name)
@@ -90,8 +92,7 @@
 
      (reference/references title false)
 
-     (when (and (not (state/logged?))
-                today?)
+     (when intro?
        (onboarding/intro))]))
 
 (rum/defc journals <

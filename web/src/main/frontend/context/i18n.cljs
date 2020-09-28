@@ -1,5 +1,5 @@
 (ns frontend.context.i18n
-  (:require [frontend.tools.tongue :as tongue]
+  (:require [frontend.dicts :as dicts]
             [rum.core :as rum]
             [frontend.state :as state]))
 
@@ -18,7 +18,7 @@
 (rum/defc tongue-provider [children]
   (let [prefered-language (keyword (state/sub :preferred-language))
         set-preferred-language state/set-preferred-language!
-        t (partial tongue/translate prefered-language)]
+        t (partial dicts/translate prefered-language)]
     (if (nil? prefered-language)
       (set-preferred-language (fetch-local-language))
       :ok)

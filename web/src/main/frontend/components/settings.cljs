@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
-            [frontend.tools.tongue :as tongue]
+            [frontend.dicts :as dicts]
             [clojure.string :as string]
             [goog.object :as gobj]
             [frontend.context.i18n :as i18n]))
@@ -84,11 +84,11 @@
           [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
            {:on-change (fn [e]
                          (let [lang (util/evalue e)
-                               lang-val (filter (fn [el] (if (= (:label el) lang) true nil)) tongue/languages)
+                               lang-val (filter (fn [el] (if (= (:label el) lang) true nil)) dicts/languages)
                                lang-val (name (:value(first lang-val)))]
                            (state/set-preferred-language! lang-val)
                            (ui-handler/re-render-root!)))}
-           (for [language tongue/languages]
+           (for [language dicts/languages]
              [:option (cond->
                           {:key (:value language)}
                         (= (name (:value language)) preferred-language)

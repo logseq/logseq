@@ -12,27 +12,6 @@
      [:div.flex-1
       [:div.flex.flex-col.pl-1.ls-block
        [:hr {:style {:margin-top 200}}]
-       [:h1.title.welcome-title
-        (t :on-boarding/title)]
-       [:p
-        {}
-        [:strong {} "Logseq"]
-        (t :on-boarding/is-a)
-        [:a {:href "https://www.inkandswitch.com/local-first.html"
-             :target "_blank"}
-         [:i {} (t :on-boarding/local-first)]]
-        ", "
-        [:a {:href "https://tiddlywiki.com/"
-             :target "_blank"}
-         [:i {} (t :on-boarding/non-linear)]]
-        ", "
-        [:a {:href "https://orgmode.org/"
-             :target "_blank"}
-         [:i {} (t :on-boarding/outliner)]]
-        (t :on-boarding/notebook-for-organizing-and)
-        [:a {:href "https://logseq.com/blog"
-             :target "_blank"} (t :on-boarding/sharing)]
-        (t :on-boarding/your-personal-knowledge-base)]
        [:div.flex.flex-row.admonitionblock.align-items {:class "warning"}
         [:div.pr-4.admonition-icon.flex.flex-col.justify-center
          {:title "Warning"} (svg/warning)]
@@ -80,21 +59,6 @@
        [:p
         {}
         (t :on-boarding/use-1-desc)]
-       [:p
-        (t :on-boarding/use-1-video)
-        [:a {:href "https://twitter.com/EdTravelling"
-             :target "_blank"}
-         "@EdTravelling"]
-        ":"]
-       [:div.videoWrapper
-        [:iframe
-         {:allowfullscreen "allowfullscreen"
-          :allow
-          "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-          :frameborder "0"
-          :src "https://www.youtube.com/embed/Vw-x7yTTO0s"
-          :height "367"
-          :width "653"}]]
 
        [:h3 {} (t :on-boarding/use-2)]
        [:p
