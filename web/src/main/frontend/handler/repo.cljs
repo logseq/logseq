@@ -142,18 +142,8 @@
                  {:installation-ids installation-ids
                   :repos repos}
                  (fn [result]
-                   (cond
-                     (= "refresh" (:message result))
-                     ;; reload
-                     (set! (.-href js/window.location) config/website)
-
-                     (= "clear" (:message result))
-                     (user-handler/sign-out! nil)
-
-                     :else
-                     (do
-                       (state/set-github-installation-tokens! result)
-                       (when ok-handler (ok-handler)))))
+                   (state/set-github-installation-tokens! result)
+                   (when ok-handler (ok-handler)))
                  (fn [error]
                    (println "Something wrong!")
                    (js/console.dir error)
