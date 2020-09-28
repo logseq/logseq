@@ -8,7 +8,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defc add-repo
   []
@@ -26,7 +27,7 @@
         [:div.flex.my-4 {:key "add-button"}
          (ui/button
            "Add another repo"
-           :href "/repo/add")]
+           :href (rfe/href :repo-add))]
 
         (for [{:keys [id url] :as repo} repos]
           [:div.flex.justify-between.mb-1 {:key id}

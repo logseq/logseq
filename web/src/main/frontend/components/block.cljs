@@ -3,7 +3,8 @@
             [frontend.handler.editor :as editor]
             [frontend.util :as util]
             [clojure.string :as string]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [reitit.frontend.easy :as rfe]))
 
 (defn block-parents
   ([repo block-id format]
@@ -18,7 +19,7 @@
        (let [parents-atom (atom parents)
              component [:div.block-parents.flex-row.flex
                         (when show-page?
-                          [:a {:href (str "/page/" (util/encode-str page-name))}
+                          [:a {:href (rfe/href :page {:name (util/encode-str page-name)})}
                            (or (:page/original-name page)
                                (:page/name page))])
 
@@ -34,7 +35,7 @@
                                                            (apply str))]
                                             (when (and (not (string/blank? title))
                                                        (not= (string/lower-case page-name) (string/lower-case title)))
-                                              [:a {:href (str "/page/" uuid)}
+                                              [:a {:href (rfe/href :page {:name uuid})}
                                                title])))
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)

@@ -28,7 +28,8 @@
             [dommy.core :as d]
             [clojure.string :as string]
             [goog.object :as gobj]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [reitit.frontend.easy :as rfe]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -333,33 +334,33 @@
                (->>
                 [(when current-repo
                    {:title (t :graph)
-                    :options {:href "/graph"}
+                    :options {:href (rfe/href :graph)}
                     :icon svg/graph-sm})
                  (when logged?
                    {:title (t :all-repos)
-                    :options {:href "/repos"}
+                    :options {:href (rfe/href :repos)}
                     :icon svg/repos-sm})
                  {:title (t :excalidraw-title)
-                  :options {:href "/draw"}
+                  :options {:href (rfe/href :draw)}
                   :icon (svg/excalidraw-logo)}
                  (when current-repo
                    {:title (t :all-pages)
-                    :options {:href "/all-pages"}
+                    :options {:href (rfe/href :all-pages)}
                     :icon svg/pages-sm})
                  (when current-repo
                    {:title (t :all-files)
-                    :options {:href "/all-files"}
+                    :options {:href (rfe/href :all-files)}
                     :icon svg/folder-sm})
                  (when (and default-home current-repo)
                    {:title (t :all-journals)
-                    :options {:href "/all-journals"}
+                    :options {:href (rfe/href :all-journals)}
                     :icon svg/calendar-sm})
                  {:title (t :settings)
-                  :options {:href "/settings"}
+                  :options {:href (rfe/href :settings)}
                   :icon svg/settings-sm}
                  (when current-repo
                    {:title (t :import)
-                    :options {:href "/import"}
+                    :options {:href (rfe/href :import)}
                     :icon svg/import-sm})
                  {:title [:div.flex-row.flex.justify-between.items-center
                           [:span (t :join-community)]]

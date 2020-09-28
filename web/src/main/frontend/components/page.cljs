@@ -36,7 +36,8 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [reitit.frontend.easy :as rfe]))
 
 (defn- get-page-name
   [state]
@@ -446,7 +447,7 @@
                                                            (:db/id page)
                                                            :page
                                                            {:page page}))))
-                                          :href (str "/page/" encoded-page)}
+                                          :href (rfe/href :page {:name encoded-page})}
                         page]]
                   [:td [:span.text-gray-500.text-sm
                         (if (zero? modified-at)

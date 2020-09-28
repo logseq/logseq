@@ -21,7 +21,8 @@
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
             [frontend.graph :as graph]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -59,7 +60,7 @@
      (if (seq pages)
        (for [page pages]
          [:a.mb-1 {:key (str "recent-page-" page)
-                   :href (str "/page/" page)}
+                   :href (rfe/href :page {:name page})}
           page]))]))
 
 (rum/defcs foldable-list <
@@ -76,7 +77,7 @@
            svg/arrow-right-v2))]
 
       [:a.ml-2 {:key (str "contents-" page)
-                :href (str "/page/" page)}
+                :href (rfe/href :page {:name page})}
        (util/capitalize-all page)]]
      (when (seq l)
        [:div.contents-list.ml-4 {:class (if @fold? "hidden" "initial")}
@@ -133,7 +134,7 @@
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
-      [[:a {:href (str "/page/" (util/url-encode page-name))}
+      [[:a {:href (rfe/href :page {:name (util/url-encode page-name)})}
         (util/capitalize-all page-name)]
        [:div.ml-2
         (page-cp repo page-name)]])
