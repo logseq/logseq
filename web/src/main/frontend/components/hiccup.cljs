@@ -1332,7 +1332,8 @@
                    state)}
   [state config {:keys [title query inputs view collapsed?] :as q}]
   (let [query-atom (:query-atom state)]
-    (let [current-block-uuid (:block/uuid (:block config))
+    (let [current-block-uuid (or (:block/uuid (:block config))
+                                 (:block/uuid config))
           ;; exclude the current one, otherwise it'll loop forever
           remove-blocks (if current-block-uuid [current-block-uuid] nil)
           query-result (and query-atom (rum/react query-atom))
