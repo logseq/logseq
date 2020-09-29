@@ -1343,6 +1343,7 @@
           view-f (sci/eval-string (pr-str view))
           only-blocks? (:block/uuid (first result))
           blocks-grouped-by-page? (and (seq result)
+                                       (coll? (first result))
                                        (:page/name (ffirst result))
                                        (:block/uuid (first (second (first result))))
                                        true)
