@@ -231,37 +231,36 @@
 (defn delete!
   [page-name ok-handler]
   (when page-name
-    (when-not (date/valid-journal-title? page-name)
-      (when-let [repo (state/get-current-repo)]
-        (let [page-name (string/lower-case page-name)]
-          (let [file (db/get-page-file page-name)
-                file-path (:file/path file)]
-            ;; delete file
-            (when file-path
-              (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-              (when-let [files-conn (db/get-files-conn repo)]
-                (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
+    (when-let [repo (state/get-current-repo)]
+      (let [page-name (string/lower-case page-name)]
+        (let [file (db/get-page-file page-name)
+              file-path (:file/path file)]
+          ;; delete file
+          (when file-path
+            (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+            (when-let [files-conn (db/get-files-conn repo)]
+              (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
-              (let [blocks (db/get-page-blocks page-name)
-                    tx-data (mapv
-                             (fn [block]
-                               [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                             blocks)]
-                (db/transact! tx-data)
-                ;; remove file
-                (->
-                 (p/let [_ (git/remove-file repo file-path)
-                         _result (fs/unlink (str (util/get-repo-dir repo)
-                                                 "/"
-                                                 file-path)
-                                            nil)]
-                   (state/git-add! repo (str "- " file-path)))
-                 (p/catch (fn [err]
-                            (prn "error: " err))))))
+            (let [blocks (db/get-page-blocks page-name)
+                  tx-data (mapv
+                           (fn [block]
+                             [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                           blocks)]
+              (db/transact! tx-data)
+              ;; remove file
+              (->
+               (p/let [_ (git/remove-file repo file-path)
+                       _result (fs/unlink (str (util/get-repo-dir repo)
+                                               "/"
+                                               file-path)
+                                          nil)]
+                 (state/git-add! repo (str "- " file-path)))
+               (p/catch (fn [err]
+                          (prn "error: " err))))))
 
-            (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+          (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
-            (ok-handler)))))))
+          (ok-handler))))))
 
 (defn rename!
   [old-name new-name]
