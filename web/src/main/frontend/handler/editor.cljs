@@ -123,10 +123,6 @@
       (state/set-edit-content! edit-id new-value)
       (util/move-cursor-to input (+ cur-pos forward-pos)))))
 
-(defn copy-block-ref!
-  [block-id]
-  (util/copy-to-clipboard! (str block-id)))
-
 (defn focus-on-block!
   [block-id]
   (when block-id
@@ -937,6 +933,11 @@
             (save-block-if-changed! block content
                                     {:custom-properties properties'
                                      :rebuild-content? false})))))))
+
+(defn copy-block-ref!
+  [block-id]
+  (set-block-property! block-id "custom_id" (str block-id))
+  (util/copy-to-clipboard! (str block-id)))
 
 (defn clear-selection!
   [_e]
