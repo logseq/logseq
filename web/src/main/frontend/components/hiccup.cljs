@@ -39,7 +39,8 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.text :as text]
             [frontend.utf8 :as utf8]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [reitit.frontend.easy :as rfe]))
 
 ;; local state
 (defonce *block-children
@@ -240,7 +241,7 @@
           page (string/lower-case page-name)
           href (if html-export?
                  (util/encode-str page)
-                 (str "/page/" (util/encode-str page)))]
+                 (rfe/href :page {:name (util/encode-str page)}))]
       [:a.page-ref
        {:href href
         :on-click (fn [e]
@@ -274,7 +275,7 @@
      [:span.text-gray-500 "[["])
    (if (string/ends-with? s ".excalidraw")
      [:a.page-ref
-      {:href (str "/draw?file=" (string/replace s (str config/default-draw-directory "/") ""))
+      {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
        :on-click (fn [e] (util/stop e))}
       [:span
        (svg/excalidraw-logo)
@@ -348,7 +349,7 @@
     (->elem :sub (map-inline config l))
     ["Tag" s]
     (if (and s (util/tag-valid? s))
-      [:a.tag.mr-1 {:href (str "/page/" s)
+      [:a.tag.mr-1 {:href (rfe/href :page {:name s})
                     :on-click (fn [e]
                                 (util/stop e)
                                 (let [repo (state/get-current-repo)
@@ -404,7 +405,7 @@
         (if block
           [:span
            [:span.text-gray-500 "(("]
-           [:a {:href (str "/page/" id)
+           [:a {:href (rfe/href :page {:name id})
                 :on-click (fn [e]
                             (util/stop e)
                             (when (gobj/get e "shiftKey")
@@ -674,7 +675,7 @@
         :else
         [:span ""])]
      [:a (if (not dummy?)
-           {:href (str "/page/" uuid)
+           {:href (rfe/href :page {:name uuid})
             :on-click (fn [e]
                         (util/stop e)
                         (when (gobj/get e "shiftKey")
@@ -812,7 +813,7 @@
                                              :on-click (fn [] (editor-handler/set-priority block p))}])]
      [:a.opacity-50.hover:opacity-100
       {:class "priority"
-       :href (str "/page/" priority)
+       :href (rfe/href :page {:name priority})
        :style {:margin-right 3.5}}
       (util/format "[#%s]" (str priority))])))
 
@@ -826,7 +827,7 @@
      (mapv (fn [{:keys [db/id tag/name]}]
              (if (util/tag-valid? name)
                [:a.tag.mx-1 {:key (str "tag-" id)
-                             :href (str "/page/" name)}
+                             :href (rfe/href :page {:name name})}
                 (str "#" name)]
                [:span.warning.mx-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
                 (str "#" name)]))
@@ -1411,7 +1412,7 @@
                                     (string/replace "[" "")
                                     (string/replace "]" "")
                                     (string/replace "#" ""))]
-                        [:a.tag.mr-1 {:href (str "/page/" tag)}
+                        [:a.tag.mr-1 {:href (rfe/href :page {:name tag})}
                          tag]))
                     (property-value format v)))
                 (property-value format v))])))]

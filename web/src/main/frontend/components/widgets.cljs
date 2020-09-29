@@ -17,7 +17,8 @@
             [frontend.components.svg :as svg]
             [frontend.components.commit :as commit]
             [clojure.set :as set]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defcs choose-preferred-format
   []
@@ -73,7 +74,7 @@
                     (for [file changed-files]
                       [:li {:key (str "sync-" file)}
                        [:div.flex.flex-row.justify-between.align-items
-                        [:a {:href (str "/file/" (util/encode-str file))}
+                        [:a {:href (rfe/href :file {:path (util/encode-str file)})}
                          file]
                         [:a.ml-4.text-sm.mt-1
                          {:on-click (fn [e]

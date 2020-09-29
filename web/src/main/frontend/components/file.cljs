@@ -22,7 +22,8 @@
             [frontend.date :as date]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [reitit.frontend.easy :as rfe]))
 
 (defn- get-path
   [state]
@@ -51,8 +52,8 @@
              [:tr {:key file-id}
               [:td
                (let [href (if (config/draw? file)
-                            (str "/draw?file=" (string/replace file (str config/default-draw-directory "/") ""))
-                            (str "/file/" file-id))]
+                            (rfe/href :draw nil {:file (string/replace file (str config/default-draw-directory "/") "")})
+                            (rfe/href :file {:path file-id}))]
                  [:a.text-gray-700 {:href href}
                  file])]
               [:td [:span.text-gray-500.text-sm
@@ -96,7 +97,7 @@
      (when page
        [:div.text-sm.mb-4.ml-1 "Page: "
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                :href (str "/page/" (util/url-encode page))
+                                :href (rfe/href :page {:name (util/url-encode page)})
                                 :on-click (fn [e]
                                             (util/stop e)
                                             (when (gobj/get e "shiftKey")

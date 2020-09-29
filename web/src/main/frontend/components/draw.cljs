@@ -30,7 +30,8 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.components.widgets :as widgets]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [reitit.frontend.easy :as rfe]))
 
 (defn loaded? []
   js/window.Excalidraw)
@@ -427,7 +428,7 @@
          :initial-data (or elements #js [])}))
      [:div.absolute.top-4.left-4.hidden.md:block
       [:div.flex.flex-row.items-center
-       [:a.mr-3.opacity-70.hover:opacity-100 {:href "/"
+       [:a.mr-3.opacity-70.hover:opacity-100 {:href (rfe/href :home)
                                               :title "Back to logseq"}
         (svg/logo false)]
        (files)
