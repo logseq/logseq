@@ -7,7 +7,6 @@
             [frontend.components.block :as block]
             [frontend.extensions.graph-2d :as graph-2d]
             [frontend.components.onboarding :as onboarding]
-            [frontend.handler :as handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]

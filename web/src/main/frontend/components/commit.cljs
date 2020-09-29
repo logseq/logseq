@@ -1,7 +1,6 @@
 (ns frontend.components.commit
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler :as handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.state :as state]

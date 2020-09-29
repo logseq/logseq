@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.config :as config]
-            [frontend.handler :as handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file]
             [frontend.handler.notification :as notification]

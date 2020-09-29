@@ -1,7 +1,6 @@
 (ns frontend.components.settings
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.handler.ui :as ui-handler]

@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [medley.core :as medley]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler :as handler]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]

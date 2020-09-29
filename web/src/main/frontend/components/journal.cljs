@@ -2,9 +2,9 @@
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.date :as date]
-            [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
@@ -106,7 +106,7 @@
       [:div.journal.content {:key journal-name}
        (journal-cp [journal-name format])])
     {:on-load (fn []
-                (handler/load-more-journals!))})])
+                (page-handler/load-more-journals!))})])
 
 (rum/defc all-journals < rum/reactive
   []

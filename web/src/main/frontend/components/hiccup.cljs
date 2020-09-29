@@ -17,7 +17,6 @@
             [frontend.components.block :as block-comp]
             [frontend.ui :as ui]
             [frontend.components.widgets :as widgets]
-            [frontend.handler :as handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.image :as image-handler]
             [frontend.handler.editor :as editor-handler]

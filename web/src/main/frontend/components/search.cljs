@@ -1,7 +1,6 @@
 (ns frontend.components.search
   (:require [rum.core :as rum]
             [frontend.util :as util]
-            [frontend.handler :as handler]
             [frontend.handler.route :as route]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]

@@ -3,7 +3,6 @@
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.protocol :as protocol]
-            [frontend.handler :as handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.image :as image-handler]

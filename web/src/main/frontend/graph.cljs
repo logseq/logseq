@@ -1,6 +1,5 @@
 (ns frontend.graph
-  (:require [frontend.handler :as handler]
-            [frontend.handler.ui :as ui-handler]
+  (:require [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]
             [frontend.util :as util]
             [clojure.string :as string]

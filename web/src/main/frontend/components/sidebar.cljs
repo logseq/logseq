@@ -16,7 +16,6 @@
             [goog.crypt.base64 :as b64]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]

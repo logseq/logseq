@@ -15,12 +15,6 @@
             [frontend.history :as history]
             [frontend.ui :as ui]))
 
-(defn load-more-journals!
-  []
-  (let [current-length (:journals-length @state/state)]
-    (when (< current-length (db/get-journals-length))
-      (state/update-state! :journals-length inc))))
-
 (defn- watch-for-date!
   []
   (js/setInterval (fn []
