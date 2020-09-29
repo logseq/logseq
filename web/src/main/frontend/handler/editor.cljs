@@ -474,7 +474,6 @@
                  ;;         :new-end-pos new-end-pos
                  ;;         :new-content new-content})
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
-                 blocks (db/recompute-block-children repo block blocks)
                  page-id (:db/id page)
                  modified-time (let [modified-at (tc/to-long (t/now))]
                                  [[:db/add page-id :page/last-modified-at modified-at]
@@ -569,7 +568,6 @@
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
                              {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
-                             blocks (db/recompute-block-children repo block blocks)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
                              transact-fn (fn []
                                            (repo-handler/transact-react-and-alter-file!

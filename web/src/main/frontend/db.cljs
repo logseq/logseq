@@ -2161,50 +2161,6 @@
    ;; TODO: need more thoughts
    0))
 
-(defn recompute-block-children
-  [repo block blocks]
-  (if (> (count blocks) 1)
-    (when-let [conn (get-conn repo)]
-      (let [top-parent (:block/uuid (get-block-parent repo (:block/uuid block)))
-            level (:block/level block)
-            result (loop [result []
-                          blocks (reverse blocks)
-                          last-level 1000
-                          children []]
-                     (if-let [h (first blocks)]
-                       (let [id (:block/uuid h)
-                             level (:block/level h)
-                             [children current-block-children]
-                             (cond
-                               (>= level last-level)
-                               [(conj children [id level])
-                                #{}]
-
-                               (< level last-level)
-                               (let [current-block-children (set (->> (filter #(< level (second %)) children)
-                                                                      (map first)))
-                                     others (vec (remove #(< level (second %)) children))]
-                                 [(conj others [id level])
-                                  current-block-children]))
-                             h (assoc h :block/children current-block-children)]
-                         (recur (conj result h)
-                                (rest blocks)
-                                level
-                                children))
-                       (reverse result)))
-            result (vec result)]
-        (if top-parent
-          (let [top-parent-children (filter (fn [h] (= (:block/level h) level)) blocks)
-                top-parent-children-ids (map :block/uuid top-parent-children)]
-            (if (= 1 (count top-parent-children)) ; no children count changed
-              result
-              (let [old-top-parent-children (:block/children (entity repo [:block/uuid top-parent]))
-                    new-children (set/union (set old-top-parent-children) (set top-parent-children-ids))]
-                (conj result {:block/uuid top-parent
-                              :block/children new-children}))))
-          result)))
-    blocks))
-
 (defn get-blocks-by-priority
   [repo priority]
   (let [priority (string/capitalize priority)]
