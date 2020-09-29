@@ -15,13 +15,25 @@
 ;; Both files and git libraries can be removed.
 ;; Maybe we can remove some handlers and components too.
 
+;; There should be two publishing modes:
+;; 1. Graph version, similar to logseq.com
+;; 2. Traditional blog version, much faster to load
+;; We might host the pages or blocks directly on logseq.com in the future.
+
+;; How to publish?
+;; 1. When you click a publish button, it'll downloads a zip which includes the
+;;    html, css, javascript and other files (image, mp3, etc.), the serialized
+;;    data should include all the public pages and blocks.
+;; 2. Built-in sync with Github Pages, you should specify a Github repo for publishing.
+
 (defn restore-from-transit-str!
   []
   (state/set-current-repo! "local")
   (when-let [data js/window.logseq_db]
-    (let [db-conn (d/create-conn db-schema/schema)
-          _ (swap! db/conns assoc "local" db-conn)
-          db (string->db logseq_db)]
+    (let [data (js/JSON.stringify data)
+          db-conn (d/create-conn db-schema/schema)
+          _ (swap! db/conns assoc "logseq-db/local" db-conn)
+          db (db/string->db data)]
       (reset! db-conn db))))
 
 (defn set-router!
@@ -42,7 +54,7 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
 
-  (db/restore-from-transit-str!)
+  (restore-from-transit-str!)
   (start))
 
 (defn stop []

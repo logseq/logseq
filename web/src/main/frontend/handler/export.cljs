@@ -4,7 +4,8 @@
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.publishing.html :as html]))
 
 (defn copy-block!
   [block-id]
@@ -50,3 +51,14 @@
           (.setAttribute anchor "href" url)
           (.setAttribute anchor "download" file-path)
           (.click anchor))))))
+
+(defn export-repo-as-zip!
+  [repo]
+  (when-let [db (db/get-conn repo)]
+    (let [db-str (db/db->string db)
+          html-str (str "data:text/html;charset=UTF-8,"
+                        (js/encodeURIComponent (html/publishing-html db-str)))]
+      (when-let [anchor (gdom/getElement "download-as-zip")]
+        (.setAttribute anchor "href" html-str)
+        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".html"))
+        (.click anchor)))))

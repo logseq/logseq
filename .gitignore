@@ -16,6 +16,10 @@ node_modules/
 /resources/static/js/main.js
 /resources/static/js/cljs-runtime
 /resources/static/js/manifest.edn
+/resources/static/js/publishing/*.map
+/resources/static/js/publishing/main.js
+/resources/static/js/publishing/cljs-runtime
+/resources/static/js/publishing/manifest.edn
 /resources/static/style.css
 tauri-release/
 

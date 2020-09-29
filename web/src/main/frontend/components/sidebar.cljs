@@ -22,6 +22,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.export :as export]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
             [dommy.core :as d]
@@ -93,6 +94,8 @@
         token (state/sub :encrypt/token)
         ;; TODO: remove this
         daily-migrating? (state/sub [:daily/migrating?])]
+    (prn {:repo (state/get-current-repo)
+          :conns (db/get-conn)})
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.max-w-7xl.mx-auto
        (cond
@@ -331,7 +334,12 @@
                    [:a svg/user]])])
              (let [logged? (:name me)]
                (->>
-                [(when current-repo
+                [(when (and logged? current-repo)
+                   {:title (t :publishing)
+                    :options {:on-click (fn []
+                                          (export/export-repo-as-zip! current-repo))}
+                    :icon nil})
+                 (when current-repo
                    {:title (t :graph)
                     :options {:href (rfe/href :graph)}
                     :icon svg/graph-sm})
@@ -373,6 +381,8 @@
                     :icon svg/logout-sm})]
                 (remove nil?)))
              {})
+
+            [:a#download-as-zip.hidden]
 
             [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
              {:on-click (fn []
