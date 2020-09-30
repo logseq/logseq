@@ -32,6 +32,8 @@
    :output-dir "../resources/static/js/publishing"
    :asset-path "/static/js"
 
+   :closure-defines {frontend.config/PUBLISHING true}
+
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es6
                       :externs ["datascript/externs.js"

@@ -260,7 +260,9 @@
               developer-mode? (state/sub [:ui/developer-mode?])]
           [:div.flex-1.page.relative
            [:div.relative
-            (when (and (not block?) (not sidebar?))
+            (when (and (not block?)
+                       (not sidebar?)
+                       (not config/publishing?))
 
               (let [links (->>
                            [(when file
@@ -334,7 +336,8 @@
               (when (and file-path
                          (not sidebar?)
                          (not block?)
-                         (not (state/hide-file?)))
+                         (not (state/hide-file?))
+                         (not config/publishing?))
                 [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
                  [:span.opacity-50 (t :file/file)]
                  [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}

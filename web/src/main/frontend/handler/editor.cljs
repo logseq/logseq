@@ -107,14 +107,14 @@
           selection-link? (and selection (or (util/starts-with? selection "http://")
                                              (util/starts-with? selection "https://")))
           [content forward-pos] (cond
-                               empty-selection?
-                               (config/get-empty-link-and-forward-pos format)
+                                  empty-selection?
+                                  (config/get-empty-link-and-forward-pos format)
 
-                               selection-link?
-                               (config/with-default-link format selection)
+                                  selection-link?
+                                  (config/with-default-link format selection)
 
-                               :else
-                               (config/with-default-label format selection))
+                                  :else
+                                  (config/with-default-label format selection))
           new-value (str
                      (subs value 0 selection-start)
                      content
@@ -337,36 +337,38 @@
   ([block pos format id]
    (edit-block! block pos format id nil))
   ([block pos format id {:keys [custom-content custom-properties]}]
-   (when-let [block-id (:block/uuid block)]
-     (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
-           block (or
-                  block
-                  (db/pull [:block/uuid block-id])
-                  ;; dummy?
-                  {:block/uuid block-id
-                   :block/content ""})
-           {:block/keys [content properties]} block
-           content (or custom-content content)
-           content (string/trim (text/remove-level-spaces content format))
-           properties (or custom-properties properties)
-           content (if (and (seq properties) (text/properties-hidden? properties))
-                     (text/remove-properties! content)
-                     content)
-           content-length (count content)
-           text-range (if (or (= :max pos) (<= content-length pos))
-                        content
-                        (subs content 0 pos))]
-       (state/set-editing! edit-input-id content block text-range)))))
+   (when-not config/publishing?
+     (when-let [block-id (:block/uuid block)]
+       (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
+             block (or
+                    block
+                    (db/pull [:block/uuid block-id])
+                    ;; dummy?
+                    {:block/uuid block-id
+                     :block/content ""})
+             {:block/keys [content properties]} block
+             content (or custom-content content)
+             content (string/trim (text/remove-level-spaces content format))
+             properties (or custom-properties properties)
+             content (if (and (seq properties) (text/properties-hidden? properties))
+                       (text/remove-properties! content)
+                       content)
+             content-length (count content)
+             text-range (if (or (= :max pos) (<= content-length pos))
+                          content
+                          (subs content 0 pos))]
+         (state/set-editing! edit-input-id content block text-range))))))
 
 (defn edit-last-block-for-new-page!
   [last-block pos]
   (when-let [first-block (util/get-first-block-by-id (:block/uuid last-block))]
-    (edit-block! last-block
-                 pos
-                 (:block/format last-block)
-                 (string/replace (gobj/get first-block "id")
-                                 "ls-block"
-                                 "edit-block"))))
+    (edit-block!
+     last-block
+     pos
+     (:block/format last-block)
+     (string/replace (gobj/get first-block "id")
+                     "ls-block"
+                     "edit-block"))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -469,10 +471,6 @@
                                                                :end-pos new-end-pos})
                                                             (block/parse-block block format))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
-                 new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)
-                 ;; _ (prn {:block-children-content block-children-content
-                 ;;         :new-end-pos new-end-pos
-                 ;;         :new-content new-content})
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
                  page-id (:db/id page)
                  modified-time (let [modified-at (tc/to-long (t/now))]
@@ -519,7 +517,8 @@
                 modified-time)
                {:key :block/change
                 :data (map (fn [block] (assoc block :block/page page)) blocks)}
-               [[file-path new-content]]))
+               (let [new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)]
+                 [[file-path new-content]])))
 
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!)))
@@ -694,32 +693,33 @@
 
 (defn- insert-new-block!
   [state]
-  (let [{:keys [block value format id config]} (get-state state)
-        block-id (:block/uuid block)
-        block (or (db/pull [:block/uuid block-id])
-                  block)
-        collapsed? (:block/collapsed? block)
-        repo (or (:block/repo block) (state/get-current-repo))
-        last-child (and collapsed?
-                        (last (db/get-block-and-children repo (:block/uuid block))))
-        last-child (when (not= (:block/uuid last-child)
-                               (:block/uuid block))
-                     last-child)]
-    (set-last-edit-block! (:block/uuid block) value)
-    ;; save the current block and insert a new block
-    (insert-new-block-aux!
-     (or last-child block)
-     (if last-child (:block/content last-child) value)
-     {:create-new-block? true
-      :ok-handler
-      (fn [[_first-block last-block _new-block-content]]
-        (let [last-id (:block/uuid last-block)]
-          (edit-block! last-block 0 format id)
-          (clear-when-saved!)))
-      :with-level? (if last-child true false)
-      :new-level (and last-child (:block/level block))
-      :blocks-container-id (:id config)
-      :current-page (state/get-current-page)})))
+  (when-not config/publishing?
+    (let [{:keys [block value format id config]} (get-state state)
+          block-id (:block/uuid block)
+          block (or (db/pull [:block/uuid block-id])
+                    block)
+          collapsed? (:block/collapsed? block)
+          repo (or (:block/repo block) (state/get-current-repo))
+          last-child (and collapsed?
+                          (last (db/get-block-and-children repo (:block/uuid block))))
+          last-child (when (not= (:block/uuid last-child)
+                                 (:block/uuid block))
+                       last-child)]
+      (set-last-edit-block! (:block/uuid block) value)
+      ;; save the current block and insert a new block
+      (insert-new-block-aux!
+       (or last-child block)
+       (if last-child (:block/content last-child) value)
+       {:create-new-block? true
+        :ok-handler
+        (fn [[_first-block last-block _new-block-content]]
+          (let [last-id (:block/uuid last-block)]
+            (edit-block! last-block 0 format id)
+            (clear-when-saved!)))
+        :with-level? (if last-child true false)
+        :new-level (and last-child (:block/level block))
+        :blocks-container-id (:id config)
+        :current-page (state/get-current-page)}))))
 
 ;; TODO: utf8 encode performance
 (defn check

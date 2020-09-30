@@ -346,7 +346,8 @@
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
     (when-let [conn (if files-db?
-                      (deref (get-files-conn repo))
+                      (when-let [files-conn (get-files-conn repo)]
+                        (deref files-conn))
                       (get-conn repo))]
       (let [result-atom (:result (get @query-state k))]
         (if (and use-cache? result-atom)
@@ -502,9 +503,9 @@
           (group-by-page result)))
       result)))
 
-(defn get-repo-tx-id [repo]
-  (when-let [db (get-conn repo)]
-    ))
+;; (defn get-repo-tx-id [repo]
+;;   (when-let [db (get-conn repo)]
+;;     ))
 
 (defn get-tx-id [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))
@@ -513,12 +514,13 @@
   ([tx-data]
    (transact! (state/get-current-repo) tx-data))
   ([repo-url tx-data]
-   (let [tx-data (->> (util/remove-nils tx-data)
-                      (remove nil?))]
-     (when (seq tx-data)
-       (when-let [conn (get-conn repo-url false)]
-         (let [tx-report (d/transact! conn (vec tx-data))]
-           (state/mark-repo-as-changed! repo-url (get-tx-id tx-report))))))))
+   (when-not config/publishing?
+     (let [tx-data (->> (util/remove-nils tx-data)
+                       (remove nil?))]
+      (when (seq tx-data)
+        (when-let [conn (get-conn repo-url false)]
+          (let [tx-report (d/transact! conn (vec tx-data))]
+            (state/mark-repo-as-changed! repo-url (get-tx-id tx-report)))))))))
 
 (defn get-key-value
   ([key]
@@ -540,39 +542,40 @@
 (defn transact-react!
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
                      :or {files-db? false}}]
-  (let [repo-url (or repo-url (state/get-current-repo))
-        tx-data (->> (util/remove-nils tx-data)
-                     (remove nil?))
-        get-conn (fn [] (if files-db?
-                          (get-files-conn repo-url)
-                          (get-conn repo-url false)))]
-    (when (and (seq tx-data) (get-conn))
-      (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
-            _ (state/mark-repo-as-changed! repo-url (get-tx-id tx-result))
-            db (:db-after tx-result)
-            handler-keys (get-handler-keys handler-opts)]
-        (doseq [handler-key handler-keys]
-          (let [handler-key (vec (cons repo-url handler-key))]
-            (when-let [cache (get @query-state handler-key)]
-              (let [{:keys [query inputs transform-fn query-fn]} cache]
-                (when (or query query-fn)
-                  (let [new-result (->
-                                    (cond
-                                      query-fn
-                                      (profile
-                                       "Query:"
-                                       (doall (query-fn db)))
+  (when-not config/publishing?
+    (let [repo-url (or repo-url (state/get-current-repo))
+          tx-data (->> (util/remove-nils tx-data)
+                       (remove nil?))
+          get-conn (fn [] (if files-db?
+                            (get-files-conn repo-url)
+                            (get-conn repo-url false)))]
+      (when (and (seq tx-data) (get-conn))
+        (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
+              _ (state/mark-repo-as-changed! repo-url (get-tx-id tx-result))
+              db (:db-after tx-result)
+              handler-keys (get-handler-keys handler-opts)]
+          (doseq [handler-key handler-keys]
+            (let [handler-key (vec (cons repo-url handler-key))]
+              (when-let [cache (get @query-state handler-key)]
+                (let [{:keys [query inputs transform-fn query-fn]} cache]
+                  (when (or query query-fn)
+                    (let [new-result (->
+                                      (cond
+                                        query-fn
+                                        (profile
+                                         "Query:"
+                                         (doall (query-fn db)))
 
-                                      (keyword? query)
-                                      (get-key-value repo-url query)
+                                        (keyword? query)
+                                        (get-key-value repo-url query)
 
-                                      (seq inputs)
-                                      (apply d/q query db inputs)
+                                        (seq inputs)
+                                        (apply d/q query db inputs)
 
-                                      :else
-                                      (d/q query db))
-                                    transform-fn)]
-                    (set-new-result! handler-key new-result)))))))))))
+                                        :else
+                                        (d/q query db))
+                                      transform-fn)]
+                      (set-new-result! handler-key new-result))))))))))))
 
 (defn pull-block
   [id]

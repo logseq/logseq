@@ -79,6 +79,19 @@
 
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
+  {:init (fn [state]
+           (let [current-repo (state/sub :git/current-repo)
+                 default-home (get-default-home-if-valid)]
+             (when-let [pages (->> (seq (:sidebar default-home))
+                                   (remove nil?))]
+               (let [blocks (remove nil? pages)]
+                 (doseq [page pages]
+                   (let [page (string/lower-case page)
+                         [db-id block-type] (if (= page "contents")
+                                              ["contents" :contents]
+                                              [page :page])]
+                     (state/sidebar-add-block! current-repo db-id block-type nil))))))
+           state)}
   []
   (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
@@ -94,8 +107,6 @@
         token (state/sub :encrypt/token)
         ;; TODO: remove this
         daily-migrating? (state/sub [:daily/migrating?])]
-    (prn {:repo (state/get-current-repo)
-          :conns (db/get-conn)})
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.max-w-7xl.mx-auto
        (cond
@@ -103,17 +114,8 @@
          (ui/loading "Migrating to daily notes")
 
          default-home
-         (do
-           ;; if there is sidebar item, update
-           (when (:sidebar default-home)
-             (doall (map (fn [el]
-                           (case (:type el)
-                             :contents
-                             (state/sidebar-add-block! current-repo "contents" :contents nil)
-
-                             nil)) (:sidebar default-home))))
-           (route-handler/redirect! {:to :page
-                                     :path-params {:name (util/encode-str (:page default-home))}}))
+         (route-handler/redirect! {:to :page
+                                   :path-params {:name (util/encode-str (:page default-home))}})
 
          (and (not logged?) (seq latest-journals))
          (journal/journals latest-journals)
@@ -298,7 +300,8 @@
            [:div.ml-4.flex.items-center.md:ml-6
             (new-block-mode)
 
-            (when-not logged?
+            (when (and (not logged?)
+                       (not config/publishing?))
               [:a.text-sm.font-medium.login
                {:href "/login/github"
                 :on-click (fn []
@@ -323,64 +326,68 @@
                     page (db/entity [:page/name page])]
                 (page/presentation current-repo page (:journal? page))))
 
-            (ui/dropdown-with-links
-             (fn [{:keys [toggle-fn]}]
-               [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7.ml-2
-                {:on-click toggle-fn}
-                (if-let [avatar (:avatar me)]
-                  [:img.h-7.w-7.rounded-full
-                   {:src avatar}]
-                  [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
-                   [:a svg/user]])])
-             (let [logged? (:name me)]
-               (->>
-                [(when (and logged? current-repo)
-                   {:title (t :publishing)
-                    :options {:on-click (fn []
-                                          (export/export-repo-as-zip! current-repo))}
-                    :icon nil})
-                 (when current-repo
-                   {:title (t :graph)
-                    :options {:href (rfe/href :graph)}
-                    :icon svg/graph-sm})
-                 (when logged?
-                   {:title (t :all-repos)
-                    :options {:href (rfe/href :repos)}
-                    :icon svg/repos-sm})
-                 {:title (t :excalidraw-title)
-                  :options {:href (rfe/href :draw)}
-                  :icon (svg/excalidraw-logo)}
-                 (when current-repo
-                   {:title (t :all-pages)
-                    :options {:href (rfe/href :all-pages)}
-                    :icon svg/pages-sm})
-                 (when current-repo
-                   {:title (t :all-files)
-                    :options {:href (rfe/href :all-files)}
-                    :icon svg/folder-sm})
-                 (when (and default-home current-repo)
-                   {:title (t :all-journals)
-                    :options {:href (rfe/href :all-journals)}
-                    :icon svg/calendar-sm})
-                 {:title (t :settings)
-                  :options {:href (rfe/href :settings)}
-                  :icon svg/settings-sm}
-                 (when current-repo
-                   {:title (t :import)
-                    :options {:href (rfe/href :import)}
-                    :icon svg/import-sm})
-                 {:title [:div.flex-row.flex.justify-between.items-center
-                          [:span (t :join-community)]]
-                  :options {:href "https://discord.gg/KpN4eHY"
-                            :title (t :discord-title)
-                            :target "_blank"}
-                  :icon svg/discord}
-                 (when logged?
-                   {:title (t :sign-out)
-                    :options {:on-click user-handler/sign-out!}
-                    :icon svg/logout-sm})]
-                (remove nil?)))
-             {})
+            (if config/publishing?
+              [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}
+               (t :graph)]
+
+              (ui/dropdown-with-links
+               (fn [{:keys [toggle-fn]}]
+                 [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7.ml-2
+                  {:on-click toggle-fn}
+                  (if-let [avatar (:avatar me)]
+                    [:img.h-7.w-7.rounded-full
+                     {:src avatar}]
+                    [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
+                     [:a svg/user]])])
+               (let [logged? (:name me)]
+                 (->>
+                  [(when (and logged? current-repo)
+                     {:title (t :publishing)
+                      :options {:on-click (fn []
+                                            (export/export-repo-as-zip! current-repo))}
+                      :icon nil})
+                   (when current-repo
+                     {:title (t :graph)
+                      :options {:href (rfe/href :graph)}
+                      :icon svg/graph-sm})
+                   (when logged?
+                     {:title (t :all-repos)
+                      :options {:href (rfe/href :repos)}
+                      :icon svg/repos-sm})
+                   {:title (t :excalidraw-title)
+                    :options {:href (rfe/href :draw)}
+                    :icon (svg/excalidraw-logo)}
+                   (when current-repo
+                     {:title (t :all-pages)
+                      :options {:href (rfe/href :all-pages)}
+                      :icon svg/pages-sm})
+                   (when current-repo
+                     {:title (t :all-files)
+                      :options {:href (rfe/href :all-files)}
+                      :icon svg/folder-sm})
+                   (when (and default-home current-repo)
+                     {:title (t :all-journals)
+                      :options {:href (rfe/href :all-journals)}
+                      :icon svg/calendar-sm})
+                   {:title (t :settings)
+                    :options {:href (rfe/href :settings)}
+                    :icon svg/settings-sm}
+                   (when current-repo
+                     {:title (t :import)
+                      :options {:href (rfe/href :import)}
+                      :icon svg/import-sm})
+                   {:title [:div.flex-row.flex.justify-between.items-center
+                            [:span (t :join-community)]]
+                    :options {:href "https://discord.gg/KpN4eHY"
+                              :title (t :discord-title)
+                              :target "_blank"}
+                    :icon svg/discord}
+                   (when logged?
+                     {:title (t :sign-out)
+                      :options {:on-click user-handler/sign-out!}
+                      :icon svg/logout-sm})]
+                  (remove nil?)))
+               {}))
 
             [:a#download-as-zip.hidden]
 
@@ -437,12 +444,18 @@
                    :top 12
                    :left 16
                    :z-index 111}}
-          (svg/logo (not white?))]
+          (if-let [logo (and config/publishing?
+                             (get-in (state/get-config) [:project :logo]))]
+            [:img {:src logo
+                   :width 24
+                   :height 24}]
+            (svg/logo (not white?)))]
          (ui/notification)
          (ui/modal)
          (custom-context-menu)
          [:a#download.hidden]
-         (when-not config/mobile?
+         (when (and (not config/mobile?)
+                    (not config/publishing?))
            [
             (help-button)
             ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100

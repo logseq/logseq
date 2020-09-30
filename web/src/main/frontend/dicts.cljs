@@ -1,7 +1,8 @@
 (ns frontend.dicts
   (:require [tongue.core :as tongue]
             [frontend.state :as state]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.config :as config]))
 
 
 ;; TODO
@@ -289,7 +290,9 @@ title: How to take dummy notes?
         :re-index "Re-index"
         :export-json "Export as JSON"
         :unlink "unlink"
-        :search "Search or Create Page"
+        :search (if config/publishing?
+                  "Search"
+                  "Search or Create Page")
         :new-page "New page"
         :graph "Graph"
         :publishing "publishing"
@@ -529,7 +532,9 @@ title: How to take dummy notes?
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
            :unlink "解除绑定"
-           :search "搜索或者创建新页面"
+           :search (if config/publishing?
+                     "搜索"
+                     "搜索或者创建新页面")
            :new-page "新页面"
            :graph "图谱"
            :publishing "发布/下载 HTML 文件"

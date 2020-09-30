@@ -21,7 +21,8 @@
             [goog.object :as gobj]
             [frontend.graph :as graph]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.config :as config]))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -256,10 +257,11 @@
                               (state/set-theme! theme))}
               (t :right-side-bar/theme (t (keyword theme)))])]
 
-          [:div.mr-4.text-sm
-           [:a {:on-click (fn [_e]
-                            (state/sidebar-add-block! repo "help" :help nil))}
-            (t :right-side-bar/help)]]]
+          (when-not config/publishing?
+            [:div.mr-4.text-sm
+             [:a {:on-click (fn [_e]
+                              (state/sidebar-add-block! repo "help" :help nil))}
+              (t :right-side-bar/help)]])]
 
          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
            (rum/with-key

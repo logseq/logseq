@@ -125,7 +125,8 @@
        (history/add-history!
         [:git/repo repo]
         {:db (d/db (db/get-conn repo false))
-         :files-db (d/db (db/get-files-conn repo))
+         :files-db (when-let [files-conn (db/get-files-conn repo)]
+                     (d/db files-conn))
          :file-handler (fn [cb]
                          (->
                           (p/let [result (fs/write-file (util/get-repo-dir repo) path content)]
@@ -157,7 +158,8 @@
                 (history/add-history!
                  [:git/repo repo]
                  {:db (d/db (db/get-conn repo false))
-                  :files-db (d/db (db/get-files-conn repo))
+                  :files-db (when-let [files-conn (db/get-files-conn repo)]
+                              (d/db files-conn))
                   :file-handler (fn [cb]
                                   (doseq [[path content] files]
                                     (->

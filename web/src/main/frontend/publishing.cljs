@@ -9,7 +9,8 @@
             [frontend.routes :as routes]
             [frontend.util :as util]
             [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [cljs.reader :as reader]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -36,6 +37,14 @@
           db (db/string->db data)]
       (reset! db-conn db))))
 
+(defn restore-state!
+  []
+  (when-let [data js/window.logseq_state]
+    (let [data (reader/read-string data)]
+      (swap! state/state merge data)
+      (prn (state/get-config))
+      (prn (state/get-default-home)))))
+
 (defn set-router!
   []
   (rfe/start!
@@ -53,8 +62,8 @@
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
-
   (restore-from-transit-str!)
+  (restore-state!)
   (start))
 
 (defn stop []
