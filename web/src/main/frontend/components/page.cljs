@@ -308,7 +308,8 @@
                       (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
                    links
                    {:modal-class (util/hiccup->class
-                                  "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")}))))
+                                  "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
+                    :z-index 1}))))
             (when (and (not sidebar?)
                        (not block?))
               [:a {:on-click (fn [e]
