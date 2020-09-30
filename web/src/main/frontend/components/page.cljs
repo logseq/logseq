@@ -79,12 +79,11 @@
       (str encoded-page-name "-hiccup"))))
 
 (defn contents-page
-  [contents]
-  (let [page-name "contents"]
-    (when-let [repo (state/get-current-repo)]
-      (let [format (db/get-page-format page-name)
-            file-path (:file/path (:page/file contents))]
-        (page-blocks-cp repo contents file-path page-name page-name page-name true false false nil format)))))
+  [{:page/keys [name original-name file] :as contents}]
+  (when-let [repo (state/get-current-repo)]
+    (let [format (db/get-page-format name)
+          file-path (:file/path file)]
+      (page-blocks-cp repo contents file-path name original-name name true false false nil format))))
 
 (defn presentation
   [repo page journal?]
