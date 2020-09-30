@@ -31,10 +31,13 @@
 
 ;; public exports
 (rum/defcs dropdown < (mixins/modal :open?)
-  [state content-fn modal-content-fn modal-class]
+  [state content-fn modal-content-fn
+   & [{:keys [modal-class z-index]
+       :or   {z-index 999}
+       :as   opts}]]
   (let [{:keys [open? toggle-fn]} state
-        modal-content (modal-content-fn state)]
-    [:div.ml-1.relative {:style {:z-index 999}}
+        modal-content             (modal-content-fn state)]
+    [:div.ml-1.relative {:style {:z-index z-index}}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
@@ -49,7 +52,7 @@
    child])
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [modal-class links-header]}]
+  [content-fn links {:keys [modal-class links-header z-index] :as opts}]
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
@@ -72,7 +75,7 @@
           (rum/with-key
             (menu-link new-options child)
             (cljs.core/random-uuid))))])
-   modal-class))
+   opts))
 
 (defn button
   [text & {:keys [background on-click href]
