@@ -84,7 +84,9 @@
 (rum/defc main-content < rum/reactive
   {:init (fn [state]
            (let [current-repo (state/sub :git/current-repo)
-                 default-home (get-default-home-if-valid)]
+                 default-home (get-default-home-if-valid)
+                 sidebar (:sidebar default-home)
+                 sidebar (if (string? sidebar) [sidebar] sidebar)]
              (when-let [pages (->> (seq (:sidebar default-home))
                                    (remove nil?))]
                (let [blocks (remove nil? pages)]
