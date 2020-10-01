@@ -217,7 +217,8 @@
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         repo (or repo current-repo)
-        encoded-page-name (get-page-name state)
+        encoded-page-name (or (get-page-name state)
+                              (state/get-current-page))
         page-name (string/lower-case (util/url-decode encoded-page-name))
         path-page-name page-name
         marker-page? (util/marker? page-name)
