@@ -295,7 +295,7 @@ title: How to take dummy notes?
                   "Search or Create Page")
         :new-page "New page"
         :graph "Graph"
-        :publishing "publishing"
+        :publishing "Publishing"
         :all-repos "All repos"
         :all-pages "All pages"
         :all-files "All files"

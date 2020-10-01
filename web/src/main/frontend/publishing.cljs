@@ -41,9 +41,7 @@
   []
   (when-let [data js/window.logseq_state]
     (let [data (reader/read-string data)]
-      (swap! state/state merge data)
-      (prn (state/get-config))
-      (prn (state/get-default-home)))))
+      (swap! state/state merge data))))
 
 (defn set-router!
   []

@@ -344,7 +344,7 @@
                   [(when (and logged? current-repo)
                      {:title (t :publishing)
                       :options {:on-click (fn []
-                                            (export/export-repo-as-zip! current-repo))}
+                                            (export/export-repo-as-html! current-repo))}
                       :icon nil})
                    (when current-repo
                      {:title (t :graph)
@@ -389,7 +389,7 @@
                   (remove nil?)))
                {}))
 
-            [:a#download-as-zip.hidden]
+            [:a#download-as-html.hidden]
 
             [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
              {:on-click (fn []

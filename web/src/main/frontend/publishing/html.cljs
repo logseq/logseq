@@ -6,7 +6,7 @@
 (defn publishing-html
   [transit-db app-state]
   (let [{:keys [icon name alias title description url]} (:project (state/get-config))
-        icon (or icon (config/asset-uri "/static/img/logo.png"))
+        icon (or icon "/static/img/logo.png")
         project (or alias name)
         content (html
                   [:head
@@ -15,7 +15,7 @@
                     {:content
                      "minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no",
                      :name "viewport"}]
-                   [:link {:type "text/css", :href (config/asset-uri "/static/css/style.css"), :rel "stylesheet"}]
+                   [:link {:type "text/css", :href "/static/style.css", :rel "stylesheet"}]
                    [:link
                     {:href icon
                      :type "image/png",
@@ -51,8 +51,8 @@
                    [:div#root]
                    [:script (str "window.logseq_db=" transit-db)]
                    [:script (str "window.logseq_state=" (js/JSON.stringify app-state))]
-                   [:script {:src (config/asset-uri "/static/js/mldoc.min.js")}]
-                   [:script {:src (config/asset-uri "/static/js/publishing/main.js")}]
+                   [:script {:src "/static/js/mldoc.min.js"}]
+                   [:script {:src "/static/js/publishing.js"}]
                    ;; TODO: should make this configurable
-                   [:script {:src (config/asset-uri "/static/js/highlight.min.js")}]])]
+                   [:script {:src "/static/js/highlight.min.js"}]])]
     (str "<!DOCTYPE html>\n" content)))
