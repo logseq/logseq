@@ -516,11 +516,11 @@
   ([repo-url tx-data]
    (when-not config/publishing?
      (let [tx-data (->> (util/remove-nils tx-data)
-                       (remove nil?))]
-      (when (seq tx-data)
-        (when-let [conn (get-conn repo-url false)]
-          (let [tx-report (d/transact! conn (vec tx-data))]
-            (state/mark-repo-as-changed! repo-url (get-tx-id tx-report)))))))))
+                        (remove nil?))]
+       (when (seq tx-data)
+         (when-let [conn (get-conn repo-url false)]
+           (let [tx-report (d/transact! conn (vec tx-data))]
+             (state/mark-repo-as-changed! repo-url (get-tx-id tx-report)))))))))
 
 (defn get-key-value
   ([key]
@@ -2307,6 +2307,46 @@
 (defn transact-async?
   []
   (>= (blocks-count) 1000))
+
+(defn- get-public-pages
+  [db]
+  (-> (d/q
+        '[:find ?p
+          :where
+          [?p :page/directives ?d]
+          [(get ?d :public) ?pub]
+          [(= "true" ?pub)]]
+        db)
+      (seq-flatten)))
+
+(defn clean-export!
+  [db]
+  (let [remove? #(contains? #{"me" "recent" "file"} %)
+        filtered-db (d/filter db
+                              (fn [db datom]
+                                (let [ns (namespace (:a datom))]
+                                  (not (remove? ns)))))
+        datoms (d/datoms filtered-db :eavt)]
+    @(d/conn-from-datoms datoms db-schema/schema)))
+
+(defn filter-only-public-pages-and-blocks
+  [db]
+  (let [public-pages (get-public-pages db)
+        contents-id (:db/id (entity [:page/name "contents"]))]
+    (when (seq public-pages)
+      (let [public-pages (set (conj public-pages contents-id))
+            page-or-block? #(contains? #{"page" "block" "me" "recent" "file"} %)
+            filtered-db (d/filter db
+                                  (fn [db datom]
+                                    (let [ns (namespace (:a datom))]
+                                      (or
+                                       (not (page-or-block? ns))
+                                       (and (= ns "page")
+                                            (contains? public-pages (:e datom)))
+                                       (and (= ns "block")
+                                            (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))
+            datoms (d/datoms filtered-db :eavt)]
+        @(d/conn-from-datoms datoms db-schema/schema)))))
 
 (comment
   (defn debug!

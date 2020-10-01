@@ -136,6 +136,10 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defn all-pages-public?
+  []
+  (true? (:all-pages-public? (get-config))))
+
 (defn get-default-home
   []
   (:default-home (get-config)))

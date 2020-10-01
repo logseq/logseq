@@ -203,9 +203,9 @@
         path (str config/default-pages-directory "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
     (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-pages-directory))
-                 (p/catch (fn [_e])))
-           _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-     (db/reset-file! repo-url path content))))
+                  (p/catch (fn [_e])))
+            _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+      (db/reset-file! repo-url path content))))
 
 (defn create-today-journal-if-not-exists
   ([repo-url]
@@ -532,12 +532,13 @@
                          (p/catch (fn [_e] nil)))
               _ (state/set-current-repo! repo)
               _ (db/start-db-conn! nil repo)
-              _ (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
-                  (create-dummy-notes-page repo dummy-notes))
-              _ (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
-                      tutorial (string/replace-first tutorial "$today" (date/today))]
-                  (create-today-journal-if-not-exists repo tutorial)
-                  )
+              _ (when-not config/publishing?
+                  (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                    (create-dummy-notes-page repo dummy-notes)))
+              _ (when-not config/publishing?
+                  (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                        tutorial (string/replace-first tutorial "$today" (date/today))]
+                    (create-today-journal-if-not-exists repo tutorial)))
               _ (create-config-file-if-not-exists repo)
               _ (create-contents-file repo)]
         (state/set-db-restoring! false)))

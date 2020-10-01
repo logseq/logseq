@@ -325,3 +325,7 @@
   (let [current-length (:journals-length @state/state)]
     (when (< current-length (db/get-journals-length))
       (state/update-state! :journals-length inc))))
+
+(defn update-public-attribute!
+  [page-name value]
+  (page-add-directives! page-name {:public value}))

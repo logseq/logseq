@@ -45,12 +45,13 @@
       :stroke-linecap "round"}]]
    title])
 
-(rum/defc sidebar-nav
+(rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]
   (let [white? (= "white" (state/sub :ui/theme))
         active? (fn [route] (= route (get-in route-match [:data :name])))
         page-active? (fn [page]
-                       (= page (get-in route-match [:parameters :path :name])))]
+                       (= page (get-in route-match [:parameters :path :name])))
+        right-sidebar? (state/sub :ui/sidebar-open?)]
     [:nav.flex-1
      (nav-item "Journals" "/"
                "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
@@ -60,15 +61,17 @@
                "M6 2h9a1 1 0 0 1 .7.3l4 4a1 1 0 0 1 .3.7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.1.9-2 2-2zm9 2.41V7h2.59L15 4.41zM18 9h-3a2 2 0 0 1-2-2V4H6v16h12V9zm-2 7a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm0-4a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm-5-4a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1z"
                (active? :all-pages)
                close-modal-fn)
-     (nav-item "All Files" "/all-files"
-               "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
-               (active? :all-files)
-               close-modal-fn)
-     ;; [:div.pl-4.pr-4 {:style {:height 1
-     ;;                          :background-color (if white? "#f0f8ff" "#073642")
-     ;;                          :margin 12}}]
-     ;; (right-sidebar/contents)
-     ]))
+     (when-not config/publishing?
+       (nav-item "All Files" "/all-files"
+                "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
+                (active? :all-files)
+                close-modal-fn))
+     (when-not right-sidebar?
+       [:div.pl-4.pr-4 {:style {:height 1
+                               :background-color (if white? "#f0f8ff" "#073642")
+                               :margin 12}}])
+     (when-not right-sidebar?
+       (right-sidebar/contents))]))
 
 (defn get-default-home-if-valid
   []
@@ -326,6 +329,10 @@
                     page (db/entity [:page/name page])]
                 (page/presentation current-repo page (:journal? page))))
 
+            (when config/publishing?
+              [:a.text-sm.font-medium.ml-3 {:href (rfe/href :all-pages)}
+               (t :all-pages)])
+
             (if config/publishing?
               [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}
                (t :graph)]
@@ -341,22 +348,19 @@
                      [:a svg/user]])])
                (let [logged? (:name me)]
                  (->>
-                  [(when (and logged? current-repo)
+                  [(when current-repo
+                     {:title (t :graph)
+                      :options {:href (rfe/href :graph)}
+                      :icon svg/graph-sm})
+                   (when (and logged? current-repo)
                      {:title (t :publishing)
                       :options {:on-click (fn []
                                             (export/export-repo-as-html! current-repo))}
                       :icon nil})
-                   (when current-repo
-                     {:title (t :graph)
-                      :options {:href (rfe/href :graph)}
-                      :icon svg/graph-sm})
                    (when logged?
                      {:title (t :all-repos)
                       :options {:href (rfe/href :repos)}
                       :icon svg/repos-sm})
-                   {:title (t :excalidraw-title)
-                    :options {:href (rfe/href :draw)}
-                    :icon (svg/excalidraw-logo)}
                    (when current-repo
                      {:title (t :all-pages)
                       :options {:href (rfe/href :all-pages)}
@@ -369,6 +373,9 @@
                      {:title (t :all-journals)
                       :options {:href (rfe/href :all-journals)}
                       :icon svg/calendar-sm})
+                   {:title (t :excalidraw-title)
+                    :options {:href (rfe/href :draw)}
+                    :icon (svg/excalidraw-logo)}
                    {:title (t :settings)
                     :options {:href (rfe/href :settings)}
                     :icon svg/settings-sm}

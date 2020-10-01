@@ -55,7 +55,10 @@
 (defn export-repo-as-html!
   [repo]
   (when-let [db (db/get-conn repo)]
-    (let [db-str (db/db->string db)
+    (let [db (if (state/all-pages-public?)
+               (db/clean-export! db)
+               (db/filter-only-public-pages-and-blocks db))
+          db-str (db/db->string db)
           state (select-keys @state/state
                              [:ui/theme :ui/cycle-collapse
                               :ui/collapsed-blocks
