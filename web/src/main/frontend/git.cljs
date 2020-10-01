@@ -10,7 +10,6 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]))
 
-(defonce default-branch "master")
 ;; only support Github now
 (defn get-username
   []
@@ -38,7 +37,7 @@
                                 repo-url
                                 (get-cors-proxy repo-url)
                                 1
-                                default-branch
+                                (state/get-default-branch repo-url)
                                 (get-username)
                                 token))
 
@@ -52,31 +51,31 @@
                                 repo-url
                                 (get-cors-proxy repo-url)
                                 100
-                                default-branch
+                                (state/get-default-branch repo-url)
                                 (get-username)
                                 token))
 
 (defn merge
   [repo-url]
   (js/window.workerThread.merge (util/get-repo-dir repo-url)
-                                default-branch))
+                                (state/get-default-branch repo-url)))
 
 (defn checkout
   [repo-url]
   (js/window.workerThread.checkout (util/get-repo-dir repo-url)
-                                default-branch))
+                                   (state/get-default-branch repo-url)))
 
 (defn log
   [repo-url depth]
   (js/window.workerThread.log (util/get-repo-dir repo-url)
-                              default-branch
+                              (state/get-default-branch repo-url)
                               depth))
 
 (defn pull
   [repo-url token]
   (js/window.workerThread.pull (util/get-repo-dir repo-url)
                                (get-cors-proxy repo-url)
-                               default-branch
+                               (state/get-default-branch repo-url)
                                (get-username)
                                token))
 
@@ -117,7 +116,7 @@
   ([repo-url token force?]
    (js/window.workerThread.push (util/get-repo-dir repo-url)
                                 (get-cors-proxy repo-url)
-                                default-branch
+                                (state/get-default-branch repo-url)
                                 force?
                                 (get-username)
                                 token)))
@@ -177,5 +176,5 @@
 (defn write-ref!
   [repo-url oid]
   (js/window.workerThread.writeRef (util/get-repo-dir repo-url)
-                                   default-branch
+                                   (state/get-default-branch repo-url)
                                    oid))

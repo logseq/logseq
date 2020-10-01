@@ -567,9 +567,10 @@
     (periodically-push-tasks repo-url)))
 
 (defn create-repo!
-  [repo-url]
+  [repo-url branch]
   (util/post (str config/api "repos")
-             {:url repo-url}
+             {:url repo-url
+              :branch branch}
              (fn [result]
                (if (:installation_id result)
                  (set! (.-href js/window.location) config/website)

@@ -139,8 +139,10 @@
 
 (rum/defcs add-repo <
   (rum/local "" ::repo)
+  (rum/local "master" ::branch)
   [state]
-  (let [repo (get state ::repo)]
+  (let [repo (get state ::repo)
+        branch (get state ::branch)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.p-8.flex.items-center.justify-center
        [:div.w-full.mx-auto
@@ -155,17 +157,26 @@
             {:autoFocus true
              :placeholder "https://github.com/username/repo"
              :on-change (fn [e]
-                          (reset! repo (util/evalue e)))}]]]]
+                          (reset! repo (util/evalue e)))}]]
+
+          [:label.font-medium "Branch: "]
+          [:div.mt-2.mb-4.relative.rounded-md.shadow-sm.max-w-xs
+           [:input#branch.form-input.block.w-full.sm:text-sm.sm:leading-5
+            {:value @branch
+             :on-change (fn [e]
+                          (reset! branch (util/evalue e)))}]]]]
 
         (ui/button
           (t :git/add-repo-prompt-confirm)
           :on-click
           (fn []
-            (let [repo (util/lowercase-first @repo)]
-              (if (util/starts-with? repo "https://github.com/")
-                (let [repo-url (string/replace repo ".git" "")]
-                  (repo-handler/create-repo! repo))
-                (notification/show!
-                 [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
-                 :error
-                 false)))))]])))
+            (when-let [branch (string/trim @branch)]
+              (let [repo (util/lowercase-first @repo)]
+                (if (util/starts-with? repo "https://github.com/")
+                  (let [repo-url (string/replace repo ".git" "")]
+                    (repo-handler/create-repo! repo branch))
+                  (notification/show!
+                   [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
+                   :error
+                   false)))
+              )))]])))
