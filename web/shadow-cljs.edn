@@ -24,4 +24,23 @@
    {:before-load frontend.core/stop
     ;; after live-reloading finishes call this function
     :after-load frontend.core/start
+    :preloads     [devtools.preload]}}
+  :publishing
+  {:target :browser
+   :modules {:main {:init-fn frontend.publishing/init}}
+
+   :output-dir "../resources/static/js/publishing"
+   :asset-path "/static/js"
+
+   :closure-defines {frontend.config/PUBLISHING true}
+
+   :compiler-options {:infer-externs :auto
+                      :output-feature-set :es6
+                      :externs ["datascript/externs.js"
+                                "externs.js"]}
+   :devtools
+   ;; before live-reloading any code call this function
+   {:before-load frontend.core/stop
+    ;; after live-reloading finishes call this function
+    :after-load frontend.core/start
     :preloads     [devtools.preload]}}}}

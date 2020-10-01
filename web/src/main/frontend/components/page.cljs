@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [medley.core :as medley]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler :as handler]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
@@ -250,6 +249,7 @@
                      (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                           (db/entity repo))
                      (db/entity repo [:page/name page-name]))
+              directives (:page/directives page)
               page-name (:page/name page)
               page-original-name (:page/original-name page)
               file (:page/file page)
@@ -257,10 +257,14 @@
               today? (and
                       journal?
                       (= page-name (string/lower-case (date/journal-name))))
-              developer-mode? (state/sub [:ui/developer-mode?])]
+              developer-mode? (state/sub [:ui/developer-mode?])
+              published? (= "true" (:published directives))
+              public? (= "true" (:public directives))]
           [:div.flex-1.page.relative
            [:div.relative
-            (when (and (not block?) (not sidebar?))
+            (when (and (not block?)
+                       (not sidebar?)
+                       (not config/publishing?))
 
               (let [links (->>
                            [(when file
@@ -273,15 +277,20 @@
                              :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}}
                             {:title (t :page/delete)
                              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}}
+                            {:title (t (if public? :page/make-private :page/make-public))
+                             :options {:on-click #(page-handler/update-public-attribute!
+                                                   page-name
+                                                   (if public? false true))}}
                             {:title (t :page/publish)
                              :options {:on-click (fn []
                                                    (page-handler/publish-page! page-name project/add-project))}}
                             {:title (t :page/publish-as-slide)
                              :options {:on-click (fn []
                                                    (page-handler/publish-page-as-slide! page-name project/add-project))}}
-                            {:title (t :page/unpublish)
-                             :options {:on-click (fn []
-                                                   (page-handler/unpublish-page! page-name))}}
+                            (when published?
+                              {:title (t :page/unpublish)
+                               :options {:on-click (fn []
+                                                     (page-handler/unpublish-page! page-name))}})
                             (when developer-mode?
                               {:title "(Dev) Show page data"
                                :options {:on-click (fn []
@@ -335,7 +344,8 @@
               (when (and file-path
                          (not sidebar?)
                          (not block?)
-                         (not (state/hide-file?)))
+                         (not (state/hide-file?))
+                         (not config/publishing?))
                 [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
                  [:span.opacity-50 (t :file/file)]
                  [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}

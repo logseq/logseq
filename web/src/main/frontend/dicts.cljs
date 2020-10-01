@@ -1,7 +1,8 @@
 (ns frontend.dicts
   (:require [tongue.core :as tongue]
             [frontend.state :as state]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.config :as config]))
 
 
 ;; TODO
@@ -229,6 +230,8 @@ title: How to take dummy notes?
         :page/re-index "Re-index this page"
         :page/copy-to-json "Copi the whole page as JSON"
         :page/rename "Rename page"
+        :page/make-public "Make it public"
+        :page/make-private "Make it private"
         :page/delete "Delete page (will delete the file too)"
         :page/publish "Publish this page on Logseq"
         :page/publish-as-slide "Publish this page as a slide on Logseq"
@@ -289,9 +292,12 @@ title: How to take dummy notes?
         :re-index "Re-index"
         :export-json "Export as JSON"
         :unlink "unlink"
-        :search "Search or Create Page"
+        :search (if config/publishing?
+                  "Search"
+                  "Search or Create Page")
         :new-page "New page"
         :graph "Graph"
+        :publishing "Publishing"
         :all-repos "All repos"
         :all-pages "All pages"
         :all-files "All files"
@@ -468,6 +474,8 @@ title: How to take dummy notes?
            :page/re-index "对此页面重新建立索引"
            :page/copy-to-json "将整页以 JSON 格式复制"
            :page/rename "重命名本页"
+           :page/make-public "导出 HTML 时发布本页面"
+           :page/make-private "导出 HTML 时取消发布本页面"
            :page/delete "删除本页（并删除文件）"
            :page/publish "将本页发布至 Logseq"
            :page/publish-as-slide "将本页作为幻灯片发布至 Logseq"
@@ -528,9 +536,12 @@ title: How to take dummy notes?
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
            :unlink "解除绑定"
-           :search "搜索或者创建新页面"
+           :search (if config/publishing?
+                     "搜索"
+                     "搜索或者创建新页面")
            :new-page "新页面"
            :graph "图谱"
+           :publishing "发布/下载 HTML 文件"
            :all-repos "所有库"
            :all-pages "所有页面"
            :all-files "所有文件"

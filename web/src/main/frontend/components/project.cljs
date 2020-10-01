@@ -1,7 +1,6 @@
 (ns frontend.components.project
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler :as handler]
             [frontend.handler.project :as project-handler]
             [frontend.state :as state]
             [clojure.string :as string]

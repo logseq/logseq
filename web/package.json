@@ -13,8 +13,8 @@
         "tailwindcss": "^1.3.4"
     },
     "scripts": {
-        "watch": "clojure -A:cljs watch app",
-        "release": "clojure -A:cljs release app",
+        "watch": "clojure -A:cljs watch app publishing",
+        "release": "clojure -A:cljs release app publishing",
         "debug": "clojure -A:cljs release app --debug",
         "report": "clojure -A:cljs run shadow.cljs.build-report app report.html",
         "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ../resources/static/js/compiled; /usr/bin/rm -rf ../resources/static/js/cljs-runtime;"

@@ -1,7 +1,6 @@
 (ns frontend.components.file
   (:require [rum.core :as rum]
             [frontend.util :as util]
-            [frontend.handler :as handler]
             [frontend.handler.project :as project]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.image :as image-handler]

@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.handler :as handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]

@@ -1,6 +1,5 @@
 (ns frontend.handler.dnd
-  (:require [frontend.handler :as handler]
-            [frontend.handler.notification :as notification]
+  (:require [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.config :as config]
             [frontend.util :as util :refer-macros [profile]]

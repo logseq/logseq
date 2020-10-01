@@ -1,7 +1,6 @@
 (ns frontend.components.search
   (:require [rum.core :as rum]
             [frontend.util :as util]
-            [frontend.handler :as handler]
             [frontend.handler.route :as route]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
@@ -55,7 +54,9 @@
     (let [new-page [{:type :new-page}]
           pages (map (fn [page] {:type :page :data page}) pages)
           blocks (map (fn [block] {:type :block :data block}) blocks)
-          result (concat new-page pages blocks)]
+          result (if config/publishing?
+                   (concat pages blocks)
+                   (concat new-page pages blocks))]
       [:div.absolute.rounded-md.shadow-lg
        {:style (merge
                 {:top 48

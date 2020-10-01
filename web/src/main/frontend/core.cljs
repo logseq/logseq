@@ -6,7 +6,6 @@
             [frontend.routes :as routes]
             [frontend.util :as util]
             [reitit.frontend :as rf]
-            [frontend.config :as config]
             [reitit.frontend.easy :as rfe]))
 
 (defn set-router!

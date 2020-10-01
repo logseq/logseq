@@ -4,7 +4,6 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.handler :as handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]

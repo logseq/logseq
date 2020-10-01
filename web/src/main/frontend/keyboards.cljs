@@ -1,6 +1,5 @@
 (ns frontend.keyboards
-  (:require [frontend.handler :as handler]
-            [frontend.handler.editor :as editor-handler]
+  (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]

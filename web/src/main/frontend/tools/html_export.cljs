@@ -31,8 +31,8 @@
   (let [{:keys [slide] :as directives} (db/get-page-directives page-name)
         slide? slide
         blocks (if (:block/pre-block? (first blocks))
-                   (rest blocks)
-                   blocks)]
+                 (rest blocks)
+                 blocks)]
     (if (seq blocks)
       (let [config {:html-export? true :slide? slide?}
             hiccup (if slide?

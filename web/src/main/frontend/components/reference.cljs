@@ -1,7 +1,6 @@
 (ns frontend.components.reference
   (:require [rum.core :as rum]
             [frontend.util :as util]
-            [frontend.handler :as handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]

@@ -136,6 +136,10 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defn all-pages-public?
+  []
+  (true? (:all-pages-public? (get-config))))
+
 (defn get-default-home
   []
   (:default-home (get-config)))
@@ -661,6 +665,16 @@
 (defn set-db-restoring!
   [value]
   (set-state! :db/restoring? value))
+
+(defn get-default-branch
+  [repo-url]
+  (or
+   (some->> (:repos (get-me))
+            (filter (fn [m]
+                      (= (:url m) repo-url)))
+            (first)
+            :branch)
+   "master"))
 
 (defn get-current-project
   []

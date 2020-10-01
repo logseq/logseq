@@ -6,7 +6,6 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
-            [frontend.handler :as handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.git :as git-handler]
@@ -320,3 +319,13 @@
       :with-level? true
       :new-level 2
       :current-page "Contents"})))
+
+(defn load-more-journals!
+  []
+  (let [current-length (:journals-length @state/state)]
+    (when (< current-length (db/get-journals-length))
+      (state/update-state! :journals-length inc))))
+
+(defn update-public-attribute!
+  [page-name value]
+  (page-add-directives! page-name {:public value}))

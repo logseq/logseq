@@ -11,7 +11,6 @@
             [dommy.core :as d]
             [clojure.string :as string]
             [frontend.date :as date]
-            [frontend.handler :as handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.draw :as draw :refer
              [*files
