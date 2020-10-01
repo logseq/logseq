@@ -240,6 +240,11 @@
                             (state/sidebar-add-block! repo "recent" :recent nil))}
             (t :right-side-bar/recent)]]
 
+          (when config/publishing?
+            [:div.mr-4.text-sm
+             [:a {:href (rfe/href :all-pages)}
+              (t :all-pages)]])
+
           [:div.mr-4.text-sm
            [:a {:on-click (fn []
                             (when-let [page (get-current-page)]

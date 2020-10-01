@@ -63,13 +63,13 @@
                close-modal-fn)
      (when-not config/publishing?
        (nav-item "All Files" "/all-files"
-                "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
-                (active? :all-files)
-                close-modal-fn))
+                 "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
+                 (active? :all-files)
+                 close-modal-fn))
      (when-not right-sidebar?
        [:div.pl-4.pr-4 {:style {:height 1
-                               :background-color (if white? "#f0f8ff" "#073642")
-                               :margin 12}}])
+                                :background-color (if white? "#f0f8ff" "#073642")
+                                :margin 12}}])
      (when-not right-sidebar?
        (right-sidebar/contents))]))
 
@@ -80,22 +80,25 @@
       (when (db/entity [:page/name (string/lower-case page)])
         default-home))))
 
+(defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
 (rum/defc main-content < rum/reactive
   {:init (fn [state]
-           (let [current-repo (state/sub :git/current-repo)
-                 default-home (get-default-home-if-valid)
-                 sidebar (:sidebar default-home)
-                 sidebar (if (string? sidebar) [sidebar] sidebar)]
-             (when-let [pages (->> (seq sidebar)
-                                   (remove nil?))]
-               (let [blocks (remove nil? pages)]
-                 (doseq [page pages]
-                   (let [page (string/lower-case page)
-                         [db-id block-type] (if (= page "contents")
-                                              ["contents" :contents]
-                                              [page :page])]
-                     (state/sidebar-add-block! current-repo db-id block-type nil))))))
+           (when-not @sidebar-inited?
+             (let [current-repo (state/sub :git/current-repo)
+                   default-home (get-default-home-if-valid)
+                   sidebar (:sidebar default-home)
+                   sidebar (if (string? sidebar) [sidebar] sidebar)]
+               (when-let [pages (->> (seq sidebar)
+                                     (remove nil?))]
+                 (let [blocks (remove nil? pages)]
+                   (doseq [page pages]
+                     (let [page (string/lower-case page)
+                           [db-id block-type] (if (= page "contents")
+                                                ["contents" :contents]
+                                                [page :page])]
+                       (state/sidebar-add-block! current-repo db-id block-type nil))))
+                 (reset! sidebar-inited? true))))
            state)}
   []
   (let [today (state/sub :today)
@@ -331,10 +334,6 @@
                     page (db/entity [:page/name page])]
                 (page/presentation current-repo page (:journal? page))))
 
-            (when config/publishing?
-              [:a.text-sm.font-medium.ml-3 {:href (rfe/href :all-pages)}
-               (t :all-pages)])
-
             (if config/publishing?
               [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}
                (t :graph)]
@@ -424,7 +423,7 @@
                     :width "100vw"}}
            [:div.flex-1
             {:style (cond->
-                        {:max-width 640}
+                      {:max-width 640}
                       (or global-graph-pages?
                           (and (not logged?)
                                home?)

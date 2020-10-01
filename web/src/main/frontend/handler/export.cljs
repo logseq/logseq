@@ -66,7 +66,7 @@
                               :ui/show-recent?
                               :config])
           state (update state :config (fn [config]
-                                        {"local" (second (first config))}))
+                                        {"local" (get config repo)}))
           html-str (str "data:text/html;charset=UTF-8,"
                         (js/encodeURIComponent (html/publishing-html db-str (pr-str state))))]
       (when-let [anchor (gdom/getElement "download-as-html")]
