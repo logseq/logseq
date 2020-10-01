@@ -87,7 +87,7 @@
                  default-home (get-default-home-if-valid)
                  sidebar (:sidebar default-home)
                  sidebar (if (string? sidebar) [sidebar] sidebar)]
-             (when-let [pages (->> (seq (:sidebar default-home))
+             (when-let [pages (->> (seq sidebar)
                                    (remove nil?))]
                (let [blocks (remove nil? pages)]
                  (doseq [page pages]
