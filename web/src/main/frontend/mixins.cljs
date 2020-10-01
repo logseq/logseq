@@ -135,7 +135,7 @@
        (hide-when-esc-or-outside
         state
         :on-hide (fn []
-                   (and open? (reset! open? false))))))
+                   (if @open? (reset! open? false))))))
    (fn [state]
      (let [open? (atom false)
            component (:rum/react-component state)]
