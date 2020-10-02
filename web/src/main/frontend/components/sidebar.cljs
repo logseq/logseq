@@ -121,7 +121,9 @@
          daily-migrating?
          (ui/loading "Migrating to daily notes")
 
-         default-home
+         (and default-home
+              (= :home (state/get-current-route))
+              (not (state/route-has-p?)))
          (route-handler/redirect! {:to :page
                                    :path-params {:name (util/encode-str (:page default-home))}})
 

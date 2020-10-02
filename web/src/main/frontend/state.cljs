@@ -108,6 +108,10 @@
    (get-in (get-route-match)
            [:path-params :name])))
 
+(defn route-has-p?
+  []
+  (get-in (get-route-match) [:query-params :p]))
+
 (defn sub
   [ks]
   (if (coll? ks)
