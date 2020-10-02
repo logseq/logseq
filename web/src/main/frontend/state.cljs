@@ -503,7 +503,7 @@
   [repo db-id block-type block-data]
   (when db-id
     (update-state! :sidebar/blocks (fn [blocks]
-                                     (->> (remove #(= (first %) db-id) blocks)
+                                     (->> (remove #(= (second %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
                                           (distinct))))
     (open-right-sidebar!)))
