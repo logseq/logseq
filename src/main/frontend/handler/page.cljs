@@ -24,7 +24,8 @@
             [lambdaisland.glogi :as log]
             [frontend.format.mldoc :as mldoc]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [cljs.reader :as reader]))
 
 (defn- get-directory
   [journal?]
@@ -494,3 +495,14 @@
                    (or (util/file-page? page)
                        (and modified-at
                             (> modified-at now-long))))))))
+
+(defn save-filter!
+  [page-name filter-state]
+  (if (empty? filter-state)
+    (page-remove-property! page-name "filter")
+    (page-add-properties! page-name {"filter" filter-state})))
+
+(defn get-filter
+  [page-name]
+  (let [properties (db/get-page-properties page-name)]
+    (atom (reader/read-string (get-in properties [:filter] "{}")))))
