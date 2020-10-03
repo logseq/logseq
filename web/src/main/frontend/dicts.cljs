@@ -318,8 +318,8 @@ title: How to take dummy notes?
         :or "or"
         :download "Download"
         :language "Language"
-        :white "White"
-        :dark "Black"
+        :white "Light"
+        :dark "Dark"
         :remove-background "Remove background"}
 
    :zh-CN {:on-boarding/title "你好，欢迎使用 Logseq！"
