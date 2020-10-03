@@ -996,3 +996,9 @@
 
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
      "../e/f.org"))
+
+;; Modified from https://stackoverflow.com/a/3249777/8213163
+(defn in?
+  "true if coll contains elm"
+  [elm coll]
+  (true? (some #(= elm %) coll)))

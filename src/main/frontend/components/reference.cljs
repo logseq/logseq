@@ -58,13 +58,9 @@
           (or (= (first %) "Tag") (= (first (:url (second %))) "Search")))
         (:block/title (first (val ref-block))))))
 
-(defn in?
-  [elm coll]
-  (true? (some #(= elm %) coll)))
-
 (defn matches-filter
   [references filter-state]
-  (every? #(= (in? (first %) references) (second %)) filter-state))
+  (every? #(= (util/in? (first %) references) (second %)) filter-state))
 
 (rum/defc references < rum/reactive
   [page-name marker? priority?]

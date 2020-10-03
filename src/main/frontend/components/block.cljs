@@ -1682,7 +1682,8 @@
        (let [format (:block/format config)]
          (for [[k v] m]
            (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-)
+                      (not (= k :title))
+                      (not (= k :filter)))
              [:div.property
               [:span.font-medium.mr-1 (str (name k) ": ")]
               (if (coll? v)

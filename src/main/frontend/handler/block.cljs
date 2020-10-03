@@ -128,8 +128,9 @@
 (defn pre-block-with-only-title?
   [repo block-id]
   (when-let [block (db/entity repo [:block/uuid block-id])]
-    (let [properties (:page/properties (:block/page block))]
-      (and (:title properties)
+    (let [properties (:page/properties (:block/page block))
+          property-names (keys properties)]
+      (and (every? #(util/in? % '(:title :filter)) property-names)
            (= 1 (count properties))
            (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
              (or
