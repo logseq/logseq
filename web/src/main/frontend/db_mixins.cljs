@@ -1,14 +1,14 @@
 (ns frontend.db-mixins
-  (:require [frontend.db :as db]))
+  (:require [frontend.db :as db]
+            [rum.core :as rum]))
 
-(defn clear-query-cache
-  [key-f]
-  {:will-unmount
+(def query
+  {:wrap-render
+   (fn [render-fn]
+     (fn [state]
+       (binding [db/*query-component* (:rum/react-component state)]
+         (render-fn state))))
+   :will-unmount
    (fn [state]
-     ;; FIXME: Each component should has a unique id, and each query id should
-     ;; corresponds to a vector of those subscribed components, only remove
-     ;; the query when there's no subscribed components.
-
-     ;; (when-let [key (key-f state)]
-     ;;   (db/remove-q! key))
+     (db/remove-query-component! (:rum/react-component state))
      state)})

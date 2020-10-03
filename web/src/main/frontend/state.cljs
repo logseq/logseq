@@ -48,6 +48,7 @@
     ;; custom shortcuts
     :shortcuts {:editor/new-block "enter"}
 
+    ;; right sidebar
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")

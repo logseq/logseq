@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.date :as date]
+            [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.page :as page-handler]
@@ -50,7 +51,7 @@
                                 :start-level 2}
                                {})})))
 
-(rum/defc blocks-cp < rum/reactive
+(rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
   [repo page encoded-page-name format]
   (let [raw-blocks (db/get-page-blocks repo page)
@@ -108,7 +109,7 @@
     {:on-load (fn []
                 (page-handler/load-more-journals!))})])
 
-(rum/defc all-journals < rum/reactive
+(rum/defc all-journals < rum/reactive db-mixins/query
   []
   (let [journals-length (state/sub :journals-length)
          latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]

@@ -4,7 +4,6 @@
             [frontend.handler.project :as project-handler]
             [frontend.state :as state]
             [clojure.string :as string]
-            [frontend.db :as db]
             [frontend.ui :as ui]
             [frontend.mixins :as mixins]
             [goog.dom :as gdom]

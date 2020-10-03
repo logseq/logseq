@@ -53,6 +53,7 @@
         (db/get-page-blocks repo page-name)))))
 
 (rum/defc page-blocks-cp < rum/reactive
+  db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
         page-blocks (db/with-dummy-block raw-page-blocks format
@@ -428,10 +429,10 @@
                (if @dot-mode? " (ON)"))]]]])))
 
 (rum/defc all-pages < rum/reactive
-  {:did-mount (fn [state]
-                (let [current-repo (state/sub :git/current-repo)]
-                  (js/setTimeout #(db/remove-orphaned-pages! current-repo) 0))
-                state)}
+  ;; {:did-mount (fn [state]
+  ;;               (let [current-repo (state/sub :git/current-repo)]
+  ;;                 (js/setTimeout #(db/remove-orphaned-pages! current-repo) 0))
+  ;;               state)}
   []
   (let [current-repo (state/sub :git/current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]

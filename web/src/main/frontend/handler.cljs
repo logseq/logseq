@@ -21,7 +21,7 @@
                     (state/set-today! (date/today))
                     (when-let [repo (state/get-current-repo)]
                       (let [today-page (string/lower-case (date/today))]
-                        (when (empty? (db/get-page-blocks repo today-page))
+                        (when (empty? (db/get-page-blocks-no-cache repo today-page))
                           (repo-handler/create-today-journal-if-not-exists repo)))))
                   1000))
 

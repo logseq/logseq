@@ -22,6 +22,7 @@
             [frontend.graph :as graph]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
+            [frontend.db-mixins :as db-mixins]
             [frontend.config :as config]))
 
 (rum/defc block-cp < rum/reactive
@@ -38,7 +39,7 @@
               :sidebar? true
               :repo repo}))
 
-(defn page-graph
+(rum/defc page-graph < db-mixins/query
   [page]
   (let [theme (:ui/theme @state/state)
         dark? (= theme "dark")
@@ -86,10 +87,11 @@
             (foldable-list page list)
             (str "toc-item-" page)))])]))
 
-(rum/defc contents < rum/reactive
+(rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3.mt-2
    (when-let [contents (db/entity [:page/name "contents"])]
+     (prn {:contents contents})
      (page/contents-page contents))])
 
 (defn build-sidebar-item

@@ -130,9 +130,15 @@
 (defn reset-conn! [conn db]
   (reset! conn db))
 
+(def ^:dynamic *query-component*)
+
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
+
+;; key -> components
+(defonce query-components (atom {}))
+
 
 (defn clear-query-state!
   []
@@ -157,6 +163,29 @@
                               :transform-fn transform-fn})
   result-atom)
 
+(defn remove-q!
+  [k]
+  (prn "Remove q: " k)
+  (swap! query-state dissoc k))
+
+(defn add-query-component!
+  [key component]
+  (swap! query-components update key conj component))
+
+(defn remove-query-component!
+  [component]
+  (let [ks (->> (filter (fn [[_ components]]
+                          (contains? (set components) component))
+                        @query-components)
+                (map first))]
+    (doseq [k ks]
+      (swap! query-components update k (fn [components]
+                                         (remove #(= component %) components)))
+      (prn {:query-component (count (get @query-components k))})
+      (when (zero? (count (get @query-components k))) ; no subscribed components
+        (swap! query-components dissoc k)
+        (remove-q! k)))))
+
 (defn get-page-blocks-cache-atom
   [repo page-id]
   (:result (get @query-state [repo :page/blocks page-id])))
@@ -165,9 +194,6 @@
   [repo block-id]
   (:result (get @query-state [repo :block/block block-id])))
 
-(defn remove-q!
-  [k]
-  (swap! query-state dissoc k))
 
 ;; TODO: rename :custom to :query/custom
 (defn remove-custom-query!
@@ -368,6 +394,8 @@
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
+            (when-let [component *query-component*]
+              (add-query-component! k component))
             (add-q! k query inputs result-atom transform-fn query-fn)))))))
 
 (defn seq-flatten [col]
@@ -460,21 +488,22 @@
   ([query]
    (custom-query query {}))
   ([query query-opts]
-   (when-let [query (cond
-                      (and (string? query)
-                           (not (string/blank? query)))
-                      (reader/read-string query)
+   (when-let [query' (cond
+                       (and (string? query)
+                            (not (string/blank? query)))
+                       (reader/read-string query)
 
-                      (map? query)
-                      query
+                       (map? query)
+                       query
 
-                      :else
-                      nil)]
+                       :else
+                       nil)]
      (try
-       (let [{:keys [query inputs result-transform]} query
+       (let [{:keys [query inputs result-transform]} query'
              inputs (map resolve-input inputs)
              repo (state/get-current-repo)
-             k [:custom query]]
+             k [:custom query']]
+         (prn {:k k})
          (apply q repo k query-opts query inputs))
        (catch js/Error e
          (println "Query parsing failed: ")
@@ -649,11 +678,11 @@
 
 (defn get-pages
   [repo]
-  (->> (q repo [:pages] {:use-cache? false}
+  (->> (d/q
          '[:find ?page-name
            :where
-           [?page :page/original-name ?page-name]])
-       (react)
+           [?page :page/original-name ?page-name]]
+         (get-conn))
        (map first)))
 
 (defn get-sync-metadata
@@ -683,24 +712,13 @@
 (defn get-pages-with-modified-at
   [repo]
   (let [now-long (tc/to-long (t/now))]
-    (->> (q repo [:pages] {:use-cache? false}
+    (->> (d/q
            '[:find ?page-name ?modified-at
              :where
              [?page :page/original-name ?page-name]
              [(get-else $ ?page :page/journal? false) ?journal]
-             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]
-             ;; (or
-             ;;  ;; journal pages, can't be empty
-             ;;  (and [(true? ?journal)]
-             ;;       [?h :block/page ?page]
-             ;;       [?h :block/level ?level]
-             ;;       [(> ?level 1)])
-             ;;  ;; non-journals, might be empty pages
-             ;;  (and [(false? ?journal)]
-             ;;       [?h :block/page]
-             ;;       [?h :block/level ?level]))
-             ])
-         (react)
+             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
+           (get-conn repo))
          (seq)
          (sort-by (fn [[page modified-at]]
                     [modified-at page]))
@@ -735,12 +753,12 @@
 (defn get-files
   [repo]
   (when-let [conn (get-conn repo)]
-    (->> (q repo [:files] {:use-cache? false}
+    (->> (d/q
            '[:find ?path ?modified-at
              :where
              [?file :file/path ?path]
-             [(get-else $ ?file :file/last-modified-at 0) ?modified-at]])
-         (react)
+             [(get-else $ ?file :file/last-modified-at 0) ?modified-at]]
+           conn)
          (seq)
          (sort-by last)
          (reverse))))
@@ -870,6 +888,22 @@
         path)
       react
       ffirst))))
+
+(defn get-file-no-sub
+  ([path]
+   (get-file-no-sub (state/get-current-repo) path))
+  ([repo path]
+   (when (and repo path)
+     (when-let [conn (get-files-conn repo)]
+       (->
+        (d/q
+          '[:find ?content
+            :in $ ?path
+            :where
+            [?file :file/path ?path]
+            [?file :file/content ?content]]
+          @conn)
+        ffirst)))))
 
 (defn reset-contents-and-blocks!
   [repo-url contents blocks-pages delete-files delete-blocks]
@@ -1023,9 +1057,9 @@
 
 (defn get-page-blocks-no-cache
   ([page]
-   (get-page-blocks (state/get-current-repo) page nil))
+   (get-page-blocks-no-cache (state/get-current-repo) page nil))
   ([repo-url page]
-   (get-page-blocks repo-url page nil))
+   (get-page-blocks-no-cache repo-url page nil))
   ([repo-url page {:keys [pull-keys]
                    :or {pull-keys '[*]}}]
    (let [page (string/lower-case page)
@@ -1462,16 +1496,6 @@
   (let [{:keys [year month]} (date/get-date)]
     (date/journals-path year month (state/get-preferred-format))))
 
-(defn get-journal
-  ([]
-   (get-journal (date/journal-name)))
-  ([page-name]
-   [page-name (get-page-blocks (state/get-current-repo) page-name)]))
-
-(defn get-today-journal
-  [repo]
-  (get-page-blocks repo (date/journal-name)))
-
 (defn get-journals-length
   []
   (let [today (date->int (js/Date.))]
@@ -1721,14 +1745,14 @@
   (when-let [repo (state/get-current-repo)]
     (let [pred (fn [db content]
                  (match-fn content))]
-      (->> (q repo [:matched-blocks] {:use-cache? false}
+      (->> (d/q
              '[:find ?block
                :in $ ?pred
                :where
                [?block :block/content ?content]
                [(?pred $ ?content)]]
+             (get-conn)
              pred)
-           react
            (take limit)
            seq-flatten
            (pull-many '[:block/uuid
@@ -2186,6 +2210,7 @@
         new-pages (take 12 (distinct (cons page pages)))]
     (set-key-value repo :recent/pages new-pages)))
 
+;; FIXME: remove all subscribed queries
 (defn remove-orphaned-pages!
   [repo]
   (let [all-pages (get-pages repo)
