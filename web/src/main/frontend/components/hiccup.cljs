@@ -297,7 +297,7 @@
 
 (declare blocks-container)
 
-(rum/defc block-embed < rum/reactive
+(rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
     [:div.embed-block.bg-base-2 {:style {:z-index 2}}
@@ -305,7 +305,7 @@
      [:div.px-2
       (blocks-container blocks (assoc config :embed? true))]]))
 
-(rum/defc page-embed < rum/reactive
+(rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))

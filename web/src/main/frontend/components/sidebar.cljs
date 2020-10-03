@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
             [frontend.mixins :as mixins]
+            [frontend.db-mixins :as db-mixins]
             [frontend.db :as db]
             [frontend.components.widgets :as widgets]
             [frontend.components.journal :as journal]
@@ -29,7 +30,8 @@
             [clojure.string :as string]
             [goog.object :as gobj]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [goog.dom :as gdom]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -51,27 +53,28 @@
         active? (fn [route] (= route (get-in route-match [:data :name])))
         page-active? (fn [page]
                        (= page (get-in route-match [:parameters :path :name])))
-        right-sidebar? (state/sub :ui/sidebar-open?)]
-    [:nav.flex-1
-     (nav-item "Journals" "/"
-               "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
-               (active? :home)
-               close-modal-fn)
-     (nav-item "All Pages" "/all-pages"
-               "M6 2h9a1 1 0 0 1 .7.3l4 4a1 1 0 0 1 .3.7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.1.9-2 2-2zm9 2.41V7h2.59L15 4.41zM18 9h-3a2 2 0 0 1-2-2V4H6v16h12V9zm-2 7a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm0-4a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm-5-4a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1z"
-               (active? :all-pages)
-               close-modal-fn)
-     (when-not config/publishing?
-       (nav-item "All Files" "/all-files"
-                 "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
-                 (active? :all-files)
-                 close-modal-fn))
-     (when-not right-sidebar?
-       [:div.pl-4.pr-4 {:style {:height 1
-                                :background-color (if white? "#f0f8ff" "#073642")
-                                :margin 12}}])
-     (when-not right-sidebar?
-       (right-sidebar/contents))]))
+        right-sidebar? (state/sub :ui/sidebar-open?)
+        left-sidebar? (state/sub :ui/left-sidebar-open?)]
+    (when left-sidebar?
+      [:nav.flex-1
+       (nav-item "Journals" "/"
+                 "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
+                 (active? :home)
+                 close-modal-fn)
+       (nav-item "All Pages" "/all-pages"
+                 "M6 2h9a1 1 0 0 1 .7.3l4 4a1 1 0 0 1 .3.7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.1.9-2 2-2zm9 2.41V7h2.59L15 4.41zM18 9h-3a2 2 0 0 1-2-2V4H6v16h12V9zm-2 7a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm0-4a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm-5-4a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1z"
+                 (active? :all-pages)
+                 close-modal-fn)
+       (when-not config/publishing?
+         (nav-item "All Files" "/all-files"
+                   "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
+                   (active? :all-files)
+                   close-modal-fn))
+       (when-not right-sidebar?
+         [:div.pl-4.pr-4 {:style {:height 1
+                                  :background-color (if white? "#f0f8ff" "#073642")
+                                  :margin 12}}])
+       (right-sidebar/contents)])))
 
 (defn get-default-home-if-valid
   []
@@ -82,7 +85,7 @@
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
-(rum/defc main-content < rum/reactive
+(rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
              (let [current-repo (state/sub :git/current-repo)
@@ -248,6 +251,9 @@
   (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
+        close-fn (fn []
+                   (close-fn)
+                   (state/set-left-sidebar-open! false))
         prefered-language (keyword (state/sub :preferred-language))
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
@@ -294,8 +300,10 @@
            (sidebar-nav route-match close-fn)]]]
         [:div.flex.flex-col.w-0.flex-1.overflow-hidden
          [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
-          [:button.px-4.focus:outline-none.md:hidden.menu
-           {:on-click open-fn}
+          [:button#left-menu.px-4.focus:outline-none.md:hidden.menu
+           {:on-click (fn []
+                        (open-fn)
+                        (state/set-left-sidebar-open! true))}
            [:svg.h-6.w-6
             {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
             [:path
@@ -425,7 +433,7 @@
                     :width "100vw"}}
            [:div.flex-1
             {:style (cond->
-                      {:max-width 640}
+                        {:max-width 640}
                       (or global-graph-pages?
                           (and (not logged?)
                                home?)

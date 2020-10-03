@@ -9,9 +9,13 @@
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.config :as config]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.components.svg :as svg]
+            [frontend.handler.page :as page-handler]
+            [frontend.db-mixins :as db-mixins]
+            [clojure.set :as set]))
 
-(rum/defc references < rum/reactive
+(rum/defc references < rum/reactive db-mixins/query
   [page-name marker? priority?]
   (when page-name
     (let [block? (util/uuid-string? page-name)
@@ -45,7 +49,7 @@
               (content/content encoded-page-name
                                {:hiccup ref-hiccup}))])]]))))
 
-(rum/defc unlinked-references-aux < rum/reactive
+(rum/defc unlinked-references-aux < rum/reactive db-mixins/query
   [page-name n-ref]
   (let [ref-blocks (db/get-page-unlinked-references page-name)
         encoded-page-name (util/url-encode page-name)]

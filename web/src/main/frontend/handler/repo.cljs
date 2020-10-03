@@ -498,7 +498,7 @@
   [k v]
   (when-let [repo (state/get-current-repo)]
     (let [path (str config/app-name "/" config/config-file)]
-      (when-let [config (db/get-file path)]
+      (when-let [config (db/get-file-no-sub path)]
         (let [config (try
                        (reader/read-string config)
                        (catch js/Error e
