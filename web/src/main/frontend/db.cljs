@@ -166,7 +166,6 @@
 
 (defn remove-q!
   [k]
-  (prn "Remove q: " k)
   (swap! query-state dissoc k))
 
 (defn add-query-component!

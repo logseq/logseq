@@ -91,7 +91,6 @@
   []
   [:div.contents.flex-col.flex.ml-3.mt-2
    (when-let [contents (db/entity [:page/name "contents"])]
-     (prn {:contents contents})
      (page/contents-page contents))])
 
 (defn build-sidebar-item
