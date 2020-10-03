@@ -155,12 +155,13 @@
 
 ;; TODO: Add components which subscribed to a specific query
 (defn add-q!
-  [k query inputs result-atom transform-fn query-fn]
+  [k query inputs result-atom transform-fn query-fn inputs-fn]
   (swap! query-state assoc k {:query query
                               :inputs inputs
                               :result result-atom
                               :query-fn query-fn
-                              :transform-fn transform-fn})
+                              :transform-fn transform-fn
+                              :inputs-fn inputs-fn})
   result-atom)
 
 (defn remove-q!
@@ -170,7 +171,9 @@
 
 (defn add-query-component!
   [key component]
-  (swap! query-components update key conj component))
+  (swap! query-components update key
+         (fn [components]
+           (distinct (conj components component)))))
 
 (defn remove-query-component!
   [component]
@@ -181,7 +184,6 @@
     (doseq [k ks]
       (swap! query-components update k (fn [components]
                                          (remove #(= component %) components)))
-      (prn {:query-component (count (get @query-components k))})
       (when (zero? (count (get @query-components k))) ; no subscribed components
         (swap! query-components dissoc k)
         (remove-q! k)))))
@@ -365,7 +367,7 @@
       [[key]])))
 
 (defn q
-  [repo k {:keys [use-cache? files-db? transform-fn query-fn]
+  [repo k {:keys [use-cache? files-db? transform-fn query-fn inputs-fn]
            :or {use-cache? true
                 files-db? false
                 transform-fn identity}} query & inputs]
@@ -376,14 +378,21 @@
                         (deref files-conn))
                       (get-conn repo))]
       (let [result-atom (:result (get @query-state k))]
+        (when-let [component *query-component*]
+          (add-query-component! k component))
         (if (and use-cache? result-atom)
           result-atom
           (let [result (cond
                          query-fn
                          (query-fn conn)
 
+                         inputs-fn
+                         (let [inputs (inputs-fn)]
+                           (apply d/q query conn inputs))
+
                          kv?
                          (d/entity conn (last k))
+
 
                          (seq inputs)
                          (apply d/q query conn inputs)
@@ -394,9 +403,7 @@
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
-            (when-let [component *query-component*]
-              (add-query-component! k component))
-            (add-q! k query inputs result-atom transform-fn query-fn)))))))
+            (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)))))))
 
 (defn seq-flatten [col]
   (flatten (seq col)))
@@ -503,7 +510,6 @@
              inputs (map resolve-input inputs)
              repo (state/get-current-repo)
              k [:custom query']]
-         (prn {:k k})
          (apply q repo k query-opts query inputs))
        (catch js/Error e
          (println "Query parsing failed: ")
@@ -586,7 +592,7 @@
           (doseq [handler-key handler-keys]
             (let [handler-key (vec (cons repo-url handler-key))]
               (when-let [cache (get @query-state handler-key)]
-                (let [{:keys [query inputs transform-fn query-fn]} cache]
+                (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
                   (when (or query query-fn)
                     (let [new-result (->
                                       (cond
@@ -594,6 +600,10 @@
                                         (profile
                                          "Query:"
                                          (doall (query-fn db)))
+
+                                        inputs-fn
+                                        (let [inputs (inputs-fn)]
+                                          (apply d/q query db inputs))
 
                                         (keyword? query)
                                         (get-key-value repo-url query)
@@ -1154,19 +1164,22 @@
          page (:db/id (:block/page block))
          pos (:start-pos (:block/meta block))
          level (:block/level block)
-         pred (fn [data meta]
-                (>= (:start-pos meta) pos))]
+         pred (fn []
+                (let [block (entity repo [:block/uuid block-uuid])
+                      pos (:start-pos (:block/meta block))]
+                  (fn [data meta]
+                   (>= (:start-pos meta) pos))))]
      (some-> (q repo [:block/block block-uuid]
                {:use-cache? use-cache?
-                :transform-fn #(block-and-children-transform % repo block-uuid level)}
+                :transform-fn #(block-and-children-transform % repo block-uuid level)
+                :inputs-fn (fn []
+                             [page (pred)])}
                '[:find (pull ?block [*])
                  :in $ ?page ?pred
                  :where
                  [?block :block/page ?page]
                  [?block :block/meta ?meta]
-                 [(?pred $ ?meta)]]
-               page
-               pred)
+                 [(?pred $ ?meta)]])
              react))))
 
 (defn block-has-children?
