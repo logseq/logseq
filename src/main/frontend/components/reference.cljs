@@ -12,36 +12,40 @@
             [frontend.db-mixins :as db-mixins]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.components.svg :as svg]))
+            [frontend.components.svg :as svg]
+            [frontend.handler.page :as page-handler]))
 
 (rum/defc filter-dialog-inner < rum/reactive
-  [close-fn references filter-state]
-  [:div
-   [:div.sm:flex.sm:items-start
-    [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
-     (svg/filter-icon)]
-    [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-     [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
-      "Filter"]]]
+  [close-fn references page-name]
+  (let [filter-state (page-handler/get-filter page-name)]
+    [:div
+     [:div.sm:flex.sm:items-start
+      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
+       (svg/filter-icon)]
+      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+       [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+        "Filter"]
+       [:span.text-xs "Click to include and shift-click to exclude. Click again to remove. "]]]
 
-   [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1
-    (for [reference references]
-      [:button {:key reference :style {:padding "0px 5px" :border-width "1px" :border-radius "5px" :color (let [filtered (get (rum/react filter-state) reference)]
-                                                                                                            (condp = filtered
-                                                                                                              true "green"
-                                                                                                              false "red"
-                                                                                                              ""))}
-                :on-click (fn [e]
-                            (swap! filter-state #(if (nil? (get @filter-state reference))
-                                                   (assoc % reference (not (.-shiftKey e)))
-                                                   (dissoc % reference))))}
-       reference])]])
+     [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1
+      (for [reference references]
+        (let [filtered (get (rum/react filter-state) reference)
+              color (condp = filtered
+                      true "text-green-500"
+                      false "text-red-500"
+                      nil)]
+          [:button.border.rounded.px-1 {:key reference :class color :style {:border-color "currentColor"}
+                                        :on-click (fn [e]
+                                                    (swap! filter-state #(if (nil? (get @filter-state reference))
+                                                                           (assoc % reference (not (.-shiftKey e)))
+                                                                           (dissoc % reference)))
+                                                    (page-handler/save-filter! page-name @filter-state))}
+           reference]))]]))
 
 (defn filter-dialog
-  [references filter-state]
+  [references page-name]
   (fn [close-fn]
-    (filter-dialog-inner close-fn references filter-state)))
+    (filter-dialog-inner close-fn references page-name)))
 
 (defn get-block-references
   [ref-block]
@@ -62,8 +66,8 @@
   [references filter-state]
   (every? #(= (in? (first %) references) (second %)) filter-state))
 
-(rum/defcs references < (rum/local {} ::filter)
-  [state page-name marker? priority?]
+(rum/defc references < rum/reactive
+  [page-name marker? priority?]
   (when page-name
     (let [block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
@@ -83,8 +87,8 @@
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           references (distinct (flatten (map get-block-references ref-blocks)))
-          filter-state (::filter state)
-          filtered-blocks (filter #(matches-filter (get-block-references %) (rum/react filter-state)) ref-blocks)
+          filter-state (rum/react (page-handler/get-filter page-name))
+          filtered-blocks (filter #(matches-filter (get-block-references %) filter-state) ref-blocks)
           n-ref (count ref-blocks)]
       (when (or (> n-ref 0)
                 (seq scheduled-or-deadlines))
@@ -110,8 +114,13 @@
             [:h2.font-bold.opacity-50 (let []
                                         (str n-ref " Linked References"))]
             [:a {:title "Filter"
-                 :on-click #(state/set-modal! (filter-dialog references filter-state))}
-             (svg/filter-icon)]]
+                 :on-click #(state/set-modal! (filter-dialog references page-name))}
+             [:span {:class (cond
+                              (empty? filter-state) nil
+                              (every? true? (vals filter-state)) "text-green-500"
+                              (every? false? (vals filter-state)) "text-red-500"
+                              :else "text-yellow-200")}
+              (svg/filter-icon)]]]
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup filtered-blocks
                                              {:id page-name
