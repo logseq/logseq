@@ -6,6 +6,8 @@
             [goog.dom :as gdom]
             [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
+            [frontend.date :as date]
+            [clojure.string :as string]
             [medley.core :as medley]
             [frontend.text :as text]))
 
@@ -92,3 +94,36 @@
                 :home)]
     (redirect! {:to route}))
   (util/scroll-to-top))
+
+(defn- redirect-to-file!
+  [page]
+  (when-let [path (-> (db/get-page-file (string/lower-case page))
+                      :db/id
+                      (db/entity)
+                      :file/path)]
+    (redirect! {:to :file
+                :path-params {:path (util/encode-str path)}})))
+
+(defn toggle-between-page-and-file!
+  []
+  (let [current-route (state/get-current-route)]
+    (case current-route
+      :home
+      (redirect-to-file! (date/today))
+
+      :all-journals
+      (redirect-to-file! (date/today))
+
+      :page
+      (when-let [page-name (get-in (state/get-route-match) [:path-params :name])]
+        (let [page-name (util/url-decode page-name)]
+          (redirect-to-file! page-name)))
+
+      :file
+      (when-let [path (get-in (state/get-route-match) [:path-params :path])]
+        (let [path (util/url-decode path)]
+          (when-let [page (db/get-file-page path)]
+            (redirect! {:to :page
+                        :path-params {:name (util/encode-str page)}}))))
+
+      nil)))

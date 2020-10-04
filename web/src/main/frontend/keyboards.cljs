@@ -79,6 +79,7 @@
    "t t" state/toggle-theme!
    "t r" ui-handler/toggle-right-sidebar!
    "t e" state/toggle-new-block-shortcut!
+   "s" route-handler/toggle-between-page-and-file!
    })
 
 (defonce bind! (gobj/get mousetrap "bind"))
