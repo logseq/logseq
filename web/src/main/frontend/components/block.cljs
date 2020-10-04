@@ -24,7 +24,7 @@
                                (:page/name page))])
 
                         (when (and show-page? (seq parents))
-                          [:span.mx-2.opacity-50 "⮞"])
+                          [:span.mx-2.opacity-50 "➤"])
 
                         (when (seq parents)
                           (let [parents (for [{:block/keys [uuid content]} parents]
@@ -40,7 +40,7 @@
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)
                             (when (seq parents)
-                              (interpose [:span.mx-2.opacity-50 "⮞"]
+                              (interpose [:span.mx-2.opacity-50 "➤"]
                                          parents))))]]
          (when (or (seq @parents-atom) show-page?)
            component))))))
