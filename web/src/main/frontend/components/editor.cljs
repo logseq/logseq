@@ -5,6 +5,7 @@
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.handler.file :as file]
             [promesa.core :as p]
             [frontend.date :as date]
             [frontend.state :as state]
@@ -663,7 +664,8 @@
                     (.focus element)))
                 state)
    :will-unmount (fn [state]
-                   (let [{:keys [id value format block repo dummy?]} (get-state state)]
+                   (let [{:keys [id value format block repo dummy? config]} (get-state state)
+                         file? (:file? config)]
                      (when-let [input (gdom/getElement id)]
                        ;; (.removeEventListener input "paste" (fn [event]
                        ;;                                       (append-paste-doc! format event)))
@@ -676,7 +678,17 @@
                                input
                                :upload-images))))
                      (editor-handler/clear-when-saved!)
-                     (editor-handler/save-block! (get-state state) value))
+                     (if file?
+                       (let [path (:file-path config)
+                             content (db/get-file-no-sub path)
+                             value (some-> (gdom/getElement path)
+                                           (gobj/get "value"))]
+                         (when (and
+                                (not (string/blank? value))
+                                (not= (string/trim value) (string/trim content)))
+                           (file/alter-file (state/get-current-repo) path (string/trim value)
+                                            {:re-render-root? true})))
+                       (editor-handler/save-block! (get-state state) value)))
                    state)}
   [state {:keys [on-hide dummy? node format block]
           :or {dummy? false}

@@ -33,38 +33,45 @@
 
 (rum/defc files < rum/reactive
   []
-(rum/with-context [[tongue] i18n/*tongue-context*]
-  [:div.flex-1.overflow-hidden
-   [:h1.title
-    (tongue :all-files)]
-   (when-let [current-repo (state/sub :git/current-repo)]
-     (let [files (db/get-files current-repo)]
-       [:table.table-auto
-        [:thead
-         [:tr
-          [:th (tongue :file/name)]
-          [:th (tongue :file/last-modified-at)]
-          [:th ""]]]
-        [:tbody
-         (for [[file modified-at] files]
-           (let [file-id (util/url-encode file)]
-             [:tr {:key file-id}
-              [:td
-               (let [href (if (config/draw? file)
-                            (rfe/href :draw nil {:file (string/replace file (str config/default-draw-directory "/") "")})
-                            (rfe/href :file {:path file-id}))]
-                 [:a.text-gray-700 {:href href}
-                 file])]
-              [:td [:span.text-gray-500.text-sm
-                    (if (zero? modified-at)
-                      (tongue :file/no-data)
-                      (date/get-date-time-string
-                       (t/to-default-time-zone (tc/to-date-time modified-at))))]]
+  (rum/with-context [[tongue] i18n/*tongue-context*]
+    [:div.flex-1.overflow-hidden
+     [:h1.title
+      (tongue :all-files)]
+     (when-let [current-repo (state/sub :git/current-repo)]
+       (let [files (db/get-files current-repo)]
+         [:table.table-auto
+          [:thead
+           [:tr
+            [:th (tongue :file/name)]
+            [:th (tongue :file/last-modified-at)]
+            [:th ""]]]
+          [:tbody
+           (for [[file modified-at] files]
+             (let [file-id (util/url-encode file)]
+               [:tr {:key file-id}
+                [:td
+                 (let [href (if (config/draw? file)
+                              (rfe/href :draw nil {:file (string/replace file (str config/default-draw-directory "/") "")})
+                              (rfe/href :file {:path file-id}))]
+                   [:a.text-gray-700 {:href href}
+                    file])]
+                [:td [:span.text-gray-500.text-sm
+                      (if (zero? modified-at)
+                        (tongue :file/no-data)
+                        (date/get-date-time-string
+                         (t/to-default-time-zone (tc/to-date-time modified-at))))]]
 
-              [:td [:a.text-sm
-                    {:on-click (fn [e]
-                                 (export-handler/download-file! file))}
-                    [:span (tongue :download)]]]]))]]))]))
+                [:td [:a.text-sm
+                      {:on-click (fn [e]
+                                   (export-handler/download-file! file))}
+                      [:span (tongue :download)]]]]))]]))]))
+
+(defn- save-file!
+  [path content]
+  (fn [value]
+    (when (not= (string/trim value) (string/trim content))
+     (file/alter-file (state/get-current-repo) path (string/trim value)
+                      {:re-render-root? true}))))
 
 (rum/defcs file < rum/reactive
   {:did-mount (fn [state]
@@ -76,17 +83,15 @@
   [state]
   (let [[encoded-path path] (get-path state)
         format (format/get-format path)
-        save-file-handler (fn [content]
-                            (fn [value]
-                              (when (not= (string/trim value) (string/trim content))
-                                (file/alter-file (state/get-current-repo) path (string/trim value)
-                                                    {:re-render-root? true}))))
         edit-raw-handler (fn []
                            (when-let [file-content (db/get-file path)]
                              (let [content (string/trim file-content)]
-                              (content/content encoded-path {:content content
-                                                             :format format
-                                                             :on-hide (save-file-handler content)}))))
+                               (content/content encoded-path {:config {:file? true
+                                                                       :file-path path}
+                                                              :content content
+                                                              :format format
+                                                              ;; :on-hide (save-file! path content)
+                                                             }))))
         page (db/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
     (rum/with-context [[tongue] i18n/*tongue-context*]

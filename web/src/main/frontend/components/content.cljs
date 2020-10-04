@@ -301,7 +301,9 @@
         loading (state/sub :format/loading)]
     (if edit?
       (editor/box {:on-hide on-hide
-                   :format format} id)
+                   :format format}
+                  id
+                  config)
       (let [format (format/normalize format)
             loading? (get loading format)
             markup? (contains? config/html-render-formats format)

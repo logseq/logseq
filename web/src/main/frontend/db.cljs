@@ -911,7 +911,8 @@
             :where
             [?file :file/path ?path]
             [?file :file/content ?content]]
-          @conn)
+          @conn
+          path)
         ffirst)))))
 
 (defn reset-contents-and-blocks!
