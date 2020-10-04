@@ -690,6 +690,7 @@
      (ui/textarea
       {:id id
        :value (or content "")
+       :minRows (if (state/enable-grammarly?) 2 1)
        :on-click (fn [_e]
                    (let [input (gdom/getElement id)
                          current-pos (:pos (util/get-caret-pos input))]

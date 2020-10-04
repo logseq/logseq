@@ -145,6 +145,10 @@
   []
   (true? (:all-pages-public? (get-config))))
 
+(defn enable-grammarly?
+  []
+  (true? (:enable-grammarly? (get-config))))
+
 (defn get-default-home
   []
   (:default-home (get-config)))
