@@ -440,10 +440,10 @@
                    (util/format "File %s already exists!" file-path)]
                   :error)
                  ;; create the file
-                 (let [content (util/default-content-with-title format (:page/original-name page))]
+                 (let [content (str (util/default-content-with-title format (:page/original-name page))
+                                    (text/remove-level-spaces value (keyword format)))]
                    (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                     (db/reset-file! repo path (str content
-                                                    (text/remove-level-spaces value (keyword format))))
+                     (db/reset-file! repo path content)
                      (git-handler/git-add repo path)
 
                      (ui-handler/re-render-root!)
