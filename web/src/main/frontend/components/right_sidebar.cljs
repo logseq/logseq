@@ -117,21 +117,23 @@
      (page-graph block-data)]
 
     :block-ref
-    [(t :right-side-bar/block-ref)
-     (let [block (:block block-data)
-           block-id (:block/uuid block)
-           format (:block/format block)]
-       [[:div.ml-2.mt-1
-         (block/block-parents repo block-id format)]
-        [:div.ml-2
-         (block-cp repo idx block)]])]
+    (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
+      [(t :right-side-bar/block-ref)
+       (let [block (:block block-data)
+             block-id (:block/uuid block)
+             format (:block/format block)]
+         [[:div.ml-2.mt-1
+           (block/block-parents repo block-id format)]
+          [:div.ml-2
+           (block-cp repo idx block)]])])
 
     :block
-    (let [block-id (:block/uuid block-data)
-          format (:block/format block-data)]
-      [(block/block-parents repo block-id format)
-       [:div.ml-2
-        (block-cp repo idx block-data)]])
+    (when-let [block (db/entity repo [:block/uuid (:block/uuid block-data)])]
+      (let [block-id (:block/uuid block-data)
+            format (:block/format block-data)]
+        [(block/block-parents repo block-id format)
+         [:div.ml-2
+          (block-cp repo idx block-data)]]))
 
     :page
     (let [page-name (get-in block-data [:page :page/name])]
@@ -145,12 +147,12 @@
           journal? (:journal? block-data)
           blocks (db/get-page-blocks repo page-name)
           blocks (if journal?
-                     (rest blocks)
-                     blocks)
+                   (rest blocks)
+                   blocks)
           sections (hiccup/build-slide-sections blocks {:id "slide-reveal-js"
-                                                          :start-level 2
-                                                          :slide? true
-                                                          :sidebar? true})]
+                                                        :start-level 2
+                                                        :slide? true
+                                                        :sidebar? true})]
       [[:a {:href (str "/page/" (util/url-encode page-name))}
         (util/capitalize-all page-name)]
        [:div.ml-2.slide.mt-2
@@ -170,22 +172,24 @@
 
 (rum/defc sidebar-item < rum/reactive
   [repo idx db-id block-type block-data t]
-  (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-    [:div.sidebar-item.content
-     (let [[title component] (build-sidebar-item repo idx db-id block-type block-data t)]
-       [:div.flex.flex-col
-        [:div.flex.flex-row.justify-between
-         [:div.flex.flex-row.justify-center
-          [:a.hover:text-gray-900.text-gray-500.flex.items-center.pr-1
-           {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
-           (if collapse?
-             (svg/caret-right)
-             (svg/caret-down))]
-          [:div.ml-1.font-medium
-           title]]
-         (close #(state/sidebar-remove-block! idx))]
-        [:div {:class (if collapse? "hidden" "initial")}
-         component]])]))
+  (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])
+        item (build-sidebar-item repo idx db-id block-type block-data t)]
+    (when item
+      [:div.sidebar-item.content
+       (let [[title component] item]
+         [:div.flex.flex-col
+          [:div.flex.flex-row.justify-between
+           [:div.flex.flex-row.justify-center
+            [:a.hover:text-gray-900.text-gray-500.flex.items-center.pr-1
+             {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
+             (if collapse?
+               (svg/caret-right)
+               (svg/caret-down))]
+            [:div.ml-1.font-medium
+             title]]
+           (close #(state/sidebar-remove-block! idx))]
+          [:div {:class (if collapse? "hidden" "initial")}
+           component]])])))
 
 (defn- get-page
   [match]
@@ -217,59 +221,59 @@
         dark? (= "dark" theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
-     [:div#right-sidebar.flex-col {:style {:height "100%"
-                                           :overflow "hidden"
-                                           :flex (if sidebar-open?
-                                                   "1 0 40%"
-                                                   "0 0 0px")}}
-      (if sidebar-open?
-        [:div {:style {:flex "1 1 auto"
-                       :padding 12
-                       :height "100%"
-                       :overflow-y "scroll"
-                       :overflow-x "hidden"
-                       :box-sizing "content-box"
-                       :margin-right -17}}
-         [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
-          [:div.mr-4.text-sm
-           [:a {:on-click (fn [e]
-                            (state/sidebar-add-block! repo "contents" :contents nil))}
-            (t :right-side-bar/contents)]]
+      [:div#right-sidebar.flex-col {:style {:height "100%"
+                                            :overflow "hidden"
+                                            :flex (if sidebar-open?
+                                                    "1 0 40%"
+                                                    "0 0 0px")}}
+       (if sidebar-open?
+         [:div {:style {:flex "1 1 auto"
+                        :padding 12
+                        :height "100%"
+                        :overflow-y "scroll"
+                        :overflow-x "hidden"
+                        :box-sizing "content-box"
+                        :margin-right -17}}
+          [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
+           [:div.mr-4.text-sm
+            [:a {:on-click (fn [e]
+                             (state/sidebar-add-block! repo "contents" :contents nil))}
+             (t :right-side-bar/contents)]]
 
-          [:div.mr-4.text-sm
-           [:a {:on-click (fn [_e]
-                            (state/sidebar-add-block! repo "recent" :recent nil))}
-            (t :right-side-bar/recent)]]
+           [:div.mr-4.text-sm
+            [:a {:on-click (fn [_e]
+                             (state/sidebar-add-block! repo "recent" :recent nil))}
+             (t :right-side-bar/recent)]]
 
-          (when config/publishing?
-            [:div.mr-4.text-sm
-             [:a {:href (rfe/href :all-pages)}
-              (t :all-pages)]])
+           (when config/publishing?
+             [:div.mr-4.text-sm
+              [:a {:href (rfe/href :all-pages)}
+               (t :all-pages)]])
 
-          [:div.mr-4.text-sm
-           [:a {:on-click (fn []
-                            (when-let [page (get-current-page)]
-                              (state/sidebar-add-block!
-                               repo
-                               (str "page-graph-" page)
-                               :page-graph
-                               page)))}
-            (t :right-side-bar/page)]]
+           [:div.mr-4.text-sm
+            [:a {:on-click (fn []
+                             (when-let [page (get-current-page)]
+                               (state/sidebar-add-block!
+                                repo
+                                (str "page-graph-" page)
+                                :page-graph
+                                page)))}
+             (t :right-side-bar/page)]]
 
-          [:div.mr-4.text-sm
-           (let [theme (if dark? "white" "dark")]
-             [:a {:title (t :right-side-bar/switch-theme theme)
-                  :on-click (fn []
-                              (state/set-theme! theme))}
-              (t :right-side-bar/theme (t (keyword theme)))])]
+           [:div.mr-4.text-sm
+            (let [theme (if dark? "white" "dark")]
+              [:a {:title (t :right-side-bar/switch-theme theme)
+                   :on-click (fn []
+                               (state/set-theme! theme))}
+               (t :right-side-bar/theme (t (keyword theme)))])]
 
-          (when-not config/publishing?
-            [:div.mr-4.text-sm
-             [:a {:on-click (fn [_e]
-                              (state/sidebar-add-block! repo "help" :help nil))}
-              (t :right-side-bar/help)]])]
+           (when-not config/publishing?
+             [:div.mr-4.text-sm
+              [:a {:on-click (fn [_e]
+                               (state/sidebar-add-block! repo "help" :help nil))}
+               (t :right-side-bar/help)]])]
 
-         (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
-           (rum/with-key
-             (sidebar-item repo idx db-id block-type block-data t)
-             (str "sidebar-block-" idx)))])])))
+          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
+            (rum/with-key
+              (sidebar-item repo idx db-id block-type block-data t)
+              (str "sidebar-block-" idx)))])])))

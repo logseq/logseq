@@ -111,63 +111,44 @@
                       :or {reset? true
                            re-render-root? false
                            add-history? true}}]
-  (if reset?
-    (db/reset-file! repo path content)
-    (db/set-file-content! repo path content))
-  (util/p-handle
-   (fs/write-file (util/get-repo-dir repo) path content)
-   (fn [_]
-     (git-handler/git-add repo path)
-     (when (= path (str config/app-name "/" config/config-file))
-       (restore-config! repo true))
-     (when re-render-root? (ui-handler/re-render-root!))
-     (when add-history?
-       (history/add-history!
-        [:git/repo repo]
-        {:db (d/db (db/get-conn repo false))
-         :files-db (when-let [files-conn (db/get-files-conn repo)]
-                     (d/db files-conn))
-         :file-handler (fn [cb]
-                         (->
-                          (p/let [result (fs/write-file (util/get-repo-dir repo) path content)]
-                            (git-handler/git-add repo path)
-                            (cb))
-                          (p/catch (fn [error]
-                                     (prn "Add history file handler failed, error: " error)))))})))
-   (fn [error]
-     (println "Write file failed, path: " path ", content: " content)
-     (js/console.error error))))
+  (let [original-content (db/get-file-no-sub repo path)]
+    (if reset?
+      (db/reset-file! repo path content)
+      (db/set-file-content! repo path content))
+    (util/p-handle
+     (fs/write-file (util/get-repo-dir repo) path content)
+     (fn [_]
+       (git-handler/git-add repo path)
+       (when (= path (str config/app-name "/" config/config-file))
+         (restore-config! repo true))
+       (when re-render-root? (ui-handler/re-render-root!))
+       (when add-history?
+         (history/add-history! repo [[path original-content content]])))
+     (fn [error]
+       (println "Write file failed, path: " path ", content: " content)
+       (js/console.error error)))))
 
 (defn alter-files
   [repo files]
-  (-> (p/all
-       (doall
-        (map
-          (fn [[path content]]
-            (db/set-file-content! repo path content)
-            (util/p-handle
-             (fs/write-file (util/get-repo-dir repo) path content)
-             (fn [_]
-               (git-handler/git-add repo path))
-             (fn [error]
-               (println "Write file failed, path: " path ", content: " content)
-               (js/console.error error))))
-          files)))
-      (p/then (fn [_result]
-                (ui-handler/re-render-file!)
-                (history/add-history!
-                 [:git/repo repo]
-                 {:db (d/db (db/get-conn repo false))
-                  :files-db (when-let [files-conn (db/get-files-conn repo)]
-                              (d/db files-conn))
-                  :file-handler (fn [cb]
-                                  (doseq [[path content] files]
-                                    (->
-                                     (p/let [result (fs/write-file (util/get-repo-dir repo) path content)]
-                                       (git-handler/git-add repo path)
-                                       (cb))
-                                     (p/catch (fn [error]
-                                                (prn "Add history file handler failed, error: " error))))))})))))
+  (let [files-tx (mapv (fn [[path content]]
+                         (let [original-content (db/get-file-no-sub repo path)]
+                           [path original-content content])) files)]
+    (-> (p/all
+        (doall
+         (map
+           (fn [[path content]]
+             (db/set-file-content! repo path content)
+             (util/p-handle
+              (fs/write-file (util/get-repo-dir repo) path content)
+              (fn [_]
+                (git-handler/git-add repo path))
+              (fn [error]
+                (println "Write file failed, path: " path ", content: " content)
+                (js/console.error error))))
+           files)))
+       (p/then (fn [_result]
+                 (ui-handler/re-render-file!)
+                 (history/add-history! repo files-tx))))))
 
 (defn remove-file!
   [repo file]
