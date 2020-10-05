@@ -1,143 +1,54 @@
 (ns frontend.history
-  (:require [frontend.state :as state]
-            [datascript.core :as d]
-            [frontend.db :as db]))
+  (:require [frontend.db :as db]))
 
-;; Inspired by https://github.com/tonsky/datascript-todo
+;; Undo && Redo that works with files
+;; TODO:
+;; 1. undo-tree
+;; 2. db-only version, store transactions instead of file patches
 
-;; TODO: add state/state
-;; (def state-keys
-;;   #{:route-match
-;;     :search/q
-;;     :search/result
-;;     :ui/toggle-state
-;;     :ui/sidebar-collapsed-blocks
-;;     :editor/show-page-search?
-;;     :editor/show-date-picker?
-;;     :editor/show-input
-;;     :editor/last-saved-cursor
-;;     :editor/editing?
-;;     :editor/content
-;;     :editor/block
-;;     :cursor-range
-;;     :cursor-pos
-;;     :selection/mode
-;;     :selection/blocks
-;;     :custom-context-menu/show?
-;;     :sidebar/blocks})
+;; repo file -> contents transactions sequence
+(defonce history (atom {}))
+;; repo -> idx
+(defonce history-idx (atom {}))
 
-;; Undo && Redo
-;; We need to track several states:
-;; 1. frontend.state/state.
-;; 2. Datascript dbs (include the files db).
-;; 3. Git files
+(defonce history-limit 100)
 
-;; db -> history sequence
-(defonce history
-  (atom {}))
-
-(def ^:const history-limit 20)
-
-(defonce current-id (atom nil))
-
-(defn find-prev [xs pred]
-  (last (take-while #(not (pred %)) xs)))
-
-(defn find-next [xs pred]
-  (fnext (drop-while #(not (pred %)) xs)))
-
-(defn drop-tail [xs pred]
-  (loop [acc []
-         xs  xs]
-    (let [x (first xs)]
-      (cond
-        (nil? x) acc
-        (pred x) (conj acc x)
-        :else  (recur (conj acc x) (next xs))))))
-
-(defn trim-head [xs n]
-  (vec (drop (- (count xs) n) xs)))
-
+;; TODO: replace with patches to reduce memory usage
+;; tx [[file1-path original new] [file2-path original new]]
 (defn add-history!
-  [k value]
-  (when (and k value)
-    (let [id (d/squuid)
-          value (assoc value :id id)]
-      (swap! history update k
-             (fn [col]
-               (let [col (if @current-id
-                           (drop-tail col #(= @current-id (:id %)))
-                           col)])
-               (-> col
-                   (conj value)
-                   (trim-head history-limit))))
-      (reset! current-id id))))
-
-(defn traverse!
-  [k re-render undo?]
-  (when @current-id
-    (let [next-fn (if undo? find-prev find-next)]
-      (when-let [item (next-fn (get @history k)
-                               (fn [{:keys [id] :as item}]
-                                 (= id @current-id)))]
-        (let [{:keys [id db files-db file-handler]} item]
-          (when (and (vector? k)
-                     (= (first k) :git/repo)
-                     id
-                     db
-                     files-db)
-            (let [repo (last k)
-                  reset-dbs (fn []
-                              (db/reset-conn! (db/get-conn repo false) db)
-                              (db/persist repo db false)
-                              (db/reset-conn! (db/get-files-conn repo) files-db)
-                              (db/persist repo files-db true)
-                              (reset! current-id id)
-                              (re-render))]
-              (if file-handler
-                (file-handler reset-dbs)
-                (reset-dbs)))))))))
+  [repo tx]
+  (let [length (count (get @history repo))
+        idx (get @history-idx repo 0)]
+    (when (and (>= length history-limit)
+               (>= idx history-limit))
+      (swap! history assoc repo (vec (drop (/ history-limit 2) (get @history repo))))
+      (swap! history-idx assoc repo (dec (/ history-limit 2))))
+    (let [idx (get @history-idx repo 0)
+          idx' (inc idx)
+          txs (vec (take idx' (get @history repo)))]
+     (swap! history assoc repo (conj txs tx))
+     (swap! history-idx assoc repo idx'))))
 
 (defn undo!
-  [k re-render]
-  (traverse! k re-render true))
+  [repo alter-file]
+  (let [idx (get @history-idx repo 0)]
+    (when (> idx 0)
+      (let [idx' (dec idx)
+            tx (get-in @history [repo idx'])]
+        (doseq [[path original-content _content] tx]
+          (alter-file repo path original-content
+                      {:add-history? false
+                       :re-render-root? true}))
+        (swap! history-idx assoc repo idx')))))
 
 (defn redo!
-  [k re-render]
-  (traverse! k re-render false))
-
-(defn get-current-state
-  [k]
-  (and
-   @current-id
-   (filter #(= (:id %) @current-id)
-           (get @history k))))
-
-(defn clear-specific-history!
-  [k]
-  (swap! history assoc k []))
-
-(defn init-history!
-  [repo-url]
-  (clear-specific-history! [:git/repo repo-url])
-  (add-history!
-   [:git/repo repo-url]
-   {:db (when-let [conn (db/get-conn repo-url false)]
-          (d/db conn))
-    :files-db (when-let [file-conn (db/get-files-conn repo-url)]
-                (d/db file-conn))}))
-
-(comment
-  (def k [:git/repo "https://github.com/tiensonqin/notes"])
-  (undo! k)
-  (redo! k)
-
-  (keys @history)
-
-  (require '[clojure.pprint])
-  (->> (second (first @history))
-       (map (fn [v]
-              (select-keys v
-                           [:id :content])))
-       clojure.pprint/pprint)
-  )
+  [repo alter-file]
+  (let [idx (get @history-idx repo 0)
+        txs (get @history repo)]
+    (when (> (count txs) idx)
+      (let [tx (get-in @history [repo idx])]
+        (doseq [[path _original-content content] tx]
+          (alter-file repo path content
+                      {:add-history? false
+                       :re-render-root? true}))
+        (swap! history-idx assoc repo (inc idx))))))

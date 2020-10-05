@@ -12,7 +12,6 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [frontend.format :as format]
-            [frontend.history :as history]
             [frontend.format.protocol :as protocol]
             [goog.object :as gobj]
             [frontend.handler.ui :as ui-handler]
@@ -261,8 +260,6 @@
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
       (when first-clone?
         (create-default-files! repo-url))
-
-      (history/init-history! repo-url)
 
       (when first-clone?
         (migration-handler/show!)))))
