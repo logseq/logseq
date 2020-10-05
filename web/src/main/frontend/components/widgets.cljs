@@ -139,7 +139,7 @@
 
 (rum/defcs add-repo <
   (rum/local "" ::repo)
-  (rum/local "master" ::branch)
+  (rum/local "" ::branch)
   [state]
   (let [repo (get state ::repo)
         branch (get state ::branch)]
@@ -159,10 +159,11 @@
              :on-change (fn [e]
                           (reset! repo (util/evalue e)))}]]
 
-          [:label.font-medium "Branch: "]
+          [:label.font-medium "Default Branch (make sure it's matched with your setting on Github): "]
           [:div.mt-2.mb-4.relative.rounded-md.shadow-sm.max-w-xs
            [:input#branch.form-input.block.w-full.sm:text-sm.sm:leading-5
             {:value @branch
+             :placeholder "master"
              :on-change (fn [e]
                           (reset! branch (util/evalue e)))}]]]]
 
@@ -170,13 +171,17 @@
           (t :git/add-repo-prompt-confirm)
           :on-click
           (fn []
-            (when-let [branch (string/trim @branch)]
-              (let [repo (util/lowercase-first @repo)]
-                (if (util/starts-with? repo "https://github.com/")
-                  (let [repo-url (string/replace repo ".git" "")]
-                    (repo-handler/create-repo! repo branch))
-                  (notification/show!
-                   [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
-                   :error
-                   false)))
-              )))]])))
+            (let [branch (string/trim @branch)]
+              (if (string/blank? branch)
+                (notification/show!
+                 [:p.text-gray-700 "Please input a branch, make sure it's matched with your setting on Github."]
+                 :error
+                 false)
+                (let [repo (util/lowercase-first @repo)]
+                  (if (util/starts-with? repo "https://github.com/")
+                    (let [repo-url (string/replace repo ".git" "")]
+                      (repo-handler/create-repo! repo branch))
+                    (notification/show!
+                     [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
+                     :error
+                     false)))))))]])))

@@ -43,7 +43,8 @@
 
 (defn list-files
   [repo-url]
-  (js/window.workerThread.listFiles (util/get-repo-dir repo-url)))
+  (js/window.workerThread.listFiles (util/get-repo-dir repo-url)
+                                    (state/get-default-branch repo-url)))
 
 (defn fetch
   [repo-url token]
