@@ -177,21 +177,21 @@
               matched-templates (editor-handler/get-matched-templates q)
               chosen-handler (fn [[template db-id] _click?]
                                (if-let [block (db/entity db-id)]
-                                 (let [properties' (dissoc (:block/properties block) "custom_id" "template")
-                                       new-level (:block/level edit-block)
+                                 (let [new-level (:block/level edit-block)
                                        template-parent-level (:block/level block)
                                        pattern (config/get-block-pattern format)
                                        content
                                        (db/get-block-full-content
                                         (state/get-current-repo)
                                         (:block/uuid block)
-                                        (fn [{:block/keys [level content]}]
-                                          (let [new-level (+ new-level (- level template-parent-level))]
-                                            (string/replace-first content
-                                                                  (apply str (repeat level pattern))
-                                                                  (apply str (repeat new-level pattern))))))
-                                       content (-> (text/remove-properties! content)
-                                                   (text/rejoin-properties properties'))
+                                        (fn [{:block/keys [level content properties] :as block}]
+                                          (let [new-level (+ new-level (- level template-parent-level))
+                                                properties' (dissoc (into {} properties) "custom_id" "template")]
+                                            (-> content
+                                                (string/replace-first (apply str (repeat level pattern))
+                                                                      (apply str (repeat new-level pattern)))
+                                                text/remove-properties!
+                                                (text/rejoin-properties properties')))))
                                        content (if (string/includes? (string/trim edit-content) "\n")
                                                  content
                                                  (text/remove-level-spaces content format))]
