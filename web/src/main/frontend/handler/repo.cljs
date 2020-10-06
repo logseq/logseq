@@ -298,6 +298,8 @@
   (js/setInterval #(persist-repo-metadata! repo-url)
                   (* 5 60 1000)))
 
+(declare push)
+
 (defn pull
   ([repo-url token]
    (pull repo-url token false))
@@ -310,7 +312,7 @@
        (when (and
               ;; (not= status :push-failed)
               (not= status :pushing)
-              (empty? (state/get-changed-files repo-url))
+              ;; (empty? (state/get-changed-files repo-url))
               (not (state/get-edit-input-id))
               (not (state/in-draw-mode?)))
          (git-handler/set-git-status! repo-url :pulling)
@@ -318,7 +320,6 @@
            (->
             (p/let [result (git/fetch repo-url token)]
               (let [{:keys [fetchHead]} (bean/->clj result)]
-                (git-handler/set-latest-commit! repo-url fetchHead)
                 (-> (git/merge repo-url)
                     (p/then (fn [result]
                               (-> (git/checkout repo-url)
@@ -328,7 +329,12 @@
                                             (when (and latest-commit fetchHead
                                                        (not= latest-commit fetchHead))
                                               (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                                (load-db-and-journals! repo-url diffs false)))))
+                                                (when (seq diffs)
+                                                  (load-db-and-journals! repo-url diffs false)
+                                                  (git-handler/set-latest-commit! repo-url fetchHead)
+                                                  (when (seq (state/get-changed-files repo-url))
+                                                    ;; FIXME: no need to create a new commit
+                                                    (push repo-url {:diff-push? true})))))))
                                   (p/catch (fn [error]
                                              (git-handler/set-git-status! repo-url :checkout-failed)
                                              (git-handler/set-git-error! repo-url error))))))
@@ -376,76 +382,50 @@
                 (js/console.dir error))))))
 
 (defn push
-  ([repo-url]
-   (push repo-url "Logseq auto save" false))
-  ([repo-url commit-message fallback?]
-   (let [status (db/get-key-value repo-url :git/status)]
-     (when (and
-            (db/cloned? repo-url)
-            ;; (not= status :push-failed)
-            (not (state/get-edit-input-id))
-            ;; getChangedFiles is not very reliable
-            (seq (state/get-changed-files repo-url)))
-       (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-         (when (or (seq files) fallback?)
-           ;; auto commit if there are any un-committed changes
-           (let [commit-message (if (string/blank? commit-message)
-                                  "Logseq auto save"
-                                  commit-message)]
-             (p/let [_ (git/commit repo-url commit-message)]
-               (git-handler/set-git-status! repo-url :pushing)
-               (when-let [token (state/get-github-token repo-url)]
-                 (util/p-handle
-                  (git/push repo-url token)
-                  (fn []
-                    (git-handler/set-git-status! repo-url nil)
-                    (git-handler/set-git-error! repo-url nil)
-                    (git-handler/set-latest-commit-if-exists! repo-url)
-                    (state/clear-changed-files! repo-url))
-                  (fn [error]
-                    (js/console.error error)
-                    (let [permission? (or (string/includes? (str error) "401")
-                                          (string/includes? (str error) "404"))]
-                      (cond
-                        (and permission? (not fallback?))
-                        (request-app-tokens!
-                         (fn []
-                           (push repo-url commit-message true))
-                         nil)
+  [repo-url {:keys [commit-message fallback? diff-push?]
+             :or {commit-message "Logseq auto save"
+                  fallback? false
+                  diff-push? false}}]
+  (let [status (db/get-key-value repo-url :git/status)]
+    (when (and
+           (db/cloned? repo-url)
+           (not (state/get-edit-input-id)))
+      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
+        (when (or (seq files) fallback? diff-push?)
+          ;; auto commit if there are any un-committed changes
+          (let [commit-message (if (string/blank? commit-message)
+                                 "Logseq auto save"
+                                 commit-message)]
+            (p/let [_ (git/commit repo-url commit-message)]
+              (git-handler/set-latest-commit-if-exists! repo-url)
+              (git-handler/set-git-status! repo-url :pushing)
+              (when-let [token (state/get-github-token repo-url)]
+                (util/p-handle
+                 (git/push repo-url token)
+                 (fn [result]
+                   (git-handler/set-git-status! repo-url nil)
+                   (git-handler/set-git-error! repo-url nil)
+                   (state/clear-changed-files! repo-url))
+                 (fn [error]
+                   (js/console.error error)
+                   (let [permission? (or (string/includes? (str error) "401")
+                                         (string/includes? (str error) "404"))]
+                     (cond
+                       (and permission? (not fallback?))
+                       (request-app-tokens!
+                        (fn []
+                          (push repo-url
+                                {:commit-message commit-message
+                                 :fallback? true}))
+                        nil)
 
-                        :else
-                        (do
-                          (git-handler/set-git-status! repo-url :push-failed)
-                          (git-handler/set-git-error! repo-url error)
-                          (if permission?
-                            (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-                            (-> (git-handler/get-latest-commit
-                                 repo-url
-                                 (fn [commit]
-                                   (let [local-oid (gobj/get commit "oid")
-                                         remote-oid (db/get-key-value repo-url :git/latest-commit)]
-                                     (p/let [result (git/get-local-diffs repo-url remote-oid local-oid)]
-                                       (if (seq result)
-                                         (show-diff-error! repo-url)
-                                         (notification/show!
-                                          [:p.content
-                                           (util/format "Failed to push to %s. " repo-url)
-                                           [:span.text-gray-700.mr-2
-                                            (str error)]]
-                                          :error
-                                          false))))))
-                                (p/catch
-                                    (fn [error]
-                                      (notification/show!
-                                       [:p.content
-                                        (util/format "Failed to push to %s. Please backup your changes first and re-login to give it a try!" repo-url)
-                                        [:span.text-gray-700.mr-2
-                                         (str error)]]
-                                       :error
-                                       false)))))
-                          (p/let [result (git/fetch repo-url (state/get-github-token repo-url))
-                                  {:keys [fetchHead]} (bean/->clj result)]
-                            (git-handler/set-latest-commit! repo-url fetchHead))))))))))))))))
+                       :else
+                       (do
+                         (git-handler/set-git-status! repo-url :push-failed)
+                         (git-handler/set-git-error! repo-url error)
+                         (if permission?
+                           (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
+                           (pull repo-url token)))))))))))))))
 
 (defn pull-current-repo
   []
@@ -552,7 +532,7 @@
   [repo-url]
   (let [token (state/get-github-token repo-url)
         push (fn []
-               (push repo-url))]
+               (push repo-url nil))]
     (js/setInterval push
                     (* (config/git-push-secs) 1000))))
 
@@ -561,7 +541,8 @@
              :or {pull-now? true}}]
   (periodically-pull repo-url pull-now?)
   (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-             (not config/dev?))
+             ;; (not config/dev?)
+             )
     (periodically-push-tasks repo-url)))
 
 (defn create-repo!
@@ -625,7 +606,8 @@
 (defn git-commit-and-push!
   [commit-message]
   (when-let [repo (state/get-current-repo)]
-    (push repo commit-message false)))
+    (push repo {:commit-message commit-message
+                :fallback? false})))
 
 (defn read-repair-journals!
   [repo-url]
