@@ -301,73 +301,73 @@
 (declare push)
 
 (defn pull
-  ([repo-url token]
-   (pull repo-url token false))
-  ([repo-url token fallback?]
-   (when (and
-          (db/get-conn repo-url true)
-          (db/cloned? repo-url)
-          token)
-     (let [status (db/get-key-value repo-url :git/status)]
-       (when (and
-              ;; (not= status :push-failed)
-              (not= status :pushing)
-              ;; (empty? (state/get-changed-files repo-url))
-              (not (state/get-edit-input-id))
-              (not (state/in-draw-mode?)))
-         (git-handler/set-git-status! repo-url :pulling)
-         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
-           (->
-            (p/let [result (git/fetch repo-url token)]
-              (let [{:keys [fetchHead]} (bean/->clj result)]
-                (-> (git/merge repo-url)
-                    (p/then (fn [result]
-                              (-> (git/checkout repo-url)
-                                  (p/then (fn [result]
-                                            (git-handler/set-git-status! repo-url nil)
-                                            (git-handler/set-git-last-pulled-at! repo-url)
-                                            (when (and latest-commit fetchHead
-                                                       (not= latest-commit fetchHead))
-                                              (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                                (when (seq diffs)
-                                                  (load-db-and-journals! repo-url diffs false)
-                                                  (git-handler/set-latest-commit! repo-url fetchHead)
-                                                  (when (seq (state/get-changed-files repo-url))
-                                                    ;; FIXME: no need to create a new commit
-                                                    (push repo-url {:diff-push? true})))))))
-                                  (p/catch (fn [error]
-                                             (git-handler/set-git-status! repo-url :checkout-failed)
-                                             (git-handler/set-git-error! repo-url error))))))
-                    (p/catch (fn [error]
-                               (git-handler/set-git-status! repo-url :merge-failed)
-                               (git-handler/set-git-error! repo-url error)
-                               (notification/show!
-                                [:p.content
-                                 "Failed to merge, please "
-                                 [:span.text-gray-700.font-bold
-                                  "resolve any diffs first."]]
-                                :error)
-                               (route-handler/redirect! {:to :diff}))))))
-            (p/catch (fn [error]
-                       (println "Pull error:" (str error))
-                       (js/console.error error)
-                       ;; token might be expired, request new token
+  [repo-url token {:keys [fallback? force-pull?]
+                   :or {fallback? false
+                        force-pull? false}}]
+  (when (and
+         (db/get-conn repo-url true)
+         (db/cloned? repo-url)
+         token)
+    (let [status (db/get-key-value repo-url :git/status)]
+      (when (and
+             ;; (not= status :push-failed)
+             (not= status :pushing)
+             (empty? (state/get-changed-files repo-url))
+             (not (state/get-edit-input-id))
+             (not (state/in-draw-mode?)))
+        (git-handler/set-git-status! repo-url :pulling)
+        (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
+          (->
+           (p/let [result (git/fetch repo-url token)]
+             (let [{:keys [fetchHead]} (bean/->clj result)]
+               (-> (git/merge repo-url)
+                   (p/then (fn [result]
+                             (-> (git/checkout repo-url)
+                                 (p/then (fn [result]
+                                           (git-handler/set-git-status! repo-url nil)
+                                           (git-handler/set-git-last-pulled-at! repo-url)
+                                           (when (and latest-commit fetchHead
+                                                      (not= latest-commit fetchHead))
+                                             (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                               (when (seq diffs)
+                                                 (load-db-and-journals! repo-url diffs false)
+                                                 (git-handler/set-latest-commit! repo-url fetchHead)
+                                                 (when (seq (state/get-changed-files repo-url))
+                                                   ;; FIXME: no need to create a new commit
+                                                   (push repo-url {:diff-push? true})))))))
+                                 (p/catch (fn [error]
+                                            (git-handler/set-git-status! repo-url :checkout-failed)
+                                            (git-handler/set-git-error! repo-url error))))))
+                   (p/catch (fn [error]
+                              (git-handler/set-git-status! repo-url :merge-failed)
+                              (git-handler/set-git-error! repo-url error)
+                              (notification/show!
+                               [:p.content
+                                "Failed to merge, please "
+                                [:span.text-gray-700.font-bold
+                                 "resolve any diffs first."]]
+                               :error)
+                              (route-handler/redirect! {:to :diff}))))))
+           (p/catch (fn [error]
+                      (println "Pull error:" (str error))
+                      (js/console.error error)
+                      ;; token might be expired, request new token
 
-                       (cond
-                         (and (or (string/includes? (str error) "401")
-                                  (string/includes? (str error) "404"))
-                              (not fallback?))
-                         (request-app-tokens!
-                          (fn []
-                            (pull repo-url (state/get-github-token repo-url) true))
-                          nil)
+                      (cond
+                        (and (or (string/includes? (str error) "401")
+                                 (string/includes? (str error) "404"))
+                             (not fallback?))
+                        (request-app-tokens!
+                         (fn []
+                           (pull repo-url (state/get-github-token repo-url) {:fallback? true}))
+                         nil)
 
-                         (or (string/includes? (str error) "401")
-                             (string/includes? (str error) "404"))
-                         (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
+                        (or (string/includes? (str error) "401")
+                            (string/includes? (str error) "404"))
+                        (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
 
-                         :else
-                         nil))))))))))
+                        :else
+                        nil)))))))))
 
 (defn check-changed-files-status
   [f]
@@ -425,13 +425,13 @@
                          (git-handler/set-git-error! repo-url error)
                          (if permission?
                            (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-                           (pull repo-url token)))))))))))))))
+                           (pull repo-url token {:force-pull? true})))))))))))))))
 
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]
     (when-let [token (state/get-github-token repo)]
-      (pull repo token))))
+      (pull repo token nil))))
 
 (defn clone
   ([repo-url]
@@ -524,8 +524,8 @@
 (defn periodically-pull
   [repo-url pull-now?]
   (when-let [token (state/get-github-token repo-url)]
-    (when pull-now? (pull repo-url token))
-    (js/setInterval #(pull repo-url token)
+    (when pull-now? (pull repo-url token nil))
+    (js/setInterval #(pull repo-url token nil)
                     (* (config/git-pull-secs) 1000))))
 
 (defn periodically-push-tasks
