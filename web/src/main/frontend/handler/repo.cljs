@@ -541,8 +541,7 @@
              :or {pull-now? true}}]
   (periodically-pull repo-url pull-now?)
   (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-             ;; (not config/dev?)
-             )
+             (not config/dev?))
     (periodically-push-tasks repo-url)))
 
 (defn create-repo!
