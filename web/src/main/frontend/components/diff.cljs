@@ -210,11 +210,11 @@
                         (reset! commit-message (util/evalue e)))})
          (if pushing?
            [:span (ui/loading "Pushing")]
-           (ui/button "Commit and force pushing"
+           (ui/button "Commit and push"
              :on-click
              (fn []
                (let [commit-message (if (string/blank? @commit-message)
-                                      "A force push"
+                                      "Merge"
                                       @commit-message)]
                  (reset! *pushing? true)
                  (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
