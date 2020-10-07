@@ -89,7 +89,7 @@
 (defn remove-file
   [repo-url file]
   (js/window.workerThread.remove (util/get-repo-dir repo-url)
-                              file))
+                                 file))
 
 (defn rename
   [repo-url old-file new-file]
@@ -99,12 +99,15 @@
      (remove-file repo-url old-file))))
 
 (defn commit
-  [repo-url message]
-  (let [{:keys [name email]} (:me @state/state)]
-    (js/window.workerThread.commit (util/get-repo-dir repo-url)
-                                   message
-                                   name
-                                   email)))
+  ([repo-url message]
+   (commit repo-url message nil))
+  ([repo-url message parent]
+   (let [{:keys [name email]} (:me @state/state)]
+     (js/window.workerThread.commit (util/get-repo-dir repo-url)
+                                    message
+                                    name
+                                    email
+                                    parent))))
 
 (defn read-commit
   [repo-url oid]

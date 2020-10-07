@@ -24,6 +24,10 @@
   [repo-url hash]
   (db/set-key-value repo-url :git/latest-commit hash))
 
+(defn- set-remote-latest-commit!
+  [repo-url hash]
+  (db/set-key-value repo-url :git/remote-latest-commit hash))
+
 (defn- set-git-status!
   [repo-url value]
   (db/set-key-value repo-url :git/status value)
@@ -64,11 +68,19 @@
      (when-let [hash (gobj/get commit "oid")]
        (set-latest-commit! repo-url hash)))))
 
+(defn set-remote-latest-commit-if-exists! [repo-url]
+  (get-latest-commit
+   repo-url
+   (fn [commit]
+     (when-let [hash (gobj/get commit "oid")]
+       (set-remote-latest-commit! repo-url hash)))))
+
 (defn commit-and-force-push!
   [commit-message pushing?]
   (when-let [repo (frontend.state/get-current-repo)]
-    (when (seq (state/get-changed-files repo))
-      (p/let [commit-oid (git/commit repo commit-message)
+    (let [remote-oid (db/get-key-value repo
+                                       :git/remote-latest-commit)]
+      (p/let [commit-oid (git/commit repo commit-message (array remote-oid))
               result (git/write-ref! repo commit-oid)
               push-result (git/push repo
                                     (state/get-github-token repo)

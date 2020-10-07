@@ -309,17 +309,21 @@
          (db/cloned? repo-url)
          token)
     (let [status (db/get-key-value repo-url :git/status)]
-      (when (and
-             ;; (not= status :push-failed)
-             (not= status :pushing)
-             (empty? (state/get-changed-files repo-url))
-             (not (state/get-edit-input-id))
-             (not (state/in-draw-mode?)))
+      (when (or
+             force-pull?
+             (and
+              ;; (not= status :push-failed)
+              (not= status :pushing)
+              (empty? (state/get-changed-files repo-url))
+              (not (state/get-edit-input-id))
+              (not (state/in-draw-mode?))))
         (git-handler/set-git-status! repo-url :pulling)
         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
           (->
            (p/let [result (git/fetch repo-url token)]
              (let [{:keys [fetchHead]} (bean/->clj result)]
+               (when fetchHead
+                 (git-handler/set-remote-latest-commit! repo-url fetchHead))
                (-> (git/merge repo-url)
                    (p/then (fn [result]
                              (-> (git/checkout repo-url)
@@ -447,7 +451,8 @@
         (state/set-current-repo! repo-url)
         (db/start-db-conn! (:me @state/state) repo-url)
         (db/mark-repo-as-cloned repo-url)
-        (git-handler/set-latest-commit-if-exists! repo-url))
+        (git-handler/set-latest-commit-if-exists! repo-url)
+        (git-handler/set-remote-latest-commit-if-exists! repo-url))
       (fn [e]
         (if (and (not fallback?)
                  (or (string/includes? (str e) "401")
@@ -541,7 +546,8 @@
              :or {pull-now? true}}]
   (periodically-pull repo-url pull-now?)
   (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-             (not config/dev?))
+             ;; (not config/dev?)
+             )
     (periodically-push-tasks repo-url)))
 
 (defn create-repo!
