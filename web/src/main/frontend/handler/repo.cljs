@@ -235,10 +235,16 @@
        (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
                      (p/catch (fn [_e])))
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-         (when (not file-exists?)
-           (db/reset-file! repo-url path content)
-           (ui-handler/re-render-root!)
-           (git-handler/git-add repo-url path)))))))
+         ;; TODO: why file exists but page not created
+         (p/let [resolved-content (if file-exists?
+                           (file-handler/load-file repo-url path)
+                           (p/resolved content))]
+           (let [content (if (string/blank? (string/trim resolved-content))
+                           content
+                           resolved-content)]
+             (db/reset-file! repo-url path content)
+             (ui-handler/re-render-root!)
+             (git-handler/git-add repo-url path))))))))
 
 (defn create-default-files!
   [repo-url]

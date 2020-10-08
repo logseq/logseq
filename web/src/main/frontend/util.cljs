@@ -899,3 +899,20 @@
   (when s
     (str (string/lower-case (.charAt s 0))
          (subs s 1))))
+
+(defn add-style!
+  [style]
+  (when (some? style)
+    (let [parent-node (d/sel1 :head)
+          id "logseq-custom-theme-id"
+          old-link-element (d/sel1 id)
+          encoded-style (str "data:text/css;charset=utf-8," (js/encodeURIComponent style))]
+      (when old-link-element
+        (d/remove! old-link-element))
+      (let [link (->
+                  (d/create-element :link)
+                  (d/set-attr! :id id)
+                  (d/set-attr! :rel "stylesheet")
+                  (d/set-attr! :type "text/css")
+                  (d/set-attr! :href encoded-style))]
+        (d/append! parent-node link)))))

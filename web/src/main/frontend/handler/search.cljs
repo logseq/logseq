@@ -8,6 +8,7 @@
   [q]
   (swap! state/state assoc :search/result
          {:pages (search/page-search q)
+          :files (search/file-search q)
           :blocks (search/search q)}))
 
 (defn clear-search!

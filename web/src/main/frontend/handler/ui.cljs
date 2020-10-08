@@ -82,3 +82,8 @@
   (when-let [fragment (util/get-fragment)]
     (highlight-element! fragment))
   state)
+
+(defn add-style-if-exist!
+  []
+  (when-let [style (db/get-custom-css)]
+    (util/add-style! style)))

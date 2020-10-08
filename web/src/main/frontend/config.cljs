@@ -53,7 +53,7 @@
                                 (set))]
     (set/union
      config-formats
-     #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c
+     #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
        :excalidraw})))
 
 (defn img-formats
@@ -237,6 +237,7 @@
 
 (defonce local-repo "local")
 (def config-file "config.edn")
+(def custom-css-file "custom.css")
 (def metadata-file "metadata.edn")
 
 (def config-default-content

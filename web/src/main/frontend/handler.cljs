@@ -12,6 +12,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]))
 
 (defn- watch-for-date!
@@ -38,7 +39,8 @@
                      (reset! interval nil)
                      (-> (p/all (db/restore! (assoc me :repos repos)
                                              (fn [repo]
-                                               (file-handler/restore-config! repo false))
+                                               (file-handler/restore-config! repo false)
+                                               (ui-handler/add-style-if-exist!))
                                              db-schema-changed-handler))
                          (p/then
                           (fn []
