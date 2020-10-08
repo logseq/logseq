@@ -2278,6 +2278,18 @@ pako@~1.0.5:
   resolved "https://registry.yarnpkg.com/pako/-/pako-1.0.10.tgz#4328badb5086a426aa90f541977d4955da5c9732"
   integrity sha512-0DTvPVU3ed8+HNXOu5Bs+o//Mbdj9VNQMUOe9oKCwh8l0GNwpTDMKCWbRjgtD291AWnkAgkqA/LOnQS8AmS1tw==
 
+parinfer-codemirror@^1.4.2:
+  version "1.4.2"
+  resolved "https://registry.yarnpkg.com/parinfer-codemirror/-/parinfer-codemirror-1.4.2.tgz#2b9b7f27af65bf14282034a17731d4a82367d046"
+  integrity sha1-K5t/J69lvxQoIDShdzHUqCNn0EY=
+  dependencies:
+    parinfer "^3.11.0"
+
+parinfer@^3.11.0:
+  version "3.12.0"
+  resolved "https://registry.yarnpkg.com/parinfer/-/parinfer-3.12.0.tgz#6ea16236319717d579275aa9a94ed1197c3cbd62"
+  integrity sha512-iViQ8vtJ6CEa9x0SxcQCtsOYSCVVu7ILnuUJfKHPEGjxM0Z6R1EdAJX3kWyqZDrszvQyYWl/XpD9pN2IFgSF/g==
+
 parse-asn1@^5.0.0:
   version "5.1.5"
   resolved "https://registry.yarnpkg.com/parse-asn1/-/parse-asn1-5.1.5.tgz#003271343da58dc94cace494faef3d2147ecea0e"

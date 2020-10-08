@@ -1,5 +1,5 @@
 (ns frontend.publishing.html
-  (:require-macros [hiccups.core :as hiccups :refer [html]])
+  (:require-macros [hiccups.core :as hiccups])
   (:require [frontend.config :as config]
             [frontend.state :as state]))
 
@@ -8,7 +8,7 @@
   (let [{:keys [icon name alias title description url]} (:project (state/get-config))
         icon (or icon "/static/img/logo.png")
         project (or alias name)
-        content (html
+        content (hiccups/html
                   [:head
                    [:meta {:charset "utf-8"}]
                    [:meta

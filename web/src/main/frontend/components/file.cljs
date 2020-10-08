@@ -6,6 +6,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.file :as file]
             [frontend.handler.export :as export-handler]
+            [frontend.extensions.code :as code]
             [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -81,15 +82,6 @@
   [state]
   (let [path (get-path state)
         format (format/get-format path)
-        edit-raw-handler (fn []
-                           (when-let [file-content (db/get-file path)]
-                             (let [content (string/trim file-content)]
-                               (content/content path {:config {:file? true
-                                                               :file-path path}
-                                                      :content content
-                                                      :format format
-                                                      ;; :on-hide (save-file! path content)
-                                                      }))))
         page (db/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
@@ -121,7 +113,10 @@
          [:img {:src path}]
 
          (and format (contains? (config/text-formats) format))
-         (edit-raw-handler)
+         (when-let [file-content (db/get-file path)]
+           (let [content (string/trim file-content)]
+             (code/editor {:file? true
+                           :file-path path} path nil content)))
 
          :else
          [:div (tongue :file/format-not-supported (name format))])])))
