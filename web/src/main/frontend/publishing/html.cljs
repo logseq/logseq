@@ -80,7 +80,7 @@
           }
         }
       }(window.location))"]
-                   [:script {:src "/static/js/publishing.js"}]
                    ;; TODO: should make this configurable
-                   [:script {:src "/static/js/highlight.min.js"}]])]
+                   [:script {:src "/static/js/highlight.min.js"}]
+                   [:script {:src "/static/js/publishing.js"}]])]
     (str "<!DOCTYPE html>\n" content)))
