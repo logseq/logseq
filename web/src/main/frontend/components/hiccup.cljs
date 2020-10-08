@@ -1583,10 +1583,11 @@
                                 config (assoc config :block/uuid (:block/uuid item))]
                             (rum/with-key
                               (block-container config item)
-                              (:block/uuid item))))))]
+                              (:block/uuid item))))))
+          blocks->vec-tree #(if (or custom-query? ref?) % (db/blocks->vec-tree %))]
       (if (> (count blocks) max-blocks-per-page)
         (ui/infinite-list
-         (blocks-cp (rum/react segment) true)
+         (blocks-cp (blocks->vec-tree (rum/react segment)) true)
          {:on-load (fn []
                      (when (= (count @segment) max-blocks-per-page)
                        (if (zero? @idx)
@@ -1615,8 +1616,7 @@
                                           (->> (concat prev tail)
                                                (remove nil?)))
                                   (util/scroll-to 100)))))})
-        (let [blocks (if (or custom-query? ref?) blocks (db/blocks->vec-tree blocks))]
-          (blocks-cp blocks false))))))
+        (blocks-cp (blocks->vec-tree blocks) false)))))
 
 (defn build-slide-sections
   ([blocks config]
