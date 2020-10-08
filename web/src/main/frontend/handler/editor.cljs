@@ -691,7 +691,7 @@
      :value value
      :pos pos}))
 
-(defn- insert-new-block!
+(defn insert-new-block!
   [state]
   (when-not config/publishing?
     (let [{:keys [block value format id config]} (get-state state)
@@ -720,6 +720,26 @@
         :new-level (and last-child (:block/level block))
         :blocks-container-id (:id config)
         :current-page (state/get-current-page)}))))
+
+(defn insert-new-block-without-save-previous!
+  [config last-block]
+  (let [format (:block/format last-block)
+        id (:id config)
+        new-level (if (util/uuid-string? id)
+                    (inc (:block/level (db/entity [:block/uuid (medley/uuid id)])))
+                    2)]
+    (insert-new-block-aux!
+     last-block
+     (:block/content last-block)
+     {:create-new-block? true
+      :ok-handler
+      (fn [[_first-block last-block _new-block-content]]
+        (js/setTimeout #(edit-last-block-for-new-page! last-block :max) 50))
+      :with-level? true
+      :new-level new-level
+      :blocks-container-id (:id config)
+      :current-page (state/get-current-page)})))
+
 
 ;; TODO: utf8 encode performance
 (defn check

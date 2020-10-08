@@ -1644,11 +1644,23 @@
                      blocks)]
        sections))))
 
+(rum/defc add-button < rum/reactive
+  [config ref? custom-query? blocks]
+  (let [editing (state/sub [:editor/editing?])]
+    (when-not (or ref? custom-query?
+                 (:block/dummy? (last blocks))
+                 (second (first editing)))
+     (when-let [last-block (last blocks)]
+       [:a.add-button-link {:on-click (fn []
+                                        (editor-handler/insert-new-block-without-save-previous! config last-block))}
+        svg/plus-circle]))))
+
 (rum/defc blocks-container < rum/static
   [blocks config]
   (let [blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
-        ref? (:ref? config)]
+        ref? (:ref? config)
+        custom-query? (:custom-query? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:style {:margin-left (cond
@@ -1656,7 +1668,8 @@
                                0
                                :else
                                -18)}}
-       (build-blocks blocks config)])))
+       (build-blocks blocks config)
+       (add-button config ref? custom-query? blocks)])))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive
