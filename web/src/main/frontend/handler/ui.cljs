@@ -83,7 +83,11 @@
     (highlight-element! fragment))
   state)
 
-(defn add-style-if-exist!
+(defn add-style-if-exists!
   []
-  (when-let [style (db/get-custom-css)]
+  (when-let [style (or
+                    (state/get-custom-css-link)
+                    (db/get-custom-css)
+                    ;; (state/get-custom-css-link)
+                    )]
     (util/add-style! style)))

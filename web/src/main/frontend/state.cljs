@@ -141,6 +141,10 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defn get-custom-css-link
+  []
+  (:custom-css-url (get-config)))
+
 (defn all-pages-public?
   []
   (true? (:all-pages-public? (get-config))))

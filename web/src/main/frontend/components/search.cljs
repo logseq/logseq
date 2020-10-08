@@ -74,11 +74,11 @@
 
                         :page
                         (route/redirect! {:to :page
-                                          :path-params {:name (util/encode-str data)}})
+                                          :path-params {:name data}})
 
                         :file
                         (route/redirect! {:to :file
-                                          :path-params {:path (util/encode-str data)}})
+                                          :path-params {:path data}})
 
                         :block
                         (let [page (:page/name (:block/page data))

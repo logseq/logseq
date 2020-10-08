@@ -681,7 +681,7 @@
                      (if file?
                        (let [path (:file-path config)
                              content (db/get-file-no-sub path)
-                             value (some-> (gdom/getElement (util/url-encode path))
+                             value (some-> (gdom/getElement path)
                                            (gobj/get "value"))]
                          (when (and
                                 (not (string/blank? value))

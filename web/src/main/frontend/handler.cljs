@@ -40,7 +40,7 @@
                      (-> (p/all (db/restore! (assoc me :repos repos)
                                              (fn [repo]
                                                (file-handler/restore-config! repo false)
-                                               (ui-handler/add-style-if-exist!))
+                                               (ui-handler/add-style-if-exists!))
                                              db-schema-changed-handler))
                          (p/then
                           (fn []
