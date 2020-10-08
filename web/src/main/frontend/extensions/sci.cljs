@@ -1,6 +1,5 @@
 (ns frontend.extensions.sci
   (:require [rum.core :as rum]
-            [frontend.loader :as loader]
             [frontend.config :as config]
             [frontend.ui :as ui]
             [goog.object :as gobj]

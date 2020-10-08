@@ -28,7 +28,8 @@
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [frontend.extensions.latex :as latex]
-            [frontend.extensions.code :as code]
+            [frontend.components.lazy-editor :as lazy-editor]
+            [frontend.extensions.highlight :as highlight]
             [frontend.extensions.sci :as sci]
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
@@ -1456,15 +1457,15 @@
             code (join-lines lines)]
         (cond
           html-export?
-          (code/html-export attr code)
+          (highlight/html-export attr code)
 
           (and (= language "clojure") (contains? (set options) ":results"))
           [:div
-           (code/editor config (str (dc/squuid)) attr code)
+           (lazy-editor/editor config (str (dc/squuid)) attr code)
            (sci/eval-result code)]
 
           :else
-          (code/editor config (str (dc/squuid)) attr code)))
+          (lazy-editor/editor config (str (dc/squuid)) attr code)))
       ["Quote" l]
       (->elem
        :blockquote

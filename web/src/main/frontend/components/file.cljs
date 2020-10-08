@@ -6,7 +6,6 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.file :as file]
             [frontend.handler.export :as export-handler]
-            [frontend.extensions.code :as code]
             [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -15,6 +14,7 @@
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.components.content :as content]
+            [frontend.components.lazy-editor :as lazy-editor]
             [frontend.config :as config]
             [frontend.utf8 :as utf8]
             [goog.dom :as gdom]
@@ -115,8 +115,8 @@
          (and format (contains? (config/text-formats) format))
          (when-let [file-content (db/get-file path)]
            (let [content (string/trim file-content)]
-             (code/editor {:file? true
-                           :file-path path} path nil content)))
+             (lazy-editor/editor {:file? true
+                                  :file-path path} path nil content)))
 
          :else
          [:div (tongue :file/format-not-supported (name format))])])))
