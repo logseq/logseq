@@ -20,6 +20,7 @@
         "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ../resources/static/js/compiled; /usr/bin/rm -rf ../resources/static/js/cljs-runtime; /usr/bin/rm -rf ../resources/static/js/publishing/cljs-runtime;"
     },
     "dependencies": {
+        "codemirror": "^5.58.1",
         "diff": "^4.0.2",
         "dropbox": "^5.2.0",
         "localforage": "^1.7.3",

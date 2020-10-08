@@ -1460,11 +1460,11 @@
 
           (and (= language "clojure") (contains? (set options) ":results"))
           [:div
-           (code/highlight (str (dc/squuid)) attr code)
+           (code/editor config (str (dc/squuid)) attr code)
            (sci/eval-result code)]
 
           :else
-          (code/highlight (str (dc/squuid)) attr code)))
+          (code/editor config (str (dc/squuid)) attr code)))
       ["Quote" l]
       (->elem
        :blockquote
