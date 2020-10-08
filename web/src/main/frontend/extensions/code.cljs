@@ -71,7 +71,7 @@
         editor (from-text-area textarea
                                #js {:mode mode
                                     :matchBrackets lisp?
-                                    :closeBrackets true
+                                    :autoCloseBrackets true
                                     :lineNumbers true})
         element (.getWrapperElement editor)]
     (.on editor "blur" (fn []
