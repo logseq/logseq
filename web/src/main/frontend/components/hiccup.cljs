@@ -1170,7 +1170,7 @@
         (for [child children]
           (when (map? child)
             (let [child (dissoc child :block/meta)]
-              (rum/with-key (block-container config child)
+              (rum/with-key (block-container (assoc config :block/uuid (:block/uuid child)) child)
                 (:block/uuid child)))))])
 
      (when (and ref? (not ref-child?))
