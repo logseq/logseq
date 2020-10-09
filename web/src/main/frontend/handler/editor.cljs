@@ -332,6 +332,13 @@
       content
       (text/append-newline-after-level-spaces content format))))
 
+(defn- get-edit-input-id-with-block-id
+  [block-id]
+  (when-let [first-block (util/get-first-block-by-id block-id)]
+    (string/replace (gobj/get first-block "id")
+                    "ls-block"
+                    "edit-block")))
+
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn edit-block!
   ([block pos format id]
@@ -339,7 +346,9 @@
   ([block pos format id {:keys [custom-content custom-properties]}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
-       (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
+       (let [edit-input-id (if (uuid? id)
+                             (get-edit-input-id-with-block-id id)
+                             (str (subs id 0 (- (count id) 36)) block-id))
              block (or
                     block
                     (db/pull [:block/uuid block-id])
