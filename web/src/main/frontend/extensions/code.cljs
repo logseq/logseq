@@ -56,7 +56,7 @@
             ;; Get newest state
             pos-meta (::pos-meta state)
             {:keys [start_pos end_pos]} @pos-meta
-            value (str (string/trimr value) "\n")
+            value (str "\n" (string/trimr value) "\n")
             content (:block/content block)
             content' (utf8/insert! content
                                    start_pos
