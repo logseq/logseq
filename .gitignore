@@ -20,7 +20,6 @@ node_modules/
 /resources/static/js/publishing/main.js
 /resources/static/js/publishing/cljs-runtime
 /resources/static/js/publishing/manifest.edn
-/resources/static/js/code-editor.js
 /resources/static/style.css
 tauri-release/
 
