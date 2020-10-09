@@ -106,17 +106,24 @@
        (when (and config? (state/logged?))
          [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
           (tongue :project/sync-settings)])
-
        (cond
          ;; image type
          (and format (contains? (config/img-formats) format))
          [:img {:src path}]
 
+         (and format (contains? config/markup-formats format))
+         (when-let [file-content (db/get-file path)]
+           (let [content (string/trim file-content)]
+             (content/content path {:config {:file? true
+                                             :file-path path}
+                                    :content content
+                                    :format format})))
+
          (and format (contains? (config/text-formats) format))
          (when-let [file-content (db/get-file path)]
            (let [content (string/trim file-content)]
              (lazy-editor/editor {:file? true
-                                  :file-path path} path nil content)))
+                                  :file-path path} path nil content nil)))
 
          :else
          [:div (tongue :file/format-not-supported (name format))])])))

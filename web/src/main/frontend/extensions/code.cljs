@@ -10,6 +10,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [clojure.string :as string]
+            [frontend.utf8 :as utf8]
             ["codemirror" :as cm]
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/edit/closebrackets"]
@@ -45,8 +46,9 @@
 
 (defn render!
   [state]
-  (let [[config id attr] (:rum/args state)
-        mode (get attr :data-lang "javascript")
+  (let [[config id attr code pos_meta] (:rum/args state)
+        original-mode (get attr :data-lang)
+        mode (or original-mode "javascript")
         clojure? (contains? #{"clojure" "clj"} mode)
         mode (if clojure? "clojure" mode)
         lisp? (contains? #{"clojure" "scheme" "racket" "lisp"} mode)
@@ -64,10 +66,19 @@
                            (cond
                              (:block/uuid config)
                              (let [block (db/pull [:block/uuid (:block/uuid config)])
+                                   format (:block/format block)
+                                   ;; Get newest state
+                                   pos-meta (::pos-meta state)
+                                   {:keys [start_pos end_pos]} @pos-meta
+                                   value (str (string/trimr value) "\n")
                                    content (:block/content block)
-                                   ;; FIXME: what if there're multiple same code blocks in the same block
-                                   ;; and we're editing the second code block instead of the first one?
-                                   content' (string/replace-first content default-value value)]
+                                   content' (utf8/insert! content
+                                                          start_pos
+                                                          end_pos
+                                                          value)]
+                               (reset! pos-meta {:start_pos start_pos
+                                                 :end_pos (+ start_pos
+                                                             (utf8/length (utf8/encode value)))})
                                (editor-handler/save-block-if-changed! block content'))
 
                              (:file-path config)
@@ -89,16 +100,26 @@
     (.save editor)
     (.refresh editor)
     (when clojure?
-      (par-cm/init editor))))
+      (par-cm/init editor))
+    editor))
 
 (defn- load-and-render!
   [state]
-  (render! state)
-  state)
+  (let [editor (render! state)]
+    (assoc state ::editor editor)))
 
 (rum/defcs editor < rum/reactive
-  {:did-mount load-and-render!}
-  [state config id attr code]
+  {:init (fn [state]
+           (assoc state ::pos-meta (atom (last (:rum/args state)))))
+   :did-mount (fn [state]
+                (load-and-render! state))
+   :did-update (fn [state]
+                 (when-let [editor (::editor state)]
+                   (let [code (nth (:rum/args state) 3)]
+                     (.setValue (.getDoc editor) code)))
+                 (when-let [pos-meta (::pos-meta state)]
+                   (reset! pos-meta (last (:rum/args state)))))}
+  [state config id attr code pos_meta]
   [:div.relative.fixed-width
    [:div.absolute.top-0.right-0.p-1.text-sm.text-gray-500
     {:style {:z-index 1000

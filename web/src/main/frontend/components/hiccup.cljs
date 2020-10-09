@@ -1451,7 +1451,7 @@
       [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Src" options]
-      (let [{:keys [language options lines]} options
+      (let [{:keys [language options lines pos_meta]} options
             attr (if language
                    {:data-lang language})
             code (join-lines lines)]
@@ -1459,13 +1459,11 @@
           html-export?
           (highlight/html-export attr code)
 
-          (and (= language "clojure") (contains? (set options) ":results"))
-          [:div
-           (lazy-editor/editor config (str (dc/squuid)) attr code)
-           (sci/eval-result code)]
-
           :else
-          (lazy-editor/editor config (str (dc/squuid)) attr code)))
+          [:div
+           (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
+           (when (and (= language "clojure") (contains? (set options) ":results"))
+             (sci/eval-result code))]))
       ["Quote" l]
       (->elem
        :blockquote

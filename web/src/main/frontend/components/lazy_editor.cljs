@@ -13,8 +13,8 @@
                             (fn []
                               (reset! loaded? true)))
                  state)}
-  [config id attr code]
+  [config id attr code pos_meta]
   (let [loaded? (rum/react loaded?)]
     (if loaded?
-     (@lazy-editor config id attr code)
-     (ui/loading "CodeMirror"))))
+      (@lazy-editor config id attr code pos_meta)
+      (ui/loading "CodeMirror"))))

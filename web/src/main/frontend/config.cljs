@@ -56,6 +56,9 @@
      #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
        :excalidraw})))
 
+(def markup-formats
+  #{:org :md :markdown :asciidoc :rst})
+
 (defn img-formats
   []
   (let [config-formats (some->> (get-in @state/state [:config :image-formats])
@@ -226,6 +229,18 @@
   ([format n]
    (let [block-pattern (get-block-pattern format)]
      (apply str (repeat n block-pattern)))))
+
+(defn with-code-wrapper
+  [format mode code]
+  (let [mode (if-not (string/blank? mode)
+               (str mode " ")
+               "")]
+    (case format
+      :markdown
+      (util/format "```%s\n%s\n```" mode code)
+      :org
+      (util/format "#+BEGIN_SRC%s\n%s\n#+END_SRC" mode code)
+      code)))
 
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
