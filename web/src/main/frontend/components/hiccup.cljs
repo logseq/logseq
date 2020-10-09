@@ -28,7 +28,8 @@
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [frontend.extensions.latex :as latex]
-            [frontend.extensions.code :as code]
+            [frontend.components.lazy-editor :as lazy-editor]
+            [frontend.extensions.highlight :as highlight]
             [frontend.extensions.sci :as sci]
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
@@ -1447,21 +1448,19 @@
       [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Src" options]
-      (let [{:keys [language options lines]} options
+      (let [{:keys [language options lines pos_meta]} options
             attr (if language
                    {:data-lang language})
             code (join-lines lines)]
         (cond
           html-export?
-          (code/html-export attr code)
-
-          (and (= language "clojure") (contains? (set options) ":results"))
-          [:div
-           (code/highlight (str (dc/squuid)) attr code)
-           (sci/eval-result code)]
+          (highlight/html-export attr code)
 
           :else
-          (code/highlight (str (dc/squuid)) attr code)))
+          [:div
+           (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
+           (when (and (= language "clojure") (contains? (set options) ":results"))
+             (sci/eval-result code))]))
       ["Quote" l]
       (->elem
        :blockquote
@@ -1646,11 +1645,23 @@
                      blocks)]
        sections))))
 
+(rum/defc add-button < rum/reactive
+  [config ref? custom-query? blocks]
+  (let [editing (state/sub [:editor/editing?])]
+    (when-not (or ref? custom-query?
+                 (:block/dummy? (last blocks))
+                 (second (first editing)))
+     (when-let [last-block (last blocks)]
+       [:a.add-button-link {:on-click (fn []
+                                        (editor-handler/insert-new-block-without-save-previous! config last-block))}
+        svg/plus-circle]))))
+
 (rum/defc blocks-container < rum/static
   [blocks config]
   (let [blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
-        ref? (:ref? config)]
+        ref? (:ref? config)
+        custom-query? (:custom-query? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:style {:margin-left (cond
@@ -1658,7 +1669,8 @@
                                0
                                :else
                                -18)}}
-       (build-blocks blocks config)])))
+       (build-blocks blocks config)
+       (add-button config ref? custom-query? blocks)])))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

@@ -898,6 +898,10 @@
       react
       ffirst))))
 
+(defn get-custom-css
+  []
+  (get-file "logseq/custom.css"))
+
 (defn get-file-no-sub
   ([path]
    (get-file-no-sub (state/get-current-repo) path))

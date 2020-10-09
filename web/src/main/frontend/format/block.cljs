@@ -149,6 +149,22 @@
                                    [:block/uuid (medley/uuid id)])
                                  ref-blocks)))))
 
+(defn update-src-pos-meta!
+  [{:keys [body] :as block}]
+  (let [body (walk/postwalk
+              (fn [form]
+                (if (and (vector? form)
+                         (= (first form) "Src")
+                         (map? (:pos_meta (second form))))
+                  (let [{:keys [start_pos end_pos]} (:pos_meta (second form))
+                        new_start_pos (- start_pos (get-in block [:meta :start-pos]))]
+                    ["Src" (assoc (second form)
+                                  :pos_meta {:start_pos new_start_pos
+                                             :end_pos (+ new_start_pos (- end_pos start_pos))})])
+                  form))
+              body)]
+    (assoc block :body body)))
+
 (defn block-keywordize
   [block]
   (medley/map-keys
@@ -224,6 +240,7 @@
                       block (collect-block-tags block)
                       block (with-page-refs block)
                       block (with-block-refs block)
+                      block (update-src-pos-meta! block)
                       block-refs (into block-refs (:ref-blocks block))
                       last-pos' (get-in block [:meta :start-pos])]
                   (recur block-refs (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))

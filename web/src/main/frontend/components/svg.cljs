@@ -101,6 +101,26 @@
 
 (def close (hero-icon "M6 18L18 6M6 6L18 18"))
 (def plus (hero-icon "M12 4v16m8-8H4"))
+
+(def plus-circle
+  [:svg.addButton
+   {:viewbox "0 0 20 20"}
+   [:circle.circle {:fill "#dce0e2", :r "9", :cy "10.5", :cx "10.5"}]
+   [:line
+    {:stroke-width "1",
+     :stroke "#868c90",
+     :y2 "10.5",
+     :x2 "15",
+     :y1 "10.5",
+     :x1 "6"}]
+   [:line
+    {:stroke-width "1",
+     :stroke "#868c90",
+     :y2 "15",
+     :x2 "10.5",
+     :y1 "6",
+     :x1 "10.5"}]])
+
 (def graph-sm [:div {:style {:transform "rotate(90deg)"}} (hero-icon "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" {:height "16" :width "16"})])
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
 (def folder-sm (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" {:height "16" :width "16"}))

@@ -49,14 +49,15 @@
     (.blur input)))
 
 (rum/defc search-auto-complete
-  [{:keys [pages blocks]} search-q]
+  [{:keys [pages files blocks]} search-q]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [new-page [{:type :new-page}]
           pages (map (fn [page] {:type :page :data page}) pages)
+          files (map (fn [file] {:type :file :data file}) files)
           blocks (map (fn [block] {:type :block :data block}) blocks)
           result (if config/publishing?
-                   (concat pages blocks)
-                   (concat new-page pages blocks))]
+                   (concat pages files blocks)
+                   (concat new-page pages files blocks))]
       [:div.absolute.rounded-md.shadow-lg
        {:style (merge
                 {:top 48
@@ -73,7 +74,11 @@
 
                         :page
                         (route/redirect! {:to :page
-                                          :path-params {:name (util/encode-str data)}})
+                                          :path-params {:name data}})
+
+                        :file
+                        (route/redirect! {:to :file
+                                          :path-params {:path data}})
 
                         :block
                         (let [page (:page/name (:block/page data))
@@ -106,7 +111,16 @@
                            [:span.ml-1 (str "\""search-q "\"")]]
 
                           :page
-                          [:div.text-sm.font-medium data]
+                          [:div.text-sm.font-medium
+                           [:span.text-xs.rounded.border.mr-2.px-1 {:title "Page"}
+                            "P"]
+                           data]
+
+                          :file
+                          [:div.text-sm.font-medium
+                           [:span.text-xs.rounded.border.mr-2.px-1 {:title "File"}
+                            "F"]
+                           data]
 
                           :block
                           (let [{:block/keys [page content]} data]

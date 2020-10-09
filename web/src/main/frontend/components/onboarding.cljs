@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.components.svg :as svg]
             [frontend.extensions.latex :as latex]
-            [frontend.extensions.code :as code]
+            [frontend.extensions.highlight :as highlight]
             [frontend.context.i18n :as i18n]))
 
 (rum/defc intro
@@ -302,7 +302,7 @@
        [:tr [:td [:pre "```clojure
   (println \"Hello world!\")
 ```"]] [:td.text-right
-        (code/highlight
+        (highlight/highlight
          "help-highlight"
          {:data-lang "clojure"}
          "(println \"Hello world!\")")]]
@@ -333,7 +333,7 @@
        [:tr [:td [:pre "#+BEGIN_SRC clojure
   (println \"Hello world!\")
 #+END_SRC"]] [:td.text-right
-              (code/highlight
+              (highlight/highlight
                "help-highlight-org"
                {:data-lang "clojure"}
                "(println \"hello world\")")]]

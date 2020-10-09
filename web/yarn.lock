@@ -571,6 +571,11 @@ code-point-at@^1.0.0:
   resolved "https://registry.yarnpkg.com/code-point-at/-/code-point-at-1.1.0.tgz#0d070b4d043a5bea33a2f1a40e2edb3d9a4ccf77"
   integrity sha1-DQcLTQQ6W+ozovGkDi7bPZpMz3c=
 
+codemirror@^5.58.1:
+  version "5.58.1"
+  resolved "https://registry.yarnpkg.com/codemirror/-/codemirror-5.58.1.tgz#ec6bf38ad2a17f74c61bd00cc6dc5a69bd167854"
+  integrity sha512-UGb/ueu20U4xqWk8hZB3xIfV2/SFqnSLYONiM3wTMDqko0bsYrsAkGGhqUzbRkYm89aBKPyHtuNEbVWF9FTFzw==
+
 collection-visit@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/collection-visit/-/collection-visit-1.0.0.tgz#4bc0373c164bc3291b4d368c829cf1a80a59dca0"
@@ -2272,6 +2277,18 @@ pako@~1.0.5:
   version "1.0.10"
   resolved "https://registry.yarnpkg.com/pako/-/pako-1.0.10.tgz#4328badb5086a426aa90f541977d4955da5c9732"
   integrity sha512-0DTvPVU3ed8+HNXOu5Bs+o//Mbdj9VNQMUOe9oKCwh8l0GNwpTDMKCWbRjgtD291AWnkAgkqA/LOnQS8AmS1tw==
+
+parinfer-codemirror@^1.4.2:
+  version "1.4.2"
+  resolved "https://registry.yarnpkg.com/parinfer-codemirror/-/parinfer-codemirror-1.4.2.tgz#2b9b7f27af65bf14282034a17731d4a82367d046"
+  integrity sha1-K5t/J69lvxQoIDShdzHUqCNn0EY=
+  dependencies:
+    parinfer "^3.11.0"
+
+parinfer@^3.11.0:
+  version "3.12.0"
+  resolved "https://registry.yarnpkg.com/parinfer/-/parinfer-3.12.0.tgz#6ea16236319717d579275aa9a94ed1197c3cbd62"
+  integrity sha512-iViQ8vtJ6CEa9x0SxcQCtsOYSCVVu7ILnuUJfKHPEGjxM0Z6R1EdAJX3kWyqZDrszvQyYWl/XpD9pN2IFgSF/g==
 
 parse-asn1@^5.0.0:
   version "5.1.5"

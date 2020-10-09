@@ -96,13 +96,23 @@
 
 (defn page-search
   ([q]
-   (page-search q 2))
+   (page-search q 3))
   ([q limit]
    (let [q (clean-str q)]
      (when-not (string/blank? q)
        (let [pages (db/get-pages (state/get-current-repo))]
          (when (seq pages)
            (fuzzy-search pages q :limit limit)))))))
+
+(defn file-search
+  ([q]
+   (file-search q 3))
+  ([q limit]
+   (let [q (clean-str q)]
+     (when-not (string/blank? q)
+       (let [files (db/get-files (state/get-current-repo))]
+         (when (seq files)
+           (fuzzy-search (map first files) q :limit limit)))))))
 
 (defn template-search
   ([q]

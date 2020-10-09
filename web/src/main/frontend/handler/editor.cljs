@@ -332,6 +332,13 @@
       content
       (text/append-newline-after-level-spaces content format))))
 
+(defn- get-edit-input-id-with-block-id
+  [block-id]
+  (when-let [first-block (util/get-first-block-by-id block-id)]
+    (string/replace (gobj/get first-block "id")
+                    "ls-block"
+                    "edit-block")))
+
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn edit-block!
   ([block pos format id]
@@ -339,7 +346,9 @@
   ([block pos format id {:keys [custom-content custom-properties]}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
-       (let [edit-input-id (str (subs id 0 (- (count id) 36)) block-id)
+       (let [edit-input-id (if (uuid? id)
+                             (get-edit-input-id-with-block-id id)
+                             (str (subs id 0 (- (count id) 36)) block-id))
              block (or
                     block
                     (db/pull [:block/uuid block-id])
@@ -691,7 +700,7 @@
      :value value
      :pos pos}))
 
-(defn- insert-new-block!
+(defn insert-new-block!
   [state]
   (when-not config/publishing?
     (let [{:keys [block value format id config]} (get-state state)
@@ -720,6 +729,26 @@
         :new-level (and last-child (:block/level block))
         :blocks-container-id (:id config)
         :current-page (state/get-current-page)}))))
+
+(defn insert-new-block-without-save-previous!
+  [config last-block]
+  (let [format (:block/format last-block)
+        id (:id config)
+        new-level (if (util/uuid-string? id)
+                    (inc (:block/level (db/entity [:block/uuid (medley/uuid id)])))
+                    2)]
+    (insert-new-block-aux!
+     last-block
+     (:block/content last-block)
+     {:create-new-block? true
+      :ok-handler
+      (fn [[_first-block last-block _new-block-content]]
+        (js/setTimeout #(edit-last-block-for-new-page! last-block :max) 50))
+      :with-level? true
+      :new-level new-level
+      :blocks-container-id (:id config)
+      :current-page (state/get-current-page)})))
+
 
 ;; TODO: utf8 encode performance
 (defn check

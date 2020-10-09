@@ -97,7 +97,7 @@
        [:div.pl-1
         ;; config.edn
         (when current-repo
-          [:a {:href (str "/file/" (util/encode-str (str config/app-name "/" config/config-file)))}
+          [:a {:href (str "/file/" (util/url-encode (str config/app-name "/" config/config-file)))}
            (t :settings-page/edit-config-edn)])
 
         (when logged? [:hr])
