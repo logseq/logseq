@@ -861,8 +861,9 @@
   (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
     (when block-id
       (when-let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))]
-        (let [page-blocks-count (db/get-page-blocks-count repo page-id)]
-          (when (> page-blocks-count 2)
+        (let [page-blocks-count (db/get-page-blocks-count repo page-id)
+              page (db/entity page-id)]
+          (when (> page-blocks-count 1)
             (util/stop e)
             ;; delete block, edit previous block
             (let [block (db/pull [:block/uuid block-id])
