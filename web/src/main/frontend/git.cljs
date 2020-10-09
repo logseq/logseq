@@ -176,6 +176,10 @@
   (js/window.workerThread.readBlob (util/get-repo-dir repo-url)
                                    oid
                                    path))
+;; (resolve-ref (state/get-current-repo) "refs/remotes/origin/master")
+(defn resolve-ref
+  [repo-url ref]
+  (js/window.workerThread.resolveRef (util/get-repo-dir repo-url) ref))
 
 (defn write-ref!
   [repo-url oid]

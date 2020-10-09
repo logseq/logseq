@@ -1209,6 +1209,13 @@
        seq-flatten
        first))))
 
+(defn delete-pages-by-files
+  [files]
+  (let [pages (->> (mapv get-file-page files)
+                   (remove nil?))]
+    (when (seq pages)
+      (mapv (fn [page] [:db.fn/retractEntity [:page/name page]]) (map string/lower-case pages)))))
+
 (defn get-page-file
   [page-name]
   (some-> (entity [:page/name page-name])

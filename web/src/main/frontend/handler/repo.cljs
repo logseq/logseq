@@ -82,8 +82,11 @@
               delete-files (if (seq remove-files)
                              (db/delete-files remove-files))
               delete-blocks (db/delete-blocks repo-url (concat remove-files modify-files))
+              delete-pages (if (seq remove-files)
+                             (db/delete-pages-by-files remove-files)
+                             [])
               add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files delete-files delete-blocks true))))))
+          (load-contents add-or-modify-files (concat delete-files delete-pages) delete-blocks true))))))
 
 (defn show-install-error!
   [repo-url title]
@@ -399,6 +402,7 @@
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
            (db/cloned? repo-url)
+           (not= status :pulling)
            (not (state/get-edit-input-id)))
       (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
         (when (or (seq files) fallback? diff-push?)
