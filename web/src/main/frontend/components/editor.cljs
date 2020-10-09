@@ -651,7 +651,7 @@
                       (fn [state e event]
                         (let [{:keys [on-hide format value block id repo dummy?]} (get-state state)]
                           (when on-hide
-                            (on-hide value event))
+                            (on-hide value content))
                           (when
                               (or (= event :esc)
                                   (and (= event :click)

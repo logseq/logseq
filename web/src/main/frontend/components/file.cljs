@@ -6,6 +6,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.file :as file]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -13,6 +14,7 @@
             [frontend.components.hiccup :as hiccup]
             [frontend.ui :as ui]
             [frontend.format :as format]
+            [frontend.format.mldoc :as mldoc]
             [frontend.components.content :as content]
             [frontend.config :as config]
             [frontend.utf8 :as utf8]
@@ -83,6 +85,8 @@
   [state]
   (let [[encoded-path path] (get-path state)
         format (format/get-format path)
+        page (db/get-file-page path)
+        config? (= path (str config/app-name "/" config/config-file))
         edit-raw-handler (fn []
                            (when-let [file-content (db/get-file path)]
                              (let [content (string/trim file-content)]
@@ -90,10 +94,15 @@
                                                                        :file-path path}
                                                               :content content
                                                               :format format
-                                                              ;; :on-hide (save-file! path content)
-                                                             }))))
-        page (db/get-file-page path)
-        config? (= path (str config/app-name "/" config/config-file))]
+                                                              :on-hide (fn [content original-content]
+                                                                         (when (and page (contains? config/mldoc-support-formats format))
+                                                                           (let [get-page-name
+                                                                                 #(let [ast (mldoc/->edn % (mldoc/default-config format))]
+                                                                                    (db/get-page-name path ast))
+                                                                                 old-name (get-page-name original-content)
+                                                                                 new-name (get-page-name content)]
+                                                                             (when (not= old-name new-name)
+                                                                               (page-handler/rename! old-name new-name)))))}))))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
     [:div.file {:id (str "file-" encoded-path)}
      [:h1.title
