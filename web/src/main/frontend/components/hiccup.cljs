@@ -1135,55 +1135,52 @@
                                (when doc-mode?
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
-                                     (d/add-class! node "hide-inner-bullet")))))}
-        pre-block-only-title? (and pre-block?
-                                   (db/pre-block-with-only-title? repo uuid))]
-    (when-not pre-block-only-title?
-      [:div.ls-block.flex.flex-col.pt-1
-       (cond->
-           {:id block-id
-            :style {:position "relative"}
-            :class (str uuid
-                        (when dummy? " dummy")
-                        (when (and collapsed? has-child?) " collapsed")
-                        (when pre-block? " pre-block"))
-            :blockid (str uuid)
-            :repo repo
-            :level level
-            :haschild (str has-child?)}
-         (not slide?)
-         (merge attrs))
+                                     (d/add-class! node "hide-inner-bullet")))))}]
+    [:div.ls-block.flex.flex-col.pt-1
+     (cond->
+         {:id block-id
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-block? " pre-block"))
+          :blockid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
+       (not slide?)
+       (merge attrs))
 
-       (when (and ref? (not ref-child?))
-         (when-let [comp (block-comp/block-parents repo uuid format false)]
-           [:div.my-2.opacity-50.ml-4 comp]))
+     (when (and ref? (not ref-child?))
+       (when-let [comp (block-comp/block-parents repo uuid format false)]
+         [:div.my-2.opacity-50.ml-4 comp]))
 
-       (dnd-separator-wrapper block slide? (zero? idx))
+     (dnd-separator-wrapper block slide? (zero? idx))
 
-       [:div.flex-1.flex-row
-        (when (not slide?)
-          (block-control config block uuid block-id level start-level body children dummy?))
+     [:div.flex-1.flex-row
+      (when (not slide?)
+        (block-control config block uuid block-id level start-level body children dummy?))
 
-        (block-content-or-editor config block edit-input-id block-id slide?)]
+      (block-content-or-editor config block edit-input-id block-id slide?)]
 
-       (when (seq children)
-         [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
-                                       :display (if collapsed? "none" "")}}
-          (for [child children]
-            (when (map? child)
-              (let [child (dissoc child :block/meta)]
-                (rum/with-key (block-container config child)
-                  (:block/uuid child)))))])
+     (when (seq children)
+       [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
+                                     :display (if collapsed? "none" "")}}
+        (for [child children]
+          (when (map? child)
+            (let [child (dissoc child :block/meta)]
+              (rum/with-key (block-container config child)
+                (:block/uuid child)))))])
 
-       (when (and ref? (not ref-child?))
-         (let [children (db/get-block-children-unsafe repo uuid)]
-           (when (seq children)
-             [:div.ref-children.ml-12
-              (blocks-container children (assoc config
-                                                :ref-child? true
-                                                :ref? true))])))
+     (when (and ref? (not ref-child?))
+       (let [children (db/get-block-children-unsafe repo uuid)]
+         (when (seq children)
+           [:div.ref-children.ml-12
+            (blocks-container children (assoc config
+                                              :ref-child? true
+                                              :ref? true))])))
 
-       (dnd-separator-wrapper block slide? false)])))
+     (dnd-separator-wrapper block slide? false)]))
 
 (defn divide-lists
   [[f & l]]
@@ -1572,8 +1569,13 @@
         custom-query? (:custom-query? config)
         ref? (:ref? config)]
     (let [blocks-cp (fn [blocks segment?]
-                      (let [first-id (:block/uuid (first blocks))]
-                        (for [item blocks]
+                      (let [first-block (first blocks)
+                            blocks' (if (and (:block/pre-block? first-block)
+                                             (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
+                                      (rest blocks)
+                                      blocks)
+                            first-id (:block/uuid (first blocks'))]
+                        (for [item blocks']
                           (let [item (-> (if (:block/dummy? item)
                                            item
                                            (dissoc item :block/meta)))
