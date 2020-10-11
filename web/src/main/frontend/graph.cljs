@@ -93,7 +93,10 @@
   [node ctx global-scale dark?]
   (let [label (gobj/get node "id")
         val (gobj/get node "val")
-        font-size (* (/ 15 global-scale) (js/Math.cbrt val))
+        val (if (zero? val) 1 val)
+        font-size (min
+                   20
+                   (* (/ 15 global-scale) (js/Math.cbrt val)))
         arc-radius (/ 3 global-scale)
         _ (set! (.-font ctx)
                 (str font-size "px Inter"))
@@ -101,7 +104,6 @@
         x (gobj/get node "x")
         y (gobj/get node "y")
         color (gobj/get node "color")]
-    (set! (.-font ctx) (str font-size "px Inter"))
     (set! (.-filltextAlign ctx) "center")
     (set! (.-textBaseLine ctx) "middle")
     (set! (.-fillStyle ctx) color)
