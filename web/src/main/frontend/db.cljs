@@ -2320,7 +2320,7 @@
   We can improve it if the performance is really an issue."
   [repo page]
   (let [blocks (->>
-                (get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block?]})
+                (get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block? :block/meta]})
                 (remove :block/pre-block?)
                 (map #(select-keys % [:db/id :block/uuid :block/level]))
                 (reverse))
