@@ -3,7 +3,8 @@
             [frontend.components.svg :as svg]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [frontend.util :as util]))
 
 (rum/defc intro
   []
@@ -244,21 +245,21 @@
       [:tbody
        [:tr [:td (t :help/indent-block-tab)] [:td "Tab"]]
        [:tr [:td (t :help/unindent-block)] [:td "Shift-Tab"]]
-       [:tr [:td (t :help/move-block-up)] [:td "Alt-Shift-Up"]]
-       [:tr [:td (t :help/move-block-down)] [:td "Alt-Shift-Down"]]
+       [:tr [:td (t :help/move-block-up)] [:td (util/->platform-shortcut "Alt-Shift-Up")]]
+       [:tr [:td (t :help/move-block-down)] [:td (util/->platform-shortcut "Alt-Shift-Down")]]
        [:tr [:td (t :help/create-new-block)] [:td "Enter"]]
        [:tr [:td (t :help/new-line-in-block)] [:td "Shift-Enter"]]
-       [:tr [:td (t :undo)] [:td "Ctrl-z"]]
-       [:tr [:td (t :redo)] [:td "Ctrl-y"]]
-       [:tr [:td (t :help/zoom-in)] [:td "Alt-Right"]]
-       [:tr [:td (t :help/zoom-out)] [:td "Alt-left"]]
-       [:tr [:td (t :help/follow-link-under-cursor)] [:td "Ctrl-o"]]
-       [:tr [:td (t :help/open-link-in-sidebar)] [:td "Ctrl-shift-o"]]
-       [:tr [:td (t :expand)] [:td "Ctrl-Down"]]
-       [:tr [:td (t :collapse)] [:td "Ctrl-Up"]]
+       [:tr [:td (t :undo)] [:td (util/->platform-shortcut "Ctrl-z")]]
+       [:tr [:td (t :redo)] [:td (util/->platform-shortcut "Ctrl-y")]]
+       [:tr [:td (t :help/zoom-in)] [:td (util/->platform-shortcut "Alt-Right")]]
+       [:tr [:td (t :help/zoom-out)] [:td (util/->platform-shortcut "Alt-left")]]
+       [:tr [:td (t :help/follow-link-under-cursor)] [:td (util/->platform-shortcut "Ctrl-o")]]
+       [:tr [:td (t :help/open-link-in-sidebar)] [:td (util/->platform-shortcut "Ctrl-shift-o")]]
+       [:tr [:td (t :expand)] [:td (util/->platform-shortcut "Ctrl-Down")]]
+       [:tr [:td (t :collapse)] [:td (util/->platform-shortcut "Ctrl-Up")]]
        [:tr [:td (t :select-block-above)] [:td "Shift-Up"]]
        [:tr [:td (t :select-block-below)] [:td "Shift-Down"]]
-       [:tr [:td (t :select-all-blocks)] [:td "Ctrl-Shift-a"]]]]
+       [:tr [:td (t :select-all-blocks)] [:td (util/->platform-shortcut "Ctrl-Shift-a")]]]]
      [:table
       [:thead
        [:tr
@@ -267,7 +268,7 @@
       [:tbody
        [:tr [:td (t :help/toggle)] [:td "?"]]
        [:tr [:td (t :help/git-commit-message)] [:td "c"]]
-       [:tr [:td (t :help/full-text-search)] [:td "Ctrl-u"]]
+       [:tr [:td (t :help/full-text-search)] [:td (util/->platform-shortcut "Ctrl-u")]]
        [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
        [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
        [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
@@ -275,17 +276,17 @@
        [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
        [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
        [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
-       [:tr [:td (t :help/jump-to-journals)] [:td "Alt-j"]]]]
+       [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Alt-j")]]]]
      [:table
       [:thead
        [:tr
         [:th [:b (t :formatting)]]
         [:th (t :help/shortcut)]]]
       [:tbody
-       [:tr [:td (t :bold)] [:td "Ctrl-b"]]
-       [:tr [:td (t :italics)] [:td "Ctrl-i"]]
-       [:tr [:td (t :html-link)] [:td "Ctrl-k"]]
-       [:tr [:td (t :highlight)] [:td "Ctrl-h"]]]]]
+       [:tr [:td (t :bold)] [:td (util/->platform-shortcut "Ctrl-b")]]
+       [:tr [:td (t :italics)] [:td (util/->platform-shortcut "Ctrl-i")]]
+       [:tr [:td (t :html-link)] [:td (util/->platform-shortcut "Ctrl-k")]]
+       [:tr [:td (t :highlight)] [:td (util/->platform-shortcut "Ctrl-h")]]]]]
 
     [:li
      (t :help/markdown-syntax)

@@ -919,3 +919,11 @@
                   (d/set-attr! :href style)
                   (d/set-attr! :media "all"))]
         (d/append! parent-node link)))))
+
+(defn ->platform-shortcut
+  [keyboard-shortcut]
+  (if mac?
+    (-> keyboard-shortcut
+        (string/replace "Ctrl" "Cmd")
+        (string/replace "Alt" "Opt"))
+    keyboard-shortcut))
