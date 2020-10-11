@@ -1168,7 +1168,7 @@
                 (let [block (entity repo [:block/uuid block-uuid])
                       pos (:start-pos (:block/meta block))]
                   (fn [data meta]
-                   (>= (:start-pos meta) pos))))]
+                    (>= (:start-pos meta) pos))))]
      (some-> (q repo [:block/block block-uuid]
                {:use-cache? use-cache?
                 :transform-fn #(block-and-children-transform % repo block-uuid level)
@@ -1190,20 +1190,29 @@
          (> (:block/level second-block) (:block/level block)))))
 
 (defn get-file-page
-  [file-path]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [conn (get-conn repo)]
-      (some->
-       (d/q
-         '[:find ?page-name
-           :in $ ?path
-           :where
-           [?file :file/path ?path]
-           [?page :page/file ?file]
-           [?page :page/original-name ?page-name]]
-         conn file-path)
-       seq-flatten
-       first))))
+  ([file-path]
+   (get-file-page file-path true))
+  ([file-path original-name?]
+   (when-let [repo (state/get-current-repo)]
+     (when-let [conn (get-conn repo)]
+       (some->
+        (d/q
+          (if original-name?
+            '[:find ?page-name
+              :in $ ?path
+              :where
+              [?file :file/path ?path]
+              [?page :page/file ?file]
+              [?page :page/original-name ?page-name]]
+            '[:find ?page-name
+              :in $ ?path
+              :where
+              [?file :file/path ?path]
+              [?page :page/file ?file]
+              [?page :page/name ?page-name]])
+          conn file-path)
+        seq-flatten
+        first)))))
 
 (defn get-page-file
   [page-name]

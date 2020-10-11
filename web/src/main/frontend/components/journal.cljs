@@ -6,7 +6,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -15,6 +15,7 @@
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.components.hiccup :as hiccup]
+            [frontend.components.editor :as editor]
             [frontend.components.reference :as reference]
             [frontend.components.page :as page]
             [frontend.components.onboarding :as onboarding]
@@ -48,7 +49,8 @@
      encoded-page-name
      {:hiccup (hiccup/->hiccup blocks
                                {:id encoded-page-name
-                                :start-level 2}
+                                :start-level 2
+                                :editor-box editor/box}
                                {})})))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
@@ -98,7 +100,7 @@
 
 (rum/defc journals <
   {:did-mount (fn [state]
-                (editor/open-last-block! true)
+                (editor-handler/open-last-block! true)
                 state)}
   [latest-journals]
   [:div#journals

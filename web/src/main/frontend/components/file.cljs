@@ -93,16 +93,7 @@
                                (content/content encoded-path {:config {:file? true
                                                                        :file-path path}
                                                               :content content
-                                                              :format format
-                                                              :on-hide (fn [content original-content]
-                                                                         (when (and page (contains? config/mldoc-support-formats format))
-                                                                           (let [get-page-name
-                                                                                 #(let [ast (mldoc/->edn % (mldoc/default-config format))]
-                                                                                    (db/get-page-name path ast))
-                                                                                 old-name (get-page-name original-content)
-                                                                                 new-name (get-page-name content)]
-                                                                             (when (not= old-name new-name)
-                                                                               (page-handler/rename! old-name new-name)))))}))))]
+                                                              :format format}))))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
     [:div.file {:id (str "file-" encoded-path)}
      [:h1.title

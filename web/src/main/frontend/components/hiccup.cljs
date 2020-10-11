@@ -11,7 +11,6 @@
             [datascript.core :as dc]
             [goog.dom :as gdom]
             [frontend.handler.expand :as expand]
-            [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
             [frontend.components.draw :as draw]
             [frontend.components.block :as block-comp]
@@ -1020,10 +1019,11 @@
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx] :as block} edit-input-id block-id slide?]
-  (let [edit? (state/sub [:editor/editing? edit-input-id])]
-    (if edit?
+  (let [edit? (state/sub [:editor/editing? edit-input-id])
+        editor-box (get config :editor-box)]
+    (if (and edit? editor-box)
       [:div.editor-wrapper {:id (str "editor-" edit-input-id)}
-       (editor/box {:block block
+       (editor-box {:block block
                     :block-id uuid
                     :block-parent-id block-id
                     :format format
