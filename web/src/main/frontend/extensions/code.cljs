@@ -136,7 +136,7 @@
                  (when-let [pos-meta (::pos-meta state)]
                    (reset! pos-meta (last (:rum/args state)))))}
   [state config id attr code pos_meta]
-  [:div.relative.fixed-width
+  [:div.relative
    [:div.absolute.top-0.right-0.p-1.text-sm.text-gray-500
     {:style {:z-index 1000
              :background "white"}}

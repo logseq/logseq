@@ -1714,7 +1714,7 @@
     (when-not (string/blank? (:title m))
       (let [file (draw/title->file-name (:title m))
             value (util/format
-                   "[[%s]]\n<iframe class=\"draw-iframe\" src=\"/draw?file=%s\" width=\"100%\" height=\"600\" frameborder=\"0\" allowfullscreen></iframe>"
+                   "[[%s]]\n<iframe class=\"draw-iframe\" src=\"/draw?file=%s\" width=\"100%\" height=\"400\" frameborder=\"0\" allowfullscreen></iframe>"
                    file
                    file)]
         (insert-command! id
