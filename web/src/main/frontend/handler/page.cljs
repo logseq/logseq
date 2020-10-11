@@ -18,7 +18,8 @@
             [frontend.git :as git]
             [frontend.fs :as fs]
             [promesa.core :as p]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.format.mldoc :as mldoc]))
 
 (defn create!
   [title]
@@ -300,6 +301,15 @@
         (notification/show! "Page renamed successfully!" :success)
 
         (ui-handler/re-render-root!)))))
+
+(defn rename-when-alter-title-propertiy!
+  [page path format original-content content]
+  (when (and page (contains? config/mldoc-support-formats format))
+    (let [old-name page
+          new-name (let [ast (mldoc/->edn content (mldoc/default-config format))]
+                     (db/get-page-name path ast))]
+      (when (not= old-name new-name)
+        (rename! old-name new-name)))))
 
 (defn handle-add-page-to-contents!
   [page-name]

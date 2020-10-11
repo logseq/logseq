@@ -11,6 +11,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.components.svg :as svg]
+            [frontend.components.editor :as editor]
             [frontend.handler.page :as page-handler]
             [frontend.db-mixins :as db-mixins]
             [clojure.set :as set]))
@@ -44,7 +45,8 @@
                                               {:id encoded-page-name
                                                :start-level 2
                                                :ref? true
-                                               :group-by-page? true}
+                                               :group-by-page? true
+                                               :editor-box editor/box}
                                               {})]
               (content/content encoded-page-name
                                {:hiccup ref-hiccup}))])]]))))
@@ -59,7 +61,8 @@
                                        {:id (str encoded-page-name "-unlinked-")
                                         :start-level 2
                                         :ref? true
-                                        :group-by-page? true}
+                                        :group-by-page? true
+                                        :editor-box editor/box}
                                        {})]
        (content/content encoded-page-name
                         {:hiccup ref-hiccup}))]))

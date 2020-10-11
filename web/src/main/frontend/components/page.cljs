@@ -14,6 +14,7 @@
             [frontend.db :as db]
             [dommy.core :as d]
             [frontend.components.hiccup :as hiccup]
+            [frontend.components.editor :as editor]
             [frontend.components.block :as block]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
@@ -70,7 +71,8 @@
         hiccup-config {:id encoded-page-name
                        :start-level start-level
                        :sidebar? sidebar?
-                       :block? block?}
+                       :block? block?
+                       :editor-box editor/box}
         hiccup (hiccup/->hiccup page-blocks hiccup-config {})]
     (rum/with-key
       (content/content encoded-page-name

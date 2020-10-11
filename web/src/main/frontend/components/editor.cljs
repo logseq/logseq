@@ -6,6 +6,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
+            [frontend.handler.page :as page-handler]
             [promesa.core :as p]
             [frontend.date :as date]
             [frontend.state :as state]
@@ -686,8 +687,10 @@
                          (when (and
                                 (not (string/blank? value))
                                 (not= (string/trim value) (string/trim content)))
-                           (file/alter-file (state/get-current-repo) path (string/trim value)
-                                            {:re-render-root? true})))
+                           (let [old-page-name (db/get-file-page path false)]
+                             (page-handler/rename-when-alter-title-propertiy! old-page-name path format content value)
+                             (file/alter-file (state/get-current-repo) path (string/trim value)
+                                              {:re-render-root? true}))))
                        (editor-handler/save-block! (get-state state) value)))
                    state)}
   [state {:keys [on-hide dummy? node format block]

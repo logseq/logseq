@@ -6,6 +6,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.handler.file :as file]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -13,6 +14,7 @@
             [frontend.components.hiccup :as hiccup]
             [frontend.ui :as ui]
             [frontend.format :as format]
+            [frontend.format.mldoc :as mldoc]
             [frontend.components.content :as content]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.config :as config]
@@ -84,7 +86,7 @@
         format (format/get-format path)
         page (db/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
-    (rum/with-context [[tongue] i18n/*tongue-context*]
+  (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-" path)}
        [:h1.title
         path]
