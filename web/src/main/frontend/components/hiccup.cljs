@@ -41,6 +41,16 @@
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]))
 
+(defn safe-read-string
+  [s]
+  (try
+    (reader/read-string s)
+   (catch js/Error e
+     (println "read-string error:")
+     (js/console.error e)
+     [:div.warning {:title "read-string failed"}
+      s])))
+
 ;; local state
 (defonce *block-children
   (atom {}))
@@ -515,7 +525,9 @@
 
     ;; String to hiccup
     ["Inline_Hiccup" s]
-    (reader/read-string s)
+    (ui/catch-error
+     [:div.warning {:title "Invalid hiccup"} s]
+     (safe-read-string s))
 
     ["Break_Line"]
     [:br]
@@ -1471,9 +1483,11 @@
       ["Export" "html" options content]
       [:div.export_html {:dangerouslySetInnerHTML
                          {:__html content}}]
-      ;; TODO: hiccup element check
       ["Hiccup" content]
-      (reader/read-string content)
+      (ui/catch-error
+       (safe-read-string content)
+       [:div.warning {:title "Invalid hiccup"}
+        content])
 
       ["Export" "latex" options content]
       (if html-export?
@@ -1481,8 +1495,14 @@
         (latex/latex (str (dc/squuid)) content true false))
 
       ["Custom" "query" _options result content]
-      (let [query (reader/read-string content)]
-        (custom-query config query))
+      (try
+        (let [query (reader/read-string content)]
+          (custom-query config query))
+        (catch js/Error e
+          (println "read-string error:")
+          (js/console.error e)
+          [:div.warning {:title "Invalid query"}
+           content]))
 
       ["Custom" "note" options result content]
       (admonition config "note" options result)
@@ -1649,12 +1669,12 @@
   [config ref? custom-query? blocks]
   (let [editing (state/sub [:editor/editing?])]
     (when-not (or ref? custom-query?
-                 (:block/dummy? (last blocks))
-                 (second (first editing)))
-     (when-let [last-block (last blocks)]
-       [:a.add-button-link {:on-click (fn []
-                                        (editor-handler/insert-new-block-without-save-previous! config last-block))}
-        svg/plus-circle]))))
+                  (:block/dummy? (last blocks))
+                  (second (first editing)))
+      (when-let [last-block (last blocks)]
+        [:a.add-button-link {:on-click (fn []
+                                         (editor-handler/insert-new-block-without-save-previous! config last-block))}
+         svg/plus-circle]))))
 
 (rum/defc blocks-container < rum/static
   [blocks config]

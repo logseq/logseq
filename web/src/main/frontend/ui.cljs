@@ -444,3 +444,13 @@
         {:title (string/upper-case type)} (icon)]
        [:div.ml-4.text-lg
         content]])))
+
+(rum/defcs catch-error
+  < {:did-catch
+     (fn [state error info]
+       (js/console.dir error)
+       (assoc state ::error error))}
+  [{error ::error, c :rum/react-component} error-view view]
+  (if (some? error)
+    error-view
+    view))
