@@ -1944,7 +1944,9 @@
             nodes (concat (seq relation)
                           (seq tagged-pages)
                           (if (seq empty-pages)
-                            [empty-pages]
+                            (map (fn [page]
+                                   [page])
+                              empty-pages)
                             []))
             edges (build-edges (remove
                                 (fn [[_ to]]
