@@ -138,7 +138,7 @@
   [state config id attr code pos_meta]
   [:div.relative
    [:div.absolute.top-0.right-0.p-1.text-sm.text-gray-500
-    {:style {:z-index 1000
+    {:style {:z-index 2
              :background "white"}}
     (get attr :data-lang "javascript")]
    [:textarea (merge {:id id
