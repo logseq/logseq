@@ -102,7 +102,7 @@
                       (db/entity)
                       :file/path)]
     (redirect! {:to :file
-                :path-params {:path (util/encode-str path)}})))
+                :path-params {:path path}})))
 
 (defn toggle-between-page-and-file!
   []
@@ -116,14 +116,12 @@
 
       :page
       (when-let [page-name (get-in (state/get-route-match) [:path-params :name])]
-        (let [page-name (util/url-decode page-name)]
-          (redirect-to-file! page-name)))
+        (redirect-to-file! page-name))
 
       :file
       (when-let [path (get-in (state/get-route-match) [:path-params :path])]
-        (let [path (util/url-decode path)]
-          (when-let [page (db/get-file-page path)]
-            (redirect! {:to :page
-                        :path-params {:name (util/encode-str page)}}))))
+        (when-let [page (db/get-file-page path)]
+          (redirect! {:to :page
+                      :path-params {:name page}})))
 
       nil)))

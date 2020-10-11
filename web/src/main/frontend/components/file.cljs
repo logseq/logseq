@@ -48,7 +48,7 @@
             [:th ""]]]
           [:tbody
            (for [[file modified-at] files]
-             (let [file-id (util/url-encode file)]
+             (let [file-id file]
                [:tr {:key file-id}
                 [:td
                  (let [href (if (config/draw? file)
@@ -93,7 +93,7 @@
        (when page
          [:div.text-sm.mb-4.ml-1 "Page: "
           [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                  :href (rfe/href :page {:name (util/url-encode page)})
+                                  :href (rfe/href :page {:name page})
                                   :on-click (fn [e]
                                               (util/stop e)
                                               (when (gobj/get e "shiftKey")

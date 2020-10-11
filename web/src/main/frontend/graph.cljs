@@ -181,7 +181,7 @@
                               :page
                               {:page page}))
                            (route-handler/redirect! {:to :page
-                                                     :path-params {:name (util/url-encode page-name)}})))))
+                                                     :path-params {:name page-name}})))))
       ;; :cooldownTicks 100
       ;; :onEngineStop (fn []
       ;;                 (when-let [ref (:ref-atom option)]
