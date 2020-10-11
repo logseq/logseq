@@ -15,15 +15,19 @@
     "scripts": {
         "watch": "clojure -A:cljs watch app publishing",
         "release": "clojure -A:cljs release app publishing",
+        "watch-app": "clojure -A:cljs watch app",
+        "release-app": "clojure -A:cljs release app",
         "debug": "clojure -A:cljs release app --debug",
         "report": "clojure -A:cljs run shadow.cljs.build-report app report.html",
         "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ../resources/static/js/compiled; /usr/bin/rm -rf ../resources/static/js/cljs-runtime; /usr/bin/rm -rf ../resources/static/js/publishing/cljs-runtime;"
     },
     "dependencies": {
+        "codemirror": "^5.58.1",
         "diff": "^4.0.2",
         "dropbox": "^5.2.0",
         "localforage": "^1.7.3",
         "mousetrap": "^1.6.5",
+        "parinfer-codemirror": "^1.4.2",
         "react": "^16.12.0",
         "react-dom": "^16.12.0",
         "react-textarea-autosize": "^8.0.1",

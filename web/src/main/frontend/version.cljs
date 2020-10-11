@@ -1,3 +1,3 @@
 (ns frontend.version)
 
-(defonce version "0.0.3.8-4")
+(defonce version "0.0.3.9")

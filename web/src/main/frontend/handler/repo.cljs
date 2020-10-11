@@ -82,8 +82,11 @@
               delete-files (if (seq remove-files)
                              (db/delete-files remove-files))
               delete-blocks (db/delete-blocks repo-url (concat remove-files modify-files))
+              delete-pages (if (seq remove-files)
+                             (db/delete-pages-by-files remove-files)
+                             [])
               add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files delete-files delete-blocks true))))))
+          (load-contents add-or-modify-files (concat delete-files delete-pages) delete-blocks true))))))
 
 (defn show-install-error!
   [repo-url title]
@@ -235,10 +238,16 @@
        (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
                      (p/catch (fn [_e])))
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-         (when (not file-exists?)
-           (db/reset-file! repo-url path content)
-           (ui-handler/re-render-root!)
-           (git-handler/git-add repo-url path)))))))
+         ;; TODO: why file exists but page not created
+         (p/let [resolved-content (if file-exists?
+                           (file-handler/load-file repo-url path)
+                           (p/resolved content))]
+           (let [content (if (string/blank? (string/trim resolved-content))
+                           content
+                           resolved-content)]
+             (db/reset-file! repo-url path content)
+             (ui-handler/re-render-root!)
+             (git-handler/git-add repo-url path))))))))
 
 (defn create-default-files!
   [repo-url]
@@ -393,6 +402,7 @@
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
            (db/cloned? repo-url)
+           (not= status :pulling)
            (not (state/get-edit-input-id)))
       (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
         (when (or (seq files) fallback? diff-push?)

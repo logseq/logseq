@@ -16,6 +16,7 @@
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
             [frontend.components.content :as content]
+            [frontend.components.lazy-editor :as lazy-editor]
             [frontend.config :as config]
             [frontend.utf8 :as utf8]
             [goog.dom :as gdom]
@@ -28,10 +29,8 @@
 
 (defn- get-path
   [state]
-  (let [route-match (first (:rum/args state))
-        encoded-path (get-in route-match [:parameters :path :path])
-        decoded-path (util/url-decode encoded-path)]
-    [encoded-path decoded-path]))
+  (let [route-match (first (:rum/args state))]
+    (get-in route-match [:parameters :path :path])))
 
 (rum/defc files < rum/reactive
   []
@@ -72,8 +71,8 @@
   [path content]
   (fn [value]
     (when (not= (string/trim value) (string/trim content))
-     (file/alter-file (state/get-current-repo) path (string/trim value)
-                      {:re-render-root? true}))))
+      (file/alter-file (state/get-current-repo) path (string/trim value)
+                       {:re-render-root? true}))))
 
 (rum/defcs file < rum/reactive
   {:did-mount (fn [state]
@@ -83,47 +82,52 @@
                    (state/clear-file-component!)
                    state)}
   [state]
-  (let [[encoded-path path] (get-path state)
+  (let [path (get-path state)
         format (format/get-format path)
         page (db/get-file-page path)
-        config? (= path (str config/app-name "/" config/config-file))
-        edit-raw-handler (fn []
-                           (when-let [file-content (db/get-file path)]
-                             (let [content (string/trim file-content)]
-                               (content/content encoded-path {:config {:file? true
-                                                                       :file-path path}
-                                                              :content content
-                                                              :format format}))))]
-    (rum/with-context [[tongue] i18n/*tongue-context*]
-    [:div.file {:id (str "file-" encoded-path)}
-     [:h1.title
-      path]
-     (when page
-       [:div.text-sm.mb-4.ml-1 "Page: "
-        [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                :href (rfe/href :page {:name (util/url-encode page)})
-                                :on-click (fn [e]
-                                            (util/stop e)
-                                            (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/entity [:page/name (string/lower-case page)])]
-                                                (state/sidebar-add-block!
-                                                 (state/get-current-repo)
-                                                 (:db/id page)
-                                                 :page
-                                                 {:page page}))))}
-         page]])
+        config? (= path (str config/app-name "/" config/config-file))]
+  (rum/with-context [[tongue] i18n/*tongue-context*]
+      [:div.file {:id (str "file-" path)}
+       [:h1.title
+        path]
+       (when page
+         [:div.text-sm.mb-4.ml-1 "Page: "
+          [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
+                                  :href (rfe/href :page {:name (util/url-encode page)})
+                                  :on-click (fn [e]
+                                              (util/stop e)
+                                              (when (gobj/get e "shiftKey")
+                                                (when-let [page (db/entity [:page/name (string/lower-case page)])]
+                                                  (state/sidebar-add-block!
+                                                   (state/get-current-repo)
+                                                   (:db/id page)
+                                                   :page
+                                                   {:page page}))))}
+           page]])
 
-     (when (and config? (state/logged?))
-       [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
-        (tongue :project/sync-settings)])
+       (when (and config? (state/logged?))
+         [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
+          (tongue :project/sync-settings)])
+       (cond
+         ;; image type
+         (and format (contains? (config/img-formats) format))
+         [:img {:src path}]
 
-     (cond
-       ;; image type
-       (and format (contains? (config/img-formats) format))
-       [:img {:src path}]
+         (and format (contains? config/markup-formats format))
+         (when-let [file-content (db/get-file path)]
+           (let [content (string/trim file-content)]
+             (content/content path {:config {:file? true
+                                             :file-path path}
+                                    :content content
+                                    :format format})))
 
-       (and format (contains? (config/text-formats) format))
-       (edit-raw-handler)
+         (and format (contains? (config/text-formats) format))
+         (when-let [file-content (db/get-file path)]
+           (let [content (string/trim file-content)
+                 mode (util/get-file-ext path)
+                 mode (if (= mode "edn") "clojure" mode)]
+             (lazy-editor/editor {:file? true
+                                  :file-path path} path {:data-lang mode} content nil)))
 
-       :else
-       [:div (tongue :file/format-not-supported (name format))])])))
+         :else
+         [:div (tongue :file/format-not-supported (name format))])])))

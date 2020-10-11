@@ -50,7 +50,7 @@
         value]))])
 
 (rum/defc file < rum/reactive
-  [repo path contents remote-oid component]
+  [repo type path contents remote-oid component]
   (let [{:keys [collapse? resolved?]} (util/react (rum/cursor diff-state path))
         edit? (util/react *edit?)]
     [:div.mb-3 {:style {:border "1px solid #ddd"
@@ -65,7 +65,10 @@
         (if collapse?
           (svg/arrow-right)
           (svg/arrow-down))]
-       path]
+       [:span
+        path
+        [:span.text-sm.font-medium.ml-2.border.rounded.px-1
+         type]]]
       (when resolved?
         [:span.text-green-600
          {:dangerouslySetInnerHTML
@@ -73,7 +76,7 @@
 
      (if-let [content (get contents path)]
        (let [local-content (db/get-file path)
-             local-content local-content
+             local-content (or local-content "")
              diff (medley/indexed (diff/diff local-content content))
              diff? (some (fn [[_idx {:keys [added removed]}]]
                            (or added removed))
@@ -149,11 +152,11 @@
           (let [local-oid (gobj/get commit "oid")
                 remote-oid (db/get-key-value repo
                                              :git/remote-latest-commit)]
-            (p/let [result (git/get-local-diffs repo remote-oid local-oid)]
+            (p/let [result (git/get-local-diffs repo local-oid remote-oid)]
               (reset! diffs result)
               (reset! remote-hash-id remote-oid)
               (doseq [{:keys [type path]} result]
-                (when (contains? #{"add" "modify"}
+                (when (contains? #{"added" "modify"}
                                  type)
                   (github/get-content
                    (state/get-github-token repo)
@@ -201,7 +204,7 @@
        (seq diffs)
        [:div#diffs-body
         (for [{:keys [type path]} diffs]
-          (rum/with-key (file repo path contents remote-oid component)
+          (rum/with-key (file repo type path contents remote-oid component)
             path))
         [:div
          (ui/textarea

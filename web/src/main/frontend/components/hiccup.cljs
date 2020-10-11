@@ -27,7 +27,8 @@
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [frontend.extensions.latex :as latex]
-            [frontend.extensions.code :as code]
+            [frontend.components.lazy-editor :as lazy-editor]
+            [frontend.extensions.highlight :as highlight]
             [frontend.extensions.sci :as sci]
             ["/frontend/utils" :as utils]
             [frontend.format.block :as block]
@@ -1135,55 +1136,52 @@
                                (when doc-mode?
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
-                                     (d/add-class! node "hide-inner-bullet")))))}
-        pre-block-only-title? (and pre-block?
-                                   (db/pre-block-with-only-title? repo uuid))]
-    (when-not pre-block-only-title?
-      [:div.ls-block.flex.flex-col.pt-1
-       (cond->
-           {:id block-id
-            :style {:position "relative"}
-            :class (str uuid
-                        (when dummy? " dummy")
-                        (when (and collapsed? has-child?) " collapsed")
-                        (when pre-block? " pre-block"))
-            :blockid (str uuid)
-            :repo repo
-            :level level
-            :haschild (str has-child?)}
-         (not slide?)
-         (merge attrs))
+                                     (d/add-class! node "hide-inner-bullet")))))}]
+    [:div.ls-block.flex.flex-col.pt-1
+     (cond->
+         {:id block-id
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-block? " pre-block"))
+          :blockid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
+       (not slide?)
+       (merge attrs))
 
-       (when (and ref? (not ref-child?))
-         (when-let [comp (block-comp/block-parents repo uuid format false)]
-           [:div.my-2.opacity-50.ml-4 comp]))
+     (when (and ref? (not ref-child?))
+       (when-let [comp (block-comp/block-parents repo uuid format false)]
+         [:div.my-2.opacity-50.ml-4 comp]))
 
-       (dnd-separator-wrapper block slide? (zero? idx))
+     (dnd-separator-wrapper block slide? (zero? idx))
 
-       [:div.flex-1.flex-row
-        (when (not slide?)
-          (block-control config block uuid block-id level start-level body children dummy?))
+     [:div.flex-1.flex-row
+      (when (not slide?)
+        (block-control config block uuid block-id level start-level body children dummy?))
 
-        (block-content-or-editor config block edit-input-id block-id slide?)]
+      (block-content-or-editor config block edit-input-id block-id slide?)]
 
-       (when (seq children)
-         [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
-                                       :display (if collapsed? "none" "")}}
-          (for [child children]
-            (when (map? child)
-              (let [child (dissoc child :block/meta)]
-                (rum/with-key (block-container config child)
-                  (:block/uuid child)))))])
+     (when (seq children)
+       [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
+                                     :display (if collapsed? "none" "")}}
+        (for [child children]
+          (when (map? child)
+            (let [child (dissoc child :block/meta)]
+              (rum/with-key (block-container (assoc config :block/uuid (:block/uuid child)) child)
+                (:block/uuid child)))))])
 
-       (when (and ref? (not ref-child?))
-         (let [children (db/get-block-children-unsafe repo uuid)]
-           (when (seq children)
-             [:div.ref-children.ml-12
-              (blocks-container children (assoc config
-                                                :ref-child? true
-                                                :ref? true))])))
+     (when (and ref? (not ref-child?))
+       (let [children (db/get-block-children-unsafe repo uuid)]
+         (when (seq children)
+           [:div.ref-children.ml-12
+            (blocks-container children (assoc config
+                                              :ref-child? true
+                                              :ref? true))])))
 
-       (dnd-separator-wrapper block slide? false)])))
+     (dnd-separator-wrapper block slide? false)]))
 
 (defn divide-lists
   [[f & l]]
@@ -1450,21 +1448,19 @@
       [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Src" options]
-      (let [{:keys [language options lines]} options
+      (let [{:keys [language options lines pos_meta]} options
             attr (if language
                    {:data-lang language})
             code (join-lines lines)]
         (cond
           html-export?
-          (code/html-export attr code)
-
-          (and (= language "clojure") (contains? (set options) ":results"))
-          [:div
-           (code/highlight (str (dc/squuid)) attr code)
-           (sci/eval-result code)]
+          (highlight/html-export attr code)
 
           :else
-          (code/highlight (str (dc/squuid)) attr code)))
+          [:div
+           (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
+           (when (and (= language "clojure") (contains? (set options) ":results"))
+             (sci/eval-result code))]))
       ["Quote" l]
       (->elem
        :blockquote
@@ -1572,8 +1568,13 @@
         custom-query? (:custom-query? config)
         ref? (:ref? config)]
     (let [blocks-cp (fn [blocks segment?]
-                      (let [first-id (:block/uuid (first blocks))]
-                        (for [item blocks]
+                      (let [first-block (first blocks)
+                            blocks' (if (and (:block/pre-block? first-block)
+                                             (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
+                                      (rest blocks)
+                                      blocks)
+                            first-id (:block/uuid (first blocks'))]
+                        (for [item blocks']
                           (let [item (-> (if (:block/dummy? item)
                                            item
                                            (dissoc item :block/meta)))
@@ -1644,11 +1645,23 @@
                      blocks)]
        sections))))
 
+(rum/defc add-button < rum/reactive
+  [config ref? custom-query? blocks]
+  (let [editing (state/sub [:editor/editing?])]
+    (when-not (or ref? custom-query?
+                 (:block/dummy? (last blocks))
+                 (second (first editing)))
+     (when-let [last-block (last blocks)]
+       [:a.add-button-link {:on-click (fn []
+                                        (editor-handler/insert-new-block-without-save-previous! config last-block))}
+        svg/plus-circle]))))
+
 (rum/defc blocks-container < rum/static
   [blocks config]
   (let [blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
-        ref? (:ref? config)]
+        ref? (:ref? config)
+        custom-query? (:custom-query? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:style {:margin-left (cond
@@ -1656,7 +1669,9 @@
                                0
                                :else
                                -18)}}
-       (build-blocks blocks config)])))
+       (build-blocks blocks config)
+       ;; (add-button config ref? custom-query? blocks)
+       ])))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

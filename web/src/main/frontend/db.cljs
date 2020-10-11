@@ -898,6 +898,10 @@
       react
       ffirst))))
 
+(defn get-custom-css
+  []
+  (get-file "logseq/custom.css"))
+
 (defn get-file-no-sub
   ([path]
    (get-file-no-sub (state/get-current-repo) path))
@@ -1213,6 +1217,13 @@
           conn file-path)
         seq-flatten
         first)))))
+
+(defn delete-pages-by-files
+  [files]
+  (let [pages (->> (mapv get-file-page files)
+                   (remove nil?))]
+    (when (seq pages)
+      (mapv (fn [page] [:db.fn/retractEntity [:page/name page]]) (map string/lower-case pages)))))
 
 (defn get-page-file
   [page-name]

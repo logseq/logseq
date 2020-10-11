@@ -121,6 +121,8 @@
        (git-handler/git-add repo path)
        (when (= path (str config/app-name "/" config/config-file))
          (restore-config! repo true))
+       (when (= path (str config/app-name "/" config/custom-css-file))
+         (ui-handler/add-style-if-exists!))
        (when re-render-root? (ui-handler/re-render-root!))
        (when add-history?
          (history/add-history! repo [[path original-content content]])))
