@@ -654,7 +654,7 @@
        ;; (map first)
        ;; frequencies
        ;; (util/sort-by-value :desc)
-       ))))
+))))
 
 (defn get-tag-pages
   [repo tag-name]

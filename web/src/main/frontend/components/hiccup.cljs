@@ -1691,7 +1691,7 @@
                                -18)}}
        (build-blocks blocks config)
        ;; (add-button config ref? custom-query? blocks)
-       ])))
+])))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

@@ -109,7 +109,8 @@
          (for [{:keys [title] :as query} queries]
            (rum/with-key
              (hiccup/custom-query {:start-level 2
-                                   :attr {:class "mt-10"}} query)
+                                   :attr {:class "mt-10"}
+                                   :editor-box editor/box} query)
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn- delete-page!
