@@ -741,7 +741,8 @@
       :style (merge
               {:position "absolute"
                :left margin-left
-               :width (- 700 margin-left)}
+               :width "100%"
+               :z-index 3}
               (if top?
                 {:top 0}
                 {:bottom bottom}))}]))
