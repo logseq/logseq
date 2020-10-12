@@ -169,15 +169,15 @@
                   :exit 300}}
        links
        ;; (custom-context-menu-content)
-       ))))
+))))
 
 (rum/defc new-block-mode < rum/reactive
   []
   (when-let [alt-enter? (= "alt+enter" (state/sub [:shortcuts :editor/new-block]))]
     [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
-     {:title "Press Alt + Enter to insert a new block, Shift + Enter for new line. You can also click to disable it"
+     {:title "Click to switch to \"Enter\" for creating new block"
       :on-click state/toggle-new-block-shortcut!}
-     "Alt + Enter"]))
+     "A"]))
 
 (rum/defc help-button < rum/reactive
   []
@@ -480,4 +480,4 @@
             ;;   :on-click (fn []
             ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
             ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-            ])]]])))
+])]]])))
