@@ -38,7 +38,8 @@
             ["codemirror/mode/sql/sql"]
             ["codemirror/mode/swift/swift"]
             ["codemirror/mode/xml/xml"]
-            ["parinfer-codemirror" :as par-cm]))
+            ;; ["parinfer-codemirror" :as par-cm]
+))
 
 ;; codemirror
 
@@ -86,9 +87,10 @@
   (let [[config id attr code pos_meta] (:rum/args state)
         original-mode (get attr :data-lang)
         mode (or original-mode "javascript")
-        clojure? (contains? #{"clojure" "clj"} mode)
+        clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
         mode (if clojure? "clojure" mode)
-        lisp? (contains? #{"clojure" "scheme" "racket" "lisp"} mode)
+        lisp? (or clojure?
+                  (contains? #{"scheme" "racket" "lisp"} mode))
         textarea (gdom/getElement id)
         editor (from-textarea textarea
                               #js {:mode mode
@@ -114,8 +116,8 @@
                          (util/stop e)))
     (.save editor)
     (.refresh editor)
-    (when clojure?
-      (par-cm/init editor))
+    ;; (when clojure?
+    ;;   (par-cm/init editor))
     editor))
 
 (defn- load-and-render!
@@ -139,6 +141,9 @@
    [:div.absolute.top-0.right-0.p-1.text-sm.text-gray-500
     {:style {:z-index 2
              :background "white"}}
-    (get attr :data-lang "javascript")]
+    (let [mode (get attr :data-lang "javascript")]
+      (if (= mode "text/x-clojure")
+        "clojure"
+        mode))]
    [:textarea (merge {:id id
                       :default-value code} attr)]])

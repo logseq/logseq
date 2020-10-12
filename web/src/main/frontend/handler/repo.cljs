@@ -402,8 +402,14 @@
            (db/cloned? repo-url)
            (not (state/get-edit-input-id)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-            (when (or (seq files) fallback? diff-push?)
-           ;; auto commit if there are any un-committed changes
+            (when (or
+                   ;; FIXME:
+                   (and
+                    (seq (state/get-changed-files repo-url))
+                    (seq files))
+                   fallback?
+                   diff-push?)
+              ;; auto commit if there are any un-committed changes
               (let [commit-message (if (string/blank? commit-message)
                                      "Logseq auto save"
                                      commit-message)]
