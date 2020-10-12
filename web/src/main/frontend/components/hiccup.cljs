@@ -706,6 +706,7 @@
                          (.setData (gobj/get event "dataTransfer")
                                    "block-dom-id"
                                    block-id)
+                         (state/clear-selection!)
                          (reset! *dragging? true)
                          (reset! *dragging-block block))
         :blockid (str uuid)
@@ -745,7 +746,7 @@
                :z-index 3}
               (if top?
                 {:top 0}
-                {:bottom bottom}))}]))
+                {:bottom 0}))}]))
 
 (declare block-container)
 (defn block-checkbox
@@ -1054,10 +1055,17 @@
   (let [dragging? (rum/react *dragging?)]
     (cond
       (and dragging? (not slide?))
-      (dnd-separator block 30 0 top? false)
+      (dnd-separator block 20 0 top? false)
 
       :else
       nil)))
+
+(defn non-dragging?
+  [e]
+  (and (= (gobj/get e "buttons") 1)
+       (not (d/has-class? (gobj/get e "target") "bullet-container"))
+       (not (d/has-class? (gobj/get e "target") "bullet"))
+       (not @*dragging?)))
 
 (rum/defc block-container < rum/static
   {:did-mount (fn [state]
@@ -1115,9 +1123,8 @@
                           (reset! *dragging-block nil)
                           (editor-handler/unhighlight-block!))
                :on-mouse-move (fn [e]
-                                (when (= (gobj/get e "buttons") 1)
+                                (when (non-dragging? e)
                                   (state/into-selection-mode!)))
-
                :on-mouse-down (fn [e]
                                 (when (and
                                        (not (state/get-selection-start-block))
@@ -1137,8 +1144,7 @@
                                       (d/remove-class! node "hide-inner-bullet"))))
                                 (when (and
                                        (state/in-selection-mode?)
-                                       (= (gobj/get e "buttons") 1)
-                                       (false? @*dragging?))
+                                       (non-dragging? e))
                                   (util/stop e)
                                   (editor-handler/highlight-selection-area! block-id)))
                :on-mouse-out (fn [e]

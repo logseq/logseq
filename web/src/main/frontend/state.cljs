@@ -260,7 +260,7 @@
     ;;                        (remove #(= leader-parent %)))]
     ;;     (prn "followers: " (count followers))
     ;;     ))
-    ))
+))
 
 (defn get-edit-input-id
   []

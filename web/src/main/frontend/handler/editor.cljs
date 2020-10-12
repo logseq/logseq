@@ -977,7 +977,7 @@
   ;; (when e
   ;;   (when-not (util/input? (gobj/get e "target"))
   ;;     (util/clear-selection!)))
-  )
+)
 
 (defn clear-selection-blocks!
   []
