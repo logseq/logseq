@@ -22,6 +22,7 @@ node_modules/
 /resources/static/js/publishing/manifest.edn
 /resources/static/style.css
 /resources/static/js/publishing/code-editor.js
+/resources/static/js/code-editor.js
 tauri-release/
 
 .cpcache/
