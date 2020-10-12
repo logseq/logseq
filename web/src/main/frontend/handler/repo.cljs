@@ -393,7 +393,7 @@
                 (js/console.dir error))))))
 
 (defn push
-  [repo-url {:keys [commit-message fallback? diff-push?]
+  [repo-url {:keys [commit-message fallback? diff-push? force?]
              :or {commit-message "Logseq auto save"
                   fallback? false
                   diff-push? false
