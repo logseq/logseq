@@ -406,6 +406,7 @@
         {;; enter
          13 (fn [state e]
               (when (and (not (gobj/get e "ctrlKey"))
+                         (not (gobj/get e "metaKey"))
                          (not (editor-handler/in-auto-complete? input)))
                 (let [{:keys [block config]} (get-state state)]
                   (when (and block
