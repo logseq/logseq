@@ -60,12 +60,12 @@
   []
   (let [mode (state/next-collapse-mode)
         get-blocks (fn []
-                       (let [elements (d/by-class "ls-block")
-                             result (group-by (fn [e]
-                                                (let [level (d/attr e "level")]
-                                                  (and level
-                                                       (> (util/parse-int level) 2)))) elements)]
-                         [(get result true) (get result false)]))]
+                     (let [elements (d/by-class "ls-block")
+                           result (group-by (fn [e]
+                                              (let [level (d/attr e "level")]
+                                                (and level
+                                                     (> (util/parse-int level) 2)))) elements)]
+                       [(get result true) (get result false)]))]
     (case mode
       :show-all
       (do

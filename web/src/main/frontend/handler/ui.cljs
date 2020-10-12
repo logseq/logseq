@@ -44,6 +44,8 @@
 
 
 ;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
+
+
 (defn re-render-root!
   []
   (when-let [component (state/get-root-component)]

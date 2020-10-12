@@ -18,11 +18,11 @@
    (let [handler (new KeyboardShortcutHandler target)]
      (.registerShortcut handler (str key once?) key)
      (events/listen
-              handler
-              EventType/SHORTCUT_TRIGGERED
-              (fn [e]
-                (trigger e)
-                (when once?
-                  (.unregisterShortcut handler keys))))
+      handler
+      EventType/SHORTCUT_TRIGGERED
+      (fn [e]
+        (trigger e)
+        (when once?
+          (.unregisterShortcut handler keys))))
      (fn []
        (.unregisterShortcut handler key)))))

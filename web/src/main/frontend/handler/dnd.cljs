@@ -41,17 +41,17 @@
                                                                (apply str (repeat level pattern))
                                                                (apply str (repeat new-level pattern)))
                              block (cond->
-                                         {:block/uuid uuid
-                                          :block/level new-level
-                                          :block/content new-content
-                                          :block/page (:block/page to-block)}
+                                    {:block/uuid uuid
+                                     :block/level new-level
+                                     :block/content new-content
+                                     :block/page (:block/page to-block)}
 
-                                       (not same-repo?)
-                                       (merge (dissoc block [:block/level :block/content]))
+                                     (not same-repo?)
+                                     (merge (dissoc block [:block/level :block/content]))
 
-                                       (not same-file?)
-                                       (merge {:block/page (:block/page to-block)
-                                               :block/file (:block/file to-block)}))]
+                                     (not same-file?)
+                                     (merge {:block/page (:block/page to-block)
+                                             :block/file (:block/file to-block)}))]
                          (swap! block-changes conj block)
                          new-content)))]
     [all-content @block-changes]))
@@ -86,30 +86,30 @@
 
 (defn rebuild-dnd-blocks
   [repo file target-child? start-pos target-blocks offset-block-uuid {:keys [delete? same-file?]
-                                                                          :or {delete? false
-                                                                               same-file? true}}]
+                                                                      :or {delete? false
+                                                                           same-file? true}}]
   (when (seq target-blocks)
     (let [file-id (:db/id file)
           target-block-ids (set (map :block/uuid target-blocks))
           after-blocks (->> (db/get-file-after-blocks repo file-id start-pos)
-                              (remove (fn [h] (contains? target-block-ids (:block/uuid h)))))
+                            (remove (fn [h] (contains? target-block-ids (:block/uuid h)))))
 
           after-blocks (cond
-                           delete?
-                           after-blocks
+                         delete?
+                         after-blocks
 
-                           (and offset-block-uuid
-                                (not (contains? (set (map :block/uuid after-blocks)) offset-block-uuid)))
-                           (concat target-blocks after-blocks)
+                         (and offset-block-uuid
+                              (not (contains? (set (map :block/uuid after-blocks)) offset-block-uuid)))
+                         (concat target-blocks after-blocks)
 
-                           offset-block-uuid
-                           (let [[before after] (split-with (fn [h] (not= (:block/uuid h)
-                                                                          offset-block-uuid)) after-blocks)]
-                             (concat (conj (vec before) (first after))
-                                     target-blocks
-                                     (rest after)))
-                           :else
-                           (concat target-blocks after-blocks))
+                         offset-block-uuid
+                         (let [[before after] (split-with (fn [h] (not= (:block/uuid h)
+                                                                        offset-block-uuid)) after-blocks)]
+                           (concat (conj (vec before) (first after))
+                                   target-blocks
+                                   (rest after)))
+                         :else
+                         (concat target-blocks after-blocks))
           after-blocks (remove nil? after-blocks)
           ;; _ (prn {:start-pos start-pos
           ;;         :target-blocks target-blocks
@@ -176,33 +176,33 @@
   (cond
     top?
     (rebuild-dnd-blocks repo target-file target-child?
-                          original-top-block-start-pos
-                          block-changes
-                          nil
-                          {})
+                        original-top-block-start-pos
+                        block-changes
+                        nil
+                        {})
 
     (= direction :up)
     (let [offset-block-id (if nested?
-                              (:block/uuid to-block)
-                              (last (db/get-block-ids to-block)))
+                            (:block/uuid to-block)
+                            (last (db/get-block-ids to-block)))
           offset-end-pos (get-end-pos
                           (db/entity repo [:block/uuid offset-block-id]))]
       (rebuild-dnd-blocks repo target-file target-child?
-                            offset-end-pos
-                            block-changes
-                            nil
-                            {}))
+                          offset-end-pos
+                          block-changes
+                          nil
+                          {}))
 
     (= direction :down)
     (let [offset-block-id (if nested?
-                              (:block/uuid to-block)
-                              (last (db/get-block-ids to-block)))
+                            (:block/uuid to-block)
+                            (last (db/get-block-ids to-block)))
           target-start-pos (get-start-pos target-block)]
       (rebuild-dnd-blocks repo target-file target-child?
-                            target-start-pos
-                            block-changes
-                            offset-block-id
-                            {}))))
+                          target-start-pos
+                          block-changes
+                          offset-block-id
+                          {}))))
 
 ;; TODO: still could be different pages, e.g. move a block from one journal to another journal
 (defn- move-block-in-same-file
@@ -274,7 +274,7 @@
                              down-content
                              bottom-area))
           after-blocks (->> (compute-after-blocks-in-same-file repo target-block to-block direction top? nested? target-child? target-file original-top-block-start-pos block-changes)
-                              (remove nil?))
+                            (remove nil?))
           path (:file/path (db/entity repo (:db/id (:block/file to-block))))
           modified-time (let [modified-at (tc/to-long (t/now))]
                           (->
@@ -334,27 +334,27 @@
                          distinct
                          vec))
         target-after-blocks (rebuild-dnd-blocks repo target-file target-child?
-                                                    (get-start-pos target-block)
-                                                    block-changes nil {:delete? true})
+                                                (get-start-pos target-block)
+                                                block-changes nil {:delete? true})
         to-after-blocks (cond
-                            top?
-                            (rebuild-dnd-blocks repo to-file target-child?
-                                                  (get-start-pos to-block)
-                                                  block-changes
-                                                  nil
-                                                  {:same-file? false})
+                          top?
+                          (rebuild-dnd-blocks repo to-file target-child?
+                                              (get-start-pos to-block)
+                                              block-changes
+                                              nil
+                                              {:same-file? false})
 
-                            :else
-                            (let [offset-block-id (if nested?
-                                                      (:block/uuid to-block)
-                                                      (last (db/get-block-ids to-block)))
-                                  offset-end-pos (get-end-pos
-                                                  (db/entity repo [:block/uuid offset-block-id]))]
-                              (rebuild-dnd-blocks repo to-file target-child?
-                                                    offset-end-pos
-                                                    block-changes
-                                                    nil
-                                                    {:same-file? false})))]
+                          :else
+                          (let [offset-block-id (if nested?
+                                                  (:block/uuid to-block)
+                                                  (last (db/get-block-ids to-block)))
+                                offset-end-pos (get-end-pos
+                                                (db/entity repo [:block/uuid offset-block-id]))]
+                            (rebuild-dnd-blocks repo to-file target-child?
+                                                offset-end-pos
+                                                block-changes
+                                                nil
+                                                {:same-file? false})))]
     (profile
      "Move block between different files: "
      (repo-handler/transact-react-and-alter-file!
@@ -395,7 +395,7 @@
                                 (utf8/substring to-file-content separate-pos))))
         target-delete-tx (map (fn [id]
                                 [:db.fn/retractEntity [:block/uuid id]])
-                           (db/get-block-ids target-block))
+                              (db/get-block-ids target-block))
         [target-modified-time to-modified-time]
         (let [modified-at (tc/to-long (t/now))]
           [[[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
@@ -403,27 +403,27 @@
            [[:db/add (:db/id (:block/page to-block)) :page/last-modified-at modified-at]
             [:db/add (:db/id (:block/file to-block)) :file/last-modified-at modified-at]]])
         target-after-blocks (rebuild-dnd-blocks target-block-repo target-file target-child?
-                                                    (get-start-pos target-block)
-                                                    block-changes nil {:delete? true})
+                                                (get-start-pos target-block)
+                                                block-changes nil {:delete? true})
         to-after-blocks (cond
-                            top?
-                            (rebuild-dnd-blocks to-block-repo to-file target-child?
-                                                  (get-start-pos to-block)
-                                                  block-changes
-                                                  nil
-                                                  {:same-file? false})
+                          top?
+                          (rebuild-dnd-blocks to-block-repo to-file target-child?
+                                              (get-start-pos to-block)
+                                              block-changes
+                                              nil
+                                              {:same-file? false})
 
-                            :else
-                            (let [offset-block-id (if nested?
-                                                      (:block/uuid to-block)
-                                                      (last (db/get-block-ids to-block)))
-                                  offset-end-pos (get-end-pos
-                                                  (db/entity to-block-repo [:block/uuid offset-block-id]))]
-                              (rebuild-dnd-blocks to-block-repo to-file target-child?
-                                                    offset-end-pos
-                                                    block-changes
-                                                    nil
-                                                    {:same-file? false})))]
+                          :else
+                          (let [offset-block-id (if nested?
+                                                  (:block/uuid to-block)
+                                                  (last (db/get-block-ids to-block)))
+                                offset-end-pos (get-end-pos
+                                                (db/entity to-block-repo [:block/uuid offset-block-id]))]
+                            (rebuild-dnd-blocks to-block-repo to-file target-child?
+                                                offset-end-pos
+                                                block-changes
+                                                nil
+                                                {:same-file? false})))]
     (profile
      "[Target file] Move block between different files: "
      (repo-handler/transact-react-and-alter-file!
@@ -477,11 +477,11 @@
             target-block-repo (:block/repo target-block)
             to-block-repo (:block/repo to-block)
             target-block (assoc target-block
-                                  :block/meta
-                                  (:block/meta (db/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
+                                :block/meta
+                                (:block/meta (db/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
             to-block (assoc to-block
-                              :block/meta
-                              (:block/meta (db/entity [:block/uuid (:block/uuid to-block)])))
+                            :block/meta
+                            (:block/meta (db/entity [:block/uuid (:block/uuid to-block)])))
             same-repo? (= target-block-repo to-block-repo)
             target-file (:block/file target-block)
             same-file? (and
@@ -489,11 +489,11 @@
                         (= (:db/id target-file)
                            (:db/id (:block/file to-block))))
             [top-block bottom-block] (if same-file?
-                                           (if (< (get-start-pos target-block)
-                                                  (get-start-pos to-block))
-                                             [target-block to-block]
-                                             [to-block target-block])
-                                           [nil nil])
+                                       (if (< (get-start-pos target-block)
+                                              (get-start-pos to-block))
+                                         [target-block to-block]
+                                         [to-block target-block])
+                                       [nil nil])
             target-child? (compute-target-child? target-block to-block)
             direction (compute-direction target-block top-block nested? top? target-child?)
             original-top-block-start-pos (get-start-pos top-block)

@@ -28,16 +28,16 @@
 
      [:div.mt-4.ml-1
       (ui/button
-        "Markdown"
-        :on-click
-        #(user-handler/set-preferred-format! :markdown))
+       "Markdown"
+       :on-click
+       #(user-handler/set-preferred-format! :markdown))
 
       [:span.ml-2.mr-2 "-OR-"]
 
       (ui/button
-        "Org Mode"
-        :on-click
-        #(user-handler/set-preferred-format! :org))]]))
+       "Org Mode"
+       :on-click
+       #(user-handler/set-preferred-format! :org))]]))
 
 (rum/defc sync-status < rum/reactive
   []
@@ -82,7 +82,7 @@
                   ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
                   [:div.flex.flex-row.justify-between.align-items.mt-2
                    (ui/button (t :git/push)
-                     :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                              :on-click (fn [] (state/set-modal! commit/add-commit-message)))
                    (if pushing?
                      [:span.lds-dual-ring.mt-1])]]
                  [:p (t :git/local-changes-synced)])
@@ -92,7 +92,7 @@
                  last-pulled-at]
                 [:div.flex.flex-row.justify-between.align-items
                  (ui/button (t :git/pull)
-                   :on-click (fn [] (repo-handler/pull-current-repo)))
+                            :on-click (fn [] (repo-handler/pull-current-repo)))
                  (if pulling?
                    [:span.lds-dual-ring.mt-1])]
                 [:p.pt-2.text-sm.opacity-50
@@ -168,20 +168,20 @@
                           (reset! branch (util/evalue e)))}]]]]
 
         (ui/button
-          (t :git/add-repo-prompt-confirm)
-          :on-click
-          (fn []
-            (let [branch (string/trim @branch)]
-              (if (string/blank? branch)
-                (notification/show!
-                 [:p.text-gray-700 "Please input a branch, make sure it's matched with your setting on Github."]
-                 :error
-                 false)
-                (let [repo (util/lowercase-first @repo)]
-                  (if (util/starts-with? repo "https://github.com/")
-                    (let [repo-url (string/replace repo ".git" "")]
-                      (repo-handler/create-repo! repo branch))
-                    (notification/show!
-                     [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
-                     :error
-                     false)))))))]])))
+         (t :git/add-repo-prompt-confirm)
+         :on-click
+         (fn []
+           (let [branch (string/trim @branch)]
+             (if (string/blank? branch)
+               (notification/show!
+                [:p.text-gray-700 "Please input a branch, make sure it's matched with your setting on Github."]
+                :error
+                false)
+               (let [repo (util/lowercase-first @repo)]
+                 (if (util/starts-with? repo "https://github.com/")
+                   (let [repo-url (string/replace repo ".git" "")]
+                     (repo-handler/create-repo! repo branch))
+                   (notification/show!
+                    [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
+                    :error
+                    false)))))))]])))

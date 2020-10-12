@@ -32,28 +32,28 @@
 
 ;; adapted from https://github.com/tonsky/rum/issues/20
 (defn adapt-class [react-class]
-     (fn [& args]
-       (let [[opts children] (if (map? (first args))
-                               [(first args) (rest args)]
-                               [{} args])
-             type# (first children)
+  (fn [& args]
+    (let [[opts children] (if (map? (first args))
+                            [(first args) (rest args)]
+                            [{} args])
+          type# (first children)
              ;; we have to make sure to check if the children is sequential
              ;; as a list can be returned, eg: from a (for)
-             new-children (if (sequential? type#)
-                            (let [result (daiquiri.interpreter/interpret children)]
-                              (if (sequential? result)
-                                result
-                                [result]))
-                            children)
+          new-children (if (sequential? type#)
+                         (let [result (daiquiri.interpreter/interpret children)]
+                           (if (sequential? result)
+                             result
+                             [result]))
+                         children)
              ;; convert any options key value to a react element, if
              ;; a valid html element tag is used, using sablono
-             vector->react-elems (fn [[key val]]
-                                   (if (sequential? val)
-                                     [key (daiquiri.interpreter/interpret val)]
-                                     [key val]))
-             new-options (into {} (map vector->react-elems opts))]
+          vector->react-elems (fn [[key val]]
+                                (if (sequential? val)
+                                  [key (daiquiri.interpreter/interpret val)]
+                                  [key val]))
+          new-options (into {} (map vector->react-elems opts))]
          ;; (.dir js/console new-children)
-         (apply js/React.createElement react-class
+      (apply js/React.createElement react-class
            ;; sablono html-to-dom-attrs does not work for nested hashmaps
-           (clj->js (map-keys->camel-case new-options :html-props true))
-           new-children))))
+             (clj->js (map-keys->camel-case new-options :html-props true))
+             new-children))))

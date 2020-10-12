@@ -96,46 +96,46 @@
             edit?
             [:div.mt-2
              (ui/button "Save"
-               :on-click
-               (fn []
-                 (reset! *edit? false)
-                 (let [new-content @*edit-content]
-                   (file/alter-file repo path new-content
-                                    {:commit? false
-                                     :re-render-root? true})
-                   (swap! state/state
-                          assoc-in [:github/contents repo remote-oid path] new-content)
-                   (mark-as-resolved path))))]
+                        :on-click
+                        (fn []
+                          (reset! *edit? false)
+                          (let [new-content @*edit-content]
+                            (file/alter-file repo path new-content
+                                             {:commit? false
+                                              :re-render-root? true})
+                            (swap! state/state
+                                   assoc-in [:github/contents repo remote-oid path] new-content)
+                            (mark-as-resolved path))))]
 
             diff?
             [:div.mt-2
              (ui/button "Use remote"
-               :on-click
-               (fn []
+                        :on-click
+                        (fn []
                  ;; overwrite the file
-                 (file/alter-file repo path content
-                                  {:commit? false
-                                   :re-render-root? true})
-                 (mark-as-resolved path))
-               :background "green")
+                          (file/alter-file repo path content
+                                           {:commit? false
+                                            :re-render-root? true})
+                          (mark-as-resolved path))
+                        :background "green")
 
              [:span.pl-2.pr-2 "or"]
 
              (ui/button "Keep local"
-               :on-click
-               (fn []
+                        :on-click
+                        (fn []
                  ;; overwrite the file
-                 (swap! state/state
-                        assoc-in [:github/contents repo remote-oid path] local-content)
-                 (mark-as-resolved path))
-               :background "pink")
+                          (swap! state/state
+                                 assoc-in [:github/contents repo remote-oid path] local-content)
+                          (mark-as-resolved path))
+                        :background "pink")
 
              [:span.pl-2.pr-2 "or"]
 
              (ui/button "Edit"
-               :on-click
-               (fn []
-                 (reset! *edit? true)))]
+                        :on-click
+                        (fn []
+                          (reset! *edit? true)))]
 
             :else
             nil)])
@@ -174,8 +174,8 @@
                           "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
                           repo)
                          (ui/button
-                           "Install Logseq on GitHub"
-                           :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
+                          "Install Logseq on GitHub"
+                          :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
                         :error
                         false)))))))))))
      state)
@@ -214,13 +214,13 @@
          (if pushing?
            [:span (ui/loading "Pushing")]
            (ui/button "Commit and push"
-             :on-click
-             (fn []
-               (let [commit-message (if (string/blank? @commit-message)
-                                      "Merge"
-                                      @commit-message)]
-                 (reset! *pushing? true)
-                 (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
+                      :on-click
+                      (fn []
+                        (let [commit-message (if (string/blank? @commit-message)
+                                               "Merge"
+                                               @commit-message)]
+                          (reset! *pushing? true)
+                          (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
 
        :else
        [:div "No diffs"])]))

@@ -305,7 +305,7 @@
                                                          [:pre.code page-data]
                                                          [:br]
                                                          (ui/button "Copy to clipboard"
-                                                           :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                                    :on-click #(.writeText js/navigator.clipboard page-data))]
                                                         :success
                                                         false)))}})]
                            (remove nil?))]

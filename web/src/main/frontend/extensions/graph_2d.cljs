@@ -26,7 +26,7 @@
                   (reset! graph-component
                           (r/adapt-class (gobj/get js/window.ForceGraph "ForceGraph2D")))
                   (reset! *loading? false)))))
-                state)}
+           state)}
   [opts]
   (let [loading? (rum/react *loading?)]
     (when @graph-component

@@ -24,12 +24,12 @@
 (defn read-file
   [dir path]
   (js/window.pfs.readFile (str dir "/" path)
-                   (clj->js {:encoding "utf8"})))
+                          (clj->js {:encoding "utf8"})))
 
 (defn read-file-2
   [dir path]
   (js/window.pfs.readFile (str dir "/" path)
-                   (clj->js {})))
+                          (clj->js {})))
 
 (defn write-file
   [dir path content]
@@ -47,11 +47,11 @@
                 path
                 (str "/" path))]
      (util/p-handle
-     (stat dir path)
-     (fn [_stat] true)
-     (fn [error]
-       (write-file dir path initial-content)
-       false)))))
+      (stat dir path)
+      (fn [_stat] true)
+      (fn [error]
+        (write-file dir path initial-content)
+        false)))))
 
 (defn file-exists?
   [dir path]
@@ -61,5 +61,4 @@
    (fn [_e] false)))
 
 (comment
-  (def dir "/notes")
-  )
+  (def dir "/notes"))

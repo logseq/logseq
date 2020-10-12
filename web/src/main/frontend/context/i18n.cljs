@@ -11,7 +11,7 @@
 ;; - [ ] Fetch prefered language from backend if user is logged in
 
 (defn fetch-local-language []
- (.. js/window -navigator -language))
+  (.. js/window -navigator -language))
 
 (rum/defcontext *tongue-context*)
 
@@ -26,7 +26,7 @@
                       children)))
 
 (rum/defc use-tongue []
-          (rum/with-context [value *tongue-context*]
-                            (if (nil? value)
-                              (throw "use-i18n must be used within a i18n-provider")
-                              value)))
+  (rum/with-context [value *tongue-context*]
+    (if (nil? value)
+      (throw "use-i18n must be used within a i18n-provider")
+      value)))

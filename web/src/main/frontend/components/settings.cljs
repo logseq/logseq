@@ -27,10 +27,10 @@
            :on-change (fn [e]
                         (reset! email (util/evalue e)))}]]]]
       (ui/button
-        "Submit"
-        :on-click
-        (fn []
-          (user-handler/set-email! @email)))
+       "Submit"
+       :on-click
+       (fn []
+         (user-handler/set-email! @email)))
 
       [:hr]
 
@@ -51,10 +51,10 @@
            :on-change (fn [e]
                         (reset! cors (util/evalue e)))}]]]]
       (ui/button
-        "Submit"
-        :on-click
-        (fn []
-          (user-handler/set-cors! @cors)))
+       "Submit"
+       :on-click
+       (fn []
+         (user-handler/set-cors! @cors)))
 
       [:hr]
 
@@ -84,12 +84,12 @@
            {:on-change (fn [e]
                          (let [lang (util/evalue e)
                                lang-val (filter (fn [el] (if (= (:label el) lang) true nil)) dicts/languages)
-                               lang-val (name (:value(first lang-val)))]
+                               lang-val (name (:value (first lang-val)))]
                            (state/set-preferred-language! lang-val)
                            (ui-handler/re-render-root!)))}
            (for [language dicts/languages]
              [:option (cond->
-                          {:key (:value language)}
+                       {:key (:value language)}
                         (= (name (:value language)) preferred-language)
                         (assoc :selected "selected"))
               (:label language)])]]]]
@@ -118,7 +118,7 @@
                                (user-handler/set-preferred-format! format)))}
                (for [format [:org :markdown]]
                  [:option (cond->
-                              {:key (name format)}
+                           {:key (name format)}
                             (= format preferred-format)
                             (assoc :selected "selected"))
                   (string/capitalize (name format))])]]]]
@@ -139,7 +139,7 @@
                                (user-handler/set-preferred-workflow! workflow)))}
                (for [workflow [:now :todo]]
                  [:option (cond->
-                              {:key (name workflow)}
+                           {:key (name workflow)}
                             (= workflow preferred-workflow)
                             (assoc :selected "selected"))
                   (if (= workflow :now)
@@ -183,7 +183,7 @@
             [:div.mt-1.sm:mt-0.sm:col-span-2
              [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
               (ui/button (if developer-mode? (t :settings-page/disable-developer-mode) (t :settings-page/enable-developer-mode))
-                :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
+                         :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
 
            [:br]
            (t :settings-page/developer-mode-desc)])]])))

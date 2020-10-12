@@ -282,8 +282,7 @@
                           (save-excalidraw! state e nil nil))}
      [:div.ToolIcon__icon {:class (if unsaved? "bg-orange-400" "bg-gray-200")
                            :style {:width "2rem"
-                                   :height "2rem"
-                                   }}
+                                   :height "2rem"}}
       svg/save]]))
 
 (rum/defcs files < rum/reactive

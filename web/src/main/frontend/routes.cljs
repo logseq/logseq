@@ -62,7 +62,7 @@
    ["/import"
     {:name :import
      :view external/import-cp}]
-   
+
    ["/all-journals"
     {:name :all-journals
      :view journal/all-journals}]])

@@ -89,12 +89,12 @@
                                      [:div
                                       [:p "It seems that you have some unsaved changes!"]
                                       (ui/button "Save"
-                                        :on-click (fn [e]
-                                                    (persist-repo-to-indexeddb!)
-                                                    (notification/show!
-                                                     "Saved successfully!"
-                                                     :success)
-                                                    (and @notification-id (notification/clear! @notification-id))))]
+                                                 :on-click (fn [e]
+                                                             (persist-repo-to-indexeddb!)
+                                                             (notification/show!
+                                                              "Saved successfully!"
+                                                              :success)
+                                                             (and @notification-id (notification/clear! @notification-id))))]
                                      :warning
                                      false)]
                              (reset! notification-id id)))

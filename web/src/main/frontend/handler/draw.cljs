@@ -75,12 +75,12 @@
                 (ok-handler file)
                 (let [modified-at (tc/to-long (t/now))]
                   (db/transact! repo
-                    [{:file/path path
-                      :file/last-modified-at modified-at}
-                     {:page/name file
-                      :page/file path
-                      :page/last-modified-at (tc/to-long (t/now))
-                      :page/journal? false}])))))
+                                [{:file/path path
+                                  :file/last-modified-at modified-at}
+                                 {:page/name file
+                                  :page/file path
+                                  :page/last-modified-at (tc/to-long (t/now))
+                                  :page/journal? false}])))))
            (fn [error]
              (prn "Write file failed, path: " path ", data: " data)
              (js/console.dir error))))))))

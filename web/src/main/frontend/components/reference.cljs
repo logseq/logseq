@@ -24,15 +24,15 @@
           page-name (string/lower-case page-name)
           encoded-page-name (util/url-encode page-name)
           ref-blocks (cond
-                         priority?
-                         (db/get-blocks-by-priority (state/get-current-repo) page-name)
+                       priority?
+                       (db/get-blocks-by-priority (state/get-current-repo) page-name)
 
-                         marker?
-                         (db/get-marker-blocks (state/get-current-repo) page-name)
-                         block-id
-                         (db/get-block-referenced-blocks block-id)
-                         :else
-                         (db/get-page-referenced-blocks page-name))
+                       marker?
+                       (db/get-marker-blocks (state/get-current-repo) page-name)
+                       block-id
+                       (db/get-block-referenced-blocks block-id)
+                       :else
+                       (db/get-page-referenced-blocks page-name))
           n-ref (count ref-blocks)]
       (when (> n-ref 0)
         [:div.references.mt-6.flex-1.flex-row
@@ -72,14 +72,14 @@
   [state page-name]
   (let [n-ref (get state ::n-ref)]
     (when page-name
-     (let [page-name (string/lower-case page-name)]
-       [:div.references.mt-6.flex-1.flex-row
-        [:div.content.flex-1
-         (ui/foldable
-          [:h2.font-bold {:style {:opacity "0.3"}}
-           (if @n-ref
-             (str @n-ref " Unlinked References")
-             "Unlinked References")]
-          (fn []
-            (unlinked-references-aux page-name n-ref))
-          true)]]))))
+      (let [page-name (string/lower-case page-name)]
+        [:div.references.mt-6.flex-1.flex-row
+         [:div.content.flex-1
+          (ui/foldable
+           [:h2.font-bold {:style {:opacity "0.3"}}
+            (if @n-ref
+              (str @n-ref " Unlinked References")
+              "Unlinked References")]
+           (fn []
+             (unlinked-references-aux page-name n-ref))
+           true)]]))))

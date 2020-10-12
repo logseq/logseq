@@ -290,8 +290,7 @@
    (fn [state]
      (mixins/on-key-down
       state
-      {
-       ;; enter
+      {;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
                   input-option (get @state/state :editor/show-input)]
@@ -327,21 +326,21 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                  {:key (str "modal-input-" (name id))
-                   :id (str "modal-input-" (name id))
-                   :type (or type "text")
-                   :on-change (fn [e]
-                                (swap! input-value assoc id (util/evalue e)))
-                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                 {:key (str "modal-input-" (name id))
+                  :id (str "modal-input-" (name id))
+                  :type (or type "text")
+                  :on-change (fn [e]
+                               (swap! input-value assoc id (util/evalue e)))
+                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder))
                 (dissoc input-item :id))]])
            (ui/button
-             "Submit"
-             :on-click
-             (fn [e]
-               (util/stop e)
-               (on-submit command @input-value pos)))])))))
+            "Submit"
+            :on-click
+            (fn [e]
+              (util/stop e)
+              (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left]}]
@@ -404,8 +403,7 @@
        ;;                                    (editor-handler/append-paste-doc! format event)))
        (mixins/on-key-down
         state
-        {
-         ;; enter
+        {;; enter
          13 (fn [state e]
               (when (and (not (gobj/get e "ctrlKey"))
                          (not (editor-handler/in-auto-complete? input)))
@@ -654,9 +652,9 @@
                           (when on-hide
                             (on-hide value event))
                           (when
-                              (or (= event :esc)
-                                  (and (= event :click)
-                                       (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
+                           (or (= event :esc)
+                               (and (= event :click)
+                                    (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
                             (state/clear-edit!))))
                       :node (gdom/getElement id)))
                    100)

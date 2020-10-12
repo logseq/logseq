@@ -8,6 +8,7 @@
 ;; - [ ] Localizing Number Formats
 ;; - [ ] Localizing Dates
 
+
 (def dicts
   {:en {:on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "sharing"

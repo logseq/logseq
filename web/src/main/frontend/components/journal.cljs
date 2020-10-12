@@ -38,13 +38,13 @@
                         "It seems that you have multiple journals for the same day \"%s\"."
                         first-title)]
                       (ui/button "Go to files"
-                        :href "/all-files"
-                        :on-click notification/clear!)]
+                                 :href "/all-files"
+                                 :on-click notification/clear!)]
                      :error
                      false)))
                 state)}
   [blocks encoded-page-name page]
-  (let [start-level (or (:block/level (first blocks)) 1 )]
+  (let [start-level (or (:block/level (first blocks)) 1)]
     (content/content
      encoded-page-name
      {:hiccup (hiccup/->hiccup blocks
@@ -114,5 +114,5 @@
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
   (let [journals-length (state/sub :journals-length)
-         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
-     (journals latest-journals)))
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
+    (journals latest-journals)))

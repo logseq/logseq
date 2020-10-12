@@ -45,11 +45,11 @@
   [s]
   (try
     (reader/read-string s)
-   (catch js/Error e
-     (println "read-string error:")
-     (js/console.error e)
-     [:div.warning {:title "read-string failed"}
-      s])))
+    (catch js/Error e
+      (println "read-string error:")
+      (js/console.error e)
+      [:div.warning {:title "read-string failed"}
+       s])))
 
 ;; local state
 (defonce *block-children
@@ -372,7 +372,7 @@
        (str "#" s)]
       [:span.warning.mr-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
        (str "#" s)])
-    ["Emphasis" [[kind] data] ]
+    ["Emphasis" [[kind] data]]
     (let [elem (case kind
                  "Bold" :b
                  "Italic" :i
@@ -491,7 +491,7 @@
                   (->elem
                    :a
                    (cond->
-                       {:href href}
+                    {:href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -504,8 +504,8 @@
             (->elem
              :a
              (cond->
-                 {:href href
-                  :target "_blank"}
+              {:href href
+               :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -1151,16 +1151,16 @@
                                      (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-block.flex.flex-col.pt-1
      (cond->
-         {:id block-id
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-block? " pre-block"))
-          :blockid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
+      {:id block-id
+       :style {:position "relative"}
+       :class (str uuid
+                   (when dummy? " dummy")
+                   (when (and collapsed? has-child?) " collapsed")
+                   (when pre-block? " pre-block"))
+       :blockid (str uuid)
+       :repo repo
+       :level level
+       :haschild (str has-child?)}
        (not slide?)
        (merge attrs))
 
@@ -1734,5 +1734,4 @@ nice
     "| Name  | Phone | Age |
 |-------+-------+-----|
 | Peter |  1234 |  17 |
-| Anna  |  4321 |  25 |")
-  )
+| Anna  |  4321 |  25 |"))

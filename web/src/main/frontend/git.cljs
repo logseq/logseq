@@ -154,7 +154,7 @@
   ([repo-url remote-id local-id local-commits remote-commits]
    ;; FIXME: p/plet not working
    (p/let
-       [local-commit (read-commit repo-url local-id)]
+    [local-commit (read-commit repo-url local-id)]
      (p/let [remote-commit (read-commit repo-url remote-id)]
        (let [local-parent (first (get-in (bean/->clj local-commit) [:commit :parent]))
 

@@ -26,8 +26,8 @@
     (let [idx (get @history-idx repo 0)
           idx' (inc idx)
           txs (vec (take idx' (get @history repo)))]
-     (swap! history assoc repo (conj txs tx))
-     (swap! history-idx assoc repo idx'))))
+      (swap! history assoc repo (conj txs tx))
+      (swap! history-idx assoc repo idx'))))
 
 (defn undo!
   [repo alter-file]

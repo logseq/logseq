@@ -271,9 +271,9 @@
         (let [old-original-name (:page/original-name page)
               file (:page/file page)]
           (d/transact! (db/get-conn repo false)
-            [{:db/id (:db/id page)
-              :page/name (string/lower-case new-name)
-              :page/original-name new-name}])
+                       [{:db/id (:db/id page)
+                         :page/name (string/lower-case new-name)
+                         :page/original-name new-name}])
 
           (when file
             (page-add-directives! (string/lower-case new-name) {:title new-name}))

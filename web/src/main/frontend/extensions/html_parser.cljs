@@ -28,11 +28,11 @@
         block-pattern (config/get-block-pattern format)
         map-join (fn [children] (apply str (map transform-fn children)))
         block-transform (fn [level children]
-                            (str (apply str (repeat level block-pattern))
-                                 " "
-                                 (->> (map transform-fn children)
-                                      (string/join " "))
-                                 "\n"))
+                          (str (apply str (repeat level block-pattern))
+                               " "
+                               (->> (map transform-fn children)
+                                    (string/join " "))
+                               "\n"))
         emphasis-transform (fn [tag attrs children]
                              (let [pattern (cond
                                              (contains? #{:b :strong} tag)
@@ -168,8 +168,7 @@
                              (_ :guard #(contains? #{:aside :center :figure :figcaption :fieldset :footer :header} %))
                              (export-hiccup x)
 
-                             :else (map-join children)
-                             )]
+                             :else (map-join children))]
                 (wrapper tag result))
 
               (string? x)
@@ -214,5 +213,4 @@
   ;; | Paragraph   | Text        | And more      |
 
   (def img-link
-    [:a {:href "https://www.markdownguide.org/book/", :style "box-sizing: border-box; color: rgb(0, 123, 255); text-decoration: none; background-color: transparent;"} [:img {:src "https://d33wubrfki0l68.cloudfront.net/cb41dd8e38b0543a305f9c56db89b46caa802263/25192/assets/images/book-cover.jpg", :class "card-img", :alt "Markdown Guide book cover", :style "box-sizing: border-box; vertical-align: middle; border-style: none; flex-shrink: 0; width: 205.75px; border-radius: calc(0.25rem - 1px);"}]])
-  )
+    [:a {:href "https://www.markdownguide.org/book/", :style "box-sizing: border-box; color: rgb(0, 123, 255); text-decoration: none; background-color: transparent;"} [:img {:src "https://d33wubrfki0l68.cloudfront.net/cb41dd8e38b0543a305f9c56db89b46caa802263/25192/assets/images/book-cover.jpg", :class "card-img", :alt "Markdown Guide book cover", :style "box-sizing: border-box; vertical-align: middle; border-style: none; flex-shrink: 0; width: 205.75px; border-radius: calc(0.25rem - 1px);"}]]))

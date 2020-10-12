@@ -27,9 +27,9 @@
             (when journal?
               (let [page-name (string/lower-case title)]
                 (db/transact! repo
-                  [{:page/name page-name
-                    :page/journal? true
-                    :page/journal-day (date/journal-title->int title)}])))))
+                              [{:page/name page-name
+                                :page/journal? true
+                                :page/journal-day (date/journal-title->int title)}])))))
         (catch js/Error e
           (swap! error-files conj file))))))
 

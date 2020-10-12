@@ -64,8 +64,7 @@
                      :on-click (fn [e]
                                  (when-let [on-click-fn (:on-click options)]
                                    (on-click-fn e))
-                                 (close-fn)
-                                 ))
+                                 (close-fn)))
               child [:div
                      {:style {:display "flex" :flex-direction "row"}}
                      [:div {:style {:margin-right "8px"}} title]
@@ -163,17 +162,17 @@
 (rum/defc notification < rum/reactive
   []
   (let [contents (state/sub :notification/contents)]
-   (transition-group
-    {:class-name "notifications"}
-    (doall (map (fn [el]
-                  (let [k (first el)
-                        v (second el)]
-                    (css-transition
-                     {:timeout 100
-                      :key (name k)}
-                     (fn [state]
-                       (notification-content state (:content v) (:status v) k)))))
-                        contents)))))
+    (transition-group
+     {:class-name "notifications"}
+     (doall (map (fn [el]
+                   (let [k (first el)
+                         v (second el)]
+                     (css-transition
+                      {:timeout 100
+                       :key (name k)}
+                      (fn [state]
+                        (notification-content state (:content v) (:status v) k)))))
+                 contents)))))
 
 (defn checkbox
   [option]
@@ -230,8 +229,7 @@
    (fn [state]
      (mixins/on-key-down
       state
-      {
-       ;; up
+      {;; up
        38 (fn [_ e]
             (let [current-idx (get state ::current-idx)
                   matched (first (:rum/args state))]

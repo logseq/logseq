@@ -106,12 +106,12 @@
         files (group-by (fn [f] (string/lower-case (:title f)))
                         files)]
     (map
-      (fn [[_ [fst & others]]]
-        (assoc fst :text
-               (->> (map :text (cons fst others))
-                    (interpose "\n")
-                    (apply str))))
-      files)))
+     (fn [[_ [fst & others]]]
+       (assoc fst :text
+              (->> (map :text (cons fst others))
+                   (interpose "\n")
+                   (apply str))))
+     files)))
 
 (defrecord Roam []
   protocol/External

@@ -98,8 +98,8 @@
       "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
       repo-url)
      (ui/button
-       "Install Logseq on GitHub"
-       :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
+      "Install Logseq on GitHub"
+      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
    :error
    false))
 
@@ -110,8 +110,8 @@
     [:span.text-gray-700.font-bold.mr-2
      "Please resolve the diffs if any."]
     (ui/button
-      "Go to diff"
-      :href "/diff")]
+     "Go to diff"
+     :href "/diff")]
    :error
    false))
 
@@ -240,8 +240,8 @@
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
          ;; TODO: why file exists but page not created
          (p/let [resolved-content (if file-exists?
-                           (file-handler/load-file repo-url path)
-                           (p/resolved content))]
+                                    (file-handler/load-file repo-url path)
+                                    (p/resolved content))]
            (let [content (if (string/blank? (string/trim resolved-content))
                            content
                            resolved-content)]
@@ -299,8 +299,6 @@
                                  (str config/app-name "/" config/metadata-file)
                                  data-str
                                  {:reset? false})))))
-
-
 
 (defn periodically-persist-app-metadata
   [repo-url]
@@ -511,8 +509,7 @@
                  (db/remove-files-db! url)
                  (fs/rmdir (util/get-repo-dir url))
                  (state/delete-repo! repo)
-                 (state/clear-changed-files! repo)
-                 )
+                 (state/clear-changed-files! repo))
                (fn [error]
                  (prn "Delete repo failed, error: " error))))
 

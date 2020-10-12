@@ -65,7 +65,6 @@
 (defn- >=date [date1 date2]
   (or (=date date1 date2) (after? date1 date2)))
 
-
 (def ^:private days-vector
   [{:key :Mo :short-name "M" :name "MON"}
    {:key :Tu :short-name "T" :name "TUE"}
@@ -182,8 +181,7 @@
    (fn [state]
      (mixins/on-key-down
       state
-      {
-       ;; enter, current day
+      {;; enter, current day
        13 (fn [state e]
             (when-let [on-change (:on-change (last (:rum/args state)))]
               (on-change e @*internal-model)))

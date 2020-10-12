@@ -90,9 +90,7 @@
     :preferred-language (storage/get :preferred-language)
 
     ;; all notification contents as k-v pairs
-    :notification/contents {}
-
-    }))
+    :notification/contents {}}))
 
 (defn get-route-match
   []

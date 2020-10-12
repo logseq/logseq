@@ -26,10 +26,10 @@
   (state/set-daily-migrating! true)
   (let [all-journals (->>
                       (db/q repo [:journals] {:use-cache? false}
-                        '[:find ?page-name
-                          :where
-                          [?page :page/journal? true]
-                          [?page :page/original-name ?page-name]])
+                            '[:find ?page-name
+                              :where
+                              [?page :page/journal? true]
+                              [?page :page/original-name ?page-name]])
                       (db/react)
                       (map first)
                       (distinct)
@@ -56,8 +56,7 @@
                              (ui-handler/re-render-root!)
                              (notification/show!
                               "Migration successfully! Please re-index your repository after the sync indicator turned green for a smooth experience."
-                              :success)
-                             ))
+                              :success)))
                    (p/catch (fn [error]
                               (state/set-daily-migrating! false)
                               (println "Migration failed: ")
@@ -71,6 +70,6 @@
        [:div
         [:p "Logseq is migrating to creating journal pages on a daily basis for better performance and data safety. In the future, the current method of storing journal files once a month would be removed. Please click the following button to migrate, and feel free to let us know if anything unexpected happened!"]
         (ui/button "Begin migration"
-          :on-click #(handle-journal-migration-from-monthly-to-daily! current-repo))]
+                   :on-click #(handle-journal-migration-from-monthly-to-daily! current-repo))]
        :warning
        false))))

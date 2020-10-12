@@ -98,12 +98,12 @@
           macros (if (seq macro-directives)
                    (->>
                     (map
-                      (fn [[_ v]]
-                        (let [[k v] (util/split-first " " v)]
-                          (mapv
-                           string/trim
-                           [k v])))
-                      macro-directives)
+                     (fn [[_ v]]
+                       (let [[k v] (util/split-first " " v)]
+                         (mapv
+                          string/trim
+                          [k v])))
+                     macro-directives)
                     (into {}))
                    {})
           directives (->> (remove (fn [x] (= :macro (first x))) directives)

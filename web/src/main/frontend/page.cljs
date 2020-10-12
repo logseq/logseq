@@ -14,9 +14,9 @@
                 (state/set-root-component! (:rum/react-component state))
                 state)}
   []
-   (when-let [route-match (state/sub :route-match)]
-     (i18n/tongue-provider 
-      (let [route-name (get-in route-match [:data :name])]
+  (when-let [route-match (state/sub :route-match)]
+    (i18n/tongue-provider
+     (let [route-name (get-in route-match [:data :name])]
        (if-let [view (:view (:data route-match))]
          (if (= :draw route-name)
            (view route-match)

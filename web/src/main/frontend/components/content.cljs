@@ -87,16 +87,16 @@
            :on-change (fn [e]
                         (reset! input (util/evalue e)))}]
          (ui/button "Submit"
-           :on-click (fn []
-                       (let [title (string/trim @input)]
-                         (when (not (string/blank? title))
-                           (if (db/template-exists? title)
-                             (notification/show!
-                              [:p "Template already exists!"]
-                              :error)
-                             (do
-                               (editor-handler/set-block-property! block-id "template" title)
-                               (state/hide-custom-context-menu!)))))))])
+                    :on-click (fn []
+                                (let [title (string/trim @input)]
+                                  (when (not (string/blank? title))
+                                    (if (db/template-exists? title)
+                                      (notification/show!
+                                       [:p "Template already exists!"]
+                                       :error)
+                                      (do
+                                        (editor-handler/set-block-property! block-id "template" title)
+                                        (state/hide-custom-context-menu!)))))))])
       (ui/menu-link
        {:key "Make template"
         :on-click (fn [e]
@@ -217,15 +217,16 @@
                               [:pre.code block-data]
                               [:br]
                               (ui/button "Copy to clipboard"
-                                :on-click #(.writeText js/navigator.clipboard block-data))]
+                                         :on-click #(.writeText js/navigator.clipboard block-data))]
                              :success
                              false)))}
-             "(Dev) Show block data")
-            )]]))))
+             "(Dev) Show block data"))]]))))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
+
+
 (defn- cut-blocks-and-clear-selections!
   [_]
   (editor-handler/cut-selection-blocks)

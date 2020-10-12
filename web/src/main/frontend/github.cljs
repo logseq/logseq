@@ -35,7 +35,7 @@
 (defn get-repo-permission
   [token repo-url current-user-name true-handler false-handler]
   (let [[owner repo-name] (util/get-git-owner-and-repo repo-url)
-        token (str "Basic "(b64/encodeString (str owner ":" token)))
+        token (str "Basic " (b64/encodeString (str owner ":" token)))
         url (util/format (str API "repos/%s/%s/collaborators/%s/permission")
                          owner
                          repo-name

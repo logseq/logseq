@@ -91,21 +91,20 @@
         lisp? (contains? #{"clojure" "scheme" "racket" "lisp"} mode)
         textarea (gdom/getElement id)
         editor (from-textarea textarea
-                               #js {:mode mode
-                                    :matchBrackets lisp?
-                                    :autoCloseBrackets true
-                                    :lineNumbers true
-                                    :extraKeys #js {
-                                                    "Esc" (fn [cm]
-                                                            (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
-                                                              (if-let [block-id (:block/uuid config)]
-                                                                (let [block (db/pull [:block/uuid block-id])
-                                                                      value (.getValue cm)
-                                                                      textarea-value (gobj/get textarea "value")
-                                                                      changed? (not= value textarea-value)]
-                                                                  (if changed?
-                                                                    (save!)
-                                                                    (editor-handler/edit-block! block :max (:block/format block) block-id)))
+                              #js {:mode mode
+                                   :matchBrackets lisp?
+                                   :autoCloseBrackets true
+                                   :lineNumbers true
+                                   :extraKeys #js {"Esc" (fn [cm]
+                                                           (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
+                                                             (if-let [block-id (:block/uuid config)]
+                                                               (let [block (db/pull [:block/uuid block-id])
+                                                                     value (.getValue cm)
+                                                                     textarea-value (gobj/get textarea "value")
+                                                                     changed? (not= value textarea-value)]
+                                                                 (if changed?
+                                                                   (save!)
+                                                                   (editor-handler/edit-block! block :max (:block/format block) block-id)))
                                                                (save!))))}})
         element (.getWrapperElement editor)]
     (.on editor "blur" (fn []

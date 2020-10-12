@@ -52,8 +52,7 @@
 
 (defonce keyboards
   (->>
-   {
-    "tab" (editor-handler/on-tab :right)
+   {"tab" (editor-handler/on-tab :right)
     "shift+tab" (editor-handler/on-tab :left)
     "ctrl+z" history-handler/undo!
     "ctrl+y" history-handler/redo!
@@ -73,14 +72,12 @@
    (medley/map-keys util/->system-modifier)))
 
 (defonce chords
-  {
-   ;; Toggle
+  {;; Toggle
    "t d" state/toggle-document-mode!
    "t t" state/toggle-theme!
    "t r" ui-handler/toggle-right-sidebar!
    "t e" state/toggle-new-block-shortcut!
-   "s" route-handler/toggle-between-page-and-file!
-   })
+   "s" route-handler/toggle-between-page-and-file!})
 
 (defonce bind! (gobj/get mousetrap "bind"))
 

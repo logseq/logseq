@@ -116,7 +116,7 @@
      ["Block Embed" (embed-block)]
      ["Link" link-steps]
      ["Template" [[:editor/input "/" nil]
-                        [:editor/search-template]]]
+                  [:editor/search-template]]]
      ;; same as link
      ["Image Link" link-steps]
      (when (state/logged?)
@@ -327,8 +327,8 @@
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id
-                                                 new-value
-                                                 (count prefix))))))
+                                               new-value
+                                               (count prefix))))))
 
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]

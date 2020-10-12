@@ -108,7 +108,7 @@
 (defn index-by
   [col k]
   (->> (map (fn [entry] [(get entry k) entry])
-         col)
+            col)
        (into {})))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
@@ -376,7 +376,7 @@
   [f col]
   (reduce
    (fn [acc x]
-     (if (some #(= (f x) (f % )) acc)
+     (if (some #(= (f x) (f %)) acc)
        acc
        (vec (conj acc x))))
    []
@@ -600,12 +600,12 @@
             start-node (gobj/get range "startContainer")
             container-nodes (array-seq (selection/getSelectedNodes container start-node))]
         (map
-          (fn [node]
-            (if (or (= 3 (gobj/get node "nodeType"))
-                    (not (d/has-class? node class-name))) ;textnode
-              (rec-get-block-node node)
-              node))
-          container-nodes)))
+         (fn [node]
+           (if (or (= 3 (gobj/get node "nodeType"))
+                   (not (d/has-class? node class-name))) ;textnode
+             (rec-get-block-node node)
+             node))
+         container-nodes)))
     (catch js/Error _e
       nil)))
 
@@ -716,18 +716,18 @@
   (let [id (gobj/get block "id")
         prefix (re-find #"ls-block-[\d]+" id)]
     (when-let [blocks (d/by-class "ls-block")]
-     (when-let [index (.indexOf blocks block)]
-       (let [level (d/attr block "level")]
-         (when (> index 0)
-           (loop [idx (dec index)]
-             (if (>= idx 0)
-               (let [block (nth blocks idx)
-                     prefix-match? (starts-with? (gobj/get block "id") prefix)]
-                 (if (and prefix-match?
-                          (= level (d/attr block "level")))
-                   block
-                   (recur (dec idx))))
-               nil))))))))
+      (when-let [index (.indexOf blocks block)]
+        (let [level (d/attr block "level")]
+          (when (> index 0)
+            (loop [idx (dec index)]
+              (if (>= idx 0)
+                (let [block (nth blocks idx)
+                      prefix-match? (starts-with? (gobj/get block "id") prefix)]
+                  (if (and prefix-match?
+                           (= level (d/attr block "level")))
+                    block
+                    (recur (dec idx))))
+                nil))))))))
 
 (defn get-next-block-with-same-level
   [block]
@@ -812,7 +812,7 @@
                 (if (tag-valid? tag)
                   {:db/id tag
                    :tag/name tag})))
-         (remove nil? tags))
+            (remove nil? tags))
        (remove nil?)
        vec))
 

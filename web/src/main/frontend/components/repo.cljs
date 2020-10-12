@@ -25,8 +25,8 @@
        [:div.pl-1.content
         [:div.flex.my-4 {:key "add-button"}
          (ui/button
-           "Add another repo"
-           :href (rfe/href :repo-add))]
+          "Add another repo"
+          :href (rfe/href :repo-add))]
 
         (for [{:keys [id url] :as repo} repos]
           [:div.flex.justify-between.mb-1 {:key id}
@@ -43,8 +43,8 @@
                                       500))}
              "Re-index"]
             [:a.control.ml-4 {:title "Clone again and re-index the db"
-                         :on-click (fn []
-                                     (export-handler/export-repo-as-json! (:url repo)))}
+                              :on-click (fn []
+                                          (export-handler/export-repo-as-json! (:url repo)))}
              "Export as JSON"]
             [:a.text-gray-400.ml-4 {:on-click (fn []
                                                 (repo-handler/remove-repo! repo))}

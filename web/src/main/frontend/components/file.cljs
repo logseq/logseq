@@ -86,7 +86,7 @@
         format (format/get-format path)
         page (db/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
-  (rum/with-context [[tongue] i18n/*tongue-context*]
+    (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-" path)}
        [:h1.title
         path]

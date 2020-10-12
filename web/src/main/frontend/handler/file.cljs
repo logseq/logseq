@@ -25,9 +25,9 @@
    (p/let [content (fs/read-file (util/get-repo-dir repo-url) path)]
      content)
    (p/catch
-       (fn [e]
-         (println "Load file failed: " path)
-         (js/console.error e)))))
+    (fn [e]
+      (println "Load file failed: " path)
+      (js/console.error e)))))
 
 (defn load-multiple-files
   [repo-url paths]
@@ -98,7 +98,7 @@
         (p/then (fn [contents]
                   (ok-handler
                    (cond->
-                       (zipmap files contents)
+                    (zipmap files contents)
 
                      (seq images)
                      (merge (zipmap images (repeat (count images) "")))))))
@@ -136,8 +136,8 @@
                          (let [original-content (db/get-file-no-sub repo path)]
                            [path original-content content])) files)]
     (-> (p/all
-        (doall
-         (map
+         (doall
+          (map
            (fn [[path content]]
              (db/set-file-content! repo path content)
              (util/p-handle
@@ -148,9 +148,9 @@
                 (println "Write file failed, path: " path ", content: " content)
                 (js/console.error error))))
            files)))
-       (p/then (fn [_result]
-                 (ui-handler/re-render-file!)
-                 (history/add-history! repo files-tx))))))
+        (p/then (fn [_result]
+                  (ui-handler/re-render-file!)
+                  (history/add-history! repo files-tx))))))
 
 (defn remove-file!
   [repo file]
@@ -166,9 +166,9 @@
          (let [file-id (:db/id file)
                page-id (db/get-file-page-id (:file/path file))
                tx-data (map
-                         (fn [db-id]
-                           [:db.fn/retractEntity db-id])
-                         (remove nil? [file-id page-id]))]
+                        (fn [db-id]
+                          [:db.fn/retractEntity db-id])
+                        (remove nil? [file-id page-id]))]
            (when (seq tx-data)
              (db/transact! repo tx-data)))))
      (p/catch (fn [err]

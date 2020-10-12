@@ -167,7 +167,7 @@
           "Angstrom"]
          (t :on-boarding/angstrom-desc-1)
          [:a {:href "https://github.com/mldoc/mldoc"
-                                            :target "_blank"} (t :on-boarding/angstrom-desc-2)]
+              :target "_blank"} (t :on-boarding/angstrom-desc-2)]
          (t :on-boarding/angstrom-desc-3)]
         [:li
          [:a {:href "https://github.com/talex5/cuekeeper"
@@ -188,164 +188,164 @@
 (defn help
   []
   (rum/with-context [[t] i18n/*tongue-context*]
-  [:div.help.ml-2.mt-1
-   [:ul
-    [:li
-     [:a {:href "https://logseq.com/blog/about"
-          :target "_blank"}
-      (t :help/about)]]
-    [:li
-     [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
-          :target "_blank"}
-      (t :help/bug)]]
-    [:li
-     [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="
-          :target "_blank"}
-      (t :help/feature)]]
-    [:li
-     [:a {:href "/blog/changelog"
-          :target "_blank"}
-      (t :help/changelog)]]
-    [:li
-     [:a {:href "/blog"
-          :target "_blank"}
-      (t :help/blog)]]
-    [:li
-     [:a {:href "/blog/privacy-policy"
-          :target "_blank"}
-      (t :help/privacy)]]
-    [:li
-     [:a {:href "/blog/terms"
-          :target "_blank"}
-      (t :help/terms)]]
-    [:li
-     [:a {:href "https://discord.gg/KpN4eHY"
-          :target "_blank"}
-      [:div.flex-row.inline-flex.items-center
-       [:span.mr-1 (t :help/community)]
-       svg/discord]]]
-    [:li
-     (t :help/shortcuts)
-     [:table
-      [:thead
-       [:tr
-        [:th [:b (t :help/shortcuts-triggers)]]
-        [:th (t :help/shortcut)]]]
-      [:tbody
-       [:tr [:td (t :help/slash-autocomplete)] [:td "/"]]
-       [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
-       [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
-       [:tr [:td (t :help/block-reference)] [:td "(())"]]]]
-     [:table
-      [:thead
-       [:tr
-        [:th [:span [:b (t :help/key-commands)]
-              (t :help/working-with-lists)]]
-        [:th (t :help/shortcut)]]]
-      [:tbody
-       [:tr [:td (t :help/indent-block-tab)] [:td "Tab"]]
-       [:tr [:td (t :help/unindent-block)] [:td "Shift-Tab"]]
-       [:tr [:td (t :help/move-block-up)] [:td (util/->platform-shortcut "Alt-Shift-Up")]]
-       [:tr [:td (t :help/move-block-down)] [:td (util/->platform-shortcut "Alt-Shift-Down")]]
-       [:tr [:td (t :help/create-new-block)] [:td "Enter"]]
-       [:tr [:td (t :help/new-line-in-block)] [:td "Shift-Enter"]]
-       [:tr [:td (t :undo)] [:td (util/->platform-shortcut "Ctrl-z")]]
-       [:tr [:td (t :redo)] [:td (util/->platform-shortcut "Ctrl-y")]]
-       [:tr [:td (t :help/zoom-in)] [:td (util/->platform-shortcut "Alt-Right")]]
-       [:tr [:td (t :help/zoom-out)] [:td (util/->platform-shortcut "Alt-left")]]
-       [:tr [:td (t :help/follow-link-under-cursor)] [:td (util/->platform-shortcut "Ctrl-o")]]
-       [:tr [:td (t :help/open-link-in-sidebar)] [:td (util/->platform-shortcut "Ctrl-shift-o")]]
-       [:tr [:td (t :expand)] [:td (util/->platform-shortcut "Ctrl-Down")]]
-       [:tr [:td (t :collapse)] [:td (util/->platform-shortcut "Ctrl-Up")]]
-       [:tr [:td (t :select-block-above)] [:td "Shift-Up"]]
-       [:tr [:td (t :select-block-below)] [:td "Shift-Down"]]
-       [:tr [:td (t :select-all-blocks)] [:td (util/->platform-shortcut "Ctrl-Shift-a")]]]]
-     [:table
-      [:thead
-       [:tr
-        [:th [:b (t :general)]]
-        [:th (t :help/shortcut)]]]
-      [:tbody
-       [:tr [:td (t :help/toggle)] [:td "?"]]
-       [:tr [:td (t :help/git-commit-message)] [:td "c"]]
-       [:tr [:td (t :help/full-text-search)] [:td (util/->platform-shortcut "Ctrl-u")]]
-       [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
-       [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
-       [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
-       [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
-       [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
-       [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
-       [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
-       [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Alt-j")]]]]
-     [:table
-      [:thead
-       [:tr
-        [:th [:b (t :formatting)]]
-        [:th (t :help/shortcut)]]]
-      [:tbody
-       [:tr [:td (t :bold)] [:td (util/->platform-shortcut "Ctrl-b")]]
-       [:tr [:td (t :italics)] [:td (util/->platform-shortcut "Ctrl-i")]]
-       [:tr [:td (t :html-link)] [:td (util/->platform-shortcut "Ctrl-k")]]
-       [:tr [:td (t :highlight)] [:td (util/->platform-shortcut "Ctrl-h")]]]]]
+    [:div.help.ml-2.mt-1
+     [:ul
+      [:li
+       [:a {:href "https://logseq.com/blog/about"
+            :target "_blank"}
+        (t :help/about)]]
+      [:li
+       [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
+            :target "_blank"}
+        (t :help/bug)]]
+      [:li
+       [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="
+            :target "_blank"}
+        (t :help/feature)]]
+      [:li
+       [:a {:href "/blog/changelog"
+            :target "_blank"}
+        (t :help/changelog)]]
+      [:li
+       [:a {:href "/blog"
+            :target "_blank"}
+        (t :help/blog)]]
+      [:li
+       [:a {:href "/blog/privacy-policy"
+            :target "_blank"}
+        (t :help/privacy)]]
+      [:li
+       [:a {:href "/blog/terms"
+            :target "_blank"}
+        (t :help/terms)]]
+      [:li
+       [:a {:href "https://discord.gg/KpN4eHY"
+            :target "_blank"}
+        [:div.flex-row.inline-flex.items-center
+         [:span.mr-1 (t :help/community)]
+         svg/discord]]]
+      [:li
+       (t :help/shortcuts)
+       [:table
+        [:thead
+         [:tr
+          [:th [:b (t :help/shortcuts-triggers)]]
+          [:th (t :help/shortcut)]]]
+        [:tbody
+         [:tr [:td (t :help/slash-autocomplete)] [:td "/"]]
+         [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
+         [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
+         [:tr [:td (t :help/block-reference)] [:td "(())"]]]]
+       [:table
+        [:thead
+         [:tr
+          [:th [:span [:b (t :help/key-commands)]
+                (t :help/working-with-lists)]]
+          [:th (t :help/shortcut)]]]
+        [:tbody
+         [:tr [:td (t :help/indent-block-tab)] [:td "Tab"]]
+         [:tr [:td (t :help/unindent-block)] [:td "Shift-Tab"]]
+         [:tr [:td (t :help/move-block-up)] [:td (util/->platform-shortcut "Alt-Shift-Up")]]
+         [:tr [:td (t :help/move-block-down)] [:td (util/->platform-shortcut "Alt-Shift-Down")]]
+         [:tr [:td (t :help/create-new-block)] [:td "Enter"]]
+         [:tr [:td (t :help/new-line-in-block)] [:td "Shift-Enter"]]
+         [:tr [:td (t :undo)] [:td (util/->platform-shortcut "Ctrl-z")]]
+         [:tr [:td (t :redo)] [:td (util/->platform-shortcut "Ctrl-y")]]
+         [:tr [:td (t :help/zoom-in)] [:td (util/->platform-shortcut "Alt-Right")]]
+         [:tr [:td (t :help/zoom-out)] [:td (util/->platform-shortcut "Alt-left")]]
+         [:tr [:td (t :help/follow-link-under-cursor)] [:td (util/->platform-shortcut "Ctrl-o")]]
+         [:tr [:td (t :help/open-link-in-sidebar)] [:td (util/->platform-shortcut "Ctrl-shift-o")]]
+         [:tr [:td (t :expand)] [:td (util/->platform-shortcut "Ctrl-Down")]]
+         [:tr [:td (t :collapse)] [:td (util/->platform-shortcut "Ctrl-Up")]]
+         [:tr [:td (t :select-block-above)] [:td "Shift-Up"]]
+         [:tr [:td (t :select-block-below)] [:td "Shift-Down"]]
+         [:tr [:td (t :select-all-blocks)] [:td (util/->platform-shortcut "Ctrl-Shift-a")]]]]
+       [:table
+        [:thead
+         [:tr
+          [:th [:b (t :general)]]
+          [:th (t :help/shortcut)]]]
+        [:tbody
+         [:tr [:td (t :help/toggle)] [:td "?"]]
+         [:tr [:td (t :help/git-commit-message)] [:td "c"]]
+         [:tr [:td (t :help/full-text-search)] [:td (util/->platform-shortcut "Ctrl-u")]]
+         [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
+         [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
+         [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
+         [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
+         [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
+         [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
+         [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
+         [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Alt-j")]]]]
+       [:table
+        [:thead
+         [:tr
+          [:th [:b (t :formatting)]]
+          [:th (t :help/shortcut)]]]
+        [:tbody
+         [:tr [:td (t :bold)] [:td (util/->platform-shortcut "Ctrl-b")]]
+         [:tr [:td (t :italics)] [:td (util/->platform-shortcut "Ctrl-i")]]
+         [:tr [:td (t :html-link)] [:td (util/->platform-shortcut "Ctrl-k")]]
+         [:tr [:td (t :highlight)] [:td (util/->platform-shortcut "Ctrl-h")]]]]]
 
-    [:li
-     (t :help/markdown-syntax)
-     [:table
-      [:tbody
-       [:tr [:td (str "**" (t :bold) "**")] [:td.text-right [:b (t :bold)]]]
-       [:tr [:td (str "_" (t :italics) "_")] [:td.text-right [:i (t :italics)]]]
-       [:tr [:td (str "~~" (t :strikethrough) "~~")] [:td.text-right [:del (t :strikethrough)]]]
-       [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
-       [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
-                                                  "help-latex"
-                                                  "E = mc^2" true false)]]
-       [:tr [:td (str "`" (t :code) "`")] [:td.text-right [:code (t :code)]]]
-       [:tr [:td [:pre "```clojure
+      [:li
+       (t :help/markdown-syntax)
+       [:table
+        [:tbody
+         [:tr [:td (str "**" (t :bold) "**")] [:td.text-right [:b (t :bold)]]]
+         [:tr [:td (str "_" (t :italics) "_")] [:td.text-right [:i (t :italics)]]]
+         [:tr [:td (str "~~" (t :strikethrough) "~~")] [:td.text-right [:del (t :strikethrough)]]]
+         [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
+         [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
+                                                    "help-latex"
+                                                    "E = mc^2" true false)]]
+         [:tr [:td (str "`" (t :code) "`")] [:td.text-right [:code (t :code)]]]
+         [:tr [:td [:pre "```clojure
   (println \"Hello world!\")
 ```"]] [:td.text-right
         (highlight/highlight
          "help-highlight"
          {:data-lang "clojure"}
          "(println \"Hello world!\")")]]
-       [:tr [:td "[label](https://www.example.com)"]
-        [:td.text-right
-         [:a {:href "https://www.example.com"}
-          "label"]]]
-       [:tr [:td "![image](https://logseq.com/static/img/logo.png)"]
-        [:td.text-right
-         [:img {:style {:float "right"
-                        :width 64
-                        :height 64}
-                :src "https://logseq.com/static/img/logo.png"
-                :alt "image"}]]]]]]
+         [:tr [:td "[label](https://www.example.com)"]
+          [:td.text-right
+           [:a {:href "https://www.example.com"}
+            "label"]]]
+         [:tr [:td "![image](https://logseq.com/static/img/logo.png)"]
+          [:td.text-right
+           [:img {:style {:float "right"
+                          :width 64
+                          :height 64}
+                  :src "https://logseq.com/static/img/logo.png"
+                  :alt "image"}]]]]]]
 
-    [:li
-     (t :help/org-mode-syntax)
-     [:table
-      [:tbody
-       [:tr [:td (str "*" (t :bold) "*")] [:td.text-right [:b (t :bold)]]]
-       [:tr [:td (str "/" (t :italics) "/")] [:td.text-right [:i (t :italics)]]]
-       [:tr [:td (str "+" (t :strikethrough) "+")] [:td.text-right [:del (t :strikethrough)]]]
-       [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
-       [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
-                                                  "help-latex"
-                                                  "E = mc^2" true false)]]
-       [:tr [:td "~Code~"] [:td.text-right [:code (t :code)]]]
-       [:tr [:td [:pre "#+BEGIN_SRC clojure
+      [:li
+       (t :help/org-mode-syntax)
+       [:table
+        [:tbody
+         [:tr [:td (str "*" (t :bold) "*")] [:td.text-right [:b (t :bold)]]]
+         [:tr [:td (str "/" (t :italics) "/")] [:td.text-right [:i (t :italics)]]]
+         [:tr [:td (str "+" (t :strikethrough) "+")] [:td.text-right [:del (t :strikethrough)]]]
+         [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
+         [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
+                                                    "help-latex"
+                                                    "E = mc^2" true false)]]
+         [:tr [:td "~Code~"] [:td.text-right [:code (t :code)]]]
+         [:tr [:td [:pre "#+BEGIN_SRC clojure
   (println \"Hello world!\")
 #+END_SRC"]] [:td.text-right
               (highlight/highlight
                "help-highlight-org"
                {:data-lang "clojure"}
                "(println \"hello world\")")]]
-       [:tr [:td "[[https://www.example.com][label]]"]
-        [:td.text-right
-         [:a {:href "https://www.example.com"}
-          "label"]]]
-       [:tr [:td "[[https://logseq.com/static/img/logo.png][image]]"]
-        [:td.text-right
-         [:img {:style {:float "right"
-                        :width 64
-                        :height 64}
-                :src "https://logseq.com/static/img/logo.png"
-                :alt "image"}]]]]]]]]))
+         [:tr [:td "[[https://www.example.com][label]]"]
+          [:td.text-right
+           [:a {:href "https://www.example.com"}
+            "label"]]]
+         [:tr [:td "[[https://logseq.com/static/img/logo.png][image]]"]
+          [:td.text-right
+           [:img {:style {:float "right"
+                          :width 64
+                          :height 64}
+                  :src "https://logseq.com/static/img/logo.png"
+                  :alt "image"}]]]]]]]]))

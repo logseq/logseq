@@ -212,8 +212,7 @@
 
      (mixins/on-key-down
       state
-      {
-       ;; esc
+      {;; esc
        27 (fn [_state e]
             (editor-handler/clear-selection! e))
 
@@ -433,7 +432,7 @@
                     :width "100vw"}}
            [:div.flex-1
             {:style (cond->
-                        {:max-width 640}
+                     {:max-width 640}
                       (or global-graph-pages?
                           (and (not logged?)
                                home?)
@@ -474,13 +473,11 @@
          [:a#download.hidden]
          (when (and (not config/mobile?)
                     (not config/publishing?))
-           [
-            (help-button)
+           [(help-button)
             ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
             ;;  {:style {:left 24}
             ;;   :title "Click to show/hide sidebar"
             ;;   :on-click (fn []
             ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
             ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-            ])
-         ]]])))
+            ])]]])))
