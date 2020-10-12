@@ -400,7 +400,6 @@
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
            (db/cloned? repo-url)
-           (not= status :pulling)
            (not (state/get-edit-input-id)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or (seq files) fallback? diff-push?)
