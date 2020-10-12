@@ -21,6 +21,7 @@ node_modules/
 /resources/static/js/publishing/cljs-runtime
 /resources/static/js/publishing/manifest.edn
 /resources/static/style.css
+/resources/static/js/publishing/code-editor.js
 tauri-release/
 
 .cpcache/

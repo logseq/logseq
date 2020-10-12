@@ -989,7 +989,7 @@
                           (reset! *dragging? false)
                           (reset! *dragging-block nil)
                           (editor-handler/unhighlight-block!))}]
-    [:div.flex.flex-row.overflow-x-auto
+    [:div.flex.overflow-x-auto
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)
                :style {:cursor "text"
