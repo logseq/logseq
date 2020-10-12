@@ -396,7 +396,8 @@
   [repo-url {:keys [commit-message fallback? diff-push?]
              :or {commit-message "Logseq auto save"
                   fallback? false
-                  diff-push? false}}]
+                  diff-push? false
+                  force? false}}]
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
            (db/cloned? repo-url)
@@ -404,6 +405,7 @@
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or
                    ;; FIXME:
+                   force?
                    (and
                     (seq (state/get-changed-files repo-url))
                     (seq files))
@@ -451,7 +453,7 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when-let [token (state/get-github-token repo)]
-      (pull repo token nil))))
+      (pull repo token {:force-pull? true}))))
 
 (defn clone
   ([repo-url]
@@ -627,7 +629,8 @@
   [commit-message]
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
-                :fallback? false})))
+                :fallback? false
+                :force? true})))
 
 (defn read-repair-journals!
   [repo-url]
