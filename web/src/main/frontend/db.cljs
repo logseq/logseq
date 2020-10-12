@@ -1653,22 +1653,23 @@
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (get-conn repo)]
-    (->>
-     (d/q
-      '[:find ?page ?ref-page-name
-        :in $ ?with-journal ?brain-text
-        :where
-        [?p :page/name ?page]
-        [?p :page/journal? ?with-journal]
-        [?block :block/page ?p]
-        [(get-else $ ?block :block/ref-pages 100000000) ?ref-page]
-        [(get-else $ ?ref-page :page/name ?brain-text) ?ref-page-name]]
-      conn
-      with-journal?
-      brain-text)
-     (map (fn [[page ref-page-name]]
-            (if (= ref-page-name brain-text)
-              [page]
+    (let [q (if with-journal?
+              '[:find ?page ?ref-page-name
+                :where
+                [?p :page/name ?page]
+                [?block :block/page ?p]
+                [?block :block/ref-pages ?ref-page]
+                [?ref-page :page/name ?ref-page-name]]
+              '[:find ?page ?ref-page-name
+                :where
+                [?p :page/name ?page]
+                [?p :page/journal? false]
+                [?block :block/page ?p]
+                [?block :block/ref-pages ?ref-page]
+                [?ref-page :page/name ?ref-page-name]])]
+      (->>
+       (d/q q conn)
+       (map (fn [[page ref-page-name]]
               [page ref-page-name]))))))
 
 ;; get pages who mentioned this page
@@ -1936,13 +1937,25 @@
     (when-let [repo (state/get-current-repo)]
       (let [relation (get-pages-relation repo show-journal?)
             tagged-pages (get-all-tagged-pages repo)
-            empty-pages (get-empty-pages repo)
+            linked-pages (-> (concat
+                              relation
+                              tagged-pages)
+                             flatten
+                             set)
+            all-pages (get-pages repo)
+            other-pages (->> (remove linked-pages all-pages)
+                             (remove nil?))
+            other-pages (if show-journal? other-pages
+                            (remove date/valid-journal-title? other-pages))
+            other-pages (if (seq other-pages)
+                          (map string/lower-case other-pages)
+                          other-pages)
             nodes (concat (seq relation)
                           (seq tagged-pages)
-                          (if (seq empty-pages)
+                          (if (seq other-pages)
                             (map (fn [page]
                                    [page])
-                                 empty-pages)
+                                 other-pages)
                             []))
             edges (build-edges (remove
                                 (fn [[_ to]]

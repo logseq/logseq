@@ -95,7 +95,7 @@
         val (gobj/get node "val")
         val (if (zero? val) 1 val)
         font-size (min
-                   20
+                   10
                    (* (/ 15 global-scale) (js/Math.cbrt val)))
         arc-radius (/ 3 global-scale)
         _ (set! (.-font ctx)
