@@ -29,7 +29,7 @@
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             ;; [clojure.set :as set]
-            ))
+))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -181,7 +181,7 @@
         ;;     (when-not file-exists?
         ;;       (db/reset-file! repo-url path "{:tx-data []}")
         ;;       (git-handler/git-add repo-url path))))
-        ))))
+))))
 
 (defn create-contents-file
   [repo-url]
@@ -402,42 +402,45 @@
            (db/cloned? repo-url)
            (not= status :pulling)
            (not (state/get-edit-input-id)))
-      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-        (when (or (seq files) fallback? diff-push?)
-          ;; auto commit if there are any un-committed changes
-          (let [commit-message (if (string/blank? commit-message)
-                                 "Logseq auto save"
-                                 commit-message)]
-            (p/let [_ (git/commit repo-url commit-message)]
-              (git-handler/set-latest-commit-if-exists! repo-url)
-              (git-handler/set-git-status! repo-url :pushing)
-              (when-let [token (state/get-github-token repo-url)]
-                (util/p-handle
-                 (git/push repo-url token)
-                 (fn [result]
-                   (git-handler/set-git-status! repo-url nil)
-                   (git-handler/set-git-error! repo-url nil)
-                   (state/clear-changed-files! repo-url))
-                 (fn [error]
-                   (js/console.error error)
-                   (let [permission? (or (string/includes? (str error) "401")
-                                         (string/includes? (str error) "404"))]
-                     (cond
-                       (and permission? (not fallback?))
-                       (request-app-tokens!
-                        (fn []
-                          (push repo-url
-                                {:commit-message commit-message
-                                 :fallback? true}))
-                        nil)
+      (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
+            (when (or (seq files) fallback? diff-push?)
+           ;; auto commit if there are any un-committed changes
+              (let [commit-message (if (string/blank? commit-message)
+                                     "Logseq auto save"
+                                     commit-message)]
+                (p/let [_ (git/commit repo-url commit-message)]
+                  (git-handler/set-latest-commit-if-exists! repo-url)
+                  (git-handler/set-git-status! repo-url :pushing)
+                  (when-let [token (state/get-github-token repo-url)]
+                    (util/p-handle
+                     (git/push repo-url token)
+                     (fn [result]
+                       (git-handler/set-git-status! repo-url nil)
+                       (git-handler/set-git-error! repo-url nil)
+                       (state/clear-changed-files! repo-url))
+                     (fn [error]
+                       (js/console.error error)
+                       (let [permission? (or (string/includes? (str error) "401")
+                                             (string/includes? (str error) "404"))]
+                         (cond
+                           (and permission? (not fallback?))
+                           (request-app-tokens!
+                            (fn []
+                              (push repo-url
+                                    {:commit-message commit-message
+                                     :fallback? true}))
+                            nil)
 
-                       :else
-                       (do
-                         (git-handler/set-git-status! repo-url :push-failed)
-                         (git-handler/set-git-error! repo-url error)
-                         (if permission?
-                           (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-                           (pull repo-url token {:force-pull? true})))))))))))))))
+                           :else
+                           (do
+                             (git-handler/set-git-status! repo-url :push-failed)
+                             (git-handler/set-git-error! repo-url error)
+                             (if permission?
+                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
+                               (pull repo-url token {:force-pull? true}))))))))))))
+          (p/catch (fn [error]
+                     (println "Git push error: ")
+                     (js/console.dir error)))))))
 
 (defn pull-current-repo
   []
@@ -554,7 +557,7 @@
   (periodically-pull repo-url pull-now?)
   (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
              ;; (not config/dev?)
-             )
+)
     (periodically-push-tasks repo-url)))
 
 (defn create-repo!
@@ -578,7 +581,7 @@
      (load-db-and-journals! repo-url nil true)
      (periodically-pull-and-push repo-url {:pull-now? false})
      ;; (periodically-persist-app-metadata repo-url)
-     )
+)
    (p/catch (fn [error]
               (js/console.error error)))))
 
@@ -596,7 +599,7 @@
               (git-handler/git-set-username-email! repo me)
               (periodically-pull-and-push repo {:pull-now? true})
               ;; (periodically-persist-app-metadata repo)
-              )
+)
             (clone-and-pull repo)))))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
@@ -624,4 +627,4 @@
 (defn read-repair-journals!
   [repo-url]
   ;; TODO: check file corrupts
-  )
+)
