@@ -546,7 +546,10 @@
   [repo-url]
   (let [token (state/get-github-token repo-url)
         push (fn []
-               (push repo-url nil))]
+               (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
+                          ;; (not config/dev?)
+)
+                 (push repo-url nil)))]
     (js/setInterval push
                     (* (config/git-push-secs) 1000))))
 
@@ -554,10 +557,7 @@
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
   (periodically-pull repo-url pull-now?)
-  (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-             ;; (not config/dev?)
-)
-    (periodically-push-tasks repo-url)))
+  (periodically-push-tasks repo-url))
 
 (defn create-repo!
   [repo-url branch]
