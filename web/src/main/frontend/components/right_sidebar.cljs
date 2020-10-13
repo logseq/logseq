@@ -236,12 +236,12 @@
                         :margin-right -17}}
           [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
            [:div.mr-4.text-sm
-            [:a {:on-click (fn [e]
+            [:a.right-sidebar-button {:on-click (fn [e]
                              (state/sidebar-add-block! repo "contents" :contents nil))}
              (t :right-side-bar/contents)]]
 
            [:div.mr-4.text-sm
-            [:a {:on-click (fn [_e]
+            [:a.right-sidebar-button {:on-click (fn [_e]
                              (state/sidebar-add-block! repo "recent" :recent nil))}
              (t :right-side-bar/recent)]]
 
@@ -251,7 +251,7 @@
                (t :all-pages)]])
 
            [:div.mr-4.text-sm
-            [:a {:on-click (fn []
+            [:a.right-sidebar-button {:on-click (fn []
                              (when-let [page (get-current-page)]
                                (state/sidebar-add-block!
                                 repo
@@ -262,14 +262,14 @@
 
            [:div.mr-4.text-sm
             (let [theme (if dark? "white" "dark")]
-              [:a {:title (t :right-side-bar/switch-theme theme)
+              [:a.right-sidebar-button {:title (t :right-side-bar/switch-theme theme)
                    :on-click (fn []
                                (state/set-theme! theme))}
                (t :right-side-bar/theme (t (keyword theme)))])]
 
            (when-not config/publishing?
              [:div.mr-4.text-sm
-              [:a {:on-click (fn [_e]
+              [:a.right-sidebar-button {:on-click (fn [_e]
                                (state/sidebar-add-block! repo "help" :help nil))}
                (t :right-side-bar/help)]])]
 
