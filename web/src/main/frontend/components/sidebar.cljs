@@ -270,7 +270,7 @@
       [:div {:class (if white? "white-theme" "dark-theme")
              :on-click (fn []
                          (editor-handler/unhighlight-block!))}
-       [:div.h-screen.flex.overflow-hidden.bg-base-3
+       [:div.h-screen.flex.overflow-hidden
         [:div.md:hidden
          [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
           {:class (if @open?
@@ -298,7 +298,7 @@
           [:div.flex-1.h-0.overflow-y-auto
            (sidebar-nav route-match close-fn)]]]
         [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-         [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
+         [:div.relative.z-10.flex-shrink-0.flex.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
           [:button#left-menu.px-4.focus:outline-none.md:hidden.menu
            {:on-click (fn []
                         (open-fn)

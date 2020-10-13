@@ -56,7 +56,7 @@
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
-     [:div.py-1.rounded-md.shadow-xs.bg-base-3
+     [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
       (for [{:keys [options title icon]} links]
         (let [new-options
