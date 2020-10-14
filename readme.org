@@ -1,5 +1,5 @@
 * Logseq
-   Logseq is a local-first, non-linear, outliner notebook for organizing and sharing your personal knowledge base.
+   Logseq is A privacy-first, open-source platform for knowledge sharing and management.
 
 ** Website
    https://logseq.com
@@ -76,7 +76,7 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
 
 *** 4. Setup the website
     Either run ~cmd-clojure -A:cljs watch app~ instead of ~yarn watch~ in the next step or modify web/package.json to use cmd-clojure instead of clojure in the scripts section.
-    
+
     Open command prompt in the repo and do:
     #+BEGIN_SRC batch
       cd web
