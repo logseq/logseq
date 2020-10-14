@@ -2065,13 +2065,17 @@
         children
         (let [[item & others] col
               cur-level (:block/level item)
-              bottom-level (:block/level (first children))]
+              bottom-level (:block/level (first children))
+              pre-block? (:block/pre-block? item)]
           (cond
             (empty? children)
             (recur others (list item))
 
             (<= bottom-level cur-level)
             (recur others (conj children item))
+
+            pre-block?
+            (recur others (cons item children))
 
             (> bottom-level cur-level)      ; parent
             (let [[children other-children] (split-with (fn [h]
