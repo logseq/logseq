@@ -408,7 +408,7 @@
 
             [:a#download-as-html.hidden]
 
-            [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
+            [:a.hover:.ml-3.hidden.md:block
              {:on-click (fn []
                           (state/toggle-sidebar-open?!))}
              (svg/menu)]]]]
