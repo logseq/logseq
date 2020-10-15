@@ -61,36 +61,36 @@
                        #(editor-handler/edit-last-block-for-new-page! last-block 0)
                        100))))))))))))
 
-(defn page-add-directives!
-  [page-name directives]
+(defn page-add-properties!
+  [page-name properties]
   (let [page (db/entity [:page/name page-name])
         page-format (db/get-page-format page-name)
-        directives-content (db/get-page-directives-content page-name)
-        directives-content (if directives-content
-                             (string/trim directives-content)
-                             (config/directives-wrapper page-format))]
+        properties-content (db/get-page-properties-content page-name)
+        properties-content (if properties-content
+                             (string/trim properties-content)
+                             (config/properties-wrapper page-format))]
     (let [file (db/entity (:db/id (:page/file page)))
           file-path (:file/path file)
           file-content (db/get-file file-path)
-          after-content (subs file-content (inc (count directives-content)))
-          new-directives-content (db/add-directives! page-format directives-content directives)
-          full-content (str new-directives-content "\n\n" (string/trim after-content))]
+          after-content (subs file-content (inc (count properties-content)))
+          new-properties-content (db/add-properties! page-format properties-content properties)
+          full-content (str new-properties-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
                                file-path
                                full-content
                                {:reset? true
                                 :re-render-root? true}))))
 
-(defn page-remove-directive!
+(defn page-remove-property!
   [page-name k]
-  (when-let [directives-content (string/trim (db/get-page-directives-content page-name))]
+  (when-let [properties-content (string/trim (db/get-page-properties-content page-name))]
     (let [page (db/entity [:page/name page-name])
           file (db/entity (:db/id (:page/file page)))
           file-path (:file/path file)
           file-content (db/get-file file-path)
-          after-content (subs file-content (count directives-content))
+          after-content (subs file-content (count properties-content))
           page-format (db/get-page-format page-name)
-          new-directives-content (let [lines (string/split-lines directives-content)
+          new-properties-content (let [lines (string/split-lines properties-content)
                                        prefix (case page-format
                                                 :org (str "#+" (string/upper-case k) ": ")
                                                 :markdown (str (string/lower-case k) ": ")
@@ -98,7 +98,7 @@
                                        exists? (atom false)
                                        lines (remove #(util/starts-with? % prefix) lines)]
                                    (string/join "\n" lines))
-          full-content (str new-directives-content "\n\n" (string/trim after-content))]
+          full-content (str new-properties-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
                                file-path
                                full-content
@@ -109,7 +109,7 @@
   [page-name]
   (fn [result]
     (let [permalink (:permalink result)]
-      (page-add-directives! page-name {"permalink" permalink})
+      (page-add-properties! page-name {"permalink" permalink})
       (let [win (js/window.open (str
                                  config/website
                                  "/"
@@ -153,17 +153,17 @@
   ([page-name blocks project-add-modal]
    (project-handler/exists-or-create!
     (fn [project]
-      (page-add-directives! page-name {"published" true
+      (page-add-properties! page-name {"published" true
                                        "slide" true})
-      (let [directives (db/get-page-directives page-name)
+      (let [properties (db/get-page-properties page-name)
             plugins (get-plugins blocks)
             data {:project project
                   :title page-name
-                  :permalink (:permalink directives)
+                  :permalink (:permalink properties)
                   :html (html-export/export-page page-name blocks notification/show!)
-                  :tags (:tags directives)
+                  :tags (:tags properties)
                   :settings (merge
-                             (assoc directives
+                             (assoc properties
                                     :slide true
                                     :published true)
                              plugins)
@@ -178,8 +178,8 @@
   [page-name project-add-modal]
   (project-handler/exists-or-create!
    (fn [project]
-     (let [directives (db/get-page-directives page-name)
-           slide? (let [slide (:slide directives)]
+     (let [properties (db/get-page-properties page-name)
+           slide? (let [slide (:slide properties)]
                     (or (true? slide)
                         (= "true" slide)))
            blocks (db/get-page-blocks page-name)
@@ -187,13 +187,13 @@
        (if slide?
          (publish-page-as-slide! page-name blocks project-add-modal)
          (do
-           (page-add-directives! page-name {"published" true})
+           (page-add-properties! page-name {"published" true})
            (let [data {:project project
                        :title page-name
-                       :permalink (:permalink directives)
+                       :permalink (:permalink properties)
                        :html (html-export/export-page page-name blocks notification/show!)
-                       :tags (:tags directives)
-                       :settings (merge directives plugins)
+                       :tags (:tags properties)
+                       :settings (merge properties plugins)
                        :repo (state/get-current-repo)}]
              (util/post (str config/api "pages")
                         data
@@ -216,9 +216,9 @@
 
 (defn unpublish-page!
   [page-name]
-  (page-add-directives! page-name {"published" false})
-  (let [directives (db/get-page-directives page-name)
-        permalink (:permalink directives)
+  (page-add-properties! page-name {"published" false})
+  (let [properties (db/get-page-properties page-name)
+        permalink (:permalink properties)
         project (state/get-current-project)]
     (if (and project permalink)
       (util/delete (str config/api project "/" permalink)
@@ -276,7 +276,7 @@
                          :page/original-name new-name}])
 
           (when file
-            (page-add-directives! (string/lower-case new-name) {:title new-name}))
+            (page-add-properties! (string/lower-case new-name) {:title new-name}))
 
           ;; update all files which have references to this page
           (let [files (db/get-files-that-referenced-page (:db/id page))]
@@ -338,4 +338,4 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (page-add-directives! page-name {:public value}))
+  (page-add-properties! page-name {:public value}))

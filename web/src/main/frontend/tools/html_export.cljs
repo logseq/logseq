@@ -28,7 +28,7 @@
 
 (defn export-page
   [page-name blocks show-notification!]
-  (let [{:keys [slide] :as directives} (db/get-page-directives page-name)
+  (let [{:keys [slide] :as properties} (db/get-page-properties page-name)
         slide? slide
         blocks (if (:block/pre-block? (first blocks))
                  (rest blocks)

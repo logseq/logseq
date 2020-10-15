@@ -254,7 +254,7 @@
                      (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                           (db/entity repo))
                      (db/entity repo [:page/name page-name]))
-              directives (:page/directives page)
+              properties (:page/properties page)
               page-name (:page/name page)
               page-original-name (:page/original-name page)
               file (:page/file page)
@@ -263,8 +263,8 @@
                       journal?
                       (= page-name (string/lower-case (date/journal-name))))
               developer-mode? (state/sub [:ui/developer-mode?])
-              published? (= "true" (:published directives))
-              public? (= "true" (:public directives))]
+              published? (= "true" (:published properties))
+              public? (= "true" (:public properties))]
           [:div.flex-1.page.relative
            [:div.relative
             (when (and (not block?)

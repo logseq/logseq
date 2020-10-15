@@ -83,19 +83,19 @@
         (recur (rest ast)))
       nil)))
 
-(defn collect-page-directives
+(defn collect-page-properties
   [ast]
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
           directive? (fn [item] (= "directive" (string/lower-case (first item))))
-          directives (->> (take-while directive? ast)
+          properties (->> (take-while directive? ast)
                           (map (fn [[_ k v]]
                                  [(keyword (string/lower-case k))
                                   v]))
                           (into {}))
-          macro-directives (filter (fn [x] (= :macro (first x))) directives)
-          macros (if (seq macro-directives)
+          macro-properties (filter (fn [x] (= :macro (first x))) properties)
+          macros (if (seq macro-properties)
                    (->>
                     (map
                      (fn [[_ v]]
@@ -103,37 +103,37 @@
                          (mapv
                           string/trim
                           [k v])))
-                     macro-directives)
+                     macro-properties)
                     (into {}))
                    {})
-          directives (->> (remove (fn [x] (= :macro (first x))) directives)
+          properties (->> (remove (fn [x] (= :macro (first x))) properties)
                           (into {}))
-          directives (if (:roam_alias directives)
-                       (assoc directives :alias (:roam_alias directives))
-                       directives)
-          directives (if (seq directives)
-                       (cond-> directives
-                         (:roam_key directives)
-                         (assoc :key (:roam_key directives))
-                         (:alias directives)
+          properties (if (:roam_alias properties)
+                       (assoc properties :alias (:roam_alias properties))
+                       properties)
+          properties (if (seq properties)
+                       (cond-> properties
+                         (:roam_key properties)
+                         (assoc :key (:roam_key properties))
+                         (:alias properties)
                          (update :alias sep-by-quote-or-space-or-comma)
-                         (:tags directives)
+                         (:tags properties)
                          (update :tags sep-by-quote-or-space-or-comma)
-                         (:roam_tags directives)
+                         (:roam_tags properties)
                          (update :roam_tags sep-by-quote-or-space-or-comma))
-                       directives)
+                       properties)
           definition-tags (get-tags-from-definition ast)
-          directives (if definition-tags
-                       (update directives :tags (fn [tags]
+          properties (if definition-tags
+                       (update properties :tags (fn [tags]
                                                   (-> (concat tags definition-tags)
                                                       distinct)))
-                       directives)
-          directives (cond-> directives
+                       properties)
+          properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
           other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
-      (if (seq directives)
-        (cons [["Directives" directives] nil] other-ast)
+      (if (seq properties)
+        (cons [["Properties" properties] nil] other-ast)
         original-ast))
     ast))
 
@@ -145,7 +145,7 @@
       (-> content
           (parse-json config)
           (util/json->clj)
-          (collect-page-directives)))
+          (collect-page-properties)))
     (catch js/Error _e
       [])))
 

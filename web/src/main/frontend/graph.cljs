@@ -62,9 +62,7 @@
         x (gobj/get node "x")
         y (gobj/get node "y")
         color (gobj/get node "color")
-        font-size (if (= label db/brain)
-                    4
-                    (/ 14 global-scale))
+        font-size (/ 14 global-scale)
         text-width (gobj/get (.measureText ctx label) "width")]
     (set! (.-font ctx) (str font-size "px Inter"))
     (set! (.-filltextAlign ctx) "center")
@@ -173,17 +171,16 @@
                             :dot-text))))
       :onNodeClick (fn [node event]
                      (let [page-name (string/lower-case (gobj/get node "id"))]
-                       (when-not (= page-name db/brain)
-                         (if (gobj/get event "shiftKey")
-                           (let [repo (state/get-current-repo)
-                                 page (db/entity repo [:page/name page-name])]
-                             (state/sidebar-add-block!
-                              repo
-                              (:db/id page)
-                              :page
-                              {:page page}))
-                           (route-handler/redirect! {:to :page
-                                                     :path-params {:name page-name}})))))
+                       (if (gobj/get event "shiftKey")
+                         (let [repo (state/get-current-repo)
+                               page (db/entity repo [:page/name page-name])]
+                           (state/sidebar-add-block!
+                            repo
+                            (:db/id page)
+                            :page
+                            {:page page}))
+                         (route-handler/redirect! {:to :page
+                                                   :path-params {:name page-name}}))))
       ;; :cooldownTicks 100
       ;; :onEngineStop (fn []
       ;;                 (when-let [ref (:ref-atom option)]
