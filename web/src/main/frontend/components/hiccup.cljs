@@ -521,8 +521,7 @@
     [:code (:code x)]
 
     ["Export_Snippet" "html" s]
-    (when (and (not config/publishing?)
-               (not html-export?))
+    (when (not html-export?)
       [:span {:dangerouslySetInnerHTML
               {:__html s}}])
 
@@ -1491,13 +1490,11 @@
        :blockquote
        (blocks-cp config l))
       ["Raw_Html" content]
-      (when (and (not config/publishing?)
-                 (not html-export?))
+      (when (not html-export?)
         [:div.raw_html {:dangerouslySetInnerHTML
                         {:__html content}}])
       ["Export" "html" options content]
-      (when (and (not config/publishing?)
-                 (not html-export?))
+      (when (not html-export?)
         [:div.export_html {:dangerouslySetInnerHTML
                            {:__html content}}])
       ["Hiccup" content]
