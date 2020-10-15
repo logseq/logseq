@@ -391,25 +391,25 @@
                       :block/properties (:block/properties e))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         [old-directives new-directives] (when pre-block?
-                                           [(:page/directives (db/entity (:db/id page)))
-                                            (db/parse-directives value format)])
-         page-tags (when-let [tags (:tags new-directives)]
+         [old-properties new-properties] (when pre-block?
+                                           [(:page/properties (db/entity (:db/id page)))
+                                            (db/parse-properties value format)])
+         page-tags (when-let [tags (:tags new-properties)]
                      (util/->tags tags))
-         page-alias (when-let [alias (:alias new-directives)]
+         page-alias (when-let [alias (:alias new-properties)]
                       (map
                        (fn [alias]
                          {:page/name (string/lower-case alias)})
                        (remove #{(:page/name page)} alias)))
-         permalink-changed? (when (and pre-block? (:permalink old-directives))
-                              (not= (:permalink old-directives)
-                                    (:permalink new-directives)))
+         permalink-changed? (when (and pre-block? (:permalink old-properties))
+                              (not= (:permalink old-properties)
+                                    (:permalink new-properties)))
          value (if permalink-changed?
-                 (db/add-directives! format value {:old_permalink (:permalink old-directives)})
+                 (db/add-properties! format value {:old_permalink (:permalink old-properties)})
                  value)
-         new-directives (if permalink-changed?
-                          (assoc new-directives :old_permalink (:permalink old-directives))
-                          new-directives)
+         new-properties (if permalink-changed?
+                          (assoc new-properties :old_permalink (:permalink old-properties))
+                          new-properties)
          value (cond
                  custom-properties
                  (text/re-construct-block-properties block value custom-properties)
@@ -484,12 +484,12 @@
                  modified-time (let [modified-at (tc/to-long (t/now))]
                                  [[:db/add page-id :page/last-modified-at modified-at]
                                   [:db/add (:db/id file) :file/last-modified-at modified-at]])
-                 page-directives (when pre-block?
-                                   (if (seq new-directives)
-                                     [[:db/retract page-id :page/directives]
+                 page-properties (when pre-block?
+                                   (if (seq new-properties)
+                                     [[:db/retract page-id :page/properties]
                                       {:db/id page-id
-                                       :page/directives new-directives}]
-                                     [[:db/retract page-id :page/directives]]))
+                                       :page/properties new-properties}]
+                                     [[:db/retract page-id :page/properties]]))
                  pages (if (seq page-tags)
                          (let [tag-pages (map
                                           (fn [page]
@@ -518,7 +518,7 @@
                 pages
                 blocks
                 retract-refs
-                page-directives
+                page-properties
                 page-tags
                 page-alias
                 after-blocks

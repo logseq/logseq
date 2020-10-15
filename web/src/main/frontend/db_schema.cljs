@@ -42,24 +42,18 @@
 
    :recent/pages    {}
 
-   :page/id         {:db/unique      :db.unique/identity}
    :page/name       {:db/unique      :db.unique/identity}
    :page/original-name {:db/unique      :db.unique/identity}
    :page/file       {:db/valueType   :db.type/ref}
-   :page/directives {}
+   :page/properties {}
    :page/alias      {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
    :page/tags       {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
-   :page/definitions {:db/valueType   :db.type/ref
-                      :db/cardinality :db.cardinality/many}
-   :page/created-at {}
-   :page/last-modified-at {}
-   :page/contributors {}
    :page/journal?   {}
    :page/journal-day {}
-   ;; TODO: page meta like :page/start-pos and :page/end-pos to improve the performance for month journal pages.
-   ;; ;; Maybe we should add daily journal or weekly journal later.
+   :page/created-at {}
+   :page/last-modified-at {}
 
    ;; block
    :block/uuid   {:db/unique      :db.unique/identity}
@@ -103,9 +97,10 @@
    ;; For pages
    :tag/name       {:db/unique :db.unique/identity}
 
-   ;; Definitions, useful for tags and future anki cards
-   :definition/block {:db/valueType   :db.type/ref}
-   ;; Why not make :definition/key unique?
-   ;; Multiple definitions with the same key in either one page or multiple pages
-   :definition/key {}
-   :definition/value {}})
+   ;; ;; Definitions, useful for tags and future anki cards
+   ;; :definition/block {:db/valueType   :db.type/ref}
+   ;; ;; Why not make :definition/key unique?
+   ;; ;; Multiple definitions with the same key in either one page or multiple pages
+   ;; :definition/key {}
+   ;; :definition/value {}
+})

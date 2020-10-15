@@ -202,14 +202,14 @@
      (+ 3 (count label))]
     ["" 0]))
 
-(defn directives-wrapper
+(defn properties-wrapper
   [format]
   (case format
     :markdown
     "---\n\n---"
     ""))
 
-(defn directives-wrapper-pattern
+(defn properties-wrapper-pattern
   [format]
   (case format
     :markdown

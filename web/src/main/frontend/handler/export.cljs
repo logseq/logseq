@@ -22,12 +22,12 @@
 (defn copy-page-as-json!
   [page-name]
   (when-let [repo (state/get-current-repo)]
-    (let [directives (db/get-page-directives page-name)
+    (let [properties (db/get-page-properties page-name)
           blocks (db/get-page-blocks repo page-name)]
       (util/copy-to-clipboard!
        (js/JSON.stringify
         (bean/->js
-         {:directives directives
+         {:properties properties
           :blocks blocks}))))))
 
 (defn export-repo-as-json!

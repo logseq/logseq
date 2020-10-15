@@ -611,7 +611,7 @@
                                    (:block/page)
                                    (:db/id)
                                    (db/entity)
-                                   :page/directives
+                                   :page/properties
                                    :macros
                                    (get name))
                                (get-in (state/get-config) [:macros name])
@@ -1416,13 +1416,13 @@
   [{:keys [html-export?] :as config} item]
   (try
     (match item
-      ["Directives" m]
-      [:div.directives
+      ["Properties" m]
+      [:div.properties
        (let [format (:block/format config)]
          (for [[k v] m]
            (when (and (not (and (= k :macros) (empty? v))) ; empty macros
                       (not (= k :title)))
-             [:div.directive
+             [:div.property
               [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
               (if (coll? v)
                 (for [item v]

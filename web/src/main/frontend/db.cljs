@@ -27,9 +27,6 @@
             [frontend.db-schema :as db-schema]
             [clojure.core.async :as async]))
 
-(defonce brain "🧠")
-(defonce brain-text "logseq-second-brain")
-
 ;; offline db
 (def store-name "dbs")
 (.config localforage
@@ -296,7 +293,7 @@
               pre-block? (:block/pre-block? (first blocks))
               current-priority (get-current-priority)
               current-marker (get-current-marker)
-              current-page-id (:page/id (get-current-page))
+              current-page-id (:db/id (get-current-page))
               {:block/keys [page]} (first blocks)
               handler-keys (->>
                             (util/concat-without-nil
@@ -999,21 +996,21 @@
 ;;        page-id)
 ;;      react)))
 
-(defn get-page-directives
+(defn get-page-properties
   [page]
   (when-let [page (entity [:page/name page])]
-    (:page/directives page)))
+    (:page/properties page)))
 
-(defn add-directives!
-  [page-format directives-content directives]
-  (let [directives (medley/map-keys name directives)
-        lines (string/split-lines directives-content)
+(defn add-properties!
+  [page-format properties-content properties]
+  (let [properties (medley/map-keys name properties)
+        lines (string/split-lines properties-content)
         front-matter-format? (contains? #{:markdown} page-format)
         lines (if front-matter-format?
                 (remove (fn [line]
                           (contains? #{"---" ""} (string/trim line))) lines)
                 lines)
-        directive-keys (keys directives)
+        property-keys (keys properties)
         prefix-f (case page-format
                    :org (fn [k]
                           (str "#+" (string/upper-case k) ": "))
@@ -1024,24 +1021,24 @@
         lines (doall
                (mapv (fn [line]
                        (let [result (filter #(and % (util/starts-with? line (prefix-f %)))
-                                            directive-keys)]
+                                            property-keys)]
                          (if (seq result)
                            (let [k (first result)]
                              (swap! exists? conj k)
-                             (str (prefix-f k) (get directives k)))
+                             (str (prefix-f k) (get properties k)))
                            line))) lines))
         lines (concat
                lines
                (let [not-exists (remove
                                  (fn [[k _]]
                                    (contains? @exists? k))
-                                 directives)]
+                                 properties)]
                  (when (seq not-exists)
                    (mapv
                     (fn [[k v]] (str (prefix-f k) v))
                     not-exists))))]
     (util/format
-     (config/directives-wrapper-pattern page-format)
+     (config/properties-wrapper-pattern page-format)
      (string/join "\n" lines))))
 
 (defn get-page-blocks
@@ -1090,7 +1087,7 @@
   (when-let [db (get-conn repo)]
     (count (d/datoms db :avet :block/page page-id))))
 
-(defn get-page-directives-content
+(defn get-page-properties-content
   [page]
   (when-let [content (let [blocks (get-page-blocks page)]
                        (and (:block/pre-block? (first blocks))
@@ -1264,9 +1261,9 @@
     (if (util/starts-with? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter block/heading-block? ast)))
-            directive-name (when (and (= "Directives" (ffirst ast))
-                                      (not (string/blank? (:title (last (first ast))))))
-                             (:title (last (first ast))))
+            property-name (when (and (= "Properties" (ffirst ast))
+                                     (not (string/blank? (:title (last (first ast))))))
+                            (:title (last (first ast))))
             first-block-name (and first-block
                                   ;; FIXME:
                                   (str (last (first (:title first-block)))))
@@ -1276,7 +1273,7 @@
                               (string/replace "-" " ")
                               (string/replace "_" " ")
                               (util/capitalize-all))))]
-        (or directive-name
+        (or property-name
             (if (= (state/page-name-order) "file")
               (or file-name first-block-name)
               (or first-block-name file-name)))))))
@@ -1301,7 +1298,7 @@
          (distinct))))
 
 (defn extract-pages-and-blocks
-  [repo-url format ast directives file content utf8-content journal? pages-fn]
+  [repo-url format ast properties file content utf8-content journal? pages-fn]
   (try
     (let [now (tc/to-long (t/now))
           [block-refs blocks] (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
@@ -1333,14 +1330,14 @@
                  (map
                   (fn [page]
                     (let [page-file? (= page (string/lower-case file))
-                          other-alias (and (:alias directives)
+                          other-alias (and (:alias properties)
                                            (seq (remove #(= page %)
-                                                        (:alias directives))))
+                                                        (:alias properties))))
                           other-alias (distinct
                                        (remove nil? other-alias))
                           journal-date-long (if journal?
                                               (date/journal-title->long (string/capitalize page)))
-                          page-list (when-let [list-content (:list directives)]
+                          page-list (when-let [list-content (:list properties)]
                                       (extract-page-list list-content))]
                       (cond->
                        (util/remove-nils
@@ -1353,8 +1350,8 @@
                                              0)
                          :page/created-at journal-date-long
                          :page/last-modified-at journal-date-long})
-                        (seq directives)
-                        (assoc :page/directives directives)
+                        (seq properties)
+                        (assoc :page/properties properties)
 
                         other-alias
                         (assoc :page/alias
@@ -1378,9 +1375,9 @@
                                       {:page/name alias})))
                                 other-alias))
 
-                        (or (:tags directives) (:roam_tags directives))
-                        (assoc :page/tags (let [tags (:tags directives)
-                                                roam-tags (:roam_tags directives)
+                        (or (:tags properties) (:roam_tags properties))
+                        (assoc :page/tags (let [tags (:tags properties)
+                                                roam-tags (:roam_tags properties)
                                                 tags (if (string? tags)
                                                        (string/split tags #",")
                                                        tags)
@@ -1412,17 +1409,17 @@
     (catch js/Error e
       (js/console.log e))))
 
-(defn parse-directives
+(defn parse-properties
   [content format]
   (let [ast (->> (mldoc/->edn content
                               (mldoc/default-config format))
                  (map first))
-        directives (let [directives (and (seq ast)
-                                         (= "Directives" (ffirst ast))
+        properties (let [properties (and (seq ast)
+                                         (= "Properties" (ffirst ast))
                                          (last (first ast)))]
-                     (if (and directives (seq directives))
-                       directives))]
-    (into {} directives)))
+                     (if (and properties (seq properties))
+                       properties))]
+    (into {} properties)))
 
 (defn monthly-journals-exists?
   [current-repo]
@@ -1443,20 +1440,20 @@
           ast (mldoc/->edn content
                            (mldoc/default-config format))
           first-block (first ast)
-          directives (let [directives (and (seq first-block)
-                                           (= "Directives" (ffirst first-block))
+          properties (let [properties (and (seq first-block)
+                                           (= "Properties" (ffirst first-block))
                                            (last (first first-block)))]
-                       (if (and directives (seq directives))
-                         directives))
+                       (if (and properties (seq properties))
+                         properties))
           monthly? (re-find #"journals/[0-9]{4}_[0-9]{2}\.+" file)]
       (cond
         (and journal? monthly?)
         (extract-pages-and-blocks
          repo-url
-         format ast directives
+         format ast properties
          file content utf8-content true
          (fn [blocks _ast]
-           (let [directive-title (:title directives)]
+           (let [property-title (:title properties)]
              (loop [pages {}
                     last-page-name nil
                     blocks blocks]
@@ -1466,8 +1463,8 @@
                         (and (= level 1)
                              (when-let [title (last (first title))]
                                (date/valid-journal-title? title)))
-                        (and directive-title (date/valid-journal-title? directive-title)))
-                     (let [page-name (or directive-title (last (first title)))
+                        (and property-title (date/valid-journal-title? property-title)))
+                     (let [page-name (or property-title (last (first title)))
                            new-pages (assoc pages page-name [block])]
                        (recur new-pages page-name tl))
                      (let [new-pages (update pages last-page-name (fn [blocks]
@@ -1478,7 +1475,7 @@
         (and journal? (not monthly?))
         (extract-pages-and-blocks
          repo-url
-         format ast directives
+         format ast properties
          file content utf8-content true
          (fn [blocks ast]
            [[(get-page-name file ast) blocks]]))
@@ -1486,7 +1483,7 @@
         (not journal?)
         (extract-pages-and-blocks
          repo-url
-         format ast directives
+         format ast properties
          file content utf8-content false
          (fn [blocks ast]
            [[(get-page-name file ast) blocks]]))))))
@@ -1916,12 +1913,10 @@
                                    [(map :id nodes)
                                     (map :source links)
                                     (map :target links)]))
-                       (remove (fn [x] (= x brain-text)))
                        (map string/lower-case))
         names (pull-many '[:page/name :page/original-name] (mapv (fn [page] [:page/name page]) all-pages))
         names (zipmap (map :page/name names)
                       (map (fn [x] (get x :page/original-name (util/capitalize-all (:page/name x)))) names))
-        names (assoc names brain-text brain)
         nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
         links (mapv (fn [{:keys [source target]}]
                       {:source (get names source)
@@ -2274,9 +2269,9 @@
 (defn pre-block-with-only-title?
   [repo block-id]
   (when-let [block (entity repo [:block/uuid block-id])]
-    (let [directives (:page/directives (:block/page block))]
-      (and (:title directives)
-           (= 1 (count directives))
+    (let [properties (:page/properties (:block/page block))]
+      (and (:title properties)
+           (= 1 (count properties))
            (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
              (or
               (empty? (rest ast))
@@ -2386,7 +2381,7 @@
   (-> (d/q
        '[:find ?p
          :where
-         [?p :page/directives ?d]
+         [?p :page/properties ?d]
          [(get ?d :public) ?pub]
          [(= "true" ?pub)]]
        db)
