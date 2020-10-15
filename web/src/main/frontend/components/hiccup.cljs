@@ -1494,9 +1494,9 @@
                          {:__html content}}]
       ["Hiccup" content]
       (ui/catch-error
-       (safe-read-string content)
        [:div.warning {:title "Invalid hiccup"}
-        content])
+        content]
+       (safe-read-string content))
 
       ["Export" "latex" options content]
       (if html-export?
