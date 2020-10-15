@@ -39,6 +39,7 @@
             [frontend.text :as text]
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
+            [frontend.security :as security]
             [reitit.frontend.easy :as rfe]))
 
 (defn safe-read-string
@@ -520,14 +521,17 @@
     [:code (:code x)]
 
     ["Export_Snippet" "html" s]
-    [:span {:dangerouslySetInnerHTML
-            {:__html s}}]
+    (when (and (not config/publishing?)
+               (not html-export?))
+      [:span {:dangerouslySetInnerHTML
+              {:__html s}}])
 
     ;; String to hiccup
     ["Inline_Hiccup" s]
     (ui/catch-error
      [:div.warning {:title "Invalid hiccup"} s]
-     (safe-read-string s))
+     (-> (safe-read-string s)
+         (security/remove-javascript-links-in-href)))
 
     ["Break_Line"]
     [:br]
@@ -1487,16 +1491,21 @@
        :blockquote
        (blocks-cp config l))
       ["Raw_Html" content]
-      [:div.raw_html {:dangerouslySetInnerHTML
-                      {:__html content}}]
+      (when (and (not config/publishing?)
+                 (not html-export?))
+        [:div.raw_html {:dangerouslySetInnerHTML
+                        {:__html content}}])
       ["Export" "html" options content]
-      [:div.export_html {:dangerouslySetInnerHTML
-                         {:__html content}}]
+      (when (and (not config/publishing?)
+                 (not html-export?))
+        [:div.export_html {:dangerouslySetInnerHTML
+                           {:__html content}}])
       ["Hiccup" content]
       (ui/catch-error
        [:div.warning {:title "Invalid hiccup"}
         content]
-       (safe-read-string content))
+       (-> (safe-read-string content)
+           (security/remove-javascript-links-in-href)))
 
       ["Export" "latex" options content]
       (if html-export?

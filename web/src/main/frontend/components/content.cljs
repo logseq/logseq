@@ -20,7 +20,8 @@
             [frontend.components.editor :as editor]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.security :as security]))
 
 (defn- set-format-js-loading!
   [format value]
@@ -319,18 +320,6 @@
         (cond
           (and markup? loading?)
           [:div "loading ..."]
-
-          markup?
-          (let [html (format/to-html content format config)]
-            (if (string/blank? html)
-              [:div.cursor.content
-               {:id id
-                :on-click on-click}
-               [:div.text-gray-500.cursor "Click to edit"]]
-              [:div.cursor.content
-               {:id id
-                :on-click on-click
-                :dangerouslySetInnerHTML {:__html html}}]))
 
           :else                       ; other text formats
           [:pre.cursor.content
