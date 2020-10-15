@@ -82,7 +82,7 @@
 
 (defn yesterday
   []
-  (journal-name (t/yesterday)))
+  (journal-name (t/minus (t/today) (t/days 1))))
 
 (defn get-month-last-day
   []
