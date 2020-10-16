@@ -1351,7 +1351,7 @@
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
-  [state config {:keys [title query inputs view collapsed?] :as q}]
+  [state config {:keys [title query inputs view collapsed? children?] :as q}]
   (let [query-atom (:query-atom state)]
     (let [current-block-uuid (or (:block/uuid (:block config))
                                  (:block/uuid config))
@@ -1380,9 +1380,11 @@
 
             (and (seq result)
                  (or only-blocks? blocks-grouped-by-page?))
-            (->hiccup result (assoc config
-                                    :custom-query? true
-                                    :group-by-page? blocks-grouped-by-page?)
+            (->hiccup result (-> (assoc config
+                                        :custom-query? true
+                                        :group-by-page? blocks-grouped-by-page?)
+                                 children?
+                                 (assoc :ref? true))
                       {:style {:margin-top "0.25rem"
                                :margin-left "0.25rem"}})
 
