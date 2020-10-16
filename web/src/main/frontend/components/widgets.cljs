@@ -179,8 +179,9 @@
                 false)
                (let [repo (util/lowercase-first @repo)]
                  (if (util/starts-with? repo "https://github.com/")
-                   (let [repo-url (string/replace repo ".git" "")]
+                   (let [repo (string/replace repo ".git" "")]
                      (repo-handler/create-repo! repo branch))
+
                    (notification/show!
                     [:p.text-gray-700 "Please input a valid repo url, e.g. https://github.com/username/repo"]
                     :error
