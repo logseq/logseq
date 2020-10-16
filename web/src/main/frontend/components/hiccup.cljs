@@ -1380,11 +1380,11 @@
 
             (and (seq result)
                  (or only-blocks? blocks-grouped-by-page?))
-            (->hiccup result (-> (assoc config
-                                        :custom-query? true
-                                        :group-by-page? blocks-grouped-by-page?)
-                                 children?
-                                 (assoc :ref? true))
+            (->hiccup result (cond-> (assoc config
+                                            :custom-query? true
+                                            :group-by-page? blocks-grouped-by-page?)
+                               children?
+                               (assoc :ref? true))
                       {:style {:margin-top "0.25rem"
                                :margin-left "0.25rem"}})
 
