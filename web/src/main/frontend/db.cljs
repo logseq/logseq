@@ -1182,9 +1182,32 @@
                   [(?pred $ ?meta)]])
              react))))
 
+(defn get-block-and-children-no-cache
+  [repo block-uuid]
+  (let [block (entity repo [:block/uuid block-uuid])
+        page (:db/id (:block/page block))
+        pos (:start-pos (:block/meta block))
+        level (:block/level block)
+        pred (fn []
+               (let [block (entity repo [:block/uuid block-uuid])
+                     pos (:start-pos (:block/meta block))]
+                 (fn [data meta]
+                   (>= (:start-pos meta) pos))))]
+    (-> (d/q
+         '[:find (pull ?block [*])
+           :in $ ?page ?pred
+           :where
+           [?block :block/page ?page]
+           [?block :block/meta ?meta]
+           [(?pred $ ?meta)]]
+         (get-conn repo)
+         page
+         pred)
+        (block-and-children-transform repo block-uuid level))))
+
 (defn block-has-children?
   [repo block]
-  (let [blocks (get-block-and-children repo (:block/uuid block))
+  (let [blocks (get-block-and-children-no-cache repo (:block/uuid block))
         second-block (second blocks)]
     (and second-block
          (> (:block/level second-block) (:block/level block)))))
@@ -2102,7 +2125,7 @@
   ([repo block-id]
    (get-block-full-content repo block-id (fn [block] (:block/content block))))
   ([repo block-id transform-fn]
-   (let [blocks (get-block-and-children repo block-id false)]
+   (let [blocks (get-block-and-children-no-cache repo block-id)]
      (->> blocks
           (map transform-fn)
           (apply util/join-newline)))))

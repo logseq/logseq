@@ -709,7 +709,7 @@
           collapsed? (:block/collapsed? block)
           repo (or (:block/repo block) (state/get-current-repo))
           last-child (and collapsed?
-                          (last (db/get-block-and-children repo (:block/uuid block))))
+                          (last (db/get-block-and-children-no-cache repo (:block/uuid block))))
           last-child (when (not= (:block/uuid last-child)
                                  (:block/uuid block))
                        last-child)]
@@ -1508,10 +1508,10 @@
       (when-let [sibling-block-id (d/attr sibling-block "blockid")]
         (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
           (let [sibling-meta (:block/meta sibling-block)
-                hc1 (db/get-block-and-children repo (:block/uuid block) false)
+                hc1 (db/get-block-and-children-no-cache repo (:block/uuid block))
                 hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
                       [sibling-block]
-                      (db/get-block-and-children repo (:block/uuid sibling-block) false))]
+                      (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
             ;; Same page and next to the other
             (when (and
                    (= (:db/id (:block/page block))
