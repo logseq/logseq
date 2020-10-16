@@ -539,7 +539,8 @@
   [{:block/keys [uuid content meta file dummy? level repo page format properties collapsed?] :as block}
    value
    {:keys [create-new-block? ok-handler with-level? new-level current-page blocks-container-id]}]
-  (let [block-page? (and current-page (util/uuid-string? current-page))
+  (let [value (or value "")
+        block-page? (and current-page (util/uuid-string? current-page))
         block-self? (= uuid (and block-page? (medley/uuid current-page)))
         input (gdom/getElement (state/get-edit-input-id))
         pos (if new-level
@@ -705,33 +706,36 @@
 
 (defn insert-new-block!
   [state]
-  (when-not config/publishing?
-    (let [{:keys [block value format id config]} (get-state state)
-          block-id (:block/uuid block)
-          block (or (db/pull [:block/uuid block-id])
-                    block)
-          collapsed? (:block/collapsed? block)
-          repo (or (:block/repo block) (state/get-current-repo))
-          last-child (and collapsed?
-                          (last (db/get-block-and-children-no-cache repo (:block/uuid block))))
-          last-child (when (not= (:block/uuid last-child)
-                                 (:block/uuid block))
-                       last-child)]
-      (set-last-edit-block! (:block/uuid block) value)
-      ;; save the current block and insert a new block
-      (insert-new-block-aux!
-       (or last-child block)
-       (if last-child (:block/content last-child) value)
-       {:create-new-block? true
-        :ok-handler
-        (fn [[_first-block last-block _new-block-content]]
-          (let [last-id (:block/uuid last-block)]
-            (edit-block! last-block 0 format id)
-            (clear-when-saved!)))
-        :with-level? (if last-child true false)
-        :new-level (and last-child (:block/level block))
-        :blocks-container-id (:id config)
-        :current-page (state/get-current-page)}))))
+  (let [aux-fn (fn [] (when-not config/publishing?
+                        (let [{:keys [block value format id config]} (get-state state)
+                              block-id (:block/uuid block)
+                              block (or (db/pull [:block/uuid block-id])
+                                        block)
+                              collapsed? (:block/collapsed? block)
+                              repo (or (:block/repo block) (state/get-current-repo))
+                              last-child (and collapsed?
+                                              (last (db/get-block-and-children-no-cache repo (:block/uuid block))))
+                              last-child (when (not= (:block/uuid last-child)
+                                                     (:block/uuid block))
+                                           last-child)]
+                          (set-last-edit-block! (:block/uuid block) value)
+                          ;; save the current block and insert a new block
+                          (insert-new-block-aux!
+                           (or last-child block)
+                           (if last-child (:block/content last-child) value)
+                           {:create-new-block? true
+                            :ok-handler
+                            (fn [[_first-block last-block _new-block-content]]
+                              (let [last-id (:block/uuid last-block)]
+                                (edit-block! last-block 0 format id)
+                                (clear-when-saved!)))
+                            :with-level? (if last-child true false)
+                            :new-level (and last-child (:block/level block))
+                            :blocks-container-id (:id config)
+                            :current-page (state/get-current-page)}))))]
+    (if @*async-insert-start
+      (js/setTimeout aux-fn 20)
+      (aux-fn))))
 
 (defn insert-new-block-without-save-previous!
   [config last-block]
