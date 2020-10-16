@@ -1,5 +1,6 @@
 (ns frontend.search
   (:require [frontend.db :as db]
+            [frontend.config :as config]
             [frontend.state :as state]
             [medley.core :as medley]
             [frontend.util :as util]
@@ -110,9 +111,13 @@
   ([q limit]
    (let [q (clean-str q)]
      (when-not (string/blank? q)
-       (let [files (db/get-files (state/get-current-repo))]
+       (let [mldoc-exts (set (map name config/mldoc-support-formats))
+             files (->> (db/get-files (state/get-current-repo))
+                        (map first)
+                        (remove (fn [file]
+                                  (mldoc-exts (util/get-file-ext file)))))]
          (when (seq files)
-           (fuzzy-search (map first files) q :limit limit)))))))
+           (fuzzy-search files q :limit limit)))))))
 
 (defn template-search
   ([q]
