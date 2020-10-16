@@ -48,6 +48,7 @@
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
+(defonce *async-insert-start (atom false))
 
 (defn modified-time-tx
   [page file]
@@ -585,9 +586,12 @@
                                              after-blocks)
                                             {:key :block/change
                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                                            [[file-path new-content]]))]
+                                            [[file-path new-content]])
+                                           (reset! *async-insert-start false))]
                          ;; Replace with batch transactions
                          (state/add-tx! transact-fn)
+
+                         (reset! *async-insert-start true)
 
                          (let [blocks (remove (fn [block]
                                                 (nil? (:block/content block))) blocks)
@@ -1438,35 +1442,40 @@
 
 (defn adjust-block-level!
   [state direction]
-  (let [{:keys [block block-parent-id value config]} (get-state state)
-        start-level (:start-level config)
-        format (:block/format block)
-        block-pattern (config/get-block-pattern format)
-        level (:block/level block)
-        previous-level (or (get-previous-block-level block-parent-id) 1)
-        [add? remove?] (case direction
-                         :left [false true]
-                         :right [true false]
-                         [(<= level previous-level)
-                          (and (> level previous-level)
-                               (> level 2))])
-        final-level (cond
-                      add? (inc level)
-                      remove? (if (> level 2)
-                                (dec level)
-                                level)
-                      :else level)
-        new-value (block/with-levels value format (assoc block :block/level final-level))]
-    (when (and
-           (not (and (= direction :left)
-                     (and
-                      (get config :id)
-                      (util/uuid-string? (get config :id)))
-                     (<= final-level start-level)))
-           (<= (- final-level previous-level) 1))
-      (set-last-edit-block! (:block/uuid block) value)
-      (save-block-if-changed! block new-value
-                              {:indent-left? (= direction :left)}))))
+  (let [aux-fn (fn []
+                 (let [{:keys [block block-parent-id value config]} (get-state state)
+                       start-level (:start-level config)
+                       format (:block/format block)
+                       block-pattern (config/get-block-pattern format)
+                       level (:block/level block)
+                       previous-level (or (get-previous-block-level block-parent-id) 1)
+                       [add? remove?] (case direction
+                                        :left [false true]
+                                        :right [true false]
+                                        [(<= level previous-level)
+                                         (and (> level previous-level)
+                                              (> level 2))])
+                       final-level (cond
+                                     add? (inc level)
+                                     remove? (if (> level 2)
+                                               (dec level)
+                                               level)
+                                     :else level)
+                       new-value (block/with-levels value format (assoc block :block/level final-level))]
+                   (when (and
+                          (not (and (= direction :left)
+                                    (and
+                                     (get config :id)
+                                     (util/uuid-string? (get config :id)))
+                                    (<= final-level start-level)))
+                          (<= (- final-level previous-level) 1))
+                     (set-last-edit-block! (:block/uuid block) value)
+                     (save-block-if-changed! block new-value
+                                             {:indent-left? (= direction :left)}))))]
+    ;; TODO: Not a universal solution
+    (if @*async-insert-start
+      (js/setTimeout aux-fn 20)
+      (aux-fn))))
 
 (defn adjust-blocks-level!
   [blocks direction])

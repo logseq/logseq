@@ -37,12 +37,19 @@
 
 (defonce localforage-instance (.createInstance localforage store-name))
 
+;; Query atom of map of Key ([repo q inputs]) -> atom
+;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
+(defonce query-state (atom {}))
+
+(defonce async-chan (atom nil))
+
 ;; (defn clear-store!
 ;;   []
 ;;   (p/let [_ (.clear localforage)
 ;;           dbs (js/window.indexedDB.databases)]
 ;;     (doseq [db dbs]
 ;;       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
+
 
 (defn get-repo-path
   [url]
@@ -128,10 +135,6 @@
   (reset! conn db))
 
 (def ^:dynamic *query-component*)
-
-;; Query atom of map of Key ([repo q inputs]) -> atom
-;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
-(defonce query-state (atom {}))
 
 ;; key -> components
 (defonce query-components (atom {}))
@@ -2308,7 +2311,9 @@
     (async/go-loop []
       (let [f (async/<! chan)]
         (f))
-      (recur))))
+      (recur))
+    (reset! async-chan chan)
+    chan))
 
 (defonce blocks-count-cache (atom nil))
 (defn blocks-count
