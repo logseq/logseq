@@ -1191,11 +1191,8 @@
         page (:db/id (:block/page block))
         pos (:start-pos (:block/meta block))
         level (:block/level block)
-        pred (fn []
-               (let [block (entity repo [:block/uuid block-uuid])
-                     pos (:start-pos (:block/meta block))]
-                 (fn [data meta]
-                   (>= (:start-pos meta) pos))))]
+        pred (fn [data meta]
+               (>= (:start-pos meta) pos))]
     (-> (d/q
          '[:find (pull ?block [*])
            :in $ ?page ?pred
