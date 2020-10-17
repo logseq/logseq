@@ -56,7 +56,7 @@
   (try
     (let [dom-node (rum/dom-node state)]
       (when-let [dom-node (or node dom-node)]
-        (listen state js/window "click"
+        (listen state js/window "mousedown"
                 (fn [e]
                  ;; If the click target is outside of current node
                   (when-not (dom/contains dom-node (.. e -target))
