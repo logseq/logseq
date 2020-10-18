@@ -277,7 +277,7 @@
                     "opacity-75 pointer-events-auto"
                     "opacity-0 pointer-events-none")
            :on-click close-fn}]
-         [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
+         [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
           {:class (if @open?
                     "translate-x-0"
                     "-translate-x-full")
