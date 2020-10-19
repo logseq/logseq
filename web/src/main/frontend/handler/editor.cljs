@@ -1273,7 +1273,6 @@
   {"[" "]"
    "{" "}"
    "(" ")"
-   "$" "$"                              ; math
    "`" "`"
    "~" "~"
    "*" "*"
@@ -1284,6 +1283,15 @@
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
           (keys autopair-map)))
+
+(def delete-map
+  (assoc autopair-map
+         "$" "$"
+         ":" ":"))
+
+(def reversed-delete-map
+  (zipmap (vals delete-map)
+          (keys delete-map)))
 
 (defn autopair
   [input-id prefix format {:keys [restore?]
