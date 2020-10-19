@@ -39,7 +39,8 @@
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           n-ref (count ref-blocks)]
-      (when (> n-ref 0)
+      (when (or (> n-ref 0)
+                (seq scheduled-or-deadlines))
         [:div.references.mt-6.flex-1.flex-row
          [:div.content
           (when (seq scheduled-or-deadlines)

@@ -39,6 +39,7 @@
             [medley.core :as medley]
             [frontend.text :as text]
             [frontend.date :as date]
+            [frontend.handler.repeated :as repeated]
             [clojure.core.async :as async]))
 
 ;; TODO: refactor the state, it is already too complex.
@@ -756,13 +757,24 @@
       :blocks-container-id (:id config)
       :current-page (state/get-current-page)})))
 
-
-;; TODO: utf8 encode performance
-
+(defn update-timestamps-content!
+  [{:block/keys [repeated? scheduled-ast deadline-ast marker]} content]
+  (if repeated?
+    (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
+             (map (fn [ts]
+                    [(repeated/timestamp->text ts)
+                     (repeated/next-timestamp-text ts)]))
+             (reduce (fn [content [old new]]
+                       (string/replace content old new))
+                     content))
+    content))
 
 (defn check
-  [{:block/keys [uuid marker content meta file dummy?] :as block}]
-  (let [new-content (string/replace-first content marker "DONE")]
+  [{:block/keys [uuid marker content meta file dummy? repeated?] :as block}]
+  (let [new-content (string/replace-first content marker "DONE")
+        new-content (if repeated?
+                      (update-timestamps-content! block content)
+                      new-content)]
     (save-block-if-changed! block new-content)))
 
 (defn uncheck
