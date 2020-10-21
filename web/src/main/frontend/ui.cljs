@@ -172,7 +172,7 @@
                        :key (name k)}
                       (fn [state]
                         (notification-content state (:content v) (:status v) k)))))
-                 contents)))))
+              contents)))))
 
 (defn checkbox
   [option]
@@ -452,3 +452,18 @@
   (if (some? error)
     error-view
     view))
+
+(rum/defc select
+  [options on-change]
+  [:select.mt-1.form-select.block.w-full.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
+   {:style {:padding "0 0 0 12px"}
+    :on-change (fn [e]
+                 (let [value (util/evalue e)]
+                   (on-change value)))}
+   (for [{:keys [label value selected]} options]
+     [:option (cond->
+                  {:key label
+                   :value (or value label)}
+                selected
+                (assoc :selected selected))
+      label])])

@@ -2,6 +2,7 @@
   (:require [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [cljs-time.format :as tf]
+            [clojure.string :as string]
             [frontend.util :as util]))
 
 (def custom-formatter (tf/formatter "yyyy-MM-dd EEE"))
@@ -47,11 +48,16 @@
                 "++")
          repeater (str kind num d)
          time-repeater (if time
-                         (str (util/zero-pad hour) ":" (util/zero-pad min) " " repeater)
+                         (str (util/zero-pad hour) ":" (util/zero-pad min)
+                              (if (string/blank? repeater)
+                                ""
+                                (str " " repeater)))
                          repeater)]
-     (util/format "<%s %s>"
+     (util/format "<%s%s>"
                   (tf/unparse custom-formatter start-time)
-                  time-repeater))))
+                  (if (string/blank? time-repeater)
+                    ""
+                    (str " " time-repeater))))))
 
 (defn next-timestamp-text
   [{:keys [date wday repetition time active] :as timestamp}]
@@ -65,3 +71,19 @@
         [duration-f _] (get-duration-f-and-text duration)
         start-time' (t/plus start-time (duration-f num))]
     (timestamp->text timestamp start-time')))
+
+(defn timestamp-map->text
+  [{:keys [date time repeater]}]
+  (let [{:keys [kind duration num]} repeater
+        repeater (str kind num duration)
+        time-repeater (if-not (string/blank? time)
+                        (str time
+                             (if (string/blank? repeater)
+                               ""
+                               (str " " repeater)))
+                        repeater)]
+    (util/format "<%s%s>"
+                 (tf/unparse custom-formatter date)
+                 (if (string/blank? time-repeater)
+                   ""
+                   (str " " time-repeater)))))

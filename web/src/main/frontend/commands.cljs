@@ -97,6 +97,10 @@
      ["A" (->priority "A")]
      ["B" (->priority "B")]
      ["C" (->priority "C")]
+     ["Deadline" [[:editor/input "DEADLINE: "]
+                  [:editor/show-date-picker]]]
+     ["Scheduled" [[:editor/input "SCHEDULED: "]
+                  [:editor/show-date-picker]]]
      ["Draw" [[:editor/input "/draw "]
               [:editor/show-input [{:command :draw
                                     :id :title
@@ -125,7 +129,7 @@
 
      ;; TODO:
      ;; ["Upload a file" nil]
-     ]
+]
     ;; Allow user to modify or extend, should specify how to extend.
     (get-in @state/state [:config (state/get-current-repo) :commands]))
    (remove nil?)

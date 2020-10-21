@@ -6,7 +6,8 @@
    [cljs-time.format     :refer [parse unparse formatters formatter]]
    [frontend.util          :refer [deref-or-value now->utc]]
    [frontend.mixins :as mixins]
-   [frontend.util :as util]))
+   [frontend.util :as util]
+   [goog.object :as gobj]))
 
 ;; Adapted from re-com date-picker
 
@@ -143,6 +144,7 @@
                             :else                                classes)
         on-click      (fn [e]
                         (when-not (or disabled? disabled-day?)
+                          (reset! *internal-model date)
                           (on-change e date)))]
     [:td {:class    classes
           :on-click on-click} (day date)]))
@@ -179,34 +181,40 @@
 (rum/defc date-picker < rum/reactive
   (mixins/event-mixin
    (fn [state]
-     (mixins/on-key-down
-      state
-      {;; enter, current day
-       13 (fn [state e]
-            (when-let [on-change (:on-change (last (:rum/args state)))]
-              (on-change e @*internal-model)))
+     (let [{:keys [on-change on-switch]}(last (:rum/args state))]
+       (mixins/on-key-down
+       state
+       {;; enter, current day
+        13 (fn [state e]
+             (when on-change
+               (when-not (util/input? (gobj/get e "target"))
+                 (on-change e @*internal-model))))
 
-       ;; left, previous day
-       37 (fn [state e]
-            (swap! *internal-model inc-date -1))
+        ;; left, previous day
+        37 (fn [state e]
+             (when-not (util/input? (gobj/get e "target"))
+               (swap! *internal-model inc-date -1)))
 
-       ;; right, next day
-       39 (fn [state e]
-            (swap! *internal-model inc-date 1))
+        ;; right, next day
+        39 (fn [state e]
+             (when-not (util/input? (gobj/get e "target"))
+               (swap! *internal-model inc-date 1)))
 
-       ;; up, one week ago
-       38 (fn [state e]
-            (swap! *internal-model inc-week -1))
-       ;; down, next week
-       40 (fn [state e]
-            (swap! *internal-model inc-week 1))}
-      (fn [e key-code]
-        (when (contains? #{13 37 38 39 40} key-code)
-          (util/stop e))))))
+        ;; up, one week ago
+        38 (fn [state e]
+             (when-not (util/input? (gobj/get e "target"))
+               (swap! *internal-model inc-week -1)))
+        ;; down, next week
+        40 (fn [state e]
+             (when-not (util/input? (gobj/get e "target"))
+               (swap! *internal-model inc-week 1)))}
+       (fn [e key-code]
+         (when (contains? #{13 37 38 39 40} key-code)
+           (util/stop e)))))))
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
            state)}
-  [model {:keys [on-change disabled? start-of-week class style attr]
+  [model {:keys [on-change on-switch disabled? start-of-week class style attr]
           :or   {start-of-week 6} ;; Default to Sunday
           :as   args}]
   (let [internal-model (util/react *internal-model)
