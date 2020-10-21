@@ -14,12 +14,14 @@
             [frontend.components.svg :as svg]
             [frontend.components.draw :as draw]
             [frontend.components.block :as block-comp]
+            [frontend.components.datetime :as datetime-comp]
             [frontend.ui :as ui]
             [frontend.components.widgets :as widgets]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.image :as image-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as dnd]
+            [frontend.handler.repeated :as repeated]
             [goog.object :as gobj]
             [medley.core :as medley]
             [cljs.reader :as reader]
@@ -40,7 +42,8 @@
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.security :as security]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.commands :as commands]))
 
 (defn safe-read-string
   [s]
@@ -492,7 +495,7 @@
                   (->elem
                    :a
                    (cond->
-                    {:href href}
+                       {:href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -505,8 +508,8 @@
             (->elem
              :a
              (cond->
-              {:href href
-               :target "_blank"}
+                 {:href href
+                  :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -949,8 +952,42 @@
           [:span.mr-1 ":"]
           (property-value (:block/format block) v)])])))
 
+(rum/defcs timestamp-cp < rum/reactive
+  (rum/local false ::show?)
+  (rum/local {} ::pos)
+  {:will-unmount (fn [state]
+                   (when-let [show? (::show? state)]
+                     (reset! show? false))
+                   state)}
+  [state block typ ast]
+  (let [show? (get state ::show?)]
+    [:div.flex.flex-col
+     [:div.text-sm.mt-1.flex.flex-row
+      [:div.opacity-50.font-medium {:style {:width 95}}
+       (str typ ": ")]
+      [:a.opacity-80.hover:opacity-100
+       {:on-click (fn []
+                    (if @show?
+                      (do
+                        (reset! show? false)
+                        (reset! commands/*current-command nil)
+                        (state/set-editor-show-date-picker false)
+                        (state/set-timestamp-block! nil))
+                      (do
+                        (reset! show? true)
+                        (reset! commands/*current-command typ)
+                        (state/set-editor-show-date-picker true)
+                        (state/set-timestamp-block! {:block block
+                                                     :typ typ
+                                                     :show? show?}))))}
+       (repeated/timestamp->text ast)]]
+     (when (true? @show?)
+       (let [ts (repeated/timestamp->map ast)]
+         [:div.my-4
+          (datetime-comp/date-picker nil nil ts)]))]))
+
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? properties collapsed? idx block-refs-count] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? properties collapsed? idx block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
@@ -1008,6 +1045,12 @@
 
       (when (and dragging? (not slide?))
         (dnd-separator block 0 -4 false true))
+
+      (when (and deadline deadline-ast)
+        (timestamp-cp block "DEADLINE" deadline-ast))
+
+      (when (and scheduled scheduled-ast)
+        (timestamp-cp block "SCHEDULED" scheduled-ast))
 
       (when (and (seq properties)
                  (let [hidden? (text/properties-hidden? properties)]
@@ -1161,16 +1204,16 @@
                                      (d/add-class! node "hide-inner-bullet")))))}]
     [:div.ls-block.flex.flex-col.pt-1
      (cond->
-      {:id block-id
-       :style {:position "relative"}
-       :class (str uuid
-                   (when dummy? " dummy")
-                   (when (and collapsed? has-child?) " collapsed")
-                   (when pre-block? " pre-block"))
-       :blockid (str uuid)
-       :repo repo
-       :level level
-       :haschild (str has-child?)}
+         {:id block-id
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-block? " pre-block"))
+          :blockid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
        (not slide?)
        (merge attrs))
 
@@ -1708,7 +1751,7 @@
                                -18)}}
        (build-blocks blocks config)
        ;; (add-button config ref? custom-query? blocks)
-])))
+       ])))
 
 ;; headers to hiccup
 (rum/defc ->hiccup < rum/reactive

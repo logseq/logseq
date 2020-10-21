@@ -480,6 +480,15 @@
                                                                :start-pos 0
                                                                :end-pos new-end-pos})
                                                             (block/parse-block block format))
+                 block-retracted-attrs (when-not pre-block?
+                                         (let [id (:db/id block)]
+                                           [[:db/retract id :block/priority]
+                                            [:db/retract id :block/deadline]
+                                            [:db/retract id :block/deadline-ast]
+                                            [:db/retract id :block/scheduled]
+                                            [:db/retract id :block/scheduled-ast]
+                                            [:db/retract id :block/marker]
+                                            [:db/retract id :block/repeated?]]))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
                  page-id (:db/id page)
@@ -518,6 +527,7 @@
                repo
                (concat
                 pages
+                block-retracted-attrs
                 blocks
                 retract-refs
                 page-properties
@@ -981,6 +991,43 @@
             (save-block-if-changed! block content
                                     {:custom-properties properties'
                                      :rebuild-content? false})))))))
+
+(defn set-block-timestamp!
+  [block-id key value]
+  (let [key (string/lower-case key)
+        scheduled? (= key "scheduled")
+        deadline? (= key "deadline")
+        block-id (if (string? block-id) (uuid block-id) block-id)
+        key (string/lower-case (str key))
+        value (str value)]
+    (when-let [block (db/pull [:block/uuid block-id])]
+      (let [{:block/keys [content scheduled deadline]} block
+            new-line (str (string/upper-case key) ": " value)
+            new-content (cond
+                          ;; update
+                          (or
+                           (and deadline deadline?)
+                           (and scheduled scheduled?))
+                          (let [lines (string/split-lines content)
+                                body (map (fn [line]
+                                            (if (string/starts-with? (string/lower-case line) key)
+                                              new-line
+                                              line))
+                                       (rest lines))]
+                            (->> (cons (first lines) body)
+                                 (string/join "\n")))
+
+                          ;; insert
+                          (or deadline? scheduled?)
+                          (let [[title body] (util/split-first "\n" content)]
+                            (str title "\n"
+                                 new-line
+                                 "\n" body))
+
+                          :else
+                          content)]
+        (when (not= content new-content)
+          (save-block-if-changed! block new-content))))))
 
 (defn copy-block-ref!
   [block-id]

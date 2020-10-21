@@ -2,6 +2,7 @@
   (:require [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [cljs-time.format :as tf]
+            [frontend.date :as date]
             [clojure.string :as string]
             [frontend.util :as util]))
 
@@ -26,6 +27,15 @@
     [t/years "y"]
     nil))
 
+(defn get-repeater-symbol
+  [kind]
+  (case kind
+    "Plus"
+    "+"
+    "Dotted"
+    ".+"
+    "++"))
+
 (defn timestamp->text
   ([timestamp]
    (timestamp->text timestamp nil))
@@ -40,13 +50,9 @@
          [[kind] [duration] num] repetition
          start-time (or start-time (t/local-date-time year month day hour min))
          [duration-f d] (get-duration-f-and-text duration)
-         kind (case kind
-                "Plus"
-                "+"
-                "Dotted"
-                ".+"
-                "++")
-         repeater (str kind num d)
+         kind (get-repeater-symbol kind)
+         repeater (when (and kind num d)
+                    (str kind num d))
          time-repeater (if time
                          (str (util/zero-pad hour) ":" (util/zero-pad min)
                               (if (string/blank? repeater)
@@ -59,23 +65,51 @@
                     ""
                     (str " " time-repeater))))))
 
+;; Fro https://www.reddit.com/r/orgmode/comments/hr2ytg/difference_between_the_repeaters_orgzly/fy2izqx?utm_source=share&utm_medium=web2x&context=3
+;; I use these repeaters for habit tracking and it can get a little tricky to keep track. This is my short form understanding:
+;; ".+X" = repeat in X d/w/m from the last time I marked it done
+;; "++X" = repeat in at least X d/w/m from the last time I marked it done and keep it on the same day of the week move the due date into the future by increments of d/w/m. If the due date, after being moved forward X d/w/m is still in the past, adjust it by however many d/w/m needed to get it into the future. For the w, the day of the week is kept constant.
+;; "+X" = repeat in X d/w/m from when I originally scheduled it, regardless of when I marked it done. Rarely used (as described by u/serendependy). A relevant case would be "paying rent" from the link.
 (defn next-timestamp-text
   [{:keys [date wday repetition time active] :as timestamp}]
   (let [{:keys [year month day]} date
         {:keys [hour min]
          :or {hour 0 min 0}} time
         [[kind] [duration] num] repetition
-        start-time (if (= kind "Plus")
-                     (t/local-date-time year month day hour min)
-                     (tl/local-now))
         [duration-f _] (get-duration-f-and-text duration)
-        start-time' (t/plus start-time (duration-f num))]
+        delta (duration-f num)
+        today (date/get-local-date)
+        [year month day hour min] (cond
+                                    (or (string/blank? kind)
+                                        (= kind "Plus"))
+                                    [year month day hour min]
+
+                                    ;; FIXME: check hour and min, find the nearest time which is after the previous time.
+                                    (and
+                                     (= kind "Dotted")
+                                     (t/after? (tl/local-now) (t/local-date-time year month day hour min)))
+                                    [(:year today) (:month today) (:day today) hour min]
+
+                                    :else ; FIXME: DoublePlus
+                                    (if (t/before? (t/local-date year month day)
+                                                   (t/local-date (:year today)
+                                                                 (:month today)
+                                                                 (:day today)))
+                                      (let [{:keys [year month day hour minute]} today]
+                                        [year month day hour minute])
+                                      [year month day hour min]))
+        start-time (t/local-date-time year month day hour min)
+        start-time' (if (and (= kind "Dotted")
+                             (t/before? (tl/local-now) start-time))
+                      start-time
+                      (t/plus start-time delta))]
     (timestamp->text timestamp start-time')))
 
 (defn timestamp-map->text
   [{:keys [date time repeater]}]
   (let [{:keys [kind duration num]} repeater
-        repeater (str kind num duration)
+        repeater (when (and kind num duration)
+                   (str kind num duration))
         time-repeater (if-not (string/blank? time)
                         (str time
                              (if (string/blank? repeater)
@@ -87,3 +121,16 @@
                  (if (string/blank? time-repeater)
                    ""
                    (str " " time-repeater)))))
+
+(defn timestamp->map
+  [{:keys [date wday repetition time active]}]
+  (let [{:keys [year month day]} date
+        {:keys [hour min]} time
+        [[kind] [duration] num] repetition]
+    {:date (t/local-date year month day)
+     :time (when (and hour min)
+             (str (util/zero-pad hour) ":" (util/zero-pad min)))
+     :repeater (when (and kind duration num)
+                 {:kind (get-repeater-symbol kind)
+                  :duration (last (get-duration-f-and-text duration))
+                  :num num})}))

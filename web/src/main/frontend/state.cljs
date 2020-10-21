@@ -76,6 +76,7 @@
     :editor/pos 0
     :editor/content {}
     :editor/block nil
+    :editor/set-timestamp-block nil
     :cursor-range nil
 
     :selection/mode false
@@ -245,6 +246,14 @@
   []
   (set-state! :ui/cycle-collapse (next-collapse-mode)))
 
+(defn set-timestamp-block!
+  [value]
+  (set-state! :editor/set-timestamp-block value))
+
+(defn get-timestamp-block
+  []
+  (:editor/set-timestamp-block @state))
+
 (defn set-edit-content!
   [input-id value]
   (when input-id
@@ -260,7 +269,7 @@
     ;;                        (remove #(= leader-parent %)))]
     ;;     (prn "followers: " (count followers))
     ;;     ))
-))
+    ))
 
 (defn get-edit-input-id
   []
