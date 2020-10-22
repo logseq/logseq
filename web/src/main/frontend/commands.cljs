@@ -1,6 +1,7 @@
 (ns frontend.commands
   (:require [frontend.util :as util]
             [frontend.date :as date]
+            [frontend.text :as text]
             [frontend.state :as state]
             [frontend.search :as search]
             [clojure.string :as string]
@@ -350,7 +351,10 @@
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
                                                  format/marker-pattern
-                                                 (str marker " ")))]
+                                                 (str marker " ")))
+            new-value (if (string/blank? marker)
+                        new-value
+                        (text/insert-property new-value marker (util/time-ms)))]
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] format]

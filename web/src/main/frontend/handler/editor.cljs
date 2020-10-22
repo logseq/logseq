@@ -791,50 +791,63 @@
                      content))
     content))
 
+(defn- with-marker-time
+  [block marker]
+  (let [properties (:block/properties block)]
+    (assoc (into {} properties)
+           (string/lower-case marker)
+           (util/time-ms))))
+
 (defn check
   [{:block/keys [uuid marker content meta file dummy? repeated?] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
         new-content (if repeated?
                       (update-timestamps-content! block content)
                       new-content)]
-    (save-block-if-changed! block new-content)))
+    (save-block-if-changed! block new-content
+                            {:custom-properties (with-marker-time block "DONE")})))
 
 (defn uncheck
   [{:block/keys [uuid marker content meta file dummy?] :as block}]
-  (let [new-content (string/replace-first content "DONE"
-                                          (if (= :now (state/get-preferred-workflow))
-                                            "LATER"
-                                            "TODO"))]
-    (save-block-if-changed! block new-content)))
+  (let [marker (if (= :now (state/get-preferred-workflow))
+                 "LATER"
+                 "TODO")
+        new-content (string/replace-first content "DONE" marker)]
+    (save-block-if-changed! block new-content
+                            {:custom-properties (with-marker-time block marker)})))
 
 (defn cycle-todo!
   []
   (when-let [block (state/get-edit-block)]
     (let [edit-input-id (state/get-edit-input-id)
           content (state/get-edit-content)
-          new-content (->
-                       (cond
-                         (util/starts-with? content "TODO")
-                         (string/replace-first content "TODO" "DOING")
-                         (util/starts-with? content "DOING")
-                         (string/replace-first content "DOING" "DONE")
-                         (util/starts-with? content "LATER")
-                         (string/replace-first content "LATER" "NOW")
-                         (util/starts-with? content "NOW")
-                         (string/replace-first content "NOW" "DONE")
-                         (util/starts-with? content "DONE")
-                         (string/replace-first content "DONE" "")
-                         :else
-                         (str (if (= :now (state/get-preferred-workflow))
-                                "LATER "
-                                "TODO ") (string/triml content)))
-                       (string/triml))]
+          [new-content marker] (cond
+                                 (util/starts-with? content "TODO")
+                                 [(string/replace-first content "TODO" "DOING") "DOING"]
+                                 (util/starts-with? content "DOING")
+                                 [(string/replace-first content "DOING" "DONE") "DONE"]
+                                 (util/starts-with? content "LATER")
+                                 [(string/replace-first content "LATER" "NOW") "NOW"]
+                                 (util/starts-with? content "NOW")
+                                 [(string/replace-first content "NOW" "DONE") "DONE"]
+                                 (util/starts-with? content "DONE")
+                                 [(string/replace-first content "DONE" "") nil]
+                                 :else
+                                 (let [marker (if (= :now (state/get-preferred-workflow))
+                                                "LATER"
+                                                "TODO")]
+                                   [(str marker " " (string/triml content)) marker]))
+          new-content (string/triml new-content)
+          new-content (if marker
+                        (text/insert-property new-content (string/lower-case marker) (util/time-ms))
+                        new-content)]
       (state/set-edit-content! edit-input-id new-content))))
 
 (defn set-marker
-  [{:block/keys [uuid marker content meta file dummy?] :as block} new-marker]
+  [{:block/keys [uuid marker content meta file dummy? properties] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
-    (save-block-if-changed! block new-content)))
+    (save-block-if-changed! block new-content
+                            (with-marker-time block marker))))
 
 (defn set-priority
   [{:block/keys [uuid marker priority content meta file dummy?] :as block} new-priority]
