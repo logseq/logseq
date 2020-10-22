@@ -2461,6 +2461,11 @@
             datoms (d/datoms filtered-db :eavt)]
         @(d/conn-from-datoms datoms db-schema/schema)))))
 
+;; shortcut for query a block with string ref
+(defn qb
+  [string-id]
+  (pull [:block/uuid (medley/uuid string-id)]))
+
 (comment
   (defn debug!
     []

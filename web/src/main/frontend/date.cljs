@@ -184,6 +184,10 @@
   [journal-title]
   (journal-title-> journal-title format))
 
+(defn int->local-time
+  [n]
+  (get-date-time-string (t/to-default-time-zone (tc/from-long n))))
+
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))

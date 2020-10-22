@@ -9,7 +9,8 @@
             [datascript.core :as d]
             [clojure.set :as set]
             [frontend.date :as date]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [medley.core :as medley]))
 
 (defn heading-block?
   [block]
@@ -98,13 +99,19 @@
 
 (defn extract-properties
   [[_ properties] start-pos end-pos]
-  {:properties (->> (into {} properties)
-                    (medley/map-keys (fn [k]
-                                       (and k (string/trim (string/lower-case k)))))
-                    (medley/map-vals (fn [v]
-                                       (and v (string/trim v)))))
-   :start-pos start-pos
-   :end-pos end-pos})
+  (let [properties (->> (into {} properties)
+                        (medley/map-kv (fn [k v]
+                                         (let [k' (and k (string/trim (string/lower-case k)))
+                                               v' (and v (string/trim v))
+                                               v' (if (and k' v'
+                                                           (contains? config/markers k')
+                                                           (util/safe-parse-int v'))
+                                                    (util/safe-parse-int v')
+                                                    v')]
+                                           [k' v']))))]
+    {:properties properties
+     :start-pos start-pos
+     :end-pos end-pos}))
 
 (defn- paragraph-timestamp-block?
   [block]

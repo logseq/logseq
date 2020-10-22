@@ -184,6 +184,13 @@
     (js/parseInt x)
     x))
 
+(defn safe-parse-int
+  [x]
+  (let [result (parse-int x)]
+    (if (js/isNaN result)
+      nil
+      result)))
+
 (defn debounce
   "Returns a function that will call f only after threshold has passed without new calls
   to the function. Calls prep-fn on the args in a sync way, which can be used for things like

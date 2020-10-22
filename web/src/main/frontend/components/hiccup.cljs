@@ -943,7 +943,8 @@
 
 (rum/defc properties-cp
   [block]
-  (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
+  (let [properties (apply dissoc (:block/properties block) text/hidden-properties)
+        properties (apply dissoc properties config/markers)]
     (when (seq properties)
       [:div.text-sm.opacity-80.my-1.bg-base-4.p-2
        (for [[k v] properties]
@@ -987,7 +988,7 @@
           (datetime-comp/date-picker nil nil ts)]))]))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? properties collapsed? idx block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
@@ -1031,7 +1032,7 @@
                           (reset! *dragging? false)
                           (reset! *dragging-block nil)
                           (editor-handler/unhighlight-block!))}]
-    [:div.flex.overflow-x-auto.overflow-y-hidden
+    [:div.flex.overflow-x-auto.overflow-y-hidden.relative
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)
                :style {:cursor "text"
@@ -1076,7 +1077,24 @@
                        (:db/id block)
                        :block-ref
                        {:block block}))}
-         block-refs-count]])]))
+         block-refs-count]])
+
+     (when (= marker "DONE")
+       (let [start-time (or
+                         (get properties "now")
+                         (get properties "doing")
+                         (get properties "in-progress")
+                         (get properties "later")
+                         (get properties "todo"))
+             finish-time (get properties "done")]
+         (when (and start-time finish-time (> finish-time start-time))
+           [:div.text-sm.absolute.spent-time {:style {:top 0
+                                                      :right 0
+                                                      :z-index 4
+                                                      :background "#002B36"}
+                                              :title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
+            [:span.opacity-70
+             (utils/timeConversion (- finish-time start-time))]])))]))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx] :as block} edit-input-id block-id slide?]
