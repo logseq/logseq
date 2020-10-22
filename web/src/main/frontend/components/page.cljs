@@ -313,11 +313,12 @@
                 (when (seq links)
                   (ui/dropdown-with-links
                    (fn [{:keys [toggle-fn]}]
-                     [:a {:style {:position "absolute"
-                                  :right 0
-                                  :top 20}
-                          :title "More options"
-                          :on-click toggle-fn}
+                     [:a.opacity-70.hover:opacity-100
+                      {:style {:position "absolute"
+                               :right 0
+                               :top 20}
+                       :title "More options"
+                       :on-click toggle-fn}
                       (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
                    links
                    {:modal-class (util/hiccup->class

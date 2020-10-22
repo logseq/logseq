@@ -319,7 +319,7 @@
 
             (when (and (not logged?)
                        (not config/publishing?))
-              [:a.text-sm.font-medium.login
+              [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100
                {:href "/login/github"
                 :on-click (fn []
                             (storage/remove :git/current-repo))}
@@ -331,7 +331,7 @@
              (widgets/repos true)]
 
             (when-let [project (and current-repo (state/get-current-project))]
-              [:a.opacity-50.hover:opacity-100.ml-4
+              [:a.opacity-70.hover:opacity-100.ml-4
                {:title (str (t :go-to) "/" project)
                 :href (str config/website "/" project)
                 :target "_blank"}
@@ -354,7 +354,7 @@
                   (if-let [avatar (:avatar me)]
                     [:img.h-7.w-7.rounded-full
                      {:src avatar}]
-                    [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
+                    [:div.h-7.w-7.rounded-full.bg-base-2.opacity-70.hover:opacity-100. {:style {:padding 1.5}}
                      [:a svg/user]])])
                (let [logged? (:name me)]
                  (->>
@@ -408,7 +408,7 @@
 
             [:a#download-as-html.hidden]
 
-            [:a.hover:.ml-3.hidden.md:block
+            [:a.opacity-70.hover:opacity-100.ml-3.hidden.md:block
              {:on-click (fn []
                           (state/toggle-sidebar-open?!))}
              (svg/menu)]]]]

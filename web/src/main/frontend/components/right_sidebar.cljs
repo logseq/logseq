@@ -70,8 +70,9 @@
   (let [fold? (get state ::fold?)]
     [:div
      [:div.flex.flex-row.items-center.mb-1
-      [:a.control {:on-click #(swap! fold? not)
-                   :style {:width "0.75rem"}}
+      [:a.control.opacity-50.hover:opacity-100
+       {:on-click #(swap! fold? not)
+        :style {:width "0.75rem"}}
        (when (seq l)
          (if @fold?
            svg/arrow-down-v2
@@ -89,7 +90,7 @@
 
 (rum/defc contents < rum/reactive db-mixins/query
   []
-  [:div.contents.flex-col.flex.ml-3.mt-2
+  [:div.contents.flex-col.flex.ml-3
    (when-let [contents (db/entity [:page/name "contents"])]
      (page/contents-page contents))])
 
@@ -164,7 +165,7 @@
   ([on-close]
    (close nil on-close))
   ([class on-close]
-   [:a.close.hover:text-gray-900.text-gray-500.flex.items-center
+   [:a.close.opacity-50.hover:opacity-100.flex.items-center
     (cond-> {:on-click on-close}
       class
       (assoc :class class))
@@ -180,12 +181,12 @@
          [:div.flex.flex-col
           [:div.flex.flex-row.justify-between
            [:div.flex.flex-row.justify-center
-            [:a.hover:text-gray-900.text-gray-500.flex.items-center.pr-1
+            [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
              {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
              (if collapse?
                (svg/caret-right)
                (svg/caret-down))]
-            [:div.ml-1.font-medium
+            [:div.ml-1
              title]]
            (close #(state/sidebar-remove-block! idx))]
           [:div {:class (if collapse? "hidden" "initial")}
