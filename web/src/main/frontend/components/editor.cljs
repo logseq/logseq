@@ -7,6 +7,7 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
+            [frontend.components.datetime :as datetime-comp]
             [promesa.core :as p]
             [frontend.date :as date]
             [frontend.state :as state]
@@ -54,7 +55,7 @@
                      (let [command-steps (get (into {} matched) chosen)
                            restore-slash? (and
                                            (not (contains? (set (map first command-steps)) :editor/input))
-                                           (not (contains? #{"Date Picker" "Template"} chosen)))]
+                                           (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled"} chosen)))]
                        (editor-handler/insert-command! id command-steps
                                                        format
                                                        {:restore? restore-slash?})))
@@ -214,23 +215,6 @@
                            template)
             :class "black"}))))))
 
-(rum/defc date-picker < rum/reactive
-  [id format]
-  (when (state/sub :editor/show-date-picker?)
-    (ui/datepicker
-     (t/today)
-     {:on-change
-      (fn [e date]
-        (util/stop e)
-        (let [date (t/to-default-time-zone date)
-              journal (date/journal-name date)]
-          ;; similar to page reference
-          (editor-handler/insert-command! id
-                                          (util/format "[[%s]]" journal)
-                                          format
-                                          nil)
-          (state/set-editor-show-date-picker false)))})))
-
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div.bg-base-2 {:style {:position "fixed"
@@ -326,21 +310,21 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                 {:key (str "modal-input-" (name id))
-                  :id (str "modal-input-" (name id))
-                  :type (or type "text")
-                  :on-change (fn [e]
-                               (swap! input-value assoc id (util/evalue e)))
-                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                    {:key (str "modal-input-" (name id))
+                     :id (str "modal-input-" (name id))
+                     :type (or type "text")
+                     :on-change (fn [e]
+                                  (swap! input-value assoc id (util/evalue e)))
+                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder))
                 (dissoc input-item :id))]])
            (ui/button
-            "Submit"
-            :on-click
-            (fn [e]
-              (util/stop e)
-              (on-submit command @input-value pos)))])))))
+             "Submit"
+             :on-click
+             (fn [e]
+               (util/stop e)
+               (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left]}]
@@ -663,9 +647,9 @@
                           (when on-hide
                             (on-hide value event))
                           (when
-                           (or (= event :esc)
-                               (and (= event :click)
-                                    (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
+                              (or (= event :esc)
+                                  (and (= event :click)
+                                       (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
                             (state/clear-edit!))))
                       :node (gdom/getElement id)))
                    100)
@@ -768,7 +752,7 @@
       *slash-caret-pos)
 
      (transition-cp
-      (date-picker id format)
+      (datetime-comp/date-picker id format nil)
       false
       *slash-caret-pos)
 

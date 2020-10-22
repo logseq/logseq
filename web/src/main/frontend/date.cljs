@@ -184,6 +184,10 @@
   [journal-title]
   (journal-title-> journal-title format))
 
+(defn int->local-time
+  [n]
+  (get-date-time-string (t/to-default-time-zone (tc/from-long n))))
+
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))
@@ -192,4 +196,4 @@
 
   ;; :date 2020-05-31
   ;; :rfc822 Sun, 31 May 2020 03:00:57 Z
-  )
+)

@@ -1733,6 +1733,26 @@
              sort-blocks
              group-by-page)))))
 
+(defn get-date-scheduled-or-deadlines
+  [journal-title]
+  (when-let [date (date/journal-title->int journal-title)]
+    (when-let [repo (state/get-current-repo)]
+      (when-let [conn (get-conn repo)]
+        (->> (d/q
+              '[:find (pull ?block [*])
+                :in $ ?day
+                :where
+                (or
+                 [?block :block/scheduled ?day]
+                 [?block :block/deadline ?day])]
+              conn
+              date)
+             seq-flatten
+             sort-blocks
+             group-by-page
+             (remove (fn [[page _blocks]]
+                       (= journal-title (:page/original-name page)))))))))
+
 (defn get-files-that-referenced-page
   [page-id]
   (when-let [repo (state/get-current-repo)]
@@ -2440,6 +2460,11 @@
                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))
             datoms (d/datoms filtered-db :eavt)]
         @(d/conn-from-datoms datoms db-schema/schema)))))
+
+;; shortcut for query a block with string ref
+(defn qb
+  [string-id]
+  (pull [:block/uuid (medley/uuid string-id)]))
 
 (comment
   (defn debug!

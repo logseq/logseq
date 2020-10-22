@@ -83,16 +83,21 @@
    ;; :start-pos :end-pos
    :block/meta {}
    :block/properties {}
-
-   ;; TODO: To make this really working, every block needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
-   ;; Any suggestions?
-   :block/created-at {}
-   :block/last-modified-at {}
    :block/body {}
    :block/pre-block? {}
    :block/collapsed? {}
    :block/children {:db/cardinality :db.cardinality/many
                     :db/unique :db.unique/identity}
+   :block/scheduled {}
+   :block/scheduled-ast {}
+   :block/deadline {}
+   :block/deadline-ast {}
+   :block/repeated? {}
+
+   ;; TODO: To make this really working, every block needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
+   ;; Any suggestions?
+   :block/created-at {}
+   :block/last-modified-at {}
 
    ;; For pages
    :tag/name       {:db/unique :db.unique/identity}

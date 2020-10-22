@@ -9,7 +9,8 @@
             [datascript.core :as d]
             [clojure.set :as set]
             [frontend.date :as date]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [medley.core :as medley]))
 
 (defn heading-block?
   [block]
@@ -98,25 +99,53 @@
 
 (defn extract-properties
   [[_ properties] start-pos end-pos]
-  {:properties (->> (into {} properties)
-                    (medley/map-keys (fn [k]
-                                       (and k (string/trim (string/lower-case k)))))
-                    (medley/map-vals (fn [v]
-                                       (and v (string/trim v)))))
-   :start-pos start-pos
-   :end-pos end-pos})
+  (let [properties (->> (into {} properties)
+                        (medley/map-kv (fn [k v]
+                                         (let [k' (and k (string/trim (string/lower-case k)))
+                                               v' (and v (string/trim v))
+                                               v' (if (and k' v'
+                                                           (contains? config/markers k')
+                                                           (util/safe-parse-int v'))
+                                                    (util/safe-parse-int v')
+                                                    v')]
+                                           [k' v']))))]
+    {:properties properties
+     :start-pos start-pos
+     :end-pos end-pos}))
 
 (defn- paragraph-timestamp-block?
   [block]
   (and (paragraph-block? block)
        (timestamp-block? (first (second block)))))
 
-(defn extract-timestamp
+(defn extract-timestamps
   [block]
-  (-> block
-      second
-      first
-      second))
+  (some->>
+   (second block)
+   (filter timestamp-block?)
+   (map last)
+   (into {})))
+
+;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
+(defn timestamps->scheduled-and-deadline
+  [timestamps]
+  (let [timestamps (medley/map-keys (comp keyword string/lower-case) timestamps)
+        m (some->> (select-keys timestamps [:scheduled :deadline])
+                   (map (fn [[k v]]
+                          (let [{:keys [date repetition]} v
+                                {:keys [year month day]} date
+                                day (js/parseInt (str year month day))]
+                            (cond->
+                             (case k
+                               :scheduled
+                               {:scheduled day
+                                :scheduled-ast v}
+                               :deadline
+                               {:deadline day
+                                :deadline-ast v})
+                              repetition
+                              (assoc :repeated? true))))))]
+    (apply merge m)))
 
 (defn with-page-refs
   [{:keys [title body tags] :as block}]
@@ -200,9 +229,11 @@
                   level (:level (second block))]
               (cond
                 (paragraph-timestamp-block? block)
-                (let [timestamp (extract-timestamp block)
-                      timestamps' (conj timestamps timestamp)]
-                  (recur block-refs headings block-body (rest blocks) timestamps' properties last-pos last-level children))
+                (let [timestamps (extract-timestamps block)
+                      timestamps' (merge timestamps timestamps)
+                      other-body (->> (remove timestamp-block? (second block))
+                                      (drop-while #(= ["Break_Line"] %)))]
+                  (recur block-refs headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
                 (properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]
@@ -231,12 +262,13 @@
                       block (-> (assoc block
                                        :uuid id
                                        :body (vec (reverse block-body))
-                                       :timestamps timestamps
                                        :properties (:properties properties)
-                                       :properties-meta (dissoc properties :properties)
                                        :children (or current-block-children []))
                                 (assoc-in [:meta :start-pos] start_pos)
                                 (assoc-in [:meta :end-pos] last-pos))
+                      block (if (seq timestamps)
+                              (merge block (timestamps->scheduled-and-deadline timestamps))
+                              block)
                       block (collect-block-tags block)
                       block (with-page-refs block)
                       block (with-block-refs block)

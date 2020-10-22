@@ -39,6 +39,7 @@
             [medley.core :as medley]
             [frontend.text :as text]
             [frontend.date :as date]
+            [frontend.handler.repeated :as repeated]
             [clojure.core.async :as async]))
 
 ;; TODO: refactor the state, it is already too complex.
@@ -386,7 +387,8 @@
     value
     {:keys [indent-left? custom-properties rebuild-content?]
      :or {rebuild-content? true}}]
-   (let [repo (or repo (state/get-current-repo))
+   (let [value value
+         repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (assoc (with-block-meta repo block)
                       :block/properties (:block/properties e))
@@ -479,6 +481,16 @@
                                                                :start-pos 0
                                                                :end-pos new-end-pos})
                                                             (block/parse-block block format))
+                 block-retracted-attrs (when-not pre-block?
+                                         (when-let [id (:db/id block)]
+                                           [[:db/retract id :block/priority]
+                                            [:db/retract id :block/deadline]
+                                            [:db/retract id :block/deadline-ast]
+                                            [:db/retract id :block/scheduled]
+                                            [:db/retract id :block/scheduled-ast]
+                                            [:db/retract id :block/marker]
+                                            [:db/retract id :block/tags]
+                                            [:db/retract id :block/repeated?]]))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
                  page-id (:db/id page)
@@ -517,6 +529,7 @@
                repo
                (concat
                 pages
+                block-retracted-attrs
                 blocks
                 retract-refs
                 page-properties
@@ -566,6 +579,7 @@
               (str (config/default-empty-block format v2-level) " " v2)
               format))
         block (with-block-meta repo block)
+        original-id (:block/uuid block)
         format (:block/format block)
         page (db/entity repo (:db/id page))
         file (db/entity repo (:db/id file))
@@ -576,7 +590,16 @@
                              value (text/re-construct-block-properties block value properties)
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
-                             {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
+                             parse-result (block/parse-block (assoc block :block/content value) format)
+                             id-conflict? (some #(= original-id (:block/uuid %)) (next (:blocks parse-result)))
+                             {:keys [blocks pages start-pos end-pos]}
+                             (if id-conflict?
+                               (let [new-value (string/replace
+                                                value
+                                                (re-pattern (str "(?i):custom_id: " original-id))
+                                                "")]
+                                 (block/parse-block (assoc block :block/content new-value) format))
+                               parse-result)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
                              transact-fn (fn []
                                            (repo-handler/transact-react-and-alter-file!
@@ -756,51 +779,75 @@
       :blocks-container-id (:id config)
       :current-page (state/get-current-page)})))
 
+(defn update-timestamps-content!
+  [{:block/keys [repeated? scheduled-ast deadline-ast marker]} content]
+  (if repeated?
+    (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
+             (map (fn [ts]
+                    [(repeated/timestamp->text ts)
+                     (repeated/next-timestamp-text ts)]))
+             (reduce (fn [content [old new]]
+                       (string/replace content old new))
+                     content))
+    content))
 
-;; TODO: utf8 encode performance
-
+(defn- with-marker-time
+  [block marker]
+  (let [properties (:block/properties block)]
+    (assoc (into {} properties)
+           (string/lower-case marker)
+           (util/time-ms))))
 
 (defn check
-  [{:block/keys [uuid marker content meta file dummy?] :as block}]
-  (let [new-content (string/replace-first content marker "DONE")]
-    (save-block-if-changed! block new-content)))
+  [{:block/keys [uuid marker content meta file dummy? repeated?] :as block}]
+  (let [new-content (string/replace-first content marker "DONE")
+        new-content (if repeated?
+                      (update-timestamps-content! block content)
+                      new-content)]
+    (save-block-if-changed! block new-content
+                            {:custom-properties (with-marker-time block "DONE")})))
 
 (defn uncheck
   [{:block/keys [uuid marker content meta file dummy?] :as block}]
-  (let [new-content (string/replace-first content "DONE"
-                                          (if (= :now (state/get-preferred-workflow))
-                                            "LATER"
-                                            "TODO"))]
-    (save-block-if-changed! block new-content)))
+  (let [marker (if (= :now (state/get-preferred-workflow))
+                 "LATER"
+                 "TODO")
+        new-content (string/replace-first content "DONE" marker)]
+    (save-block-if-changed! block new-content
+                            {:custom-properties (with-marker-time block marker)})))
 
 (defn cycle-todo!
   []
   (when-let [block (state/get-edit-block)]
     (let [edit-input-id (state/get-edit-input-id)
           content (state/get-edit-content)
-          new-content (->
-                       (cond
-                         (util/starts-with? content "TODO")
-                         (string/replace-first content "TODO" "DOING")
-                         (util/starts-with? content "DOING")
-                         (string/replace-first content "DOING" "DONE")
-                         (util/starts-with? content "LATER")
-                         (string/replace-first content "LATER" "NOW")
-                         (util/starts-with? content "NOW")
-                         (string/replace-first content "NOW" "DONE")
-                         (util/starts-with? content "DONE")
-                         (string/replace-first content "DONE" "")
-                         :else
-                         (str (if (= :now (state/get-preferred-workflow))
-                                "LATER "
-                                "TODO ") (string/triml content)))
-                       (string/triml))]
+          [new-content marker] (cond
+                                 (util/starts-with? content "TODO")
+                                 [(string/replace-first content "TODO" "DOING") "DOING"]
+                                 (util/starts-with? content "DOING")
+                                 [(string/replace-first content "DOING" "DONE") "DONE"]
+                                 (util/starts-with? content "LATER")
+                                 [(string/replace-first content "LATER" "NOW") "NOW"]
+                                 (util/starts-with? content "NOW")
+                                 [(string/replace-first content "NOW" "DONE") "DONE"]
+                                 (util/starts-with? content "DONE")
+                                 [(string/replace-first content "DONE" "") nil]
+                                 :else
+                                 (let [marker (if (= :now (state/get-preferred-workflow))
+                                                "LATER"
+                                                "TODO")]
+                                   [(str marker " " (string/triml content)) marker]))
+          new-content (string/triml new-content)
+          new-content (if marker
+                        (text/insert-property new-content (string/lower-case marker) (util/time-ms))
+                        new-content)]
       (state/set-edit-content! edit-input-id new-content))))
 
 (defn set-marker
-  [{:block/keys [uuid marker content meta file dummy?] :as block} new-marker]
+  [{:block/keys [uuid marker content meta file dummy? properties] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
-    (save-block-if-changed! block new-content)))
+    (save-block-if-changed! block new-content
+                            (with-marker-time block marker))))
 
 (defn set-priority
   [{:block/keys [uuid marker priority content meta file dummy?] :as block} new-priority]
@@ -969,6 +1016,43 @@
             (save-block-if-changed! block content
                                     {:custom-properties properties'
                                      :rebuild-content? false})))))))
+
+(defn set-block-timestamp!
+  [block-id key value]
+  (let [key (string/lower-case key)
+        scheduled? (= key "scheduled")
+        deadline? (= key "deadline")
+        block-id (if (string? block-id) (uuid block-id) block-id)
+        key (string/lower-case (str key))
+        value (str value)]
+    (when-let [block (db/pull [:block/uuid block-id])]
+      (let [{:block/keys [content scheduled deadline]} block
+            new-line (str (string/upper-case key) ": " value)
+            new-content (cond
+                          ;; update
+                          (or
+                           (and deadline deadline?)
+                           (and scheduled scheduled?))
+                          (let [lines (string/split-lines content)
+                                body (map (fn [line]
+                                            (if (string/starts-with? (string/lower-case line) key)
+                                              new-line
+                                              line))
+                                       (rest lines))]
+                            (->> (cons (first lines) body)
+                                 (string/join "\n")))
+
+                          ;; insert
+                          (or deadline? scheduled?)
+                          (let [[title body] (util/split-first "\n" content)]
+                            (str title "\n"
+                                 new-line
+                                 "\n" body))
+
+                          :else
+                          content)]
+        (when (not= content new-content)
+          (save-block-if-changed! block new-content))))))
 
 (defn copy-block-ref!
   [block-id]
@@ -1188,7 +1272,8 @@
   [{:keys [format block id repo dummy?] :as state} value]
   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
-    (let [new-value (block/with-levels value format block)]
+    (let [value (text/remove-level-spaces value format)
+          new-value (block/with-levels value format block)]
       (let [cache [(:block/uuid block) value]]
         (when (not= @*last-edit-block cache)
           (save-block-if-changed! block new-value)

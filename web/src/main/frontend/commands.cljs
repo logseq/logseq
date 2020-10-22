@@ -1,6 +1,7 @@
 (ns frontend.commands
   (:require [frontend.util :as util]
             [frontend.date :as date]
+            [frontend.text :as text]
             [frontend.state :as state]
             [frontend.search :as search]
             [clojure.string :as string]
@@ -97,6 +98,10 @@
      ["A" (->priority "A")]
      ["B" (->priority "B")]
      ["C" (->priority "C")]
+     ["Deadline" [[:editor/clear-current-slash]
+                  [:editor/show-date-picker]]]
+     ["Scheduled" [[:editor/clear-current-slash]
+                  [:editor/show-date-picker]]]
      ["Draw" [[:editor/input "/draw "]
               [:editor/show-input [{:command :draw
                                     :id :title
@@ -125,7 +130,7 @@
 
      ;; TODO:
      ;; ["Upload a file" nil]
-     ]
+]
     ;; Allow user to modify or extend, should specify how to extend.
     (get-in @state/state [:config (state/get-current-repo) :commands]))
    (remove nil?)
@@ -346,7 +351,10 @@
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
                                                  format/marker-pattern
-                                                 (str marker " ")))]
+                                                 (str marker " ")))
+            new-value (if (string/blank? marker)
+                        new-value
+                        (text/insert-property new-value marker (util/time-ms)))]
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] format]
