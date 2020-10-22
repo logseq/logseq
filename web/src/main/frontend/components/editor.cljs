@@ -476,11 +476,11 @@
                  (and
                   deleted
                   (contains?
-                   (set (keys editor-handler/autopair-map))
+                   (set (keys editor-handler/delete-map))
                    deleted)
                   (>= (count value) (inc current-pos))
                   (= (util/nth-safe value current-pos)
-                     (get editor-handler/autopair-map deleted)))
+                     (get editor-handler/delete-map deleted)))
 
                  (do
                    (util/stop e)
@@ -517,14 +517,14 @@
                                                    0)))))))}
         (fn [e key-code]
           (let [key (gobj/get e "key")
-                value (gobj/get input "value")]
+                value (gobj/get input "value")
+                pos (:pos (util/get-caret-pos input))]
             (cond
               (or
                (and (= key "#")
-                    (let [pos (:pos (util/get-caret-pos input))]
-                      (and
-                       (> pos 0)
-                       (= "#" (util/nth-safe value (dec pos))))))
+                    (and
+                     (> pos 0)
+                     (= "#" (util/nth-safe value (dec pos)))))
                (and (= key " ")
                     (state/get-editor-show-page-search-hashtag)))
               (state/set-editor-show-page-search-hashtag false)
@@ -569,6 +569,16 @@
                     (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
                   :else
                   nil))
+
+              (let [sym "$"]
+                (and (= key sym)
+                     (>= (count value) 1)
+                     (> pos 0)
+                     (= (nth value (dec pos)) sym)
+                     (if (> (count value) pos)
+                       (not= (nth value pos) sym)
+                       true)))
+              (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
               :else
               nil))))

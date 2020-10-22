@@ -70,8 +70,9 @@
   (let [fold? (get state ::fold?)]
     [:div
      [:div.flex.flex-row.items-center.mb-1
-      [:a.control {:on-click #(swap! fold? not)
-                   :style {:width "0.75rem"}}
+      [:a.control.opacity-50.hover:opacity-100
+       {:on-click #(swap! fold? not)
+        :style {:width "0.75rem"}}
        (when (seq l)
          (if @fold?
            svg/arrow-down-v2
@@ -89,7 +90,7 @@
 
 (rum/defc contents < rum/reactive db-mixins/query
   []
-  [:div.contents.flex-col.flex.ml-3.mt-2
+  [:div.contents.flex-col.flex.ml-3
    (when-let [contents (db/entity [:page/name "contents"])]
      (page/contents-page contents))])
 
@@ -164,7 +165,7 @@
   ([on-close]
    (close nil on-close))
   ([class on-close]
-   [:a.close.hover:text-gray-900.text-gray-500.flex.items-center
+   [:a.close.opacity-50.hover:opacity-100.flex.items-center
     (cond-> {:on-click on-close}
       class
       (assoc :class class))
@@ -180,12 +181,12 @@
          [:div.flex.flex-col
           [:div.flex.flex-row.justify-between
            [:div.flex.flex-row.justify-center
-            [:a.hover:text-gray-900.text-gray-500.flex.items-center.pr-1
+            [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
              {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
              (if collapse?
                (svg/caret-right)
                (svg/caret-down))]
-            [:div.ml-1.font-medium
+            [:div.ml-1
              title]]
            (close #(state/sidebar-remove-block! idx))]
           [:div {:class (if collapse? "hidden" "initial")}
@@ -236,12 +237,12 @@
                         :margin-right -17}}
           [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
            [:div.mr-4.text-sm
-            [:a {:on-click (fn [e]
+            [:a.right-sidebar-button {:on-click (fn [e]
                              (state/sidebar-add-block! repo "contents" :contents nil))}
              (t :right-side-bar/contents)]]
 
            [:div.mr-4.text-sm
-            [:a {:on-click (fn [_e]
+            [:a.right-sidebar-button {:on-click (fn [_e]
                              (state/sidebar-add-block! repo "recent" :recent nil))}
              (t :right-side-bar/recent)]]
 
@@ -251,7 +252,7 @@
                (t :all-pages)]])
 
            [:div.mr-4.text-sm
-            [:a {:on-click (fn []
+            [:a.right-sidebar-button {:on-click (fn []
                              (when-let [page (get-current-page)]
                                (state/sidebar-add-block!
                                 repo
@@ -262,14 +263,14 @@
 
            [:div.mr-4.text-sm
             (let [theme (if dark? "white" "dark")]
-              [:a {:title (t :right-side-bar/switch-theme theme)
+              [:a.right-sidebar-button {:title (t :right-side-bar/switch-theme theme)
                    :on-click (fn []
                                (state/set-theme! theme))}
                (t :right-side-bar/theme (t (keyword theme)))])]
 
            (when-not config/publishing?
              [:div.mr-4.text-sm
-              [:a {:on-click (fn [_e]
+              [:a.right-sidebar-button {:on-click (fn [_e]
                                (state/sidebar-add-block! repo "help" :help nil))}
                (t :right-side-bar/help)]])]
 
