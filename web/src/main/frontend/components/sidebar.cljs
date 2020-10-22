@@ -35,7 +35,7 @@
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
-  [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.text-gray-500.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
+  [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
    {:href href
     :on-click close-modal-fn}
    [:svg.mr-4.h-6.w-6.group-hover:text-gray-200.group-focus:text-gray-200.transition.ease-in-out.duration-150
@@ -270,14 +270,14 @@
       [:div {:class (if white? "white-theme" "dark-theme")
              :on-click (fn []
                          (editor-handler/unhighlight-block!))}
-       [:div.h-screen.flex.overflow-hidden.bg-base-3
+       [:div.h-screen.flex.overflow-hidden
         [:div.md:hidden
          [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
           {:class (if @open?
                     "opacity-75 pointer-events-auto"
                     "opacity-0 pointer-events-none")
            :on-click close-fn}]
-         [:div.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
+         [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
           {:class (if @open?
                     "translate-x-0"
                     "-translate-x-full")
@@ -298,7 +298,7 @@
           [:div.flex-1.h-0.overflow-y-auto
            (sidebar-nav route-match close-fn)]]]
         [:div.flex.flex-col.w-0.flex-1.overflow-hidden
-         [:div.relative.z-10.flex-shrink-0.flex.bg-base-3.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
+         [:div.relative.z-10.flex-shrink-0.flex.sm:bg-transparent.shadow.sm:shadow-none.h-16.sm:h-12#head
           [:button#left-menu.px-4.focus:outline-none.md:hidden.menu
            {:on-click (fn []
                         (open-fn)
@@ -319,7 +319,7 @@
 
             (when (and (not logged?)
                        (not config/publishing?))
-              [:a.text-sm.font-medium.login
+              [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100
                {:href "/login/github"
                 :on-click (fn []
                             (storage/remove :git/current-repo))}
@@ -331,7 +331,7 @@
              (widgets/repos true)]
 
             (when-let [project (and current-repo (state/get-current-project))]
-              [:a.opacity-50.hover:opacity-100.ml-4
+              [:a.opacity-70.hover:opacity-100.ml-4
                {:title (str (t :go-to) "/" project)
                 :href (str config/website "/" project)
                 :target "_blank"}
@@ -354,7 +354,7 @@
                   (if-let [avatar (:avatar me)]
                     [:img.h-7.w-7.rounded-full
                      {:src avatar}]
-                    [:div.h-7.w-7.rounded-full.bg-base-2 {:style {:padding 1.5}}
+                    [:div.h-7.w-7.rounded-full.bg-base-2.opacity-70.hover:opacity-100. {:style {:padding 1.5}}
                      [:a svg/user]])])
                (let [logged? (:name me)]
                  (->>
@@ -408,7 +408,7 @@
 
             [:a#download-as-html.hidden]
 
-            [:a.hover:text-gray-900.text-gray-500.ml-3.hidden.md:block
+            [:a.opacity-70.hover:opacity-100.ml-3.hidden.md:block
              {:on-click (fn []
                           (state/toggle-sidebar-open?!))}
              (svg/menu)]]]]

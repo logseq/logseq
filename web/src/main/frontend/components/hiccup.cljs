@@ -655,7 +655,7 @@
         control-show (util/react (rum/cursor *control-show? block-id))
         dark? (= "dark" (state/sub :ui/theme))
         heading? (= (get (:block/properties block) "heading") "true")]
-    [:div.hd-control.mr-2.flex.flex-row.items-center
+    [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top (if (and heading? (<= level 6))
                             (case level
@@ -667,7 +667,7 @@
                             0)
               :float "left"}}
 
-     [:a.block-control
+     [:a.block-control.opacity-50.hover:opacity-100
       {:id (str "control-" uuid)
        :style {:width 14
                :height 16

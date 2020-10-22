@@ -56,7 +56,7 @@
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
-     [:div.py-1.rounded-md.shadow-xs.bg-base-3
+     [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
       (for [{:keys [options title icon]} links]
         (let [new-options
@@ -400,7 +400,7 @@
      [:div.content
       [:div.flex-1.flex-row.foldable-title {:on-mouse-over #(reset! control? true)
                                             :on-mouse-out #(reset! control? false)}
-       [:div.hd-control.flex.flex-row.items-center
+       [:div.flex.flex-row.items-center
         [:a.block-control.opacity-50.hover:opacity-100.mr-2
          {:style {:width 14
                   :height 16
