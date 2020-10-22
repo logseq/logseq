@@ -73,11 +73,6 @@
                    (recur (t/plus result delta))))
         w1 (t/day-of-week datetime)
         w2 (t/day-of-week result)]
-    (reset! debug-data {:w1 w1
-          :w2 w2
-          :result result
-          :datetime datetime
-          :now now})
     (if (and keep-week? (not= w1 w2))
       ;; next week
       (if (> w2 w1)
