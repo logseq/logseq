@@ -1088,10 +1088,10 @@
                          (get properties "todo"))
              finish-time (get properties "done")]
          (when (and start-time finish-time (> finish-time start-time))
-           [:div.text-sm.absolute.spent-time {:style {:top 0
+           [:div.text-sm.absolute.time-spent {:style {:top 0
                                                       :right 0
-                                                      :z-index 4
-                                                      :background "#002B36"}
+                                                      :padding-left 2
+                                                      :z-index 4}
                                               :title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
             [:span.opacity-70
              (utils/timeConversion (- finish-time start-time))]])))]))
