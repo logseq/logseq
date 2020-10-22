@@ -481,7 +481,7 @@
                                                                :end-pos new-end-pos})
                                                             (block/parse-block block format))
                  block-retracted-attrs (when-not pre-block?
-                                         (let [id (:db/id block)]
+                                         (when-let [id (:db/id block)]
                                            [[:db/retract id :block/priority]
                                             [:db/retract id :block/deadline]
                                             [:db/retract id :block/deadline-ast]

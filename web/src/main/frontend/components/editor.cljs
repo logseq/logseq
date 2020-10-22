@@ -55,7 +55,7 @@
                      (let [command-steps (get (into {} matched) chosen)
                            restore-slash? (and
                                            (not (contains? (set (map first command-steps)) :editor/input))
-                                           (not (contains? #{"Date Picker" "Template"} chosen)))]
+                                           (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled"} chosen)))]
                        (editor-handler/insert-command! id command-steps
                                                        format
                                                        {:restore? restore-slash?})))

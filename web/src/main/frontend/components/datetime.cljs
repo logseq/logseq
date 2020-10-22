@@ -71,8 +71,8 @@
             (if (= (:label item) kind)
               (assoc item :selected "selected")
               item))
-          [{:label "+"}
-           {:label ".+"}
+          [{:label ".+"}
+           {:label "+"}
            {:label "++"}])
          (fn [value]
            (swap! *timestamp assoc-in [:repeater :kind] value)))
@@ -112,15 +112,17 @@
      [:p.mt-4
       (ui/button "Submit"
         :on-click (fn [e]
-                    (if-let [block (state/get-timestamp-block)]
-                      (do
-                        (let [{:keys [block typ show?]} block]
-                         (editor-handler/set-block-timestamp! (:block/uuid block)
-                                                              typ
-                                                              text)
-                         (reset! show? false)))
-                      (when-let [input-id (state/get-edit-input-id)]
-                       (commands/simple-insert! input-id text nil)))
+                    (let [block-data (state/get-timestamp-block)]
+                      (let [{:keys [block typ show?]} block-data
+                            block-id (or (:block/uuid (state/get-edit-block))
+                                         (:block/uuid block))
+                            typ (or typ @commands/*current-command)]
+                        (editor-handler/set-block-timestamp! block-id
+                                                             typ
+                                                             text)
+                        (state/clear-edit!)
+                        (when show?
+                          (reset! show? false))))
                     (clear-timestamp!)
                     (state/set-editor-show-date-picker false)))]]))
 

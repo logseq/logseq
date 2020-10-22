@@ -46,7 +46,7 @@
           (when (seq scheduled-or-deadlines)
             (ui/foldable
              [:h2.font-bold.opacity-50 (let []
-                                         "Scheduled AND Deadline")]
+                                         "SCHEDULED AND DEADLINE")]
              [:div.references-blocks.mb-6
               (let [ref-hiccup (hiccup/->hiccup scheduled-or-deadlines
                                                 {:id (str encoded-page-name "-agenda")

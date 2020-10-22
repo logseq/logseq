@@ -97,9 +97,9 @@
      ["A" (->priority "A")]
      ["B" (->priority "B")]
      ["C" (->priority "C")]
-     ["Deadline" [[:editor/input "DEADLINE: "]
+     ["Deadline" [[:editor/clear-current-slash]
                   [:editor/show-date-picker]]]
-     ["Scheduled" [[:editor/input "SCHEDULED: "]
+     ["Scheduled" [[:editor/clear-current-slash]
                   [:editor/show-date-picker]]]
      ["Draw" [[:editor/input "/draw "]
               [:editor/show-input [{:command :draw

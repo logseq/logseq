@@ -65,6 +65,26 @@
                     ""
                     (str " " time-repeater))))))
 
+(defn- repeat-until-future-timestamp
+  [datetime now delta keep-week?]
+  (let [result (loop [result datetime]
+                 (if (t/after? result now)
+                   result
+                   (recur (t/plus result delta))))
+        w1 (t/day-of-week datetime)
+        w2 (t/day-of-week result)]
+    (reset! debug-data {:w1 w1
+          :w2 w2
+          :result result
+          :datetime datetime
+          :now now})
+    (if (and keep-week? (not= w1 w2))
+      ;; next week
+      (if (> w2 w1)
+        (t/plus result (t/days (- 7 (- w2 w1))))
+        (t/plus result (t/days (- w1 w2))))
+      result)))
+
 ;; Fro https://www.reddit.com/r/orgmode/comments/hr2ytg/difference_between_the_repeaters_orgzly/fy2izqx?utm_source=share&utm_medium=web2x&context=3
 ;; I use these repeaters for habit tracking and it can get a little tricky to keep track. This is my short form understanding:
 ;; ".+X" = repeat in X d/w/m from the last time I marked it done
@@ -79,29 +99,15 @@
         [duration-f _] (get-duration-f-and-text duration)
         delta (duration-f num)
         today (date/get-local-date)
-        [year month day hour min] (cond
-                                    (or (string/blank? kind)
-                                        (= kind "Plus"))
-                                    [year month day hour min]
-
-                                    ;; FIXME: check hour and min, find the nearest time which is after the previous time.
-                                    (and
-                                     (= kind "Dotted")
-                                     (t/after? (tl/local-now) (t/local-date-time year month day hour min)))
-                                    [(:year today) (:month today) (:day today) hour min]
-
-                                    :else ; FIXME: DoublePlus
-                                    (if (t/before? (t/local-date year month day)
-                                                   (t/local-date (:year today)
-                                                                 (:month today)
-                                                                 (:day today)))
-                                      (let [{:keys [year month day hour minute]} today]
-                                        [year month day hour minute])
-                                      [year month day hour min]))
         start-time (t/local-date-time year month day hour min)
-        start-time' (if (and (= kind "Dotted")
-                             (t/before? (tl/local-now) start-time))
-                      start-time
+        start-time' (if (or (= kind "Dotted")
+                            (= kind "DoublePlus"))
+                      (if (t/before? (tl/local-now) start-time)
+                        start-time
+
+                        ;; Repeatedly add delta to make it a future timestamp
+                        (repeat-until-future-timestamp start-time (tl/local-now) delta
+                                                       (= kind "DoublePlus")))
                       (t/plus start-time delta))]
     (timestamp->text timestamp start-time')))
 
