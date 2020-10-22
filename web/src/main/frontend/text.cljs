@@ -11,7 +11,8 @@
     (let [pattern (util/format
                    "^[%s]+\\s?"
                    (config/get-block-pattern format))]
-      (string/replace-first text (re-pattern pattern) ""))))
+      (string/replace-first text (re-pattern pattern) ""))
+    ""))
 
 (defn append-newline-after-level-spaces
   [text format]

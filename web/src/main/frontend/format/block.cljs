@@ -223,8 +223,10 @@
               (cond
                 (paragraph-timestamp-block? block)
                 (let [timestamps (extract-timestamps block)
-                      timestamps' (merge timestamps timestamps)]
-                  (recur block-refs headings block-body (rest blocks) timestamps' properties last-pos last-level children))
+                      timestamps' (merge timestamps timestamps)
+                      other-body (->> (remove timestamp-block? (second block))
+                                      (drop-while #(= ["Break_Line"] %)))]
+                  (recur block-refs headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
                 (properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]

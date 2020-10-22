@@ -387,7 +387,8 @@
     value
     {:keys [indent-left? custom-properties rebuild-content?]
      :or {rebuild-content? true}}]
-   (let [repo (or repo (state/get-current-repo))
+   (let [value value
+         repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (assoc (with-block-meta repo block)
                       :block/properties (:block/properties e))
@@ -488,6 +489,7 @@
                                             [:db/retract id :block/scheduled]
                                             [:db/retract id :block/scheduled-ast]
                                             [:db/retract id :block/marker]
+                                            [:db/retract id :block/tags]
                                             [:db/retract id :block/repeated?]]))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
@@ -577,6 +579,7 @@
               (str (config/default-empty-block format v2-level) " " v2)
               format))
         block (with-block-meta repo block)
+        original-id (:block/uuid block)
         format (:block/format block)
         page (db/entity repo (:db/id page))
         file (db/entity repo (:db/id file))
@@ -587,7 +590,16 @@
                              value (text/re-construct-block-properties block value properties)
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
-                             {:keys [blocks pages start-pos end-pos]} (block/parse-block (assoc block :block/content value) format)
+                             parse-result (block/parse-block (assoc block :block/content value) format)
+                             id-conflict? (some #(= original-id (:block/uuid %)) (next (:blocks parse-result)))
+                             {:keys [blocks pages start-pos end-pos]}
+                             (if id-conflict?
+                               (let [new-value (string/replace
+                                                value
+                                                (re-pattern (str "(?i):custom_id: " original-id))
+                                                "")]
+                                 (block/parse-block (assoc block :block/content new-value) format))
+                               parse-result)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
                              transact-fn (fn []
                                            (repo-handler/transact-react-and-alter-file!
@@ -1247,7 +1259,8 @@
   [{:keys [format block id repo dummy?] :as state} value]
   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
-    (let [new-value (block/with-levels value format block)]
+    (let [value (text/remove-level-spaces value format)
+          new-value (block/with-levels value format block)]
       (let [cache [(:block/uuid block) value]]
         (when (not= @*last-edit-block cache)
           (save-block-if-changed! block new-value)
