@@ -39,8 +39,8 @@ export var focus = function( elem ) {
 
 // copied from https://stackoverflow.com/a/32180863
 export var timeConversion = function (millisec) {
-  var seconds = (millisec / 1000).toFixed(1);
-  var minutes = (millisec / (1000 * 60)).toFixed(1);
+  var seconds = (millisec / 1000).toFixed(0);
+  var minutes = (millisec / (1000 * 60)).toFixed(0);
   var hours = (millisec / (1000 * 60 * 60)).toFixed(1);
   var days = (millisec / (1000 * 60 * 60 * 24)).toFixed(1);
 
