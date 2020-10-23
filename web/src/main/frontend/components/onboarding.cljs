@@ -132,9 +132,9 @@
          {}
          (t :on-boarding/our-blog)
          [:a
-          {:href "https://logseq.com/blog"
+          {:href "https://logseq.github.io/"
            :target "_blank"}
-          "https://logseq.com/blog"]]]
+          "https://logseq.github.io/"]]]
        [:h2 (t :on-boarding/credits-to)]
        [:ul
         {}
@@ -203,7 +203,7 @@
             :target "_blank"}
         (t :help/feature)]]
       [:li
-       [:a {:href "/blog/changelog"
+       [:a {:href "https://logseq.github.io/page/changelog"
             :target "_blank"}
         (t :help/changelog)]]
       [:li
