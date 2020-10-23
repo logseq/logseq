@@ -1058,9 +1058,7 @@
                           content)]
         (when (not= content new-content)
           (if-let [input-id (state/get-edit-input-id)]
-            (do
-              (prn {:input-id input-id})
-              (state/set-edit-content! input-id new-content))
+            (state/set-edit-content! input-id new-content)
             (save-block-if-changed! block new-content)))))))
 
 (defn copy-block-ref!
