@@ -37,6 +37,8 @@
              {:entries [frontend.extensions.code]
               :depends-on #{:main}}}
 
+   :release {:asset-path "https://asset.logseq.com/static/js"}
+
    :output-dir "../resources/static/js/publishing"
    :asset-path "/static/js"
 
