@@ -84,7 +84,7 @@
       [:a.text-sm {:on-click (fn []
                                (reset! *show-repeater? true)
                                (swap! *timestamp assoc :repeater
-                                      {:kind "+"
+                                      {:kind ".+"
                                        :num 1
                                        :duration "h"}))}
        "Add repeater"])))
