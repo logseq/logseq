@@ -205,7 +205,7 @@
                       ;; enable scroll
                       (let [main (d/by-id "main-content")]
                         (d/remove-class! main "overflow-hidden")
-                        (d/add-class! main "overflow-y-scroll"))
+                        (d/set-style! main "overflow-y" "scroll"))
                       (if-not (state/get-selection-start-block)
                         (editor-handler/clear-selection! e)
                         (state/set-selection-start-block! nil))))
@@ -413,7 +413,8 @@
                           (state/toggle-sidebar-open?!))}
              (svg/menu)]]]]
 
-         [:div#main-content.flex.wrapper.overflow-y-scroll {:style {:height "100vh"}}
+         [:div#main-content.flex.wrapper {:style {:height "100vh"
+                                                  :overflow-y "scroll"}}
           (when-not config/mobile?
             [:div#sidebar-nav-wrapper.flex-col.pt-4
              {:style {:flex (if (state/get-left-sidebar-open)
