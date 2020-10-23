@@ -112,6 +112,7 @@
      [:p.mt-4
       (ui/button "Submit"
         :on-click (fn [e]
+                    (util/stop e)
                     (let [block-data (state/get-timestamp-block)]
                       (let [{:keys [block typ show?]} block-data
                             block-id (or (:block/uuid (state/get-edit-block))

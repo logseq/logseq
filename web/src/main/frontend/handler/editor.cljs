@@ -1026,7 +1026,10 @@
         key (string/lower-case (str key))
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
-      (let [{:block/keys [content scheduled deadline]} block
+      (let [{:block/keys [content scheduled deadline format]} block
+            content (or (when-let [edit-content (state/get-edit-content)]
+                          (block/with-levels edit-content format block))
+                        content)
             new-line (str (string/upper-case key) ": " value)
             new-content (cond
                           ;; update
@@ -1044,15 +1047,21 @@
 
                           ;; insert
                           (or deadline? scheduled?)
-                          (let [[title body] (util/split-first "\n" content)]
+                          (let [[title body] (if (string/includes? content "\n")
+                                               (util/split-first "\n" content)
+                                               [content ""])]
                             (str title "\n"
                                  new-line
-                                 "\n" body))
+                                 "\n" (util/trim-only-newlines body)))
 
                           :else
                           content)]
         (when (not= content new-content)
-          (save-block-if-changed! block new-content))))))
+          (if-let [input-id (state/get-edit-input-id)]
+            (do
+              (prn {:input-id input-id})
+              (state/set-edit-content! input-id new-content))
+            (save-block-if-changed! block new-content)))))))
 
 (defn copy-block-ref!
   [block-id]
