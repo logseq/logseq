@@ -820,6 +820,7 @@
   []
   (when-let [block (state/get-edit-block)]
     (let [edit-input-id (state/get-edit-input-id)
+          current-input (gdom/getElement edit-input-id)
           content (state/get-edit-content)
           [new-content marker] (cond
                                  (util/starts-with? content "TODO")
@@ -841,7 +842,10 @@
           new-content (if marker
                         (text/insert-property new-content (string/lower-case marker) (util/time-ms))
                         new-content)]
-      (state/set-edit-content! edit-input-id new-content))))
+      (let [new-pos (commands/compute-pos-delta-when-change-marker
+                     current-input content new-content marker (util/get-input-pos current-input))]
+        (state/set-edit-content! edit-input-id new-content)
+        (util/set-caret-pos! current-input new-pos)))))
 
 (defn set-marker
   [{:block/keys [uuid marker content meta file dummy? properties] :as block} new-marker]

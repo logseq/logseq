@@ -120,3 +120,13 @@
               body (drop-while properties? properties-and-body)]
           (->> (concat title-lines new-properties body)
                (string/join "\n")))))))
+
+;; FIXME:
+(defn get-properties-text
+  [text]
+  (let [start (or (string/index-of text ":PROPERTIES:")
+                  (string/index-of text ":properties:"))
+        end (or (string/index-of text ":END:")
+                (string/index-of text ":end:"))]
+    (when (and start end)
+      (subs text start (+ end 5)))))

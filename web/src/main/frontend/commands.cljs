@@ -335,6 +335,28 @@
                                                new-value
                                                (count prefix))))))
 
+(defn compute-pos-delta-when-change-marker
+  [current-input edit-content new-value marker pos]
+  (let [old-marker (first (re-find format/bare-marker-pattern edit-content))
+        pos-delta (- (count marker)
+                     (count old-marker))
+        pos-delta (if (string/blank? old-marker)
+                    (inc pos-delta)
+                    pos-delta)
+        cursor-after-properties? (or (string/includes? (subs edit-content 0 pos) ":PROPERTIES:")
+                                     (string/includes? (subs edit-content 0 pos) ":properties:"))
+        properties-delta (if cursor-after-properties?
+                           (- (count (text/get-properties-text new-value))
+                              (count (text/get-properties-text edit-content)))
+                           0)]
+    ;; (prn {:old-marker old-marker
+    ;;       :new-marker marker
+    ;;       :pos pos
+    ;;       :pos-delta pos-delta
+    ;;       :properties-delta properties-delta
+    ;;       :new-pos (dec (+ pos pos-delta properties-delta))})
+    (+ pos pos-delta properties-delta)))
+
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
@@ -355,7 +377,11 @@
             new-value (if (string/blank? marker)
                         new-value
                         (text/insert-property new-value marker (util/time-ms)))]
-        (state/set-edit-content! input-id new-value)))))
+        (state/set-edit-content! input-id new-value)
+        (let [new-pos (compute-pos-delta-when-change-marker
+                       current-input edit-content new-value marker (dec slash-pos))]
+          ;; TODO: any performance issue?
+          (js/setTimeout #(util/set-caret-pos! current-input new-pos) 10))))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] format]
   (when-let [input-id (state/get-edit-input-id)]
