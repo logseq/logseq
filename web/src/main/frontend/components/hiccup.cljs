@@ -943,8 +943,7 @@
 
 (rum/defc properties-cp
   [block]
-  (let [properties (apply dissoc (:block/properties block) text/hidden-properties)
-        properties (apply dissoc properties config/markers)]
+  (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
     (when (seq properties)
       [:div.text-sm.opacity-80.my-1.bg-base-4.p-2
        (for [[k v] properties]

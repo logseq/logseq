@@ -838,10 +838,7 @@
                                                 "LATER"
                                                 "TODO")]
                                    [(str marker " " (string/triml content)) marker]))
-          new-content (string/triml new-content)
-          new-content (if marker
-                        (text/insert-property new-content (string/lower-case marker) (util/time-ms))
-                        new-content)]
+          new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
                      current-input content new-content marker (util/get-input-pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
@@ -1284,10 +1281,19 @@
   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
     (let [value (text/remove-level-spaces value format true)
-          new-value (block/with-levels value format block)]
+          new-value (block/with-levels value format block)
+          new-marker (first (re-find format/bare-marker-pattern value))
+          new-marker (if new-marker (string/lower-case (string/trim new-marker)))
+          properties (into {} (:block/properties block))
+          properties (if (and
+                          new-marker
+                          (not= new-marker (:block/marker block)))
+                       (assoc properties new-marker (util/time-ms))
+                       properties)]
       (let [cache [(:block/uuid block) value]]
         (when (not= @*last-edit-block cache)
-          (save-block-if-changed! block new-value)
+          (save-block-if-changed! block new-value
+                                  {:custom-properties properties})
           (reset! *last-edit-block cache))))))
 
 (defn on-up-down
