@@ -6,13 +6,17 @@
             [frontend.db :as db]))
 
 (defn remove-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?"
-                   (config/get-block-pattern format))]
-      (string/replace-first text (re-pattern pattern) ""))
-    ""))
+  ([text format]
+   (remove-level-spaces text format false))
+  ([text format space?]
+   (if-not (string/blank? text)
+     (let [pattern (util/format
+                    (if space?
+                      "^[%s]+\\s+"
+                      "^[%s]+\\s?")
+                    (config/get-block-pattern format))]
+       (string/replace-first text (re-pattern pattern) ""))
+     "")))
 
 (defn append-newline-after-level-spaces
   [text format]

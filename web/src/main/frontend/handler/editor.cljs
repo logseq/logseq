@@ -1283,7 +1283,7 @@
   [{:keys [format block id repo dummy?] :as state} value]
   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
-    (let [value (text/remove-level-spaces value format)
+    (let [value (text/remove-level-spaces value format true)
           new-value (block/with-levels value format block)]
       (let [cache [(:block/uuid block) value]]
         (when (not= @*last-edit-block cache)
