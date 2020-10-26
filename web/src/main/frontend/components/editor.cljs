@@ -328,7 +328,7 @@
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left]}]
-  [:div.absolute.rounded-md.shadow-lg
+  [:div.absolute.rounded-md.shadow-lg.absolute-modal
    {:style (merge
             {:top (+ top 24)
              :max-height 600
