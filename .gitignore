@@ -23,6 +23,7 @@ node_modules/
 /resources/static/style.css
 /resources/static/js/publishing/code-editor.js
 /resources/static/js/code-editor.js
+/resources/static/js/publishing
 
 .cpcache/
 /target
