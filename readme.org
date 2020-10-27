@@ -15,7 +15,14 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
 
 **** [[https://nodejs.org/en/][Node.js]]
 
-*** 2. Add environment variables
+*** 2. Creating a GitHub app:
+    Follow this step: https://docs.github.com/en/free-pro-team@latest/developers/apps/creating-a-github-app.
+    The ~User authorization callback URL~ should be:
+    http://localhost:3000/auth/github
+
+    Remember to download the ~private-key.pem~ which will be used for the next step.
+
+*** 3. Add environment variables
        #+BEGIN_SRC sh
          export ENVIRONMENT="dev"
          export JWT_SECRET="4fa183cf1d28460498b13330835e80ab"
@@ -28,16 +35,16 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
          export GITHUB_APP_PEM="/your-code-directory/your-app.private-key.pem"
        #+END_SRC
 
-*** 3. Start the clojure server
+*** 4. Start the clojure server
     #+BEGIN_SRC sh
-      # 1. cd resources
+      cd resources
       # 1. Download jar
       wget https://github.com/logseq/logseq-internal/releases/download/0.0.4.1/logseq.jar
       # 2. run jar
       java -Duser.timezone=UTC -jar logseq.jar
     #+END_SRC
 
-*** 4. Compile javascript
+*** 5. Compile javascript
     #+BEGIN_SRC sh
       cd web
       yarn
