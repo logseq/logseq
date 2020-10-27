@@ -37,11 +37,13 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
 
 *** 4. Start the clojure server
     #+BEGIN_SRC sh
+      cd resources
+
       # 1. Download jar
-      Go to https://github.com/logseq/logseq-internal/releases and download the logseq.jar.
+      Go to https://github.com/logseq/logseq-internal/releases, download the logseq.jar and move it to the "resources" directory.
 
       # 2. run jar
-      cd resources && java -Duser.timezone=UTC -jar logseq.jar
+      java -Duser.timezone=UTC -jar logseq.jar
     #+END_SRC
 
 *** 5. Compile javascript
