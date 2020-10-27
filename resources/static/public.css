@@ -1,0 +1,182 @@
+/* Copied from https://tonsky.me/, should change this asap */
+* {
+  -moz-box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+@font-face { font-family: 'body';                     src: url('/static/fonts/IBMPlexSans-Text.woff') format('woff'); }
+@font-face { font-family: 'body'; font-style: italic; src: url('/static/fonts/IBMPlexSans-TextItalic.woff') format('woff'); }
+@font-face { font-family: 'body'; font-weight: 800;   src: url('/static/fonts/IBMPlexSans-Bold.woff') format('woff'); }
+
+@font-face { font-family: 'mono';                     src: url('/static/fonts/IBMPlexMono-Text-Latin1.woff') format('woff'); }
+
+body { font: 18px/28px body, sans-serif; }
+pre, code { font-family: mono, monospace; }
+
+body {
+  color: #000;
+  -webkit-font-feature-settings: "kern" 1,"liga" 1,"calt" 1;
+  -moz-font-feature-settings: "kern" 1,"liga" 1,"calt" 1;
+  font-feature-settings: "kern" 1,"liga" 1,"calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  margin: 50px auto;
+}
+.pub-page { max-width: 700px; margin: 0 auto; padding: 0 24px; overflow-x: hidden; }
+
+.spacer { flex-grow: 1; }
+
+.starred { margin: 0 0.5em 0 -1.5em; }
+
+.post { margin: 0 auto;
+        position: relative;
+      }
+
+a { color: inherit; text-decoration: none; border-bottom: 2px solid rgba(0,0,0,0.2); }
+
+a.page-ref {border-bottom: 2px solid #93c763; }
+a:hover { border-color: currentColor; }
+p, blockquote { margin: 15px 0; }
+h1 + p + blockquote { margin-bottom: 30px; margin-right: 1em; }
+blockquote { padding-left: 1em; color: rgba(0,0,0,0.55); }
+blockquote::before {content: "> "; float: left; margin: 0 0 0 -1em; }
+
+.quote-author { text-align: right; font-size: 15px; }
+strong { font-weight: 700; }
+h1, h2 { margin: 2.5em 0 0.5em; }
+h1 { font-size: 1.7em; }
+h2 { font-size: 1.4em; }
+h1 + h2 { margin: -0.75em 0 0.9em; }
+.title { font-size: 2.5em; line-height: 50px; margin: 1.5em 0 0.75em 0; }
+
+p > img, .fig, figure { margin: 2em 0; }
+img { max-width: 100%; }
+
+.fig, figure { text-align: center; font-size: 12px; line-height: 20px; font-style: italic; }
+@media (min-width: 600px) {
+  .fig, figure { width: 600px; margin-left: -28px; margin-right: -28px; }
+}
+.fig img, figure > img, figure > video, figure > a > img { margin: 0 auto 1em; display: block; border-radius: 3px; }
+figure > video { max-width: 100%; }
+.label { text-align: center; font-size: 12px; font-style: italic; margin: -1em 0 1em 0; }
+
+code { font-style: normal; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-size: 17px; white-space: nowrap; }
+pre { font-size: 16px;
+      background: rgba(0,0,0,0.06);
+      padding: 16px 30px 14px;
+      margin: 1em -30px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-style: normal; }
+pre > code { background: none; padding: 0; font-size: inherit; white-space: unset; }
+
+ul { padding: 0 0 0 1em; list-style-type: square; }
+ul > li, ol > li { margin: 0.5em 0; }
+
+sup, sub, .note-ref, .note-number { vertical-align: baseline; position: relative; font-size: .7em; line-height: 1; }
+sup, .note-ref, .note-number { bottom: 1.4ex; }
+sub { top: .5ex; }
+
+.btn-subscribe { line-height: 20px; text-decoration: none; background: rgba(0,0,0,0.1); border: none; font-size: 12px; padding: 0px 7px; display: inline-block; border-radius: 4px; position: relative; top: -1px; margin-top: 6px;}
+.btn-subscribe:hover { background: rgba(0,0,0,0.2); }
+.btn-subscribe > svg { width: 21px; height: 21px; vertical-align: bottom; margin: 0 -2px 0 -5px; }
+
+.footnote { margin: 0 5px;  }
+.footnotes-br { width: 100px; height: 2px; background: #000000; margin-top: 5em; }
+.footnotes > ol { padding-left: 1em;  }
+
+.notes { font-size: 0.8em; }
+.note-number { margin-left: -1em; }
+
+.date { color: rgba(0,0,0,0.55); font-size: 14px; margin-left: 6px; }
+
+.footer{ color: rgba(0,0,0,0.55); }
+.footer { font-size: 16px; margin-bottom: 5em; }
+.footer > .separator { margin: 0 4px; }
+.footer > a { margin-right: 5px; }
+.footer > a:hover { color: #000; }
+
+.hoverable { object-fit: cover; object-position: center top; }
+.hoverable.clicked { object-position: center bottom; }
+
+@media (hover: hover) {
+  .hoverable.clicked:hover { object-fit: cover; object-position: center top; }
+  .hoverable:hover { object-position: center bottom; }
+}
+
+img.avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin-top: 0px;
+    margin-bottom: 0px;
+    margin-left: 6px;
+}
+
+img.avatar-bigger {
+    width: 96px;
+    height: 96px;
+}
+
+.flex {
+    display: flex;
+}
+
+.flex-1 {
+    display: flex;
+    flex: 1;
+}
+
+.row {
+    flex-direction: row;
+}
+
+.space-between {
+    justify-content: space-between;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.project-card .title {
+    margin-top: 0em;
+    margin-bottom: 0em;
+}
+
+.project-card {
+    margin-top: 6em;
+    margin-bottom: 2em;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+    .project-card {
+        margin-top: 1em;
+    }
+}
+
+.description {
+    font-size: 90%;
+    opacity: 0.7;
+    margin-left: 4px;
+}
+
+p {
+    overflow-wrap: break-word;
+}
+
+a.back, a.avatar {
+    border-bottom: none;
+}
+
+a.back {
+    opacity: 0.5;
+}
+
+a.back:hover {
+    opacity: 1;
+}

@@ -11,7 +11,7 @@
              {:entries [frontend.extensions.code]
               :depends-on #{:main}}}
 
-   :output-dir "../resources/static/js"
+   :output-dir "./resources/static/js"
    :asset-path "/static/js"
    :release {:asset-path "https://asset.logseq.com/static/js"}
    :compiler-options {:infer-externs :auto
