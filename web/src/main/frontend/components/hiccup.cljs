@@ -453,7 +453,7 @@
         ["Search" s]
         (cond
           ;; image
-          (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) s)) img-formats)
+          (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) s)) img-formats)
           (image-link config url s label)
 
           (= \# (first s))
@@ -478,7 +478,7 @@
                              "file"))]
           (cond
             (= protocol "file")
-            (if (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
+            (if (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
               (image-link config url href label)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
@@ -501,7 +501,7 @@
                    (map-inline config label)))))
 
             ;; image
-            (some (fn [fmt] (re-find (re-pattern (str "\\." fmt)) href)) img-formats)
+            (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
             (image-link config url href label)
 
             :else
