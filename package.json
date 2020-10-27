@@ -19,7 +19,7 @@
         "release-app": "clojure -A:cljs release app",
         "debug": "clojure -A:cljs release app --debug",
         "report": "clojure -A:cljs run shadow.cljs.build-report app report.html",
-        "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ./resources/static/js/compiled; /usr/bin/rm -rf ./resources/static/js/cljs-runtime; /usr/bin/rm -rf ./resources/static/js/publishing/cljs-runtime;"
+        "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ./resources/static/js/compiled; /usr/bin/rm -rf ./resources/static/js/cljs-runtime; /usr/bin/rm -rf ./resources/static/js/publishing; /usr/bin/rm -rf ./resources/static/js/main.js;"
     },
     "dependencies": {
         "codemirror": "^5.58.1",
