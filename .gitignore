@@ -23,7 +23,6 @@ node_modules/
 /resources/static/style.css
 /resources/static/js/publishing/code-editor.js
 /resources/static/js/code-editor.js
-tauri-release/
 
 .cpcache/
 /target
@@ -43,4 +42,3 @@ strings.csv
 resources/static/style.css
 
 .calva
-web/.calva
