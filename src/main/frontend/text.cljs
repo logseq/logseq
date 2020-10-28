@@ -47,10 +47,17 @@
   (let [lines (string/split-lines content)
         [title-lines properties-and-body] (split-with (fn [l] (not (string/starts-with? (string/upper-case (string/triml l)) ":PROPERTIES:"))) lines)
         body (drop-while (fn [l]
-                           (or
-                            (string/starts-with? (string/triml l) ":") ; kv
-                            (string/starts-with? (string/upper-case (string/triml l)) ":end:")))
-                         properties-and-body)]
+                           (let [l' (string/lower-case (string/trim l))]
+                             (and (string/starts-with? l' ":")
+                                  (not (string/starts-with? l' ":end:")))))
+                         properties-and-body)
+        body (if (and (seq body)
+                      (string/starts-with? (string/lower-case (string/triml (first body))) ":end:"))
+               (let [line (string/replace (first body) #"(?i):end:\s?" "")]
+                 (if (string/blank? line)
+                   (rest body)
+                   (cons line (rest body))))
+               body)]
     (->> (concat title-lines body)
          (string/join "\n"))))
 
