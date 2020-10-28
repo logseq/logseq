@@ -322,7 +322,7 @@
           [:div "loading ..."]
 
           :else                       ; other text formats
-          [:pre.cursor.content
+          [:pre.cursor.content.pre-white-space
            {:id id
             :on-click on-click}
            (if (string/blank? content)

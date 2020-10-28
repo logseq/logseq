@@ -613,11 +613,6 @@ hr {
     border-color: var(--ls-border-color);
 }
 
-#search-wrapper {
-    margin-top: 5px;
-    height: 2.5em;
-}
-
 #search-wrapper svg {
     color: #9fa6b2;
     color: var(--ls-search-icon-color);

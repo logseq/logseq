@@ -227,23 +227,23 @@
                            :align-items "center"
                            ;; This element should be the upper-most in most situations
                            :z-index 99999999}}
-   [:button
+   [:button.bottom-action
     {:style {:padding "5px"}
      :on-click #(editor-handler/adjust-block-level! parent-state :right)}
     svg/indent-block]
-   [:button
+   [:button.bottom-action
     {:style {:padding "5px"}
      :on-click #(editor-handler/adjust-block-level! parent-state :left)}
     svg/outdent-block]
-   [:button
+   [:button.bottom-action
     {:style {:padding "5px"}
      :on-click #(editor-handler/move-up-down parent-state % true)}
     svg/move-up-block]
-   [:button
+   [:button.bottom-action
     {:style {:padding "5px"}
      :on-click #(editor-handler/move-up-down parent-state % false)}
     svg/move-down-block]
-   [:button
+   [:button.bottom-action
     {:style {:padding "5px"}
      :on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
@@ -251,7 +251,7 @@
                    (state/set-state! :editor/content {parent-id new-content}))
                  (.stopPropagation e))}
     svg/multi-line-input]
-   [:button
+   [:button.font-extrabold.bottom-action.-mt-1
     {:style {:padding "5px"}
      :on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
@@ -259,7 +259,7 @@
                    (state/set-state! :editor/content {parent-id new-content}))
                  (.stopPropagation e))}
     "[[]]"]
-   [:button
+   [:button.font-extrabold.bottom-action.-mt-1
     {:style {:padding "5px"}
      :on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
@@ -643,14 +643,16 @@
                       state
                       :on-hide
                       (fn [state e event]
-                        (let [{:keys [on-hide format value block id repo dummy?]} (get-state state)]
-                          (when on-hide
-                            (on-hide value event))
-                          (when
-                              (or (= event :esc)
-                                  (and (= event :click)
-                                       (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
-                            (state/clear-edit!))))
+                        (let [target (.-target e)]
+                          (when-not (d/has-class? target "bottom-action")
+                            (let [{:keys [on-hide format value block id repo dummy?]} (get-state state)]
+                             (when on-hide
+                               (on-hide value event))
+                             (when
+                                 (or (= event :esc)
+                                     (and (= event :click)
+                                          (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
+                               (state/clear-edit!))))))
                       :node (gdom/getElement id)))
                    100)
 
