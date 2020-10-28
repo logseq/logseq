@@ -1,5 +1,5 @@
 (ns frontend.publishing.html
-  (:require-macros [hiccups.core :as hiccups])
+  (:require-macros [hiccups.core])
   (:require [frontend.config :as config]
             [frontend.state :as state]))
 
@@ -9,7 +9,7 @@
         icon (or icon "/static/img/logo.png")
         project (or alias name)]
     (str "<!DOCTYPE html>\n"
-         (hiccups/html
+         (hiccups.core/html
            [:head
             [:meta {:charset "utf-8"}]
             [:meta
