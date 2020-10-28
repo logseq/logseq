@@ -181,33 +181,29 @@
 (rum/defc date-picker < rum/reactive
   (mixins/event-mixin
    (fn [state]
-     (let [{:keys [on-change on-switch]}(last (:rum/args state))]
+     (let [{:keys [on-change on-switch deadline-or-schedule?]} (last (:rum/args state))]
        (mixins/on-key-down
        state
        {;; enter, current day
         13 (fn [state e]
              (when on-change
-               (when-not (util/input? (gobj/get e "target"))
+               (when-not deadline-or-schedule?
                  (on-change e @*internal-model))))
 
         ;; left, previous day
         37 (fn [state e]
-             (when-not (util/input? (gobj/get e "target"))
-               (swap! *internal-model inc-date -1)))
+             (swap! *internal-model inc-date -1))
 
         ;; right, next day
         39 (fn [state e]
-             (when-not (util/input? (gobj/get e "target"))
-               (swap! *internal-model inc-date 1)))
+             (swap! *internal-model inc-date 1))
 
         ;; up, one week ago
         38 (fn [state e]
-             (when-not (util/input? (gobj/get e "target"))
-               (swap! *internal-model inc-week -1)))
+             (swap! *internal-model inc-week -1))
         ;; down, next week
         40 (fn [state e]
-             (when-not (util/input? (gobj/get e "target"))
-               (swap! *internal-model inc-week 1)))}
+             (swap! *internal-model inc-week 1))}
        (fn [e key-code]
          (when (contains? #{13 37 38 39 40} key-code)
            (util/stop e)))))))

@@ -152,7 +152,8 @@
                                        (util/stop e))}
        (ui/datepicker
         date
-        {:on-change
+        {:deadline-or-schedule? deadline-or-schedule?
+         :on-change
          (fn [e date]
            (util/stop e)
            (let [date (t/to-default-time-zone date)
