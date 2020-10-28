@@ -1272,10 +1272,6 @@ a.tag:hover {
     opacity: 0.5;
 }
 
-.time-spent {
-    background: var(--ls-primary-background-color);
-}
-
 /* FIXME: */
 
 .dark-theme input {
