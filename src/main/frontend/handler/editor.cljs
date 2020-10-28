@@ -42,9 +42,6 @@
             [frontend.handler.repeated :as repeated]
             [clojure.core.async :as async]))
 
-;; TODO: refactor the state, it is already too complex.
-(defonce *last-edit-block (atom nil))
-
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
@@ -56,10 +53,6 @@
   (let [modified-at (tc/to-long (t/now))]
     [[:db/add (:db/id page) :page/last-modified-at modified-at]
      [:db/add (:db/id file) :file/last-modified-at modified-at]]))
-
-(defn set-last-edit-block!
-  [id value]
-  (reset! *last-edit-block [id value]))
 
 (defn- get-selection-and-format
   []
@@ -741,7 +734,6 @@
                               last-child (when (not= (:block/uuid last-child)
                                                      (:block/uuid block))
                                            last-child)]
-                          (set-last-edit-block! (:block/uuid block) value)
                           ;; save the current block and insert a new block
                           (insert-new-block-aux!
                            (or last-child block)
@@ -1291,10 +1283,8 @@
                        (assoc properties new-marker (util/time-ms))
                        properties)]
       (let [cache [(:block/uuid block) value]]
-        (when (not= @*last-edit-block cache)
-          (save-block-if-changed! block new-value
-                                  {:custom-properties properties})
-          (reset! *last-edit-block cache))))))
+        (save-block-if-changed! block new-value
+                                {:custom-properties properties})))))
 
 (defn on-up-down
   [state e up?]
@@ -1583,7 +1573,6 @@
                                      (util/uuid-string? (get config :id)))
                                     (<= final-level start-level)))
                           (<= (- final-level previous-level) 1))
-                     (set-last-edit-block! (:block/uuid block) value)
                      (save-block-if-changed! block new-value
                                              {:indent-left? (= direction :left)}))))]
     ;; TODO: Not a universal solution
