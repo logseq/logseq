@@ -73,7 +73,7 @@
                     (for [file changed-files]
                       [:li {:key (str "sync-" file)}
                        [:div.flex.flex-row.justify-between.align-items
-                        [:a {:href (rfe/href :file {:path (util/encode-str file)})}
+                        [:a {:href (rfe/href :file {:path file})}
                          file]
                         [:a.ml-4.text-sm.mt-1
                          {:on-click (fn [e]

@@ -19,7 +19,7 @@
        (let [parents-atom (atom parents)
              component [:div.block-parents.flex-row.flex
                         (when show-page?
-                          [:a {:href (rfe/href :page {:name (util/encode-str page-name)})}
+                          [:a {:href (rfe/href :page {:name page-name})}
                            (or (:page/original-name page)
                                (:page/name page))])
 

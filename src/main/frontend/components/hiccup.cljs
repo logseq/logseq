@@ -254,7 +254,7 @@
           page (string/lower-case page-name)
           href (if html-export?
                  (util/encode-str page)
-                 (rfe/href :page {:name (util/encode-str page)}))]
+                 (rfe/href :page {:name page}))]
       [:a.page-ref
        {:href href
         :on-click (fn [e]

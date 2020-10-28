@@ -296,7 +296,7 @@
 
         ;; Redirect to the new page
         (route-handler/redirect! {:to :page
-                                  :path-params {:name (util/encode-str (string/lower-case new-name))}})
+                                  :path-params {:name (string/lower-case new-name)}})
 
         (notification/show! "Page renamed successfully!" :success)
 

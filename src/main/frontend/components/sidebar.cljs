@@ -128,7 +128,7 @@
               (= :home (state/get-current-route))
               (not (state/route-has-p?)))
          (route-handler/redirect! {:to :page
-                                   :path-params {:name (util/encode-str (:page default-home))}})
+                                   :path-params {:name (:page default-home)}})
 
          (and (not logged?) (seq latest-journals))
          (journal/journals latest-journals)
