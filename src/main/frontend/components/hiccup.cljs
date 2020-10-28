@@ -767,8 +767,8 @@
                            [(str class " checked") true])]
     (when class
       (ui/checkbox {:class class
-                    :style {:margin-top -1
-                            :margin-right 6}
+                    :style {:margin-top -2
+                            :margin-right 5}
                     :checked checked?
                     :on-change (fn [_e]
                                  ;; FIXME: Log timestamp
@@ -881,7 +881,8 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (string/lower-case marker)})
+            {:class (str (string/lower-case marker)
+                         "flex flex-row items-center")})
           (when bg-color
             {:style {:background-color bg-color
                      :padding-left 6

@@ -51,6 +51,7 @@
 
     --ls-primary-text-color: #24292e;
     --ls-secondary-text-color: #161e2e;
+    --ls-title-text-color: #222;
     --ls-link-text-color: #045591;
     --ls-link-text-hover-color: #000;
     --ls-link-ref-text-color: var(--ls-link-text-color);
@@ -1020,6 +1021,7 @@ a.login:hover {
 }
 
 .marker-switch {
+    display: inline;
     font-size: 85%;
     margin-right: 6px;
     margin-left: 2px;
