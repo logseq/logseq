@@ -1274,24 +1274,31 @@
               nil)
             (state/conj-selection-block! element up?)))))))
 
+;; FIXME: temporal fix
+(defonce *block-adjusted? (atom false))
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
-  (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
-            dummy?)
-    (let [value (text/remove-level-spaces value format true)
-          new-value (block/with-levels value format block)
-          new-marker (first (re-find format/bare-marker-pattern value))
-          new-marker (if new-marker (string/lower-case (string/trim new-marker)))
-          properties (into {} (:block/properties block))
-          properties (if (and
-                          new-marker
-                          (not= new-marker (:block/marker block))
-                          (state/enable-timetracking?))
-                       (assoc properties new-marker (util/time-ms))
-                       properties)]
-      (let [cache [(:block/uuid block) value]]
-        (save-block-if-changed! block new-value
-                                {:custom-properties properties})))))
+  (when-not @*block-adjusted?
+    (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
+              dummy?)
+      (let [value (text/remove-level-spaces value format true)
+            new-value (block/with-levels value format block)
+            new-marker (first (re-find format/bare-marker-pattern value))
+            new-marker (if new-marker (string/lower-case (string/trim new-marker)))
+            properties (into {} (:block/properties block))
+            properties (if (and
+                            new-marker
+                            (not= new-marker (:block/marker block))
+                            (state/enable-timetracking?))
+                         (assoc properties new-marker (util/time-ms))
+                         properties)]
+
+        (let [new-block {:block block
+                         :new-value new-value}]
+          ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
+          ;; maybe we shouldn't save the block/file in "will-unmount" event?
+          (save-block-if-changed! block new-value
+                                  {:custom-properties properties}))))))
 
 (defn on-up-down
   [state e up?]
@@ -1580,8 +1587,10 @@
                                      (util/uuid-string? (get config :id)))
                                     (<= final-level start-level)))
                           (<= (- final-level previous-level) 1))
+                     (reset! *block-adjusted? true)
                      (save-block-if-changed! block new-value
-                                             {:indent-left? (= direction :left)}))))]
+                                             {:indent-left? (= direction :left)})
+                     (js/setTimeout #(reset! *block-adjusted? false) 10))))]
     ;; TODO: Not a universal solution
     (if @*async-insert-start
       (js/setTimeout aux-fn 20)
