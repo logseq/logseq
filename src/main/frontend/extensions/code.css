@@ -1,0 +1,9 @@
+.extensions__code {
+    @apply relative
+}
+
+.extensions__code-lang {
+    @apply absolute top-0 right-0 p-1 text-sm text-gray-500;
+    z-index: 2;
+    background: white;
+}
