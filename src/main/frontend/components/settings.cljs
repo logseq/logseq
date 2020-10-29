@@ -4,6 +4,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -65,6 +66,7 @@
   (let [preferred-format (keyword (state/sub [:me :preferred_format]))
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
         preferred-language (state/sub [:preferred-language])
+        enable-timetracking? (state/enable-timetracking?)
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
@@ -145,6 +147,17 @@
                   (if (= workflow :now)
                     "NOW/LATER"
                     "TODO/DOING")])]]]]
+
+           [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+            [:label.block.text-sm.font-medium.leading-5.opacity-70
+             {:for "enable_timetracking"}
+             (t :settings-page/enable-timetracking)]
+            [:div.mt-1.sm:mt-0.sm:col-span-2
+             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+              (ui/toggle enable-timetracking?
+                         (fn []
+                           (let [value (not enable-timetracking?)]
+                             (repo-handler/set-config! :feature/enable-timetracking? value))))]]]
 
            [:hr]
 

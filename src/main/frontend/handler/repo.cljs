@@ -405,7 +405,6 @@
            (db/cloned? repo-url)
            (not (state/get-edit-input-id)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-            (prn {:changed-files files})
             (when (or
                    ;; FIXME:
                    force?

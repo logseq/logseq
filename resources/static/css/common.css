@@ -1297,3 +1297,8 @@ a.tag:hover {
 .absolute-modal {
     background: var(--ls-primary-background-color);
 }
+
+/* FIXME: not sure why this is not working for ui/toggle */
+.translate-x-5 {
+    --transform-translate-x: 1.25rem;
+}

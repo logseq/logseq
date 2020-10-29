@@ -140,6 +140,10 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defn sub-config
+  []
+  (sub :config))
+
 (defn get-custom-css-link
   []
   (:custom-css-url (get-config)))
@@ -150,7 +154,13 @@
 
 (defn enable-grammarly?
   []
-  (true? (:enable-grammarly? (get-config))))
+  (true? (:feature/enable-grammarly?
+          (get (sub-config) (get-current-repo)))))
+
+(defn enable-timetracking?
+  []
+  (not (false? (:feature/enable-timetracking?
+                (get (sub-config) (get-current-repo))))))
 
 (defn get-default-home
   []

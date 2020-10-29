@@ -792,10 +792,13 @@
 
 (defn- with-marker-time
   [block marker]
-  (let [properties (:block/properties block)]
-    (assoc (into {} properties)
-           (string/lower-case marker)
-           (util/time-ms))))
+  (let [properties (:block/properties block)
+        properties (into {} properties)]
+    (if (state/enable-timetracking?)
+      (assoc properties
+             (string/lower-case marker)
+             (util/time-ms))
+      properties)))
 
 (defn check
   [{:block/keys [uuid marker content meta file dummy? repeated?] :as block}]
@@ -1282,7 +1285,8 @@
           properties (into {} (:block/properties block))
           properties (if (and
                           new-marker
-                          (not= new-marker (:block/marker block)))
+                          (not= new-marker (:block/marker block))
+                          (state/enable-timetracking?))
                        (assoc properties new-marker (util/time-ms))
                        properties)]
       (let [cache [(:block/uuid block) value]]
