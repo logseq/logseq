@@ -1298,13 +1298,11 @@
               dummy?)
       (let [value (text/remove-level-spaces value format true)
             new-value (block/with-levels value format block)
-            properties (with-timetracking-properties block new-value)]
-        (let [new-block {:block block
-                         :new-value new-value}]
-          ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-          ;; maybe we shouldn't save the block/file in "will-unmount" event?
-          (save-block-if-changed! block new-value
-                                  {:custom-properties properties}))))))
+            properties (with-timetracking-properties block value)]
+        ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
+        ;; maybe we shouldn't save the block/file in "will-unmount" event?
+        (save-block-if-changed! block new-value
+                                {:custom-properties properties})))))
 
 (defn on-up-down
   [state e up?]
