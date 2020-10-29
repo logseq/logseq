@@ -21,7 +21,7 @@
 ;; TODO: 5. Roam attributes -> properties
 ;; TODO: 6. hiccup
 
-(defonce uid-pattern #"\(\(([a-zA-Z0-9_\\-]{9})\)\)")
+(defonce uid-pattern #"\(\(([a-zA-Z0-9_\\-]{10})\)\)")
 (defonce macro-pattern #"\{\{([^{}]+)\}\}")
 
 (defn uid-transform
@@ -33,7 +33,8 @@
 (defn macro-transform
   [text]
   (string/replace text macro-pattern (fn [[original text]]
-                                       (let [[name arg] (string/split text #": ")]
+                                       (let [[name arg] (-> (string/replace text #" " "")
+                                                            (string/split #":"))]
                                          (if name
                                            (let [name (case name
                                                         "[[embed]]" "embed"
