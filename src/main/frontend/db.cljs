@@ -427,6 +427,8 @@
     (date->int (t/yesterday))
     (= :tomorrow input)
     (date->int (t/plus (t/today) (t/days 1)))
+    (= :current-page input)
+    (string/lower-case (state/get-current-page))
     (and (keyword? input)
          (re-find #"^\d+d(-before)?$" (name input)))
     (let [input (name input)
