@@ -1079,7 +1079,8 @@
                        {:block block}))}
          block-refs-count]])
 
-     (when (= marker "DONE")
+     (when (and (= marker "DONE")
+                (state/enable-timetracking?))
        (let [start-time (or
                          (get properties "now")
                          (get properties "doing")
