@@ -1,6 +1,4 @@
 module.exports = {
-  theme: {
-    extend: {},
-  },
+  purge: false,
   plugins: [require("@tailwindcss/ui")],
 };

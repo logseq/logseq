@@ -9,7 +9,8 @@ module.exports = (ctx) => ({
           '../resources/static/js/main.js',
           // etc.
         ],
-        // https://tailwindcss.com/docs/controlling-file-size#setting-up-purgecss
+
+        // https://tailwindcss.com/docs/controlling-file-size#understanding-the-regex
         // without this we miss keeping eg. `w-1/2`
         defaultExtractor: (content) => content.match(/[\w-/:]+(?<!:)/g) || [],
       })

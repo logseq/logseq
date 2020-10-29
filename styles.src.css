@@ -1,8 +1,0 @@
-@tailwind base;
-@tailwind components;
-
-.green-example {
-    @apply text-green-700 bg-green-200;
-}
-
-@tailwind utilities;
