@@ -39,6 +39,7 @@
     --ls-icon-color: var(--ls-link-text-color);
     --ls-search-icon-color: var(--ls-link-text-color);
     --ls-a-chosen-bg: var(--ls-secondary-background-color);
+    --ls-right-sidebar-code-bg-color: #04303c;
 }
 
 .white-theme {
@@ -71,6 +72,7 @@
     --ls-icon-color: #6b7280;
     --ls-search-icon-color: var(--ls-icon-color);
     --ls-a-chosen-bg: #f4f5f7;
+    --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
 }
 
 html {
@@ -681,7 +683,7 @@ pre.code {
 
 /* Are these reachable? */
 #right-sidebar .non-block-editor textarea, #right-sidebar pre, #right-sidebar pre.code {
-    background: #04303c;
+    background: var(--ls-right-sidebar-code-bg-color);
 }
 
 #right-sidebar pre.CodeMirror-line {
