@@ -727,6 +727,18 @@
      :value value
      :pos pos}))
 
+(defn- with-timetracking-properties
+  [block value]
+  (let [new-marker (first (re-find format/bare-marker-pattern value))
+        new-marker (if new-marker (string/lower-case (string/trim new-marker)))
+        properties (into {} (:block/properties block))]
+    (if (and
+         new-marker
+         (not= new-marker (:block/marker block))
+         (state/enable-timetracking?))
+      (assoc properties new-marker (util/time-ms))
+      properties)))
+
 (defn insert-new-block!
   [state]
   (let [aux-fn (fn [] (when-not config/publishing?
@@ -740,11 +752,14 @@
                                               (last (db/get-block-and-children-no-cache repo (:block/uuid block))))
                               last-child (when (not= (:block/uuid last-child)
                                                      (:block/uuid block))
-                                           last-child)]
+                                           last-child)
+                              new-block (or last-child block)
+                              new-value (if last-child (:block/content last-child) value)
+                              properties (with-timetracking-properties new-block new-value)]
                           ;; save the current block and insert a new block
                           (insert-new-block-aux!
-                           (or last-child block)
-                           (if last-child (:block/content last-child) value)
+                           (assoc new-block :block/properties properties)
+                           new-value
                            {:create-new-block? true
                             :ok-handler
                             (fn [[_first-block last-block _new-block-content]]
@@ -1283,16 +1298,7 @@
               dummy?)
       (let [value (text/remove-level-spaces value format true)
             new-value (block/with-levels value format block)
-            new-marker (first (re-find format/bare-marker-pattern value))
-            new-marker (if new-marker (string/lower-case (string/trim new-marker)))
-            properties (into {} (:block/properties block))
-            properties (if (and
-                            new-marker
-                            (not= new-marker (:block/marker block))
-                            (state/enable-timetracking?))
-                         (assoc properties new-marker (util/time-ms))
-                         properties)]
-
+            properties (with-timetracking-properties block new-value)]
         (let [new-block {:block block
                          :new-value new-value}]
           ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
