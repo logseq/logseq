@@ -889,7 +889,8 @@
   [page-name]
   (-> page-name
       (string/replace #"\s+" "_")
-      (string/replace "/" "_")))
+      ;; Windows reserved path characters
+      (string/replace #"[\\/:\\*\\?\"<>|]+" "_")))
 
 (defn lowercase-first
   [s]
