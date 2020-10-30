@@ -543,7 +543,10 @@
                  [[file-path new-content]])))
 
              (when (or (seq retract-refs) pre-block?)
-               (ui-handler/re-render-root!)))
+               (ui-handler/re-render-root!))
+
+             (when (state/git-auto-push?)
+                 (repo-handler/push repo nil)))
 
            :else
            nil))))))

@@ -834,3 +834,7 @@
   (set-new-block-shortcut!
    (or (get-shortcut repo-url :editor/new-block)
        "enter")))
+
+(defn git-auto-push?
+  []
+  (true? (:git-auto-push (get-config (get-current-repo)))))

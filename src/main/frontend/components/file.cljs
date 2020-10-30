@@ -67,13 +67,6 @@
                                    (export-handler/download-file! file))}
                       [:span (tongue :download)]]]]))]]))]))
 
-(defn- save-file!
-  [path content]
-  (fn [value]
-    (when (not= (string/trim value) (string/trim content))
-      (file/alter-file (state/get-current-repo) path (string/trim value)
-                       {:re-render-root? true}))))
-
 (rum/defcs file < rum/reactive
   {:did-mount (fn [state]
                 (state/set-file-component! (:rum/react-component state))
