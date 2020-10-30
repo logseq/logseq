@@ -35,7 +35,14 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
          export GITHUB_APP_PEM="/your-code-directory/your-app.private-key.pem"
        #+END_SRC
 
-*** 4. Start the clojure server
+*** 4. Compile javascript
+    #+BEGIN_SRC sh
+      cd web
+      yarn
+      yarn watch
+    #+END_SRC
+
+*** 5. Start the clojure server
     #+BEGIN_SRC sh
       cd resources
 
@@ -46,13 +53,9 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
       java -Duser.timezone=UTC -jar logseq.jar
     #+END_SRC
 
-*** 5. Compile javascript
-    #+BEGIN_SRC sh
-      cd web
-      yarn
-      yarn watch
-      open http://localhost:3000
-    #+END_SRC
+*** 6. Open the browser
+    Open http://localhost:3000.
+
 
 ** Windows setup
 
