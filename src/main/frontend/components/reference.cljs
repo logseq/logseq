@@ -96,12 +96,11 @@
                                         (str n-ref " Linked References"))]
             [:a {:title "Filter"
                  :on-click #(state/set-modal! (filter-dialog references page-name))}
-             [:span {:class (cond
-                              (empty? filter-state) nil
-                              (every? true? (vals filter-state)) "text-green-500"
-                              (every? false? (vals filter-state)) "text-red-500"
-                              :else "text-yellow-200")}
-              (svg/filter-icon)]]]
+              (svg/filter-icon (cond
+                                 (empty? filter-state) nil
+                                 (every? true? (vals filter-state)) "text-green-500"
+                                 (every? false? (vals filter-state)) "text-red-500"
+                                 :else "text-yellow-200"))]]
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                              {:id page-name
