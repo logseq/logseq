@@ -13,18 +13,6 @@ pom.xml.asc
 
 node_modules/
 static/
-/resources/js/*.map
-/resources/js/main.js
-/resources/js/cljs-runtime
-/resources/js/manifest.edn
-/resources/js/publishing/*.map
-/resources/js/publishing/main.js
-/resources/js/publishing/cljs-runtime
-/resources/js/publishing/manifest.edn
-/resources/style.css
-/resources/js/publishing/code-editor.js
-/resources/js/code-editor.js
-/resources/js/publishing
 
 .cpcache/
 /src/gen
