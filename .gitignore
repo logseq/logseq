@@ -12,22 +12,21 @@ pom.xml.asc
 .hg/
 
 node_modules/
-/resources/static/js/*.map
-/resources/static/js/main.js
-/resources/static/js/cljs-runtime
-/resources/static/js/manifest.edn
-/resources/static/js/publishing/*.map
-/resources/static/js/publishing/main.js
-/resources/static/js/publishing/cljs-runtime
-/resources/static/js/publishing/manifest.edn
-/resources/static/style.css
-/resources/static/js/publishing/code-editor.js
-/resources/static/js/code-editor.js
-/resources/static/js/publishing
+static/
+/resources/js/*.map
+/resources/js/main.js
+/resources/js/cljs-runtime
+/resources/js/manifest.edn
+/resources/js/publishing/*.map
+/resources/js/publishing/main.js
+/resources/js/publishing/cljs-runtime
+/resources/js/publishing/manifest.edn
+/resources/style.css
+/resources/js/publishing/code-editor.js
+/resources/js/code-editor.js
+/resources/js/publishing
 
 .cpcache/
-/target
-/checkouts
 /src/gen
 
 *.iml
