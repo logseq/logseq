@@ -13,7 +13,8 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.components.svg :as svg]
-            [frontend.handler.page :as page-handler]))
+            [frontend.handler.page :as page-handler]
+            [frontend.filtering :as filtering]))
 
 (rum/defc filter-dialog-inner < rum/reactive
   [close-fn references page-name]
@@ -23,11 +24,10 @@
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (svg/filter-icon)]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
-        "Filter"]
-       [:span.text-xs "Click to include and shift-click to exclude. Click again to remove. "]]]
-
-     [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1
+       [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900 "Filter"]
+       [:span.text-xs
+        "Click to include and shift-click to exclude. Click again to remove."]]]
+     [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
       (for [reference references]
         (let [filtered (get (rum/react filter-state) reference)
               color (condp = filtered
@@ -46,21 +46,6 @@
   [references page-name]
   (fn [close-fn]
     (filter-dialog-inner close-fn references page-name)))
-
-(defn get-block-references
-  [ref-block]
-  (map #(if (= (first %) "Tag")
-          (second %)
-          (second (:url (second %))))
-       (filter
-        #(and
-          (some (partial = (first %)) ["Tag", "Link"])
-          (or (= (first %) "Tag") (= (first (:url (second %))) "Search")))
-        (:block/title (first (val ref-block))))))
-
-(defn matches-filter
-  [references filter-state]
-  (every? #(= (util/in? (first %) references) (second %)) filter-state))
 
 (rum/defc references < rum/reactive
   [page-name marker? priority?]
@@ -82,9 +67,9 @@
           scheduled-or-deadlines (if journal?
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
-          references (distinct (flatten (map get-block-references ref-blocks)))
+          references (distinct (flatten (map filtering/get-block-references (flatten (map val ref-blocks)))))
           filter-state (rum/react (page-handler/get-filter page-name))
-          filtered-blocks (filter #(matches-filter (get-block-references %) filter-state) ref-blocks)
+          filtered-ref-blocks (filter #(filtering/matches-filter (filtering/get-ref-block-references %) filter-state) ref-blocks)
           n-ref (count ref-blocks)]
       (when (or (> n-ref 0)
                 (seq scheduled-or-deadlines))
@@ -118,13 +103,14 @@
                               :else "text-yellow-200")}
               (svg/filter-icon)]]]
            [:div.references-blocks
-            (let [ref-hiccup (block/->hiccup filtered-blocks
+            (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                              {:id page-name
                                               :start-level 2
                                               :ref? true
                                               :breadcrumb-show? true
                                               :group-by-page? true
-                                              :editor-box editor/box}
+                                              :editor-box editor/box
+                                              :filter-state filter-state}
                                              {})]
               (content/content page-name
                                {:hiccup ref-hiccup}))])]]))))
