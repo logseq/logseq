@@ -6,11 +6,11 @@
         "@fullhuman/postcss-purgecss": "^2.1.2",
         "@tailwindcss/ui": "^0.1.3",
         "cssnano": "^4.1.10",
+        "del": "^6.0.0",
         "gulp": "^4.0.2",
         "gulp-clean-css": "^4.3.0",
         "gulp-concat": "^2.6.1",
         "gulp-postcss": "^9.0.0",
-        "merge-stream": "^2.0.0",
         "postcss": "^7.0.21",
         "postcss-cli": "^6.1.3",
         "purgecss": "^2.1.0",
@@ -18,15 +18,15 @@
         "tailwindcss": "^1.3.4"
     },
     "scripts": {
-        "watch:css": "gulp watchCSS",
-        "release:css": "NODE_ENV=production gulp releaseCSS",
+        "gulp:watch": "gulp watch",
+        "gulp:build": "NODE_ENV=production gulp build",
         "watch": "clojure -A:cljs watch app publishing",
         "release": "clojure -A:cljs release app publishing",
         "watch-app": "clojure -A:cljs watch app",
         "release-app": "clojure -A:cljs release app",
         "debug": "clojure -A:cljs release app --debug",
         "report": "clojure -A:cljs run shadow.cljs.build-report app report.html",
-        "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ./resources/static/js/compiled; /usr/bin/rm -rf ./resources/static/js/cljs-runtime; /usr/bin/rm -rf ./resources/static/js/publishing; /usr/bin/rm -rf ./resources/static/js/main.js;"
+        "clean": "/usr/bin/rm -rf target; /usr/bin/rm -rf ./static;"
     },
     "dependencies": {
         "codemirror": "^5.58.1",

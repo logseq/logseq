@@ -6,7 +6,7 @@ module.exports = (ctx) => ({
     ctx.env === "production"
       ? require("@fullhuman/postcss-purgecss")({
         content: [
-          '../resources/static/js/main.js',
+          './static/js/main.js',
           // etc.
         ],
 
