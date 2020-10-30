@@ -1206,19 +1206,22 @@
     (js/window.history.forward)))
 
 (defn zoom-out! []
-  (let [parent? (atom false)]
-    (when-let [page (state/get-current-page)]
-      (let [block-id (and
-                      (string? page)
-                      (util/uuid-string? page)
-                      (medley/uuid page))
-            block-parent (db/get-block-parent (state/get-current-repo) block-id)]
-        (when-let [id (:block/uuid block-parent)]
-          (route-handler/redirect! {:to :page
-                                    :path-params {:name (str id)}})
-          (reset! parent? true))))
-    (when-not @parent?
-      (route-handler/redirect-to-home!))))
+  (when-let [page (state/get-current-page)]
+    (let [block-id (and
+                    (string? page)
+                    (util/uuid-string? page)
+                    (medley/uuid page))
+          repo (state/get-current-repo)
+          block-parent (db/get-block-parent repo block-id)]
+      (if-let [id (:block/uuid block-parent)]
+        (route-handler/redirect! {:to :page
+                                  :path-params {:name (str id)}})
+        (let [page-id (-> (db/entity [:block/uuid block-id])
+                          :block/page
+                          :db/id)]
+          (when-let [page-name (:page/name (db/entity repo page-id))]
+            (route-handler/redirect! {:to :page
+                                      :path-params {:name page-name}})))))))
 
 (defn cut-block!
   [block-id]
