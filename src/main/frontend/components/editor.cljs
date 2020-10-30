@@ -650,10 +650,12 @@
                                (on-hide value event))
                              (when
                                  (or (= event :esc)
+                                     (= event :visibilitychange)
                                      (and (= event :click)
                                           (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
                                (state/clear-edit!))))))
-                      :node (gdom/getElement id)))
+                      :node (gdom/getElement id)
+                      :visibilitychange? true))
                    100)
 
                   (when-let [element (gdom/getElement id)]

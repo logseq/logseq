@@ -52,7 +52,7 @@
 ;;      (dissoc state name))})
 
 (defn hide-when-esc-or-outside
-  [state & {:keys [on-hide node]}]
+  [state & {:keys [on-hide node visibilitychange?]}]
   (try
     (let [dom-node (rum/dom-node state)]
       (when-let [dom-node (or node dom-node)]
@@ -65,6 +65,16 @@
                 (fn [e]
                   (case (.-keyCode e)
                    ;; Esc
+                    27 (on-hide state e :esc)
+                    nil)))
+        (when visibilitychange?
+          (listen state js/window "visibilitychange"
+                  (fn [e]
+                    (on-hide state e :visibilitychange))))
+        (listen state dom-node "keydown"
+                (fn [e]
+                  (case (.-keyCode e)
+                    ;; Esc
                     27 (on-hide state e :esc)
                     nil)))))
     (catch js/Error e
