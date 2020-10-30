@@ -1281,8 +1281,11 @@ a.tag:hover {
 
 .dark-theme .form-checkbox {
     color: #6093a0;
+    color: var(--ls-page-checkbox-color);
     background-color: #6093a0;
+    background-color: var(--ls-page-checkbox-color);
     border-color: #6093a0;
+    border-color: var(--ls-page-checkbox-border-color);
 }
 
 .dark-theme #right-sidebar .bg-base-2 {
