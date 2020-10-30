@@ -44,8 +44,8 @@
   [file-path]
   (when-let [repo (state/get-current-repo)]
     (when-let [content (db/get-file repo file-path)]
-      (let [data (js/Blob. (array content)
-                           (clj->js {:type "text/plain"}))]
+      (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
+                           (clj->js {:type "text/plain;charset=utf-8,"}))]
         (let [anchor (gdom/getElement "download")
               url (js/window.URL.createObjectURL data)]
           (.setAttribute anchor "href" url)
