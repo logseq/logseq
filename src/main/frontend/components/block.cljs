@@ -1415,10 +1415,11 @@
 
      (when ref?
        (let [children (-> (db/get-block-immediate-children repo uuid)
-                          db/sort-by-pos)]
-         (when (seq children)
+                          db/sort-by-pos)
+             filtered-children (filtering/filter-blocks children config)]
+         (when (seq filtered-children)
            [:div.ref-children.ml-12
-            (blocks-container children (assoc config
+            (blocks-container filtered-children (assoc config
                                               :breadcrumb-show? false
                                               :ref? true))])))
 
@@ -1925,7 +1926,7 @@
      [:div.flex.flex-col
       (for [[page blocks] blocks]
         (let [page (db/entity (:db/id page))
-              filtered-blocks (filter #(filtering/matches-filter (filtering/get-block-references %) (:filter-state config)) blocks)]
+              filtered-blocks (filtering/filter-blocks blocks config)]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
                        (assoc :class "color-level px-7 py-2 rounded"))
