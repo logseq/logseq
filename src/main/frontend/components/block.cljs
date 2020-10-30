@@ -45,7 +45,8 @@
             [reitit.frontend.easy :as rfe]
             [frontend.commands :as commands]
             [lambdaisland.glogi :as log]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [frontend.filtering :as filtering]))
 
 (defn safe-read-string
   [s]
@@ -1923,13 +1924,14 @@
    (if (:group-by-page? config)
      [:div.flex.flex-col
       (for [[page blocks] blocks]
-        (let [page (db/entity (:db/id page))]
+        (let [page (db/entity (:db/id page))
+              filtered-blocks (filter #(filtering/matches-filter (filtering/get-block-references %) (:filter-state config)) blocks)]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
                        (assoc :class "color-level px-7 py-2 rounded"))
            (ui/foldable
             (page-cp config page)
-            (blocks-container blocks config))]))]
+            (blocks-container filtered-blocks config))]))]
      (blocks-container blocks config))])
 
 (comment
