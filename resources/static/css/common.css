@@ -22,6 +22,8 @@
     --ls-link-text-hover-color: #d0e8e8;
     --ls-link-ref-text-color: var(--ls-link-text-color);
     --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
+	--ls-tag-text-color: var(--ls-link-text-color);
+	--ls-tag-text-hover-color: var(--ls-link-text-hover-color);
 
     --ls-block-bullet-border-color: #0f4958;
     --ls-block-bullet-color: #608e91;
@@ -60,6 +62,8 @@
     --ls-link-text-hover-color: #000;
     --ls-link-ref-text-color: var(--ls-link-text-color);
     --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
+	--ls-tag-text-color: var(--ls-link-text-color);
+	--ls-tag-text-hover-color: var(--ls-link-text-hover-color);
 
     --ls-block-bullet-border-color: #ced9e0;
     --ls-block-bullet-color: #394b59;
@@ -1159,14 +1163,14 @@ a.tag {
     opacity: 0.6;
     opacity: var(--ls-tag-text-opacity);
     color: #045591;
-    color: var(--ls-link-text-color);
+    color: var(--ls-tag-text-color);
 }
 
 a.tag:hover {
     opacity: 0.8;
     opacity: var(--ls-tag-text-hover-opacity);
     color: #045591;
-    color: var(--ls-link-text-hover-color);
+    color: var(--ls-tag-text-hover-color);
 }
 
 #diffs-body textarea {
