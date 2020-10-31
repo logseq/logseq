@@ -15,6 +15,7 @@
             [goog.object :as gobj]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.common :as common-handler]
             [clojure.string :as string]
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
@@ -43,9 +44,12 @@
   (db/set-key-value repo-url :git/error (if value (str value))))
 
 (defn git-add
-  [repo-url file]
-  (p/let [result (git/add repo-url file)]
-    (state/git-add! repo-url file)))
+  ([repo-url file]
+   (git-add repo-url file true))
+  ([repo-url file update-status?]
+   (p/let [_result (git/add repo-url file)]
+     (when update-status?
+       (common-handler/check-changed-files-status)))))
 
 (defn get-latest-commit
   ([repo-url handler]
@@ -86,7 +90,6 @@
                                     (state/get-github-token repo)
                                     true)]
         (reset! pushing? false)
-        (state/clear-changed-files! repo)
         (notification/clear! nil)
         (route-handler/redirect! {:to :home})))))
 

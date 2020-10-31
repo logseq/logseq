@@ -28,7 +28,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.search :as search]
-            [frontend.components.widgets :as widgets]
+            [frontend.components.repo :as repo]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -437,10 +437,10 @@
      (when current-repo
        [:div.absolute.top-4.right-4.hidden.md:block
         [:div.flex.flex-row.items-center
-         (widgets/sync-status current-repo)
-         (widgets/repos true
-                        (fn [repo]
-                          (reset! *current-file (get-last-file repo))))]])]))
+         (repo/sync-status current-repo)
+         (repo/repos-dropdown true
+                     (fn [repo]
+                       (reset! *current-file (get-last-file repo))))]])]))
 
 (rum/defcs draw-2 < rum/reactive
   {:init (fn [state]

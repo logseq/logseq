@@ -6,6 +6,7 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.git :as git-handler]
@@ -250,11 +251,11 @@
               ;; remove file
               (->
                (p/let [_ (git/remove-file repo file-path)
-                       _result (fs/unlink (str (util/get-repo-dir repo)
-                                               "/"
-                                               file-path)
-                                          nil)]
-                 (state/git-add! repo (str "- " file-path)))
+                       _ (fs/unlink (str (util/get-repo-dir repo)
+                                         "/"
+                                         file-path)
+                                    nil)]
+                 (common-handler/check-changed-files-status))
                (p/catch (fn [err]
                           (prn "error: " err))))))
 

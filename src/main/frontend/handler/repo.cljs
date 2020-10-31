@@ -22,6 +22,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.ui :as ui]
             [cljs-time.local :as tl]
             [cljs-time.core :as t]
@@ -317,82 +318,69 @@
          (db/get-conn repo-url true)
          (db/cloned? repo-url)
          token)
-    (let [status (db/get-key-value repo-url :git/status)]
-      (when (or
-             force-pull?
-             (and
-              ;; (not= status :push-failed)
-              (not= status :pushing)
-              (empty? (state/get-changed-files repo-url))
-              (not (state/get-edit-input-id))
-              (not (state/in-draw-mode?))))
-        (git-handler/set-git-status! repo-url :pulling)
-        (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
-          (->
-           (p/let [result (git/fetch repo-url token)]
-             (let [{:keys [fetchHead]} (bean/->clj result)]
-               (when fetchHead
-                 (git-handler/set-remote-latest-commit! repo-url fetchHead))
-               (-> (git/merge repo-url)
-                   (p/then (fn [result]
-                             (-> (git/checkout repo-url)
-                                 (p/then (fn [result]
-                                           (git-handler/set-git-status! repo-url nil)
-                                           (git-handler/set-git-last-pulled-at! repo-url)
-                                           (when (and latest-commit fetchHead
-                                                      (not= latest-commit fetchHead))
-                                             (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
-                                               (when (seq diffs)
-                                                 (load-db-and-journals! repo-url diffs false)
-                                                 (git-handler/set-latest-commit! repo-url fetchHead)
-                                                 (when (seq (state/get-changed-files repo-url))
-                                                   ;; FIXME: no need to create a new commit
-                                                   (push repo-url {:diff-push? true})))))))
-                                 (p/catch (fn [error]
-                                            (git-handler/set-git-status! repo-url :checkout-failed)
-                                            (git-handler/set-git-error! repo-url error))))))
-                   (p/catch (fn [error]
-                              (git-handler/set-git-status! repo-url :merge-failed)
-                              (git-handler/set-git-error! repo-url error)
-                              (notification/show!
-                               [:p.content
-                                "Failed to merge, please "
-                                [:span.text-gray-700.font-bold
-                                 "resolve any diffs first."]]
-                               :error)
-                              (route-handler/redirect! {:to :diff}))))))
-           (p/catch (fn [error]
-                      (println "Pull error:" (str error))
-                      (js/console.error error)
-                      ;; token might be expired, request new token
+    (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo-url))]
+      (when (empty? files)
+        (let [status (db/get-key-value repo-url :git/status)]
+          (when (or
+                 force-pull?
+                 (and
+                  ;; (not= status :push-failed)
+                  (not= status :pushing)
+                  (not (state/get-edit-input-id))
+                  (not (state/in-draw-mode?))))
+            (git-handler/set-git-status! repo-url :pulling)
+            (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
+              (->
+               (p/let [result (git/fetch repo-url token)]
+                 (let [{:keys [fetchHead]} (bean/->clj result)]
+                   (when fetchHead
+                     (git-handler/set-remote-latest-commit! repo-url fetchHead))
+                   (-> (git/merge repo-url)
+                       (p/then (fn [result]
+                                 (-> (git/checkout repo-url)
+                                     (p/then (fn [result]
+                                               (git-handler/set-git-status! repo-url nil)
+                                               (git-handler/set-git-last-pulled-at! repo-url)
+                                               (when (and latest-commit fetchHead
+                                                          (not= latest-commit fetchHead))
+                                                 (p/let [diffs (git/get-diffs repo-url latest-commit fetchHead)]
+                                                   (when (seq diffs)
+                                                     (load-db-and-journals! repo-url diffs false)
+                                                     (git-handler/set-latest-commit! repo-url fetchHead))))))
+                                     (p/catch (fn [error]
+                                                (git-handler/set-git-status! repo-url :checkout-failed)
+                                                (git-handler/set-git-error! repo-url error))))
+                                 (state/set-changed-files! repo-url nil)))
+                       (p/catch (fn [error]
+                                  (git-handler/set-git-status! repo-url :merge-failed)
+                                  (git-handler/set-git-error! repo-url error)
+                                  (notification/show!
+                                   [:p.content
+                                    "Failed to merge, please "
+                                    [:span.text-gray-700.font-bold
+                                     "resolve any diffs first."]]
+                                   :error)
+                                  (route-handler/redirect! {:to :diff}))))))
+               (p/catch (fn [error]
+                          (println "Pull error:" (str error))
+                          (js/console.error error)
+                          ;; token might be expired, request new token
 
-                      (cond
-                        (and (or (string/includes? (str error) "401")
-                                 (string/includes? (str error) "404"))
-                             (not fallback?))
-                        (request-app-tokens!
-                         (fn []
-                           (pull repo-url (state/get-github-token repo-url) {:fallback? true}))
-                         nil)
+                          (cond
+                            (and (or (string/includes? (str error) "401")
+                                     (string/includes? (str error) "404"))
+                                 (not fallback?))
+                            (request-app-tokens!
+                             (fn []
+                               (pull repo-url (state/get-github-token repo-url) {:fallback? true}))
+                             nil)
 
-                        (or (string/includes? (str error) "401")
-                            (string/includes? (str error) "404"))
-                        (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
+                            (or (string/includes? (str error) "401")
+                                (string/includes? (str error) "404"))
+                            (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
 
-                        :else
-                        nil)))))))))
-
-(defn check-changed-files-status
-  [f]
-  (when (gobj/get js/window.workerThread "getChangedFiles")
-    (->
-     (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-       (let [files (bean/->clj files)]
-         (when (empty? files)
-           ;; FIXME: getChangedFiles not return right result
-           (state/reset-changed-files! files))))
-     (p/catch (fn [error]
-                (js/console.dir error))))))
+                            :else
+                            nil)))))))))))
 
 (defn push
   [repo-url {:keys [commit-message fallback? diff-push? force?]
@@ -407,9 +395,7 @@
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or
                    force?
-                   (and
-                    (seq (state/get-changed-files repo-url))
-                    (seq files))
+                   (seq files)
                    fallback?
                    diff-push?)
               ;; auto commit if there are any un-committed changes
@@ -425,9 +411,10 @@
                      (fn [result]
                        (git-handler/set-git-status! repo-url nil)
                        (git-handler/set-git-error! repo-url nil)
-                       (state/clear-changed-files! repo-url))
+                       (state/set-changed-files! repo-url nil))
                      (fn [error]
                        (js/console.error error)
+                       (common-handler/check-changed-files-status)
                        (let [permission? (or (string/includes? (str error) "401")
                                              (string/includes? (str error) "404"))]
                          (cond
@@ -519,8 +506,7 @@
                  (db/remove-db! url)
                  (db/remove-files-db! url)
                  (fs/rmdir (util/get-repo-dir url))
-                 (state/delete-repo! repo)
-                 (state/clear-changed-files! repo))
+                 (state/delete-repo! repo))
                (fn [error]
                  (prn "Delete repo failed, error: " error))))
 
@@ -617,7 +603,6 @@
   [{:keys [id url] :as repo}]
   (db/remove-conn! url)
   (db/clear-query-state!)
-  (state/clear-changed-files! url)
   (-> (p/let [_ (db/remove-db! url)
               _ (db/remove-files-db! url)]
         (fs/rmdir (util/get-repo-dir url)))
