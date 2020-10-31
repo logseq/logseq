@@ -89,15 +89,31 @@
     (when (seq lines)
       (set/subset? #{":PROPERTIES:" ":END:"} lines))))
 
+;; FIXME:
+(defn get-properties-text
+  [text]
+  (let [start (or (string/index-of text ":PROPERTIES:")
+                  (string/index-of text ":properties:"))
+        end (or (string/index-of text ":END:")
+                (string/index-of text ":end:"))]
+    (when (and start end)
+      (subs text start (+ end 5)))))
+
 (defn re-construct-block-properties
   [block content properties]
-  (if (and (contains-properties? content)
-           ;; not changed
-           (= (:block/properties (db/entity [:block/uuid (:block/uuid block)]))
-              properties))
-    content
-    (-> (remove-properties! content)
-        (rejoin-properties properties))))
+  (let [content' (-> (remove-level-spaces content (:block/format block))
+                     (string/trim)
+                     (string/lower-case))]
+    (if (or
+         (string/starts-with? content'
+                              (string/lower-case (get-properties-text content)))
+         (and (contains-properties? content)
+              ;; not changed
+              (= (:block/properties (db/entity [:block/uuid (:block/uuid block)]))
+                 properties)))
+      content
+      (-> (remove-properties! content)
+          (rejoin-properties properties)))))
 
 (defn insert-property
   [content key value]
@@ -133,13 +149,3 @@
               body (drop-while properties? properties-and-body)]
           (->> (concat title-lines new-properties body)
                (string/join "\n")))))))
-
-;; FIXME:
-(defn get-properties-text
-  [text]
-  (let [start (or (string/index-of text ":PROPERTIES:")
-                  (string/index-of text ":properties:"))
-        end (or (string/index-of text ":END:")
-                (string/index-of text ":end:"))]
-    (when (and start end)
-      (subs text start (+ end 5)))))
