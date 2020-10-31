@@ -743,8 +743,12 @@
       (assoc properties new-marker (util/time-ms))
       properties)))
 
+;; FIXME: temporal fix
+(defonce *skip-save-block? (atom false))
+
 (defn insert-new-block!
   [state]
+  (reset! *skip-save-block? true)
   (let [aux-fn (fn [] (when-not config/publishing?
                         (let [{:keys [block value format id config]} (get-state state)
                               block-id (:block/uuid block)
@@ -773,7 +777,9 @@
                             :with-level? (if last-child true false)
                             :new-level (and last-child (:block/level block))
                             :blocks-container-id (:id config)
-                            :current-page (state/get-current-page)}))))]
+                            :current-page (state/get-current-page)})
+
+                          (js/setTimeout #(reset! *skip-save-block? false) 10))))]
     (if @*async-insert-start
       (js/setTimeout aux-fn 20)
       (aux-fn))))
@@ -1296,11 +1302,9 @@
               nil)
             (state/conj-selection-block! element up?)))))))
 
-;; FIXME: temporal fix
-(defonce *block-adjusted? (atom false))
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
-  (when-not @*block-adjusted?
+  (when-not @*skip-save-block?
     (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
               dummy?)
       (let [value (text/remove-level-spaces value format true)
@@ -1598,10 +1602,10 @@
                                      (util/uuid-string? (get config :id)))
                                     (<= final-level start-level)))
                           (<= (- final-level previous-level) 1))
-                     (reset! *block-adjusted? true)
+                     (reset! *skip-save-block? true)
                      (save-block-if-changed! block new-value
                                              {:indent-left? (= direction :left)})
-                     (js/setTimeout #(reset! *block-adjusted? false) 10))))]
+                     (js/setTimeout #(reset! *skip-save-block? false) 10))))]
     ;; TODO: Not a universal solution
     (if @*async-insert-start
       (js/setTimeout aux-fn 20)
