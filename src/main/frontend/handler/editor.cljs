@@ -545,8 +545,9 @@
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
 
-             (when (state/git-auto-push?)
-                 (repo-handler/push repo nil)))
+             ;; (when (state/git-auto-push?)
+             ;;     (repo-handler/push repo nil))
+             )
 
            :else
            nil))))))

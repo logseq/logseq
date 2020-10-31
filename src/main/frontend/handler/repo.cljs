@@ -318,16 +318,14 @@
          (db/cloned? repo-url)
          token)
     (let [status (db/get-key-value repo-url :git/status)]
-      (when (and
-             (not= status :pulling)
-             (or
-              force-pull?
-              (and
-               ;; (not= status :push-failed)
-               (not= status :pushing)
-               (empty? (state/get-changed-files repo-url))
-               (not (state/get-edit-input-id))
-               (not (state/in-draw-mode?)))))
+      (when (or
+             force-pull?
+             (and
+              ;; (not= status :push-failed)
+              (not= status :pushing)
+              (empty? (state/get-changed-files repo-url))
+              (not (state/get-edit-input-id))
+              (not (state/in-draw-mode?))))
         (git-handler/set-git-status! repo-url :pulling)
         (let [latest-commit (db/get-key-value repo-url :git/latest-commit)]
           (->
@@ -405,8 +403,7 @@
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
            (db/cloned? repo-url)
-           (not (state/get-edit-input-id))
-           (not= status :pushing))
+           (not (state/get-edit-input-id)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or
                    ;; FIXME:
