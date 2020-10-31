@@ -21,6 +21,7 @@
     --ls-link-text-color: #8abbbb;
     --ls-link-text-hover-color: #d0e8e8;
     --ls-link-ref-text-color: var(--ls-link-text-color);
+    --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
 
     --ls-block-bullet-border-color: #0f4958;
     --ls-block-bullet-color: #608e91;
@@ -58,6 +59,7 @@
     --ls-link-text-color: #045591;
     --ls-link-text-hover-color: #000;
     --ls-link-ref-text-color: var(--ls-link-text-color);
+    --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
 
     --ls-block-bullet-border-color: #ced9e0;
     --ls-block-bullet-color: #394b59;
@@ -330,7 +332,7 @@ a.page-ref {
 }
 
 a.page-ref:hover {
-    color: var(--ls-link-text-hover-color)
+    color: var(--ls-link-ref-text-hover-color)
 }
 
 .ls-block {
