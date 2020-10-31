@@ -89,6 +89,12 @@ html {
     font-family: var(--ls-font-family), Inter, sans-serif, system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI", Roboto, "Helvetica Neue", Arial ,"Noto Sans", serif, Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol!important;
 }
 
+html.is-ios, html.is-ios > body {
+    -webkit-overflow-scrolling : touch;
+    overflow: auto !important;
+    height: 100% !important;
+}
+
 @supports (font-variation-settings: normal) {
     html {
         font-family: 'Inter var', sans-serif;

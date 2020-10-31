@@ -193,6 +193,35 @@
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
 
+(defn setup-patch-ios-fixed-bottom-position
+  "fix a common issue about ios webpage viewport
+   when soft keyboard setup"
+  []
+  (if (and
+        (util/ios?)
+        (not (nil? js/window.visualViewport)))
+    (let [viewport js/visualViewport
+          style (js/document.createElement "style")]
+      (.add (.-classList js/document.documentElement) "is-ios")
+      (set! (.-id style) "dynamic-style-scope")
+      (.appendChild js/document.head style)
+      (let [sheet (.-sheet style)
+            type "resize"
+            handler
+            (fn []
+              (let [vh (.-height viewport)
+                    rule (.. sheet -rules (item 0))
+                    set-top #(set! (.. rule -style -top) (str % "px"))]
+                (set-top vh)
+                (prn "resize " vh (.. rule -style -top))))]
+        (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 0px;}")
+        (.addEventListener viewport type handler false)
+        (handler)
+        (fn []
+          (.removeEventListener viewport type handler)
+          (prn "teardown viewport " type)))
+      )))
+
 ;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
   [on-load on-top-reached]

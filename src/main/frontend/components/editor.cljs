@@ -217,16 +217,17 @@
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
-  [:div.bg-base-2 {:style {:position "fixed"
-                           :bottom 0
-                           :width "100%"
-                           :left 0
-                           :justify-content "center"
-                           :height "2.5rem"
-                           :display "flex"
-                           :align-items "center"
-                           ;; This element should be the upper-most in most situations
-                           :z-index 99999999}}
+  [:div.bg-base-2.fix-ios-fixed-bottom
+   {:style {:position        "fixed"
+            :bottom          0
+            :width           "100%"
+            :left            0
+            :justify-content "center"
+            :height          "2.5rem"
+            :display         "flex"
+            :align-items     "center"
+            ;; This element should be the upper-most in most situations
+            :z-index         99999999}}
    [:button.bottom-action
     {:style {:padding "5px"}
      :on-click #(editor-handler/adjust-block-level! parent-state :right)}
