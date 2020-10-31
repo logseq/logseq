@@ -946,7 +946,7 @@
   [block]
   (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
     (when (seq properties)
-      [:div.text-sm.opacity-80.my-1.bg-base-4.p-2
+      [:div.blocks__properties.text-sm.opacity-80.my-1.p-2
        (for [[k v] properties]
          [:div.my-1
           [:b k]

@@ -10,6 +10,7 @@
     --ls-primary-background-color: #002b36;
     --ls-secondary-background-color: #073642;
     --ls-tertiary-background-color: var(--ls-secondary-background-color);
+    --ls-block-properties-background-color: #02222a;
     --ls-search-background-color: var(--ls-primary-background-color);
     --ls-border-color: #0e5263;
     --ls-menu-hover-color: var(--ls-secondary-background-color);
@@ -46,6 +47,7 @@
     --ls-primary-background-color: white;
     --ls-secondary-background-color: #D8E1E8;
     --ls-tertiary-background-color: #f0f8ff;
+    --ls-block-properties-background-color: var(--ls-tertiary-background-color);
     --ls-search-background-color: var(--ls-primary-background-color);
     --ls-border-color: #ccc;
     --ls-menu-hover-color: var(--ls-secondary-background-color);
@@ -465,12 +467,9 @@ a.nav-item:hover, a.star-page:hover {
     background-color: #00242d;
 }
 
-.white-theme .bg-base-4 {
+.blocks__properties {
     background-color: #f0f8ff;
-}
-
-.dark-theme .bg-base-4 {
-    background-color: #02222a;
+    background-color: var(--ls-block-properties-background-color);
 }
 
 /* block dropdown top, auto-complete, sync dropdown */
