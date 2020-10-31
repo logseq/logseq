@@ -733,7 +733,7 @@ blockquote {
     padding: 10px 20px;
     border-left: 3px solid;
     border-left-color:  #d3d3d3;
-    border-left-color:  var(--ls-secondary-text-color);
+    border-left-color:  var(--ls-page-blockquote-border-color);
     background-color: #f7f7f7;
     background-color: var(--ls-page-blockquote-bg-color);
     margin: 1rem 0;
