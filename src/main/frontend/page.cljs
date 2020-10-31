@@ -12,6 +12,7 @@
 (rum/defc current-page < rum/reactive
   {:did-mount (fn [state]
                 (state/set-root-component! (:rum/react-component state))
+                (ui/setup-patch-ios-fixed-bottom-position)
                 state)}
   []
   (when-let [route-match (state/sub :route-match)]
