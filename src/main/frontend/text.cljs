@@ -103,10 +103,12 @@
   [block content properties]
   (let [content' (-> (remove-level-spaces content (:block/format block))
                      (string/trim)
-                     (string/lower-case))]
+                     (string/lower-case))
+        properties-text (get-properties-text content)]
     (if (or
-         (string/starts-with? content'
-                              (string/lower-case (get-properties-text content)))
+         (and
+          properties-text
+          (string/starts-with? content' (string/lower-case properties-text)))
          (and (contains-properties? content)
               ;; not changed
               (= (:block/properties (db/entity [:block/uuid (:block/uuid block)]))
