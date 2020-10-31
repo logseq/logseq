@@ -33,6 +33,7 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
          export GITHUB_APP2_SECRET="xxxxxxxxxxxxxxxxxxxx"
          # Replace your-code-directory with yours
          export GITHUB_APP_PEM="/your-code-directory/your-app.private-key.pem"
+         export LOG_PATH="/tmp/logseq"
        #+END_SRC
 
 *** 4. Compile javascript
