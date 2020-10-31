@@ -406,7 +406,6 @@
            (not (state/get-edit-input-id)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or
-                   ;; FIXME:
                    force?
                    (and
                     (seq (state/get-changed-files repo-url))

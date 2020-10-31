@@ -15,9 +15,12 @@
 (defn render!
   [state]
   (let [[id s display?] (:rum/args state)]
-    (js/katex.render s (gdom/getElement id)
-                     #js {:displayMode display?
-                          :throwOnError false})))
+    (try
+      (js/katex.render s (gdom/getElement id)
+                      #js {:displayMode display?
+                           :throwOnError false})
+      (catch js/Error e
+        (js/console.error e)))))
 
 (defn- load-and-render!
   [state]
