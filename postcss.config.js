@@ -6,8 +6,9 @@ module.exports = (ctx) => ({
     ctx.env === "production"
       ? require("@fullhuman/postcss-purgecss")({
         content: [
-          './static/js/main.js',
-          // etc.
+          './src/**/*.js',
+          './src/**/*.cljs',
+          './resources/**/*.html',
         ],
 
         // https://tailwindcss.com/docs/controlling-file-size#understanding-the-regex
