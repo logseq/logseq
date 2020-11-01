@@ -209,7 +209,7 @@
             type "resize"
             handler
             (fn []
-              (let [vh (.-height viewport)
+              (let [vh (+ (.-offsetTop viewport) (.-height viewport))
                     rule (.. sheet -rules (item 0))
                     set-top #(set! (.. rule -style -top) (str % "px"))]
                 (set-top vh)
