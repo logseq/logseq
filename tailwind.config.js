@@ -1,4 +1,8 @@
 module.exports = {
-  purge: false,
+  purge: [
+    './src/**/*.js',
+    './src/**/*.cljs',
+    './resources/**/*.html',
+  ],
   plugins: [require("@tailwindcss/ui")],
 };
