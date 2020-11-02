@@ -23,6 +23,7 @@
         "release": "run-s cljs:release gulp:build",
         "watch-app": "run-p cljs:watch-app gulp:watch",
         "release-app": "run-s cljs:release-app gulp:build",
+        "dev-release-app": "run-s cljs:dev-release-app gulp:build",
         "clean": "gulp clean",
         "gulp:watch": "gulp watch",
         "gulp:build": "NODE_ENV=production gulp build",
@@ -30,6 +31,7 @@
         "cljs:release": "clojure -A:cljs release app publishing",
         "cljs:watch-app": "clojure -A:cljs watch app",
         "cljs:release-app": "clojure -A:cljs release app",
+        "cljs:dev-release-app": "clojure -A:cljs release app --config-merge '{:closure-defines {frontend.config/DEV-RELEASE true}}'",
         "cljs:debug": "clojure -A:cljs release app --debug",
         "cljs:report": "clojure -A:cljs run shadow.cljs.build-report app report.html"
     },

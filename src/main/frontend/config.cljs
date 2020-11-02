@@ -4,7 +4,10 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-(defonce dev? ^boolean goog.DEBUG)
+(goog-define DEV-RELEASE false)
+(defonce dev-release? DEV-RELEASE)
+(defonce dev? ^boolean (or dev-release? goog.DEBUG))
+
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
