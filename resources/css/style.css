@@ -1,9 +1,9 @@
 @charset "utf-8";
-@import "../fonts/inter/inter.css";
+@import "./inter.css";
 @import "./reveal.min.css";
 @import "./reveal_black.min.css";
 @import "./katex.min.css";
-@import "./tailwind.min.css";
+@import "./tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
 @import "./common.css";
 @import "./datepicker.css";
 @import "./highlight.css";

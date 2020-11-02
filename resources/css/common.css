@@ -875,13 +875,13 @@ iframe {
 .aspect-ratio-square {
     padding-top: 100%;
 }
-.aspect-ratio-16/9 {
+.aspect-ratio-16\/9 {
     padding-top: 56.25%;
 }
-.aspect-ratio-4/3 {
+.aspect-ratio-4\/3 {
     padding-top: 75%;
 }
-.aspect-ratio-21/9 {
+.aspect-ratio-21\/9 {
     padding-top: 42.86%;
 }
 

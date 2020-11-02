@@ -11,18 +11,13 @@
              {:entries [frontend.extensions.code]
               :depends-on #{:main}}}
 
-   :output-dir "./resources/static/js"
+   :output-dir "./static/js"
    :asset-path "/static/js"
    :release {:asset-path "https://asset.logseq.com/static/js"}
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es6
                       :externs ["datascript/externs.js"
                                 "externs.js"]}
-   ;; TODO: purge-css not working properly
-   ;; :build-hooks [(shadow.hooks/purge-css
-   ;;                {:css-source "node_modules/@tailwindcss/ui/dist/tailwind-ui.min.css"
-   ;;                 :js-globs   ["resources/static/js/*.js"]
-   ;;                 :public-dir    "resources/static/css"})]
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop
@@ -39,7 +34,7 @@
 
    :release {:asset-path "https://asset.logseq.com/static/js"}
 
-   :output-dir "../resources/static/js/publishing"
+   :output-dir "./static/js/publishing"
    :asset-path "/static/js"
 
    :closure-defines {frontend.config/PUBLISHING true}
