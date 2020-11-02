@@ -35,7 +35,7 @@ const css = {
   _optimizeCSSForRelease() {
     return gulp.src(path.join(outputPath, 'css', 'style.css'))
       .pipe(cleanCSS())
-      .pipe(gulp.dest(outputPath))
+      .pipe(gulp.dest(path.join(outputPath, 'css')))
   },
 }
 
