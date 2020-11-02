@@ -18,7 +18,7 @@ const detect = () => {
 };
 
 function basicAuth (username, token) {
-  return "Basic " + btoa("tiensonqin:" + token);
+  return "Basic " + btoa(username + ":" + token);
 }
 
 const fsName = 'logseq';
