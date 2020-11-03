@@ -9,6 +9,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
@@ -255,7 +256,9 @@
                                          "/"
                                          file-path)
                                     nil)]
-                 (common-handler/check-changed-files-status))
+                 (common-handler/check-changed-files-status)
+                 (when (state/git-auto-push?)
+                   (repo-handler/push repo nil)))
                (p/catch (fn [err]
                           (prn "error: " err))))))
 
@@ -300,6 +303,9 @@
                                   :path-params {:name (string/lower-case new-name)}})
 
         (notification/show! "Page renamed successfully!" :success)
+
+        (when (state/git-auto-push?)
+          (repo-handler/push repo nil))
 
         (ui-handler/re-render-root!)))))
 
