@@ -44,8 +44,11 @@
 
 (defn git-add
   [repo-url file]
-  (p/let [result (git/add repo-url file)]
-    (state/git-add! repo-url file)))
+  (-> (p/let [result (git/add repo-url file)]
+        (state/git-add! repo-url file))
+      (p/catch (fn [error]
+                 (println "git add '" file "' failed: " error)
+                 (js/console.log (.-stack error))))))
 
 (defn get-latest-commit
   ([repo-url handler]
