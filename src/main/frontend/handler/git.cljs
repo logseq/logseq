@@ -47,13 +47,12 @@
   ([repo-url file]
    (git-add repo-url file true))
   ([repo-url file update-status?]
-   (-> (p/let [_result (git/add repo-url file)]
+   (-> (p/let [result (git/add repo-url file)]
          (when update-status?
            (common-handler/check-changed-files-status)))
        (p/catch (fn [error]
                   (println "git add '" file "' failed: " error)
                   (js/console.error error))))))
-
 (defn get-latest-commit
   ([repo-url handler]
    (get-latest-commit repo-url handler 1))

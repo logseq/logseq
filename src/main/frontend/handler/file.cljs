@@ -111,7 +111,8 @@
   [repo path content {:keys [reset? re-render-root? add-history? update-status?]
                       :or {reset? true
                            re-render-root? false
-                           add-history? true}}]
+                           add-history? true
+                           update-status? false}}]
   (let [original-content (db/get-file-no-sub repo path)]
     (if reset?
       (db/reset-file! repo path content)
@@ -119,7 +120,7 @@
     (util/p-handle
      (fs/write-file (util/get-repo-dir repo) path content)
      (fn [_]
-       (git-handler/git-add repo path)
+       (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))
          (restore-config! repo true))
        (when (= path (str config/app-name "/" config/custom-css-file))
@@ -132,26 +133,46 @@
        (js/console.error error)))))
 
 (defn alter-files
-  [repo files]
-  (let [files-tx (mapv (fn [[path content]]
-                         (let [original-content (db/get-file-no-sub repo path)]
-                           [path original-content content])) files)]
-    (-> (p/all
-         (doall
-          (map
-           (fn [[path content]]
-             (db/set-file-content! repo path content)
-             (util/p-handle
-              (fs/write-file (util/get-repo-dir repo) path content)
-              (fn [_]
-                (git-handler/git-add repo path))
-              (fn [error]
-                (println "Write file failed, path: " path ", content: " content)
-                (js/console.error error))))
-           files)))
-        (p/then (fn [_result]
-                  (ui-handler/re-render-file!)
-                  (history/add-history! repo files-tx))))))
+  ([repo files]
+   (alter-files repo files {}))
+  ([repo files {:keys [add-history? update-status? git-add-cb reset?]
+                :or {add-history? true
+                     update-status? true
+                     reset? false}}]
+   (let [files-tx (mapv (fn [[path content]]
+                          (let [original-content (db/get-file-no-sub repo path)]
+                            [path original-content content])) files)]
+     (-> (p/all
+          (doall
+           (map
+            (fn [[path content]]
+              (if reset?
+                (db/reset-file! repo path content)
+                (db/set-file-content! repo path content))
+              (util/p-handle
+               (fs/write-file (util/get-repo-dir repo) path content)
+               (fn [_])
+               (fn [error]
+                 (println "Write file failed, path: " path ", content: " content)
+                 (js/console.error error))))
+            files)))
+         (p/then (fn [_result]
+                   (->
+                    (p/all
+                     (doall
+                      (map
+                       (fn [[path content]]
+                         (git-handler/git-add repo path update-status?))
+                       files)))
+                    (p/then (fn [_]
+                              (when git-add-cb
+                                (git-add-cb))))
+                    (p/catch (fn [error]
+                               (println "Git add failed")
+                               (js/console.error error))))
+                   (ui-handler/re-render-file!)
+                   (when add-history?
+                     (history/add-history! repo files-tx))))))))
 
 (defn remove-file!
   [repo file]

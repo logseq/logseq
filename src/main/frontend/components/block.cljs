@@ -1143,7 +1143,7 @@
                show-page?
                page-name)
        (let [parents-atom (atom parents)
-             component [:div.block-parents.flex-row.flex
+             component [:div.block-parents.flex-row.flex-1
                         (when show-page?
                           [:a {:href (rfe/href :page {:name page-name})}
                            (or (:page/original-name page)

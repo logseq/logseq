@@ -27,8 +27,8 @@
                             (set! (.-onload reader)
                                   (fn [e]
                                     (let [text (.. e -target -result)]
-                                      (external-handler/import-from-roam-json! text)
-                                      (reset! *importing? false))))
+                                      (external-handler/import-from-roam-json! text
+                                                                               #(reset! *importing? false)))))
                             (.readAsText reader file)))
                         (notification/show! "Please choose a JSON file."
                                             :error))))}]

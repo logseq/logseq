@@ -21,7 +21,7 @@
 ;; TODO: 5. Roam attributes -> properties
 ;; TODO: 6. hiccup
 
-(defonce uid-pattern #"\(\(([a-zA-Z0-9_\\-]{10})\)\)")
+(defonce uid-pattern #"\(\(([a-zA-Z0-9_\\-]{6,24})\)\)")
 (defonce macro-pattern #"\{\{([^{}]+)\}\}")
 
 (defn uid-transform
@@ -55,7 +55,9 @@
                     (map last)
                     (distinct)
                     (set))]
-      (reset! all-refed-uids uids))))
+      (reset! all-refed-uids uids)
+      (doseq [uid uids]
+        (swap! uid->uuid assoc uid (medley/random-uuid))))))
 
 (defn transform
   [text]
@@ -65,7 +67,6 @@
       (uid-transform)
       (macro-transform)))
 
-;; #"(([a-zA-Z0-9_\\-]{9}))"
 (declare children->text)
 (defn child->text
   [{:keys [uid string children] :as child} level]
