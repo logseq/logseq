@@ -571,22 +571,22 @@
         repo (or repo (state/get-current-repo))
         ;; block-has-children? (seq children) ; not working for now
         block-has-children? (db/block-has-children? repo block)
-        v1 (subs value 0 pos)
-        v2 (string/triml (subs value pos))
-        v1 (string/trim (if with-level? v1 (block/with-levels v1 format block)))
-        v2-level (cond
-                   new-level
-                   new-level
-                   (or block-self? block-has-children?)
-                   (inc level)
-                   :else
-                   level)
-        v2 (if (and v2
-                    (re-find (re-pattern (util/format "^[%s]+\\s+" (config/get-block-pattern format))) v2))
-             v2
-             (rebuild-block-content
-              (str (config/default-empty-block format v2-level) " " v2)
-              format))
+        fst-block-text (subs value 0 pos)
+        snd-block-text (string/triml (subs value pos))
+        fst-block-text (string/trim (if with-level? fst-block-text (block/with-levels fst-block-text format block)))
+        snd-block-text-level (cond
+                               new-level
+                               new-level
+                               (or block-self? block-has-children?)
+                               (inc level)
+                               :else
+                               level)
+        snd-block-text (if (and snd-block-text
+                                (re-find (re-pattern (util/format "^[%s]+\\s+" (config/get-block-pattern format))) snd-block-text))
+                         snd-block-text
+                         (rebuild-block-content
+                          (str (config/default-empty-block format snd-block-text-level) " " snd-block-text)
+                          format))
         block (with-block-meta repo block)
         original-id (:block/uuid block)
         format (:block/format block)
@@ -594,7 +594,7 @@
         file (db/entity repo (:db/id file))
         insert-block (fn [block file-path file-content]
                        (let [value (if create-new-block?
-                                     (str v1 "\n" v2)
+                                     (str fst-block-text "\n" snd-block-text)
                                      value)
                              value (text/re-construct-block-properties block value properties)
                              value (rebuild-block-content value format)
@@ -657,7 +657,7 @@
                            (when ok-handler
                              (let [first-block (first blocks)
                                    last-block (last blocks)]
-                               (ok-handler [first-block last-block v2]))))))]
+                               (ok-handler [first-block last-block snd-block-text]))))))]
     (cond
       (and (not file) page)
       ;; TODO: replace with handler.page/create!
@@ -691,7 +691,7 @@
                                 (str content
                                      (text/remove-level-spaces value (keyword format))
                                      "\n"
-                                     v2))
+                                     snd-block-text))
                 (git-handler/git-add repo path)
                 (ui-handler/re-render-root!)
 

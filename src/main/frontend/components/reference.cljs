@@ -4,7 +4,7 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.components.hiccup :as hiccup]
+            [frontend.components.block :as block]
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.components.content :as content]
@@ -48,13 +48,13 @@
              [:h2.font-bold.opacity-50 (let []
                                          "SCHEDULED AND DEADLINE")]
              [:div.references-blocks.mb-6
-              (let [ref-hiccup (hiccup/->hiccup scheduled-or-deadlines
-                                                {:id (str encoded-page-name "-agenda")
-                                                 :start-level 2
-                                                 :ref? true
-                                                 :group-by-page? true
-                                                 :editor-box editor/box}
-                                                {})]
+              (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
+                                               {:id (str encoded-page-name "-agenda")
+                                                :start-level 2
+                                                :ref? true
+                                                :group-by-page? true
+                                                :editor-box editor/box}
+                                               {})]
                 (content/content encoded-page-name
                                  {:hiccup ref-hiccup}))]))
 
@@ -62,13 +62,13 @@
            [:h2.font-bold.opacity-50 (let []
                                        (str n-ref " Linked References"))]
            [:div.references-blocks
-            (let [ref-hiccup (hiccup/->hiccup ref-blocks
-                                              {:id encoded-page-name
-                                               :start-level 2
-                                               :ref? true
-                                               :group-by-page? true
-                                               :editor-box editor/box}
-                                              {})]
+            (let [ref-hiccup (block/->hiccup ref-blocks
+                                             {:id encoded-page-name
+                                              :start-level 2
+                                              :ref? true
+                                              :group-by-page? true
+                                              :editor-box editor/box}
+                                             {})]
               (content/content encoded-page-name
                                {:hiccup ref-hiccup}))])]]))))
 
@@ -78,13 +78,13 @@
         encoded-page-name (util/url-encode page-name)]
     (reset! n-ref (count ref-blocks))
     [:div.references-blocks
-     (let [ref-hiccup (hiccup/->hiccup ref-blocks
-                                       {:id (str encoded-page-name "-unlinked-")
-                                        :start-level 2
-                                        :ref? true
-                                        :group-by-page? true
-                                        :editor-box editor/box}
-                                       {})]
+     (let [ref-hiccup (block/->hiccup ref-blocks
+                                      {:id (str encoded-page-name "-unlinked-")
+                                       :start-level 2
+                                       :ref? true
+                                       :group-by-page? true
+                                       :editor-box editor/box}
+                                      {})]
        (content/content encoded-page-name
                         {:hiccup ref-hiccup}))]))
 

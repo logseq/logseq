@@ -14,7 +14,7 @@
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.components.content :as content]
-            [frontend.components.hiccup :as hiccup]
+            [frontend.components.block :as block]
             [frontend.components.editor :as editor]
             [frontend.components.reference :as reference]
             [frontend.components.page :as page]
@@ -47,11 +47,11 @@
   (let [start-level (or (:block/level (first blocks)) 1)]
     (content/content
      encoded-page-name
-     {:hiccup (hiccup/->hiccup blocks
-                               {:id encoded-page-name
-                                :start-level 2
-                                :editor-box editor/box}
-                               {})})))
+     {:hiccup (block/->hiccup blocks
+                              {:id encoded-page-name
+                               :start-level 2
+                               :editor-box editor/box}
+                              {})})))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}

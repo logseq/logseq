@@ -11,7 +11,6 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.components.hiccup :as hiccup]
             [frontend.ui :as ui]
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
