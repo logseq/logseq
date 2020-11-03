@@ -283,8 +283,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                             {:block/uuid uuid
-                              :block/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -401,9 +401,9 @@
                      (util/->tags tags))
          page-alias (when-let [alias (:alias new-properties)]
                       (map
-                       (fn [alias]
-                         {:page/name (string/lower-case alias)})
-                       (remove #{(:page/name page)} alias)))
+                        (fn [alias]
+                          {:page/name (string/lower-case alias)})
+                        (remove #{(:page/name page)} alias)))
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
@@ -423,7 +423,8 @@
 
                  :else
                  value)]
-     (when (not= (string/trim content) (string/trim value)) ; block content changed
+     (cond
+       (not= (string/trim content) (string/trim value)) ; block content changed
        (let [file (db/entity repo (:db/id file))]
          (cond
            ;; Page was referenced but no related file
@@ -505,10 +506,10 @@
                                      [[:db/retract page-id :page/properties]]))
                  pages (if (seq page-tags)
                          (let [tag-pages (map
-                                          (fn [page]
-                                            {:page/original-name page
-                                             :page/name page})
-                                          (map :tag/name page-tags))]
+                                           (fn [page]
+                                             {:page/original-name page
+                                              :page/name page})
+                                           (map :tag/name page-tags))]
                            (concat pages tag-pages))
                          pages)
                  page-tags (when (and pre-block? (seq page-tags))
@@ -545,12 +546,16 @@
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
 
-             ;; (when (state/git-auto-push?)
-             ;;     (repo-handler/push repo nil))
-             )
+             (repo-handler/push-if-auto-enabled! repo))
 
            :else
-           nil))))))
+           nil))
+
+       (seq (state/get-changed-files))
+       (repo-handler/push-if-auto-enabled! repo)
+
+       :else
+       nil))))
 
 (defn insert-new-block-aux!
   [{:block/keys [uuid content meta file dummy? level repo page format properties collapsed?] :as block}
@@ -1008,7 +1013,8 @@
         (when top-block?
           (route-handler/redirect! {:to :page
                                     :path-params {:name (:page/name page)}})
-          (ui-handler/re-render-root!))))))
+          (ui-handler/re-render-root!))
+        (repo-handler/push-if-auto-enabled! repo)))))
 
 (defn remove-block-property!
   [block-id key]
@@ -1100,7 +1106,7 @@
   ;; (when e
   ;;   (when-not (util/input? (gobj/get e "target"))
   ;;     (util/clear-selection!)))
-)
+  )
 
 (defn clear-selection-blocks!
   []
@@ -1752,7 +1758,7 @@
                                                                 :end-pos end-pos}))]
                                  (reset! last-start-pos end-pos)
                                  block))
-                             blocks))
+                          blocks))
                 file-id (:db/id (:block/file block))
                 file (db/entity file-id)
                 page (:block/page block)
@@ -1816,7 +1822,7 @@
                                                               :end-pos end-pos}))]
                                (reset! last-start-pos end-pos)
                                block))
-                           blocks))
+                        blocks))
               file-id (:db/id (:block/file block))
               file (db/entity file-id)
               page (:block/page block)

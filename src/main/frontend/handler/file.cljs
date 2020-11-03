@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.git :as git]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
             [datascript.core :as d]
@@ -107,7 +108,7 @@
                    (js/console.dir error))))))
 
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? add-history?]
+  [repo path content {:keys [reset? re-render-root? add-history? update-status?]
                       :or {reset? true
                            re-render-root? false
                            add-history? true}}]
@@ -161,8 +162,8 @@
                                     "/"
                                     file)
                                nil)]
-       (state/git-add! repo (str "- " file))
        (when-let [file (db/entity repo [:file/path file])]
+         (common-handler/check-changed-files-status)
          (let [file-id (:db/id file)
                page-id (db/get-file-page-id (:file/path file))
                tx-data (map

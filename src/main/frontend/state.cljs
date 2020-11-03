@@ -23,9 +23,7 @@
     :repo/loading-files? nil
     :repo/importing-to-db? nil
     :repo/sync-status {}
-    :repo/changed-files (or
-                         (storage/get "git-changed-files")
-                         {})
+    :repo/changed-files nil
     :indexeddb/support? true
     ;; TODO: save in local storage so that if :changed? is true when user
     ;; reloads the browser, the app should re-index the repo (another way
@@ -718,27 +716,6 @@
   [value]
   (set-state! :indexeddb/support? value))
 
-(defn git-add!
-  [repo file]
-  (update-state! [:repo/changed-files repo]
-                 (fn [files] (distinct (conj files file))))
-  (storage/set "git-changed-files" (:repo/changed-files @state)))
-
-(defn reset-changed-files!
-  [files]
-  (when-let [repo (get-current-repo)]
-    (swap! state assoc-in [:repo/changed-files repo] files)))
-
-(defn clear-changed-files!
-  [repo]
-  (set-state! [:repo/changed-files repo] nil)
-  (set-state! [:git/status repo] nil)
-  (storage/set "git-changed-files" (:repo/changed-files @state)))
-
-(defn get-changed-files
-  [repo]
-  (get-in @state [:repo/changed-files repo]))
-
 (defn set-modal!
   [modal-panel-content]
   (swap! state assoc
@@ -838,3 +815,11 @@
 (defn git-auto-push?
   []
   (true? (:git-auto-push (get-config (get-current-repo)))))
+
+(defn set-changed-files!
+  [repo changed-files]
+  (set-state! [:repo/changed-files repo] changed-files))
+
+(defn get-changed-files
+  []
+  (get-in @state [:repo/changed-files (get-current-repo)]))

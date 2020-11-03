@@ -11,6 +11,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.components.project :as project]
+            [frontend.components.repo :as repo]
             [frontend.components.commit :as commit]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.storage :as storage]
@@ -236,13 +237,9 @@
                        (not (gobj/get e "altKey"))
                        (not (gobj/get e "metaKey")))
               (when-let [repo-url (state/get-current-repo)]
-                (if (and
-                     (not (state/get-edit-input-id))
-                     (seq (state/get-changed-files repo-url)))
-                  (do
-                    (util/stop e)
-                    (state/set-modal! commit/add-commit-message))
-                  (notification/show! "No changed files yet!" :warning)))))}
+                (when-not (state/get-edit-input-id)
+                  (util/stop e)
+                  (state/set-modal! commit/add-commit-message)))))}
       (fn [e key-code]
         nil))))
   {:did-mount (fn [state]
@@ -295,7 +292,7 @@
                  :stroke-linejoin "round"
                  :stroke-linecap "round"}]]]])
           [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
-           (widgets/repos false)]
+           (repo/repos-dropdown false)]
           [:div.flex-1.h-0.overflow-y-auto
            (sidebar-nav route-match close-fn)]]]
         [:div.flex.flex-col.w-0.flex-1.overflow-hidden
@@ -326,10 +323,10 @@
                             (storage/remove :git/current-repo))}
                (t :login-github)])
 
-            (widgets/sync-status)
+            (repo/sync-status)
 
             [:div.repos.hidden.md:block
-             (widgets/repos true)]
+             (repo/repos-dropdown true)]
 
             (when-let [project (and current-repo (state/get-current-project))]
               [:a.opacity-70.hover:opacity-100.ml-4
