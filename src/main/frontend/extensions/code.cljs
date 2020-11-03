@@ -137,10 +137,8 @@
                  (when-let [pos-meta (::pos-meta state)]
                    (reset! pos-meta (last (:rum/args state)))))}
   [state config id attr code pos_meta]
-  [:div.relative
-   [:div.absolute.top-0.right-0.p-1.text-sm.text-gray-500
-    {:style {:z-index 2
-             :background "white"}}
+  [:div.extensions__code
+   [:div.extensions__code-lang
     (let [mode (get attr :data-lang "javascript")]
       (if (= mode "text/x-clojure")
         "clojure"
