@@ -655,7 +655,8 @@
                                           (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
                                (state/clear-edit!))))))
                       :node (gdom/getElement id)
-                      :visibilitychange? true))
+                      ;; :visibilitychange? true
+                      ))
                    100)
 
                   (when-let [element (gdom/getElement id)]
