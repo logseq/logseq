@@ -70,7 +70,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                      ;; [:div {:style {:position "absolute" :right "8px"}}
                      ;;  icon]
-                     ]]
+]]
           (rum/with-key
             (menu-link new-options child)
             (cljs.core/random-uuid))))])
@@ -104,27 +104,27 @@
              [:svg.h-6.w-6.text-green-400
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path
-               {:d "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
-                :stroke-width "2",
-                :stroke-linejoin "round",
+               {:d "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                :stroke-width "2"
+                :stroke-linejoin "round"
                 :stroke-linecap "round"}]]]
             :warning
             ["text-gray-900"
              [:svg.h-6.w-6.text-yellow-500
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path
-               {:d "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-                :stroke-width "2",
-                :stroke-linejoin "round",
+               {:d "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                :stroke-width "2"
+                :stroke-linejoin "round"
                 :stroke-linecap "round"}]]]
 
             ["text-red-500"
              [:svg.h-6.w-6.text-red-500
               {:view-box "0 0 20 20", :fill "currentColor"}
               [:path
-               {:clip-rule "evenodd",
+               {:clip-rule "evenodd"
                 :d
-                "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z",
+                "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                 :fill-rule "evenodd"}]]])]
       [:div.inset-0.flex.items-end.justify-center.px-4.py-3.pointer-events-none.sm:px-6.sm:py-3.sm:items-start.sm:justify-end
        {:style {:z-index (if (or (= state "exiting")
@@ -154,9 +154,9 @@
              [:svg.h-5.w-5
               {:fill "currentColor", :view-Box "0 0 20 20"}
               [:path
-               {:clip-rule "evenodd",
+               {:clip-rule "evenodd"
                 :d
-                "M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z",
+                "M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
                 :fill-rule "evenodd"}]]]]]]]]])))
 
 (rum/defc notification < rum/reactive
@@ -172,7 +172,7 @@
                        :key (name k)}
                       (fn [state]
                         (notification-content state (:content v) (:status v) k)))))
-              contents)))))
+                 contents)))))
 
 (defn checkbox
   [option]
@@ -193,18 +193,34 @@
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
 
+(defn get-dynamic-style-node
+  []
+  (js/document.getElementById "dynamic-style-scope"))
+
+(defn inject-document-devices-envs!
+  []
+  (let [cl (.-classList js/document.documentElement)]
+    (if (util/ios?) (.add cl "is-ios"))
+    (if (util/safari?) (.add cl "is-safari"))))
+
+(defn inject-dynamic-style-node!
+  []
+  (let [style (get-dynamic-style-node)]
+    (if (nil? style)
+      (let [node (js/document.createElement "style")]
+        (set! (.-id node) "dynamic-style-scope")
+        (.appendChild js/document.head node))
+      style)))
+
 (defn setup-patch-ios-fixed-bottom-position
   "fix a common issue about ios webpage viewport
    when soft keyboard setup"
   []
   (if (and
-        (util/ios?)
-        (not (nil? js/window.visualViewport)))
+       (util/ios?)
+       (not (nil? js/window.visualViewport)))
     (let [viewport js/visualViewport
-          style (js/document.createElement "style")]
-      (.add (.-classList js/document.documentElement) "is-ios")
-      (set! (.-id style) "dynamic-style-scope")
-      (.appendChild js/document.head style)
+          style (get-dynamic-style-node)]
       (let [sheet (.-sheet style)
             type "resize"
             handler
@@ -219,8 +235,7 @@
         (handler)
         (fn []
           (.removeEventListener viewport type handler)
-          (prn "teardown viewport " type)))
-      )))
+          (prn "TODO : teardown viewport" type))))))
 
 ;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
@@ -383,9 +398,9 @@
      [:svg.h-6.w-6
       {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
       [:path
-       {:d "M6 18L18 6M6 6l12 12",
-        :stroke-width "2",
-        :stroke-linejoin "round",
+       {:d "M6 18L18 6M6 6l12 12"
+        :stroke-width "2"
+        :stroke-linejoin "round"
         :stroke-linecap "round"}]]]]
 
    (panel-content close-fn)])
@@ -491,8 +506,8 @@
                    (on-change value)))}
    (for [{:keys [label value selected]} options]
      [:option (cond->
-                  {:key label
-                   :value (or value label)}
+               {:key label
+                :value (or value label)}
                 selected
                 (assoc :selected selected))
       label])])

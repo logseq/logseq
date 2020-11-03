@@ -10,10 +10,16 @@
   (view route-match))
 
 (rum/defc current-page < rum/reactive
-  {:did-mount (fn [state]
-                (state/set-root-component! (:rum/react-component state))
-                (ui/setup-patch-ios-fixed-bottom-position)
-                state)}
+  {:did-mount    (fn [state]
+                   (state/set-root-component! (:rum/react-component state))
+                   (ui/inject-document-devices-envs!)
+                   (ui/inject-dynamic-style-node!)
+                   (let [teardown-fn (comp (ui/setup-patch-ios-fixed-bottom-position))]
+                     (assoc state ::teardown teardown-fn)))
+   :will-unmount (fn [state]
+                   (let [teardown (::teardown state)]
+                     (when-not (nil? teardown)
+                       (teardown))))}
   []
   (when-let [route-match (state/sub :route-match)]
     (i18n/tongue-provider
