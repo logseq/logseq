@@ -104,18 +104,6 @@
    :error
    false))
 
-(defn show-diff-error!
-  [_repo-url]
-  (notification/show!
-   [:p
-    [:span.text-gray-700.font-bold.mr-2
-     "Please resolve the diffs if any."]
-    (ui/button
-     "Go to diff"
-     :href "/diff")]
-   :error
-   false))
-
 (defn get-new-token
   [repo]
   (when-let [installation-id (-> (filter
@@ -352,15 +340,29 @@
                                                 (git-handler/set-git-error! repo-url error))))
                                  (state/set-changed-files! repo-url nil)))
                        (p/catch (fn [error]
+                                  (println "Git pull error:")
+                                  (js/console.error error)
                                   (git-handler/set-git-status! repo-url :merge-failed)
                                   (git-handler/set-git-error! repo-url error)
-                                  (notification/show!
-                                   [:p.content
-                                    "Failed to merge, please "
-                                    [:span.text-gray-700.font-bold
-                                     "resolve any diffs first."]]
-                                   :error)
-                                  (route-handler/redirect! {:to :diff}))))))
+                                  (git-handler/get-latest-commit
+                                   repo-url
+                                   (fn [commit]
+                                     (let [local-oid (gobj/get commit "oid")
+                                           remote-oid (db/get-key-value repo-url
+                                                                        :git/remote-latest-commit)]
+                                       (p/let [result (git/get-local-diffs repo-url local-oid remote-oid)]
+                                         (if (seq result)
+                                           (do
+                                             (notification/show!
+                                              [:p.content
+                                               "Failed to merge, please "
+                                               [:span.text-gray-700.font-bold
+                                                "resolve any diffs first."]]
+                                              :error)
+                                             (route-handler/redirect! {:to :diff}))
+                                           (push repo-url {:commit-push? true
+                                                           :force? true
+                                                           :commit-message "Merge push without diffed files"})))))))))))
                (p/catch (fn [error]
                           (println "Pull error:" (str error))
                           (js/console.error error)
@@ -383,10 +385,11 @@
                             nil)))))))))))
 
 (defn push
-  [repo-url {:keys [commit-message fallback? diff-push? force?]
+  [repo-url {:keys [commit-message fallback? diff-push? commit-push? force?]
              :or {commit-message "Logseq auto save"
                   fallback? false
                   diff-push? false
+                  commit-push? false
                   force? false}}]
   (let [status (db/get-key-value repo-url :git/status)]
     (when (and
@@ -394,7 +397,7 @@
            (not (state/get-edit-input-id)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or
-                   force?
+                   commit-push?
                    (seq files)
                    fallback?
                    diff-push?)
@@ -407,12 +410,13 @@
                   (git-handler/set-git-status! repo-url :pushing)
                   (when-let [token (state/get-github-token repo-url)]
                     (util/p-handle
-                     (git/push repo-url token)
+                     (git/push repo-url token force?)
                      (fn [result]
                        (git-handler/set-git-status! repo-url nil)
                        (git-handler/set-git-error! repo-url nil)
                        (state/set-changed-files! repo-url nil))
                      (fn [error]
+                       (println "Git push error: ")
                        (js/console.error error)
                        (common-handler/check-changed-files-status)
                        (let [permission? (or (string/includes? (str error) "401")
@@ -621,7 +625,7 @@
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
                 :fallback? false
-                :force? true})))
+                :commit-push? true})))
 
 (defn read-repair-journals!
   [repo-url]
