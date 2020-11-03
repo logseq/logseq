@@ -128,7 +128,7 @@
   (let [current-repo (state/sub :git/current-repo)
         logged? (state/logged?)
         local-repo? (= current-repo config/local-repo)
-        get-repo-name-f (fn [repo]
+        get-repo-name (fn [repo]
                           (if head?
                             (db/get-repo-path repo)
                             (util/take-at-most (db/get-repo-name repo) 20)))]
@@ -139,11 +139,11 @@
             (ui/dropdown-with-links
              (fn [{:keys [toggle-fn]}]
                [:a#repo-switch {:on-click toggle-fn}
-                [:span (get-repo-name-f current-repo)]
+                [:span (get-repo-name current-repo)]
                 [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
              (mapv
               (fn [{:keys [id url]}]
-                {:title (get-repo-name-f url)
+                {:title (get-repo-name url)
                  :options {:on-click (fn []
                                        (state/set-current-repo! url)
                                        (when-not (= :draw (state/get-current-route))
@@ -156,8 +156,8 @@
              {:modal-class (util/hiccup->class
                             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
             (if local-repo?
-              [:span (get-repo-name-f current-repo)]
+              [:span (get-repo-name current-repo)]
               [:a
                {:href current-repo
                 :target "_blank"}
-               (get-repo-name-f current-repo)])))))))
+               (get-repo-name current-repo)])))))))
