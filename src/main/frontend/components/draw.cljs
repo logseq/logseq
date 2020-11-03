@@ -139,7 +139,7 @@
          "Please specify a title first!"
          :error)
         ;; TODO: focus the title input
-        )
+)
 
       (= title @*saving-title)
       nil
@@ -439,8 +439,8 @@
         [:div.flex.flex-row.items-center
          (repo/sync-status current-repo)
          (repo/repos-dropdown true
-                     (fn [repo]
-                       (reset! *current-file (get-last-file repo))))]])]))
+                              (fn [repo]
+                                (reset! *current-file (get-last-file repo))))]])]))
 
 (rum/defcs draw-2 < rum/reactive
   {:init (fn [state]

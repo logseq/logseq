@@ -283,8 +283,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                                {:block/uuid uuid
-                                 :block/meta new-meta}
+                             {:block/uuid uuid
+                              :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -401,9 +401,9 @@
                      (util/->tags tags))
          page-alias (when-let [alias (:alias new-properties)]
                       (map
-                        (fn [alias]
-                          {:page/name (string/lower-case alias)})
-                        (remove #{(:page/name page)} alias)))
+                       (fn [alias]
+                         {:page/name (string/lower-case alias)})
+                       (remove #{(:page/name page)} alias)))
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
@@ -506,10 +506,10 @@
                                      [[:db/retract page-id :page/properties]]))
                  pages (if (seq page-tags)
                          (let [tag-pages (map
-                                           (fn [page]
-                                             {:page/original-name page
-                                              :page/name page})
-                                           (map :tag/name page-tags))]
+                                          (fn [page]
+                                            {:page/original-name page
+                                             :page/name page})
+                                          (map :tag/name page-tags))]
                            (concat pages tag-pages))
                          pages)
                  page-tags (when (and pre-block? (seq page-tags))
@@ -1071,7 +1071,7 @@
                                             (if (string/starts-with? (string/lower-case line) key)
                                               new-line
                                               line))
-                                       (rest lines))]
+                                          (rest lines))]
                             (->> (cons (first lines) body)
                                  (string/join "\n")))
 
@@ -1106,7 +1106,7 @@
   ;; (when e
   ;;   (when-not (util/input? (gobj/get e "target"))
   ;;     (util/clear-selection!)))
-  )
+)
 
 (defn clear-selection-blocks!
   []
@@ -1758,7 +1758,7 @@
                                                                 :end-pos end-pos}))]
                                  (reset! last-start-pos end-pos)
                                  block))
-                          blocks))
+                             blocks))
                 file-id (:db/id (:block/file block))
                 file (db/entity file-id)
                 page (:block/page block)
@@ -1822,7 +1822,7 @@
                                                               :end-pos end-pos}))]
                                (reset! last-start-pos end-pos)
                                block))
-                        blocks))
+                           blocks))
               file-id (:db/id (:block/file block))
               file (db/entity file-id)
               page (:block/page block)
