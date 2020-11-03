@@ -257,8 +257,7 @@
                                          file-path)
                                     nil)]
                  (common-handler/check-changed-files-status)
-                 (when (state/git-auto-push?)
-                   (repo-handler/push repo nil)))
+                 (repo-handler/push-if-auto-enabled! repo))
                (p/catch (fn [err]
                           (prn "error: " err))))))
 
@@ -304,8 +303,7 @@
 
         (notification/show! "Page renamed successfully!" :success)
 
-        (when (state/git-auto-push?)
-          (repo-handler/push repo nil))
+        (repo-handler/push-if-auto-enabled! repo)
 
         (ui-handler/re-render-root!)))))
 

@@ -437,6 +437,11 @@
                      (println "Git push error: ")
                      (js/console.dir error)))))))
 
+(defn push-if-auto-enabled!
+  [repo]
+  (when (state/git-auto-push?)
+    (push repo nil)))
+
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]

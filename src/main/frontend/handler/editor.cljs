@@ -546,15 +546,13 @@
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
 
-             (when (state/git-auto-push?)
-               (repo-handler/push repo nil)))
+             (repo-handler/push-if-auto-enabled! repo))
 
            :else
            nil))
 
        (seq (state/get-changed-files))
-       (when (state/git-auto-push?)
-         (repo-handler/push repo nil))
+       (repo-handler/push-if-auto-enabled! repo)
 
        :else
        nil))))
@@ -1016,8 +1014,7 @@
           (route-handler/redirect! {:to :page
                                     :path-params {:name (:page/name page)}})
           (ui-handler/re-render-root!))
-        (when (state/git-auto-push?)
-          (repo-handler/push repo nil))))))
+        (repo-handler/push-if-auto-enabled! repo)))))
 
 (defn remove-block-property!
   [block-id key]
