@@ -311,12 +311,12 @@
           [:td.text-right
            [:a {:href "https://www.example.com"}
             "label"]]]
-         [:tr [:td "![image](https://logseq.com/static/img/logo.png)"]
+         [:tr [:td "![image](https://asset.logseq.com/static/img/logo.png)"]
           [:td.text-right
            [:img {:style {:float "right"
                           :width 64
                           :height 64}
-                  :src "https://logseq.com/static/img/logo.png"
+                  :src "https://asset.logseq.com/static/img/logo.png"
                   :alt "image"}]]]]]]
 
       [:li
@@ -342,10 +342,10 @@
           [:td.text-right
            [:a {:href "https://www.example.com"}
             "label"]]]
-         [:tr [:td "[[https://logseq.com/static/img/logo.png][image]]"]
+         [:tr [:td "[[https://asset.logseq.com/static/img/logo.png][image]]"]
           [:td.text-right
            [:img {:style {:float "right"
                           :width 64
                           :height 64}
-                  :src "https://logseq.com/static/img/logo.png"
+                  :src "https://asset.logseq.com/static/img/logo.png"
                   :alt "image"}]]]]]]]]))
