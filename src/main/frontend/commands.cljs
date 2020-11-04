@@ -1,7 +1,6 @@
 (ns frontend.commands
   (:require [frontend.util :as util]
             [frontend.date :as date]
-            [frontend.text :as text]
             [frontend.state :as state]
             [frontend.search :as search]
             [clojure.string :as string]

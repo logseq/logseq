@@ -3,14 +3,12 @@
             [goog.object :as gobj]
             [frontend.rum :as r]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.fs :as fs]
             [frontend.mixins :as mixins]
             [frontend.storage :as storage]
             [frontend.components.svg :as svg]
             [cljs-bean.core :as bean]
             [dommy.core :as d]
             [clojure.string :as string]
-            [frontend.date :as date]
             [frontend.handler.notification :as notification]
             [frontend.handler.draw :as draw :refer
              [*files
@@ -28,7 +26,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.search :as search]
-            [frontend.components.widgets :as widgets]
+            [frontend.components.repo :as repo]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -139,7 +137,7 @@
          "Please specify a title first!"
          :error)
         ;; TODO: focus the title input
-        )
+)
 
       (= title @*saving-title)
       nil
@@ -437,10 +435,10 @@
      (when current-repo
        [:div.absolute.top-4.right-4.hidden.md:block
         [:div.flex.flex-row.items-center
-         (widgets/sync-status current-repo)
-         (widgets/repos true
-                        (fn [repo]
-                          (reset! *current-file (get-last-file repo))))]])]))
+         (repo/sync-status current-repo)
+         (repo/repos-dropdown true
+                              (fn [repo]
+                                (reset! *current-file (get-last-file repo))))]])]))
 
 (rum/defcs draw-2 < rum/reactive
   {:init (fn [state]

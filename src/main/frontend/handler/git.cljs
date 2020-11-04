@@ -1,24 +1,16 @@
 (ns frontend.handler.git
   (:refer-clojure :exclude [clone load-file])
   (:require [frontend.util :as util :refer-macros [profile]]
-            [frontend.fs :as fs]
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.git :as git]
-            [frontend.github :as github]
-            [cljs-bean.core :as bean]
             [frontend.date :as date]
-            [frontend.config :as config]
-            [frontend.format :as format]
-            [frontend.format.protocol :as protocol]
             [goog.object :as gobj]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
-            [clojure.string :as string]
-            [cljs-time.local :as tl]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [frontend.handler.common :as common-handler]
+            [cljs-time.local :as tl]))
 
 (defn- set-latest-commit!
   [repo-url hash]
@@ -43,10 +35,15 @@
   (db/set-key-value repo-url :git/error (if value (str value))))
 
 (defn git-add
-  [repo-url file]
-  (p/let [result (git/add repo-url file)]
-    (state/git-add! repo-url file)))
-
+  ([repo-url file]
+   (git-add repo-url file true))
+  ([repo-url file update-status?]
+   (-> (p/let [result (git/add repo-url file)]
+         (when update-status?
+           (common-handler/check-changed-files-status)))
+       (p/catch (fn [error]
+                  (println "git add '" file "' failed: " error)
+                  (js/console.error error))))))
 (defn get-latest-commit
   ([repo-url handler]
    (get-latest-commit repo-url handler 1))
@@ -86,7 +83,6 @@
                                     (state/get-github-token repo)
                                     true)]
         (reset! pushing? false)
-        (state/clear-changed-files! repo)
         (notification/clear! nil)
         (route-handler/redirect! {:to :home})))))
 

@@ -1,7 +1,6 @@
 (ns frontend.handler.history
   (:require [frontend.state :as state]
             [frontend.history :as history]
-            [frontend.handler.ui :as ui-handler]
             [frontend.handler.file :as file]))
 
 (defn- default-undo

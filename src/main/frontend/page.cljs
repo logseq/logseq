@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [frontend.state :as state]
             [frontend.components.sidebar :as sidebar]
-            [frontend.ui :as ui]
             [frontend.context.i18n :as i18n]))
 
 (rum/defc route-view

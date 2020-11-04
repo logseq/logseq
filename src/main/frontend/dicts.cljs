@@ -1,7 +1,5 @@
 (ns frontend.dicts
   (:require [tongue.core :as tongue]
-            [frontend.state :as state]
-            [clojure.string :as string]
             [frontend.config :as config]))
 
 

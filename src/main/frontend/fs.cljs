@@ -1,7 +1,5 @@
 (ns frontend.fs
-  (:require [frontend.util :as util]
-            [promesa.core :as p]
-            [clojure.string :as string]))
+  (:require [frontend.util :as util]))
 
 (defn mkdir
   [dir]

@@ -1,7 +1,7 @@
 (ns frontend.tools.html-export
   (:require-macros [hiccups.core :as hiccups :refer [html]])
   (:require [frontend.db :as db]
-            [frontend.components.hiccup :as hiccup]
+            [frontend.components.block :as block]
             [frontend.extensions.slide :as slide]
             [hiccups.runtime :as hiccupsrt]
             [clojure.walk :as walk]
@@ -18,13 +18,13 @@
 (defn- build-block
   [config block]
   (let [body (:block/body block)
-        block (hiccup/build-block-part config block)]
+        block (block/build-block-part config block)]
     [:div.block
      block
      (when (seq body)
        (for [child body]
          (do
-           (hiccup/block-cp config child))))]))
+           (block/markup-element-cp config child))))]))
 
 (defn export-page
   [page-name blocks show-notification!]
@@ -36,12 +36,12 @@
     (if (seq blocks)
       (let [config {:html-export? true :slide? slide?}
             hiccup (if slide?
-                     (let [sections (hiccup/build-slide-sections blocks
-                                                                 (merge
-                                                                  config
-                                                                  {:id "slide"
-                                                                   :start-level 2})
-                                                                 build-block)]
+                     (let [sections (block/build-slide-sections blocks
+                                                                (merge
+                                                                 config
+                                                                 {:id "slide"
+                                                                  :start-level 2})
+                                                                build-block)]
                        (slide/slide-content false "" sections))
                      [:div.page
                       (for [block blocks]

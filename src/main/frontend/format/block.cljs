@@ -7,9 +7,7 @@
             [medley.core :as medley]
             [frontend.config :as config]
             [datascript.core :as d]
-            [clojure.set :as set]
             [frontend.date :as date]
-            [frontend.format.mldoc :as mldoc]
             [medley.core :as medley]))
 
 (defn heading-block?

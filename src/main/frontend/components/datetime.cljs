@@ -4,7 +4,6 @@
             [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.state :as state]
-            [frontend.mixins :as mixins]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.editor :as editor-handler]
             [cljs-time.core :as t]

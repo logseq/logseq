@@ -1,6 +1,5 @@
 (ns frontend.security
-  (:require [clojure.walk :as walk]
-            [clojure.string :as string]))
+  (:require [clojure.walk :as walk]))
 
 ;; To prevent from cross-site scripting vulnerability, we should add security checks for both hiccup and raw html.
 ;; Hiccup: [:a {:href "javascript:alert('hei')"} "click me"]

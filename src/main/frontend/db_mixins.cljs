@@ -1,6 +1,5 @@
 (ns frontend.db-mixins
-  (:require [frontend.db :as db]
-            [rum.core :as rum]))
+  (:require [frontend.db :as db]))
 
 (def query
   {:wrap-render

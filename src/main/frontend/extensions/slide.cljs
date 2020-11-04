@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [medley.core :as medley]
             [cljs-bean.core :as bean]
-            [promesa.core :as p]
             [frontend.loader :as loader]
             [frontend.ui :as ui]
             [frontend.config :as config]))

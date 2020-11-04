@@ -6,8 +6,10 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
@@ -250,11 +252,12 @@
               ;; remove file
               (->
                (p/let [_ (git/remove-file repo file-path)
-                       _result (fs/unlink (str (util/get-repo-dir repo)
-                                               "/"
-                                               file-path)
-                                          nil)]
-                 (state/git-add! repo (str "- " file-path)))
+                       _ (fs/unlink (str (util/get-repo-dir repo)
+                                         "/"
+                                         file-path)
+                                    nil)]
+                 (common-handler/check-changed-files-status)
+                 (repo-handler/push-if-auto-enabled! repo))
                (p/catch (fn [err]
                           (prn "error: " err))))))
 
@@ -299,6 +302,8 @@
                                   :path-params {:name (string/lower-case new-name)}})
 
         (notification/show! "Page renamed successfully!" :success)
+
+        (repo-handler/push-if-auto-enabled! repo)
 
         (ui-handler/re-render-root!)))))
 

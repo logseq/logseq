@@ -4,22 +4,18 @@
             [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.ui :as ui]
-            [frontend.format :as format]
             [frontend.components.content :as content]
-            [frontend.components.hiccup :as hiccup]
+            [frontend.components.block :as block]
             [frontend.components.editor :as editor]
             [frontend.components.reference :as reference]
             [frontend.components.page :as page]
             [frontend.components.onboarding :as onboarding]
-            [frontend.utf8 :as utf8]
             [goog.object :as gobj]
             [clojure.string :as string]))
 
@@ -47,11 +43,11 @@
   (let [start-level (or (:block/level (first blocks)) 1)]
     (content/content
      encoded-page-name
-     {:hiccup (hiccup/->hiccup blocks
-                               {:id encoded-page-name
-                                :start-level 2
-                                :editor-box editor/box}
-                               {})})))
+     {:hiccup (block/->hiccup blocks
+                              {:id encoded-page-name
+                               :start-level 2
+                               :editor-box editor/box}
+                              {})})))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}

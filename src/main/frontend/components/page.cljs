@@ -1,6 +1,5 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
-            [medley.core :as medley]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
@@ -8,19 +7,16 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
             [dommy.core :as d]
-            [frontend.components.hiccup :as hiccup]
-            [frontend.components.editor :as editor]
             [frontend.components.block :as block]
+            [frontend.components.editor :as editor]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.extensions.graph-2d :as graph-2d]
             [frontend.ui :as ui]
-            [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.components.project :as project]
             [frontend.config :as config]
@@ -73,7 +69,7 @@
                        :sidebar? sidebar?
                        :block? block?
                        :editor-box editor/box}
-        hiccup (hiccup/->hiccup page-blocks hiccup-config {})]
+        hiccup (block/->hiccup page-blocks hiccup-config {})]
     (rum/with-key
       (content/content encoded-page-name
                        {:hiccup hiccup
@@ -108,9 +104,9 @@
         [:div#today-queries.mt-10
          (for [{:keys [title] :as query} queries]
            (rum/with-key
-             (hiccup/custom-query {:start-level 2
-                                   :attr {:class "mt-10"}
-                                   :editor-box editor/box} query)
+             (block/custom-query {:start-level 2
+                                  :attr {:class "mt-10"}
+                                  :editor-box editor/box} query)
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn- delete-page!
@@ -340,7 +336,7 @@
                   (if (and (string/includes? page-original-name "[[")
                            (string/includes? page-original-name "]]"))
                     (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                      (hiccup/block-cp {} (ffirst ast)))
+                      (block/markup-element-cp {} (ffirst ast)))
                     page-original-name)
                   (or
                    page-name
@@ -454,16 +450,16 @@
                (let [encoded-page (util/encode-str page)]
                  [:tr {:key encoded-page}
                   [:td [:a {:on-click (fn [e]
-                                                      (util/stop e)
-                                                      (let [repo (state/get-current-repo)
-                                                            page (db/pull repo '[*] [:page/name (string/lower-case page)])]
-                                                        (when (gobj/get e "shiftKey")
-                                                          (state/sidebar-add-block!
-                                                           repo
-                                                           (:db/id page)
-                                                           :page
-                                                           {:page page}))))
-                                          :href (rfe/href :page {:name encoded-page})}
+                                        (util/stop e)
+                                        (let [repo (state/get-current-repo)
+                                              page (db/pull repo '[*] [:page/name (string/lower-case page)])]
+                                          (when (gobj/get e "shiftKey")
+                                            (state/sidebar-add-block!
+                                             repo
+                                             (:db/id page)
+                                             :page
+                                             {:page page}))))
+                            :href (rfe/href :page {:name encoded-page})}
                         page]]
                   [:td [:span.text-gray-500.text-sm
                         (if (zero? modified-at)
