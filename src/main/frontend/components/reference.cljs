@@ -61,7 +61,7 @@
                                              {:id encoded-page-name
                                               :start-level 2
                                               :ref? true
-                                              :ref-child? false
+                                              :breadcrumb-show? true
                                               :group-by-page? true
                                               :editor-box editor/box}
                                              {})]

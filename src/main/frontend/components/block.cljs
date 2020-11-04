@@ -1176,7 +1176,7 @@
                   state))}
   [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties] :as block}]
   (let [ref? (boolean (:ref? config))
-        ref-child? (:ref-child? config)
+        breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
@@ -1271,7 +1271,7 @@
        (not slide?)
        (merge attrs))
 
-     (when (and ref? (not ref-child?))
+     (when (and ref? breadcrumb-show?)
        (when-let [comp (block-parents repo uuid format false)]
          [:div.my-2.opacity-50.ml-4 comp]))
 
@@ -1298,7 +1298,7 @@
          (when (seq children)
            [:div.ref-children.ml-12
             (blocks-container children (assoc config
-                                              :ref-child? true
+                                              :breadcrumb-show? false
                                               :ref? true))])))
 
      (dnd-separator-wrapper block slide? false)]))
