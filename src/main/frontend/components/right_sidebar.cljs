@@ -227,13 +227,12 @@
                                                     "1 0 40%"
                                                     "0 0 0px")}}
        (if sidebar-open?
-         [:div {:style {:flex "1 1 auto"
+         [:div.hide-scrollbar {:style {:flex "1 1 auto"
                         :padding 12
                         :height "100%"
-                        :overflow-y "scroll"
+                        :overflow-y "auto"
                         :overflow-x "hidden"
-                        :box-sizing "content-box"
-                        :margin-right -17}}
+                        :box-sizing "content-box"}}
           [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
            [:div.mr-4.text-sm
             [:a.right-sidebar-button {:on-click (fn [e]
