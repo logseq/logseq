@@ -1,6 +1,7 @@
 (ns frontend.page
   (:require [rum.core :as rum]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.components.sidebar :as sidebar]
             [frontend.context.i18n :as i18n]))
 
