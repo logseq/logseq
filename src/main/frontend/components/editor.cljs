@@ -217,52 +217,35 @@
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
-  [:div.bg-base-2.fix-ios-fixed-bottom
-   {:style {:position        "fixed"
-            :bottom          0
-            :width           "100%"
-            :left            0
-            :justify-content "center"
-            :height          "2.5rem"
-            :display         "flex"
-            :align-items     "center"
-            ;; This element should be the upper-most in most situations
-            :z-index         99999999}}
+  [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/adjust-block-level! parent-state :right)}
+    {:on-click #(editor-handler/adjust-block-level! parent-state :right)}
     svg/indent-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/adjust-block-level! parent-state :left)}
+    {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
     svg/outdent-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/move-up-down parent-state % true)}
+    {:on-click #(editor-handler/move-up-down parent-state % true)}
     svg/move-up-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/move-up-down parent-state % false)}
+    {:on-click #(editor-handler/move-up-down parent-state % false)}
     svg/move-down-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click (fn [e]
+    {:on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
                        new-content (str old-content "\n")]
                    (state/set-state! :editor/content {parent-id new-content}))
                  (.stopPropagation e))}
     svg/multi-line-input]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:style {:padding "5px"}
-     :on-click (fn [e]
+    {:on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
                        new-content (str old-content "[[]]")]
                    (state/set-state! :editor/content {parent-id new-content}))
                  (.stopPropagation e))}
     "[[]]"]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:style {:padding "5px"}
-     :on-click (fn [e]
+    {:on-click (fn [e]
                  (let [old-content (state/sub [:editor/content parent-id])
                        new-content (str old-content "(())")]
                    (state/set-state! :editor/content {parent-id new-content}))
@@ -311,21 +294,21 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                    {:key (str "modal-input-" (name id))
-                     :id (str "modal-input-" (name id))
-                     :type (or type "text")
-                     :on-change (fn [e]
-                                  (swap! input-value assoc id (util/evalue e)))
-                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                 {:key (str "modal-input-" (name id))
+                  :id (str "modal-input-" (name id))
+                  :type (or type "text")
+                  :on-change (fn [e]
+                               (swap! input-value assoc id (util/evalue e)))
+                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder))
                 (dissoc input-item :id))]])
            (ui/button
-             "Submit"
-             :on-click
-             (fn [e]
-               (util/stop e)
-               (on-submit command @input-value pos)))])))))
+            "Submit"
+            :on-click
+            (fn [e]
+              (util/stop e)
+              (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left]}]
@@ -645,16 +628,17 @@
                       :on-hide
                       (fn [state e event]
                         (let [target (.-target e)]
-                          (when-not (d/has-class? target "bottom-action")
+                          (if (d/has-class? target "bottom-action") ;; FIXME: not particular case
+                            (.preventDefault e)
                             (let [{:keys [on-hide format value block id repo dummy?]} (get-state state)]
-                             (when on-hide
-                               (on-hide value event))
-                             (when
-                                 (or (= event :esc)
-                                     (= event :visibilitychange)
-                                     (and (= event :click)
-                                          (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
-                               (state/clear-edit!))))))
+                              (when on-hide
+                                (on-hide value event))
+                              (when
+                               (or (= event :esc)
+                                   (= event :visibilitychange)
+                                   (and (= event :click)
+                                        (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
+                                (state/clear-edit!))))))
                       :node (gdom/getElement id)
                       :visibilitychange? true))
                    100)

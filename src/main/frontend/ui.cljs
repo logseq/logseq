@@ -225,17 +225,18 @@
             type "resize"
             handler
             (fn []
-              (let [vh (+ (.-offsetTop viewport) (.-height viewport))
-                    rule (.. sheet -rules (item 0))
-                    set-top #(set! (.. rule -style -top) (str % "px"))]
-                (set-top vh)
-                (prn "resize " vh (.. rule -style -top))))]
+              (let [f (fn []
+                        (let [vh (+ (.-offsetTop viewport) (.-height viewport))
+                              rule (.. sheet -rules (item 0))
+                              set-top #(set! (.. rule -style -top) (str % "px"))]
+                          (set-top vh)))]
+                (js/setTimeout f 200)))
+            timer (js/setInterval handler 1000)]
         (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 0px;}")
         (.addEventListener viewport type handler false)
-        (handler)
         (fn []
           (.removeEventListener viewport type handler)
-          (prn "TODO : teardown viewport" type))))))
+          (js/clearInterval timer))))))
 
 ;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
