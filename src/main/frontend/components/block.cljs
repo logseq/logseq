@@ -1292,7 +1292,7 @@
               (rum/with-key (block-container (assoc config :block/uuid (:block/uuid child)) child)
                 (:block/uuid child)))))])
 
-     (when (and ref? (not ref-child?))
+     (when ref?
        (let [children (-> (db/get-block-children-unsafe repo uuid)
                           db/sort-by-pos)]
          (when (seq children)
