@@ -3,8 +3,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.util :as util]
-            [clojure.string :as string]
-            [medley.core :as medley]
             [frontend.state :as state]
             [frontend.db :as db]))
 

@@ -2,7 +2,6 @@
   (:require [frontend.db :as db]
             [frontend.config :as config]
             [frontend.state :as state]
-            [medley.core :as medley]
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [clojure.string :as string]

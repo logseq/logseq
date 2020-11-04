@@ -1,25 +1,16 @@
 (ns frontend.handler.git
   (:refer-clojure :exclude [clone load-file])
   (:require [frontend.util :as util :refer-macros [profile]]
-            [frontend.fs :as fs]
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.git :as git]
-            [frontend.github :as github]
-            [cljs-bean.core :as bean]
             [frontend.date :as date]
-            [frontend.config :as config]
-            [frontend.format :as format]
-            [frontend.format.protocol :as protocol]
             [goog.object :as gobj]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
-            [clojure.string :as string]
-            [cljs-time.local :as tl]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.local :as tl]))
 
 (defn- set-latest-commit!
   [repo-url hash]

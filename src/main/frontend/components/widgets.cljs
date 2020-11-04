@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.git :as git-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
@@ -13,9 +12,7 @@
             [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.version :as version]
-            [frontend.components.svg :as svg]
             [frontend.components.commit :as commit]
-            [clojure.set :as set]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]))
 

@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler.route :as route]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.db :as db]
             [frontend.handler.search :as search-handler]
@@ -12,8 +11,6 @@
             [frontend.config :as config]
             [frontend.search :as search]
             [clojure.string :as string]
-            [goog.crypt.base64 :as b64]
-            [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.context.i18n :as i18n]))
 

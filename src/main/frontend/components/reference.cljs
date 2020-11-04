@@ -6,15 +6,10 @@
             [frontend.db :as db]
             [frontend.components.block :as block]
             [frontend.ui :as ui]
-            [frontend.format :as format]
             [frontend.components.content :as content]
-            [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.components.svg :as svg]
             [frontend.components.editor :as editor]
-            [frontend.handler.page :as page-handler]
             [frontend.db-mixins :as db-mixins]
-            [clojure.set :as set]
             [clojure.string :as string]))
 
 (rum/defc references < rum/reactive db-mixins/query

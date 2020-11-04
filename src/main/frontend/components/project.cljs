@@ -1,13 +1,7 @@
 (ns frontend.components.project
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler.project :as project-handler]
-            [frontend.state :as state]
-            [clojure.string :as string]
-            [frontend.ui :as ui]
-            [frontend.mixins :as mixins]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [frontend.handler.project :as project-handler]))
 
 (rum/defcs add-project <
   (rum/local "" ::project)

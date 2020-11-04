@@ -1,10 +1,5 @@
 (ns frontend.extensions.sci
-  (:require [rum.core :as rum]
-            [frontend.config :as config]
-            [frontend.ui :as ui]
-            [goog.object :as gobj]
-            [cljs-bean.core :as bean]
-            [sci.core :as sci]))
+  (:require [sci.core :as sci]))
 
 (defn eval-string
   [s]

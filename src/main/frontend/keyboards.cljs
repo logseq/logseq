@@ -4,7 +4,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
-            [goog.events.KeyCodes :as codes]
             [frontend.util :as util]
             [medley.core :as medley]
             ["mousetrap" :as mousetrap]

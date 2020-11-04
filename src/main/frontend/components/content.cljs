@@ -18,10 +18,8 @@
             [cljs.pprint :as pprint]
             [frontend.handler.notification :as notification]
             [frontend.components.editor :as editor]
-            [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
-            [frontend.text :as text]
-            [frontend.security :as security]))
+            [frontend.text :as text]))
 
 (defn- set-format-js-loading!
   [format value]

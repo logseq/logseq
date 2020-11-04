@@ -5,10 +5,7 @@
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.state :as state]
-            [goog.object :as gobj]
-            [cljs-bean.core :as bean]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-bean.core :as bean]))
 
 ;; only support Github now
 (defn get-username

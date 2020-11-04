@@ -9,13 +9,9 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
-            [datascript.core :as d]
-            [frontend.github :as github]
             [cljs-bean.core :as bean]
-            [frontend.date :as date]
             [frontend.config :as config]
             [frontend.format :as format]
-            [frontend.format.protocol :as protocol]
             [clojure.string :as string]
             [frontend.history :as history]
             [frontend.handler.project :as project-handler]))

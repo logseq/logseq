@@ -1,6 +1,5 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
-            [medley.core :as medley]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
@@ -8,7 +7,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -19,7 +17,6 @@
             [frontend.components.svg :as svg]
             [frontend.extensions.graph-2d :as graph-2d]
             [frontend.ui :as ui]
-            [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.components.project :as project]
             [frontend.config :as config]

@@ -10,7 +10,6 @@
             [frontend.format :as format]
             [frontend.format.block :as block]
             [frontend.image :as image]
-            [cljs-time.local :as tl]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.db :as db]

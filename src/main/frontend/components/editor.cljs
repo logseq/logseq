@@ -3,20 +3,16 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
-            [frontend.handler.image :as image-handler]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
             [frontend.components.datetime :as datetime-comp]
             [promesa.core :as p]
-            [frontend.date :as date]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
-            [frontend.image :as image]
             [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.config :as config]
-            [frontend.utf8 :as utf8]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -29,12 +25,8 @@
                      *angle-bracket-caret-pos
                      *matched-block-commands
                      *show-block-commands]]
-            [frontend.format.block :as block]
             [medley.core :as medley]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
             [cljs-drag-n-drop.core :as dnd]
-            [frontend.search :as search]
             [frontend.text :as text]
             ["/frontend/utils" :as utils]))
 

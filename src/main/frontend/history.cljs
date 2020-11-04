@@ -1,5 +1,4 @@
-(ns frontend.history
-  (:require [frontend.db :as db]))
+(ns frontend.history)
 
 ;; Undo && Redo that works with files
 ;; TODO:

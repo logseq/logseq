@@ -1,7 +1,6 @@
 (ns frontend.keyboard
   (:require [goog.events :as events]
-            [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [goog.events.KeyCodes :as KeyCodes])
+            [goog.ui.KeyboardShortcutHandler.EventType :as EventType])
   (:import  [goog.ui KeyboardShortcutHandler]))
 
 ;; Copy from https://github.com/tonsky/rum/blob/gh-pages/doc/useful-mixins.md#keyboard-shortcut

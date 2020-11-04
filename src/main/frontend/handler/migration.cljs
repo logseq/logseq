@@ -4,7 +4,6 @@
             [frontend.ui :as ui]
             [promesa.core :as p]
             [frontend.util :as util]
-            [frontend.git :as git]
             [clojure.string :as str]
             [frontend.date :as date]
             [frontend.config :as config]

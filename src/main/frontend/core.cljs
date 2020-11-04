@@ -4,7 +4,6 @@
             [frontend.handler.route :as route]
             [frontend.page :as page]
             [frontend.routes :as routes]
-            [frontend.util :as util]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 

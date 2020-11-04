@@ -10,7 +10,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.migration :as migration-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]))

@@ -1,8 +1,6 @@
 (ns frontend.extensions.code
   (:require [rum.core :as rum]
-            [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.mixins :as mixins]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.db :as db]

@@ -1,11 +1,8 @@
 (ns frontend.format.mldoc
   (:require [frontend.format.protocol :as protocol]
             [frontend.util :as util]
-            [frontend.config :as config]
             [clojure.string :as string]
-            [frontend.loader :as loader]
             [cljs-bean.core :as bean]
-            [medley.core :as medley]
             [cljs.core.match :refer-macros [match]]))
 
 (defn default-config

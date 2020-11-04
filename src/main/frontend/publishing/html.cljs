@@ -1,7 +1,6 @@
 (ns frontend.publishing.html
   (:require-macros [hiccups.core])
-  (:require [frontend.config :as config]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
             [hiccups.runtime]))
 
 (defn publishing-html

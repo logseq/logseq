@@ -7,9 +7,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [dommy.core :as dom]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [clojure.core.async :as async]))
+            [cljs.core.async :as async]))
 
 (defonce state
   (atom

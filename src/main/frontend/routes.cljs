@@ -1,7 +1,6 @@
 (ns frontend.routes
   (:require [frontend.components.home :as home]
             [frontend.components.repo :as repo]
-            [frontend.components.sidebar :as sidebar]
             [frontend.components.file :as file]
             [frontend.components.page :as page]
             [frontend.components.diff :as diff]

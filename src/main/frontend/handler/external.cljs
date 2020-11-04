@@ -1,7 +1,6 @@
 (ns frontend.handler.external
   (:require [frontend.external :as external]
             [frontend.handler.file :as file-handler]
-            [frontend.handler.notification :as notification]
             [frontend.handler.common :as common-handler]
             [frontend.state :as state]
             [frontend.date :as date]

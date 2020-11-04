@@ -1,6 +1,5 @@
 (ns frontend.format.adoc
   (:require [frontend.format.protocol :as protocol]
-            [frontend.config :as config]
             [frontend.loader :as loader]))
 
 (defn loaded? []

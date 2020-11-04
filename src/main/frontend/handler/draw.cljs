@@ -5,18 +5,12 @@
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.git :as git]
-            [frontend.github :as github]
             [frontend.handler.file :as file-handler]
             [frontend.handler.git :as git-handler]
-            [cljs-bean.core :as bean]
             [frontend.date :as date]
             [frontend.config :as config]
-            [frontend.format :as format]
-            [frontend.format.protocol :as protocol]
             [frontend.storage :as storage]
             [clojure.string :as string]
-            [cljs-time.local :as tl]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]))
 

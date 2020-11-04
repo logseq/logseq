@@ -1,12 +1,8 @@
 (ns frontend.components.commit
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler.git :as git-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.state :as state]
-            [clojure.string :as string]
-            [frontend.db :as db]
-            [frontend.ui :as ui]
             [frontend.mixins :as mixins]
             [goog.dom :as gdom]
             [goog.object :as gobj]))

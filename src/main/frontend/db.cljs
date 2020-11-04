@@ -13,7 +13,6 @@
             [frontend.utf8 :as utf8]
             [cljs-bean.core :as bean]
             [frontend.config :as config]
-            [rum.core :as rum]
             [goog.object :as gobj]
             ["localforage" :as localforage]
             [promesa.core :as p]

@@ -1,7 +1,5 @@
 (ns frontend.graph
-  (:require [frontend.handler.ui :as ui-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.util :as util]
+  (:require [frontend.handler.route :as route-handler]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
