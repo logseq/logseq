@@ -141,38 +141,40 @@
                      reset? false}}]
    (let [files-tx (mapv (fn [[path content]]
                           (let [original-content (db/get-file-no-sub repo path)]
-                            [path original-content content])) files)]
-     (-> (p/all
-          (doall
-           (map
-            (fn [[path content]]
-              (if reset?
-                (db/reset-file! repo path content)
-                (db/set-file-content! repo path content))
-              (util/p-handle
-               (fs/write-file (util/get-repo-dir repo) path content)
-               (fn [_])
-               (fn [error]
-                 (println "Write file failed, path: " path ", content: " content)
-                 (js/console.error error))))
-            files)))
-         (p/then (fn [_result]
-                   (->
-                    (p/all
-                     (doall
-                      (map
-                       (fn [[path content]]
-                         (git-handler/git-add repo path update-status?))
-                       files)))
-                    (p/then (fn [_]
-                              (when git-add-cb
-                                (git-add-cb))))
-                    (p/catch (fn [error]
-                               (println "Git add failed")
-                               (js/console.error error))))
-                   (ui-handler/re-render-file!)
-                   (when add-history?
-                     (history/add-history! repo files-tx))))))))
+                            [path original-content content])) files)
+         write-file-f (fn [[path content]]
+                        (if reset?
+                          (db/reset-file! repo path content)
+                          (db/set-file-content! repo path content))
+                        (util/p-handle
+                         (fs/write-file (util/get-repo-dir repo) path content)
+                         (fn [_])
+                         (fn [error]
+                           (println "Write file failed, path: " path ", content: " content)
+                           (js/console.error error))))
+         git-add-f (fn [_result]
+                     (let [add-helper
+                           (fn []
+                             (doall
+                              (map
+                               (fn [[path content]]
+                                 (git-handler/git-add repo path update-status?))
+                               files)))]
+                       (-> (p/all (add-helper))
+                           (p/then (fn [_]
+                                     (when git-add-cb
+                                       (git-add-cb))))
+                           (p/catch (fn [error]
+                                      (println "Git add failed:")
+                                      (js/console.error error)))))
+                     (ui-handler/re-render-file!)
+                     (when add-history?
+                       (history/add-history! repo files-tx)))]
+     (-> (p/all (doall (map write-file-f files)))
+         (p/then git-add-f)
+         (p/catch (fn [error]
+                    (println "Alter files failed:")
+                    (js/console.error error)))))))
 
 (defn remove-file!
   [repo file]

@@ -29,6 +29,7 @@
                                          ".md")]
                            [path text]))))
                    files)]
+    ;; TODO: git add is quite slow
     (file-handler/alter-files repo files {:add-history? false
                                           :update-status? false
                                           :reset? true
