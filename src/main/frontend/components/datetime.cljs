@@ -66,17 +66,6 @@
           {:label "y"}])
         (fn [value]
           (swap! *timestamp assoc-in [:repeater :duration] value)))
-       ;; (ui/select
-       ;;  (mapv
-       ;;   (fn [item]
-       ;;     (if (= (:label item) kind)
-       ;;       (assoc item :selected "selected")
-       ;;       item))
-       ;;   [{:label "++"}
-       ;;    {:label "+"}
-       ;;    {:label ".+"}])
-       ;;  (fn [value]
-       ;;    (swap! *timestamp assoc-in [:repeater :kind] value)))
 
        [:a.ml-2.self-center {:on-click (fn []
                                          (reset! *show-repeater? false)
