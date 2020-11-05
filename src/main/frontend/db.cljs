@@ -1742,15 +1742,15 @@
   (when-let [date (date/journal-title->int journal-title)]
     (when-let [repo (state/get-current-repo)]
       (when-let [conn (get-conn repo)]
-        (->> (d/q
-              '[:find (pull ?block [*])
-                :in $ ?day
-                :where
-                (or
-                 [?block :block/scheduled ?day]
-                 [?block :block/deadline ?day])]
-              conn
-              date)
+        (->> (q repo [:custom :scheduled-deadline journal-title] {}
+                '[:find (pull ?block [*])
+                  :in $ ?day
+                  :where
+                  (or
+                   [?block :block/scheduled ?day]
+                   [?block :block/deadline ?day])]
+                date)
+             react
              seq-flatten
              sort-blocks
              group-by-page
