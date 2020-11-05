@@ -32,9 +32,9 @@
 (defn- sep-by-quote-or-space-or-comma
   [s]
   (when s
-    (let [comma? (re-find #"," s)]
+    (let [comma? (re-find #"[,|，]+" s)]
       (some->>
-       (string/split s #"[\"|\,]{1}")
+       (string/split s #"[\"|\,|，]{1}")
        (remove string/blank?)
        (map (fn [s]
               (if (and (not comma?)
