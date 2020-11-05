@@ -743,7 +743,7 @@
         properties (into {} (:block/properties block))]
     (if (and
          new-marker
-         (not= new-marker (:block/marker block))
+         (not= new-marker (string/lower-case (:block/marker block)))
          (state/enable-timetracking?))
       (assoc properties new-marker (util/time-ms))
       properties)))
