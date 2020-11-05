@@ -61,12 +61,6 @@
                  ;; If the click target is outside of current node
                   (when-not (dom/contains dom-node (.. e -target))
                     (on-hide state e :click))))
-        (listen state dom-node "keydown"
-                (fn [e]
-                  (case (.-keyCode e)
-                   ;; Esc
-                    27 (on-hide state e :esc)
-                    nil)))
         (when visibilitychange?
           (listen state js/window "visibilitychange"
                   (fn [e]
@@ -135,7 +129,7 @@
      ;; :will-unmount (fn [state]
      ;;                 (detach state)
      ;;                 state)
-     })))
+})))
 
 (defn modal
   [k]
