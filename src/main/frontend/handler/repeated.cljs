@@ -101,10 +101,9 @@
                         (t/plus now delta))
 
                       "DoublePlus"
-                      ;; Repeatedly add delta to make it a future timestamp
                       (repeat-until-future-timestamp start-time now delta week?)
 
-                      ;; Dotted and Plus
+                      ;; "Plus"
                       (t/plus start-time delta))]
     (timestamp->text timestamp start-time')))
 
