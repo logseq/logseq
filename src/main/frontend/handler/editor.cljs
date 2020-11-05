@@ -1342,7 +1342,10 @@
                 (let [state (get-state state)
                       content (:block/content block)
                       value (:value state)]
-                  (when (not= (string/trim (text/remove-level-spaces content format))
+                  (when (not= (-> content
+                                  (text/remove-level-spaces format)
+                                  text/remove-properties!
+                                  string/trim)
                               (string/trim value))
                     (save-block! state (:value state))))
                 (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
