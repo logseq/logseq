@@ -359,7 +359,7 @@
                  (when (seq alias)
                    [:div.text-sm.ml-1.mb-4 {:key "page-file"}
                     [:span.opacity-50 "Alias: "]
-                    (for [item alias]
+                    (for [item (reverse alias)]
                       [:a.p-1.ml-1 {:href (str "/page/" (util/encode-str item))}
                        item])])))
 

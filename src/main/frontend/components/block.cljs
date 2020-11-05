@@ -935,8 +935,9 @@
 
 (defn property-value
   [format v]
-  (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
-    [:div.inline (map-inline {} inline-list)]))
+  (when (string? v)
+    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+      [:div.inline.mr-1 (map-inline {} inline-list)])))
 
 (rum/defc properties-cp
   [block]
@@ -1525,7 +1526,8 @@
               [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
               (if (coll? v)
                 (for [item v]
-                  (if (= k :tags)
+                  (if (or (= k :tags)
+                          (= k :alias))
                     (if (string/includes? item "[[")
                       (property-value format item)
                       (let [tag (-> item
@@ -1534,7 +1536,7 @@
                                     (string/replace "#" ""))]
                         [:a.tag.mr-1 {:href (rfe/href :page {:name tag})}
                          tag]))
-                    (property-value format v)))
+                    (property-value format item)))
                 (property-value format v))])))]
 
       ["Paragraph" l]
