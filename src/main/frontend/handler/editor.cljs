@@ -1032,20 +1032,21 @@
         key (string/lower-case (str key))
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
-      (let [{:block/keys [content properties]} block]
-        (cond
-          (and (get properties key)
-               (= (string/trim (get properties key)) value))
-          nil
+      (when-not (:block/pre-block? block)
+        (let [{:block/keys [content properties]} block]
+          (cond
+            (and (get properties key)
+                 (= (string/trim (get properties key)) value))
+            nil
 
-          :else
-          (let [properties (:block/properties block)
-                properties' (if (seq properties)
-                              (assoc properties key value)
-                              {key value})]
-            (save-block-if-changed! block content
-                                    {:custom-properties properties'
-                                     :rebuild-content? false})))))))
+            :else
+            (let [properties (:block/properties block)
+                  properties' (if (seq properties)
+                                (assoc properties key value)
+                                {key value})]
+              (save-block-if-changed! block content
+                                      {:custom-properties properties'
+                                       :rebuild-content? false}))))))))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -1093,7 +1094,9 @@
 
 (defn copy-block-ref!
   [block-id]
-  (set-block-property! block-id "custom_id" (str block-id))
+  (let [block (db/entity [:block/uuid block-id])]
+    (when-not (:block/pre-block? block)
+      (set-block-property! block-id "custom_id" (str block-id))))
   (util/copy-to-clipboard! (str block-id)))
 
 (defn clear-selection!
