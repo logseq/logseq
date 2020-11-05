@@ -811,13 +811,19 @@
 (defn update-timestamps-content!
   [{:block/keys [repeated? scheduled-ast deadline-ast marker]} content]
   (if repeated?
-    (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
-             (map (fn [ts]
-                    [(repeated/timestamp->text ts)
-                     (repeated/next-timestamp-text ts)]))
-             (reduce (fn [content [old new]]
-                       (string/replace content old new))
-                     content))
+    (let [content (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
+                           (map (fn [ts]
+                                  [(repeated/timestamp->text ts)
+                                   (repeated/next-timestamp-text ts)]))
+                           (reduce (fn [content [old new]]
+                                     (string/replace content old new))
+                                   content))]
+      (when content
+        (str (string/trimr content)
+             "\n"
+             (util/format "- %s -> DONE [%s]"
+                          marker
+                          (date/get-local-date-time-string)))))
     content))
 
 (defn- with-marker-time

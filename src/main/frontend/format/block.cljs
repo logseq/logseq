@@ -132,7 +132,7 @@
                    (map (fn [[k v]]
                           (let [{:keys [date repetition]} v
                                 {:keys [year month day]} date
-                                day (js/parseInt (str year month day))]
+                                day (js/parseInt (str year (util/zero-pad month) (util/zero-pad day)))]
                             (cond->
                              (case k
                                :scheduled
