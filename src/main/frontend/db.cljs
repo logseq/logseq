@@ -491,6 +491,17 @@
                   (get refs (:db/id block))))
          blocks)))
 
+(defn custom-query-aux
+  [{:keys [query inputs result-transform] :as query'} query-opts]
+  (try
+    (let [inputs (map resolve-input inputs)
+          repo (state/get-current-repo)
+          k [:custom query']]
+      (apply q repo k query-opts query inputs))
+    (catch js/Error e
+      (println "Custom query failed: ")
+      (js/console.dir e))))
+
 (defn custom-query
   ([query]
    (custom-query query {}))
@@ -505,15 +516,7 @@
 
                        :else
                        nil)]
-     (try
-       (let [{:keys [query inputs result-transform]} query'
-             inputs (map resolve-input inputs)
-             repo (state/get-current-repo)
-             k [:custom query']]
-         (apply q repo k query-opts query inputs))
-       (catch js/Error e
-         (println "Query parsing failed: ")
-         (js/console.dir e))))))
+     (custom-query-aux query' query-opts))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
