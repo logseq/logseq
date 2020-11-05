@@ -748,10 +748,21 @@
                     :in $ ?page-name
                     :where
                     [?page :page/name ?page-name]
-                    [?page :page/alias ?alias]
-                    [?page :page/journal? false]]
+                    [?page :page/alias ?alias]]
                   conn
                   page-name)
+             seq-flatten
+             distinct)))
+
+(defn get-alias-page
+  [repo alias]
+  (when-let [conn (and repo (get-conn repo))]
+    (some->> (d/q '[:find ?page
+                    :in $ ?alias
+                    :where
+                    [?page :page/alias ?alias]]
+                  conn
+                  alias)
              seq-flatten
              distinct)))
 
@@ -958,7 +969,13 @@
 (defn page-alias-set
   [repo-url page]
   (when-let [page-id (:db/id (entity [:page/name page]))]
-    (let [aliases (get-page-alias repo-url page)]
+    (let [aliases (get-page-alias repo-url page)
+          aliases (if (seq aliases)
+                    (set
+                     (concat
+                      (mapcat #(get-alias-page repo-url %) aliases)
+                      aliases))
+                    aliases)]
       (set (conj aliases page-id)))))
 
 (defn page-blocks-transform
