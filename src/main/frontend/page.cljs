@@ -14,7 +14,7 @@
                    (state/set-root-component! (:rum/react-component state))
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
-                   (let [teardown-fn (comp (ui/setup-patch-ios-fixed-bottom-position))]
+                   (let [teardown-fn (comp (ui/setup-patch-ios-fixed-bottom-position!))]
                      (assoc state ::teardown teardown-fn)))
    :will-unmount (fn [state]
                    (let [teardown (::teardown state)]

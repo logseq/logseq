@@ -223,25 +223,13 @@
     {:on-click #(editor-handler/move-up-down parent-state % false)}
     svg/move-down-block]
    [:button.bottom-action
-    {:on-click (fn [e]
-                 (let [old-content (state/sub [:editor/content parent-id])
-                       new-content (str old-content "\n")]
-                   (state/set-state! :editor/content {parent-id new-content}))
-                 (.stopPropagation e))}
+    {:on-click #(commands/simple-insert! parent-id "\n" {})}
     svg/multi-line-input]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:on-click (fn [e]
-                 (let [old-content (state/sub [:editor/content parent-id])
-                       new-content (str old-content "[[]]")]
-                   (state/set-state! :editor/content {parent-id new-content}))
-                 (.stopPropagation e))}
+    {:on-click #(commands/simple-insert! parent-id "[[]]" {:backward-pos 2})}
     "[[]]"]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:on-click (fn [e]
-                 (let [old-content (state/sub [:editor/content parent-id])
-                       new-content (str old-content "(())")]
-                   (state/set-state! :editor/content {parent-id new-content}))
-                 (.stopPropagation e))}
+    {:on-click #(commands/simple-insert! parent-id "(())" {:backward-pos 2})}
     "(())"]])
 
 (rum/defcs input < rum/reactive
@@ -633,7 +621,7 @@
                                 (state/clear-edit!))))))
                       :node (gdom/getElement id)
                       ;; :visibilitychange? true
-                      ))
+))
                    100)
 
                   (when-let [element (gdom/getElement id)]

@@ -212,7 +212,7 @@
         (.appendChild js/document.head node))
       style)))
 
-(defn setup-patch-ios-fixed-bottom-position
+(defn setup-patch-ios-fixed-bottom-position!
   "fix a common issue about ios webpage viewport
    when soft keyboard setup"
   []
@@ -220,23 +220,22 @@
        (util/ios?)
        (not (nil? js/window.visualViewport)))
     (let [viewport js/visualViewport
-          style (get-dynamic-style-node)]
-      (let [sheet (.-sheet style)
-            type "resize"
-            handler
-            (fn []
-              (let [f (fn []
-                        (let [vh (+ (.-offsetTop viewport) (.-height viewport))
-                              rule (.. sheet -rules (item 0))
-                              set-top #(set! (.. rule -style -top) (str % "px"))]
-                          (set-top vh)))]
-                (js/setTimeout f 200)))
-            timer (js/setInterval handler 1000)]
-        (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 0px;}")
-        (.addEventListener viewport type handler false)
-        (fn []
-          (.removeEventListener viewport type handler)
-          (js/clearInterval timer))))))
+          style (get-dynamic-style-node)
+          sheet (.-sheet style)
+          type "resize"
+          handler (fn []
+                    (let [f (fn []
+                              (let [vh (+ (.-offsetTop viewport) (.-height viewport))
+                                    rule (.. sheet -rules (item 0))
+                                    set-top #(set! (.. rule -style -top) (str % "px"))]
+                                (set-top vh)))]
+                      (js/setTimeout f 200)))
+          timer (js/setInterval handler 1000)]
+      (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 0px;}")
+      (.addEventListener viewport type handler false)
+      (fn []
+        (.removeEventListener viewport type handler)
+        (js/clearInterval timer)))))
 
 ;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
