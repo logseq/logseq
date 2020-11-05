@@ -5,13 +5,15 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [goog.dom :as gdom]
-            [frontend.publishing.html :as html]))
+            [frontend.publishing.html :as html]
+            [frontend.text :as text]
+            [frontend.handler.common :as common-handler]))
 
 (defn copy-block!
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
-      (util/copy-to-clipboard! content))))
+      (common-handler/copy-to-clipboard-without-id-property! content))))
 
 (defn copy-block-as-json!
   [block-id]

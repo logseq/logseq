@@ -1,5 +1,6 @@
 (ns frontend.handler.editor
   (:require [frontend.state :as state]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
@@ -1146,7 +1147,7 @@
           content (if (false? up?) (reverse content) content)
           content (string/join "" content)]
       (when-not (string/blank? content)
-        (util/copy-to-clipboard! content)))))
+        (common-handler/copy-to-clipboard-without-id-property! content)))))
 
 (defn cut-selection-blocks
   []
@@ -1242,7 +1243,7 @@
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
-      (util/copy-to-clipboard! content)
+      (common-handler/copy-to-clipboard-without-id-property! content)
       (delete-block-aux! block false))))
 
 (defonce select-start-block-state (atom nil))

@@ -207,6 +207,10 @@
             :target "_blank"}
         (t :help/changelog)]]
       [:li
+       [:a {:href "https://logseq.github.io/page/faq"
+            :target "_blank"}
+        "FAQ"]]
+      [:li
        [:a {:href "https://logseq.github.io/"
             :target "_blank"}
         (t :help/docs)]]

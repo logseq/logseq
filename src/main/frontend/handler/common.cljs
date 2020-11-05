@@ -3,7 +3,8 @@
             [frontend.state :as state]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.text :as text]))
 
 (defn check-changed-files-status
   []
@@ -17,3 +18,7 @@
            (state/set-changed-files! repo files)))
        (p/catch (fn [error]
                   (js/console.dir error)))))))
+
+(defn copy-to-clipboard-without-id-property!
+  [content]
+  (util/copy-to-clipboard! (text/remove-id-property content)))
