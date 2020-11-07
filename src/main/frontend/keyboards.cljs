@@ -67,7 +67,10 @@
     "ctrl+b" editor-handler/bold-format!
     "ctrl+i" editor-handler/italics-format!
     "ctrl+k" editor-handler/html-link-format!
-    "ctrl+h" editor-handler/highlight-format!}
+    "ctrl+h" editor-handler/highlight-format!
+    "ctrl+shift+a" editor-handler/select-all-blocks!
+    "alt+shift+up" (fn [state e] (editor-handler/move-up-down e true))
+    "alt+shift+down" (fn [state e] (editor-handler/move-up-down e false))}
    (medley/map-keys util/->system-modifier)))
 
 (defonce chords

@@ -72,6 +72,7 @@
     :editor/pos 0
     :editor/content {}
     :editor/block nil
+    :editor/block-dom-id nil
     :editor/set-timestamp-block nil
     :cursor-range nil
 
@@ -584,6 +585,14 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn set-editing-block-dom-id!
+  [block-dom-id]
+  (set-state! :editor/block-dom-id block-dom-id))
+
+(defn get-editing-block-dom-id
+  []
+  (:editor/block-dom-id @state))
 
 (defn toggle-theme!
   []

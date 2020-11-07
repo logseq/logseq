@@ -236,9 +236,12 @@
                          (fn [_]
                            (editor-handler/copy-selection-blocks)
                            (editor-handler/clear-selection! nil)))
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+x") cut-blocks-and-clear-selections!)
-  (mixins/keyboard-mixin "backspace" cut-blocks-and-clear-selections!)
-  (mixins/keyboard-mixin "delete" cut-blocks-and-clear-selections!)
+  (mixins/keyboard-mixin (util/->system-modifier "ctrl+x")
+                         cut-blocks-and-clear-selections!)
+  (mixins/keyboard-mixin "backspace"
+                         cut-blocks-and-clear-selections!)
+  (mixins/keyboard-mixin "delete"
+                         cut-blocks-and-clear-selections!)
   []
   [:div#selection.hidden])
 
