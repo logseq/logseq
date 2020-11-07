@@ -24,11 +24,12 @@
      (util/post (str config/api "projects")
                 data
                 (fn [result]
-                  (swap! state/state
-                         update-in [:me :projects]
-                         (fn [projects]
-                           (util/distinct-by :name (conj projects result))))
-                  (ok-handler project))
+                  (when-not (:message result) ; exists
+                    (swap! state/state
+                           update-in [:me :projects]
+                           (fn [projects]
+                             (util/distinct-by :name (conj projects result))))
+                    (ok-handler project)))
                 (fn [error]
                   (js/console.dir error)
                   (notification/show! (util/format "Project \"%s\" already taken, please change to another name." project) :error))))))
