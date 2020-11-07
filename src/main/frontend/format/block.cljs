@@ -56,7 +56,9 @@
                    (subs (first arguments) 2 (- (count (first arguments)) 2))))
                :else
                nil)]
-    (when-not (string/blank? page)
+    (when (and
+           (string? page)
+           (not (string/blank? page)))
       (string/trim page))))
 
 (defn get-block-reference
