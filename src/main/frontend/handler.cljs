@@ -48,7 +48,7 @@
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
                               (state/set-db-restoring! false))
-                            (watch-for-date!)
+                            (js/setTimeout watch-for-date! 10000)
                             (migration-handler/show!)
                             (when (seq (:repos me))
                               ;; FIXME: handle error
