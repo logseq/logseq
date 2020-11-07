@@ -365,8 +365,7 @@
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         show? (boolean modal-panel-content)
-        close-fn #(fn []
-                    (state/close-modal!))
+        close-fn #(state/close-modal!)
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
      {:style {:z-index (if show? 10 -1)}}
