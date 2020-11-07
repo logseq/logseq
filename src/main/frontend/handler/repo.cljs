@@ -128,6 +128,19 @@
         (db/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
+(defn create-custom-theme
+  [repo-url]
+  (let [repo-dir (util/get-repo-dir repo-url)
+        path (str config/app-name "/" config/custom-css-file)
+        file-path (str "/" path)
+        default-content ""]
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/app-name))
+                  (p/catch (fn [_e])))
+            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+      (when-not file-exists?
+        (db/reset-file! repo-url path default-content)
+        (git-handler/git-add repo-url path)))))
+
 (defn create-dummy-notes-page
   [repo-url content]
   (let [repo-dir (util/get-repo-dir repo-url)
@@ -180,7 +193,8 @@
   (when-let [name (get-in @state/state [:me :name])]
     (create-config-file-if-not-exists repo-url)
     (create-today-journal-if-not-exists repo-url)
-    (create-contents-file repo-url)))
+    (create-contents-file repo-url)
+    (create-custom-theme repo-url)))
 
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]
@@ -516,7 +530,8 @@
                         tutorial (string/replace-first tutorial "$today" (date/today))]
                     (create-today-journal-if-not-exists repo tutorial)))
               _ (create-config-file-if-not-exists repo)
-              _ (create-contents-file repo)]
+              _ (create-contents-file repo)
+              _ (create-custom-theme repo)]
         (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 

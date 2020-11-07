@@ -9,6 +9,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.route :as route-handler]
             [cljs-bean.core :as bean]
             [frontend.config :as config]
             [frontend.format :as format]
@@ -132,6 +133,18 @@
      (fn [error]
        (println "Write file failed, path: " path ", content: " content)
        (js/console.error error)))))
+
+(defn create!
+  ([path]
+   (create! path ""))
+  ([path content]
+   (when-let [repo (state/get-current-repo)]
+     (when (and path content)
+       (p/let [_ (alter-file repo path content {:reset? false
+                                                :re-render-root? false
+                                                :update-status? true})]
+         (route-handler/redirect! {:to :file
+                                   :path-params {:path path}})))))  )
 
 (defn alter-files
   ([repo files]
