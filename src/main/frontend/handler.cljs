@@ -48,15 +48,16 @@
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
                               (state/set-db-restoring! false))
-                            (js/setTimeout watch-for-date! 10000)
                             (migration-handler/show!)
-                            (when (seq (:repos me))
+                            (if (seq (:repos me))
                               ;; FIXME: handle error
                               (repo-handler/request-app-tokens!
                                (fn []
                                  (repo-handler/clone-and-pull-repos me))
                                (fn []
-                                 (js/console.error "Failed to request GitHub app tokens.")))))))))]
+                                 (js/console.error "Failed to request GitHub app tokens."))))
+
+                            (js/setTimeout watch-for-date! 60000))))))]
     ;; clear this interval
     (let [interval-id (js/setInterval inner-fn 50)]
       (reset! interval interval-id))))
