@@ -46,7 +46,7 @@
           (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
 (rum/defc menu-link
-  [options child icon]
+  [options child]
   [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link.overflow-hidden
    options
    child])
@@ -70,10 +70,10 @@
                      [:div {:style {:margin-right "8px"}} title]
                      ;; [:div {:style {:position "absolute" :right "8px"}}
                      ;;  icon]
-                     ]]
+]]
           (rum/with-key
             (menu-link new-options child)
-            (cljs.core/random-uuid))))])
+            title)))])
    opts))
 
 (defn button
@@ -172,7 +172,7 @@
                        :key (name k)}
                       (fn [state]
                         (notification-content state (:content v) (:status v) k)))))
-              contents)))))
+                 contents)))))
 
 (defn checkbox
   [option]
@@ -365,7 +365,8 @@
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         show? (boolean modal-panel-content)
-        close-fn #(state/close-modal!)
+        close-fn #(fn []
+                    (state/close-modal!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
      {:style {:z-index (if show? 10 -1)}}
@@ -462,8 +463,8 @@
                    (on-change value)))}
    (for [{:keys [label value selected]} options]
      [:option (cond->
-                  {:key label
-                   :value (or value label)}
+               {:key label
+                :value (or value label)}
                 selected
                 (assoc :selected selected))
       label])])
