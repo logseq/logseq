@@ -417,21 +417,13 @@
                                          (if white? "#f0f8ff" "#073642"))}}
              (when (state/sub :ui/left-sidebar-open?)
                (sidebar-nav route-match nil))])
-          [:div.flex.#main-content-container.justify-center
-           {:class (if global-graph-pages?
-                     "initial"
-                     (util/hiccup->class ".mx-6.my-12"))
-            :style {:position "relative"
-                    :flex "1 1 65%"
-                    :width "100vw"}}
-           [:div.flex-1
-            {:style (cond->
-                     {:max-width 640}
-                      (or global-graph-pages?
-                          (and (not logged?)
-                               home?)
-                          (contains? #{:all-files :all-pages} route-name))
-                      (dissoc :max-width))}
+          [:div#main-content-container.cp__sidebar-main-content-container
+           [:div.cp__sidebar-main-content
+            {:data-is-global-graph-pages global-graph-pages?
+             :data-is-full-width (or global-graph-pages?
+                                  (and (not logged?)
+                                       home?)
+                                  (contains? #{:all-files :all-pages} route-name))}
             (cond
               (not indexeddb-support?)
               nil
