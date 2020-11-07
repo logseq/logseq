@@ -3,7 +3,7 @@
 @import "./reveal.min.css";
 @import "./reveal_black.min.css";
 @import "./katex.min.css";
-@import "./tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
+@import "../../static/css/tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
 @import "./common.css";
 @import "./datepicker.css";
 @import "./highlight.css";
