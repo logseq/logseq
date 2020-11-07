@@ -1872,14 +1872,16 @@
 
 (defn cloned?
   [repo-url]
-  (->
-   (d/q '[:find ?cloned
-          :in $ ?repo-url
-          :where
-          [?repo :repo/url ?repo-url]
-          [?repo :repo/cloned? ?cloned]]
-        (get-conn repo-url) repo-url)
-   ffirst))
+  (when-let [conn (get-conn repo-url)]
+    (->
+     (d/q '[:find ?cloned
+            :in $ ?repo-url
+            :where
+            [?repo :repo/url ?repo-url]
+            [?repo :repo/cloned? ?cloned]]
+          conn
+          repo-url)
+     ffirst)))
 
 (defn reset-config!
   [repo-url content]

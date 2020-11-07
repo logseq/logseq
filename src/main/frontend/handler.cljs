@@ -19,9 +19,10 @@
   (js/setInterval (fn []
                     (state/set-today! (date/today))
                     (when-let [repo (state/get-current-repo)]
-                      (let [today-page (string/lower-case (date/today))]
-                        (when (empty? (db/get-page-blocks-no-cache repo today-page))
-                          (repo-handler/create-today-journal-if-not-exists repo)))))
+                      (when (db/cloned? repo)
+                        (let [today-page (string/lower-case (date/today))]
+                          (when (empty? (db/get-page-blocks-no-cache repo today-page))
+                            (repo-handler/create-today-journal-if-not-exists repo))))))
                   1000))
 
 (defn restore-and-setup!
@@ -70,7 +71,7 @@
                   (or force?
                       (and (state/get-edit-input-id)
                            (> (- (util/time-ms) last-stored-at) (* 5 60 1000)) ; 5 minutes
-                           )
+)
                       (nil? (state/get-edit-input-id))))
          (p/let [_ (repo-handler/persist-repo! repo)]
            (state/update-repo-last-stored-at! repo)))))))
