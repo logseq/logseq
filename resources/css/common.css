@@ -10,6 +10,7 @@
     --ls-primary-background-color: #002b36;
     --ls-secondary-background-color: #073642;
     --ls-tertiary-background-color: #0f4552;
+
     --ls-block-properties-background-color: #02222a;
     --ls-search-background-color: var(--ls-primary-background-color);
     --ls-border-color: #0e5263;
@@ -51,6 +52,7 @@
     --ls-primary-background-color: white;
     --ls-secondary-background-color: #D8E1E8;
     --ls-tertiary-background-color: #f0f8ff;
+
     --ls-block-properties-background-color: var(--ls-tertiary-background-color);
     --ls-search-background-color: var(--ls-primary-background-color);
     --ls-border-color: #ccc;
@@ -134,7 +136,7 @@ textarea {
     padding: 8px;
     border: 1px solid rgba(39,41,43,.15);
     border-radius: 4px;
-    font-size: 1rem;
+    font-size: 1em;
     line-height: 1.5;
     width: 100%;
     resize: none;
