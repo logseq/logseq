@@ -192,18 +192,30 @@
   ([m enable-f target]
    (when (seq m)
      (let [target-fn (if (fn? target) target (fn [_] target))]
-       {:init
+       {:did-mount
+        (fn [state]
+          (if (enable-f state)
+            (let [keyboards (doall
+                             (map
+                              (fn [[key f]]
+                                [key
+                                 (keyboard/install-shortcut! key
+                                                             (fn [e] (f state e))
+                                                             false
+                                                             (target-fn state))])
+                              m))]
+              (assoc state ::keyboards-listener keyboards))
+            state))
+        :will-unmount
         (fn [state]
           (when (enable-f state)
-            (doseq [[key f] m]
-              (keyboard/install-shortcut! key
-                                          (fn [e] (f state e))
-                                          true
-                                          (target-fn state))
-              m)
-            state))}))))
+            (doseq [[_k f] (get state ::keyboards-listener)]
+              (f)))
+          state)}))))
 
 ;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
+
+
 (defn perf-measure-mixin
   [desc]
   "Does performance measurements in development."
