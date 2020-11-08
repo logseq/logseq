@@ -1416,7 +1416,7 @@
      (when ref?
        (let [children (-> (db/get-block-immediate-children repo uuid)
                           db/sort-by-pos)
-             filtered-children (filtering/filter-blocks children config)]
+             filtered-children (filtering/filter-blocks children (:filter-state config))]
          (when (seq filtered-children)
            [:div.ref-children.ml-12
             (blocks-container filtered-children (assoc config
@@ -1925,15 +1925,15 @@
    (if (:group-by-page? config)
      [:div.flex.flex-col
       (for [[page blocks] blocks]
-        (let [page (db/entity (:db/id page))
-              filtered-blocks (filtering/filter-blocks blocks config)]
-          [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                       (:ref? config)
-                       (assoc :class "color-level px-7 py-2 rounded"))
-           (ui/foldable
-            (page-cp config page)
-            (blocks-container filtered-blocks config))]))]
-     (blocks-container blocks config))])
+        (if (not-empty blocks)
+          (let [page (db/entity (:db/id page))]
+            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                         (:ref? config)
+                         (assoc :class "bg-base-2 px-7 py-2 rounded"))
+             (ui/foldable
+              (page-cp config page)
+              (blocks-container blocks config))])))]
+     (blocks-container blocks config))]))
 
 (comment
   ;; timestamps

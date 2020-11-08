@@ -67,9 +67,9 @@
           scheduled-or-deadlines (if journal?
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
-          references (distinct (flatten (map filtering/get-block-references (flatten (map val ref-blocks)))))
+          references (remove #{page-name} (distinct (flatten (map filtering/get-nested-block-references (flatten (map val ref-blocks))))))
           filter-state (rum/react (page-handler/get-filter page-name))
-          filtered-ref-blocks (filter #(filtering/matches-filter (filtering/get-ref-block-references %) filter-state) ref-blocks)
+          filtered-ref-blocks (map #(filtering/filter-ref-block % filter-state) ref-blocks)
           n-ref (count ref-blocks)]
       (when (or (> n-ref 0)
                 (seq scheduled-or-deadlines))
