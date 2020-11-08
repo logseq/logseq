@@ -63,11 +63,19 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
 *** 1. Required software
     Install clojure through scoop-clojure: https://github.com/littleli/scoop-clojure. You can also install [[https://nodejs.org/en/][Node.js]], [[https://yarnpkg.com/][Yarn]] and [[https://www.postgresql.org/download/][PostgreSQL]] through scoop if you want to.
 
-*** 2. Setup PostgreSQL
+*** 2. Creating a GitHub app
+    Follow [[step #2][#2-creating-a-github-app]] above if you want Logseq to connect to GitHub. If not, skip this section.
+    The ~GITHUB_APP_PEM~ variable in the ~run-windows.bat~ needs to be set with the correct directory for your system.
+
+*** 3. Setup PostgreSQL
     Make sure you have PostgreSQL running. You can check if it's running with ~pg_ctl status~ and use ~pg_ctl start~ to start it up.
     You'll also need to make a logseq DB in PostgreSQL. Do that with ~createdb logseq~.
 
-*** 3. Setup the server
-    Download [[https://gist.github.com/samfundev/98088dd76f67085f114c75493261aa3d][this little script]] that sets up the environment variables and runs ~cmd-clj -A:dev~.
-    The ~GITHUB_APP_PEM~ variable in the script needs to be set with the correct directory for your system.
-    Run that script in the repo and enter ~(go)~ into the interpreter.
+*** 4. Download the clojure server
+    Go to https://github.com/logseq/logseq-internal/releases, download the logseq.jar and move into the root directory of repo.
+
+*** 5. Start Logseq
+    Run ~start-windows.bat~ which is located in the repo. This will open a second terminal that runs Logseq's backend server.
+    To completely stop Logseq, you'll need to also close that second terminal that was opened.
+
+    ~start-windows.bat~ will try to start PostgreSQL for you if it's not already started.
