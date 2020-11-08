@@ -24,8 +24,10 @@
                      handler
                      EventType/SHORTCUT_TRIGGERED
                      f)
-           unlisten-fn (fn []
-                         (.dispose handler))]
+           ;; unlisten-fn (fn []
+           ;;               (.dispose handler))
+]
        (fn []
          (.unregisterShortcut handler key)
-         (unlisten-fn))))))
+         ;; (unlisten-fn)
+)))))
