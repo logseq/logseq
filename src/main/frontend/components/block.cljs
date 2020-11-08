@@ -578,6 +578,27 @@
                         [title])
                       arguments)]
       (cond
+        (= name "youtube")
+        (let [url (first arguments)]
+          (when-let [youtube-id (cond
+                                  (string/starts-with? url "https://youtu.be/")
+                                  (string/replace url "https://youtu.be/" "")
+
+                                  (string? url)
+                                  url
+
+                                  :else
+                                  nil)]
+            (when-not (string/blank? youtube-id)
+              [:iframe
+               {:allowfullscreen "allowfullscreen"
+                :allow
+                "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                :frameborder "0"
+                :src (str "https://www.youtube.com/embed/" youtube-id)
+                :height "315"
+                :width "560"}])))
+
         (= name "embed")
         (let [a (first arguments)]
           (cond

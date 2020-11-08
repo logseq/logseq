@@ -100,7 +100,7 @@
      ["Deadline" [[:editor/clear-current-slash]
                   [:editor/show-date-picker]]]
      ["Scheduled" [[:editor/clear-current-slash]
-                  [:editor/show-date-picker]]]
+                   [:editor/show-date-picker]]]
      ["Draw" [[:editor/input "/draw "]
               [:editor/show-input [{:command :draw
                                     :id :title
@@ -125,6 +125,8 @@
      ["Image Link" link-steps]
      (when (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
+     ["Embed Youtube Video" [[:editor/input "{{{youtube }}}" {:last-pattern slash
+                                                              :backward-pos 3}]]]
      ["Html Inline " (->inline "html")]
 
      ;; TODO:
