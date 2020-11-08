@@ -229,6 +229,8 @@
        (p/catch (fn [error]
                   (println "loading files failed: ")
                   (js/console.dir error)
+                  ;; Empty repo
+                  (create-default-files! repo-url)
                   (state/set-state! :repo/loading-files? false))))
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
