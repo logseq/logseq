@@ -386,7 +386,8 @@
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
     {:keys [indent-left? custom-properties rebuild-content?]
-     :or {rebuild-content? true}}]
+     :or {rebuild-content? true
+          custom-properties nil}}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -414,7 +415,7 @@
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
          value (cond
-                 (seq custom-properties)
+                 (some? custom-properties)
                  (text/re-construct-block-properties block value custom-properties)
 
                  (and (seq (:block/properties block))
