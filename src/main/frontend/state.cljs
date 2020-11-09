@@ -72,6 +72,7 @@
     :editor/pos 0
     :editor/content {}
     :editor/block nil
+    :editor/block-dom-id nil
     :editor/set-timestamp-block nil
     :cursor-range nil
 
@@ -167,13 +168,15 @@
   (some? (:page (get-default-home))))
 
 (defn get-preferred-format
-  []
-  (keyword
-   (or
-    (when-let [fmt (:preferred-format (get-config))]
-      (string/lower-case (name fmt)))
+  ([]
+   (get-preferred-format (get-current-repo)))
+  ([repo-url]
+   (keyword
+    (or
+     (when-let [fmt (:preferred-format (get-config repo-url))]
+       (string/lower-case (name fmt)))
 
-    (get-in @state [:me :preferred_format] "markdown"))))
+     (get-in @state [:me :preferred_format] "markdown")))))
 
 (defn get-preferred-workflow
   []
@@ -275,7 +278,7 @@
     ;;                        (remove #(= leader-parent %)))]
     ;;     (prn "followers: " (count followers))
     ;;     ))
-    ))
+))
 
 (defn get-edit-input-id
   []
@@ -582,6 +585,14 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn set-editing-block-dom-id!
+  [block-dom-id]
+  (set-state! :editor/block-dom-id block-dom-id))
+
+(defn get-editing-block-dom-id
+  []
+  (:editor/block-dom-id @state))
 
 (defn toggle-theme!
   []

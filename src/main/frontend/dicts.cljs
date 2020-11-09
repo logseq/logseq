@@ -297,6 +297,7 @@ title: How to take dummy notes?
                   "Search"
                   "Search or Create Page")
         :new-page "New page"
+        :new-file "New file"
         :graph "Graph"
         :publishing "Publishing"
         :all-repos "All repos"
@@ -543,6 +544,7 @@ title: How to take dummy notes?
                      "搜索"
                      "搜索或者创建新页面")
            :new-page "新页面"
+           :new-file "新文件"
            :graph "图谱"
            :publishing "发布/下载 HTML 文件"
            :all-repos "所有库"

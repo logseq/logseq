@@ -53,22 +53,14 @@
   [repo type path contents remote-oid component]
   (let [{:keys [collapse? resolved?]} (util/react (rum/cursor diff-state path))
         edit? (util/react *edit?)]
-    [:div.mb-3 {:style {:border "1px solid #ddd"
-                        :border-radius 3}}
-     [:div.flex.flex-row.items-center.justify-between.bg-base-2
-      {:style {:padding "5px 10px"
-               :border-bottom "1px solid #e1e4e8"
-               :border-top-left-radius 3
-               :border-top-right-radius 3}}
-      [:div.flex.flex-row.items-center
-       [:a.mr-2 {:on-click (fn [] (toggle-collapse? path))}
-        (if collapse?
-          (svg/arrow-right)
-          (svg/arrow-down))]
-       [:span
-        path
-        [:span.text-sm.font-medium.ml-2.border.rounded.px-1
-         type]]]
+    [:div.cp__diff-file
+     [:div.cp__diff-file-header
+      [:a.mr-2 {:on-click (fn [] (toggle-collapse? path))}
+       (if collapse?
+         (svg/arrow-right)
+         (svg/arrow-down))]
+      [:span.cp__diff-file-header-content path]
+      [:span.cp__diff-file-header-type type]
       (when resolved?
         [:span.text-green-600
          {:dangerouslySetInnerHTML
@@ -82,7 +74,7 @@
                            (or added removed))
                          diff)]
          [:div.pre-line-white-space.p-2 {:class (if collapse? "hidden")
-                                         :style {:overflow "hidden"}}
+                                         :style {:overflow "auto"}}
           (if edit?
             [:div.grid.grid-cols-2.gap-1
              (diff-cp diff)

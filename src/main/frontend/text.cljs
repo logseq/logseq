@@ -61,6 +61,19 @@
     (->> (concat title-lines body)
          (string/join "\n"))))
 
+(defn remove-id-property
+  [content]
+  (let [lines (->> (string/split-lines content)
+                   (remove #(let [s (string/lower-case (string/trim %))]
+                              (and
+                               (or (string/starts-with? s ":id:")
+                                   (string/starts-with? s ":custom_id:"))
+                               (let [id (and
+                                         (> (count s) 36)
+                                         (subs s (- (count s) 36)))]
+                                 (and id (util/uuid-string? id)))))))]
+    (string/join "\n" lines)))
+
 (defn build-properties-str
   [properties]
   (when (seq properties)

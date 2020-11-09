@@ -491,6 +491,17 @@
                   (get refs (:db/id block))))
          blocks)))
 
+(defn custom-query-aux
+  [{:keys [query inputs result-transform] :as query'} query-opts]
+  (try
+    (let [inputs (map resolve-input inputs)
+          repo (state/get-current-repo)
+          k [:custom query']]
+      (apply q repo k query-opts query inputs))
+    (catch js/Error e
+      (println "Custom query failed: ")
+      (js/console.dir e))))
+
 (defn custom-query
   ([query]
    (custom-query query {}))
@@ -505,15 +516,7 @@
 
                        :else
                        nil)]
-     (try
-       (let [{:keys [query inputs result-transform]} query'
-             inputs (map resolve-input inputs)
-             repo (state/get-current-repo)
-             k [:custom query']]
-         (apply q repo k query-opts query inputs))
-       (catch js/Error e
-         (println "Query parsing failed: ")
-         (js/console.dir e))))))
+     (custom-query-aux query' query-opts))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
@@ -745,10 +748,21 @@
                     :in $ ?page-name
                     :where
                     [?page :page/name ?page-name]
-                    [?page :page/alias ?alias]
-                    [?page :page/journal? false]]
+                    [?page :page/alias ?alias]]
                   conn
                   page-name)
+             seq-flatten
+             distinct)))
+
+(defn get-alias-page
+  [repo alias]
+  (when-let [conn (and repo (get-conn repo))]
+    (some->> (d/q '[:find ?page
+                    :in $ ?alias
+                    :where
+                    [?page :page/alias ?alias]]
+                  conn
+                  alias)
              seq-flatten
              distinct)))
 
@@ -955,7 +969,13 @@
 (defn page-alias-set
   [repo-url page]
   (when-let [page-id (:db/id (entity [:page/name page]))]
-    (let [aliases (get-page-alias repo-url page)]
+    (let [aliases (get-page-alias repo-url page)
+          aliases (if (seq aliases)
+                    (set
+                     (concat
+                      (mapcat #(get-alias-page repo-url %) aliases)
+                      aliases))
+                    aliases)]
       (set (conj aliases page-id)))))
 
 (defn page-blocks-transform
@@ -1739,15 +1759,15 @@
   (when-let [date (date/journal-title->int journal-title)]
     (when-let [repo (state/get-current-repo)]
       (when-let [conn (get-conn repo)]
-        (->> (d/q
-              '[:find (pull ?block [*])
-                :in $ ?day
-                :where
-                (or
-                 [?block :block/scheduled ?day]
-                 [?block :block/deadline ?day])]
-              conn
-              date)
+        (->> (q repo [:custom :scheduled-deadline journal-title] {}
+                '[:find (pull ?block [*])
+                  :in $ ?day
+                  :where
+                  (or
+                   [?block :block/scheduled ?day]
+                   [?block :block/deadline ?day])]
+                date)
+             react
              seq-flatten
              sort-blocks
              group-by-page
@@ -1852,14 +1872,16 @@
 
 (defn cloned?
   [repo-url]
-  (->
-   (d/q '[:find ?cloned
-          :in $ ?repo-url
-          :where
-          [?repo :repo/url ?repo-url]
-          [?repo :repo/cloned? ?cloned]]
-        (get-conn repo-url) repo-url)
-   ffirst))
+  (when-let [conn (get-conn repo-url)]
+    (->
+     (d/q '[:find ?cloned
+            :in $ ?repo-url
+            :where
+            [?repo :repo/url ?repo-url]
+            [?repo :repo/cloned? ?cloned]]
+          conn
+          repo-url)
+     ffirst)))
 
 (defn reset-config!
   [repo-url content]

@@ -335,12 +335,6 @@
         *slash-caret-pos)))])
 
 (rum/defcs box < rum/reactive
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+shift+a") editor-handler/select-all-blocks!)
-  (mixins/keyboard-mixin (if util/mac? "meta+shift+up" "alt+shift+up")
-                         (fn [state e]
-                           (editor-handler/move-up-down state e true)))
-  (mixins/keyboard-mixin (if util/mac? "meta+shift+down" "alt+shift+down")
-                         (fn [state e] (editor-handler/move-up-down state e false)))
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [id format block]} (get-state state)
@@ -590,6 +584,8 @@
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
                       content (get-in @state/state [:editor/content id])]
+                  (when block-parent-id
+                    (state/set-editing-block-dom-id! block-parent-id))
                   (editor-handler/restore-cursor-pos! id content dummy?)
 
                   (when-let [input (gdom/getElement id)]
@@ -656,7 +652,7 @@
                                               {:re-render-root? true}))))
                        (editor-handler/save-block! (get-state state) value)))
                    state)}
-  [state {:keys [on-hide dummy? node format block]
+  [state {:keys [on-hide dummy? node format block block-parent-id]
           :or {dummy? false}
           :as option} id config]
   (let [content (state/sub [:editor/content id])]

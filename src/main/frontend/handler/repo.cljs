@@ -29,59 +29,6 @@
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
 ;; 2. Git pulls the new change (fn: load-files)
 
-(defn load-repo-to-db!
-  [repo-url diffs first-clone?]
-  (let [load-contents (fn [files delete-files delete-blocks re-render?]
-                        (file-handler/load-files-contents!
-                         repo-url
-                         files
-                         (fn [contents]
-                           (state/set-state! :repo/loading-files? false)
-                           (state/set-state! :repo/importing-to-db? true)
-                           (let [parsed-files (filter
-                                               (fn [[file _]]
-                                                 (let [format (format/get-format file)]
-                                                   (contains? config/mldoc-support-formats format)))
-                                               contents)
-                                 blocks-pages (if (seq parsed-files)
-                                                (db/extract-all-blocks-pages repo-url parsed-files)
-                                                [])]
-                             (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
-                             (let [config-file (str config/app-name "/" config/config-file)]
-                               (when (contains? (set files) config-file)
-                                 (when-let [content (get contents config-file)]
-                                   (file-handler/restore-config! repo-url content true))))
-                             ;; (let [metadata-file (str config/app-name "/" config/metadata-file)]
-                             ;;   (when (contains? (set files) metadata-file)
-                             ;;     (when-let [content (get contents metadata-file)]
-                             ;;       (let [{:keys [tx-data]} (reader/read-string content)]
-                             ;;         (db/transact! repo-url tx-data)))))
-                             (state/set-state! :repo/importing-to-db? false)
-                             (when re-render?
-                               (ui-handler/re-render-root!))))))]
-    (if first-clone?
-      (->
-       (p/let [files (file-handler/load-files repo-url)]
-         (load-contents files nil nil false))
-       (p/catch (fn [error]
-                  (println "loading files failed: ")
-                  (js/console.dir error)
-                  (state/set-state! :repo/loading-files? false))))
-      (when (seq diffs)
-        (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
-                                           (map :path)))
-              remove-files (filter-diffs "remove")
-              modify-files (filter-diffs "modify")
-              add-files (filter-diffs "add")
-              delete-files (if (seq remove-files)
-                             (db/delete-files remove-files))
-              delete-blocks (db/delete-blocks repo-url (concat remove-files modify-files))
-              delete-pages (if (seq remove-files)
-                             (db/delete-pages-by-files remove-files)
-                             [])
-              add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files (concat delete-files delete-pages) delete-blocks true))))))
-
 (defn show-install-error!
   [repo-url title]
   (notification/show!
@@ -181,6 +128,19 @@
         (db/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
+(defn create-custom-theme
+  [repo-url]
+  (let [repo-dir (util/get-repo-dir repo-url)
+        path (str config/app-name "/" config/custom-css-file)
+        file-path (str "/" path)
+        default-content ""]
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/app-name))
+                  (p/catch (fn [_e])))
+            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+      (when-not file-exists?
+        (db/reset-file! repo-url path default-content)
+        (git-handler/git-add repo-url path)))))
+
 (defn create-dummy-notes-page
   [repo-url content]
   (let [repo-dir (util/get-repo-dir repo-url)
@@ -196,7 +156,7 @@
    (create-today-journal-if-not-exists repo-url nil))
   ([repo-url content]
    (let [repo-dir (util/get-repo-dir repo-url)
-         format (state/get-preferred-format)
+         format (state/get-preferred-format repo-url)
          title (date/today)
          file-name (date/journal-title->default title)
          default-content (util/default-content-with-title format title false)
@@ -207,6 +167,7 @@
          content (cond
                    content
                    content
+
                    template
                    (str default-content template)
 
@@ -222,23 +183,69 @@
        (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
                      (p/catch (fn [_e])))
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-         ;; TODO: why file exists but page not created
-         (p/let [resolved-content (if file-exists?
-                                    (file-handler/load-file repo-url path)
-                                    (p/resolved content))]
-           (let [content (if (string/blank? (string/trim resolved-content))
-                           content
-                           resolved-content)]
-             (db/reset-file! repo-url path content)
-             (ui-handler/re-render-root!)
-             (git-handler/git-add repo-url path))))))))
+         (when-not file-exists?
+           (db/reset-file! repo-url path content)
+           (ui-handler/re-render-root!)
+           (git-handler/git-add repo-url path)))))))
 
 (defn create-default-files!
   [repo-url]
   (when-let [name (get-in @state/state [:me :name])]
     (create-config-file-if-not-exists repo-url)
     (create-today-journal-if-not-exists repo-url)
-    (create-contents-file repo-url)))
+    (create-contents-file repo-url)
+    (create-custom-theme repo-url)))
+
+(defn load-repo-to-db!
+  [repo-url diffs first-clone?]
+  (let [load-contents (fn [files delete-files delete-blocks re-render?]
+                        (file-handler/load-files-contents!
+                         repo-url
+                         files
+                         (fn [contents]
+                           (state/set-state! :repo/loading-files? false)
+                           (state/set-state! :repo/importing-to-db? true)
+                           (let [parsed-files (filter
+                                               (fn [[file _]]
+                                                 (let [format (format/get-format file)]
+                                                   (contains? config/mldoc-support-formats format)))
+                                               contents)
+                                 blocks-pages (if (seq parsed-files)
+                                                (db/extract-all-blocks-pages repo-url parsed-files)
+                                                [])]
+                             (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
+                             (let [config-file (str config/app-name "/" config/config-file)]
+                               (if (contains? (set files) config-file)
+                                 (when-let [content (get contents config-file)]
+                                   (file-handler/restore-config! repo-url content true))))
+                             (when first-clone? (create-default-files! repo-url))
+                             (state/set-state! :repo/importing-to-db? false)
+                             (when re-render?
+                               (ui-handler/re-render-root!))))))]
+    (if first-clone?
+      (->
+       (p/let [files (file-handler/load-files repo-url)]
+         (load-contents files nil nil false))
+       (p/catch (fn [error]
+                  (println "loading files failed: ")
+                  (js/console.dir error)
+                  ;; Empty repo
+                  (create-default-files! repo-url)
+                  (state/set-state! :repo/loading-files? false))))
+      (when (seq diffs)
+        (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
+                                           (map :path)))
+              remove-files (filter-diffs "remove")
+              modify-files (filter-diffs "modify")
+              add-files (filter-diffs "add")
+              delete-files (if (seq remove-files)
+                             (db/delete-files remove-files))
+              delete-blocks (db/delete-blocks repo-url (concat remove-files modify-files))
+              delete-pages (if (seq remove-files)
+                             (db/delete-pages-by-files remove-files)
+                             [])
+              add-or-modify-files (util/remove-nils (concat add-files modify-files))]
+          (load-contents add-or-modify-files (concat delete-files delete-pages) delete-blocks true))))))
 
 (defn persist-repo!
   [repo]
@@ -251,9 +258,6 @@
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
     (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
-      (when first-clone?
-        (create-default-files! repo-url))
-
       (when first-clone?
         (migration-handler/show!)))))
 
@@ -528,7 +532,8 @@
                         tutorial (string/replace-first tutorial "$today" (date/today))]
                     (create-today-journal-if-not-exists repo tutorial)))
               _ (create-config-file-if-not-exists repo)
-              _ (create-contents-file repo)]
+              _ (create-contents-file repo)
+              _ (create-custom-theme repo)]
         (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 

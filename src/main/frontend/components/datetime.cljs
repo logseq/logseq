@@ -44,7 +44,9 @@
   [{:keys [num duration kind]}]
   (let [show? (rum/react *show-repeater?)]
     (if (or show? (and num duration kind))
-      [:div.flex.flex-row {:style {:height 32}}
+      [:div.flex.flex-row.justify-center {:style {:height 32}}
+       [:div.block.text-medium.mr-2.mt-1 {:style {:width 110}}
+        "Every"]
        [:input#repeater-num.form-input.mt-1
         {:style {:width 48}
          :default-value num
@@ -52,29 +54,18 @@
                       (let [value (util/evalue event)]
                         (swap! *timestamp assoc-in [:repeater :num] value)))}]
        (ui/select
-         (mapv
-          (fn [item]
-            (if (= (:label item) duration)
-              (assoc item :selected "selected")
-              item))
-          [{:label "h"}
-           {:label "d"}
-           {:label "w"}
-           {:label "m"}
-           {:label "y"}])
-         (fn [value]
-           (swap! *timestamp assoc-in [:repeater :duration] value)))
-       (ui/select
-         (mapv
-          (fn [item]
-            (if (= (:label item) kind)
-              (assoc item :selected "selected")
-              item))
-          [{:label ".+"}
-           {:label "+"}
-           {:label "++"}])
-         (fn [value]
-           (swap! *timestamp assoc-in [:repeater :kind] value)))
+        (mapv
+         (fn [item]
+           (if (= (:label item) duration)
+             (assoc item :selected "selected")
+             item))
+         [{:label "h"}
+          {:label "d"}
+          {:label "w"}
+          {:label "m"}
+          {:label "y"}])
+        (fn [value]
+          (swap! *timestamp assoc-in [:repeater :duration] value)))
 
        [:a.ml-2.self-center {:on-click (fn []
                                          (reset! *show-repeater? false)
@@ -85,7 +76,7 @@
                                (swap! *timestamp assoc :repeater
                                       {:kind ".+"
                                        :num 1
-                                       :duration "h"}))}
+                                       :duration "d"}))}
        "Add repeater"])))
 
 (defn clear-timestamp!
@@ -100,6 +91,8 @@
         timestamp (if date
                     timestamp
                     (assoc timestamp :date (t/today)))
+        kind (if (= "w" (:duration repeater)) "++" ".+")
+        timestamp (assoc-in timestamp [:repeater :kind] kind)
         text (repeated/timestamp-map->text timestamp)]
     [:div.py-1.px-4 {:style {:min-width 300}}
      [:p.text-sm.opacity-50.font-medium.mt-4 "Time:"]
@@ -110,21 +103,21 @@
 
      [:p.mt-4
       (ui/button "Submit"
-        :on-click (fn [e]
-                    (util/stop e)
-                    (let [block-data (state/get-timestamp-block)]
-                      (let [{:keys [block typ show?]} block-data
-                            block-id (or (:block/uuid (state/get-edit-block))
-                                         (:block/uuid block))
-                            typ (or typ @commands/*current-command)]
-                        (editor-handler/set-block-timestamp! block-id
-                                                             typ
-                                                             text)
-                        (state/clear-edit!)
-                        (when show?
-                          (reset! show? false))))
-                    (clear-timestamp!)
-                    (state/set-editor-show-date-picker false)))]]))
+                 :on-click (fn [e]
+                             (util/stop e)
+                             (let [block-data (state/get-timestamp-block)]
+                               (let [{:keys [block typ show?]} block-data
+                                     block-id (or (:block/uuid (state/get-edit-block))
+                                                  (:block/uuid block))
+                                     typ (or typ @commands/*current-command)]
+                                 (editor-handler/set-block-timestamp! block-id
+                                                                      typ
+                                                                      text)
+                                 (state/clear-edit!)
+                                 (when show?
+                                   (reset! show? false))))
+                             (clear-timestamp!)
+                             (state/set-editor-show-date-picker false)))]]))
 
 (rum/defc date-picker < rum/reactive
   {:init (fn [state]
@@ -163,8 +156,7 @@
                                                (util/format "[[%s]]" journal)
                                                format
                                                nil)
-               (state/set-editor-show-date-picker false)
-)
+               (state/set-editor-show-date-picker false))
              (swap! *timestamp assoc :date date)))})
        (when deadline-or-schedule?
          (time-repeater))])))

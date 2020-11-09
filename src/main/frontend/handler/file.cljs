@@ -9,6 +9,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.route :as route-handler]
             [cljs-bean.core :as bean]
             [frontend.config :as config]
             [frontend.format :as format]
@@ -111,7 +112,12 @@
                            update-status? false}}]
   (let [original-content (db/get-file-no-sub repo path)]
     (if reset?
-      (db/reset-file! repo path content)
+      (do
+        (when-let [page-id (db/get-file-page-id path)]
+          (db/transact! repo
+                        [[:db/retract page-id :page/alias]
+                         [:db/retract page-id :page/tags]]))
+        (db/reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
      (fs/write-file (util/get-repo-dir repo) path content)
@@ -127,6 +133,18 @@
      (fn [error]
        (println "Write file failed, path: " path ", content: " content)
        (js/console.error error)))))
+
+(defn create!
+  ([path]
+   (create! path ""))
+  ([path content]
+   (when-let [repo (state/get-current-repo)]
+     (when (and path content)
+       (p/let [_ (alter-file repo path content {:reset? false
+                                                :re-render-root? false
+                                                :update-status? true})]
+         (route-handler/redirect! {:to :file
+                                   :path-params {:path path}})))))  )
 
 (defn alter-files
   ([repo files]

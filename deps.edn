@@ -4,11 +4,13 @@
   rum                         {:mvn/version "0.12.3"}
   ;; rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   ;; persistent-sorted-set       {:mvn/version "0.1.2"}
+  ;; FIXME: doesn't work on my archlinux laptop (tienson)
+  ;; The required namespace "datascript.core" is not available, it was required by "frontend/db.cljs".
   datascript                  {:git/url "https://github.com/tiensonqin/datascript",
                                :sha "7c2822565d9a114c7d8604c335af89de4640e2e5"}
+  ;; datascript                  {:mvn/version "1.0.1"}
   datascript-transit          {:mvn/version "0.3.0"
                                :exclusions [datascript]}
-  ;; datascript                  {:mvn/version "1.0.1"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley                      {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}

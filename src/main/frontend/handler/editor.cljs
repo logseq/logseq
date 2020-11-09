@@ -1,5 +1,6 @@
 (ns frontend.handler.editor
   (:require [frontend.state :as state]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
@@ -737,12 +738,12 @@
 
 (defn- with-timetracking-properties
   [block value]
-  (let [new-marker (first (re-find format/bare-marker-pattern value))
+  (let [new-marker (first (re-find format/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
         properties (into {} (:block/properties block))]
     (if (and
          new-marker
-         (not= new-marker (:block/marker block))
+         (not= new-marker (string/lower-case (or (:block/marker block) "")))
          (state/enable-timetracking?))
       (assoc properties new-marker (util/time-ms))
       properties)))
@@ -810,13 +811,19 @@
 (defn update-timestamps-content!
   [{:block/keys [repeated? scheduled-ast deadline-ast marker]} content]
   (if repeated?
-    (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
-             (map (fn [ts]
-                    [(repeated/timestamp->text ts)
-                     (repeated/next-timestamp-text ts)]))
-             (reduce (fn [content [old new]]
-                       (string/replace content old new))
-                     content))
+    (let [content (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
+                           (map (fn [ts]
+                                  [(repeated/timestamp->text ts)
+                                   (repeated/next-timestamp-text ts)]))
+                           (reduce (fn [content [old new]]
+                                     (string/replace content old new))
+                                   content))]
+      (when content
+        (str (string/trimr content)
+             "\n"
+             (util/format "- %s -> DONE [%s]"
+                          marker
+                          (date/get-local-date-time-string)))))
     content))
 
 (defn- with-marker-time
@@ -1031,20 +1038,21 @@
         key (string/lower-case (str key))
         value (str value)]
     (when-let [block (db/pull [:block/uuid block-id])]
-      (let [{:block/keys [content properties]} block]
-        (cond
-          (and (get properties key)
-               (= (string/trim (get properties key)) value))
-          nil
+      (when-not (:block/pre-block? block)
+        (let [{:block/keys [content properties]} block]
+          (cond
+            (and (get properties key)
+                 (= (string/trim (get properties key)) value))
+            nil
 
-          :else
-          (let [properties (:block/properties block)
-                properties' (if (seq properties)
-                              (assoc properties key value)
-                              {key value})]
-            (save-block-if-changed! block content
-                                    {:custom-properties properties'
-                                     :rebuild-content? false})))))))
+            :else
+            (let [properties (:block/properties block)
+                  properties' (if (seq properties)
+                                (assoc properties key value)
+                                {key value})]
+              (save-block-if-changed! block content
+                                      {:custom-properties properties'
+                                       :rebuild-content? false}))))))))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -1092,7 +1100,9 @@
 
 (defn copy-block-ref!
   [block-id]
-  (set-block-property! block-id "custom_id" (str block-id))
+  (let [block (db/entity [:block/uuid block-id])]
+    (when-not (:block/pre-block? block)
+      (set-block-property! block-id "custom_id" (str block-id))))
   (util/copy-to-clipboard! (str block-id)))
 
 (defn clear-selection!
@@ -1146,7 +1156,7 @@
           content (if (false? up?) (reverse content) content)
           content (string/join "" content)]
       (when-not (string/blank? content)
-        (util/copy-to-clipboard! content)))))
+        (common-handler/copy-to-clipboard-without-id-property! content)))))
 
 (defn cut-selection-blocks
   []
@@ -1242,7 +1252,7 @@
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
-      (util/copy-to-clipboard! content)
+      (common-handler/copy-to-clipboard-without-id-property! content)
       (delete-block-aux! block false))))
 
 (defonce select-start-block-state (atom nil))
@@ -1338,7 +1348,10 @@
                 (let [state (get-state state)
                       content (:block/content block)
                       value (:value state)]
-                  (when (not= (string/trim (text/remove-level-spaces content format))
+                  (when (not= (-> content
+                                  (text/remove-level-spaces format)
+                                  text/remove-properties!
+                                  string/trim)
                               (string/trim value))
                     (save-block! state (:value state))))
                 (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
@@ -1634,67 +1647,68 @@
       string/join))
 
 (defn move-up-down
-  [state e up?]
-  (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} (get-state state)
-        block (db/entity [:block/uuid block-id])
-        meta (:block/meta block)
-        page (:block/page block)
-        block-dom-node (gdom/getElement block-parent-id)
-        prev-block (get-prev-block-non-collapsed block-dom-node)
-        next-block (get-next-block-non-collapsed block-dom-node)
-        repo (state/get-current-repo)
-        move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
-        move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
-    (when-let [sibling-block (cond
-                               move-upwards-to-parent?
-                               prev-block
-                               move-down-to-higher-level?
-                               next-block
-                               :else
-                               (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
-                                 (f block-dom-node)))]
-      (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-        (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
-          (let [sibling-meta (:block/meta sibling-block)
-                hc1 (db/get-block-and-children-no-cache repo (:block/uuid block))
-                hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
-                      [sibling-block]
-                      (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
-            ;; Same page and next to the other
-            (when (and
-                   (= (:db/id (:block/page block))
-                      (:db/id (:block/page sibling-block)))
-                   (or
-                    (and up? (= (:end-pos (:block/meta (last hc2))) (:start-pos (:block/meta (first hc1)))))
-                    (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
-              (let [hc1-content (block-and-children-content hc1)
-                    hc2-content (block-and-children-content hc2)
-                    file (db/get-block-file (:block/uuid block))
-                    file-path (:file/path file)
-                    old-file-content (db/get-file file-path)
-                    [start-pos end-pos new-content blocks] (if up?
-                                                             [(:start-pos sibling-meta)
-                                                              (get-in (last hc1) [:block/meta :end-pos])
-                                                              (str hc1-content hc2-content)
-                                                              (concat hc1 hc2)]
-                                                             [(:start-pos meta)
-                                                              (get-in (last hc2) [:block/meta :end-pos])
-                                                              (str hc2-content hc1-content)
-                                                              (concat hc2 hc1)])]
-                (when (and start-pos end-pos)
-                  (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
-                        modified-time (modified-time-tx page file)
-                        blocks-meta (rebuild-blocks-meta start-pos blocks)]
-                    (profile
-                     (str "Move block " (if up? "up: " "down: "))
-                     (repo-handler/transact-react-and-alter-file!
-                      repo
-                      (concat
-                       blocks-meta
-                       modified-time)
-                      {:key :block/change
-                       :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                      [[file-path new-file-content]]))))))))))))
+  [e up?]
+  (when-let [block-id (:block/uuid (state/get-edit-block))]
+    (let [block-parent-id (state/get-editing-block-dom-id)
+          block (db/entity [:block/uuid block-id])
+          meta (:block/meta block)
+          page (:block/page block)
+          block-dom-node (gdom/getElement block-parent-id)
+          prev-block (get-prev-block-non-collapsed block-dom-node)
+          next-block (get-next-block-non-collapsed block-dom-node)
+          repo (state/get-current-repo)
+          move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
+          move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
+      (when-let [sibling-block (cond
+                                 move-upwards-to-parent?
+                                 prev-block
+                                 move-down-to-higher-level?
+                                 next-block
+                                 :else
+                                 (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
+                                   (f block-dom-node)))]
+        (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+          (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
+            (let [sibling-meta (:block/meta sibling-block)
+                  hc1 (db/get-block-and-children-no-cache repo (:block/uuid block))
+                  hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
+                        [sibling-block]
+                        (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
+             ;; Same page and next to the other
+              (when (and
+                     (= (:db/id (:block/page block))
+                        (:db/id (:block/page sibling-block)))
+                     (or
+                      (and up? (= (:end-pos (:block/meta (last hc2))) (:start-pos (:block/meta (first hc1)))))
+                      (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
+                (let [hc1-content (block-and-children-content hc1)
+                      hc2-content (block-and-children-content hc2)
+                      file (db/get-block-file (:block/uuid block))
+                      file-path (:file/path file)
+                      old-file-content (db/get-file file-path)
+                      [start-pos end-pos new-content blocks] (if up?
+                                                               [(:start-pos sibling-meta)
+                                                                (get-in (last hc1) [:block/meta :end-pos])
+                                                                (str hc1-content hc2-content)
+                                                                (concat hc1 hc2)]
+                                                               [(:start-pos meta)
+                                                                (get-in (last hc2) [:block/meta :end-pos])
+                                                                (str hc2-content hc1-content)
+                                                                (concat hc2 hc1)])]
+                  (when (and start-pos end-pos)
+                    (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
+                          modified-time (modified-time-tx page file)
+                          blocks-meta (rebuild-blocks-meta start-pos blocks)]
+                      (profile
+                       (str "Move block " (if up? "up: " "down: "))
+                       (repo-handler/transact-react-and-alter-file!
+                        repo
+                        (concat
+                         blocks-meta
+                         modified-time)
+                        {:key :block/change
+                         :data (map (fn [block] (assoc block :block/page page)) blocks)}
+                        [[file-path new-file-content]])))))))))))))
 
 (defn expand!
   []

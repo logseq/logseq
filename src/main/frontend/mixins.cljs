@@ -169,25 +169,22 @@
    If no target is given it is defaulted to js/window (global handler)
    Ex:
      (keyboard-mixin \"esc\" #(browse-to :home/home))"
-  ([key f] (keyboard-mixin key f (fn [_] true) js/window))
-  ([key f enable-f] (keyboard-mixin key f enable-f js/window))
-  ([key f enable-f target]
+  ([key f] (keyboard-mixin key f js/window))
+  ([key f target]
    (let [target-fn (if (fn? target) target (fn [_] target))]
      {:did-mount
       (fn [state]
-        (if (enable-f state)
-          (assoc state (str (name ::keyboard-listener) key)
-                 (keyboard/install-shortcut! key
-                                             (fn [e] (f state e))
-                                             false
-                                             (target-fn state)))
-          state))
+        (assoc state (str (name ::keyboard-listener) key)
+               (keyboard/install-shortcut! key
+                                           (fn [e] (f state e))
+                                           false
+                                           (target-fn state))))
       :will-unmount
       (fn [state]
-        (when (enable-f state)
-          (when-let [f (get state (str (name ::keyboard-listener) key))]
-            (f)))
-        state)})))
+        (let [k (str (name ::keyboard-listener) key)]
+          (when-let [f (get state k)]
+            (f))
+          (dissoc state k)))})))
 
 (defn keyboards-mixin
   ([m] (keyboards-mixin m (fn [_] true) js/window))
@@ -217,6 +214,8 @@
           state)}))))
 
 ;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
+
+
 (defn perf-measure-mixin
   [desc]
   "Does performance measurements in development."

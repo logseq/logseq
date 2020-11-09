@@ -39,6 +39,10 @@
 (defn get-date-time-string [date-time]
   (tf/unparse custom-formatter date-time))
 
+(defn get-local-date-time-string
+  []
+  (get-date-time-string (tl/local-now)))
+
 (def custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
 
 (defn get-date-time-string-2 []

@@ -24,37 +24,63 @@
 
 (defn get-page-reference
   [block]
-  (cond
-    (and (vector? block) (= "Link" (first block)))
-    (let [typ (first (:url (second block)))]
-      (or
-       (and
-        (= typ "Search")
-        (not (contains? #{\# \* \/ \( \[} (first (second (:url (second block))))))
-        (let [page (second (:url (second block)))]
-          (when (and (not (util/starts-with? page "http"))
-                     (not (util/starts-with? page "file"))
-                     (not (string/ends-with? page ".html")))
-            page)))
+  (let [page (cond
+               (and (vector? block) (= "Link" (first block)))
+               (let [typ (first (:url (second block)))]
+                 (or
+                  (and
+                   (= typ "Search")
+                   (not (contains? #{\# \* \/ \( \[} (first (second (:url (second block))))))
+                   (let [page (second (:url (second block)))]
+                     (when (and (not (util/starts-with? page "http"))
+                                (not (util/starts-with? page "file"))
+                                (not (string/ends-with? page ".html")))
+                       page)))
 
-       (and
-        (= typ "Complex")
-        (= (:protocol (second (:url (second block)))) "file")
-        (:link (second (:url (second block)))))))
+                  (and
+                   (= typ "Complex")
+                   (= (:protocol (second (:url (second block)))) "file")
+                   (:link (second (:url (second block)))))))
 
-    (and (vector? block) (= "Nested_link" (first block)))
-    (let [content (:content (last block))]
-      (subs content 2 (- (count content) 2)))
+               (and (vector? block) (= "Nested_link" (first block)))
+               (let [content (:content (last block))]
+                 (subs content 2 (- (count content) 2)))
 
-    :else
-    nil))
+               (and (vector? block)
+                    (= "Macro" (first block)))
+               (let [{:keys [name arguments]} (second block)]
+                 (when (and (= name "embed")
+                            (string? (first arguments))
+                            (string/starts-with? (first arguments) "[[")
+                            (string/ends-with? (first arguments) "]]"))
+                   (subs (first arguments) 2 (- (count (first arguments)) 2))))
+               :else
+               nil)]
+    (when (and
+           (string? page)
+           (not (string/blank? page)))
+      (string/trim page))))
 
 (defn get-block-reference
   [block]
-  (when-let [block-id (and (vector? block)
-                           (= "Block_reference" (first block))
-                           (last block))]
-    (when (util/uuid-string? block-id)
+  (when-let [block-id (cond
+                        (and (vector? block)
+                             (= "Block_reference" (first block)))
+                        (last block)
+
+                        (and (vector? block)
+                             (= "Macro" (first block)))
+                        (let [{:keys [name arguments]} (second block)]
+                          (when (and (= name "embed")
+                                     (string? (first arguments))
+                                     (string/starts-with? (first arguments) "((")
+                                     (string/ends-with? (first arguments) "))"))
+                            (subs (first arguments) 2 (- (count (first arguments)) 2))))
+
+                        :else
+                        nil)]
+    (when (and block-id
+               (util/uuid-string? block-id))
       block-id)))
 
 ;; FIXME:
@@ -132,7 +158,7 @@
                    (map (fn [[k v]]
                           (let [{:keys [date repetition]} v
                                 {:keys [year month day]} date
-                                day (js/parseInt (str year month day))]
+                                day (js/parseInt (str year (util/zero-pad month) (util/zero-pad day)))]
                             (cond->
                              (case k
                                :scheduled

@@ -19,9 +19,10 @@
   (js/setInterval (fn []
                     (state/set-today! (date/today))
                     (when-let [repo (state/get-current-repo)]
-                      (let [today-page (string/lower-case (date/today))]
-                        (when (empty? (db/get-page-blocks-no-cache repo today-page))
-                          (repo-handler/create-today-journal-if-not-exists repo)))))
+                      (when (db/cloned? repo)
+                        (let [today-page (string/lower-case (date/today))]
+                          (when (empty? (db/get-page-blocks-no-cache repo today-page))
+                            (repo-handler/create-today-journal-if-not-exists repo))))))
                   1000))
 
 (defn restore-and-setup!
@@ -47,15 +48,16 @@
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
                               (state/set-db-restoring! false))
-                            (watch-for-date!)
                             (migration-handler/show!)
-                            (when (seq (:repos me))
+                            (if (seq (:repos me))
                               ;; FIXME: handle error
                               (repo-handler/request-app-tokens!
                                (fn []
                                  (repo-handler/clone-and-pull-repos me))
                                (fn []
-                                 (js/console.error "Failed to request GitHub app tokens.")))))))))]
+                                 (js/console.error "Failed to request GitHub app tokens."))))
+
+                            (js/setTimeout watch-for-date! 60000))))))]
     ;; clear this interval
     (let [interval-id (js/setInterval inner-fn 50)]
       (reset! interval interval-id))))
@@ -70,7 +72,7 @@
                   (or force?
                       (and (state/get-edit-input-id)
                            (> (- (util/time-ms) last-stored-at) (* 5 60 1000)) ; 5 minutes
-                           )
+)
                       (nil? (state/get-edit-input-id))))
          (p/let [_ (repo-handler/persist-repo! repo)]
            (state/update-repo-last-stored-at! repo)))))))

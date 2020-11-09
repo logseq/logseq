@@ -3,6 +3,7 @@
             [frontend.util :as util]
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.db :as db]
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
@@ -49,12 +50,13 @@
   [{:keys [pages files blocks]} search-q]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [new-page [{:type :new-page}]
+          new-file [{:type :new-file}]
           pages (map (fn [page] {:type :page :data page}) pages)
           files (map (fn [file] {:type :file :data file}) files)
           blocks (map (fn [block] {:type :block :data block}) blocks)
           result (if config/publishing?
                    (concat pages files blocks)
-                   (concat new-page pages files blocks))]
+                   (concat new-page pages new-file files blocks))]
       [:div.absolute.rounded-md.shadow-lg
        {:style (merge
                 {:top 48
@@ -72,6 +74,9 @@
                         :page
                         (route/redirect! {:to :page
                                           :path-params {:name data}})
+
+                        :new-file
+                        (file-handler/create! search-q)
 
                         :file
                         (route/redirect! {:to :file
@@ -105,6 +110,10 @@
                         (case type
                           :new-page
                           [:div.text.font-bold (str (t :new-page) ": ")
+                           [:span.ml-1 (str "\"" search-q "\"")]]
+
+                          :new-file
+                          [:div.text.font-bold (str (t :new-file) ": ")
                            [:span.ml-1 (str "\"" search-q "\"")]]
 
                           :page

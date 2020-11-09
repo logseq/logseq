@@ -46,7 +46,7 @@
           (dropdown-content-wrapper dropdown-state modal-content modal-class))))]))
 
 (rum/defc menu-link
-  [options child icon]
+  [options child]
   [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link.overflow-hidden
    options
    child])
@@ -73,7 +73,7 @@
 ]]
           (rum/with-key
             (menu-link new-options child)
-            (cljs.core/random-uuid))))])
+            title)))])
    opts))
 
 (defn button
