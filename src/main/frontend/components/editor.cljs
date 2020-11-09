@@ -217,10 +217,10 @@
     {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
     svg/outdent-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/move-up-down parent-state % true)}
+    {:on-click #(editor-handler/move-up-down % true)}
     svg/move-up-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/move-up-down parent-state % false)}
+    {:on-click #(editor-handler/move-up-down % false)}
     svg/move-down-block]
    [:button.bottom-action
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
