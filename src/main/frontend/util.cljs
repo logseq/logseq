@@ -18,6 +18,17 @@
             [clojure.pprint :refer [pprint]]
             [goog.userAgent]))
 
+;; envs
+(defn ios?
+  []
+  (not (nil? (re-find #"iPad|iPhone|iPod" js/navigator.userAgent))))
+
+(defn safari?
+  []
+  (let [ua (string/lower-case js/navigator.userAgent)]
+    (and (string/includes? ua "webkit")
+         (not (string/includes? ua "chrome")))))
+
 (defn format
   [fmt & args]
   (apply gstring/format fmt args))

@@ -209,55 +209,27 @@
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
-  [:div.bg-base-2 {:style {:position "fixed"
-                           :bottom 0
-                           :width "100%"
-                           :left 0
-                           :justify-content "center"
-                           :height "2.5rem"
-                           :display "flex"
-                           :align-items "center"
-                           ;; This element should be the upper-most in most situations
-                           :z-index 99999999}}
+  [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/adjust-block-level! parent-state :right)}
+    {:on-click #(editor-handler/adjust-block-level! parent-state :right)}
     svg/indent-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/adjust-block-level! parent-state :left)}
+    {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
     svg/outdent-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/move-up-down % true)}
+    {:on-click #(editor-handler/move-up-down % true)}
     svg/move-up-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click #(editor-handler/move-up-down % false)}
+    {:on-click #(editor-handler/move-up-down % false)}
     svg/move-down-block]
    [:button.bottom-action
-    {:style {:padding "5px"}
-     :on-click (fn [e]
-                 (let [old-content (state/sub [:editor/content parent-id])
-                       new-content (str old-content "\n")]
-                   (state/set-state! :editor/content {parent-id new-content}))
-                 (.stopPropagation e))}
+    {:on-click #(commands/simple-insert! parent-id "\n" {})}
     svg/multi-line-input]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:style {:padding "5px"}
-     :on-click (fn [e]
-                 (let [old-content (state/sub [:editor/content parent-id])
-                       new-content (str old-content "[[]]")]
-                   (state/set-state! :editor/content {parent-id new-content}))
-                 (.stopPropagation e))}
+    {:on-click #(commands/simple-insert! parent-id "[[]]" {:backward-pos 2})}
     "[[]]"]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:style {:padding "5px"}
-     :on-click (fn [e]
-                 (let [old-content (state/sub [:editor/content parent-id])
-                       new-content (str old-content "(())")]
-                   (state/set-state! :editor/content {parent-id new-content}))
-                 (.stopPropagation e))}
+    {:on-click #(commands/simple-insert! parent-id "(())" {:backward-pos 2})}
     "(())"]])
 
 (rum/defcs input < rum/reactive
@@ -632,7 +604,8 @@
                       :on-hide
                       (fn [state e event]
                         (let [target (.-target e)]
-                          (when-not (d/has-class? target "bottom-action")
+                          (if (d/has-class? target "bottom-action") ;; FIXME: not particular case
+                            (.preventDefault e)
                             (let [{:keys [on-hide format value block id repo dummy?]} (get-state state)]
                               (when on-hide
                                 (on-hide value event))
