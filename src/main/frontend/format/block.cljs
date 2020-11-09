@@ -279,7 +279,9 @@
 
                         (< level last-level)
                         (let [current-block-children (set (->> (filter #(< level (second %)) children)
-                                                               (map first)))
+                                                               (map first)
+                                                               (map (fn [id]
+                                                                      [:block/uuid id]))))
                               others (vec (remove #(< level (second %)) children))]
                           [(conj others [id level])
                            current-block-children]))

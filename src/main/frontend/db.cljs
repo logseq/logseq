@@ -1173,8 +1173,7 @@
                [?e2 :block/children ?e1]]
               [(parent ?e2 ?e1)
                [?t :block/children ?e1]
-               [?t :block/uuid ?tid]
-               (parent ?e2 ?tid)]])
+               (parent ?e2 ?t)]])
            (seq-flatten)))))
 
 ;; FIXME: :block/children should contain all
@@ -1183,8 +1182,7 @@
   (when-let [conn (get-conn repo)]
     (let [ids (:block/children (entity repo [:block/uuid block-uuid]))]
       (when (seq ids)
-        (pull-many repo '[*]
-                   (map (fn [id] [:block/uuid id]) ids))))))
+        (pull-many repo '[*] ids)))))
 
 (defn get-block-children
   [repo block-uuid]
@@ -2268,8 +2266,7 @@
                        [?e2 :block/children ?e1]]
                       [(parent ?e2 ?e1)
                        [?t :block/children ?e1]
-                       [?t :block/uuid ?tid]
-                       (parent ?e2 ?tid)]])
+                       (parent ?e2 ?t)]])
                    (seq-flatten))]
       (when (seq ids)
         (pull-many repo '[:block/uuid :block/title] ids)))))
@@ -2277,7 +2274,7 @@
 (defn get-block-parent
   [repo block-id]
   (when-let [conn (get-conn repo)]
-    (d/entity conn [:block/children block-id])))
+    (d/entity conn [:block/children [:block/uuid block-id]])))
 
 ;; non recursive query
 (defn get-block-parents
@@ -2430,7 +2427,7 @@
                                            tx
                                            (map
                                             (fn [child]
-                                              [:db/add (:db/id block) :block/children child])
+                                              [:db/add (:db/id block) :block/children [:block/uuid child]])
                                             cur-children)))
                                          tx)
                                     children (-> children
@@ -2514,4 +2511,37 @@
                :git/cloned? (cloned? repo)
                :git/status (get-key-value repo :git/status)
                :git/error (get-key-value repo :git/error)})
-            repos))))
+            repos)))
+
+  ;; filtered blocks
+
+  (def page-and-aliases #{22})
+  (def excluded-pages #{59})
+  (def include-pages #{106})
+  (def page-linked-blocks
+    (->
+     (d/q
+       '[:find (pull ?b [:block/uuid
+                         :block/title
+                         {:block/children ...}])
+         :in $ ?pages
+         :where
+         [?b :block/ref-pages ?ref-page]
+         [(contains? ?pages ?ref-page)]]
+       (get-conn)
+       page-and-aliases)
+     flatten))
+
+  (def page-linked-blocks-include-filter
+    (if (seq include-pages)
+      (filter (fn [{:block/keys [ref-pages]}]
+                (some include-pages (map :db/id ref-pages)))
+              page-linked-blocks)
+      page-linked-blocks))
+
+  (def page-linked-blocks-exclude-filter
+    (if (seq excluded-pages)
+      (remove (fn [{:block/keys [ref-pages]}]
+                (some excluded-pages (map :db/id ref-pages)))
+              page-linked-blocks-include-filter)
+      page-linked-blocks-include-filter)))
