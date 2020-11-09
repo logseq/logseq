@@ -222,20 +222,25 @@
     (let [viewport js/visualViewport
           style (get-dynamic-style-node)
           sheet (.-sheet style)
-          type "resize"
-          handler (fn []
-                    (let [f (fn []
-                              (let [vh (+ (.-offsetTop viewport) (.-height viewport))
-                                    rule (.. sheet -rules (item 0))
-                                    set-top #(set! (.. rule -style -top) (str % "px"))]
-                                (set-top vh)))]
-                      (js/setTimeout f 200)))
-          timer (js/setInterval handler 1000)]
+          raf-pending? (atom false)
+          set-raf-pending! #(reset! raf-pending? %)
+          handler
+          (fn []
+            (if-not @raf-pending?
+              (let [f (fn []
+                        (set-raf-pending! false)
+                        (let [vh (+ (.-offsetTop viewport) (.-height viewport))
+                              rule (.. sheet -rules (item 0))
+                              set-top #(set! (.. rule -style -top) (str % "px"))]
+                          (set-top vh)))]
+                (set-raf-pending! true)
+                (js/window.requestAnimationFrame f))))]
       (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 0px;}")
-      (.addEventListener viewport type handler false)
+      (.addEventListener viewport "resize" handler)
+      (.addEventListener viewport "scroll" handler)
       (fn []
-        (.removeEventListener viewport type handler)
-        (js/clearInterval timer)))))
+        (.removeEventListener viewport "resize" handler)
+        (.removeEventListener viewport "scroll" handler)))))
 
 ;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
