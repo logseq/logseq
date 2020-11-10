@@ -71,6 +71,7 @@
             git-status (state/sub [:git/status repo])
             pushing? (= :pushing git-status)
             pulling? (= :pulling git-status)
+            push-failed? (= :push-failed git-status)
             last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
         [:div.flex-row.flex.items-center
          (when pushing?
@@ -78,7 +79,13 @@
          (ui/dropdown
           (fn [{:keys [toggle-fn]}]
             [:div.cursor.w-2.h-2.sync-status.mr-2
-             {:class (if (or should-push? pushing?) "bg-orange-400" "bg-green-600")
+             {:class (cond
+                       push-failed?
+                       "bg-red-500"
+                       (or should-push? pushing?)
+                       "bg-orange-400"
+                       :else
+                       "bg-green-600")
               :style {:border-radius "50%"
                       :margin-top 2}
               :on-mouse-over
@@ -91,7 +98,10 @@
        {:on-mouse-leave toggle-fn}
        [:div
         [:div
-         (if (and should-push? (seq changed-files))
+         (cond
+           push-failed?
+           [:p (t :git/push-failed)]
+           (and should-push? (seq changed-files))
            [:div.changes
             [:ul
              (for [file changed-files]
@@ -103,6 +113,7 @@
                   {:on-click (fn [e]
                                (export-handler/download-file! file))}
                   [:span (t :download)]]]])]]
+           :else
            [:p (t :git/local-changes-synced)])]
         ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
         [:div.flex.flex-row.justify-between.align-items.mt-2

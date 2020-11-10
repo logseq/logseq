@@ -111,6 +111,24 @@
   (js/window.workerThread.readCommit (util/get-repo-dir repo-url)
                                      oid))
 
+
+;; FIXME: not working
+;; (defn descendent?
+;;   [repo-url oid ancestor]
+;;   (js/window.workerThread.isDescendent (util/get-repo-dir repo-url)
+;;                                        oid
+;;                                        ancestor))
+
+(defn descendent?
+  [repo-url oid ancestor]
+  (p/let [child (read-commit repo-url oid)
+          child-data (bean/->clj child)
+          parent (read-commit repo-url ancestor)
+          parent-data (bean/->clj parent)
+          child-time (get-in child-data [:commit :committer :timestamp])
+          parent-time (get-in parent-data [:commit :committer :timestamp])]
+    (> child-time parent-time)))
+
 (defn push
   ([repo-url token]
    (push repo-url token false))
