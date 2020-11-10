@@ -1,5 +1,5 @@
 * Logseq
-   Logseq is A privacy-first, open-source platform for knowledge sharing and management.
+   A privacy-first, open-source platform for knowledge sharing and management.
 
 ** Website
    https://logseq.com
@@ -9,7 +9,7 @@ If you are on Windows, use the [[#windows-setup][Windows setup]].
 
 *** 1. Requirements
 
-- [[https://clojure.org/guides/getting_started][Java && Clojure]]
+- [[https://clojure.org/guides/getting_started][Java & Clojure]]
 
 - [[https://www.postgresql.org/download/][PostgreSQL]]
 
