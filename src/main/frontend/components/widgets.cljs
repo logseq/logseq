@@ -38,7 +38,7 @@
 
 (rum/defcs add-repo <
   (rum/local "" ::repo)
-  (rum/local "" ::branch)
+  (rum/local "master" ::branch)
   [state]
   (let [repo (get state ::repo)
         branch (get state ::branch)]
