@@ -235,7 +235,7 @@
                           (set-top vh)))]
                 (set-raf-pending! true)
                 (js/window.requestAnimationFrame f))))]
-      (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 0px;}")
+      (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 100vh;}")
       (.addEventListener viewport "resize" handler)
       (.addEventListener viewport "scroll" handler)
       (fn []
