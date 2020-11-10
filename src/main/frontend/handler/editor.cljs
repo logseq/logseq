@@ -453,7 +453,9 @@
                    (util/format "File %s already exists!" file-path)]
                   :error)
                  ;; create the file
-                 (let [content (str (util/default-content-with-title format (:page/original-name page))
+                 (let [content (str (util/default-content-with-title format
+                                                                     (or (:page/original-name page)
+                                                                         (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
                    (p/let [_ (fs/create-if-not-exists dir file-path content)]
                      (db/reset-file! repo path content)
@@ -686,7 +688,9 @@
                            file-path)]
              :error)
             ;; create the file
-            (let [content (util/default-content-with-title format (:page/original-name page))]
+            (let [content (util/default-content-with-title format (or
+                                                                   (:page/original-name page)
+                                                                   (:page/name page)))]
               (p/let [_ (fs/create-if-not-exists dir file-path content)]
                 (db/reset-file! repo path
                                 (str content
