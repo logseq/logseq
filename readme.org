@@ -55,7 +55,7 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
     #+END_SRC
 
 *** 6. Open the browser
-    Open http://localhost:3000.
+    Open [[http://localhost:3000]].
 
 
 ** Windows setup
@@ -64,7 +64,7 @@ If you're on Windows, use the [[#windows-setup][Windows setup]].
     Install clojure through scoop-clojure: https://github.com/littleli/scoop-clojure. You can also install [[https://nodejs.org/en/][Node.js]], [[https://yarnpkg.com/][Yarn]] and [[https://www.postgresql.org/download/][PostgreSQL]] through scoop if you want to.
 
 *** 2. Creating a GitHub app
-    Follow [[step #2][#2-creating-a-github-app]] above if you want Logseq to connect to GitHub. If not, skip this section.
+    Follow [[#2-creating-a-github-app][step #2]] above if you want Logseq to connect to GitHub. If not, skip this section.
     The ~GITHUB_APP_PEM~ variable in the ~run-windows.bat~ needs to be set with the correct directory for your system.
 
 *** 3. Setup PostgreSQL
