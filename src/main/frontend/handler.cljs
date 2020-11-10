@@ -57,7 +57,7 @@
                                (fn []
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
-                            (js/setTimeout watch-for-date! 60000))))))]
+                            (watch-for-date!))))))]
     ;; clear this interval
     (let [interval-id (js/setInterval inner-fn 50)]
       (reset! interval interval-id))))
