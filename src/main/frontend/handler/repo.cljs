@@ -308,7 +308,8 @@
       (p/let [descendent? (git/descendent? repo-url local-latest-commit remote-latest-commit)]
         (when (or (= local-latest-commit remote-latest-commit)
                   (nil? local-latest-commit)
-                  (not descendent?))
+                  (not descendent?)
+                  force-pull?)
           (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo-url))]
             (when (empty? files)
               (let [status (db/get-key-value repo-url :git/status)]
@@ -438,9 +439,8 @@
                            (do
                              (git-handler/set-git-status! repo-url :push-failed)
                              (git-handler/set-git-error! repo-url error)
-                             (if permission?
-                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-                               (pull repo-url token {:force-pull? true}))))))))))))
+                             (when permission?
+                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url)))))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
                      (js/console.dir error)))))))
