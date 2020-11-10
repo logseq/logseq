@@ -10,7 +10,7 @@
     --ls-primary-background-color: #002b36;
     --ls-secondary-background-color: #073642;
     --ls-tertiary-background-color: #0f4552;
-    --ls-alternate-background-color: #01313d
+    --ls-quaternary-background-color: #01313d
 
     --ls-block-properties-background-color: #02222a;
     --ls-search-background-color: var(--ls-primary-background-color);
@@ -53,7 +53,7 @@
     --ls-primary-background-color: white;
     --ls-secondary-background-color: #D8E1E8;
     --ls-tertiary-background-color: #f0f8ff;
-    --ls-alternate-background-color: #f7f7f7
+    --ls-quaternary-background-color: #f7f7f7
 
     --ls-block-properties-background-color: var(--ls-tertiary-background-color);
     --ls-search-background-color: var(--ls-primary-background-color);

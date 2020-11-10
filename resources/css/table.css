@@ -27,7 +27,7 @@ td {
     text-align: left;
 }
 
-tr:nth-child(even) {background: var(--ls-alternate-background-color)}
+tr:nth-child(even) {background: var(--ls-quaternary-background-color)}
 tr:nth-child(odd) {background: var(--ls-primary-background-color)}
 
 caption.t-above {caption-side:top}
@@ -42,7 +42,7 @@ figcaption{margin-top:.3em}
     color: var(--ls-primary-text-color);
 }
 
-.dark-theme tr:nth-child(even) {background: var(--ls-alternate-background-color)}
+.dark-theme tr:nth-child(even) {background: var(--ls-quaternary-background-color)}
 .dark-theme tr:nth-child(odd) {background: var(--ls-primary-background-color)}
 .dark-theme td, .dark-theme tr {
     border-bottom: none;
