@@ -15,10 +15,13 @@
    ;; set to false to enable HistoryAPI
    {:use-fragment false}))
 
-(defn welcome-message
+(defn display-welcome-message
   []
   (js/console.log
-    "Welcome to Logseq! If you encounter any problem, feel free to file an issue on GitHub (https://github.com/logseq/logseq) or join our Discord server (https://discord.gg/KpN4eHY).
+    "
+    Welcome to Logseq!
+    If you encounter any problem, feel free to file an issue on GitHub (https://github.com/logseq/logseq)
+    or join our Discord server (https://discord.gg/KpN4eHY).
     .____
     |    |    ____   ____  ______ ____  ______
     |    |   /  _ \\ / ___\\/  ___// __ \\/ ____/
@@ -27,14 +30,11 @@
             \\/    /_____/     \\/     \\/   |__|
      " ))
 
-
-
-
-                            (defn start []
+(defn start []
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)
-    (welcome-message)))
+    (display-welcome-message)))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
