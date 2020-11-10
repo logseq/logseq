@@ -46,7 +46,6 @@
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
-(defonce *async-insert-start (atom false))
 
 (defn modified-time-tx
   [page file]
@@ -622,12 +621,9 @@
                                              after-blocks)
                                             {:key :block/change
                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                                            [[file-path new-content]])
-                                           (reset! *async-insert-start false))]
+                                            [[file-path new-content]]))]
                          ;; Replace with batch transactions
                          (state/add-tx! transact-fn)
-
-                         (reset! *async-insert-start true)
 
                          (let [blocks (remove (fn [block]
                                                 (nil? (:block/content block))) blocks)
@@ -711,7 +707,8 @@
         (insert-block block file-path file-content))
 
       :else
-      nil)))
+      nil))
+  (state/set-editor-op! nil))
 
 (defn clear-when-saved!
   []
@@ -753,46 +750,38 @@
       (assoc properties new-marker (util/time-ms))
       properties)))
 
-;; FIXME: temporal fix
-(defonce *skip-save-block? (atom false))
-
 (defn insert-new-block!
   [state]
-  (reset! *skip-save-block? true)
-  (let [aux-fn (fn [] (when-not config/publishing?
-                        (let [{:keys [block value format id config]} (get-state state)
-                              block-id (:block/uuid block)
-                              block (or (db/pull [:block/uuid block-id])
-                                        block)
-                              collapsed? (:block/collapsed? block)
-                              repo (or (:block/repo block) (state/get-current-repo))
-                              last-child (and collapsed?
-                                              (last (db/get-block-and-children-no-cache repo (:block/uuid block))))
-                              last-child (when (not= (:block/uuid last-child)
-                                                     (:block/uuid block))
-                                           last-child)
-                              new-block (or last-child block)
-                              new-value (if last-child (:block/content last-child) value)
-                              properties (with-timetracking-properties new-block new-value)]
-                          ;; save the current block and insert a new block
-                          (insert-new-block-aux!
-                           (assoc new-block :block/properties properties)
-                           new-value
-                           {:create-new-block? true
-                            :ok-handler
-                            (fn [[_first-block last-block _new-block-content]]
-                              (let [last-id (:block/uuid last-block)]
-                                (edit-block! last-block 0 format id)
-                                (clear-when-saved!)))
-                            :with-level? (if last-child true false)
-                            :new-level (and last-child (:block/level block))
-                            :blocks-container-id (:id config)
-                            :current-page (state/get-current-page)})
-
-                          (js/setTimeout #(reset! *skip-save-block? false) 10))))]
-    (if @*async-insert-start
-      (js/setTimeout aux-fn 20)
-      (aux-fn))))
+  (state/set-editor-op! :insert)
+  (when-not config/publishing?
+    (let [{:keys [block value format id config]} (get-state state)
+          block-id (:block/uuid block)
+          block (or (db/pull [:block/uuid block-id])
+                    block)
+          collapsed? (:block/collapsed? block)
+          repo (or (:block/repo block) (state/get-current-repo))
+          last-child (and collapsed?
+                          (last (db/get-block-and-children-no-cache repo (:block/uuid block))))
+          last-child (when (not= (:block/uuid last-child)
+                                 (:block/uuid block))
+                       last-child)
+          new-block (or last-child block)
+          new-value (if last-child (:block/content last-child) value)
+          properties (with-timetracking-properties new-block new-value)]
+      ;; save the current block and insert a new block
+      (insert-new-block-aux!
+       (assoc new-block :block/properties properties)
+       new-value
+       {:create-new-block? true
+        :ok-handler
+        (fn [[_first-block last-block _new-block-content]]
+          (let [last-id (:block/uuid last-block)]
+            (edit-block! last-block 0 format id)
+            (clear-when-saved!)))
+        :with-level? (if last-child true false)
+        :new-level (and last-child (:block/level block))
+        :blocks-container-id (:id config)
+        :current-page (state/get-current-page)}))))
 
 (defn insert-new-block-without-save-previous!
   [config last-block]
@@ -1324,16 +1313,16 @@
 
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
-  (when-not @*skip-save-block?
-    (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
-              dummy?)
-      (let [value (text/remove-level-spaces value format true)
-            new-value (block/with-levels value format block)
-            properties (with-timetracking-properties block value)]
-        ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-        ;; maybe we shouldn't save the block/file in "will-unmount" event?
-        (save-block-if-changed! block new-value
-                                {:custom-properties properties})))))
+  (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
+            dummy?)
+    (let [value (text/remove-level-spaces value format true)
+          new-value (block/with-levels value format block)
+          properties (with-timetracking-properties block value)]
+      (prn "save block")
+      ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
+      ;; maybe we shouldn't save the block/file in "will-unmount" event?
+      (save-block-if-changed! block new-value
+                              {:custom-properties properties}))))
 
 (defn on-up-down
   [state e up?]
@@ -1598,8 +1587,8 @@
 
 (defn adjust-block-level!
   [state direction]
-  (let [aux-fn (fn []
-                 (let [{:keys [block block-parent-id value config]} (get-state state)
+  (state/set-editor-op! :indent-outdent)
+  (let [{:keys [block block-parent-id value config]} (get-state state)
                        start-level (:start-level config)
                        format (:block/format block)
                        block-pattern (config/get-block-pattern format)
@@ -1625,14 +1614,9 @@
                                      (util/uuid-string? (get config :id)))
                                     (<= final-level start-level)))
                           (<= (- final-level previous-level) 1))
-                     (reset! *skip-save-block? true)
                      (save-block-if-changed! block new-value
-                                             {:indent-left? (= direction :left)})
-                     (js/setTimeout #(reset! *skip-save-block? false) 10))))]
-    ;; TODO: Not a universal solution
-    (if @*async-insert-start
-      (js/setTimeout aux-fn 20)
-      (aux-fn))))
+                                             {:indent-left? (= direction :left)})))
+  (state/set-editor-op! nil))
 
 (defn adjust-blocks-level!
   [blocks direction])

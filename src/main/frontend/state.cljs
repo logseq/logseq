@@ -832,3 +832,11 @@
 (defn get-changed-files
   []
   (get-in @state [:repo/changed-files (get-current-repo)]))
+
+(defonce editor-op (atom nil))
+(defn set-editor-op!
+  [value]
+  (reset! editor-op value))
+(defn get-editor-op
+  []
+  @editor-op)
