@@ -213,6 +213,20 @@
    (when-let [db (get-conn repo)]
      (d/entity db id-or-lookup-ref))))
 
+(defn query-entity-in-component
+  ([id-or-lookup-ref]
+   (entity (state/get-current-repo) id-or-lookup-ref))
+  ([repo id-or-lookup-ref]
+   (let [k [:entity id-or-lookup-ref]
+         result-atom (:result (get @query-state k))]
+     (when-let [component *query-component*]
+       (add-query-component! k component))
+     (when-let [db (get-conn repo)]
+       (let [result (d/entity db id-or-lookup-ref)
+             result-atom (or result-atom (atom nil))]
+         (set! (.-state result-atom) result)
+         (add-q! k nil nil result-atom identity identity identity))))))
+
 (def touch d/touch)
 
 (defn get-current-page
