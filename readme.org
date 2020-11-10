@@ -22,7 +22,13 @@ If you are on Windows, use the [[#windows-setup][Windows setup]].
 
     Remember to download the ~private-key.pem~ which will be used for the next step.
 
-*** 3. Add environment variables
+*** 3. Set up PostgreSQL
+
+Make sure you have PostgreSQL running. You can check if it's running with ~pg_ctl -D /usr/local/var/postgres status~
+and use ~pg_ctl -D /usr/local/var/postgres start~ to start it up.
+You'll also need to make a Logseq DB in PostgreSQL. Do that with ~createdb logseq~.
+
+*** 4. Add environment variables
        #+BEGIN_SRC sh
          export ENVIRONMENT="dev"
          export JWT_SECRET="4fa183cf1d28460498b13330835e80ab"
@@ -36,14 +42,14 @@ If you are on Windows, use the [[#windows-setup][Windows setup]].
          export LOG_PATH="/tmp/logseq"
        #+END_SRC
 
-*** 4. Compile to JavaScript
+*** 5. Compile to JavaScript
     #+BEGIN_SRC sh
       cd web
       yarn
       yarn watch
     #+END_SRC
 
-*** 5. Start the Clojure server
+*** 6. Start the Clojure server
     1. Download jar
 
        Go to https://github.com/logseq/logseq-internal/releases, download the =logseq.jar= and move it to the =resources= directory.
@@ -55,7 +61,7 @@ If you are on Windows, use the [[#windows-setup][Windows setup]].
          java -Duser.timezone=UTC -jar logseq.jar
        #+END_SRC
 
-*** 6. Open the browser
+*** 7. Open the browser
     Open [[http://localhost:3000]].
 
 
