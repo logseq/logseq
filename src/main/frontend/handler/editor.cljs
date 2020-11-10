@@ -1318,7 +1318,6 @@
     (let [value (text/remove-level-spaces value format true)
           new-value (block/with-levels value format block)
           properties (with-timetracking-properties block value)]
-      (prn "save block")
       ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
       ;; maybe we shouldn't save the block/file in "will-unmount" event?
       (save-block-if-changed! block new-value
