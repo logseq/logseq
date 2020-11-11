@@ -24,10 +24,6 @@
    ;; Git
    :repo/url        {:db/unique :db.unique/identity}
    :repo/cloned?    {}
-   ;; local
-   :git/latest-commit {}
-   ;; remote
-   :git/remote-latest-commit {}
    :git/status {}
    :git/last-pulled-at {}
    ;; last error, better we should record all the errors

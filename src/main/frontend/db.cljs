@@ -2499,6 +2499,5 @@
                :repo repo
                :git/cloned? (cloned? repo)
                :git/status (get-key-value repo :git/status)
-               :git/latest-commit (get-key-value repo :git/latest-commit)
                :git/error (get-key-value repo :git/error)})
             repos))))

@@ -5,6 +5,7 @@
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file]
             [frontend.handler.notification :as notification]
+            [frontend.handler.common :as common-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -138,38 +139,34 @@
   {:will-mount
    (fn [state]
      (when-let [repo (state/get-current-repo)]
-       (git-handler/get-latest-commit
-        repo
-        (fn [commit]
-          (let [local-oid (gobj/get commit "oid")
-                remote-oid (db/get-key-value repo
-                                             :git/remote-latest-commit)]
-            (p/let [result (git/get-local-diffs repo local-oid remote-oid)]
-              (reset! diffs result)
-              (reset! remote-hash-id remote-oid)
-              (doseq [{:keys [type path]} result]
-                (when (contains? #{"added" "modify"}
-                                 type)
-                  (github/get-content
-                   (state/get-github-token repo)
-                   repo
-                   path
-                   remote-oid
-                   (fn [{:keys [repo-url path ref content]}]
-                     (swap! state/state
-                            assoc-in [:github/contents repo-url remote-oid path] content))
-                   (fn [response]
-                     (when (= (gobj/get response "status") 401)
-                       (notification/show!
-                        [:span.text-gray-700.mr-2
-                         (util/format
-                          "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-                          repo)
-                         (ui/button
-                          "Install Logseq on GitHub"
-                          :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
-                        :error
-                        false)))))))))))
+       (p/let [remote-latest-commit (common-handler/get-remote-ref repo)
+               local-latest-commit (common-handler/get-ref repo)
+               result (git/get-local-diffs repo local-latest-commit remote-latest-commit)]
+         (reset! diffs result)
+         (reset! remote-hash-id remote-latest-commit)
+         (doseq [{:keys [type path]} result]
+           (when (contains? #{"added" "modify"}
+                            type)
+             (github/get-content
+              (state/get-github-token repo)
+              repo
+              path
+              remote-latest-commit
+              (fn [{:keys [repo-url path ref content]}]
+                (swap! state/state
+                       assoc-in [:github/contents repo-url remote-latest-commit path] content))
+              (fn [response]
+                (when (= (gobj/get response "status") 401)
+                  (notification/show!
+                   [:span.text-gray-700.mr-2
+                    (util/format
+                     "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
+                     repo)
+                    (ui/button
+                      "Install Logseq on GitHub"
+                      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
+                   :error
+                   false))))))))
      state)
    :will-unmount
    (fn [state]
@@ -206,13 +203,13 @@
          (if pushing?
            [:span (ui/loading "Pushing")]
            (ui/button "Commit and push"
-                      :on-click
-                      (fn []
-                        (let [commit-message (if (string/blank? @commit-message)
-                                               "Merge"
-                                               @commit-message)]
-                          (reset! *pushing? true)
-                          (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
+             :on-click
+             (fn []
+               (let [commit-message (if (string/blank? @commit-message)
+                                      "Merge"
+                                      @commit-message)]
+                 (reset! *pushing? true)
+                 (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
 
        :else
        [:div "No diffs"])]))
