@@ -21,25 +21,27 @@
 
 ;; Should include un-pushed committed files too
 (defn check-changed-files-status
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (and
-           (gobj/get js/window "workerThread")
-           (gobj/get js/window.workerThread "getChangedFiles"))
-      (->
-       (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo))]
-         (let [files (bean/->clj files)]
-           (p/let [remote-latest-commit (get-remote-ref repo)
-                   local-latest-commit (get-ref repo)
-                   descendent? (git/descendent? repo local-latest-commit remote-latest-commit)
-                   diffs (git/get-diffs repo local-latest-commit remote-latest-commit)]
-             (let [files (if descendent?
-                           (->> (concat (map :path diffs) files)
-                                distinct)
-                           files)]
-               (state/set-changed-files! repo files)))))
-       (p/catch (fn [error]
-                  (js/console.dir error)))))))
+  ([]
+   (check-changed-files-status (state/get-current-repo)))
+  ([repo]
+   (when (and
+          repo
+          (gobj/get js/window "workerThread")
+          (gobj/get js/window.workerThread "getChangedFiles"))
+     (->
+      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo))]
+        (let [files (bean/->clj files)]
+          (p/let [remote-latest-commit (get-remote-ref repo)
+                  local-latest-commit (get-ref repo)
+                  descendent? (git/descendent? repo local-latest-commit remote-latest-commit)
+                  diffs (git/get-diffs repo local-latest-commit remote-latest-commit)]
+            (let [files (if descendent?
+                          (->> (concat (map :path diffs) files)
+                               distinct)
+                          files)]
+              (state/set-changed-files! repo files)))))
+      (p/catch (fn [error]
+                 (js/console.dir error)))))))
 
 (defn copy-to-clipboard-without-id-property!
   [content]

@@ -333,11 +333,11 @@
                                                             (not= local-latest-commit fetchHead))
                                                    (p/let [diffs (git/get-diffs repo-url local-latest-commit fetchHead)]
                                                      (when (seq diffs)
-                                                       (load-db-and-journals! repo-url diffs false))))))
+                                                       (load-db-and-journals! repo-url diffs false))))
+                                                 (common-handler/check-changed-files-status repo-url)))
                                        (p/catch (fn [error]
                                                   (git-handler/set-git-status! repo-url :checkout-failed)
-                                                  (git-handler/set-git-error! repo-url error))))
-                                   (state/set-changed-files! repo-url nil)))
+                                                  (git-handler/set-git-error! repo-url error))))))
                          (p/catch (fn [error]
                                     (println "Git pull error:")
                                     (js/console.error error)
@@ -408,11 +408,11 @@
                      (fn [result]
                        (git-handler/set-git-status! repo-url nil)
                        (git-handler/set-git-error! repo-url nil)
-                       (state/set-changed-files! repo-url nil))
+                       (common-handler/check-changed-files-status repo-url))
                      (fn [error]
                        (println "Git push error: ")
                        (js/console.error error)
-                       (common-handler/check-changed-files-status)
+                       (common-handler/check-changed-files-status repo-url)
                        (let [permission? (or (string/includes? (str error) "401")
                                              (string/includes? (str error) "404"))]
                          (cond
