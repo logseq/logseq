@@ -14,7 +14,7 @@
 
 (defn get-remote-ref
   [repo-url]
-  (let [branch (state/get-repo-branch repo-url)]
+  (let [branch (state/get-default-branch repo-url)]
     ;; TODO: what if the remote is not named "origin", check the api from isomorphic-git
     (git/resolve-ref repo-url (str "refs/remotes/origin/" branch))))
 

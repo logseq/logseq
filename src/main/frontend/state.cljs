@@ -210,15 +210,6 @@
   []
   (get-in @state [:me :repos]))
 
-(defn get-repo-branch
-  [repo-url]
-  (or
-   (->> (get-repos)
-        (filter (fn [repo] (= (:url repo) repo-url)))
-        first
-        :branch)
-   "master"))
-
 (defn set-current-repo!
   [repo]
   (swap! state assoc :git/current-repo repo)
