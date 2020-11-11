@@ -439,8 +439,15 @@
                            (do
                              (git-handler/set-git-status! repo-url :push-failed)
                              (git-handler/set-git-error! repo-url error)
-                             (when permission?
-                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url)))))))))))))
+                             (cond
+                               permission?
+                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
+
+                               (state/online?)
+                               (pull repo-url token {:force-pull? true})
+
+                               :else    ; offline
+                               nil)))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
                      (js/console.dir error)))))))

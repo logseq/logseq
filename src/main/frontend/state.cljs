@@ -22,6 +22,7 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
+    :network/online? nil
     :indexeddb/support? true
     ;; TODO: save in local storage so that if :changed? is true when user
     ;; reloads the browser, the app should re-index the repo (another way
@@ -832,3 +833,19 @@
 (defn get-changed-files
   []
   (get-in @state [:repo/changed-files (get-current-repo)]))
+
+(defn set-online!
+  [value]
+  (set-state! :network/online? value))
+
+(defn online?
+  []
+  (:network/online? @state))
+
+(defonce editor-op (atom nil))
+(defn set-editor-op!
+  [value]
+  (reset! editor-op value))
+(defn get-editor-op
+  []
+  @editor-op)
