@@ -22,7 +22,8 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
-    :network/online? nil
+    ;; TODO: how to detect the network reliably?
+    :network/online? true
     :indexeddb/support? true
     ;; TODO: save in local storage so that if :changed? is true when user
     ;; reloads the browser, the app should re-index the repo (another way
