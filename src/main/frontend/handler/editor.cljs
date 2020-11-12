@@ -752,8 +752,10 @@
 
 (defn insert-new-block!
   [state]
-  (state/set-editor-op! :insert)
-  (when-not config/publishing?
+  (when (and (not config/publishing?)
+             ;; wait for the previous insert op finished
+             (not= :insert (state/get-editor-op)))
+    (state/set-editor-op! :insert)
     (let [{:keys [block value format id config]} (get-state state)
           block-id (:block/uuid block)
           block (or (db/pull [:block/uuid block-id])
