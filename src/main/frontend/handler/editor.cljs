@@ -754,7 +754,7 @@
 (defn insert-new-block!
   [state]
   (when (and (not config/publishing?)
-             ;; wait for the previous insert op finished
+             ;; skip this operation if it's inserting
              (not= :insert (state/get-editor-op)))
     (state/set-editor-op! :insert)
     (let [{:keys [block value format id config]} (get-state state)
