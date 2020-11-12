@@ -182,7 +182,7 @@
               :target "_blank"} "isomorphic-git"]
          (t :on-boarding/isomorphic-git-desc)]]
 
-       [:img {:src "/static/img/credits.png"
+       [:img {:src "https://asset.logseq.com/static/img/credits.png"
               :style {:margin "12px 0 0 0"}}]]]]))
 
 (defn help
