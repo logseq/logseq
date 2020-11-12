@@ -53,7 +53,7 @@
     --ls-primary-background-color: white;
     --ls-secondary-background-color: #D8E1E8;
     --ls-tertiary-background-color: #f0f8ff;
-    --ls-quaternary-background-color: #f7f7f7
+    --ls-quaternary-background-color: #f7f7f7;
 
     --ls-block-properties-background-color: var(--ls-tertiary-background-color);
     --ls-search-background-color: var(--ls-primary-background-color);
