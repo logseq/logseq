@@ -621,7 +621,8 @@
                                              after-blocks)
                                             {:key :block/change
                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                                            [[file-path new-content]]))]
+                                            [[file-path new-content]])
+                                           (state/set-editor-op! nil))]
                          ;; Replace with batch transactions
                          (state/add-tx! transact-fn)
 
@@ -699,7 +700,8 @@
                 ;; Continue to edit the last block
                 (let [blocks (db/get-page-blocks repo (:page/name page))
                       last-block (last blocks)]
-                  (edit-last-block-for-new-page! last-block 0)))))))
+                  (edit-last-block-for-new-page! last-block 0))))))
+        (state/set-editor-op! nil))
 
       file
       (let [file-path (:file/path file)
@@ -707,8 +709,7 @@
         (insert-block block file-path file-content))
 
       :else
-      nil))
-  (state/set-editor-op! nil))
+      nil)))
 
 (defn clear-when-saved!
   []
