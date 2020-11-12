@@ -650,7 +650,8 @@
                              (page-handler/rename-when-alter-title-propertiy! old-page-name path format content value)
                              (file/alter-file (state/get-current-repo) path (string/trim value)
                                               {:re-render-root? true}))))
-                       (editor-handler/save-block! (get-state state) value)))
+                       (when-not (contains? #{:insert :indent-outdent} (state/get-editor-op))
+                         (editor-handler/save-block! (get-state state) value))))
                    state)}
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or {dummy? false}
