@@ -30,8 +30,9 @@
    :file/path       {:db/unique :db.unique/identity}
    :file/created-at {}
    :file/last-modified-at {}
-   ;; TODO: calculate memory/disk usage
-   ;; :file/size       {}
+
+   ;; toggle to comment this line to force to clone
+   :release/re-clone? {}
 
    :recent/pages    {}
 
