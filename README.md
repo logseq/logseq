@@ -47,6 +47,8 @@ Logseq is also made possible by the following projects:
 - [isomorphic-git](https://isomorphic-git.org/) - A pure JavaScript implementation of Git for node and browsers
 - [sci](https://github.com/borkdude/sci) - Small Clojure Interpreter
 
+![Logseq Credits](https://asset.logseq.com/static/img/credits.png)
+
 ## Learn more
 
 - Our blog: https://logseq.com/blog - Please be sure to visit our [About page](https://logseq.com/blog/about) for the latest updates of the app
@@ -56,7 +58,7 @@ Logseq is also made possible by the following projects:
 
 - - - -
 
-The following is for devlopers and designers who want to build and run Logseq locally and contribute to this project.
+The following is for developers and designers who want to build and run Logseq locally and contribute to this project.
 
 ## Set up development environment
 
