@@ -26,6 +26,7 @@
   ([repo]
    (when (and
           repo
+          (db/cloned? repo)
           (gobj/get js/window "workerThread")
           (gobj/get js/window.workerThread "getChangedFiles"))
      (->
