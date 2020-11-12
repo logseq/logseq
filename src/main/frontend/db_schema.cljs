@@ -18,9 +18,6 @@
    :me/email {}
    :me/avatar {}
 
-   ;; TODO: local, github, dropbox, etc.
-   :db/type {}
-
    ;; Git
    :repo/url        {:db/unique :db.unique/identity}
    :repo/cloned?    {}
