@@ -272,23 +272,23 @@
                                  (when (util/uuid-string? custom-id)
                                    (uuid custom-id))))
                              (d/squuid))
-                      temp-id (d/tempid :db.part/user)
                       block (second block)
                       level (:level block)
                       [children current-block-children]
                       (cond
                         (>= level last-level)
-                        [(conj children [temp-id level])
+                        [(conj children [id level])
                          #{}]
 
                         (< level last-level)
                         (let [current-block-children (set (->> (filter #(< level (second %)) children)
-                                                               (map first)))
+                                                               (map first)
+                                                               (map (fn [id]
+                                                                      [:block/uuid id]))))
                               others (vec (remove #(< level (second %)) children))]
-                          [(conj others [temp-id level])
+                          [(conj others [id level])
                            current-block-children]))
                       block (-> (assoc block
-                                       :db/id temp-id
                                        :uuid id
                                        :body (vec (reverse block-body))
                                        :properties (:properties properties)

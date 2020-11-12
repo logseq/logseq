@@ -1173,11 +1173,11 @@
                [?e2 :block/children ?e1]]
               [(parent ?e2 ?e1)
                [?t :block/children ?e1]
-               (parent ?e2 ?t)]])
-           (seq-flatten)))))
+               [?t :block/uuid ?tid]
+               (parent ?e2 ?tid)]])
+           (apply concat)))))
 
-;; FIXME: :block/children should contain all
-(defn get-block-children-unsafe
+(defn get-block-immediate-children
   [repo block-uuid]
   (when-let [conn (get-conn repo)]
     (let [ids (:block/children (entity repo [:block/uuid block-uuid]))]
@@ -1189,8 +1189,7 @@
   (when-let [conn (get-conn repo)]
     (let [ids (get-block-children-ids repo block-uuid)]
       (when (seq ids)
-        (pull-many repo '[*]
-                   (map (fn [id] [:block/uuid id]) ids))))))
+        (pull-many repo '[*] ids)))))
 
 (defn get-block-and-children
   ([repo block-uuid]
@@ -2247,18 +2246,18 @@
 (defn get-block-parent
   [repo block-id]
   (when-let [conn (get-conn repo)]
-    (when-let [id (:db/id (d/entity conn [:block/uuid block-id]))]
-      (d/entity conn [:block/children id]))))
+    (d/entity conn [:block/children [:block/uuid block-id]])))
 
 ;; Using reverse lookup, a bit slow compared to get-block-parents
+
+
 #_(defn get-block-parents-rec
-  [repo block-id depth]
-  (when-let [conn (get-conn repo)]
-    (let [id (:db/id (entity repo [:block/uuid block-id]))]
+    [repo block-id depth]
+    (when-let [conn (get-conn repo)]
       (d/pull conn
               '[:db/id :block/uuid :block/title :block/content
                 {:block/_children ...}]
-              id))))
+              [:block/uuid block-id])))
 
 ;; non recursive query
 (defn get-block-parents
@@ -2402,7 +2401,6 @@
            last-level 10000]
       (if (seq blocks)
         (let [[{:block/keys [uuid level] :as block} & others] blocks
-              db-id (:db/id block)
               [tx children] (cond
                               (< level last-level)        ; parent
                               (let [cur-children (get children last-level)
@@ -2412,20 +2410,20 @@
                                            tx
                                            (map
                                             (fn [child]
-                                              [:db/add (:db/id block) :block/children child])
+                                              [:db/add (:db/id block) :block/children [:block/uuid child]])
                                             cur-children)))
                                          tx)
                                     children (-> children
                                                  (dissoc last-level)
-                                                 (update level conj db-id))]
+                                                 (update level conj uuid))]
                                 [tx children])
 
                               (> level last-level)        ; child of sibling
-                              (let [children (update children level conj db-id)]
+                              (let [children (update children level conj uuid)]
                                 [tx children])
 
                               :else                       ; sibling
-                              (let [children (update children last-level conj db-id)]
+                              (let [children (update children last-level conj uuid)]
                                 [tx children]))]
           (recur others tx children level))
         ;; TODO: add top-level children to the "Page" block (we might remove the Page from db schema)
@@ -2506,15 +2504,15 @@
   (def page-linked-blocks
     (->
      (d/q
-       '[:find (pull ?b [:block/uuid
-                         :block/title
-                         {:block/children ...}])
-         :in $ ?pages
-         :where
-         [?b :block/ref-pages ?ref-page]
-         [(contains? ?pages ?ref-page)]]
-       (get-conn)
-       page-and-aliases)
+      '[:find (pull ?b [:block/uuid
+                        :block/title
+                        {:block/children ...}])
+        :in $ ?pages
+        :where
+        [?b :block/ref-pages ?ref-page]
+        [(contains? ?pages ?ref-page)]]
+      (get-conn)
+      page-and-aliases)
      flatten))
 
   (def page-linked-blocks-include-filter
