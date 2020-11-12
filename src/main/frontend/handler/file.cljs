@@ -54,12 +54,16 @@
 
 (defn- hidden?
   [path patterns]
-  (some (fn [pattern]
-          (or
-           (= path pattern)
-           (and (util/starts-with? pattern "/")
-                (= (str "/" (first (string/split path #"/")))
-                   pattern)))) patterns))
+  (let [path (if (and (string? path)
+                      (= \/ (first path)))
+               (subs path 1)
+               path)]
+    (some (fn [pattern]
+           (let [pattern (if (and (string? pattern)
+                                  (not= \/ (first pattern)))
+                           (str "/" pattern)
+                           pattern)]
+             (string/starts-with? (str "/" path) pattern))) patterns)))
 
 (defn restore-config!
   ([repo-url project-changed-check?]
