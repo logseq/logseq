@@ -6,7 +6,6 @@
             [frontend.db :as db]
             [frontend.components.widgets :as widgets]
             [frontend.components.journal :as journal]
-            [frontend.components.search :as search]
             [frontend.components.page :as page]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
