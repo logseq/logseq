@@ -10,25 +10,25 @@ table {
 }
 
 tr {
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--ls-border-color);
 }
 
 th {
     font-size: 14px;
     font-weight: 400;
     color: #039;
-    border-bottom: 2px solid #6678b1;
+    border-bottom: 2px solid var(--ls-border-color);
     padding: 10px 8px;
 }
 
 td {
-    border-bottom: 1px solid #ccc;
+    border-bottom: 1px solid var(--ls-border-color);
     padding: 6px 8px;
     text-align: left;
 }
 
-tr:nth-child(even) {background: #F7F7F7}
-tr:nth-child(odd) {background: #FFF}
+tr:nth-child(even) {background: var(--ls-quaternary-background-color);}
+tr:nth-child(odd) {background: var(--ls-primary-background-color);}
 
 caption.t-above {caption-side:top}
 caption.t-bottom {caption-side:bottom}
@@ -39,14 +39,14 @@ figcaption{margin-top:.3em}
 .org-center{text-align:center}
 
 .dark-theme th {
-    color: #a4b5b6;
+    color: var(--ls-primary-text-color);
 }
 
-.dark-theme tr:nth-child(even) {background: #01313d}
-.dark-theme tr:nth-child(odd) {background: #002b36}
+.dark-theme tr:nth-child(even) {background: var(--ls-quaternary-background-color);}
+.dark-theme tr:nth-child(odd) {background: var(--ls-primary-background-color);}
 .dark-theme td, .dark-theme tr {
     border-bottom: none;
 }
 .dark-theme th {
-    border-bottom: 2px solid #546376;
+    border-bottom: 2px solid var(--ls-border-color);
 }

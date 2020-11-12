@@ -40,6 +40,8 @@ You'll also need to make a Logseq DB in PostgreSQL. Do that with ~createdb logse
          # Replace your-code-directory and your-app.private-key.pem with yours
          export GITHUB_APP_PEM="/your-code-directory/your-app.private-key.pem"
          export LOG_PATH="/tmp/logseq"
+         export PG_USERNAME="xxx"
+         export PG_PASSWORD="xxx"
        #+END_SRC
 
 *** 5. Compile to JavaScript

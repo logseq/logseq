@@ -22,6 +22,8 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
+    ;; TODO: how to detect the network reliably?
+    :network/online? true
     :indexeddb/support? true
     ;; TODO: save in local storage so that if :changed? is true when user
     ;; reloads the browser, the app should re-index the repo (another way
@@ -177,6 +179,11 @@
        (string/lower-case (name fmt)))
 
      (get-in @state [:me :preferred_format] "markdown")))))
+
+(defn get-pages-directory
+  []
+  (when-let [repo (get-current-repo)]
+    (:pages-directory (get-config repo))))
 
 (defn get-preferred-workflow
   []
@@ -832,6 +839,14 @@
 (defn get-changed-files
   []
   (get-in @state [:repo/changed-files (get-current-repo)]))
+
+(defn set-online!
+  [value]
+  (set-state! :network/online? value))
+
+(defn online?
+  []
+  (:network/online? @state))
 
 (defonce editor-op (atom nil))
 (defn set-editor-op!

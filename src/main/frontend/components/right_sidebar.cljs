@@ -135,7 +135,7 @@
           (block-cp repo idx block-data)]]))
 
     :page
-    (let [page-name (get-in block-data [:page :page/name])]
+    (let [page-name (:page/name block-data)]
       [[:a {:href (rfe/href :page {:name (util/url-encode page-name)})}
         (util/capitalize-all page-name)]
        [:div.ml-2
@@ -171,24 +171,29 @@
 
 (rum/defc sidebar-item < rum/reactive
   [repo idx db-id block-type block-data t]
-  (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])
-        item (build-sidebar-item repo idx db-id block-type block-data t)]
+  (let [item
+        (if (= :page block-type)
+          (let [page (db/query-entity-in-component db-id)]
+            (when (seq page)
+              (build-sidebar-item repo idx db-id block-type page t)))
+          (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
-      [:div.sidebar-item.content
-       (let [[title component] item]
-         [:div.flex.flex-col
-          [:div.flex.flex-row.justify-between
-           [:div.flex.flex-row.justify-center
-            [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
-             {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
-             (if collapse?
-               (svg/caret-right)
-               (svg/caret-down))]
-            [:div.ml-1
-             title]]
-           (close #(state/sidebar-remove-block! idx))]
-          [:div {:class (if collapse? "hidden" "initial")}
-           component]])])))
+      (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+        [:div.sidebar-item.content
+         (let [[title component] item]
+           [:div.flex.flex-col
+            [:div.flex.flex-row.justify-between
+             [:div.flex.flex-row.justify-center
+              [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
+               {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
+               (if collapse?
+                 (svg/caret-right)
+                 (svg/caret-down))]
+              [:div.ml-1
+               title]]
+             (close #(state/sidebar-remove-block! idx))]
+            [:div {:class (if collapse? "hidden" "initial")}
+             component]])]))))
 
 (defn- get-page
   [match]

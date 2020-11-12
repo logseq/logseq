@@ -436,7 +436,7 @@
                  path (str
                        (if journal-page?
                          config/default-journals-directory
-                         config/default-pages-directory)
+                         (config/get-pages-directory))
                        "/"
                        (if journal-page?
                          (date/journal-title->default title)
@@ -666,7 +666,7 @@
             path (str
                   (if journal-page?
                     config/default-journals-directory
-                    config/default-pages-directory)
+                    (config/get-pages-directory))
                   "/"
                   (if journal-page?
                     (date/journal-title->default title)

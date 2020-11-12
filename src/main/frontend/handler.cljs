@@ -12,7 +12,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [goog.object :as gobj]))
 
 (defn- watch-for-date!
   []
@@ -103,6 +104,16 @@
                            (set! (.-returnValue (or e js/window.event)) message)
                            message)))))
 
+(defn- handle-connection-change
+  [e]
+  (let [online? (= (gobj/get e "type") "online")]
+    (state/set-online! online?)))
+
+(defn set-network-watcher!
+  []
+  (js/window.addEventListener "online" handle-connection-change)
+  (js/window.addEventListener "offline" handle-connection-change))
+
 (defn start!
   [render]
   (let [me (and js/window.user (bean/->clj js/window.user))
@@ -113,6 +124,8 @@
     (when me (state/set-state! :me me))
     (state/set-db-restoring! true)
     (render)
+
+    (set-network-watcher!)
 
     (util/indexeddb-check?
      (fn [_error]
