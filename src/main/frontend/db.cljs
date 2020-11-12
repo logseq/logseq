@@ -1218,6 +1218,7 @@
                   [(?pred $ ?meta)]])
              react))))
 
+;; TODO: performance
 (defn get-block-and-children-no-cache
   [repo block-uuid]
   (let [block (entity repo [:block/uuid block-uuid])
@@ -1237,13 +1238,6 @@
          page
          pred)
         (block-and-children-transform repo block-uuid level))))
-
-(defn block-has-children?
-  [repo block]
-  (let [blocks (get-block-and-children-no-cache repo (:block/uuid block))
-        second-block (second blocks)]
-    (and second-block
-         (> (:block/level second-block) (:block/level block)))))
 
 (defn get-file-page
   ([file-path]
