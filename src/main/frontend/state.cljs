@@ -180,6 +180,11 @@
 
      (get-in @state [:me :preferred_format] "markdown")))))
 
+(defn get-pages-directory
+  []
+  (when-let [repo (get-current-repo)]
+    (:pages-directory (get-config repo))))
+
 (defn get-preferred-workflow
   []
   (keyword

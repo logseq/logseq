@@ -144,9 +144,9 @@
 (defn create-dummy-notes-page
   [repo-url content]
   (let [repo-dir (util/get-repo-dir repo-url)
-        path (str config/default-pages-directory "/how_to_make_dummy_notes.md")
+        path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-pages-directory))
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/" (config/get-pages-directory)))
                   (p/catch (fn [_e])))
             _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
       (db/reset-file! repo-url path content))))

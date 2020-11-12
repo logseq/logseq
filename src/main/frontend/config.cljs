@@ -249,6 +249,10 @@
 (defonce default-pages-directory "pages")
 (defonce default-draw-directory "draws")
 
+(defn get-pages-directory
+  []
+  (or (state/get-pages-directory) default-pages-directory))
+
 (defn draw?
   [path]
   (util/starts-with? path default-draw-directory))

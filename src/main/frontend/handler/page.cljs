@@ -30,7 +30,7 @@
         journal-page? (date/valid-journal-title? title)
         directory (if journal-page?
                     config/default-journals-directory
-                    config/default-pages-directory)]
+                    (config/get-pages-directory))]
     (when dir
       (p/let [_ (-> (fs/mkdir (str dir "/" directory))
                     (p/catch (fn [_e])))]
