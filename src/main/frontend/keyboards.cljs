@@ -49,7 +49,7 @@
 ;; Markdown
 ;; Block
 
-(defonce keyboards
+(def keyboards
   (->>
    {"tab" (editor-handler/on-tab :right)
     "shift+tab" (editor-handler/on-tab :left)
@@ -57,8 +57,8 @@
     "ctrl+y" history-handler/redo!
     "ctrl+u" route-handler/go-to-search!
     "alt+j" route-handler/go-to-journals!
-    "alt+right" editor-handler/zoom-in!
-    "alt+left" editor-handler/zoom-out!
+    (or (state/get-shortcut :editor/zoom-in) "alt+right") editor-handler/zoom-in!
+    (or (state/get-shortcut :editor/zoom-out) "alt+left") editor-handler/zoom-out!
     "ctrl+enter" editor-handler/cycle-todo!
     "ctrl+down" editor-handler/expand!
     "ctrl+up" editor-handler/collapse!

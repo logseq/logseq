@@ -687,8 +687,12 @@
   (swap! state assoc-in [:git/status repo-url] value))
 
 (defn get-shortcut
-  [repo key]
-  (get-in @state [:config repo :shortcuts key]))
+  ([key]
+   (get-shortcut (get-current-repo) key))
+  ([repo key]
+   (or
+    (get (storage/get (str repo "-shortcuts")) key)
+    (get-in @state [:config repo :shortcuts key]))))
 
 (defn get-me
   []
@@ -823,10 +827,16 @@
 
 (defn set-config!
   [repo-url value]
-  (set-state! [:config repo-url] value)
-  (set-new-block-shortcut!
-   (or (get-shortcut repo-url :editor/new-block)
-       "enter")))
+  (let [old-shortcuts (get-in @state [:config repo-url :shortcuts])]
+    (set-state! [:config repo-url] value)
+
+    ;; TODO: refactor
+    (set-new-block-shortcut!
+     (or (get-shortcut repo-url :editor/new-block)
+         "enter"))
+
+    (let [shortcuts (or (:shortcuts value) {})]
+      (storage/set (str repo-url "-shortcuts") shortcuts))))
 
 (defn git-auto-push?
   []
