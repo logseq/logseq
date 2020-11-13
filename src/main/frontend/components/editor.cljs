@@ -444,17 +444,17 @@
                    (util/stop e)
                    (commands/delete-pair! id)
                    (cond
-                     (and (= deleted "[") (state/get-editor-show-page-search))
+                     (and (= deleted "[") (state/get-editor-show-page-search?))
                      (state/set-editor-show-page-search! false)
 
-                     (and (= deleted "(") (state/get-editor-show-block-search))
+                     (and (= deleted "(") (state/get-editor-show-block-search?))
                      (state/set-editor-show-block-search! false)
 
                      :else
                      nil))
 
                  ;; deleting hashtag
-                 (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
+                 (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
                  (state/set-editor-show-page-search-hashtag! false)
 
                  :else
@@ -484,7 +484,7 @@
                      (> pos 0)
                      (= "#" (util/nth-safe value (dec pos)))))
                (and (= key " ")
-                    (state/get-editor-show-page-search-hashtag)))
+                    (state/get-editor-show-page-search-hashtag?)))
               (state/set-editor-show-page-search-hashtag! false)
 
               (and
@@ -500,7 +500,7 @@
 
               (and
                (= key " ")
-               (state/get-editor-show-page-search-hashtag))
+               (state/get-editor-show-page-search-hashtag?))
               (state/set-editor-show-page-search-hashtag! false)
 
               (and

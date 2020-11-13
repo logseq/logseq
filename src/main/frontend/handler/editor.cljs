@@ -1551,10 +1551,10 @@
   (or @*show-commands
       @*show-block-commands
       (state/get-editor-show-input)
-      (state/get-editor-show-page-search)
-      (state/get-editor-show-block-search)
-      (state/get-editor-show-template-search)
-      (state/get-editor-show-date-picker)))
+      (state/get-editor-show-page-search?)
+      (state/get-editor-show-block-search?)
+      (state/get-editor-show-template-search?)
+      (state/get-editor-show-date-picker?)))
 
 (defn get-previous-input-char
   [input]
@@ -1924,9 +1924,9 @@
 
 (defn close-autocomplete-if-outside
   [input]
-  (when (or (state/get-editor-show-page-search)
-            (state/get-editor-show-page-search-hashtag)
-            (state/get-editor-show-block-search))
+  (when (or (state/get-editor-show-page-search?)
+            (state/get-editor-show-page-search-hashtag?)
+            (state/get-editor-show-block-search?))
     (when-let [q (get-search-q)]
       (let [value (gobj/get input "value")
             pos (:editor/last-saved-cursor @state/state)
