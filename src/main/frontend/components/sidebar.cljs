@@ -326,7 +326,7 @@
                                 :close-fn close-fn
                                 :route-match route-match})
 
-       [:div.cp__sidebar-layout
+       [:div.cp__sidebar-layout.h-screen
         (header/header {:open-fn open-fn
                         :white? white?
                         :current-repo current-repo
