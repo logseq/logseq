@@ -772,17 +772,16 @@
   [repo _tx-id]
   (swap! state assoc-in [:repo/persist-status repo :last-modified-at] (util/time-ms)))
 
+(defn get-db-batch-txs-chan
+  []
+  (:db/batch-txs @state))
+
 (defn add-tx!
   ;; TODO: replace f with data for batch transactions
   [f]
   (when f
-    (swap! state update :db/batch-txs (fn [chan]
-                                        (async/put! chan f)
-                                        chan))))
-
-(defn get-db-batch-txs-chan
-  []
-  (:db/batch-txs @state))
+    (when-let [chan (get-db-batch-txs-chan)]
+      (async/put! chan f))))
 
 (defn repos-need-to-be-stored?
   []
