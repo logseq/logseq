@@ -638,6 +638,9 @@
                                blocks-container-id (and blocks-container-id
                                                         (util/uuid-string? blocks-container-id)
                                                         (medley/uuid blocks-container-id))]
+                           (when ok-handler
+                             (ok-handler (last blocks)))
+
                            ;; update page blocks cache if exists
                            (when page-blocks-atom
                              (reset! page-blocks-atom (->> (concat before-part blocks after-part)
@@ -653,9 +656,7 @@
                                    after-part (rest after-part)]
                                (and blocks-atom
                                     (reset! blocks-atom (->> (concat before-part blocks after-part)
-                                                             (remove nil?))))))
-                           (when ok-handler
-                             (ok-handler (last blocks))))))]
+                                                             (remove nil?)))))))))]
     (cond
       (and (not file) page)
       ;; TODO: replace with handler.page/create!

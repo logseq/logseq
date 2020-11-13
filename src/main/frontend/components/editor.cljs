@@ -693,6 +693,7 @@
                           nil))))
        :auto-focus true})
 
+     ;; TODO: how to render the transitions asynchronously?
      (transition-cp
       (commands id format)
       true
