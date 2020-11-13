@@ -86,8 +86,8 @@ Make sure you have PostgreSQL running. You can check if it's running with `pg_ct
 
 ``` bash
 export ENVIRONMENT="dev"
-export JWT_SECRET="4fa183cf1d28460498b13330835e80ab"
-export COOKIE_SECRET="10a42ca724e34f4db6086a772d787030"
+export JWT_SECRET="xxxxxxxxxxxxxxxxxxxx"
+export COOKIE_SECRET="xxxxxxxxxxxxxxxxxxxx"
 export DATABASE_URL="postgres://localhost:5432/logseq"
 export GITHUB_APP2_ID="78728"
 export GITHUB_APP2_KEY="xxxxxxxxxxxxxxxxxxxx"
