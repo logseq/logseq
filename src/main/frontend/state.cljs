@@ -356,11 +356,11 @@
   [value]
   (set-state! :search/q value))
 
-(defn set-editor-show-page-search
+(defn set-editor-show-page-search!
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? false))
-(defn set-editor-show-page-search-hashtag
+(defn set-editor-show-page-search-hashtag!
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? value))
@@ -371,25 +371,25 @@
 (defn get-editor-show-page-search-hashtag
   []
   (get @state :editor/show-page-search-hashtag?))
-(defn set-editor-show-block-search
+(defn set-editor-show-block-search!
   [value]
   (set-state! :editor/show-block-search? value))
 (defn get-editor-show-block-search
   []
   (get @state :editor/show-block-search?))
-(defn set-editor-show-template-search
+(defn set-editor-show-template-search!
   [value]
   (set-state! :editor/show-template-search? value))
 (defn get-editor-show-template-search
   []
   (get @state :editor/show-template-search?))
-(defn set-editor-show-date-picker
+(defn set-editor-show-date-picker!
   [value]
   (set-state! :editor/show-date-picker? value))
 (defn get-editor-show-date-picker
   []
   (get @state :editor/show-date-picker?))
-(defn set-editor-show-input
+(defn set-editor-show-input!
   [value]
   (set-state! :editor/show-input value))
 (defn get-editor-show-input

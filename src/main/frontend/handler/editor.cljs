@@ -712,11 +712,11 @@
 
 (defn clear-when-saved!
   []
-  (state/set-editor-show-input nil)
-  (state/set-editor-show-date-picker false)
-  (state/set-editor-show-page-search false)
-  (state/set-editor-show-block-search false)
-  (state/set-editor-show-template-search false)
+  (state/set-editor-show-input! nil)
+  (state/set-editor-show-date-picker! false)
+  (state/set-editor-show-page-search! false)
+  (state/set-editor-show-block-search! false)
+  (state/set-editor-show-template-search! false)
   (commands/restore-state true))
 
 (defn get-state
@@ -1879,7 +1879,7 @@
              (.click input))))))
     nil)
 
-  (state/set-editor-show-input nil)
+  (state/set-editor-show-input! nil)
 
   (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
     (when-let [input (gdom/getElement id)]
@@ -1934,6 +1934,6 @@
         (when (or (< current-pos pos)
                   (string/includes? q "]")
                   (string/includes? q ")"))
-          (state/set-editor-show-block-search false)
-          (state/set-editor-show-page-search false)
-          (state/set-editor-show-page-search-hashtag false))))))
+          (state/set-editor-show-block-search! false)
+          (state/set-editor-show-page-search! false)
+          (state/set-editor-show-page-search-hashtag! false))))))
