@@ -320,7 +320,8 @@
   [range]
   (set-state! :cursor-range range))
 
-(defn cloning?
+; FIXME: unused function
+(defn get-cloning?
   []
   (:repo/cloning? @state))
 
