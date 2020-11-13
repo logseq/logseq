@@ -459,7 +459,7 @@
    (when-let [token (state/get-github-token repo-url)]
      (util/p-handle
       (do
-        (state/set-cloning? true)
+        (state/set-cloning! true)
         (git/clone repo-url token))
       (fn [result]
         (state/set-git-clone-repo! "")
@@ -477,7 +477,7 @@
           (do
             (println "Clone failed, error: ")
             (js/console.error e)
-            (state/set-cloning? false)
+            (state/set-cloning! false)
             (git-handler/set-git-status! repo-url :clone-failed)
             (git-handler/set-git-error! repo-url e)
 

@@ -324,7 +324,7 @@
   []
   (:repo/cloning? @state))
 
-(defn set-cloning?
+(defn set-cloning!
   [value]
   (set-state! :repo/cloning? value))
 
@@ -468,7 +468,7 @@
   []
   (:selection/up? @state))
 
-(defn set-selection-up?
+(defn set-selection-up!
   [value]
   (swap! state assoc :selection/up? value))
 
@@ -735,7 +735,7 @@
       (when-not (string/blank? project)
         project))))
 
-(defn set-indexedb-support?
+(defn set-indexedb-support!
   [value]
   (set-state! :indexeddb/support? value))
 

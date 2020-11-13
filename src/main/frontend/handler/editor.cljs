@@ -1306,7 +1306,7 @@
             (cond
               (>= selected-blocks-count 2) ; back to the start block
               (do
-                (when (= 2 selected-blocks-count) (state/set-selection-up? nil))
+                (when (= 2 selected-blocks-count) (state/set-selection-up! nil))
                 (clear-last-selected-block!))
 
               :else

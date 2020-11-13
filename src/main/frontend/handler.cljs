@@ -130,7 +130,7 @@
     (util/indexeddb-check?
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
-       (state/set-indexedb-support? false)))
+       (state/set-indexedb-support! false)))
 
     (restore-and-setup! me repos logged?)
 
