@@ -85,6 +85,7 @@
     :custom-context-menu/links nil
 
     ;; pages or blocks in the right sidebar
+    ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
     :sidebar/blocks '()
 
     :preferred-language (storage/get :preferred-language)
@@ -191,8 +192,7 @@
    (or
     (when-let [workflow (:preferred-workflow (get-config))]
       (let [workflow (name workflow)]
-        (if (or (re-find #"now" workflow)
-                (re-find #"NOW" workflow))
+        (if (re-find #"now|NOW" workflow)
           :now
           :todo)))
     (get-in @state [:me :preferred_workflow] :now))))
@@ -208,6 +208,8 @@
   (:hide-file-in-page? (get-config)))
 
 (defn page-name-order
+  "Decide whether to use file name or :title as page name. If it returns \"file\", use the file
+  name unless it is missing."
   []
   (:page-name-order (get-config)))
 
@@ -501,7 +503,7 @@
   [tokens]
   (when (seq tokens)
     (let [tokens (medley/map-keys name tokens)
-          repos (get-in @state [:me :repos])]
+          repos (get-repos)]
       (when (seq repos)
         (let [repos (mapv (fn [{:keys [installation_id] :as r}]
                             (if-let [token (get tokens installation_id)]
@@ -514,7 +516,7 @@
    (get-github-token (get-current-repo)))
   ([repo]
    (when repo
-     (let [repos (get-in @state [:me :repos])]
+     (let [repos (get-repos)]
        (-> (filter #(= repo (:url %)) repos)
            first
            :token)))))
@@ -537,6 +539,7 @@
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (second %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
+                                          ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)))
 
@@ -717,7 +720,7 @@
 (defn get-default-branch
   [repo-url]
   (or
-   (some->> (:repos (get-me))
+   (some->> (get-repos)
             (filter (fn [m]
                       (= (:url m) repo-url)))
             (first)
@@ -787,7 +790,7 @@
             (> last-modified-at last-stored-at))
           status)))
 
-(defn get-left-sidebar-open
+(defn get-left-sidebar-open?
   []
   (get-in @state [:ui/left-sidebar-open?]))
 
@@ -806,7 +809,7 @@
 
 (defn get-notification-contents
   []
-  (get-in @state [:notification/contents]))
+  (get @state :notification/contents))
 
 (defn get-new-block-shortcut
   []
@@ -830,7 +833,8 @@
   (let [old-shortcuts (get-in @state [:config repo-url :shortcuts])]
     (set-state! [:config repo-url] value)
 
-    ;; TODO: refactor
+    ;; TODO: refactor. This seems useless as the default value has already been handled in
+    ;; `get-new-block-shortcut`.
     (set-new-block-shortcut!
      (or (get-shortcut repo-url :editor/new-block)
          "enter"))
