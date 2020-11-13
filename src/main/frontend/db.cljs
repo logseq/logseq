@@ -317,8 +317,7 @@
                               (fn [block]
                                 (when-let [page-id (:db/id (:block/page block))]
                                   [[:blocks (:block/uuid block)]
-                                   (when (not= key :block/insert) ; already reseted
-                                     [:page/blocks page-id])
+                                   [:page/blocks page-id]
                                    [:page/ref-pages page-id]]))
                               blocks)
 
