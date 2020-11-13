@@ -39,24 +39,25 @@
                      :error
                      false)))
                 state)}
-  [blocks encoded-page-name page]
-  (let [start-level (or (:block/level (first blocks)) 1)]
+  [blocks encoded-page-name page document-mode?]
+  (let [start-level (or (:block/level (first blocks)) 1)
+        config {:id encoded-page-name
+                :start-level 2
+                :editor-box editor/box
+                :document/mode? document-mode?}]
     (content/content
      encoded-page-name
-     {:hiccup (block/->hiccup blocks
-                              {:id encoded-page-name
-                               :start-level 2
-                               :editor-box editor/box}
-                              {})})))
+     {:hiccup (block/->hiccup blocks config {})})))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
   [repo page encoded-page-name format]
   (let [raw-blocks (db/get-page-blocks repo page)
+        document-mode? (state/sub :document/mode?)
         blocks (->>
                 (db/with-dummy-block raw-blocks format nil true)
                 (db/with-block-refs-count repo))]
-    (blocks-inner blocks encoded-page-name page)))
+    (blocks-inner blocks encoded-page-name page document-mode?)))
 
 (rum/defc journal-cp < rum/reactive
   [[title format]]

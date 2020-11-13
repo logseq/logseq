@@ -1195,7 +1195,10 @@
                       collapsed? (:block/collapsed? block)]
                   (when collapsed?
                     (expand/collapse! block))
-                  state))}
+                  state))
+   :should-update (fn [old-state new-state]
+                    (not= (:block/content (second (:rum/args old-state)))
+                          (:block/content (second (:rum/args new-state)))))}
   [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties] :as block}]
   (let [ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
@@ -1699,83 +1702,6 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
-(rum/defcs build-blocks < rum/reactive
-  {:init (fn [state]
-           (let [blocks (first (:rum/args state))
-                 segment-data (if (> (count blocks) max-blocks-per-page)
-                                (take max-blocks-per-page blocks)
-                                blocks)]
-             (assoc state
-                    ::segment (atom segment-data)
-                    ::idx (atom 0))))
-   :did-update (fn [state]
-                 (let [blocks (first (:rum/args state))
-                       segment (get state ::segment)
-                       idx (get state ::idx)]
-                   (when (and
-                          (seq @segment)
-                          (> (count blocks) max-blocks-per-page))
-                     (reset! segment (->> blocks
-                                          (drop @idx)
-                                          (take max-blocks-per-page))))
-                   state))}
-  [state blocks config]
-  (let [segment (get state ::segment)
-        idx (get state ::idx)
-        custom-query? (:custom-query? config)
-        ref? (:ref? config)]
-    (let [blocks-cp (fn [blocks segment?]
-                      (let [first-block (first blocks)
-                            blocks' (if (and (:block/pre-block? first-block)
-                                             (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
-                                      (rest blocks)
-                                      blocks)
-                            first-id (:block/uuid (first blocks'))]
-                        (for [item blocks']
-                          (let [item (-> (if (:block/dummy? item)
-                                           item
-                                           (dissoc item :block/meta)))
-                                item (if (= first-id (:block/uuid item))
-                                       (assoc item :block/idx 0)
-                                       item)
-                                config (assoc config :block/uuid (:block/uuid item))]
-                            (rum/with-key
-                              (block-container config item)
-                              (:block/uuid item))))))
-          blocks->vec-tree #(if (or custom-query? ref?) % (db/blocks->vec-tree %))]
-      (if (> (count blocks) max-blocks-per-page)
-        (ui/infinite-list
-         (blocks-cp (blocks->vec-tree (rum/react segment)) true)
-         {:on-load (fn []
-                     (when (= (count @segment) max-blocks-per-page)
-                       (if (zero? @idx)
-                         (reset! idx (dec max-blocks-per-page))
-                         (swap! idx + virtual-list-scroll-step))
-                       (let [tail (take-last virtual-list-previous @segment)
-                             new-segment (->> blocks
-                                              (drop (inc @idx))
-                                              (take virtual-list-scroll-step))]
-                         (reset! segment
-                                 (->> (concat tail new-segment)
-                                      (remove nil?))))))
-          :on-top-reached (fn []
-                            (when (> @idx 0)
-                              (if (> @idx (dec max-blocks-per-page))
-                                (swap! idx - max-blocks-per-page)
-                                (reset! idx 0))
-                              (if (zero? @idx)
-                                (reset! segment
-                                        (take max-blocks-per-page blocks))
-                                (let [tail (take virtual-list-previous @segment)
-                                      prev (->> blocks
-                                                (drop (inc @idx))
-                                                (take virtual-list-scroll-step))]
-                                  (reset! segment
-                                          (->> (concat prev tail)
-                                               (remove nil?)))
-                                  (util/scroll-to 100)))))})
-        (blocks-cp (blocks->vec-tree blocks) false)))))
-
 (defn build-slide-sections
   ([blocks config]
    (build-slide-sections blocks config nil))
@@ -1813,12 +1739,14 @@
                                          (editor-handler/insert-new-block-without-save-previous! config last-block))}
          svg/plus-circle]))))
 
-(rum/defc blocks-container < rum/static
+(defn blocks-container
   [blocks config]
   (let [blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
         ref? (:ref? config)
-        custom-query? (:custom-query? config)]
+        custom-query? (:custom-query? config)
+        blocks->vec-tree #(if (or custom-query? ref?) % (db/blocks->vec-tree %))
+        blocks (blocks->vec-tree blocks)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:style {:margin-left (cond
@@ -1826,31 +1754,44 @@
                                0
                                :else
                                -18)}}
-       (build-blocks blocks config)
+       (let [first-block (first blocks)
+             blocks' (if (and (:block/pre-block? first-block)
+                              (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
+                       (rest blocks)
+                       blocks)
+             first-id (:block/uuid (first blocks'))]
+         (for [item blocks']
+           (let [item (-> (if (:block/dummy? item)
+                            item
+                            (dissoc item :block/meta)))
+                 item (if (= first-id (:block/uuid item))
+                        (assoc item :block/idx 0)
+                        item)
+                 config (assoc config :block/uuid (:block/uuid item))]
+             (rum/with-key
+               (block-container config item)
+               (:block/uuid item)))))
        ;; (add-button config ref? custom-query? blocks)
 ])))
 
 ;; headers to hiccup
-(rum/defc ->hiccup < rum/reactive
+(defn ->hiccup
   [blocks config option]
-  (let [document-mode? (state/sub [:document/mode?])
-        config (assoc config
-                      :document/mode? document-mode?)]
-    [:div.content
-     (cond-> option
-       document-mode?
-       (assoc :class "doc-mode"))
-     (if (:group-by-page? config)
-       [:div.flex.flex-col
-        (for [[page blocks] blocks]
-          (let [page (db/entity (:db/id page))]
-            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                         (:ref? config)
-                         (assoc :class "bg-base-2 px-7 py-2 rounded"))
-             (ui/foldable
-              (page-cp config page)
-              (blocks-container blocks config))]))]
-       (blocks-container blocks config))]))
+  [:div.content
+   (cond-> option
+     (:document/mode? config)
+     (assoc :class "doc-mode"))
+   (if (:group-by-page? config)
+     [:div.flex.flex-col
+      (for [[page blocks] blocks]
+        (let [page (db/entity (:db/id page))]
+          [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                       (:ref? config)
+                       (assoc :class "bg-base-2 px-7 py-2 rounded"))
+           (ui/foldable
+            (page-cp config page)
+            (blocks-container blocks config))]))]
+     (blocks-container blocks config))])
 
 (comment
   ;; timestamps

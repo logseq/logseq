@@ -48,6 +48,11 @@
   [content]
   (util/copy-to-clipboard! (text/remove-id-property content)))
 
+(defn config-with-document-mode
+  [config]
+  (assoc config
+         :document/mode? (state/sub [:document/mode?])))
+
 (comment
   (let [repo (state/get-current-repo)]
     (p/let [remote-oid (get-remote-ref repo)

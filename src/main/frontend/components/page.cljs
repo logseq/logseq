@@ -4,6 +4,7 @@
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.editor :as editor-handler]
@@ -69,6 +70,7 @@
                        :sidebar? sidebar?
                        :block? block?
                        :editor-box editor/box}
+        hiccup-config (common-handler/config-with-document-mode hiccup-config)
         hiccup (block/->hiccup page-blocks hiccup-config {})]
     (rum/with-key
       (content/content encoded-page-name

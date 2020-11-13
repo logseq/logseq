@@ -303,7 +303,7 @@
 
     :else
     (case key
-      :block/change
+      (list :block/change :block/insert)
       (when (seq data)
         (let [blocks data
               pre-block? (:block/pre-block? (first blocks))
@@ -317,7 +317,8 @@
                               (fn [block]
                                 (when-let [page-id (:db/id (:block/page block))]
                                   [[:blocks (:block/uuid block)]
-                                   [:page/blocks page-id]
+                                   (when (not= key :block/insert) ; already reseted
+                                     [:page/blocks page-id])
                                    [:page/ref-pages page-id]]))
                               blocks)
 
