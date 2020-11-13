@@ -9,7 +9,7 @@
             [dommy.core :as dom]
             [cljs.core.async :as async]))
 
-(defonce state
+(defonce ^:private state
   (atom
    {:route-match nil
     :today nil
