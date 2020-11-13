@@ -105,8 +105,7 @@
 (rum/defc sidebar-main
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div#main-content.flex.wrapper {:style {:height "100vh"
-                                             :overflow-y "scroll"}}
+    [:div#main-content.cp__sidebar-main-layout
      (when-not config/mobile?
        [:div#sidebar-nav-wrapper.flex-col.pt-4
         {:style {:flex (if (state/get-left-sidebar-open)
@@ -264,10 +263,6 @@
                       ;; hide context menu
                       (state/hide-custom-context-menu!)
 
-                      ;; enable scroll
-                      (let [main (d/by-id "main-content")]
-                        (d/remove-class! main "overflow-hidden")
-                        (d/set-style! main "overflow-y" "scroll"))
                       (if-not (state/get-selection-start-block)
                         (editor-handler/clear-selection! e)
                         (state/set-selection-start-block! nil))))
@@ -331,25 +326,27 @@
                                 :close-fn close-fn
                                 :route-match route-match})
 
-       (header/header {:open-fn open-fn
-                       :white? white?
-                       :current-repo current-repo
-                       :logged? logged?
-                       :page? page?
-                       :route-match route-match
-                       :me me
-                       :default-home default-home
-                       :new-block-mode new-block-mode})
+       [:div.cp__sidebar-layout
+        (header/header {:open-fn open-fn
+                        :white? white?
+                        :current-repo current-repo
+                        :logged? logged?
+                        :page? page?
+                        :route-match route-match
+                        :me me
+                        :default-home default-home
+                        :new-block-mode new-block-mode})
 
-       (sidebar-main {:route-match route-match
-                      :global-graph-pages? global-graph-pages?
-                      :logged? logged?
-                      :home? home?
-                      :route-name route-name
-                      :indexeddb-support? indexeddb-support?
-                      :white? white?
-                      :db-restoring? db-restoring?
-                      :main-content main-content})
+        (sidebar-main {:route-match route-match
+                       :global-graph-pages? global-graph-pages?
+                       :logged? logged?
+                       :home? home?
+                       :route-name route-name
+                       :indexeddb-support? indexeddb-support?
+                       :white? white?
+                       :db-restoring? db-restoring?
+                       :main-content main-content})]
+
        (ui/notification)
        (ui/modal)
        (custom-context-menu)
