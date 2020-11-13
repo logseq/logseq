@@ -111,7 +111,7 @@ yarn watch
 
 1.  Download jar
 
-    Go to <https://github.com/logseq/logseq-internal/releases>, download the `logseq.jar` and move it to the `resources` directory.
+    Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and move it to the `resources` directory.
 
 2.  Run jar
 
@@ -140,7 +140,7 @@ Make sure you have PostgreSQL running. You can check if it's running with `pg_ct
 
 ### 4. Download the Clojure server
 
-Go to <https://github.com/logseq/logseq-internal/releases>, download the `logseq.jar` and move into the root directory of repo.
+Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and move into the root directory of repo.
 
 ### 5. Start Logseq
 
