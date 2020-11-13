@@ -150,7 +150,7 @@
         search-q (state/sub :search/q)
         show-result? (boolean (seq search-result))]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#search.flex-1.flex.ml-0.md:ml-12
+      [:div#search.flex-1.flex
        [:div.flex.md:ml-0
         [:label.sr-only {:for "search_field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600

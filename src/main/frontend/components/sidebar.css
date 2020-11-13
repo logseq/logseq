@@ -1,3 +1,15 @@
+.cp__sidebar-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.cp__sidebar-main-layout {
+    flex: 1 1 0;
+    overflow-y: auto;
+    display: flex;
+}
+
 .cp__sidebar-main-content-container {
     position: relative;
     flex: 1 1 65%;
