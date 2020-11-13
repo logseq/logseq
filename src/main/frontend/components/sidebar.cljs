@@ -107,7 +107,7 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div#main-content.cp__sidebar-main-layout
      (when-not config/mobile?
-       [:div#sidebar-nav-wrapper.flex-col.pt-4
+       [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
         {:style {:flex (if (state/get-left-sidebar-open)
                          "0 1 20%"
                          "0 0 0px")
