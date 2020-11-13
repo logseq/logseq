@@ -303,7 +303,7 @@
 
     :else
     (case key
-      :block/change
+      (list :block/change :block/insert)
       (when (seq data)
         (let [blocks data
               pre-block? (:block/pre-block? (first blocks))

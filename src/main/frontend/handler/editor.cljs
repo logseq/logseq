@@ -453,8 +453,8 @@
                   :error)
                  ;; create the file
                  (let [content (str (util/default-content-with-title format
-                                                                     (or (:page/original-name page)
-                                                                         (:page/name page)))
+                                      (or (:page/original-name page)
+                                          (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
                    (p/let [_ (fs/create-if-not-exists dir file-path content)]
                      (db/reset-file! repo path content)
@@ -618,10 +618,11 @@
                                              pages
                                              blocks
                                              after-blocks)
-                                            {:key :block/change
+                                            {:key :block/insert
                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
                                             [[file-path new-content]])
                                            (state/set-editor-op! nil))]
+
                          ;; Replace with batch transactions
                          (state/add-tx! transact-fn)
 
@@ -637,6 +638,9 @@
                                blocks-container-id (and blocks-container-id
                                                         (util/uuid-string? blocks-container-id)
                                                         (medley/uuid blocks-container-id))]
+                           (when ok-handler
+                             (ok-handler (last blocks)))
+
                            ;; update page blocks cache if exists
                            (when page-blocks-atom
                              (reset! page-blocks-atom (->> (concat before-part blocks after-part)
@@ -652,11 +656,7 @@
                                    after-part (rest after-part)]
                                (and blocks-atom
                                     (reset! blocks-atom (->> (concat before-part blocks after-part)
-                                                             (remove nil?))))))
-                           (when ok-handler
-                             (let [first-block (first blocks)
-                                   last-block (last blocks)]
-                               (ok-handler [first-block last-block snd-block-text]))))))]
+                                                             (remove nil?)))))))))]
     (cond
       (and (not file) page)
       ;; TODO: replace with handler.page/create!
@@ -776,7 +776,7 @@
        new-value
        {:create-new-block? true
         :ok-handler
-        (fn [[_first-block last-block _new-block-content]]
+        (fn [last-block]
           (let [last-id (:block/uuid last-block)]
             (edit-block! last-block 0 format id)
             (clear-when-saved!)))
@@ -797,7 +797,7 @@
      (:block/content last-block)
      {:create-new-block? true
       :ok-handler
-      (fn [[_first-block last-block _new-block-content]]
+      (fn [last-block]
         (js/setTimeout #(edit-last-block-for-new-page! last-block :max) 50))
       :with-level? true
       :new-level new-level
@@ -1590,33 +1590,33 @@
   [state direction]
   (state/set-editor-op! :indent-outdent)
   (let [{:keys [block block-parent-id value config]} (get-state state)
-                       start-level (:start-level config)
-                       format (:block/format block)
-                       block-pattern (config/get-block-pattern format)
-                       level (:block/level block)
-                       previous-level (or (get-previous-block-level block-parent-id) 1)
-                       [add? remove?] (case direction
-                                        :left [false true]
-                                        :right [true false]
-                                        [(<= level previous-level)
-                                         (and (> level previous-level)
-                                              (> level 2))])
-                       final-level (cond
-                                     add? (inc level)
-                                     remove? (if (> level 2)
-                                               (dec level)
-                                               level)
-                                     :else level)
-                       new-value (block/with-levels value format (assoc block :block/level final-level))]
-                   (when (and
-                          (not (and (= direction :left)
-                                    (and
-                                     (get config :id)
-                                     (util/uuid-string? (get config :id)))
-                                    (<= final-level start-level)))
-                          (<= (- final-level previous-level) 1))
-                     (save-block-if-changed! block new-value
-                                             {:indent-left? (= direction :left)})))
+        start-level (:start-level config)
+        format (:block/format block)
+        block-pattern (config/get-block-pattern format)
+        level (:block/level block)
+        previous-level (or (get-previous-block-level block-parent-id) 1)
+        [add? remove?] (case direction
+                         :left [false true]
+                         :right [true false]
+                         [(<= level previous-level)
+                          (and (> level previous-level)
+                               (> level 2))])
+        final-level (cond
+                      add? (inc level)
+                      remove? (if (> level 2)
+                                (dec level)
+                                level)
+                      :else level)
+        new-value (block/with-levels value format (assoc block :block/level final-level))]
+    (when (and
+           (not (and (= direction :left)
+                     (and
+                      (get config :id)
+                      (util/uuid-string? (get config :id)))
+                     (<= final-level start-level)))
+           (<= (- final-level previous-level) 1))
+      (save-block-if-changed! block new-value
+                              {:indent-left? (= direction :left)})))
   (state/set-editor-op! nil))
 
 (defn adjust-blocks-level!
@@ -1664,7 +1664,7 @@
                   hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
                         [sibling-block]
                         (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
-             ;; Same page and next to the other
+              ;; Same page and next to the other
               (when (and
                      (= (:db/id (:block/page block))
                         (:db/id (:block/page sibling-block)))
