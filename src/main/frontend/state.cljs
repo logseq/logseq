@@ -583,13 +583,13 @@
 
 (defn set-last-pos!
   [new-pos]
-  (reset! state (assoc @state :editor/last-saved-cursor new-pos)))
+  (set-state! :editor/last-saved-cursor new-pos))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)
-    (reset! state (assoc @state :editor/last-saved-cursor new-pos))))
+    (set-state! :editor/last-saved-cursor new-pos)))
 
 (defn set-theme!
   [theme]
