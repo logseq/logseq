@@ -55,7 +55,8 @@
    :block/format {}
    :block/title {}
    ;; belongs to which page
-   :block/page   {:db/valueType   :db.type/ref}
+   :block/page   {:db/valueType   :db.type/ref
+                  :db/index       true}
    ;; referenced pages
    :block/ref-pages {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
