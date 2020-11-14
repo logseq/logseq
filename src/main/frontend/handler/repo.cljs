@@ -387,9 +387,12 @@
                   commit-push? false
                   force? false}}]
   (let [status (db/get-key-value repo-url :git/status)]
-    (when (and
-           (db/cloned? repo-url)
-           (not (state/get-edit-input-id)))
+    (when (or
+           commit-push?
+           (and
+            (db/cloned? repo-url)
+            (not (state/get-edit-input-id))
+            (not= status :pushing)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or
                    commit-push?
@@ -419,6 +422,7 @@
                            (and permission? (not fallback?))
                            (request-app-tokens!
                             (fn []
+                              (git-handler/set-git-status! repo-url :re-push)
                               (push repo-url
                                     {:commit-message commit-message
                                      :fallback? true}))
@@ -439,6 +443,8 @@
                                nil)))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
+                     (git-handler/set-git-status! repo-url :push-failed)
+                     (git-handler/set-git-error! repo-url error)
                      (js/console.dir error)))))))
 
 (defn push-if-auto-enabled!
