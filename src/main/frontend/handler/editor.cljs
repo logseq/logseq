@@ -682,11 +682,12 @@
             dir (util/get-repo-dir repo)]
         (p/let [exists? (fs/file-exists? dir file-path)]
           (if exists?
-            (notification/show!
-             [:p.content
-              (util/format "File %s already exists!"
-                           file-path)]
-             :error)
+            (do (notification/show!
+                 [:p.content
+                  (util/format "File %s already exists!"
+                               file-path)]
+                 :error)
+                (state/set-editor-op! nil))
             ;; create the file
             (let [content (util/default-content-with-title format (or
                                                                    (:page/original-name page)
@@ -703,8 +704,9 @@
                 ;; Continue to edit the last block
                 (let [blocks (db/get-page-blocks repo (:page/name page))
                       last-block (last blocks)]
-                  (edit-last-block-for-new-page! last-block 0))))))
-        (state/set-editor-op! nil))
+                  (edit-last-block-for-new-page! last-block 0))
+
+                (state/set-editor-op! nil))))))
 
       file
       (let [file-path (:file/path file)
