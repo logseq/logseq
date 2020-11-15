@@ -313,7 +313,9 @@
     [:div.embed-block.bg-base-2 {:style {:z-index 2}}
      [:code "Embed block:"]
      [:div.px-2
-      (blocks-container blocks (assoc config :embed? true))]]))
+      (blocks-container blocks (assoc config
+                                      :embed? true
+                                      :ref? false))]]))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
