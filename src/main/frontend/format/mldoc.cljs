@@ -38,12 +38,14 @@
        (remove string/blank?)
        (map (fn [s]
               (if (and (not comma?)
-                       (or (= " " (first s)) (= " " (last s))))
-                ;; space separated tags
+                       (or (contains? #{" " "#"} (first s))
+                           (= " " (last s))))
+                ;; space/hashtag separated tags
                 (string/split (string/trim s) #" ")
                 s)))
        flatten
        distinct
+       (remove string/blank?)
        (map string/lower-case)
        (map string/trim)))))
 

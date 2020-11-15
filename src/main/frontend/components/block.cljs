@@ -1558,8 +1558,7 @@
                       (property-value format item)
                       (let [tag (-> item
                                     (string/replace "[" "")
-                                    (string/replace "]" "")
-                                    (string/replace "#" ""))]
+                                    (string/replace "]" ""))]
                         [:a.tag.mr-1 {:href (rfe/href :page {:name tag})}
                          tag]))
                     (property-value format item)))
