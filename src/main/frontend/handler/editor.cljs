@@ -575,10 +575,13 @@
         fst-block-text (subs value 0 pos)
         snd-block-text (string/triml (subs value pos))
         fst-block-text (string/trim (if with-level? fst-block-text (block/with-levels fst-block-text format block)))
+        edit-self? (and block-has-children? (zero? pos))
         snd-block-text-level (cond
                                new-level
                                new-level
-                               (or block-self? block-has-children?)
+                               (or block-self?
+                                   (and block-has-children?
+                                        (not (zero? pos))))
                                (inc level)
                                :else
                                level)
@@ -639,7 +642,8 @@
                                                         (util/uuid-string? blocks-container-id)
                                                         (medley/uuid blocks-container-id))]
                            (when ok-handler
-                             (ok-handler (last blocks)))
+                             (ok-handler
+                              (if edit-self? (first blocks) (last blocks))))
 
                            ;; update page blocks cache if exists
                            (when page-blocks-atom
