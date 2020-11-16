@@ -137,7 +137,7 @@
 
                                  ;; Save it so it'll be parsed correctly in the future
                                  (editor-handler/set-block-property! (:block/uuid chosen)
-                                                                     "CUSTOM_ID"
+                                                                     "ID"
                                                                      uuid-string)
 
                                  (when-let [input (gdom/getElement id)]
@@ -180,7 +180,7 @@
                                         (:block/uuid block)
                                         (fn [{:block/keys [level content properties] :as block}]
                                           (let [new-level (+ new-level (- level template-parent-level))
-                                                properties' (dissoc (into {} properties) "custom_id" "template")]
+                                                properties' (dissoc (into {} properties) "id" "custom_id" "template")]
                                             (-> content
                                                 (string/replace-first (apply str (repeat level pattern))
                                                                       (apply str (repeat new-level pattern)))

@@ -33,7 +33,7 @@
 
 (def hidden-properties
   (set/union
-   #{"custom_id" "heading" "background_color"}
+   #{"id" "custom_id" "heading" "background_color"}
    config/markers))
 
 (defn properties-hidden?

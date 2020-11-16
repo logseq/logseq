@@ -267,7 +267,8 @@
                   (recur block-refs headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
-                (let [id (or (when-let [custom-id (get-in properties [:properties "custom_id"])]
+                (let [id (or (when-let [custom-id (or (get-in properties [:properties "custom_id"])
+                                                      (get-in properties [:properties "id"]))]
                                (let [custom-id (string/trim custom-id)]
                                  (when (util/uuid-string? custom-id)
                                    (uuid custom-id))))
@@ -385,7 +386,8 @@
                                    ;; Preserve the original block id
                                    (when (and (zero? idx)
                                               ;; not custom-id
-                                              (not (get-in block [:block/properties "custom_id"])))
+                                              (not (get-in block [:block/properties "custom_id"]))
+                                              (not (get-in block [:block/properties "id"])))
                                      {:block/uuid uuid})
                                    (when (seq ref-pages)
                                      {:block/ref-pages

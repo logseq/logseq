@@ -609,7 +609,7 @@
                              (if id-conflict?
                                (let [new-value (string/replace
                                                 value
-                                                (re-pattern (str "(?i):custom_id: " original-id))
+                                                (re-pattern (str "(?i):(custom_)?id: " original-id))
                                                 "")]
                                  (block/parse-block (assoc block :block/content new-value) format))
                                parse-result)
@@ -1104,7 +1104,7 @@
   [block-id]
   (let [block (db/entity [:block/uuid block-id])]
     (when-not (:block/pre-block? block)
-      (set-block-property! block-id "custom_id" (str block-id))))
+      (set-block-property! block-id "id" (str block-id))))
   (util/copy-to-clipboard! (str block-id)))
 
 (defn clear-selection!
