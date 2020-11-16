@@ -4,8 +4,10 @@
             [frontend.handler.route :as route]
             [frontend.page :as page]
             [frontend.routes :as routes]
+            [frontend.spec]
             [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            ))
 
 (defn set-router!
   []
