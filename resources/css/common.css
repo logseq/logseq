@@ -24,8 +24,8 @@
     --ls-link-text-hover-color: #d0e8e8;
     --ls-link-ref-text-color: var(--ls-link-text-color);
     --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
-	--ls-tag-text-color: var(--ls-link-text-color);
-	--ls-tag-text-hover-color: var(--ls-link-text-hover-color);
+        --ls-tag-text-color: var(--ls-link-text-color);
+        --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
 
     --ls-block-bullet-border-color: #0f4958;
     --ls-block-bullet-color: #608e91;
@@ -35,7 +35,7 @@
     --ls-page-checkbox-border-color: var(--ls-primary-background-color);
     --ls-page-blockquote-color: var(--ls-primary-text-color);
     --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
-    --ls-page-blockquote-border-color: var(--ls-secondary-text-color);
+    --ls-page-blockquote-border-color: #2f4f4f;
     --ls-page-inline-code-color: var(--ls-primary-text-color);
     --ls-page-inline-code-bg-color: #01222a;
 
@@ -67,8 +67,8 @@
     --ls-link-text-hover-color: #000;
     --ls-link-ref-text-color: var(--ls-link-text-color);
     --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
-	--ls-tag-text-color: var(--ls-link-text-color);
-	--ls-tag-text-hover-color: var(--ls-link-text-hover-color);
+        --ls-tag-text-color: var(--ls-link-text-color);
+        --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
 
     --ls-block-bullet-border-color: #ced9e0;
     --ls-block-bullet-color: #394b59;
@@ -77,8 +77,8 @@
     --ls-page-checkbox-color: none;
     --ls-page-checkbox-border-color: #808080;
     --ls-page-blockquote-color: var(--ls-primary-text-color);
-    --ls-page-blockquote-bg-color: var(--ls-tertiary-background-color);
-    --ls-page-blockquote-border-color: var(--ls-secondary-text-color);
+    --ls-page-blockquote-bg-color: #f8f8f8;
+    --ls-page-blockquote-border-color: #ccc;
     --ls-page-inline-code-color: var(--ls-primary-text-color);
     --ls-page-inline-code-bg-color: #eeeeee;
 
@@ -528,7 +528,7 @@ a.menu-link {
 }
 
 .white-theme #head a {
-  color: var(--ls-link-text-hover-color);
+    color: var(--ls-primary-text-color);
 }
 
 button.menu {
@@ -736,7 +736,7 @@ blockquote {
   display: block;
   text-indent: 0em;
   padding: 10px 20px;
-  border-left: 3px solid;
+  border-left: 4px solid;
   border-left-color: #d3d3d3;
   border-left-color: var(--ls-page-blockquote-border-color);
   background-color: #f7f7f7;
