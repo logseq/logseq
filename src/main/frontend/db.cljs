@@ -1351,7 +1351,6 @@
   (try
     (let [now (tc/to-long (t/now))
           [block-refs blocks] (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
-          _ (transact! repo-url block-refs)
           pages (pages-fn blocks ast)
           ref-pages (atom #{})
           ref-tags (atom #{})
@@ -1450,11 +1449,9 @@
                     {:page/original-name page
                      :page/name (string/lower-case page)})
                   @ref-pages))]
-      (vec
-       (->> (concat
-             pages
-             blocks)
-            (remove nil?))))
+      [(remove nil? pages)
+       (remove nil? block-refs)
+       (remove nil? blocks)])
     (catch js/Error e
       (js/console.log e))))
 
@@ -1470,16 +1467,6 @@
                        properties))]
     (into {} properties)))
 
-(defn monthly-journals-exists?
-  [current-repo]
-  (when-let [files (seq (->> (get-files current-repo)
-                             (map first)
-                             (remove nil?)))]
-    (some
-     (fn [file] (re-find #"journals/[0-9]{4}_[0-9]{2}\.+" file))
-     files)))
-
-;; check journal formats and report errors
 (defn extract-blocks-pages
   [repo-url file content utf8-content]
   (if (string/blank? content)
@@ -1493,60 +1480,26 @@
                                            (= "Properties" (ffirst first-block))
                                            (last (first first-block)))]
                        (if (and properties (seq properties))
-                         properties))
-          monthly? (re-find #"journals/[0-9]{4}_[0-9]{2}\.+" file)]
-      (cond
-        (and journal? monthly?)
-        (extract-pages-and-blocks
-         repo-url
-         format ast properties
-         file content utf8-content true
-         (fn [blocks _ast]
-           (let [property-title (:title properties)]
-             (loop [pages {}
-                    last-page-name nil
-                    blocks blocks]
-               (if (seq blocks)
-                 (let [[{:block/keys [level title] :as block} & tl] blocks]
-                   (if (or
-                        (and (= level 1)
-                             (when-let [title (last (first title))]
-                               (date/valid-journal-title? title)))
-                        (and property-title (date/valid-journal-title? property-title)))
-                     (let [page-name (or property-title (last (first title)))
-                           new-pages (assoc pages page-name [block])]
-                       (recur new-pages page-name tl))
-                     (let [new-pages (update pages last-page-name (fn [blocks]
-                                                                    (vec (conj blocks block))))]
-                       (recur new-pages last-page-name tl))))
-                 pages)))))
-
-        (and journal? (not monthly?))
-        (extract-pages-and-blocks
-         repo-url
-         format ast properties
-         file content utf8-content true
-         (fn [blocks ast]
-           [[(get-page-name file ast) blocks]]))
-
-        (not journal?)
-        (extract-pages-and-blocks
-         repo-url
-         format ast properties
-         file content utf8-content false
-         (fn [blocks ast]
-           [[(get-page-name file ast) blocks]]))))))
+                         properties))]
+      (extract-pages-and-blocks
+       repo-url
+       format ast properties
+       file content utf8-content journal?
+       (fn [blocks ast]
+         [[(get-page-name file ast) blocks]])))))
 
 (defn extract-all-blocks-pages
   [repo-url contents]
-  (vec
-   (mapcat
-    (fn [[file content] contents]
-      (println "Parsing : " file)
-      (when content
-        (let [utf8-content (utf8/encode content)]
-          (extract-blocks-pages repo-url file content utf8-content))))
-    contents)))
+  (let [result (map
+                (fn [[file content] contents]
+                  (println "Parsing : " file)
+                  (when content
+                    (let [utf8-content (utf8/encode content)]
+                      (extract-blocks-pages repo-url file content utf8-content))))
+                contents)]
+    ;; '(pages block-refs blocks)
+    (->> (apply map concat result)
+         (apply concat))))
 
 ;; TODO: compare blocks
 (defn reset-file!
@@ -1558,8 +1511,8 @@
           file-content [{:file/path file}]
           tx (if (contains? config/mldoc-support-formats format)
                (let [delete-blocks (delete-file-blocks! repo-url file)
-                     blocks-pages (extract-blocks-pages repo-url file content utf8-content)]
-                 (concat file-content delete-blocks blocks-pages))
+                     [pages block-refs blocks] (extract-blocks-pages repo-url file content utf8-content)]
+                 (concat file-content delete-blocks pages block-refs blocks))
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->

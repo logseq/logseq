@@ -748,14 +748,6 @@
          :modal/show? false
          :modal/panel-content nil))
 
-(defn get-journal-basis
-  []
-  (or
-   (when-let [repo (get-current-repo)]
-     (when-let [basis (get-in @state [:config repo :journal-basis])]
-       (keyword (string/lower-case (str basis)))))
-   :monthly))
-
 (defn update-repo-last-stored-at!
   [repo]
   (swap! state assoc-in [:repo/persist-status repo :last-stored-at] (util/time-ms)))

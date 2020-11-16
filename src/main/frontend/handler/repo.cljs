@@ -14,7 +14,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file-handler]
-            [frontend.handler.migration :as migration-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
@@ -257,9 +256,7 @@
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
-    (p/let [_ (load-repo-to-db! repo-url diffs first-clone?)]
-      (when first-clone?
-        (migration-handler/show!)))))
+    (load-repo-to-db! repo-url diffs first-clone?)))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]

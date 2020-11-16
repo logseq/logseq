@@ -8,7 +8,6 @@
             [cljs-bean.core :as bean]
             [frontend.date :as date]
             [frontend.handler.notification :as notification]
-            [frontend.handler.migration :as migration-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.ui :as ui-handler]
@@ -49,7 +48,6 @@
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
                               (state/set-db-restoring! false))
-                            (migration-handler/show!)
                             (if (seq (:repos me))
                               ;; FIXME: handle error
                               (repo-handler/request-app-tokens!
