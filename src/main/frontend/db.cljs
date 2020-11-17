@@ -99,8 +99,10 @@
          conn)))))
 
 (defn get-files-conn
-  [repo]
-  (get @conns (datascript-files-db repo)))
+  ([]
+   (get-files-conn (state/get-current-repo)))
+  ([repo]
+   (get @conns (datascript-files-db repo))))
 
 (defn remove-conn!
   [repo]
