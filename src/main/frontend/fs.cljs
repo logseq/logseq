@@ -15,6 +15,10 @@
   [path opts]
   (js/window.pfs.unlink path opts))
 
+(defn rename
+  [old-path new-path]
+  (js/window.pfs.rename old-path new-path))
+
 (defn rmdir
   [dir]
   (js/window.workerThread.rimraf dir))
