@@ -402,7 +402,7 @@
                               (pull repo-url token {:force-pull? true})
 
                               :else                         ; offline
-                              nil))))))))))
+                              nil)))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
                      (git-handler/set-git-status! repo-url :push-failed)

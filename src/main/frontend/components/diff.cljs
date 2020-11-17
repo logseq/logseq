@@ -169,7 +169,7 @@
                       "Install Logseq on GitHub"
                       :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
                    :error
-                   false))))))))
+                   false)))))))))
    :will-unmount
    (fn [state]
      (reset! diffs nil)
