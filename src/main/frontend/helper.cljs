@@ -31,7 +31,8 @@
           (state/get-github-token repo)
           expires-at (tf/parse (tf/formatters :date-time-no-ms) expires_at)
           request-time-gap (t/minutes 1)
-          expired? (t/after? (t/now) (t/plus expires-at request-time-gap))]
+          now (t/now)
+          expired? (t/after? now (t/minus expires-at request-time-gap))]
       {:expired? expired?
        :token token})))
 
