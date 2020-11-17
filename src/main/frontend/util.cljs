@@ -936,3 +936,9 @@
         (string/replace "Ctrl" "Cmd")
         (string/replace "Alt" "Opt"))
     keyboard-shortcut))
+
+(defn escape-chars
+  [s chars]
+  (let [cmap (into {} (map (fn [c]
+                             [c (str "\\" c)]) chars))]
+    (string/escape s cmap)))

@@ -173,3 +173,13 @@
 (defn plain->text
   [plains]
   (string/join (map last plains)))
+
+(defn timestamp->str
+  [ast]
+  (let [s (js/JSON.stringify (cljs-bean.core/->js ast))]
+    (js/window.Mldoc.timestampToString s)))
+
+(defn range->str
+  [ast]
+  (let [s (js/JSON.stringify (cljs-bean.core/->js ast))]
+    (js/window.Mldoc.rangeToString s)))

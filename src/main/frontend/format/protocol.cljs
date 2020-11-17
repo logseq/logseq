@@ -5,3 +5,6 @@
   (toHtml [this content config])
   (loaded? [this])
   (lazyLoad [this ok-handler]))
+
+(defprotocol Export
+  (export [this config page-ast]))
