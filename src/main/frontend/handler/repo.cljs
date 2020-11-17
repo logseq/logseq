@@ -256,13 +256,12 @@
 (declare push)
 
 (defn pull
-  [repo-url token {:keys [fallback? force-pull?]
+  [repo-url {:keys [fallback? force-pull?]
                    :or {fallback? false
                         force-pull? false}}]
   (when (and
          (db/get-conn repo-url true)
-         (db/cloned? repo-url)
-         token)
+         (db/cloned? repo-url))
     (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
             local-latest-commit (common-handler/get-ref repo-url)
             descendent? (git/descendent? repo-url local-latest-commit remote-latest-commit)]
@@ -281,7 +280,8 @@
                       (not (state/in-draw-mode?))))
                 (git-handler/set-git-status! repo-url :pulling)
                 (->
-                 (p/let [result (git/fetch repo-url token)]
+                 (p/let [token (helper/get-github-token repo-url)
+                         result (git/fetch repo-url token)]
                    (let [{:keys [fetchHead]} (bean/->clj result)]
                      (-> (git/merge repo-url)
                          (p/then (fn [result]
@@ -327,11 +327,10 @@
                               (and (or (string/includes? (str error) "401")
                                        (string/includes? (str error) "404"))
                                    (not fallback?))
-                              (p/let [token (helper/get-github-token repo-url)]
-                               (helper/request-app-tokens!
-                                 (fn []
-                                   (pull repo-url token {:fallback? true}))
-                                 nil))
+                              (helper/request-app-tokens!
+                                (fn []
+                                  (pull repo-url {:fallback? true}))
+                                nil)
 
                               (or (string/includes? (str error) "401")
                                   (string/includes? (str error) "404"))
@@ -399,7 +398,7 @@
                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
 
                               (state/online?)
-                              (pull repo-url token {:force-pull? true})
+                              (pull repo-url {:force-pull? true})
 
                               :else                         ; offline
                               nil)))))))))))
@@ -417,8 +416,7 @@
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]
-    (p/let [token (helper/get-github-token repo)]
-      (when token (pull repo token {:force-pull? true})))))
+    (pull repo {:force-pull? true})))
 
 (defn clone
   ([repo-url]
@@ -511,8 +509,8 @@
   [repo-url pull-now?]
   (p/let [token (helper/get-github-token repo-url)]
     (when token
-      (when pull-now? (pull repo-url token nil))
-      (js/setInterval #(pull repo-url token nil)
+      (when pull-now? (pull repo-url nil))
+      (js/setInterval #(pull repo-url nil)
         (* (config/git-pull-secs) 1000)))))
 
 (defn periodically-push-tasks

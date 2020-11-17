@@ -25,7 +25,7 @@
           (js/console.dir error)
           (when error-handler (error-handler)))))))
 
-(defn get-github-token*
+(defn- get-github-token*
   [repo]
   (when repo
     (let [{:keys [token expires_at] :as token-state}
