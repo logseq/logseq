@@ -265,16 +265,20 @@
 
           (ok-handler))))))
 
+(defn- compute-new-file-path
+  [old-path new-page-name]
+  (let [result (string/split old-path "/")
+        file-name (util/page-name-sanity new-page-name)
+        ext (last (string/split (last result) "."))
+        new-file (str file-name "." ext)
+        parts (concat (butlast result) [new-file])]
+    (string/join "/" parts)))
+
 (defn rename-file!
   [file new-name ok-handler]
   (let [repo (state/get-current-repo)
         old-path (:file/path file)
-        new-path (let [result (string/split old-path "/")
-                       file-name (util/page-name-sanity new-name)
-                       ext (last (string/split (last result) "."))
-                       new-file (str file-name "." ext)
-                       parts (concat (drop-last result) [new-file])]
-                   (string/join "/" parts))]
+        new-path (compute-new-file-path old-path new-name)]
     (->
      (p/let [_ (fs/rename (str (util/get-repo-dir repo) "/" old-path)
                           (str (util/get-repo-dir repo) "/" new-path))]
@@ -285,8 +289,8 @@
        ;; update files db
        (let [conn (db/get-files-conn repo)]
          (when-let [file (d/entity (d/db conn) [:file/path old-path])]
-           (d/transact! conn  [{:db/id (:db/id file)
-                                :file/path new-path}])))
+           (d/transact! conn [{:db/id (:db/id file)
+                               :file/path new-path}])))
 
        (p/let [_ (git/rename repo old-path new-path)]
          (common-handler/check-changed-files-status)
