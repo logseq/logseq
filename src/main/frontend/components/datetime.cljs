@@ -117,7 +117,7 @@
                                  (when show?
                                    (reset! show? false))))
                              (clear-timestamp!)
-                             (state/set-editor-show-date-picker false)))]]))
+                             (state/set-editor-show-date-picker! false)))]]))
 
 (rum/defc date-picker < rum/reactive
   {:init (fn [state]
@@ -156,7 +156,7 @@
                                                (util/format "[[%s]]" journal)
                                                format
                                                nil)
-               (state/set-editor-show-date-picker false))
+               (state/set-editor-show-date-picker! false))
              (swap! *timestamp assoc :date date)))})
        (when deadline-or-schedule?
          (time-repeater))])))

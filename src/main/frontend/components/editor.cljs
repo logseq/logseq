@@ -85,7 +85,7 @@
                               (editor-handler/get-matched-pages q))
               chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
                                (fn [chosen _click?]
-                                 (state/set-editor-show-page-search false)
+                                 (state/set-editor-show-page-search! false)
                                  (editor-handler/insert-command! id
                                                                  (util/format "#%s" (if (string/includes? chosen " ")
                                                                                       (str "[[" chosen "]]")
@@ -93,14 +93,14 @@
                                                                  format
                                                                  {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))}))
                                (fn [chosen _click?]
-                                 (state/set-editor-show-page-search false)
+                                 (state/set-editor-show-page-search! false)
                                  (editor-handler/insert-command! id
                                                                  (util/format "[[%s]]" chosen)
                                                                  format
                                                                  {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
                                                                   :postfix-fn (fn [s] (util/replace-first "]]" s ""))})))
               non-exist-page-handler (fn [_state]
-                                       (state/set-editor-show-page-search false)
+                                       (state/set-editor-show-page-search! false)
                                        (util/cursor-move-forward input 2))]
           (ui/auto-complete
            matched-pages
@@ -125,7 +125,7 @@
               matched-blocks (when-not (string/blank? q)
                                (editor-handler/get-matched-blocks q))
               chosen-handler (fn [chosen _click?]
-                               (state/set-editor-show-block-search false)
+                               (state/set-editor-show-block-search! false)
                                (let [uuid-string (str (:block/uuid chosen))]
 
                                  ;; block reference
@@ -143,7 +143,7 @@
                                  (when-let [input (gdom/getElement id)]
                                    (.focus input))))
               non-exist-block-handler (fn [_state]
-                                        (state/set-editor-show-block-search false)
+                                        (state/set-editor-show-block-search! false)
                                         (util/cursor-move-forward input 2))]
           (ui/auto-complete
            matched-blocks
@@ -189,7 +189,7 @@
                                        content (if (string/includes? (string/trim edit-content) "\n")
                                                  content
                                                  (text/remove-level-spaces content format))]
-                                   (state/set-editor-show-template-search false)
+                                   (state/set-editor-show-template-search! false)
                                    (editor-handler/insert-command! id
                                                                    content
                                                                    format
@@ -197,7 +197,7 @@
                                (when-let [input (gdom/getElement id)]
                                  (.focus input)))
               non-exist-handler (fn [_state]
-                                  (state/set-editor-show-template-search false))]
+                                  (state/set-editor-show-template-search! false))]
           (ui/auto-complete
            matched-templates
            {:on-chosen chosen-handler
@@ -444,18 +444,18 @@
                    (util/stop e)
                    (commands/delete-pair! id)
                    (cond
-                     (and (= deleted "[") (state/get-editor-show-page-search))
-                     (state/set-editor-show-page-search false)
+                     (and (= deleted "[") (state/get-editor-show-page-search?))
+                     (state/set-editor-show-page-search! false)
 
-                     (and (= deleted "(") (state/get-editor-show-block-search))
-                     (state/set-editor-show-block-search false)
+                     (and (= deleted "(") (state/get-editor-show-block-search?))
+                     (state/set-editor-show-block-search! false)
 
                      :else
                      nil))
 
                  ;; deleting hashtag
-                 (and (= deleted "#") (state/get-editor-show-page-search-hashtag))
-                 (state/set-editor-show-page-search-hashtag false)
+                 (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
+                 (state/set-editor-show-page-search-hashtag! false)
 
                  :else
                  nil)))
@@ -484,8 +484,8 @@
                      (> pos 0)
                      (= "#" (util/nth-safe value (dec pos)))))
                (and (= key " ")
-                    (state/get-editor-show-page-search-hashtag)))
-              (state/set-editor-show-page-search-hashtag false)
+                    (state/get-editor-show-page-search-hashtag?)))
+              (state/set-editor-show-page-search-hashtag! false)
 
               (and
                (not= key-code 8) ;; backspace
@@ -500,8 +500,8 @@
 
               (and
                (= key " ")
-               (state/get-editor-show-page-search-hashtag))
-              (state/set-editor-show-page-search-hashtag false)
+               (state/get-editor-show-page-search-hashtag?))
+              (state/set-editor-show-page-search-hashtag! false)
 
               (and
                (contains? (set/difference (set (keys editor-handler/reversed-autopair-map))

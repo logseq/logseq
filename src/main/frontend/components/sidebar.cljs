@@ -107,7 +107,7 @@
     [:div#main-content.cp__sidebar-main-layout
      (when-not config/mobile?
        [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
-        {:style {:flex (if (state/get-left-sidebar-open)
+        {:style {:flex (if (state/get-left-sidebar-open?)
                          "0 1 20%"
                          "0 0 0px")
                  :border-right (str "1px solid "
@@ -357,6 +357,6 @@
          ;;  {:style {:left 24}
          ;;   :title "Click to show/hide sidebar"
          ;;   :on-click (fn []
-         ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open))))}
+         ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
 ])])))

@@ -9,7 +9,7 @@
             [dommy.core :as dom]
             [cljs.core.async :as async]))
 
-(defonce state
+(defonce ^:private state
   (atom
    {:route-match nil
     :today nil
@@ -85,6 +85,7 @@
     :custom-context-menu/links nil
 
     ;; pages or blocks in the right sidebar
+    ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
     :sidebar/blocks '()
 
     :preferred-language (storage/get :preferred-language)
@@ -191,8 +192,7 @@
    (or
     (when-let [workflow (:preferred-workflow (get-config))]
       (let [workflow (name workflow)]
-        (if (or (re-find #"now" workflow)
-                (re-find #"NOW" workflow))
+        (if (re-find #"now|NOW" workflow)
           :now
           :todo)))
     (get-in @state [:me :preferred_workflow] :now))))
@@ -208,6 +208,8 @@
   (:hide-file-in-page? (get-config)))
 
 (defn page-name-order
+  "Decide whether to use file name or :title as page name. If it returns \"file\", use the file
+  name unless it is missing."
   []
   (:page-name-order (get-config)))
 
@@ -318,11 +320,12 @@
   [range]
   (set-state! :cursor-range range))
 
-(defn cloning?
+; FIXME: unused function
+(defn get-cloning?
   []
   (:repo/cloning? @state))
 
-(defn set-cloning?
+(defn set-cloning!
   [value]
   (set-state! :repo/cloning? value))
 
@@ -354,40 +357,40 @@
   [value]
   (set-state! :search/q value))
 
-(defn set-editor-show-page-search
+(defn set-editor-show-page-search!
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? false))
-(defn set-editor-show-page-search-hashtag
+(defn set-editor-show-page-search-hashtag!
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? value))
 
-(defn get-editor-show-page-search
+(defn get-editor-show-page-search?
   []
   (get @state :editor/show-page-search?))
-(defn get-editor-show-page-search-hashtag
+(defn get-editor-show-page-search-hashtag?
   []
   (get @state :editor/show-page-search-hashtag?))
-(defn set-editor-show-block-search
+(defn set-editor-show-block-search!
   [value]
   (set-state! :editor/show-block-search? value))
-(defn get-editor-show-block-search
+(defn get-editor-show-block-search?
   []
   (get @state :editor/show-block-search?))
-(defn set-editor-show-template-search
+(defn set-editor-show-template-search!
   [value]
   (set-state! :editor/show-template-search? value))
-(defn get-editor-show-template-search
+(defn get-editor-show-template-search?
   []
   (get @state :editor/show-template-search?))
-(defn set-editor-show-date-picker
+(defn set-editor-show-date-picker!
   [value]
   (set-state! :editor/show-date-picker? value))
-(defn get-editor-show-date-picker
+(defn get-editor-show-date-picker?
   []
   (get @state :editor/show-date-picker?))
-(defn set-editor-show-input
+(defn set-editor-show-input!
   [value]
   (set-state! :editor/show-input value))
 (defn get-editor-show-input
@@ -466,7 +469,7 @@
   []
   (:selection/up? @state))
 
-(defn set-selection-up?
+(defn set-selection-up!
   [value]
   (swap! state assoc :selection/up? value))
 
@@ -501,7 +504,7 @@
   [tokens]
   (when (seq tokens)
     (let [tokens (medley/map-keys name tokens)
-          repos (get-in @state [:me :repos])]
+          repos (get-repos)]
       (when (seq repos)
         (let [repos (mapv (fn [{:keys [installation_id] :as r}]
                             (if-let [token (get tokens installation_id)]
@@ -514,7 +517,7 @@
    (get-github-token (get-current-repo)))
   ([repo]
    (when repo
-     (let [repos (get-in @state [:me :repos])]
+     (let [repos (get-repos)]
        (-> (filter #(= repo (:url %)) repos)
            first
            :token)))))
@@ -537,6 +540,7 @@
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (second %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
+                                          ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)))
 
@@ -580,13 +584,13 @@
 
 (defn set-last-pos!
   [new-pos]
-  (reset! state (assoc @state :editor/last-saved-cursor new-pos)))
+  (set-state! :editor/last-saved-cursor new-pos))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)
-    (reset! state (assoc @state :editor/last-saved-cursor new-pos))))
+    (set-state! :editor/last-saved-cursor new-pos)))
 
 (defn set-theme!
   [theme]
@@ -717,7 +721,7 @@
 (defn get-default-branch
   [repo-url]
   (or
-   (some->> (:repos (get-me))
+   (some->> (get-repos)
             (filter (fn [m]
                       (= (:url m) repo-url)))
             (first)
@@ -732,7 +736,7 @@
       (when-not (string/blank? project)
         project))))
 
-(defn set-indexedb-support?
+(defn set-indexedb-support!
   [value]
   (set-state! :indexeddb/support? value))
 
@@ -760,17 +764,16 @@
   [repo _tx-id]
   (swap! state assoc-in [:repo/persist-status repo :last-modified-at] (util/time-ms)))
 
+(defn get-db-batch-txs-chan
+  []
+  (:db/batch-txs @state))
+
 (defn add-tx!
   ;; TODO: replace f with data for batch transactions
   [f]
   (when f
-    (swap! state update :db/batch-txs (fn [chan]
-                                        (async/put! chan f)
-                                        chan))))
-
-(defn get-db-batch-txs-chan
-  []
-  (:db/batch-txs @state))
+    (when-let [chan (get-db-batch-txs-chan)]
+      (async/put! chan f))))
 
 (defn repos-need-to-be-stored?
   []
@@ -779,7 +782,7 @@
             (> last-modified-at last-stored-at))
           status)))
 
-(defn get-left-sidebar-open
+(defn get-left-sidebar-open?
   []
   (get-in @state [:ui/left-sidebar-open?]))
 
@@ -798,7 +801,7 @@
 
 (defn get-notification-contents
   []
-  (get-in @state [:notification/contents]))
+  (get @state :notification/contents))
 
 (defn get-new-block-shortcut
   []
@@ -822,7 +825,8 @@
   (let [old-shortcuts (get-in @state [:config repo-url :shortcuts])]
     (set-state! [:config repo-url] value)
 
-    ;; TODO: refactor
+    ;; TODO: refactor. This seems useless as the default value has already been handled in
+    ;; `get-new-block-shortcut`.
     (set-new-block-shortcut!
      (or (get-shortcut repo-url :editor/new-block)
          "enter"))

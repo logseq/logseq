@@ -718,11 +718,11 @@
 
 (defn clear-when-saved!
   []
-  (state/set-editor-show-input nil)
-  (state/set-editor-show-date-picker false)
-  (state/set-editor-show-page-search false)
-  (state/set-editor-show-block-search false)
-  (state/set-editor-show-template-search false)
+  (state/set-editor-show-input! nil)
+  (state/set-editor-show-date-picker! false)
+  (state/set-editor-show-page-search! false)
+  (state/set-editor-show-block-search! false)
+  (state/set-editor-show-template-search! false)
   (commands/restore-state true))
 
 (defn get-state
@@ -1312,7 +1312,7 @@
             (cond
               (>= selected-blocks-count 2) ; back to the start block
               (do
-                (when (= 2 selected-blocks-count) (state/set-selection-up? nil))
+                (when (= 2 selected-blocks-count) (state/set-selection-up! nil))
                 (clear-last-selected-block!))
 
               :else
@@ -1557,10 +1557,10 @@
   (or @*show-commands
       @*show-block-commands
       (state/get-editor-show-input)
-      (state/get-editor-show-page-search)
-      (state/get-editor-show-block-search)
-      (state/get-editor-show-template-search)
-      (state/get-editor-show-date-picker)))
+      (state/get-editor-show-page-search?)
+      (state/get-editor-show-block-search?)
+      (state/get-editor-show-template-search?)
+      (state/get-editor-show-date-picker?)))
 
 (defn get-previous-input-char
   [input]
@@ -1885,7 +1885,7 @@
              (.click input))))))
     nil)
 
-  (state/set-editor-show-input nil)
+  (state/set-editor-show-input! nil)
 
   (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
     (when-let [input (gdom/getElement id)]
@@ -1930,9 +1930,9 @@
 
 (defn close-autocomplete-if-outside
   [input]
-  (when (or (state/get-editor-show-page-search)
-            (state/get-editor-show-page-search-hashtag)
-            (state/get-editor-show-block-search))
+  (when (or (state/get-editor-show-page-search?)
+            (state/get-editor-show-page-search-hashtag?)
+            (state/get-editor-show-block-search?))
     (when-let [q (get-search-q)]
       (let [value (gobj/get input "value")
             pos (:editor/last-saved-cursor @state/state)
@@ -1940,6 +1940,6 @@
         (when (or (< current-pos pos)
                   (string/includes? q "]")
                   (string/includes? q ")"))
-          (state/set-editor-show-block-search false)
-          (state/set-editor-show-page-search false)
-          (state/set-editor-show-page-search-hashtag false))))))
+          (state/set-editor-show-block-search! false)
+          (state/set-editor-show-page-search! false)
+          (state/set-editor-show-page-search-hashtag! false))))))

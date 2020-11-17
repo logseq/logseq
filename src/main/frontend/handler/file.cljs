@@ -79,7 +79,7 @@
 
 (defn load-files
   [repo-url]
-  (state/set-cloning? false)
+  (state/set-cloning! false)
   (state/set-state! :repo/loading-files? true)
   (p/let [files (git/list-files repo-url)
           files (bean/->clj files)
