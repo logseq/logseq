@@ -384,11 +384,9 @@
     (pull repo {:force-pull? true})))
 
 (defn clone
-  ([repo-url]
-   (clone repo-url false))
-  ([repo-url fallback?]
-   (p/let [token (helper/get-github-token repo-url)]
-     (when token
+  [repo-url]
+  (p/let [token (helper/get-github-token repo-url)]
+    (when token
       (util/p-handle
         (do
           (state/set-cloning! true)
@@ -399,21 +397,14 @@
           (db/start-db-conn! (:me @state/state) repo-url)
           (db/mark-repo-as-cloned repo-url))
         (fn [e]
-          (if (and (not fallback?)
-                (or (string/includes? (str e) "401")
-                    (string/includes? (str e) "404")))
-            (helper/request-app-tokens!
-              (fn []
-                (clone repo-url true))
-              nil)
-            (do
-              (println "Clone failed, error: ")
-              (js/console.error e)
-              (state/set-cloning! false)
-              (git-handler/set-git-status! repo-url :clone-failed)
-              (git-handler/set-git-error! repo-url e)
+          (do
+            (println "Clone failed, error: ")
+            (js/console.error e)
+            (state/set-cloning! false)
+            (git-handler/set-git-status! repo-url :clone-failed)
+            (git-handler/set-git-error! repo-url e)
 
-              (show-install-error! repo-url (util/format "Failed to clone %s." repo-url))))))))))
+            (show-install-error! repo-url (util/format "Failed to clone %s." repo-url))))))))
 
 (defn set-config-content!
   [repo path new-config]
