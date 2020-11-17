@@ -256,9 +256,7 @@
 (declare push)
 
 (defn pull
-  [repo-url {:keys [fallback? force-pull?]
-                   :or {fallback? false
-                        force-pull? false}}]
+  [repo-url {:keys [force-pull?] :or {force-pull? false}}]
   (when (and
          (db/get-conn repo-url true)
          (db/cloned? repo-url))
@@ -323,26 +321,13 @@
                             (js/console.error error)
                             ;; token might be expired, request new token
 
-                            (cond
-                              (and (or (string/includes? (str error) "401")
-                                       (string/includes? (str error) "404"))
-                                   (not fallback?))
-                              (helper/request-app-tokens!
-                                (fn []
-                                  (pull repo-url {:fallback? true}))
-                                nil)
-
-                              (or (string/includes? (str error) "401")
-                                  (string/includes? (str error) "404"))
-                              (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
-
-                              :else
-                              nil))))))))))))
+                            (when (or (string/includes? (str error) "401")
+                                    (string/includes? (str error) "404"))
+                              (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))))))))))))))
 
 (defn push
-  [repo-url {:keys [commit-message fallback? diff-push? commit-push? force?]
+  [repo-url {:keys [commit-message diff-push? commit-push? force?]
              :or {commit-message "Logseq auto save"
-                  fallback? false
                   diff-push? false
                   commit-push? false
                   force? false}}]
@@ -357,7 +342,6 @@
             (when (or
                    commit-push?
                    (seq files)
-                   fallback?
                    diff-push?)
               ;; auto commit if there are any un-committed changes
               (let [commit-message (if (string/blank? commit-message)
@@ -377,31 +361,12 @@
                        (println "Git push error: ")
                        (js/console.error error)
                        (common-handler/check-changed-files-status repo-url)
-                       (let [permission? (or (string/includes? (str error) "401")
-                                             (string/includes? (str error) "404"))]
-                         (cond
-                           (and permission? (not fallback?))
-                           (helper/request-app-tokens!
-                            (fn []
-                              (git-handler/set-git-status! repo-url :re-push)
-                              (push repo-url
-                                {:commit-message commit-message
-                                 :fallback? true}))
-                            nil)
-
-                          :else
-                          (do
-                            (git-handler/set-git-status! repo-url :push-failed)
-                            (git-handler/set-git-error! repo-url error)
-                            (cond
-                              permission?
-                              (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-
-                              (state/online?)
-                              (pull repo-url {:force-pull? true})
-
-                              :else                         ; offline
-                              nil)))))))))))
+                       (do
+                         (git-handler/set-git-status! repo-url :push-failed)
+                         (git-handler/set-git-error! repo-url error)
+                         (when
+                           (state/online?)
+                           (pull repo-url {:force-pull? true}))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
                      (git-handler/set-git-status! repo-url :push-failed)
@@ -590,5 +555,4 @@
   [commit-message]
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
-                :fallback? false
                 :commit-push? true})))
