@@ -90,7 +90,7 @@
          :on-shift-chosen (fn [{:keys [type data]}]
                             (case type
                               :page
-                              (let [page (db/entity [:page/name data])]
+                              (let [page (db/entity [:page/name (string/lower-case data)])]
                                 (state/sidebar-add-block!
                                  (state/get-current-repo)
                                  (:db/id page)
