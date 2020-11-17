@@ -199,9 +199,9 @@
             path))
         [:div
          (ui/textarea
-           {:placeholder "Commit message (optional)"
-            :on-change (fn [e]
-                         (reset! commit-message (util/evalue e)))})
+          {:placeholder "Commit message (optional)"
+           :on-change (fn [e]
+                       (reset! commit-message (util/evalue e)))})
          (if pushing?
            [:span (ui/loading "Pushing")]
            (ui/button "Commit and push"

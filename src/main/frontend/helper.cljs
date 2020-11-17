@@ -3,12 +3,11 @@
             [cljs-time.core :as t]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.config :as config]
-            [promesa.core :as p]))
+            [frontend.config :as config]))
 
 (defn request-app-tokens!
   [ok-handler error-handler]
-  (let [repos (:repos (state/get-me))
+  (let [repos (state/get-repos)
         installation-ids (->> (map :installation_id repos)
                               (remove nil?)
                               (distinct))]
@@ -21,7 +20,7 @@
           (state/set-github-installation-tokens! result)
           (when ok-handler (ok-handler)))
         (fn [error]
-          (println "Something wrong!")
+          (println "Request app token failed.")
           (js/console.dir error)
           (when error-handler (error-handler)))))))
 
