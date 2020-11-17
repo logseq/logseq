@@ -512,7 +512,7 @@
                 (let [{:keys [token expires_at] :as m} (get tokens installation_id)]
                   (if (and token expires_at)
                     (merge repo {:token token :expires_at expires_at})
-                    (do (js/conole.log "Can't find token, expires_at key") m))))
+                    (do (js/console.log "Can't find token, expires_at key") m))))
               repos (mapv set-token-f repos)]
           (swap! state assoc-in [:me :repos] repos))))))
 
