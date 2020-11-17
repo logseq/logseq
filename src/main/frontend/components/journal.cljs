@@ -76,7 +76,7 @@
         :on-click (fn [e]
                     (util/stop e)
                     (when (gobj/get e "shiftKey")
-                      (when-let [page (db/pull [:page/name title])]
+                      (when-let [page (db/pull [:page/name (string/lower-case title)])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
