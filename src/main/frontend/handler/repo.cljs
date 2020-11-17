@@ -319,10 +319,8 @@
                  (p/catch (fn [error]
                             (println "Pull error:" (str error))
                             (js/console.error error)
-                            ;; token might be expired, request new token
-
                             (when (or (string/includes? (str error) "401")
-                                    (string/includes? (str error) "404"))
+                                      (string/includes? (str error) "404"))
                               (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))))))))))))))
 
 (defn push
