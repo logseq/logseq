@@ -935,12 +935,10 @@
 
 (defn remove-common-preceding
   [col1 col2]
-  (loop [col1 col1
-         col2 col2]
-    (if (and (= (first col1) (first col2))
-             (seq col1))
-      (recur (rest col1) (rest col2))
-      [col1 col2])))
+  (if (and (= (first col1) (first col2))
+           (seq col1))
+    (recur (rest col1) (rest col2))
+    [col1 col2]))
 
 ;; fs
 (defn get-file-ext
@@ -957,7 +955,7 @@
     (->> (concat
           (if (seq parts-1)
             (repeat (count parts-1) "..")
-            ".")
+            ["."])
           parts-2
           [another-file-name])
          (string/join "/"))))
