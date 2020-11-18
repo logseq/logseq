@@ -542,11 +542,11 @@ button.menu {
 #root > div {
   color: #24292e;
   color: var(--ls-primary-text-color);
+  font-size: var(--ls-page-text-size);
 }
 
 #main-content-container {
   font-size: 1em;
-  font-size: var(--ls-page-text-size);
 }
 
 .form-checkbox {
