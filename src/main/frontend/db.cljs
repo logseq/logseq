@@ -172,16 +172,16 @@
 
 (defn remove-query-component!
   [component]
-  (let [ks (->> (filter (fn [[_ components]]
-                          (contains? (set components) component))
-                        @query-components)
-                (map first))]
-    (doseq [k ks]
-      (swap! query-components update k (fn [components]
-                                         (remove #(= component %) components)))
-      (when (zero? (count (get @query-components k))) ; no subscribed components
-        (swap! query-components dissoc k)
-        (remove-q! k)))))
+  (reset!
+   query-components
+   (->> (for [[k components] @query-components
+              :let [new-components (remove #(= component %) components)]]
+          (if (empty? new-components) ; no subscribed components
+            (do (remove-q! k)
+                nil)
+            [k new-components]))
+        (keep identity)
+        (into {}))))
 
 (defn get-page-blocks-cache-atom
   [repo page-id]
