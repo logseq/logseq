@@ -76,7 +76,7 @@ If you are on Windows, use the [Windows setup](#windows-setup) below.
 
 Follow the guide at <https://docs.github.com/en/free-pro-team@latest/developers/apps/creating-a-github-app>, where the user authorization "Callback URL" should be `http://localhost:3000/auth/github`.
 
-Remember to download the `private-key.pem` which will be used for the next step.
+Remember to download the `private-key.pem` which will be used for the next step. Also take note of your `App ID`, `Client ID`, and your newly generated `Client Secret` for use in step 4.
 
 ### 3. Set up PostgreSQL
 
@@ -90,7 +90,7 @@ export JWT_SECRET="xxxxxxxxxxxxxxxxxxxx"
 export COOKIE_SECRET="xxxxxxxxxxxxxxxxxxxx"
 export DATABASE_URL="postgres://localhost:5432/logseq"
 export GITHUB_APP2_ID="78728"
-export GITHUB_APP2_KEY="xxxxxxxxxxxxxxxxxxxx"
+export GITHUB_APP2_KEY="xxxxxxxxxxxxxxxxxxxx" #Your Github App's Client ID
 export GITHUB_APP2_SECRET="xxxxxxxxxxxxxxxxxxxx"
 # Replace your-code-directory and your-app.private-key.pem with yours
 export GITHUB_APP_PEM="/your-code-directory/your-app.private-key.pem"
