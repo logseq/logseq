@@ -702,7 +702,7 @@
         '[:find ?page-name
           :where
           [?page :page/original-name ?page-name]]
-        (get-conn))
+        (get-conn repo))
        (map first)))
 
 (defn get-sync-metadata
