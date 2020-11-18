@@ -4,9 +4,9 @@
 @import "./reveal_black.min.css";
 @import "./katex.min.css";
 @import "../../static/css/tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
+@import "./codemirror.min.css";
 @import "./common.css";
 @import "./datepicker.css";
 @import "./highlight.css";
-@import "./codemirror.min.css";
 @import "./table.css";
 @import "./excalidraw.min.css";

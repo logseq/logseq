@@ -1052,11 +1052,12 @@
                           (reset! *dragging? false)
                           (reset! *dragging-block nil)
                           (editor-handler/unhighlight-block!))}]
-    [:div.flex.overflow-x-auto.overflow-y-hidden.relative
+    [:div.flex.relative
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)
                :style {:cursor "text"
-                       :min-height 24}}
+                       :min-height 24
+                       :max-width 560}}
         (not slide?)
         (merge attrs))
 

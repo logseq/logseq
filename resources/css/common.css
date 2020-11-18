@@ -1367,9 +1367,9 @@ a.tag:hover {
   margin-bottom: 8px;
 }
 
-.CodeMirror {
+.extensions__code>.CodeMirror {
   height: auto;
-  margin: 6px 0;
+  margin: 6px 0 0 0;
   font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
 }
 
