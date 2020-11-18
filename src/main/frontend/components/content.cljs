@@ -330,17 +330,6 @@
              [:div.text-gray-500.cursor "Click to edit"]
              content)])))))
 
-(defn- set-fixed-width!
-  []
-  (when (> (gobj/get js/window "innerWidth") 1024)
-    (let [blocks (d/by-class "ls-block")]
-      (doseq [block blocks]
-        (if (and
-             (not (d/sel1 block "img"))
-             (not (d/sel1 block "iframe")))
-          (d/add-class! block "fixed-width")
-          (d/remove-class! block "fixed-width"))))))
-
 (defn- set-draw-iframe-style!
   []
   (let [width (gobj/get js/window "innerWidth")]
@@ -358,12 +347,10 @@
                  (lazy-load-js state)
                  state)
    :did-mount (fn [state]
-                (set-fixed-width!)
                 (set-draw-iframe-style!)
                 (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
-                 (set-fixed-width!)
                  (set-draw-iframe-style!)
                  (lazy-load-js state)
                  (image-handler/render-local-images!)

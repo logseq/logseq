@@ -1146,14 +1146,6 @@ pre {
   max-width: 665px;
 }
 
-.fixed-width {
-  max-width: 665px;
-}
-
-/* .editor-wrapper { */
-/*     max-width: 610px; */
-/* } */
-
 .ls-block, .editor-wrapper {
   margin: 0 auto;
 }
