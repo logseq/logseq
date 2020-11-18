@@ -697,14 +697,15 @@
                       (state/set-edit-content! id value)
                       (state/set-edit-pos! current-pos)
                       (let [input (gdom/getElement id)
+                            native-e (gobj/get e "nativeEvent")
                             last-input-char (util/nth-safe value (dec current-pos))]
                         (case last-input-char
                           "/"
-                          (let [prev-char (util/nth-safe value (dec (dec current-pos)))]
-                            (when (string/blank? prev-char)
-                              (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
-                                (reset! *slash-caret-pos (util/get-caret-pos input))
-                                (reset! *show-commands true))))
+                          ;; TODO: is it cross-browser compatible?
+                          (when (not= (gobj/get native-e "inputType") "insertFromPaste")
+                            (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
+                             (reset! *slash-caret-pos (util/get-caret-pos input))
+                             (reset! *show-commands true)))
                           "<"
                           (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
                             (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
