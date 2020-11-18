@@ -1910,19 +1910,18 @@
 (defn- build-nodes
   [dark? current-page edges nodes]
   (mapv (fn [p]
-          (cond->
-           {:id p
-            :name p
-            :val (get-connections p edges)
-            :autoColorBy "group"
-            :group (js/Math.ceil (* (js/Math.random) 12))
-            :color "#222222"}
-            dark?
-            (assoc :color "#8abbbb")
-            (= p current-page)
-            (assoc :color (if dark?
-                            "#ffffff"
-                            "#045591"))))
+          (let [current-page? (= p current-page)
+                color (case [dark? current-page?]
+                            [false false] "#222222"
+                            [false true]  "#045591"
+                            [true false]  "#8abbbb"
+                            [true true]   "#ffffff")] ; FIXME: Put it into CSS
+            {:id p
+             :name p
+             :val (get-connections p edges)
+             :autoColorBy "group"
+             :group (js/Math.ceil (* (js/Math.random) 12))
+             :color color}))
         (set (flatten nodes))))
 
 (defn normalize-page-name
