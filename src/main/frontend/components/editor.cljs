@@ -45,10 +45,12 @@
        {:on-chosen (fn [chosen]
                      (reset! commands/*current-command chosen)
                      (let [command-steps (get (into {} matched) chosen)
-                           restore-slash? (and
-                                           (not (fn? command-steps))
-                                           (not (contains? (set (map first command-steps)) :editor/input))
-                                           (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled"} chosen)))]
+                           restore-slash? (or
+                                           (contains? #{"Today" "Yesterday" "Tomorrow"} chosen)
+                                           (and
+                                            (not (fn? command-steps))
+                                            (not (contains? (set (map first command-steps)) :editor/input))
+                                            (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled"} chosen))))]
                        (editor-handler/insert-command! id command-steps
                                                        format
                                                        {:restore? restore-slash?})))

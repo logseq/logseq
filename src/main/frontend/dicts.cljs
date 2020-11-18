@@ -325,7 +325,7 @@ title: How to take dummy notes?
         :dark "Dark"
         :remove-background "Remove background"}
 
-{:fr {:help/about "A propos de Logseq"
+   :fr {:help/about "A propos de Logseq"
         :help/bug "Signaler une anomalie"
         :help/feature "Demander une fonctionnalité"
         :help/changelog "Journal des modifications"

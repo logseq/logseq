@@ -1377,8 +1377,10 @@
     nil)
 
   (when restore?
-    (let [restore-slash-caret-pos? (if (= :editor/click-hidden-file-input
-                                          (ffirst command-output))
+    (let [restore-slash-caret-pos? (if (and
+                                        (seq? command-output)
+                                        (= :editor/click-hidden-file-input
+                                           (ffirst command-output)))
                                      false
                                      true)]
       (commands/restore-state restore-slash-caret-pos?))))
