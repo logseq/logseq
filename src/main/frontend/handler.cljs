@@ -8,6 +8,7 @@
             [cljs-bean.core :as bean]
             [frontend.date :as date]
             [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.ui :as ui-handler]
@@ -129,6 +130,8 @@
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
+
+    (page-handler/init-commands!)
 
     (restore-and-setup! me repos logged?)
 

@@ -186,6 +186,10 @@
   (when-let [repo (get-current-repo)]
     (:pages-directory (get-config repo))))
 
+(defn org-mode-file-link?
+  [repo]
+  (:org-mode/insert-file-link? (get-config repo)))
+
 (defn get-preferred-workflow
   []
   (keyword
