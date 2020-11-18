@@ -1498,7 +1498,8 @@
                   (when content
                     (let [utf8-content (utf8/encode content)]
                       (extract-blocks-pages repo-url file content utf8-content))))
-                contents)]
+                 contents)
+        result (remove empty? result)]
     ;; '(pages block-refs blocks)
     (->> (apply map concat result)
          (apply concat))))
