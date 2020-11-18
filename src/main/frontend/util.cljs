@@ -856,10 +856,6 @@
                 (fn []
                   (js/window.indexedDB.deleteDatabase test-db))))))
 
-(defn get-file-ext
-  [file]
-  (last (string/split file #"\.")))
-
 (defonce mac? goog.userAgent/MAC)
 
 (defn ->system-modifier
@@ -936,3 +932,41 @@
         (string/replace "Ctrl" "Cmd")
         (string/replace "Alt" "Opt"))
     keyboard-shortcut))
+
+(defn remove-common-preceding
+  [col1 col2]
+  (if (and (= (first col1) (first col2))
+           (seq col1))
+    (recur (rest col1) (rest col2))
+    [col1 col2]))
+
+;; fs
+(defn get-file-ext
+  [file]
+  (last (string/split file #"\.")))
+
+(defn get-relative-path
+  [current-file-path another-file-path]
+  (let [directories-f #(butlast (string/split % "/"))
+        parts-1 (directories-f current-file-path)
+        parts-2 (directories-f another-file-path)
+        [parts-1 parts-2] (remove-common-preceding parts-1 parts-2)
+        another-file-name (last (string/split another-file-path "/"))]
+    (->> (concat
+          (if (seq parts-1)
+            (repeat (count parts-1) "..")
+            ["."])
+          parts-2
+          [another-file-name])
+         (string/join "/"))))
+
+(comment
+  (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
+     "../pages/grant_ideas.org")
+
+  (= (get-relative-path "journals/2020_11_18.org" "journals/2020_11_19.org")
+     "./2020_11_19.org")
+
+  (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
+     "../e/f.org")
+  )

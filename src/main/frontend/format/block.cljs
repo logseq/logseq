@@ -27,6 +27,7 @@
   (let [page (cond
                (and (vector? block) (= "Link" (first block)))
                (let [typ (first (:url (second block)))]
+                 ;; {:url ["File" "file:../pages/hello_world.org"], :label [["Plain" "hello world"]], :title nil}
                  (or
                   (and
                    (= typ "Search")
@@ -40,7 +41,11 @@
                   (and
                    (= typ "Complex")
                    (= (:protocol (second (:url (second block)))) "file")
-                   (:link (second (:url (second block)))))))
+                   (:link (second (:url (second block)))))
+
+                  (and
+                   (= typ "File")
+                   (second (first (:label (second block)))))))
 
                (and (vector? block) (= "Nested_link" (first block)))
                (let [content (:content (last block))]

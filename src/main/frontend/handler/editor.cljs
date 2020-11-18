@@ -30,10 +30,8 @@
             [frontend.handler.image :as image-handler]
             [frontend.commands :as commands
              :refer [*show-commands
-                     *matched-commands
                      *slash-caret-pos
                      *angle-bracket-caret-pos
-                     *matched-block-commands
                      *show-block-commands]]
             [frontend.extensions.html-parser :as html-parser]
             [medley.core :as medley]
@@ -1363,6 +1361,10 @@
                              :or {restore? true}
                              :as option}]
   (cond
+    (fn? command-output)
+    (let [s (command-output)]
+      (commands/insert! id s option))
+
     ;; replace string
     (string? command-output)
     (commands/insert! id command-output option)
@@ -1527,7 +1529,7 @@
       (when (> pos 0)
         (or
          (and (= \/ (util/nth-safe edit-content (dec pos)))
-              (commands/commands-map))
+              @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
     (catch js/Error e

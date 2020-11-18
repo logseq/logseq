@@ -46,6 +46,7 @@
                      (reset! commands/*current-command chosen)
                      (let [command-steps (get (into {} matched) chosen)
                            restore-slash? (and
+                                           (not (fn? command-steps))
                                            (not (contains? (set (map first command-steps)) :editor/input))
                                            (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled"} chosen)))]
                        (editor-handler/insert-command! id command-steps
@@ -75,6 +76,7 @@
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
               edit-content (state/sub [:editor/content id])
+              edit-block (state/sub :editor/block)
               q (or
                  @editor-handler/*selected-text
                  (when (state/sub :editor/show-page-search-hashtag?)
@@ -86,22 +88,35 @@
               chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
                                (fn [chosen _click?]
                                  (state/set-editor-show-page-search! false)
-                                 (editor-handler/insert-command! id
-                                                                 (util/format "#%s" (if (string/includes? chosen " ")
-                                                                                      (str "[[" chosen "]]")
-                                                                                      chosen))
-                                                                 format
-                                                                 {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))}))
+                                 (let [page-ref-text (page-handler/get-page-ref-text chosen)]
+                                   (editor-handler/insert-command! id
+                                                                   (util/format "#%s" page-ref-text)
+                                                                   format
+                                                                   {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))})))
                                (fn [chosen _click?]
                                  (state/set-editor-show-page-search! false)
-                                 (editor-handler/insert-command! id
-                                                                 (util/format "[[%s]]" chosen)
-                                                                 format
-                                                                 {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
-                                                                  :postfix-fn (fn [s] (util/replace-first "]]" s ""))})))
+                                 (let [page-ref-text (page-handler/get-page-ref-text chosen)]
+                                   (editor-handler/insert-command! id
+                                                                   page-ref-text
+                                                                   format
+                                                                   {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
+                                                                    :postfix-fn (fn [s] (util/replace-first "]]" s ""))}))))
               non-exist-page-handler (fn [_state]
                                        (state/set-editor-show-page-search! false)
-                                       (util/cursor-move-forward input 2))]
+                                       (if (state/org-mode-file-link? (state/get-current-repo))
+                                         (let [page-ref-text (page-handler/get-page-ref-text q)
+                                               value (gobj/get input "value")
+                                               old-page-ref (util/format "[[%s]]" q)
+                                               new-value (string/replace value
+                                                                         old-page-ref
+                                                                         page-ref-text)]
+                                           (state/set-edit-content! id new-value)
+                                           (let [new-pos (+ current-pos
+                                                            (- (count page-ref-text)
+                                                               (count old-page-ref))
+                                                            2)]
+                                             (util/move-cursor-to input new-pos)))
+                                         (util/cursor-move-forward input 2)))]
           (ui/auto-complete
            matched-pages
            {:on-chosen chosen-handler

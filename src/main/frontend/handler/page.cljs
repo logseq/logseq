@@ -15,6 +15,7 @@
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.ui :as ui-handler]
+            [frontend.commands :as commands]
             [frontend.date :as date]
             [clojure.walk :as walk]
             [frontend.git :as git]
@@ -23,45 +24,57 @@
             [goog.object :as gobj]
             [frontend.format.mldoc :as mldoc]))
 
+(defn- get-directory
+  [journal?]
+  (if journal?
+    config/default-journals-directory
+    (config/get-pages-directory)))
+
+(defn- get-file-name
+  [journal? title]
+  (if journal?
+    (date/journal-title->default title)
+    (util/page-name-sanity (string/lower-case title))))
+
 (defn create!
-  [title]
-  (let [repo (state/get-current-repo)
-        dir (util/get-repo-dir repo)
-        journal-page? (date/valid-journal-title? title)
-        directory (if journal-page?
-                    config/default-journals-directory
-                    (config/get-pages-directory))]
-    (when dir
-      (p/let [_ (-> (fs/mkdir (str dir "/" directory))
-                    (p/catch (fn [_e])))]
-        (let [format (name (state/get-preferred-format))
-              page (string/lower-case title)
-              path (str (if journal-page?
-                          (date/journal-title->default title)
-                          (util/page-name-sanity page))
-                        "."
-                        (if (= format "markdown") "md" format))
-              path (str directory "/" path)
-              file-path (str "/" path)]
-          (p/let [exists? (fs/file-exists? dir file-path)]
-            (if exists?
-              (notification/show!
-               [:p.content
-                (util/format "File %s already exists!" file-path)]
-               :error)
-              ;; create the file
-              (let [content (util/default-content-with-title format title)]
-                (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                  (db/reset-file! repo path content)
-                  (git-handler/git-add repo path)
-                  (route-handler/redirect! {:to :page
-                                            :path-params {:name page}})
-                  (let [blocks (db/get-page-blocks page)
-                        last-block (last blocks)]
-                    (when last-block
-                      (js/setTimeout
-                       #(editor-handler/edit-last-block-for-new-page! last-block 0)
-                       100))))))))))))
+  ([title]
+   (create! title {}))
+  ([title {:keys [redirect?]
+           :or {redirect? true}}]
+   (let [repo (state/get-current-repo)
+         dir (util/get-repo-dir repo)
+         journal-page? (date/valid-journal-title? title)
+         directory (get-directory journal-page?)]
+     (when dir
+       (p/let [_ (-> (fs/mkdir (str dir "/" directory))
+                     (p/catch (fn [_e])))]
+         (let [format (name (state/get-preferred-format))
+               page (string/lower-case title)
+               path (str (get-file-name journal-page? title)
+                         "."
+                         (if (= format "markdown") "md" format))
+               path (str directory "/" path)
+               file-path (str "/" path)]
+           (p/let [exists? (fs/file-exists? dir file-path)]
+             (if exists?
+               (notification/show!
+                [:p.content
+                 (util/format "File %s already exists!" file-path)]
+                :error)
+               ;; create the file
+               (let [content (util/default-content-with-title format title)]
+                 (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                   (db/reset-file! repo path content)
+                   (git-handler/git-add repo path)
+                   (when redirect?
+                     (route-handler/redirect! {:to :page
+                                               :path-params {:name page}})
+                     (let [blocks (db/get-page-blocks page)
+                           last-block (last blocks)]
+                       (when last-block
+                         (js/setTimeout
+                          #(editor-handler/edit-last-block-for-new-page! last-block 0)
+                          100))))))))))))))
 
 (defn page-add-properties!
   [page-name properties]
@@ -381,3 +394,31 @@
 (defn update-public-attribute!
   [page-name value]
   (page-add-properties! page-name {:public value}))
+
+(defn get-page-ref-text
+  [page]
+  (when-let [edit-block (state/get-edit-block)]
+    (let [page-name (string/lower-case page)
+          edit-block-file-path (-> (:db/id (:block/file edit-block))
+                                   (db/entity)
+                                   :file/path)]
+      (if (and edit-block-file-path
+               (state/org-mode-file-link? (state/get-current-repo)))
+        (if-let [ref-file-path (:file/path (:page/file (db/entity [:page/name page-name])))]
+          (util/format "[[file:%s][%s]]"
+                       (util/get-relative-path edit-block-file-path ref-file-path)
+                       page)
+          (let [journal? (date/valid-journal-title? page)
+                ref-file-path (str (get-directory journal?)
+                          "/"
+                          (get-file-name journal? page)
+                          ".org")]
+            (create! page {:redirect? false})
+            (util/format "[[file:%s][%s]]"
+                         (util/get-relative-path edit-block-file-path ref-file-path)
+                         page)))
+        (util/format "[[%s]]" page)))))
+
+(defn init-commands!
+  []
+  (commands/init-commands! get-page-ref-text))

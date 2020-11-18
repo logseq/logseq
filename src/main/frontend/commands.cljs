@@ -6,7 +6,10 @@
             [clojure.string :as string]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [frontend.format :as format]))
+            [frontend.format :as format]
+            [frontend.handler.common :as common-handler]))
+
+;; TODO: move to frontend.handler.editor.commands
 
 (defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
@@ -15,10 +18,6 @@
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
 (defonce *current-command (atom nil))
-
-(defn ->page-reference
-  [page]
-  (util/format "[[%s]]" page))
 
 (def link-steps [[:editor/input (str slash "link")]
                  [:editor/show-input [{:command :link
@@ -87,7 +86,7 @@
 
 ;; Credits to roamresearch.com
 (defn commands-map
-  []
+  [get-page-ref-text]
   (->>
    (concat
     (get-preferred-workflow)
@@ -107,9 +106,9 @@
                                     :placeholder "Draw title"}]]]]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
-     ["Tomorrow" (->page-reference (date/tomorrow))]
-     ["Yesterday" (->page-reference (date/yesterday))]
-     ["Today" (->page-reference (date/today))]
+     ["Tomorrow" #(get-page-ref-text (date/tomorrow))]
+     ["Yesterday" #(get-page-ref-text (date/yesterday))]
+     ["Today" #(get-page-ref-text (date/today))]
      ["Current Time" (date/get-current-time)]
      ["Date Picker" [[:editor/show-date-picker]]]
      ["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
@@ -137,7 +136,14 @@
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
-(defonce *matched-commands (atom (commands-map)))
+(defonce *matched-commands (atom nil))
+(defonce *initial-commands (atom nil))
+
+(defn init-commands!
+  [get-page-ref-text]
+  (let [commands (commands-map get-page-ref-text)]
+    (reset! *initial-commands commands)
+    (reset! *matched-commands commands)))
 
 (defn ->block
   ([type]
@@ -199,7 +205,7 @@
   (when restore-slash-caret-pos?
     (reset! *slash-caret-pos nil))
   (reset! *show-commands false)
-  (reset! *matched-commands (commands-map))
+  (reset! *matched-commands @*initial-commands)
   (reset! *angle-bracket-caret-pos nil)
   (reset! *show-block-commands false)
   (reset! *matched-block-commands (block-commands-map)))
@@ -288,7 +294,7 @@
 
 (defn get-matched-commands
   ([text]
-   (get-matched-commands text (commands-map)))
+   (get-matched-commands text @*initial-commands))
   ([text commands]
    (search/fuzzy-search commands text
                         :extract-fn first
