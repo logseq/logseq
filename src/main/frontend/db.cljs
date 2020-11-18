@@ -1,6 +1,5 @@
 (ns frontend.db
   (:require [datascript.core :as d]
-            [frontend.util :as util]
             [frontend.date :as date]
             [medley.core :as medley]
             [datascript.transit :as dt]
@@ -11,9 +10,7 @@
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
-            [cljs-bean.core :as bean]
             [frontend.config :as config]
-            [goog.object :as gobj]
             ["localforage" :as localforage]
             [promesa.core :as p]
             [cljs.reader :as reader]
@@ -22,17 +19,16 @@
             [clojure.walk :as walk]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.extensions.sci :as sci]
-            [goog.array :as garray]
             [frontend.db-schema :as db-schema]
             [clojure.core.async :as async]))
 
 ;; offline db
 (def store-name "dbs")
 (.config localforage
-         (bean/->js
+         #js
           {:name "logseq-datascript"
            :version 1.0
-           :storeName store-name}))
+           :storeName store-name})
 
 (defonce localforage-instance (.createInstance localforage store-name))
 
@@ -40,6 +36,7 @@
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
 
+; FIXME: Unused?
 (defonce async-chan (atom nil))
 
 ;; (defn clear-store!
@@ -111,7 +108,6 @@
 
 ;; transit serialization
 
-
 (defn db->string [db]
   (dt/write-transit-str db))
 
@@ -159,8 +155,8 @@
   (swap! query-state assoc k {:query query
                               :inputs inputs
                               :result result-atom
-                              :query-fn query-fn
                               :transform-fn transform-fn
+                              :query-fn query-fn
                               :inputs-fn inputs-fn})
   result-atom)
 
@@ -305,10 +301,9 @@
 
     :else
     (case key
-      (list :block/change :block/insert)
-      (when (seq data)
-        (let [blocks data
-              pre-block? (:block/pre-block? (first blocks))
+      (:block/change :block/insert)
+      (when-let [blocks (seq data)]
+        (let [pre-block? (:block/pre-block? (first blocks))
               current-priority (get-current-priority)
               current-marker (get-current-marker)
               current-page-id (:db/id (get-current-page))
@@ -480,7 +475,7 @@
   [blocks]
   (some->> blocks
            (group-by :block/page)
-           (sort-by (fn [[p blocks]] (:page/last-modified-at p)) >)))
+           (sort-by (fn [[p _blocks]] (:page/last-modified-at p)) >)))
 
 (defn- with-repo
   [repo blocks]
@@ -556,10 +551,6 @@
             result)
           (group-by-page result)))
       result)))
-
-;; (defn get-repo-tx-id [repo]
-;;   (when-let [db (get-conn repo)]
-;;     ))
 
 (defn get-tx-id [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))
@@ -806,7 +797,7 @@
 (defn get-files-blocks
   [repo-url paths]
   (let [paths (set paths)
-        pred (fn [db e]
+        pred (fn [_db e]
                (contains? paths e))]
     (-> (d/q '[:find ?block
                :in $ ?pred
@@ -1573,7 +1564,7 @@
         pages)))))
 
 (defn me-tx
-  [db {:keys [name email avatar repos]}]
+  [db {:keys [name email avatar]}]
   (util/remove-nils {:me/name name
                      :me/email email
                      :me/avatar avatar}))
@@ -2302,7 +2293,7 @@
       (let [f (async/<! chan)]
         (f))
       (recur))
-    (reset! async-chan chan)
+    (reset! async-chan chan) ; FIXME: Unused?
     chan))
 
 (defonce blocks-count-cache (atom nil))
