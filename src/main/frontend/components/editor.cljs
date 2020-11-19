@@ -90,9 +90,11 @@
               chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
                                (fn [chosen _click?]
                                  (state/set-editor-show-page-search! false)
-                                 (let [page-ref-text (page-handler/get-page-ref-text chosen)]
+                                 (let [chosen (if (re-find #"\s+" chosen)
+                                                (util/format "[[%s]]" chosen)
+                                                chosen)]
                                    (editor-handler/insert-command! id
-                                                                   (util/format "#%s" page-ref-text)
+                                                                   (str "#" chosen)
                                                                    format
                                                                    {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))})))
                                (fn [chosen _click?]
