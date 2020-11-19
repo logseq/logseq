@@ -190,6 +190,11 @@
   [repo]
   (:org-mode/insert-file-link? (get-config repo)))
 
+(defn get-journal-file-name-format
+  []
+  (when-let [repo (get-current-repo)]
+    (:journal/file-name-format (get-config repo))))
+
 (defn get-preferred-workflow
   []
   (keyword
