@@ -461,7 +461,7 @@
                (not= \* (last s)))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
 
-          (re-find #"^http[s]?://" s)
+          (re-find #"^(?i)http[s]?://" s)
           (->elem :a {:href s}
                   (map-inline config label))
 
