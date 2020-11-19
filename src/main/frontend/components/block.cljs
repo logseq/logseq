@@ -470,11 +470,6 @@
           (->elem :a {:href s}
                   (map-inline config label))
 
-          ;; TODO: what if it's not a link
-          (re-find #"\." s)
-          (->elem :a {:href (str "https://" s)}
-                  (map-inline config label))
-
           :else
           (page-reference html-export? s config label))
 
