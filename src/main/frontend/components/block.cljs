@@ -347,6 +347,31 @@
     (util/format "{{{%s %s}}}" name (string/join ", " arguments))
     (util/format "{{{%s}}}" name)))
 
+(defn block-reference
+  [config id]
+  (when-not (string/blank? id)
+    (let [block (and (util/uuid-string? id)
+                     (db/pull-block (uuid id)))]
+      (if block
+        [:span
+         [:span.text-gray-500 "(("]
+         [:a {:href (rfe/href :page {:name id})
+              :on-click (fn [e]
+                          (util/stop e)
+                          (when (gobj/get e "shiftKey")
+                            (state/sidebar-add-block!
+                             (state/get-current-repo)
+                             (:db/id block)
+                             :block-ref
+                             {:block block})))}
+
+          (->elem
+           :span.block-ref
+           (map-inline config (:block/title block)))]
+         [:span.text-gray-500 "))"]]
+        [:span.warning.mr-1 {:title "Block ref invalid"}
+         (util/format "((%s))" id)]))))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -410,28 +435,7 @@
 
     ["Block_reference" id]
     ;; FIXME: alert when self block reference
-    (when-not (string/blank? id)
-      (let [block (and (util/uuid-string? id)
-                       (db/pull-block (uuid id)))]
-        (if block
-          [:span
-           [:span.text-gray-500 "(("]
-           [:a {:href (rfe/href :page {:name id})
-                :on-click (fn [e]
-                            (util/stop e)
-                            (when (gobj/get e "shiftKey")
-                              (state/sidebar-add-block!
-                               (state/get-current-repo)
-                               (:db/id block)
-                               :block-ref
-                               {:block block})))}
-
-            (->elem
-             :span.block-ref
-             (map-inline config (:block/title block)))]
-           [:span.text-gray-500 "))"]]
-          [:span.warning.mr-1 {:title "Block ref invalid"}
-           (util/format "((%s))" id)])))
+    (block-reference config id)
 
     ["Nested_link" link]
     (let [{:keys [content children]} link]
@@ -482,6 +486,12 @@
                         (and (= "File" (first url))
                              "file"))]
           (cond
+            (and (= "Complex" (first url))
+                 (= protocol "id")
+                 (string? (:link (second url)))
+                 (util/uuid-string? (:link (second url)))) ; org mode id
+            (block-reference config (:link (second url)))
+
             (= protocol "file")
             (if (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
               (image-link config url href label)

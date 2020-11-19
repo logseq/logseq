@@ -82,6 +82,13 @@
                                      (string/ends-with? (first arguments) "))"))
                             (subs (first arguments) 2 (- (count (first arguments)) 2))))
 
+                        (and (vector? block)
+                             (= "Link" (first block))
+                             (map? (second block))
+                             (= "id" (:protocol (second (:url (second block))))))
+
+                        (:link (second (:url (second block))))
+
                         :else
                         nil)]
     (when (and block-id
