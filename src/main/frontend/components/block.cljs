@@ -425,6 +425,7 @@
                                (:db/id block)
                                :block-ref
                                {:block block})))}
+
             (->elem
              :span.block-ref
              (map-inline config (:block/title block)))]
@@ -466,7 +467,7 @@
                   (map-inline config label))
 
           ;; TODO: what if it's not a link
-          (re-find #"." s)
+          (re-find #"\." s)
           (->elem :a {:href (str "https://" s)}
                   (map-inline config label))
 
