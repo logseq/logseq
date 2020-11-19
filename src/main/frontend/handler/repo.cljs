@@ -362,8 +362,7 @@
                        (do
                          (git-handler/set-git-status! repo-url :push-failed)
                          (git-handler/set-git-error! repo-url error)
-                         (when
-                           (state/online?)
+                         (when (state/online?)
                            (pull repo-url {:force-pull? true}))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
@@ -395,14 +394,12 @@
           (db/start-db-conn! (:me @state/state) repo-url)
           (db/mark-repo-as-cloned repo-url))
         (fn [e]
-          (do
-            (println "Clone failed, error: ")
-            (js/console.error e)
-            (state/set-cloning! false)
-            (git-handler/set-git-status! repo-url :clone-failed)
-            (git-handler/set-git-error! repo-url e)
-
-            (show-install-error! repo-url (util/format "Failed to clone %s." repo-url))))))))
+          (println "Clone failed, error: ")
+          (js/console.error e)
+          (state/set-cloning! false)
+          (git-handler/set-git-status! repo-url :clone-failed)
+          (git-handler/set-git-error! repo-url e)
+          (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))
 
 (defn set-config-content!
   [repo path new-config]
