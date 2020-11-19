@@ -460,8 +460,14 @@
           (and (= \* (first s))
                (not= \* (last s)))
           (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
-          (re-find #"^https://" s)
+
+          (re-find #"^http[s]?://" s)
           (->elem :a {:href s}
+                  (map-inline config label))
+
+          ;; TODO: what if it's not a link
+          (re-find #"." s)
+          (->elem :a {:href (str "https://" s)}
                   (map-inline config label))
 
           :else
