@@ -132,7 +132,7 @@
      ;; ["Upload a file" nil]
 ]
     ;; Allow user to modify or extend, should specify how to extend.
-    (get-in @state/state [:config (state/get-current-repo) :commands]))
+    (state/get-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
@@ -194,7 +194,7 @@
      ["Comment" (->block "comment")]]
 
     ;; Allow user to modify or extend, should specify how to extend.
-    (get-in @state/state [:config (state/get-current-repo) :block-commands]))
+    (state/get-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 

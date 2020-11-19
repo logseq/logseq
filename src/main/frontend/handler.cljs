@@ -49,6 +49,7 @@
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
                               (state/set-db-restoring! false))
+                            (page-handler/init-commands!)
                             (if (seq (:repos me))
                               ;; FIXME: handle error
                               (repo-handler/request-app-tokens!
@@ -130,8 +131,6 @@
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
-
-    (page-handler/init-commands!)
 
     (restore-and-setup! me repos logged?)
 

@@ -1361,10 +1361,6 @@
                              :or {restore? true}
                              :as option}]
   (cond
-    (fn? command-output)
-    (let [s (command-output)]
-      (commands/insert! id s option))
-
     ;; replace string
     (string? command-output)
     (commands/insert! id command-output option)
@@ -1372,6 +1368,10 @@
     ;; steps
     (vector? command-output)
     (commands/handle-steps command-output format)
+
+    (fn? command-output)
+    (let [s (command-output)]
+      (commands/insert! id s option))
 
     :else
     nil)

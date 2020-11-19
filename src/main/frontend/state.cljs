@@ -863,6 +863,10 @@
   []
   (:network/online? @state))
 
+(defn get-commands
+  []
+  (:commands (get-config)))
+
 (defonce editor-op (atom nil))
 (defn set-editor-op!
   [value]
