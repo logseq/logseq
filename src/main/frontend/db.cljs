@@ -685,7 +685,7 @@
          :where
          [?page :page/tags ?e]
          [?e :tag/name ?tag]
-         [?tag-page :page/name ?tag]
+         [_ :page/name ?tag]
          [?page :page/name ?page-name]]
        (get-conn repo)))
 
@@ -736,7 +736,6 @@
           '[:find ?page-name ?modified-at
             :where
             [?page :page/original-name ?page-name]
-            [(get-else $ ?page :page/journal? false) ?journal]
             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
           (get-conn repo))
          (seq)
@@ -1655,8 +1654,8 @@
                 [?ref-page :page/name ?ref-page-name]]
               '[:find ?page ?ref-page-name
                 :where
-                [?p :page/name ?page]
                 [?p :page/journal? false]
+                [?p :page/name ?page]
                 [?block :block/page ?p]
                 [?block :block/ref-pages ?ref-page]
                 [?ref-page :page/name ?ref-page-name]])]
@@ -2185,8 +2184,8 @@
   (d/q
    '[:find ?content
      :where
-     [?h :block/content ?content]
-     [?h :block/collapsed? true]]
+     [?h :block/collapsed? true]
+     [?h :block/content ?content]]
    (get-conn)))
 
 (defn get-block-parent
