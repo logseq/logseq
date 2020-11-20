@@ -83,7 +83,7 @@
     --ls-page-inline-code-color: var(--ls-primary-text-color);
     --ls-page-inline-code-bg-color: #eeeeee;
 
-    --ls-scrollbar-forground-color: var(--ls-primary-text-color) 
+    --ls-scrollbar-forground-color: var(--ls-primary-text-color);
     --ls-scrollbar-background-color: var(--ls-primary-background-color);
     --ls-scrollbar-thumb-hover-color: var(--ls-secondary-text-color);
 
