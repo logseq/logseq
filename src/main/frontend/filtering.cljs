@@ -14,7 +14,7 @@
 (defn get-nested-block-references
   [block]
   (let [repo (state/get-current-repo)
-        children (-> (db/get-block-children-unsafe repo (:block/uuid block))
+        children (-> (db/get-block-immediate-children repo (:block/uuid block))
                      db/sort-by-pos)
         child-refs (map get-nested-block-references children)
         block-refs (get-block-references block)]
@@ -27,7 +27,7 @@
 (defn block-matches-filter
   [block filter-state]
   (let [repo (state/get-current-repo)
-        children (-> (db/get-block-children-unsafe repo (:block/uuid block))
+        children (-> (db/get-block-immediate-children repo (:block/uuid block))
                      db/sort-by-pos)
         block-matches (matches-filter (get-block-references block) filter-state)
         child-matches (delay (some #(block-matches-filter % filter-state) children))]
