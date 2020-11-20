@@ -1933,7 +1933,7 @@
              (ui/foldable
               (page-cp config page)
               (blocks-container blocks config))])))]
-     (blocks-container blocks config))]))
+     (blocks-container blocks config))])
 
 (comment
   ;; timestamps
