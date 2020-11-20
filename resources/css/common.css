@@ -11,6 +11,7 @@
     --ls-secondary-background-color: #073642;
     --ls-tertiary-background-color: #0f4552;
     --ls-quaternary-background-color: #01313d;
+    --ls-quinary-background-color: #002b36
 
     --ls-block-properties-background-color: #02222a;
     --ls-search-background-color: var(--ls-primary-background-color);
@@ -266,6 +267,10 @@ textarea {
   cursor: pointer;
 }
 
+#left-bar {
+  background: var(--ls-quinary-background-color);
+}
+
 #left-bar a {
   color: var(--ls-icon-color);
 }
@@ -480,7 +485,7 @@ svg {
 }
 
 a.nav-item:hover, a.star-page:hover {
-  background-color: #00242d;
+  background-color: var(--ls-menu-hover-color);
 }
 
 .blocks__properties {
