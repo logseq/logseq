@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.ui :as ui]
+            [frontend.fs :as fs]
             [frontend.config :as config]))
 
 (defn ls-dir-files
@@ -20,7 +21,9 @@
            root-handle (nth result 0)
            dir-name (gobj/get root-handle "name")
            repo (str config/local-db-prefix dir-name)
-           _ (idb/set-item! (str "handle-" repo) root-handle)
+           root-handle-path (str "handle-" repo)
+           _ (idb/set-item! root-handle-path root-handle)
+           _ (fs/add-nfs-file-handle! root-handle-path root-handle)
            result (nth result 1)
            result (flatten (bean/->clj result))
            files (doall
@@ -35,8 +38,10 @@
                             :file/handle handle})) result))
            text-files (filter (fn [file] (contains? #{"org" "md" "markdown"} (util/get-file-ext (:file/path file)))) files)]
      (doseq [file text-files]
-       (idb/set-item! (str "handle-" repo "/" (:file/path file))
-                      (:file/handle file)))
+       (let [handle-path (str "handle-" repo "/" (:file/path file))
+             handle (:file/handle file)]
+         (idb/set-item! handle-path handle)
+         (fs/add-nfs-file-handle! handle-path handle)))
      (-> (p/all (map (fn [file]
                        (p/let [content (.text (:file/file file))]
                          (assoc file :file/content content))) text-files))
