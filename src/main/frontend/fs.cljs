@@ -73,6 +73,14 @@
   ([dir path option]
    (js/window.pfs.readFile (str dir "/" path) option)))
 
+(defonce nfs-file-handles-cache (atom {}))
+(defn get-nfs-file-handle
+  [handle-path]
+  (get @nfs-file-handles-cache handle-path))
+(defn add-nfs-file-handle!
+  [handle-path handle]
+  (swap! nfs-file-handles-cache assoc handle-path handle))
+
 (defn write-file
   [dir path content]
   (cond
@@ -86,8 +94,11 @@
                            (subs dir 1)
                            (if sub-dir
                              (str "/" sub-dir)))
-          basename-handle-path (str handle-path "/" basename)]
-      (p/let [file-handle (idb/get-item basename-handle-path)]
+          basename-handle-path (str handle-path "/" basename)
+          file-handle-cache (get-nfs-file-handle basename-handle-path)]
+      (p/let [file-handle (or file-handle-cache (idb/get-item basename-handle-path))]
+        (when-not file-handle-cache
+          (add-nfs-file-handle! basename-handle-path file-handle))
         (if file-handle
           (utils/writeFile file-handle content)
           ;; create file handle
