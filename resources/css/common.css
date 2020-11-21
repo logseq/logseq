@@ -1028,12 +1028,12 @@ button.context-menu-option {
 
 ::selection {
   background: var(--ls-block-highlight-color);
-  color: var(--ls-primary-text-color)
+  color: var(--ls-primary-text-color);
 }
 
 ::-moz-selection {
   background: var(--ls-block-highlight-color);
-  color: var(--ls-primary-text-color)
+  color: var(--ls-primary-text-color);
 }
 
 .dropdown-overflow-auto {
