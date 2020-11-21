@@ -15,6 +15,7 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.web.nfs :as nfs]
             [frontend.ui :as ui]
             [goog.object :as gobj]
             [frontend.helper :as helper]
@@ -177,6 +178,7 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
+    (nfs/trigger-check!)
     (restore-and-setup! me repos logged?)
 
     (periodically-persist-repo-to-indexeddb!)

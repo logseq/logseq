@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [get set remove])
   (:require [cljs.reader :as reader]))
 
-;; TODO: deprecate this, will persistent datascript
 (defn get
   [key]
   (reader/read-string ^js (.getItem js/localStorage (name key))))

@@ -4,13 +4,16 @@
 
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
-   :file/content {}})
+   :file/content {}
+   :file/last-modified-at {}
+   :file/handle {}})
 
 ;; A page can corresponds to multiple files (same title),
 ;; a month journal file can have multiple pages,
 ;; also, each block can be treated as a page too.
 (def schema
-  {:schema/version {}
+  {:schema/version  {}
+   :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
 
    ;; user

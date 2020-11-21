@@ -271,3 +271,13 @@
 (def markers
   #{"now" "later" "todo" "doing" "done" "wait" "waiting"
     "canceled" "cancelled" "started" "in-progress"})
+
+(defonce local-db-prefix "logseq-local-")
+
+(defn local-db?
+  [s]
+  (string/starts-with? s local-db-prefix))
+
+(defn get-local-dir
+  [s]
+  (string/replace s local-db-prefix ""))
