@@ -14,7 +14,8 @@
             [frontend.components.svg :as svg]
             [frontend.components.repo :as repo]
             [frontend.components.page :as page]
-            [frontend.components.search :as search]))
+            [frontend.components.search :as search]
+            [frontend.handler.web.nfs :as nfs]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white?]}]
@@ -123,6 +124,11 @@
 
      (new-block-mode)
 
+     [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100.mr-4
+      {:on-click (fn []
+                   (nfs/ls-dir-files))}
+      "Open a database"]
+
      (when (and (not logged?)
                 (not config/publishing?))
        [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100
@@ -161,5 +167,3 @@
      [:a#download-as-html.hidden]
 
      (right-menu-button)]))
-
-

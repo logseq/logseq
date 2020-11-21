@@ -14,7 +14,6 @@
             [cljs-bean.core :as bean]
             [frontend.config :as config]
             [goog.object :as gobj]
-            ["localforage" :as localforage]
             [promesa.core :as p]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
@@ -24,31 +23,14 @@
             [frontend.extensions.sci :as sci]
             [goog.array :as garray]
             [frontend.db-schema :as db-schema]
-            [clojure.core.async :as async]))
-
-;; offline db
-(def store-name "dbs")
-(.config localforage
-         (bean/->js
-          {:name "logseq-datascript"
-           :version 1.0
-           :storeName store-name}))
-
-(defonce localforage-instance (.createInstance localforage store-name))
+            [clojure.core.async :as async]
+            [frontend.idb :as idb]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
 
 (defonce async-chan (atom nil))
-
-;; (defn clear-store!
-;;   []
-;;   (p/let [_ (.clear localforage)
-;;           dbs (js/window.indexedDB.databases)]
-;;     (doseq [db dbs]
-;;       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
-
 
 (defn get-repo-path
   [url]
@@ -69,11 +51,11 @@
 
 (defn remove-db!
   [repo]
-  (.removeItem localforage-instance (datascript-db repo)))
+  (idb/remove-item! (datascript-db repo)))
 
 (defn remove-files-db!
   [repo]
-  (.removeItem localforage-instance (datascript-files-db repo)))
+  (idb/remove-item! (datascript-files-db repo)))
 
 (def react util/react)
 
@@ -126,11 +108,10 @@
 
 ;; persisting DB between page reloads
 (defn persist [repo db files-db?]
-  (.setItem localforage-instance
-            (if files-db?
+  (let [key (if files-db?
               (datascript-files-db repo)
-              (datascript-db repo))
-            (db->string db)))
+              (datascript-db repo))]
+    (idb/set-item! key (db->string db))))
 
 (defn reset-conn! [conn db]
   (reset! conn db))
@@ -958,6 +939,8 @@
                     contents))
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils))]
+    (prn {:repo-url repo-url
+          :all-data all-data})
     (transact! repo-url all-data)))
 
 (defn get-block-by-uuid
@@ -1857,16 +1840,20 @@
       config)))
 
 (defn start-db-conn!
-  [me repo]
-  (let [files-db-name (datascript-files-db repo)
-        files-db-conn (d/create-conn db-schema/files-db-schema)
-        db-name (datascript-db repo)
-        db-conn (d/create-conn db-schema/schema)]
-    (swap! conns assoc files-db-name files-db-conn)
-    (swap! conns assoc db-name db-conn)
-    (d/transact! db-conn [{:schema/version db-schema/version}])
-    (when me
-      (d/transact! db-conn [(me-tx (d/db db-conn) me)]))))
+  ([me repo]
+   (start-db-conn! me repo {}))
+  ([me repo {:keys [db-type]}]
+   (let [files-db-name (datascript-files-db repo)
+         files-db-conn (d/create-conn db-schema/files-db-schema)
+         db-name (datascript-db repo)
+         db-conn (d/create-conn db-schema/schema)]
+     (swap! conns assoc files-db-name files-db-conn)
+     (swap! conns assoc db-name db-conn)
+     (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
+                             db-type
+                             (assoc :db/type db-type))])
+     (when me
+       (d/transact! db-conn [(me-tx (d/db db-conn) me)])))))
 
 (defn restore!
   [{:keys [repos] :as me} restore-config-handler db-schema-changed-handler]
@@ -1878,7 +1865,7 @@
              db-conn (d/create-conn db-schema/files-db-schema)]
          (swap! conns assoc db-name db-conn)
          (->
-          (p/let [stored (-> (.getItem localforage-instance db-name)
+          (p/let [stored (-> (idb/get-item db-name)
                              (p/then (fn [result]
                                        result))
                              (p/catch (fn [error]
@@ -1891,7 +1878,7 @@
                   db-conn (d/create-conn db-schema/schema)
                   _ (d/transact! db-conn [{:schema/version db-schema/version}])
                   _ (swap! conns assoc db-name db-conn)
-                  stored (.getItem localforage-instance db-name)
+                  stored (idb/get-item db-name)
                   _ (if stored
                       (let [stored-db (string->db stored)
                             attached-db (d/db-with stored-db [(me-tx stored-db me)])]
@@ -2433,6 +2420,14 @@
                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))
             datoms (d/datoms filtered-db :eavt)]
         @(d/conn-from-datoms datoms db-schema/schema)))))
+
+(defn get-db-type
+  [repo]
+  (get-key-value repo :db/type))
+
+(defn local-native-fs?
+  [repo]
+  (= :local-native-fs (get-db-type repo)))
 
 ;; shortcut for query a block with string ref
 (defn qb

@@ -2,6 +2,7 @@
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.idb :as idb]
             [frontend.config :as config]
             [frontend.storage :as storage]
             [promesa.core :as p]
@@ -58,19 +59,12 @@
                    (notification/show! "Workflow set successfully!" :success))
                  (fn [_e])))))
 
-(defn- clear-store!
-  []
-  (p/let [_ (.clear db/localforage-instance)
-          dbs (js/window.indexedDB.databases)]
-    (doseq [db dbs]
-      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
-
 (defn sign-out!
   [e]
   (->
    (do
      (storage/clear)
-     (clear-store!))
+     (idb/clear-store!))
    (p/catch (fn [e]
               (println "sign out error: ")
               (js/console.dir e)))

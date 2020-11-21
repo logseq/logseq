@@ -183,8 +183,10 @@
 
 (defn get-pages-directory
   []
-  (when-let [repo (get-current-repo)]
-    (:pages-directory (get-config repo))))
+  (or
+   (when-let [repo (get-current-repo)]
+     (:pages-directory (get-config repo)))
+   "pages"))
 
 (defn org-mode-file-link?
   [repo]

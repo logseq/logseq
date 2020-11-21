@@ -95,32 +95,22 @@
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
-                              (db/get-file repo-url path))
-                content (or
-                         (and old-content
-                              (string/replace old-content "heading" "block"))
-                         default-content)]
-            (db/reset-file! repo-url path content)
-            (db/reset-config! repo-url content)
-            (when-not (= content old-content)
-              (git-handler/git-add repo-url path))))
-        ;; (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
-        ;;   (let [path (str app-dir "/" config/metadata-file)]
-        ;;     (when-not file-exists?
-        ;;       (db/reset-file! repo-url path "{:tx-data []}")
-        ;;       (git-handler/git-add repo-url path))))
-))))
+                              (db/get-file repo-url path))]
+            (db/reset-file! repo-url path default-content)
+            (db/reset-config! repo-url default-content)
+            (when (not= default-content old-content)
+              (git-handler/git-add repo-url path))))))))
 
 (defn create-contents-file
   [repo-url]
   (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)
-        path (str "pages/contents." (if (= (name format) "markdown")
-                                      "md"
-                                      (name format)))
+        path (str (state/get-pages-directory)
+                  "/contents."
+                  (if (= (name format) "markdown") "md" (name format)))
         file-path (str "/" path)
         default-content (util/default-content-with-title format "contents")]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/pages"))
+    (p/let [_ (-> (fs/mkdir (str repo-dir "/" (state/get-pages-directory)))
                   (p/catch (fn [_e])))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
@@ -189,48 +179,58 @@
 
 (defn create-default-files!
   [repo-url]
-  (when-let [name (get-in @state/state [:me :name])]
-    (create-config-file-if-not-exists repo-url)
-    (create-today-journal-if-not-exists repo-url)
-    (create-contents-file repo-url)
-    (create-custom-theme repo-url)))
+  (create-config-file-if-not-exists repo-url)
+  (create-today-journal-if-not-exists repo-url)
+  (create-contents-file repo-url)
+  (create-custom-theme repo-url))
+
+(defn- parse-files-and-load-to-db!
+  [repo-url files contents {:keys [first-clone? delete-files delete-blocks re-render? additional-files-info]}]
+  (state/set-state! :repo/loading-files? false)
+  (state/set-state! :repo/importing-to-db? true)
+  (let [parsed-files (filter
+                      (fn [[file _]]
+                        (let [format (format/get-format file)]
+                          (contains? config/mldoc-support-formats format)))
+                      contents)
+        blocks-pages (if (seq parsed-files)
+                       (db/extract-all-blocks-pages repo-url parsed-files)
+                       [])]
+    (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
+    (let [config-file (str config/app-name "/" config/config-file)]
+      (if (contains? (set files) config-file)
+        (when-let [content (get contents config-file)]
+          (file-handler/restore-config! repo-url content true))))
+    (when first-clone? (create-default-files! repo-url))
+    (state/set-state! :repo/importing-to-db? false)
+    (when re-render?
+      (ui-handler/re-render-root!))))
 
 (defn load-repo-to-db!
-  [repo-url diffs first-clone?]
-  (let [load-contents (fn [files delete-files delete-blocks re-render?]
+  [repo-url {:keys [first-clone? diffs nfs-files nfs-contents additional-files-info]}]
+  (let [load-contents (fn [files option]
                         (file-handler/load-files-contents!
                          repo-url
                          files
-                         (fn [contents]
-                           (state/set-state! :repo/loading-files? false)
-                           (state/set-state! :repo/importing-to-db? true)
-                           (let [parsed-files (filter
-                                               (fn [[file _]]
-                                                 (let [format (format/get-format file)]
-                                                   (contains? config/mldoc-support-formats format)))
-                                               contents)
-                                 blocks-pages (if (seq parsed-files)
-                                                (db/extract-all-blocks-pages repo-url parsed-files)
-                                                [])]
-                             (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
-                             (let [config-file (str config/app-name "/" config/config-file)]
-                               (if (contains? (set files) config-file)
-                                 (when-let [content (get contents config-file)]
-                                   (file-handler/restore-config! repo-url content true))))
-                             (when first-clone? (create-default-files! repo-url))
-                             (state/set-state! :repo/importing-to-db? false)
-                             (when re-render?
-                               (ui-handler/re-render-root!))))))]
-    (if first-clone?
+                         (fn [contents] (parse-files-and-load-to-db! repo-url files contents option))))]
+    (cond
+      (seq nfs-files)
+      (parse-files-and-load-to-db! repo-url nfs-files nfs-contents
+                                   {:first-clone? true
+                                    :additional-files-info additional-files-info})
+
+      first-clone?
       (->
        (p/let [files (file-handler/load-files repo-url)]
-         (load-contents files nil nil false))
+         (load-contents files {:first-clone? first-clone?}))
        (p/catch (fn [error]
                   (println "loading files failed: ")
                   (js/console.dir error)
                   ;; Empty repo
                   (create-default-files! repo-url)
                   (state/set-state! :repo/loading-files? false))))
+
+      :else
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
@@ -244,7 +244,11 @@
                              (db/delete-pages-by-files remove-files)
                              [])
               add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files (concat delete-files delete-pages) delete-blocks true))))))
+          (load-contents add-or-modify-files
+                         {:first-clone? first-clone?
+                          :delete-files (concat delete-files delete-pages)
+                          :delete-blocks delete-blocks
+                          :re-render? true}))))))
 
 (defn persist-repo!
   [repo]
@@ -256,7 +260,8 @@
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
   (when (or diffs first-clone?)
-    (load-repo-to-db! repo-url diffs first-clone?)))
+    (load-repo-to-db! repo-url {:first-clone? first-clone?
+                                :diffs diffs})))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]
@@ -519,6 +524,11 @@
                  (state/delete-repo! repo))
                (fn [error]
                  (prn "Delete repo failed, error: " error))))
+
+(defn start-repo-db-if-not-exists!
+  [repo option]
+  (state/set-current-repo! repo)
+  (db/start-db-conn! nil repo option))
 
 (defn setup-local-repo-if-not-exists!
   []
