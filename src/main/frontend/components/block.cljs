@@ -1622,7 +1622,7 @@
           (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} language) "text/x-clojure" language)]
             [:div
              (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
-             (when (and (= language "clojure") (contains? (set options) ":results"))
+             (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
                (sci/eval-result code))])))
       ["Quote" l]
       (->elem
