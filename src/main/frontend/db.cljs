@@ -36,9 +36,6 @@
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
 
-; FIXME: Unused?
-(defonce async-chan (atom nil))
-
 ;; (defn clear-store!
 ;;   []
 ;;   (p/let [_ (.clear localforage)
@@ -2291,7 +2288,6 @@
       (let [f (async/<! chan)]
         (f))
       (recur))
-    (reset! async-chan chan) ; FIXME: Unused?
     chan))
 
 (defonce blocks-count-cache (atom nil))
