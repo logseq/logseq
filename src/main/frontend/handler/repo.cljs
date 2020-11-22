@@ -21,8 +21,7 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            ;; [clojure.set :as set]
-))
+            [frontend.helper :as helper]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -42,42 +41,6 @@
       :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
    :error
    false))
-
-(defn get-new-token
-  [repo]
-  (when-let [installation-id (-> (filter
-                                  (fn [r]
-                                    (= (:url r) repo))
-                                  (:repos (state/get-me)))
-                                 (first)
-                                 :installation_id)]
-    (util/post (str config/api "refresh_github_token")
-               {:installation-ids [installation-id]}
-               (fn [result]
-                 (let [token (:token (first result))]
-                   (state/set-github-token! repo token)))
-               (fn [error]
-                 (println "Something wrong!")
-                 (js/console.dir error)))))
-
-(defn request-app-tokens!
-  [ok-handler error-handler]
-  (let [repos (:repos (state/get-me))
-        installation-ids (->> (map :installation_id repos)
-                              (remove nil?)
-                              (distinct))]
-    (when (or (seq repos)
-              (seq installation-ids))
-      (util/post (str config/api "refresh_github_token")
-                 {:installation-ids installation-ids
-                  :repos repos}
-                 (fn [result]
-                   (state/set-github-installation-tokens! result)
-                   (when ok-handler (ok-handler)))
-                 (fn [error]
-                   (println "Something wrong!")
-                   (js/console.dir error)
-                   (when error-handler (error-handler)))))))
 
 (defn journal-file-changed?
   [repo-url diffs]
@@ -293,13 +256,10 @@
 (declare push)
 
 (defn pull
-  [repo-url token {:keys [fallback? force-pull?]
-                   :or {fallback? false
-                        force-pull? false}}]
+  [repo-url {:keys [force-pull?] :or {force-pull? false}}]
   (when (and
          (db/get-conn repo-url true)
-         (db/cloned? repo-url)
-         token)
+         (db/cloned? repo-url))
     (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
             local-latest-commit (common-handler/get-ref repo-url)
             descendent? (git/descendent? repo-url local-latest-commit remote-latest-commit)]
@@ -318,7 +278,8 @@
                       (not (state/in-draw-mode?))))
                 (git-handler/set-git-status! repo-url :pulling)
                 (->
-                 (p/let [result (git/fetch repo-url token)]
+                 (p/let [token (helper/get-github-token repo-url)
+                         result (git/fetch repo-url token)]
                    (let [{:keys [fetchHead]} (bean/->clj result)]
                      (-> (git/merge repo-url)
                          (p/then (fn [result]
@@ -358,28 +319,13 @@
                  (p/catch (fn [error]
                             (println "Pull error:" (str error))
                             (js/console.error error)
-                            ;; token might be expired, request new token
-
-                            (cond
-                              (and (or (string/includes? (str error) "401")
-                                       (string/includes? (str error) "404"))
-                                   (not fallback?))
-                              (request-app-tokens!
-                               (fn []
-                                 (pull repo-url (state/get-github-token repo-url) {:fallback? true}))
-                               nil)
-
-                              (or (string/includes? (str error) "401")
-                                  (string/includes? (str error) "404"))
-                              (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
-
-                              :else
-                              nil))))))))))))
+                            (when (or (string/includes? (str error) "401")
+                                      (string/includes? (str error) "404"))
+                              (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))))))))))))))
 
 (defn push
-  [repo-url {:keys [commit-message fallback? diff-push? commit-push? force?]
+  [repo-url {:keys [commit-message diff-push? commit-push? force?]
              :or {commit-message "Logseq auto save"
-                  fallback? false
                   diff-push? false
                   commit-push? false
                   force? false}}]
@@ -394,15 +340,15 @@
             (when (or
                    commit-push?
                    (seq files)
-                   fallback?
                    diff-push?)
               ;; auto commit if there are any un-committed changes
               (let [commit-message (if (string/blank? commit-message)
                                      "Logseq auto save"
                                      commit-message)]
-                (p/let [commit-oid (git/commit repo-url commit-message)]
+                (p/let [commit-oid (git/commit repo-url commit-message)
+                        token (helper/get-github-token repo-url)]
                   (git-handler/set-git-status! repo-url :pushing)
-                  (when-let [token (state/get-github-token repo-url)]
+                  (when token
                     (util/p-handle
                      (git/push repo-url token force?)
                      (fn [result]
@@ -413,31 +359,11 @@
                        (println "Git push error: ")
                        (js/console.error error)
                        (common-handler/check-changed-files-status repo-url)
-                       (let [permission? (or (string/includes? (str error) "401")
-                                             (string/includes? (str error) "404"))]
-                         (cond
-                           (and permission? (not fallback?))
-                           (request-app-tokens!
-                            (fn []
-                              (git-handler/set-git-status! repo-url :re-push)
-                              (push repo-url
-                                    {:commit-message commit-message
-                                     :fallback? true}))
-                            nil)
-
-                           :else
-                           (do
-                             (git-handler/set-git-status! repo-url :push-failed)
-                             (git-handler/set-git-error! repo-url error)
-                             (cond
-                               permission?
-                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-
-                               (state/online?)
-                               (pull repo-url token {:force-pull? true})
-
-                               :else    ; offline
-                               nil)))))))))))
+                       (do
+                         (git-handler/set-git-status! repo-url :push-failed)
+                         (git-handler/set-git-error! repo-url error)
+                         (when (state/online?)
+                           (pull repo-url {:force-pull? true}))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
                      (git-handler/set-git-status! repo-url :push-failed)
@@ -452,39 +378,28 @@
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [token (state/get-github-token repo)]
-      (pull repo token {:force-pull? true}))))
+    (pull repo {:force-pull? true})))
 
 (defn clone
-  ([repo-url]
-   (clone repo-url false))
-  ([repo-url fallback?]
-   (when-let [token (state/get-github-token repo-url)]
-     (util/p-handle
-      (do
-        (state/set-cloning! true)
-        (git/clone repo-url token))
-      (fn [result]
-        (state/set-git-clone-repo! "")
-        (state/set-current-repo! repo-url)
-        (db/start-db-conn! (:me @state/state) repo-url)
-        (db/mark-repo-as-cloned repo-url))
-      (fn [e]
-        (if (and (not fallback?)
-                 (or (string/includes? (str e) "401")
-                     (string/includes? (str e) "404")))
-          (request-app-tokens!
-           (fn []
-             (clone repo-url true))
-           nil)
-          (do
-            (println "Clone failed, error: ")
-            (js/console.error e)
-            (state/set-cloning! false)
-            (git-handler/set-git-status! repo-url :clone-failed)
-            (git-handler/set-git-error! repo-url e)
-
-            (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))))
+  [repo-url]
+  (p/let [token (helper/get-github-token repo-url)]
+    (when token
+      (util/p-handle
+        (do
+          (state/set-cloning! true)
+          (git/clone repo-url token))
+        (fn [result]
+          (state/set-git-clone-repo! "")
+          (state/set-current-repo! repo-url)
+          (db/start-db-conn! (:me @state/state) repo-url)
+          (db/mark-repo-as-cloned repo-url))
+        (fn [e]
+          (println "Clone failed, error: ")
+          (js/console.error e)
+          (state/set-cloning! false)
+          (git-handler/set-git-status! repo-url :clone-failed)
+          (git-handler/set-git-error! repo-url e)
+          (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))
 
 (defn set-config-content!
   [repo path new-config]
@@ -543,18 +458,18 @@
 
 (defn periodically-pull
   [repo-url pull-now?]
-  (when-let [token (state/get-github-token repo-url)]
-    (when pull-now? (pull repo-url token nil))
-    (js/setInterval #(pull repo-url token nil)
-                    (* (config/git-pull-secs) 1000))))
+  (p/let [token (helper/get-github-token repo-url)]
+    (when token
+      (when pull-now? (pull repo-url nil))
+      (js/setInterval #(pull repo-url nil)
+        (* (config/git-pull-secs) 1000)))))
 
 (defn periodically-push-tasks
   [repo-url]
-  (let [token (state/get-github-token repo-url)
-        push (fn []
+  (let [push (fn []
                (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-                          ;; (not config/dev?)
-)
+                       ;; (not config/dev?)
+                       )
                  (push repo-url nil)))]
     (js/setInterval push
                     (* (config/git-push-secs) 1000))))
@@ -626,5 +541,4 @@
   [commit-message]
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
-                :fallback? false
                 :commit-push? true})))

@@ -13,7 +13,8 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.helper :as helper]))
 
 (defn- watch-for-date!
   []
@@ -52,7 +53,7 @@
                             (page-handler/init-commands!)
                             (if (seq (:repos me))
                               ;; FIXME: handle error
-                              (repo-handler/request-app-tokens!
+                              (helper/request-app-tokens!
                                (fn []
                                  (repo-handler/clone-and-pull-repos me))
                                (fn []

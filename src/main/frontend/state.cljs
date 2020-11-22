@@ -500,36 +500,36 @@
   (storage/set :git/clone-repo repo))
 
 (defn set-github-token!
-  [repo token]
-  (when token
-    (swap! state update-in [:me :repos]
-           (fn [repos]
-             (map (fn [r]
-                    (if (= repo (:url r))
-                      (assoc r :token token)
-                      repo)) repos)))))
+  [repo token-result]
+  (when token-result
+    (let [{:keys [token expires_at]} token-result]
+      (swap! state update-in [:me :repos]
+       (fn [repos]
+         (map (fn [r]
+                (if (= repo (:url r))
+                  (merge r {:token token :expires_at expires_at})
+                  repo)) repos))))))
 
 (defn set-github-installation-tokens!
   [tokens]
   (when (seq tokens)
-    (let [tokens (medley/map-keys name tokens)
+    (let [tokens  (medley/index-by :installation_id tokens)
           repos (get-repos)]
       (when (seq repos)
-        (let [repos (mapv (fn [{:keys [installation_id] :as r}]
-                            (if-let [token (get tokens installation_id)]
-                              (assoc r :token token)
-                              r)) repos)]
+        (let [set-token-f
+              (fn [{:keys [installation_id] :as repo}]
+                (let [{:keys [token expires_at] :as m} (get tokens installation_id)]
+                  (if (and token expires_at)
+                    (merge repo {:token token :expires_at expires_at})
+                    (do (js/console.log "Can't find token, expires_at key") m))))
+              repos (mapv set-token-f repos)]
           (swap! state assoc-in [:me :repos] repos))))))
 
 (defn get-github-token
-  ([]
-   (get-github-token (get-current-repo)))
-  ([repo]
-   (when repo
-     (let [repos (get-repos)]
-       (-> (filter #(= repo (:url %)) repos)
-           first
-           :token)))))
+  [repo]
+  (when repo
+    (let [repos (get-repos)]
+      (some #(when (= repo (:url %)) %) repos))))
 
 (defn toggle-sidebar-open?!
   []

@@ -13,6 +13,7 @@
             [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.git :as git]
+            [frontend.helper :as helper]
             [goog.object :as gobj]
             [promesa.core :as p]
             [frontend.github :as github]
@@ -135,20 +136,22 @@
        [:div "loading..."])]))
 
 ;; TODO: `n` shortcut for next diff, `p` for previous diff
-(rum/defcc diff < rum/reactive
+(rum/defcc diff <
+  rum/reactive
   {:will-mount
    (fn [state]
      (when-let [repo (state/get-current-repo)]
        (p/let [remote-latest-commit (common-handler/get-remote-ref repo)
                local-latest-commit (common-handler/get-ref repo)
-               result (git/get-local-diffs repo local-latest-commit remote-latest-commit)]
+               result (git/get-local-diffs repo local-latest-commit remote-latest-commit)
+               token (helper/get-github-token repo)]
          (reset! diffs result)
          (reset! remote-hash-id remote-latest-commit)
          (doseq [{:keys [type path]} result]
            (when (contains? #{"added" "modify"}
                             type)
              (github/get-content
-              (state/get-github-token repo)
+              token
               repo
               path
               remote-latest-commit
@@ -166,8 +169,7 @@
                       "Install Logseq on GitHub"
                       :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
                    :error
-                   false))))))))
-     state)
+                   false)))))))))
    :will-unmount
    (fn [state]
      (reset! diffs nil)
@@ -199,7 +201,7 @@
          (ui/textarea
           {:placeholder "Commit message (optional)"
            :on-change (fn [e]
-                        (reset! commit-message (util/evalue e)))})
+                       (reset! commit-message (util/evalue e)))})
          (if pushing?
            [:span (ui/loading "Pushing")]
            (ui/button "Commit and push"
