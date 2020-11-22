@@ -148,6 +148,7 @@ textarea {
     width: 100%;
     resize: none;
     outline: none;
+    font-weight: inherit;
 }
 
 ul {
