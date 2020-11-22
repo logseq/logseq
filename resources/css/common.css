@@ -39,7 +39,8 @@
     --ls-page-inline-code-color: var(--ls-primary-text-color);
     --ls-page-inline-code-bg-color: #01222a;
 
-    --ls-scrollbar-color: #001F27;
+    --ls-scrollbar-foreground-color: #001F27;
+    --ls-scrollbar-background-color: var(--ls-primary-background-color);
     --ls-scrollbar-thumb-hover-color: #b4b4b466;
 
     --ls-head-text-color: var(--ls-link-text-color);
@@ -81,6 +82,10 @@
     --ls-page-blockquote-border-color: #ccc;
     --ls-page-inline-code-color: var(--ls-primary-text-color);
     --ls-page-inline-code-bg-color: #eeeeee;
+
+    --ls-scrollbar-foreground-color: var(--ls-primary-text-color);
+    --ls-scrollbar-background-color: var(--ls-primary-background-color);
+    --ls-scrollbar-thumb-hover-color: var(--ls-secondary-text-color);
 
     --ls-head-text-color: var(--ls-link-text-color);
     --ls-icon-color: #6b7280;
@@ -724,7 +729,7 @@ dt {
 }
 
 :root {
-  scrollbar-color: #0079D3 #2E3645 !important;
+  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color) !important;
   scrollbar-width: thin !important;
 }
 
@@ -747,13 +752,13 @@ blockquote {
 }
 
 .dark-theme ::-webkit-scrollbar, .dark-theme ::-webkit-scrollbar-track-piece {
-  background-color: var(--ls-scrollbar-color);
+  background-color: var(--ls-scrollbar-background-color);
   border: 4px solid;
-  border-color: var(--ls-scrollbar-color);
+  border-color: var(--ls-scrollbar-background-color);
 }
 
 .dark-theme ::-webkit-scrollbar-thumb {
-  background-color: var(--ls-secondary-background-color);
+  background-color: var(--ls-scrollbar-foreground-color);
   background-clip: padding-box;
   min-height: 28px;
 }
