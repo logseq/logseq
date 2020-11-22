@@ -1,6 +1,5 @@
 (ns frontend.db
   (:require [datascript.core :as d]
-            [frontend.util :as util]
             [frontend.date :as date]
             [medley.core :as medley]
             [datascript.transit :as dt]
@@ -11,9 +10,7 @@
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
-            [cljs-bean.core :as bean]
             [frontend.config :as config]
-            [goog.object :as gobj]
             [promesa.core :as p]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
@@ -21,7 +18,6 @@
             [clojure.walk :as walk]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.extensions.sci :as sci]
-            [goog.array :as garray]
             [frontend.db-schema :as db-schema]
             [clojure.core.async :as async]
             [frontend.idb :as idb]))
@@ -29,8 +25,6 @@
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
-
-(defonce async-chan (atom nil))
 
 (defn get-repo-path
   [url]
@@ -93,7 +87,6 @@
 
 ;; transit serialization
 
-
 (defn db->string [db]
   (dt/write-transit-str db))
 
@@ -140,8 +133,8 @@
   (swap! query-state assoc k {:query query
                               :inputs inputs
                               :result result-atom
-                              :query-fn query-fn
                               :transform-fn transform-fn
+                              :query-fn query-fn
                               :inputs-fn inputs-fn})
   result-atom)
 
@@ -157,16 +150,16 @@
 
 (defn remove-query-component!
   [component]
-  (let [ks (->> (filter (fn [[_ components]]
-                          (contains? (set components) component))
-                        @query-components)
-                (map first))]
-    (doseq [k ks]
-      (swap! query-components update k (fn [components]
-                                         (remove #(= component %) components)))
-      (when (zero? (count (get @query-components k))) ; no subscribed components
-        (swap! query-components dissoc k)
-        (remove-q! k)))))
+  (reset!
+   query-components
+   (->> (for [[k components] @query-components
+              :let [new-components (remove #(= component %) components)]]
+          (if (empty? new-components) ; no subscribed components
+            (do (remove-q! k)
+                nil)
+            [k new-components]))
+        (keep identity)
+        (into {}))))
 
 (defn get-page-blocks-cache-atom
   [repo page-id]
@@ -286,10 +279,9 @@
 
     :else
     (case key
-      (list :block/change :block/insert)
-      (when (seq data)
-        (let [blocks data
-              pre-block? (:block/pre-block? (first blocks))
+      (:block/change :block/insert)
+      (when-let [blocks (seq data)]
+        (let [pre-block? (:block/pre-block? (first blocks))
               current-priority (get-current-priority)
               current-marker (get-current-marker)
               current-page-id (:db/id (get-current-page))
@@ -461,7 +453,7 @@
   [blocks]
   (some->> blocks
            (group-by :block/page)
-           (sort-by (fn [[p blocks]] (:page/last-modified-at p)) >)))
+           (sort-by (fn [[p _blocks]] (:page/last-modified-at p)) >)))
 
 (defn- with-repo
   [repo blocks]
@@ -537,10 +529,6 @@
             result)
           (group-by-page result)))
       result)))
-
-;; (defn get-repo-tx-id [repo]
-;;   (when-let [db (get-conn repo)]
-;;     ))
 
 (defn get-tx-id [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))
@@ -675,7 +663,7 @@
          :where
          [?page :page/tags ?e]
          [?e :tag/name ?tag]
-         [?tag-page :page/name ?tag]
+         [_ :page/name ?tag]
          [?page :page/name ?page-name]]
        (get-conn repo)))
 
@@ -692,7 +680,7 @@
         '[:find ?page-name
           :where
           [?page :page/original-name ?page-name]]
-        (get-conn))
+        (get-conn repo))
        (map first)))
 
 (defn get-sync-metadata
@@ -726,7 +714,6 @@
           '[:find ?page-name ?modified-at
             :where
             [?page :page/original-name ?page-name]
-            [(get-else $ ?page :page/journal? false) ?journal]
             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
           (get-conn repo))
          (seq)
@@ -787,7 +774,7 @@
 (defn get-files-blocks
   [repo-url paths]
   (let [paths (set paths)
-        pred (fn [db e]
+        pred (fn [_db e]
                (contains? paths e))]
     (-> (d/q '[:find ?block
                :in $ ?pred
@@ -1556,7 +1543,7 @@
         pages)))))
 
 (defn me-tx
-  [db {:keys [name email avatar repos]}]
+  [db {:keys [name email avatar]}]
   (util/remove-nils {:me/name name
                      :me/email email
                      :me/avatar avatar}))
@@ -1647,8 +1634,8 @@
                 [?ref-page :page/name ?ref-page-name]]
               '[:find ?page ?ref-page-name
                 :where
-                [?p :page/name ?page]
                 [?p :page/journal? false]
+                [?p :page/name ?page]
                 [?block :block/page ?p]
                 [?block :block/ref-pages ?ref-page]
                 [?ref-page :page/name ?ref-page-name]])]
@@ -1906,19 +1893,18 @@
 (defn- build-nodes
   [dark? current-page edges nodes]
   (mapv (fn [p]
-          (cond->
-           {:id p
-            :name p
-            :val (get-connections p edges)
-            :autoColorBy "group"
-            :group (js/Math.ceil (* (js/Math.random) 12))
-            :color "#222222"}
-            dark?
-            (assoc :color "#8abbbb")
-            (= p current-page)
-            (assoc :color (if dark?
-                            "#ffffff"
-                            "#045591"))))
+          (let [current-page? (= p current-page)
+                color (case [dark? current-page?]
+                            [false false] "#222222"
+                            [false true]  "#045591"
+                            [true false]  "#8abbbb"
+                            [true true]   "#ffffff")] ; FIXME: Put it into CSS
+            {:id p
+             :name p
+             :val (get-connections p edges)
+             :autoColorBy "group"
+             :group (js/Math.ceil (* (js/Math.random) 12))
+             :color color}))
         (set (flatten nodes))))
 
 (defn normalize-page-name
@@ -2182,8 +2168,8 @@
   (d/q
    '[:find ?content
      :where
-     [?h :block/content ?content]
-     [?h :block/collapsed? true]]
+     [?h :block/collapsed? true]
+     [?h :block/content ?content]]
    (get-conn)))
 
 (defn get-block-parent
@@ -2289,7 +2275,6 @@
       (let [f (async/<! chan)]
         (f))
       (recur))
-    (reset! async-chan chan)
     chan))
 
 (defonce blocks-count-cache (atom nil))
