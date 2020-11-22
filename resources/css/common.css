@@ -149,6 +149,7 @@ textarea {
     resize: none;
     outline: none;
     font-weight: inherit;
+    letter-spacing: inherit;
 }
 
 ul {
