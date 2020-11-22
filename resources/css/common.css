@@ -1080,6 +1080,7 @@ a.login:hover {
   opacity: 0.5;
   padding: 0 2px 0 2px;
   border: 1px solid;
+  line-height: 1.225;
 }
 
 a.marker-switch:hover {
