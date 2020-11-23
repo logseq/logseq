@@ -945,6 +945,14 @@
   [file]
   (last (string/split file #"\.")))
 
+(defn get-dir-and-basename
+  [path]
+  (let [parts (string/split path "/")
+        basename (last parts)
+        dir (->> (butlast parts)
+                 (string/join "/"))]
+    [dir basename]))
+
 (defn get-relative-path
   [current-file-path another-file-path]
   (let [directories-f #(butlast (string/split % "/"))

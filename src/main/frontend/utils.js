@@ -57,13 +57,13 @@ export var timeConversion = function (millisec) {
 
 // Modified from https://github.com/GoogleChromeLabs/browser-nativefs
 // because shadow-cljs doesn't handle this babel transform
-const getFiles = async function (dirHandle, recursive) {
+const getFiles = async function (dirHandle, recursive, cb, path = dirHandle.name) {
   const dirs = [];
   const files = [];
-  const path = dirHandle.name;
   for await (const entry of dirHandle.values()) {
     const nestedPath = `${path}/${entry.name}`;
     if (entry.kind === 'file') {
+      cb(nestedPath, entry);
       files.push(
         entry.getFile().then((file) => {
           Object.defineProperty(file, 'webkitRelativePath', {
@@ -81,17 +81,18 @@ const getFiles = async function (dirHandle, recursive) {
         )
       );
     } else if (entry.kind === 'directory' && recursive) {
-      dirs.push(getFiles(entry, recursive, nestedPath));
+      cb(nestedPath, entry);
+      dirs.push(getFiles(entry, recursive, cb, nestedPath));
     }
   }
 
   return [(await Promise.all(dirs)), (await Promise.all(files))];
 };
 
-export var openDirectory = async function (options = {}) {
+export var openDirectory = async function (options = {}, cb) {
   options.recursive = options.recursive || false;
   const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-  return [handle, getFiles(handle, options.recursive)];
+  return [handle, getFiles(handle, options.recursive, cb)];
 };
 
 export var writeFile = async function (fileHandle, contents) {

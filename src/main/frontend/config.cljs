@@ -270,7 +270,8 @@
   #{"now" "later" "todo" "doing" "done" "wait" "waiting"
     "canceled" "cancelled" "started" "in-progress"})
 
-(defonce local-db-prefix "logseq-local-")
+(defonce local-db-prefix "logseq_local_")
+(defonce local-handle-prefix (str "handle/" local-db-prefix))
 
 (defn local-db?
   [s]

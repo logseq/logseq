@@ -4,7 +4,20 @@
             [clojure.string :as string]
             [frontend.idb :as idb]
             [promesa.core :as p]
+            [goog.object :as gobj]
             ["/frontend/utils" :as utils]))
+
+;; We need to cache the file handles in the memory so that
+;; the browser will not keep asking permissions.
+(defonce nfs-file-handles-cache (atom {}))
+
+(defn get-nfs-file-handle
+  [handle-path]
+  (get @nfs-file-handles-cache handle-path))
+
+(defn add-nfs-file-handle!
+  [handle-path handle]
+  (swap! nfs-file-handles-cache assoc handle-path handle))
 
 ;; TODO:
 ;; We need to support several platforms:
@@ -31,13 +44,15 @@
   (cond
     (local-db? dir)
     (let [[root new-dir] (rest (string/split dir "/"))
-          root-handle (str "handle-" root)]
+          root-handle (str "handle/" root)]
       (p/let [handle (idb/get-item root-handle)]
         (when (and handle new-dir
                    (not (string/blank? new-dir)))
           (-> (p/let [handle (.getDirectoryHandle ^js handle new-dir
                                                   #js {:create true})
-                      _ (idb/set-item! (str root-handle "/" new-dir) handle)]
+                      handle-path (str root-handle "/" new-dir)
+                      _ (idb/set-item! handle-path handle)]
+                (add-nfs-file-handle! handle-path handle)
                 (println "Stored handle: " (str root-handle "/" new-dir)))
               (p/catch (fn [error]
                          (println "mkdir error: " error)
@@ -51,35 +66,52 @@
 
 (defn readdir
   [dir]
-  (when (and dir js/window.pfs)
-    (js/window.pfs.readdir dir)))
+  (cond
+    (local-db? dir)
+    (let [prefix (str "handle/" dir)
+          cached-files (keys @nfs-file-handles-cache)]
+      (p/resolved
+       (->> (filter #(string/starts-with? % (str prefix "/")) cached-files)
+            (map (fn [path]
+                   (string/replace path prefix ""))))))
+
+    (and dir js/window.pfs)
+    (js/window.pfs.readdir dir)
+
+    :else
+    nil))
 
 (defn unlink
   [path opts]
-  (js/window.pfs.unlink path opts))
+  (cond
+    (local-db? path)
+    (let [[dir basename] (util/get-dir-and-basename path)]
+      (p/let [handle (idb/get-item (str "handle" dir))]
+        (.removeEntry ^js handle basename)))
 
-(defn rename
-  [old-path new-path]
-  (js/window.pfs.rename old-path new-path))
+    :else
+    (js/window.pfs.unlink path opts)))
 
 (defn rmdir
   "Remove the directory recursively."
   [dir]
-  (js/window.workerThread.rimraf dir))
+  (cond
+    (local-db? dir)
+    nil
+
+    :else
+    (js/window.workerThread.rimraf dir)))
 
 (defn read-file
   ([dir path]
    (read-file dir path (clj->js {:encoding "utf8"})))
   ([dir path option]
-   (js/window.pfs.readFile (str dir "/" path) option)))
+   (cond
+     (local-db? dir)
+     nil
 
-(defonce nfs-file-handles-cache (atom {}))
-(defn get-nfs-file-handle
-  [handle-path]
-  (get @nfs-file-handles-cache handle-path))
-(defn add-nfs-file-handle!
-  [handle-path handle]
-  (swap! nfs-file-handles-cache assoc handle-path handle))
+     :else
+     (js/window.pfs.readFile (str dir "/" path) option))))
 
 (defn write-file
   [dir path content]
@@ -90,10 +122,13 @@
           sub-dir (->> (butlast parts)
                        (remove string/blank?)
                        (string/join "/"))
-          handle-path (str "handle-"
+          handle-path (str "handle/"
                            (subs dir 1)
                            (if sub-dir
                              (str "/" sub-dir)))
+          handle-path (if (= "/" (last handle-path))
+                        (subs handle-path 0 (dec (count handle-path)))
+                        handle-path)
           basename-handle-path (str handle-path "/" basename)
           file-handle-cache (get-nfs-file-handle basename-handle-path)]
       (p/let [file-handle (or file-handle-cache (idb/get-item basename-handle-path))]
@@ -119,9 +154,41 @@
     :else
     nil))
 
+(defn rename
+  [old-path new-path]
+  (cond
+    (local-db? old-path)
+    ;; create new file
+    ;; delete old file
+    (p/let [[dir basename] (util/get-dir-and-basename old-path)
+            [_ new-basename] (util/get-dir-and-basename new-path)
+            handle (idb/get-item (str "handle" old-path))
+            file (.getFile handle)
+            content (.text file)
+            _ (write-file dir new-basename content)]
+      (unlink old-path nil))
+
+    :else
+    (js/window.pfs.rename old-path new-path)))
+
 (defn stat
   [dir path]
-  (js/window.pfs.stat (str dir "/" path)))
+  (cond
+    (local-db? dir)
+    (if-let [file (get-nfs-file-handle (str "handle/"
+                                              (string/replace-first dir "/" "")
+                                              "/"
+                                              (string/replace-first path "/" "")))]
+      (p/let [file (.getFile file)]
+        (let [get-attr #(gobj/get file %)]
+          {:file/last-modified-at (get-attr "lastModified")
+           :file/size (get-attr "size")
+           :file/type (get-attr "type")}))
+      (p/rejected "File not exists"))
+
+    :else
+    ;; FIXME: same format
+    (js/window.pfs.stat (str dir "/" (string/replace-first path "/" "")))))
 
 (defn create-if-not-exists
   ([dir path]
@@ -143,6 +210,3 @@
    (stat dir path)
    (fn [_stat] true)
    (fn [_e] false)))
-
-(comment
-  (def dir "/notes"))
