@@ -168,7 +168,7 @@
 .datepicker th.month {
     width: auto;
     font-size: 14px;
-    color: #777;
+    color: var(--ls-title-text-color);
 }
 
 .dropdown-button {
@@ -194,7 +194,7 @@
 }
 
 .dark-theme .datepicker {
-    background: #073642;
+    background: var(--ls-secondary-background-color);
 }
 
 .dark-theme .datepicker th.day-disabled, .dark-theme .datepicker th.disabled, .dark-theme .datepicker td.disabled, .dark-theme .datepicker td.off {
@@ -206,16 +206,16 @@
 }
 
 .dark-theme .datepicker td.active, .dark-theme .datepicker td.active:hover {
-    background-color: #011b22;
-    border-color: #011b22;
+    background-color: var(--ls-block-properties-background-color);
+    border-color: var(--ls-block-properties-background-color);
 }
 
 .dark-theme .datepicker th.selectable {
-     color: #fff;
+     color: var(--ls-primary-text-color);
 }
 
 .dark-theme .datepicker td.available:hover, .dark-theme .datepicker th.available:hover {
-    background: #011b22;
+    background: var(--ls-block-properties-background-color);
 }
 
 .datepicker tr:nth-child(odd), .datepicker tr:nth-child(even), .dark-theme .datepicker tr:nth-child(odd), .dark-theme .datepicker tr:nth-child(even) {
