@@ -2,7 +2,9 @@
   (:require ["localforage" :as localforage]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.string :as string]
+            [frontend.config :as config]))
 
 ;; offline db
 (def store-name "dbs")
@@ -32,3 +34,13 @@
 (defn get-item
   [key]
   (.getItem localforage-instance key))
+
+(defn get-keys
+  []
+  (.keys localforage-instance))
+
+(defn get-nfs-dbs
+  []
+  (p/let [ks (get-keys)]
+    (->> (filter (fn [k] (string/starts-with? k (str config/idb-db-prefix config/local-db-prefix))) ks)
+         (map #(string/replace-first % config/idb-db-prefix "")))))

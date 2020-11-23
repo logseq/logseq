@@ -19,7 +19,7 @@
             [frontend.ui :as ui]
             [goog.object :as gobj]
             [frontend.helper :as helper]
-            [lambdaisland.glogi :as log]))
+            [frontend.idb :as idb]))
 
 (defn- watch-for-date!
   []
@@ -62,9 +62,7 @@
 
 (defn restore-and-setup!
   [me repos logged?]
-  ;; wait until pfs is loaded
-  (let [pfs-loaded? (atom js/window.pfs)
-        interval (atom nil)
+  (let [interval (atom nil)
         inner-fn (fn []
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
@@ -75,9 +73,14 @@
                                                (ui-handler/add-style-if-exists!))))
                          (p/then
                           (fn []
-                            (if (and (not logged?)
-                                     (not (seq (db/get-files config/local-repo))))
+                            (cond
+                              (and (not logged?)
+                                   (not (seq (db/get-files config/local-repo)))
+                                   ;; Not native local directory
+                                   (not (some config/local-db? (map :url repos))))
                               (repo-handler/setup-local-repo-if-not-exists!)
+
+                              :else
                               (state/set-db-restoring! false))
 
                             (if (schema-changed?)
@@ -87,16 +90,16 @@
                                  :warning
                                  false)
                                 (let [export-repos (for [repo repos]
-                                                    (when-let [url (:url repo)]
-                                                      (println "Export repo: " url)
-                                                      (export-handler/export-repo-as-zip! url)))]
-                                 (-> (p/all export-repos)
-                                     (p/then (fn []
-                                               (store-schema!)
-                                               (js/setTimeout clear-stores-and-refresh! 5000)))
-                                     (p/catch (fn [error]
-                                                (log/error :export/zip {:error error
-                                                                        :repos repos}))))))
+                                                     (when-let [url (:url repo)]
+                                                       (println "Export repo: " url)
+                                                       (export-handler/export-repo-as-zip! url)))]
+                                  (-> (p/all export-repos)
+                                      (p/then (fn []
+                                                (store-schema!)
+                                                (js/setTimeout clear-stores-and-refresh! 5000)))
+                                      (p/catch (fn [error]
+                                                 (log/error :export/zip {:error error
+                                                                         :repos repos}))))))
                               (store-schema!))
 
                             (page-handler/init-commands!)
@@ -178,8 +181,21 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
-    (nfs/trigger-check!)
-    (restore-and-setup! me repos logged?)
+    ;; (nfs/trigger-check!)
+    (p/let [nfs-dbs (idb/get-nfs-dbs)
+            nfs-dbs (map (fn [db] {:url db}) nfs-dbs)]
+      (let [repos (cond
+                    logged?
+                    (concat
+                     (:repos me)
+                     nfs-dbs)
+
+                    (seq nfs-dbs)
+                    nfs-dbs
+
+                    :else
+                    [{:url config/local-repo}])]
+        (restore-and-setup! me repos logged?)))
 
     (periodically-persist-repo-to-indexeddb!)
 
