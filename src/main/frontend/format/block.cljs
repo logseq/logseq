@@ -31,7 +31,8 @@
                  (or
                   (and
                    (= typ "Search")
-                   (not (contains? #{\# \* \/ \( \[} (first (second (:url (second block))))))
+                   ;; FIXME: alert error
+                   (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
                    (let [page (second (:url (second block)))]
                      (when (and (not (util/starts-with? page "http"))
                                 (not (util/starts-with? page "file"))
