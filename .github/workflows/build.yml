@@ -11,11 +11,11 @@ on:
       - '*.md'
 
 jobs:
-  clojure-test:
 
+  test:
     strategy:
       matrix:
-        operating-system: [ubuntu-latest, macOS-latest]
+        operating-system: [ubuntu-latest]
 
     runs-on: ${{ matrix.operating-system }}
 
@@ -26,15 +26,49 @@ jobs:
           fetch-depth: 1
           submodules: 'true'
 
+      - name: Maven cache
+        uses: actions/cache@v1
+        id: maven-cache
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-maven-
+
       - name: Prepare Java
         uses: actions/setup-java@v1
         with:
           java-version: 1.8
+
+      - name: Set up Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
 
       - name: Install Clojure tools.deps
         uses: DeLaGuardo/setup-clojure@master
         with:
           cli: '1.10.1.727'
 
+      - name: Fetch Maven deps
+        if: steps.maven-cache.outputs.cache-hit != 'true'
+        run: clojure -A:cljs -P
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - name: yarn cache
+        uses: actions/cache@v1
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+      - name: Fetch yarn deps
+        if: steps.yarn-cache.outputs.cache-hit != 'true'
+        run: yarn install --frozen-lockfile
+
       - name: Run Clojure test
-        run: clojure -M:test:runner
+        run: |
+          yarn cljs:test
+          node static/tests.js
