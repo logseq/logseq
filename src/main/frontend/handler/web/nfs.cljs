@@ -36,8 +36,10 @@
             files (doall
                    (map (fn [file]
                           (let [handle (gobj/get file "handle")
-                                get-attr #(gobj/get file %)]
-                            {:file/path (get-attr "webkitRelativePath")
+                                get-attr #(gobj/get file %)
+                                path (-> (get-attr "webkitRelativePath")
+                                         (string/replace-first (str dir-name "/") ""))]
+                            {:file/path path
                              :file/last-modified-at (get-attr "lastModified")
                              :file/size (get-attr "size")
                              :file/type (get-attr "type")

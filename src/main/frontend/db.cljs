@@ -37,7 +37,7 @@
 (defn datascript-db
   [repo]
   (when repo
-    (str "logseq-db/" (get-repo-path repo))))
+    (str config/idb-db-prefix (get-repo-path repo))))
 
 (defn datascript-files-db
   [repo]
