@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '*.md'
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - '*.md'
+
+jobs:
+  clojure-test:
+
+    strategy:
+      matrix:
+        operating-system: [ubuntu-latest, macOS-latest]
+
+    runs-on: ${{ matrix.operating-system }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+          submodules: 'true'
+
+      - name: Prepare Java
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - name: Install Clojure tools.deps
+        uses: DeLaGuardo/setup-clojure@master
+        with:
+          cli: '1.10.1.727'
+
+      - name: Run Clojure test
+        run: clojure -M:test:runner
