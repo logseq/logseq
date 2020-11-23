@@ -29,6 +29,7 @@
         "gulp:build": "NODE_ENV=production gulp build",
         "cljs:watch": "clojure -A:cljs watch app publishing",
         "cljs:release": "clojure -A:cljs release app publishing",
+        "cljs:test": "clojure -A:test compile test",
         "cljs:watch-app": "clojure -A:cljs watch app",
         "cljs:release-app": "clojure -A:cljs release app",
         "cljs:release-publishing": "clojure -A:cljs release publishing",
