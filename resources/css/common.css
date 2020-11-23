@@ -205,6 +205,7 @@ ol {
 p {
   line-height: 1.5;
   margin: 0.5rem 0;
+  color: var(--ls-primary-text-color)
 }
 
 li p:first-child, .block-body p:first-child {
@@ -1050,6 +1051,8 @@ button.context-menu-option {
 
 .notification-area {
   background-color: #FFF;
+  background-color: var(--ls-tertiary-background-color);
+  color: var(--ls-primary-text-color);
 }
 
 .content img {
