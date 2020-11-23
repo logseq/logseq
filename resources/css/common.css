@@ -148,6 +148,8 @@ textarea {
     width: 100%;
     resize: none;
     outline: none;
+    font-weight: inherit;
+    letter-spacing: inherit;
 }
 
 ul {
@@ -1078,6 +1080,7 @@ a.login:hover {
   opacity: 0.5;
   padding: 0 2px 0 2px;
   border: 1px solid;
+  line-height: 1.3;
 }
 
 a.marker-switch:hover {
