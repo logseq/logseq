@@ -148,6 +148,8 @@ textarea {
     width: 100%;
     resize: none;
     outline: none;
+    font-weight: inherit;
+    letter-spacing: inherit;
 }
 
 ul {
@@ -203,6 +205,7 @@ ol {
 p {
   line-height: 1.5;
   margin: 0.5rem 0;
+  color: var(--ls-primary-text-color)
 }
 
 li p:first-child, .block-body p:first-child {
@@ -1048,6 +1051,8 @@ button.context-menu-option {
 
 .notification-area {
   background-color: #FFF;
+  background-color: var(--ls-tertiary-background-color);
+  color: var(--ls-primary-text-color);
 }
 
 .content img {
@@ -1078,6 +1083,7 @@ a.login:hover {
   opacity: 0.5;
   padding: 0 2px 0 2px;
   border: 1px solid;
+  line-height: 1.3;
 }
 
 a.marker-switch:hover {

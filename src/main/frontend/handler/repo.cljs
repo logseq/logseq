@@ -32,7 +32,7 @@
   (notification/show!
    [:p.content
     title
-    [:span.text-gray-700.mr-2
+    [:span.mr-2
      (util/format
       "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
       repo-url)
@@ -256,7 +256,9 @@
 (declare push)
 
 (defn pull
-  [repo-url {:keys [force-pull?] :or {force-pull? false}}]
+  [repo-url {:keys [force-pull? show-diff?]
+             :or {force-pull? false
+                  show-diff? false}}]
   (when (and
          (db/get-conn repo-url true)
          (db/cloned? repo-url))
@@ -275,47 +277,61 @@
                      (and
                       (not= status :pushing)
                       (not (state/get-edit-input-id))
-                      (not (state/in-draw-mode?))))
+                      (not (state/in-draw-mode?))
+                      (or
+                       show-diff?
+                       (and (not show-diff?)
+                            (empty? @state/diffs)))))
                 (git-handler/set-git-status! repo-url :pulling)
                 (->
                  (p/let [token (helper/get-github-token repo-url)
                          result (git/fetch repo-url token)]
                    (let [{:keys [fetchHead]} (bean/->clj result)]
-                     (-> (git/merge repo-url)
-                         (p/then (fn [result]
-                                   (-> (git/checkout repo-url)
-                                       (p/then (fn [result]
-                                                 (git-handler/set-git-status! repo-url nil)
-                                                 (git-handler/set-git-last-pulled-at! repo-url)
-                                                 (when (and local-latest-commit fetchHead
-                                                            (not= local-latest-commit fetchHead))
-                                                   (p/let [diffs (git/get-diffs repo-url local-latest-commit fetchHead)]
-                                                     (when (seq diffs)
-                                                       (load-db-and-journals! repo-url diffs false))))
-                                                 (common-handler/check-changed-files-status repo-url)))
-                                       (p/catch (fn [error]
-                                                  (git-handler/set-git-status! repo-url :checkout-failed)
-                                                  (git-handler/set-git-error! repo-url error))))))
-                         (p/catch (fn [error]
-                                    (println "Git pull error:")
-                                    (js/console.error error)
-                                    (git-handler/set-git-status! repo-url :merge-failed)
-                                    (git-handler/set-git-error! repo-url error)
-                                    (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
-                                            local-latest-commit (common-handler/get-ref repo-url)
-                                            result (git/get-local-diffs repo-url local-latest-commit remote-latest-commit)]
-                                      (if (seq result)
-                                        (do
-                                          (notification/show!
-                                           [:p.content
-                                            "Failed to merge, please "
-                                            [:span.text-gray-700.font-bold
-                                             "resolve any diffs first."]]
-                                           :error)
-                                          (route-handler/redirect! {:to :diff}))
-                                        (push repo-url {:commit-push? true
-                                                        :force? true
-                                                        :commit-message "Merge push without diffed files"}))))))))
+                     (if show-diff?
+                       (do
+                         (notification/show!
+                          [:p.content
+                           "Failed to push, please "
+                           [:span.font-bold
+                            "resolve any diffs first."]]
+                          :error)
+                         (route-handler/redirect! {:to :diff}))
+
+                       (-> (git/merge repo-url)
+                          (p/then (fn [result]
+                                    (-> (git/checkout repo-url)
+                                        (p/then (fn [result]
+                                                  (git-handler/set-git-status! repo-url nil)
+                                                  (git-handler/set-git-last-pulled-at! repo-url)
+                                                  (when (and local-latest-commit fetchHead
+                                                             (not= local-latest-commit fetchHead))
+                                                    (p/let [diffs (git/get-diffs repo-url local-latest-commit fetchHead)]
+                                                      (when (seq diffs)
+                                                        (load-db-and-journals! repo-url diffs false))))
+                                                  (common-handler/check-changed-files-status repo-url)))
+                                        (p/catch (fn [error]
+                                                   (git-handler/set-git-status! repo-url :checkout-failed)
+                                                   (git-handler/set-git-error! repo-url error))))))
+                          (p/catch (fn [error]
+                                     (println "Git pull error:")
+                                     (js/console.error error)
+                                     (git-handler/set-git-status! repo-url :merge-failed)
+                                     (git-handler/set-git-error! repo-url error)
+                                     (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
+                                             local-latest-commit (common-handler/get-ref repo-url)
+                                             result (git/get-local-diffs repo-url local-latest-commit remote-latest-commit)]
+                                       (if (seq result)
+                                         (do
+                                           (notification/show!
+                                            [:p.content
+                                             "Failed to merge, please "
+                                             [:span.font-bold
+                                              "resolve any diffs first."]]
+                                            :error)
+                                           (route-handler/redirect! {:to :diff}))
+                                         (push repo-url {:commit-push? true
+                                                         :force? true
+                                                         :commit-message "Merge push without diffed files"})))))))))
                  (p/catch (fn [error]
                             (println "Pull error:" (str error))
                             (js/console.error error)
@@ -335,7 +351,8 @@
            (and
             (db/cloned? repo-url)
             (not (state/get-edit-input-id))
-            (not= status :pushing)))
+            (not= status :pushing)
+            (empty? @state/diffs)))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or
                    commit-push?
@@ -363,7 +380,8 @@
                          (git-handler/set-git-status! repo-url :push-failed)
                          (git-handler/set-git-error! repo-url error)
                          (when (state/online?)
-                           (pull repo-url {:force-pull? true}))))))))))
+                           (pull repo-url {:force-pull? true
+                                           :show-diff? true}))))))))))
           (p/catch (fn [error]
                      (println "Git push error: ")
                      (git-handler/set-git-status! repo-url :push-failed)

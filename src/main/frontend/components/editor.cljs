@@ -557,6 +557,16 @@
                        true)))
               (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
+              (let [sym "^"]
+                (and (= key sym)
+                     (>= (count value) 1)
+                     (> pos 0)
+                     (= (nth value (dec pos)) sym)
+                     (if (> (count value) pos)
+                       (not= (nth value pos) sym)
+                       true)))
+              (commands/simple-insert! input-id "^^" {:backward-pos 2})
+
               :else
               nil))))
        (mixins/on-key-up

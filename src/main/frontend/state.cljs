@@ -867,6 +867,7 @@
   []
   (:commands (get-config)))
 
+;; TODO: Move those to the uni `state`
 (defonce editor-op (atom nil))
 (defn set-editor-op!
   [value]
@@ -874,3 +875,5 @@
 (defn get-editor-op
   []
   @editor-op)
+
+(defonce diffs (atom nil))

@@ -26,6 +26,7 @@
         {:style {:width 240}
          :default-value default-value
          :on-change (fn [event]
+                      (util/stop event)
                       (let [value (util/evalue event)]
                         (swap! *timestamp assoc :time value)))}]
        [:a.ml-2.self-center {:on-click (fn []

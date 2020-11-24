@@ -321,12 +321,19 @@
   [config page-name]
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
-        blocks (db/get-page-blocks (state/get-current-repo) page-name)]
+        blocks (db/get-page-blocks (state/get-current-repo) page-name)
+        current-page (state/get-current-page)]
     [:div.embed-page.py-2.my-2.px-3.bg-base-2
      [:p
       [:code.mr-2 "Embed page:"]
       (page-cp config {:page/name page-name})]
-     (blocks-container blocks (assoc config :embed? true))]))
+     (when (or
+            (not current-page)
+            (and current-page
+                 (not= (string/lower-case current-page) page-name)))
+       (blocks-container blocks (assoc config
+                                       :embed? true
+                                       :ref? false)))]))
 
 (defn- get-label-text
   [label]
