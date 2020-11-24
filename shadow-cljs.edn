@@ -26,6 +26,11 @@
     ;; after live-reloading finishes call this function
     :after-load frontend.core/start
     :preloads     [devtools.preload]}}
+
+  :test
+  {:target :node-test
+   :output-to "static/tests.js"}
+
   :publishing
   {:target :browser
    :module-loader true
