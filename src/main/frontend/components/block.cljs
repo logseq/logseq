@@ -326,7 +326,9 @@
      [:p
       [:code.mr-2 "Embed page:"]
       (page-cp config {:page/name page-name})]
-     (blocks-container blocks (assoc config :embed? true))]))
+     (blocks-container blocks (assoc config
+                                     :embed? true
+                                     :ref? false))]))
 
 (defn- get-label-text
   [label]
