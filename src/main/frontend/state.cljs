@@ -7,7 +7,8 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [dommy.core :as dom]
-            [cljs.core.async :as async]))
+            [cljs.core.async :as async]
+            [lambdaisland.glogi :as log]))
 
 (defonce ^:private state
   (atom
@@ -521,7 +522,7 @@
                 (let [{:keys [token expires_at] :as m} (get tokens installation_id)]
                   (if (and token expires_at)
                     (merge repo {:token token :expires_at expires_at})
-                    (do (js/console.log "Can't find token, expires_at key") m))))
+                    (do (log/error :token/cannot-set-token {:repo-m repo :token-m m}) repo))))
               repos (mapv set-token-f repos)]
           (swap! state assoc-in [:me :repos] repos))))))
 

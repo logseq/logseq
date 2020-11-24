@@ -1,6 +1,7 @@
 (ns frontend.helper
   (:require [cljs-time.format :as tf]
             [cljs-time.core :as t]
+            [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.config :as config]))
@@ -12,7 +13,7 @@
                               (remove nil?)
                               (distinct))]
     (when (or (seq repos)
-            (seq installation-ids))
+              (seq installation-ids))
       (util/post (str config/api "refresh_github_token")
         {:installation-ids installation-ids
          :repos repos}
@@ -20,7 +21,7 @@
           (state/set-github-installation-tokens! result)
           (when ok-handler (ok-handler)))
         (fn [error]
-          (println "Request app token failed.")
+          (log/error :token/http-request-failed error)
           (js/console.dir error)
           (when error-handler (error-handler)))))))
 
@@ -28,13 +29,17 @@
   [repo]
   (when repo
     (let [{:keys [token expires_at] :as token-state}
-          (state/get-github-token repo)
-          expires-at (tf/parse (tf/formatters :date-time-no-ms) expires_at)
-          request-time-gap (t/minutes 1)
-          now (t/now)
-          expired? (t/after? now (t/minus expires-at request-time-gap))]
-      {:expired? expired?
-       :token token})))
+          (state/get-github-token repo)]
+      (if (and (map? token-state)
+               (string? expires_at))
+        (let [expires-at (tf/parse (tf/formatters :date-time-no-ms) expires_at)
+              request-time-gap (t/minutes 1)
+              now (t/now)
+              expired? (t/after? now (t/minus expires-at request-time-gap))]
+          {:exist? true
+           :expired? expired?
+           :token token})
+        {:exist? false}))))
 
 (defn get-github-token
   ([]
@@ -42,15 +47,17 @@
   ([repo]
    (js/Promise.
      (fn [resolve reject]
-       (let [{:keys [expired? token]} (get-github-token* repo)]
-        (if-not expired?
+       (let [{:keys [expired? token exist?]} (get-github-token* repo)
+             valid-token? (and exist? (not expired?))]
+        (if valid-token?
           (resolve token)
           (request-app-tokens!
             (fn []
-              (let [{:keys [expired? token]} (get-github-token* repo)]
-                (if-not expired?
+              (let [{:keys [expired? token exist?] :as token-m} (get-github-token* repo)
+                    valid-token? (and exist? (not expired?))]
+                (if valid-token?
                   (resolve token)
-                  (do (js/console.error "Failed to get GitHub token.")
+                  (do (log/error :token/failed-get-token token-m)
                       (reject)))))
             nil)))))))
 
