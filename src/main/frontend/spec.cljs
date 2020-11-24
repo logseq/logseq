@@ -1,6 +1,7 @@
 (ns frontend.spec
   (:require [cljs.spec.alpha :as s]
             [frontend.config :as config]
+            [lambdaisland.glogi :as log]
             [expound.alpha :as expound]))
 
 ;; disable in production
@@ -8,11 +9,12 @@
 
 (set! s/*explain-out* expound/printer)
 
-(defn validate [spec value]
-  (when-let [error (s/explain-data spec value)]
-    (if config/dev?
-      (throw (ex-info (expound/expound-str spec value) error))
-      (js/console.log (expound/expound-str spec value)))))
+(defn validate
+  "This function won't crash the current thread, just log error."
+  [spec value]
+  (when (s/explain-data spec value)
+    (let [error-message (expound/expound-str spec value)]
+      (log/error :spec/validate-failed error-message))))
 
 (s/def :user/repo string?)
 
