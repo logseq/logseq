@@ -81,8 +81,9 @@
 
 (defn scroll-and-highlight!
   [state]
-  (when-let [fragment (util/get-fragment)]
-    (highlight-element! fragment))
+  (if-let [fragment (util/get-fragment)]
+    (highlight-element! fragment)
+    (util/scroll-to-top))
   state)
 
 (defn add-style-if-exists!

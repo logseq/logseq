@@ -327,7 +327,10 @@
      [:p
       [:code.mr-2 "Embed page:"]
       (page-cp config {:page/name page-name})]
-     (when (not= (string/lower-case current-page) page-name)
+     (when (or
+            (not current-page)
+            (and current-page
+                 (not= (string/lower-case current-page) page-name)))
        (blocks-container blocks (assoc config
                                        :embed? true
                                        :ref? false)))]))

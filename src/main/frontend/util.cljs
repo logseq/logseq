@@ -322,9 +322,10 @@
 
 (defn scroll-to
   [pos]
-  (.scroll (gdom/getElement "main-content")
-           #js {:top pos
-                :behavior "smooth"}))
+  (when-let [main-content (gdom/getElement "main-content")]
+    (.scroll main-content
+            #js {:top pos
+                 :behavior "smooth"})))
 
 (defn scroll-to-top
   []
