@@ -1,6 +1,7 @@
 (ns frontend.spec
   (:require [cljs.spec.alpha :as s]
             [frontend.config :as config]
+            [lambdaisland.glogi :as log]
             [expound.alpha :as expound]))
 
 ;; disable in production
