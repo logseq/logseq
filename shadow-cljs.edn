@@ -18,6 +18,8 @@
                       :output-feature-set :es6
                       :externs ["datascript/externs.js"
                                 "externs.js"]}
+   :closure-defines {goog.debug.LOGGING_ENABLED true}
+
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop
@@ -37,7 +39,8 @@
    :output-dir "./static/js/publishing"
    :asset-path "/static/js"
 
-   :closure-defines {frontend.config/PUBLISHING true}
+   :closure-defines {frontend.config/PUBLISHING true
+                     goog.debug.LOGGING_ENABLED true}
 
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es6
