@@ -30,7 +30,7 @@
 (s/def :repos/repo (s/keys :req-un [:repos/id :repos/url :repos/branch :repos/installation_id]
                            :opt-un [:repos/token :repos/expires_at]))
 
-; Didn't know how to impl `require token` version in :me key.
+; Didn't know how to impl both `require token` and `not require token`version in :me key.
 (s/def :repos/repo-require-token (s/keys :req-un [:repos/id :repos/url :repos/branch :repos/installation_id
                                                   :repos/token :repos/expires_at]))
 
