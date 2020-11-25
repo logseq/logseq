@@ -38,7 +38,8 @@
             [frontend.text :as text]
             [frontend.date :as date]
             [frontend.handler.repeated :as repeated]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [lambdaisland.glogi :as log]))
 
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
@@ -1423,7 +1424,7 @@
    ;; "_" "_"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
    ;; "^" "^"
-   })
+})
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -1597,38 +1598,44 @@
     (when-let [prev-block (util/get-prev-block input)]
       (util/parse-int (d/attr prev-block "level")))))
 
+;; If it's an indent/outdent action followed by an "Enter", only adjust after inserting a block was finished. Maybe we should use a channel to serialize all the events.
 (defn adjust-block-level!
-  [state direction]
-  (state/set-editor-op! :indent-outdent)
-  (let [{:keys [block block-parent-id value config]} (get-state state)
-        start-level (:start-level config)
-        format (:block/format block)
-        block-pattern (config/get-block-pattern format)
-        level (:block/level block)
-        previous-level (or (get-previous-block-level block-parent-id) 1)
-        [add? remove?] (case direction
-                         :left [false true]
-                         :right [true false]
-                         [(<= level previous-level)
-                          (and (> level previous-level)
-                               (> level 2))])
-        final-level (cond
-                      add? (inc level)
-                      remove? (if (> level 2)
-                                (dec level)
-                                level)
-                      :else level)
-        new-value (block/with-levels value format (assoc block :block/level final-level))]
-    (when (and
-           (not (and (= direction :left)
-                     (and
-                      (get config :id)
-                      (util/uuid-string? (get config :id)))
-                     (<= final-level start-level)))
-           (<= (- final-level previous-level) 1))
-      (save-block-if-changed! block new-value
-                              {:indent-left? (= direction :left)})))
-  (state/set-editor-op! nil))
+  ([state direction]
+   (adjust-block-level! state direction 100))
+  ([state direction retry-limit]
+   (if (= :insert (state/get-editor-op))
+     (if (> retry-limit 0)
+       (js/setTimeout #(adjust-block-level! state direction (dec retry-limit)) 20)
+       (log/error :editor/indent-outdent-retry-max-limit {:direction direction}))
+     (do
+       (state/set-editor-op! :indent-outdent)
+       (let [{:keys [block block-parent-id value config]} (get-state state)
+             start-level (:start-level config)
+             format (:block/format block)
+             level (:block/level block)
+             previous-level (or (get-previous-block-level block-parent-id) 1)
+             [add? remove?] (case direction
+                              :left [false true]
+                              :right [true false]
+                              [(<= level previous-level)
+                               (and (> level previous-level)
+                                    (> level 2))])
+             final-level (cond
+                           add? (inc level)
+                           remove? (if (> level 2)
+                                     (dec level)
+                                     level)
+                           :else level)
+             new-value (block/with-levels value format (assoc block :block/level final-level))]
+         (when (and
+                (not (and (= direction :left)
+                          (get config :id)
+                          (util/uuid-string? (get config :id))
+                          (<= final-level start-level)))
+                (<= (- final-level previous-level) 1))
+           (save-block-if-changed! block new-value
+                                   {:indent-left? (= direction :left)})))
+       (state/set-editor-op! nil)))))
 
 (defn adjust-blocks-level!
   [blocks direction])
