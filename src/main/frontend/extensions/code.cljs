@@ -3,6 +3,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [medley.core :as medley]
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
@@ -53,7 +54,7 @@
       (let [block (db/pull [:block/uuid (:block/uuid config)])
             format (:block/format block)
             ;; Get newest state
-            pos-meta (::pos-meta state)
+            pos-meta (:pos-meta state)
             {:keys [start_pos end_pos]} @pos-meta
             value (str "\n" (string/trimr value) "\n")
             content (:block/content block)
@@ -105,34 +106,39 @@
                                                                  (if changed?
                                                                    (save!)
                                                                    (editor-handler/edit-block! block :max (:block/format block) block-id)))
-                                                               (save!))))}})
-        element (.getWrapperElement editor)]
-    (.on editor "blur" (fn []
-                         (save-file-or-block-when-blur-or-esc! editor textarea config state)))
-    (.addEventListener element "click"
-                       (fn [e]
-                         (util/stop e)))
-    (.save editor)
-    (.refresh editor)
-    ;; (when clojure?
-    ;;   (par-cm/init editor))
+                                                               (save!))))}})]
+    (let [element (.getWrapperElement editor)]
+      (.on editor "blur" (fn []
+                           (save-file-or-block-when-blur-or-esc! editor textarea config state)))
+      (.addEventListener element "click"
+                         (fn [e]
+                           (util/stop e)))
+      (.save editor)
+      (.refresh editor))
     editor))
 
 (defn- load-and-render!
   [state]
-  (let [editor (render! state)]
-    (assoc state ::editor editor)))
+  (let [editor-atom (:editor-atom state)]
+    (js/setTimeout (fn []
+                     (let [editor (render! state)]
+                       (reset! editor-atom editor))) 10)))
 
 (rum/defcs editor < rum/reactive
   {:init (fn [state]
-           (assoc state ::pos-meta (atom (last (:rum/args state)))))
+           (assoc state
+                  :pos-meta (atom (last (:rum/args state)))
+                  :editor-atom (atom nil)))
    :did-mount (fn [state]
-                (load-and-render! state))
+                (load-and-render! state)
+                state)
    :did-update (fn [state]
-                 (when-let [editor (::editor state)]
-                   (let [code (nth (:rum/args state) 3)]
-                     (.setValue (.getDoc editor) code)))
-                 (when-let [pos-meta (::pos-meta state)]
+                 (when-let [editor-atom (:editor-atom state)]
+                   (let [editor @editor-atom
+                         code (nth (:rum/args state) 3)]
+                     (when editor
+                       (.setValue (.getDoc editor) code))))
+                 (when-let [pos-meta (:pos-meta state)]
                    (reset! pos-meta (last (:rum/args state)))))}
   [state config id attr code pos_meta]
   [:div.extensions__code
