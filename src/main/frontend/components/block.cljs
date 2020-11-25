@@ -1208,7 +1208,8 @@
                             (reset! parents-atom parents)
                             (when (seq parents)
                               (interpose [:span.mx-2.opacity-50 "➤"]
-                                         parents))))]]
+                                         parents))))]
+             component (filterv identity component)]
          (when (or (seq @parents-atom) show-page?)
            component))))))
 
