@@ -3,6 +3,7 @@
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.fs :as fs]
             [promesa.core :as p]
+            [lambdaisland.glogi :as log]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.git :as git]
@@ -21,7 +22,8 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            [frontend.helper :as helper]))
+            [frontend.helper :as helper]
+            [frontend.spec :as spec]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -29,6 +31,7 @@
 
 (defn show-install-error!
   [repo-url title]
+  (spec/validate :repos/url repo-url)
   (notification/show!
    [:p.content
     title
@@ -49,6 +52,7 @@
 
 (defn create-config-file-if-not-exists
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         app-dir config/app-name
         dir (str repo-dir "/" app-dir)]
@@ -76,6 +80,7 @@
 
 (defn create-contents-file
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)
         path (str "pages/contents." (if (= (name format) "markdown")
@@ -92,6 +97,7 @@
 
 (defn create-custom-theme
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
@@ -105,6 +111,7 @@
 
 (defn create-dummy-notes-page
   [repo-url content]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
@@ -117,6 +124,7 @@
   ([repo-url]
    (create-today-journal-if-not-exists repo-url nil))
   ([repo-url content]
+   (spec/validate :repos/url repo-url)
    (let [repo-dir (util/get-repo-dir repo-url)
          format (state/get-preferred-format repo-url)
          title (date/today)
@@ -152,6 +160,7 @@
 
 (defn create-default-files!
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (when-let [name (get-in @state/state [:me :name])]
     (create-config-file-if-not-exists repo-url)
     (create-today-journal-if-not-exists repo-url)
@@ -160,6 +169,7 @@
 
 (defn load-repo-to-db!
   [repo-url diffs first-clone?]
+  (spec/validate :repos/url repo-url)
   (let [load-contents (fn [files delete-files delete-blocks re-render?]
                         (file-handler/load-files-contents!
                          repo-url
@@ -211,6 +221,7 @@
 
 (defn persist-repo!
   [repo]
+  (spec/validate :repos/url repo)
   (when-let [files-conn (db/get-files-conn repo)]
     (db/persist repo @files-conn true))
   (when-let [db (db/get-conn repo)]
@@ -218,11 +229,13 @@
 
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
+  (spec/validate :repos/url repo-url)
   (when (or diffs first-clone?)
     (load-repo-to-db! repo-url diffs first-clone?)))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]
+  (spec/validate :repos/url repo)
   (let [files (remove nil? files)
         pages (->> (map db/get-file-page (map first files))
                    (remove nil?))]
@@ -239,6 +252,7 @@
 
 (defn persist-repo-metadata!
   [repo]
+  (spec/validate :repos/url repo)
   (let [files (db/get-files repo)]
     (when (seq files)
       (let [data (db/get-sync-metadata repo)
@@ -259,6 +273,7 @@
   [repo-url {:keys [force-pull? show-diff?]
              :or {force-pull? false
                   show-diff? false}}]
+  (spec/validate :repos/url repo-url)
   (when (and
          (db/get-conn repo-url true)
          (db/cloned? repo-url))
@@ -345,6 +360,7 @@
                   diff-push? false
                   commit-push? false
                   force? false}}]
+  (spec/validate :repos/url repo-url)
   (let [status (db/get-key-value repo-url :git/status)]
     (when (or
            commit-push?
@@ -373,7 +389,7 @@
                        (git-handler/set-git-error! repo-url nil)
                        (common-handler/check-changed-files-status repo-url))
                      (fn [error]
-                       (println "Git push error: ")
+                       (log/error :git/push-error error)
                        (js/console.error error)
                        (common-handler/check-changed-files-status repo-url)
                        (do
@@ -383,13 +399,14 @@
                            (pull repo-url {:force-pull? true
                                            :show-diff? true}))))))))))
           (p/catch (fn [error]
-                     (println "Git push error: ")
+                     (log/error :git/get-changed-files-error error)
                      (git-handler/set-git-status! repo-url :push-failed)
                      (git-handler/set-git-error! repo-url error)
                      (js/console.dir error)))))))
 
 (defn push-if-auto-enabled!
   [repo]
+  (spec/validate :repos/url repo)
   (when (state/git-auto-push?)
     (push repo nil)))
 
@@ -400,6 +417,7 @@
 
 (defn clone
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (p/let [token (helper/get-github-token repo-url)]
     (when token
       (util/p-handle
@@ -443,6 +461,7 @@
 
 (defn remove-repo!
   [{:keys [id url] :as repo}]
+  (spec/validate :repos/repo repo)
   (util/delete (str config/api "repos/" id)
                (fn []
                  (db/remove-conn! url)
@@ -476,6 +495,7 @@
 
 (defn periodically-pull
   [repo-url pull-now?]
+  (spec/validate :repos/url repo-url)
   (p/let [token (helper/get-github-token repo-url)]
     (when token
       (when pull-now? (pull repo-url nil))
@@ -484,6 +504,7 @@
 
 (defn periodically-push-tasks
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (let [push (fn []
                (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
                        ;; (not config/dev?)
@@ -495,11 +516,14 @@
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
              :or {pull-now? true}}]
+  (spec/validate :repos/url repo-url)
   (periodically-pull repo-url pull-now?)
   (periodically-push-tasks repo-url))
 
 (defn create-repo!
   [repo-url branch]
+  (spec/validate :repos/url repo-url)
+  (spec/validate :repos/branch branch)
   (util/post (str config/api "repos")
              {:url repo-url
               :branch branch}
@@ -513,6 +537,7 @@
 
 (defn clone-and-pull
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (->
    (p/let [_ (clone repo-url)
            _ (git-handler/git-set-username-email! repo-url (:me @state/state))]
@@ -525,6 +550,7 @@
 
 (defn clone-and-pull-repos
   [me]
+  (spec/validate :state/me me)
   (if (and js/window.git js/window.pfs)
     (doseq [{:keys [id url]} (:repos me)]
       (let [repo url]
@@ -545,6 +571,7 @@
 
 (defn rebuild-index!
   [{:keys [id url] :as repo}]
+  (spec/validate :me/repos+ repo)
   (db/remove-conn! url)
   (db/clear-query-state!)
   (-> (p/let [_ (db/remove-db! url)
