@@ -111,7 +111,7 @@ yarn watch
 
 1.  Download jar
 
-    Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and move it to the `resources` directory.
+    Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and put it in the web directory.
 
 2.  Run jar
 
