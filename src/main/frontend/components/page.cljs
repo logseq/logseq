@@ -66,7 +66,7 @@
                       {:journal? journal?
                        :page-name page-name})
         start-level (or (:block/level (first page-blocks)) 1)
-        hiccup-config {:id encoded-page-name
+        hiccup-config {:id page-name
                        :start-level start-level
                        :sidebar? sidebar?
                        :block? block?
@@ -74,7 +74,7 @@
         hiccup-config (common-handler/config-with-document-mode hiccup-config)
         hiccup (block/->hiccup page-blocks hiccup-config {})]
     (rum/with-key
-      (content/content encoded-page-name
+      (content/content page-name
                        {:hiccup hiccup
                         :sidebar? sidebar?})
       (str encoded-page-name "-hiccup"))))

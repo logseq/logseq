@@ -21,7 +21,7 @@
 
 (rum/defc blocks-inner < rum/static
   {:did-mount (fn [state]
-                (let [[blocks _ page] (:rum/args state)
+                (let [[blocks page] (:rum/args state)
                       first-title (second (first (:block/title (first blocks))))
                       journal? (and (string? first-title)
                                     (date/valid-journal-title? first-title))]
@@ -39,25 +39,25 @@
                      :error
                      false)))
                 state)}
-  [blocks encoded-page-name page document-mode?]
+  [blocks page document-mode?]
   (let [start-level (or (:block/level (first blocks)) 1)
-        config {:id encoded-page-name
+        config {:id page
                 :start-level 2
                 :editor-box editor/box
                 :document/mode? document-mode?}]
     (content/content
-     encoded-page-name
+     page
      {:hiccup (block/->hiccup blocks config {})})))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
-  [repo page encoded-page-name format]
+  [repo page format]
   (let [raw-blocks (db/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
                 (db/with-dummy-block raw-blocks format nil {:journal? true})
                 (db/with-block-refs-count repo))]
-    (blocks-inner blocks encoded-page-name page document-mode?)))
+    (blocks-inner blocks page document-mode?)))
 
 (rum/defc journal-cp < rum/reactive
   [[title format]]
@@ -86,7 +86,7 @@
        [:h1.title
         (util/capitalize-all title)]]
 
-      (blocks-cp repo page encoded-page-name format))
+      (blocks-cp repo page format))
 
      (page/today-queries repo today? false)
 
