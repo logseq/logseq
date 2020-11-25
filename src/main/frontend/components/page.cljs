@@ -63,7 +63,8 @@
                            (let [file-id (:db/id (:page/file page))]
                              {:start-pos (utf8/length (utf8/encode content))
                               :end-pos nil})}))
-                      journal?)
+                      {:journal? journal?
+                       :page-name page-name})
         start-level (or (:block/level (first page-blocks)) 1)
         hiccup-config {:id encoded-page-name
                        :start-level start-level
@@ -80,6 +81,7 @@
 
 (defn contents-page
   [{:page/keys [name original-name file] :as contents}]
+  (prn {:contents contents})
   (when-let [repo (state/get-current-repo)]
     (let [format (db/get-page-format name)
           file-path (:file/path file)]
@@ -252,6 +254,9 @@
                      (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                           (db/entity repo))
                      (db/entity repo [:page/name page-name]))
+              page (if page page (do
+                                   (db/transact! repo [{:page/name page-name}])
+                                   (db/entity repo [:page/name page-name])))
               properties (:page/properties page)
               page-name (:page/name page)
               page-original-name (:page/original-name page)
