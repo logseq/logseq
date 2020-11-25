@@ -472,8 +472,14 @@
      [:div {:class (if @collapsed?
                      "hidden"
                      "initial")}
-      (if (and (fn? content) (not @collapsed?))
+      (cond
+        (and (fn? content) (not @collapsed?))
         (content)
+
+        (fn? content)
+        nil
+
+        :else
         content)]]))
 
 (defn admonition
