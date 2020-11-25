@@ -81,7 +81,6 @@
 
 (defn contents-page
   [{:page/keys [name original-name file] :as contents}]
-  (prn {:contents contents})
   (when-let [repo (state/get-current-repo)]
     (let [format (db/get-page-format name)
           file-path (:file/path file)]
