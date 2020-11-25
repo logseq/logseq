@@ -8,6 +8,7 @@
             [clojure.string :as string]
             ["/frontend/caret_pos" :as caret-pos]
             ["/frontend/selection" :as selection]
+            ["/frontend/utils" :as utils]
             [goog.string :as gstring]
             [goog.string.format]
             [dommy.core :as d]
@@ -324,8 +325,8 @@
   [pos]
   (when-let [main-content (gdom/getElement "main-content")]
     (.scroll main-content
-            #js {:top pos
-                 :behavior "smooth"})))
+             #js {:top pos
+                  :behavior "smooth"})))
 
 (defn scroll-to-top
   []
@@ -622,15 +623,9 @@
   [input]
   (and input (.-selectionStart input)))
 
-(defn get-selection
-  []
-  (when (gobj/get js/window "getSelection")
-    (js/window.getSelection)))
-
 (defn get-selected-text
   []
-  (some-> (get-selection)
-          (.toString)))
+  (utils/getSelectionText))
 
 (def clear-selection! selection/clearSelection)
 
@@ -969,5 +964,4 @@
      "./2020_11_19.org")
 
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
-     "../e/f.org")
-  )
+     "../e/f.org"))

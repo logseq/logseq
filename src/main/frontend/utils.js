@@ -54,3 +54,21 @@ export var timeConversion = function (millisec) {
     return days + "d"
   }
 }
+
+export var getSelectionText = function() {
+  const selection = (window.getSelection() || '').toString().trim();
+  if (selection) {
+    return selection;
+  }
+
+  // Firefox fix
+  const activeElement = window.document.activeElement;
+  if (activeElement) {
+    if (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') {
+      const el = activeElement;
+      return el.value.slice(el.selectionStart || 0, el.selectionEnd || 0);
+    }
+  }
+
+  return '';
+}
