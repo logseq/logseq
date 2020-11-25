@@ -1601,7 +1601,7 @@
 ;; If it's an indent/outdent action followed by an "Enter", only adjust after inserting a block was finished. Maybe we should use a channel to serialize all the events.
 (defn adjust-block-level!
   ([state direction]
-   (adjust-block-level! state direction 10))
+   (adjust-block-level! state direction 100))
   ([state direction retry-limit]
    (if (= :insert (state/get-editor-op))
      (if (> retry-limit 0)
