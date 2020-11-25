@@ -4,7 +4,8 @@
             [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.spec :as spec]))
 
 (defn request-app-tokens!
   [ok-handler error-handler]
@@ -27,9 +28,11 @@
 
 (defn- get-github-token*
   [repo]
+  (spec/validate :repos/url repo)
   (when repo
     (let [{:keys [token expires_at] :as token-state}
           (state/get-github-token repo)]
+      (spec/validate :repos/repo token-state)
       (if (and (map? token-state)
                (string? expires_at))
         (let [expires-at (tf/parse (tf/formatters :date-time-no-ms) expires_at)
