@@ -1424,7 +1424,7 @@
    ;; "_" "_"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
    ;; "^" "^"
-   })
+})
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -1607,35 +1607,35 @@
      (if (> retry-limit 0)
        (js/setTimeout #(adjust-block-level! state direction (dec retry-limit)) 20)
        (log/error :editor/indent-outdent-retry-max-limit {:direction direction}))
-    (do
-      (state/set-editor-op! :indent-outdent)
-      (let [{:keys [block block-parent-id value config]} (get-state state)
-            start-level (:start-level config)
-            format (:block/format block)
-            level (:block/level block)
-            previous-level (or (get-previous-block-level block-parent-id) 1)
-            [add? remove?] (case direction
-                             :left [false true]
-                             :right [true false]
-                             [(<= level previous-level)
-                              (and (> level previous-level)
-                                   (> level 2))])
-            final-level (cond
-                          add? (inc level)
-                          remove? (if (> level 2)
-                                    (dec level)
-                                    level)
-                          :else level)
-            new-value (block/with-levels value format (assoc block :block/level final-level))]
-        (when (and
-               (not (and (= direction :left)
-                         (get config :id)
-                         (util/uuid-string? (get config :id))
-                         (<= final-level start-level)))
-               (<= (- final-level previous-level) 1))
-          (save-block-if-changed! block new-value
-                                  {:indent-left? (= direction :left)})))
-      (state/set-editor-op! nil)))))
+     (do
+       (state/set-editor-op! :indent-outdent)
+       (let [{:keys [block block-parent-id value config]} (get-state state)
+             start-level (:start-level config)
+             format (:block/format block)
+             level (:block/level block)
+             previous-level (or (get-previous-block-level block-parent-id) 1)
+             [add? remove?] (case direction
+                              :left [false true]
+                              :right [true false]
+                              [(<= level previous-level)
+                               (and (> level previous-level)
+                                    (> level 2))])
+             final-level (cond
+                           add? (inc level)
+                           remove? (if (> level 2)
+                                     (dec level)
+                                     level)
+                           :else level)
+             new-value (block/with-levels value format (assoc block :block/level final-level))]
+         (when (and
+                (not (and (= direction :left)
+                          (get config :id)
+                          (util/uuid-string? (get config :id))
+                          (<= final-level start-level)))
+                (<= (- final-level previous-level) 1))
+           (save-block-if-changed! block new-value
+                                   {:indent-left? (= direction :left)})))
+       (state/set-editor-op! nil)))))
 
 (defn adjust-blocks-level!
   [blocks direction])
