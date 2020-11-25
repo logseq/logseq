@@ -413,7 +413,7 @@
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
          value (cond
-                 (some? custom-properties)
+                 (seq custom-properties)
                  (text/re-construct-block-properties block value custom-properties)
 
                  (and (seq (:block/properties block))
