@@ -1612,7 +1612,6 @@
       (let [{:keys [block block-parent-id value config]} (get-state state)
             start-level (:start-level config)
             format (:block/format block)
-            block-pattern (config/get-block-pattern format)
             level (:block/level block)
             previous-level (or (get-previous-block-level block-parent-id) 1)
             [add? remove?] (case direction
@@ -1630,9 +1629,8 @@
             new-value (block/with-levels value format (assoc block :block/level final-level))]
         (when (and
                (not (and (= direction :left)
-                         (and
-                          (get config :id)
-                          (util/uuid-string? (get config :id)))
+                         (get config :id)
+                         (util/uuid-string? (get config :id))
                          (<= final-level start-level)))
                (<= (- final-level previous-level) 1))
           (save-block-if-changed! block new-value
