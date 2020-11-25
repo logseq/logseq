@@ -1567,8 +1567,9 @@
 
 (defn with-dummy-block
   ([blocks format]
-   (with-dummy-block blocks format {} false))
-  ([blocks format default-option journal?]
+   (with-dummy-block blocks format {} {}))
+  ([blocks format default-option {:keys [journal? page-name]
+                                  :or {journal? false}}]
    (let [format (or format (state/get-preferred-format) :markdown)
          blocks (if (and journal?
                          (seq blocks)
