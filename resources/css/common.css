@@ -30,7 +30,7 @@
     --ls-block-bullet-border-color: #0f4958;
     --ls-block-bullet-color: #608e91;
     --ls-block-highlight-color: #074758;
-
+    --ls-selection-background-color: #338FFF;
     --ls-page-checkbox-color: #6093a0;
     --ls-page-checkbox-border-color: var(--ls-primary-background-color);
     --ls-page-blockquote-color: var(--ls-primary-text-color);
@@ -74,7 +74,7 @@
     --ls-block-bullet-border-color: #ced9e0;
     --ls-block-bullet-color: #394b59;
     --ls-block-highlight-color: #7cccff;
-
+    --ls-selection-background-color: #B1D7FF;
     --ls-page-checkbox-color: none;
     --ls-page-checkbox-border-color: #808080;
     --ls-page-blockquote-color: var(--ls-primary-text-color);
@@ -1035,12 +1035,12 @@ button.context-menu-option {
 }
 
 ::selection {
-  background: var(--ls-block-highlight-color);
+  background: var(--ls-selection-background-color);
   color: var(--ls-primary-text-color);
 }
 
 ::-moz-selection {
-  background: var(--ls-block-highlight-color);
+  background: var(--ls-selection-background-color);
   color: var(--ls-primary-text-color);
 }
 
