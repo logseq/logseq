@@ -95,6 +95,5 @@
             (if @n-ref
               (str @n-ref " Unlinked References")
               "Unlinked References")]
-           (fn []
-             (unlinked-references-aux page-name n-ref))
+           (unlinked-references-aux page-name n-ref)
            true)]]))))
