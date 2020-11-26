@@ -116,7 +116,6 @@ yarn watch
 2.  Run jar
 
     ``` bash
-    cd resources
     java -Duser.timezone=UTC -jar logseq.jar
     ```
 
