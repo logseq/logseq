@@ -109,7 +109,7 @@
      ["Tomorrow" #(get-page-ref-text (date/tomorrow))]
      ["Yesterday" #(get-page-ref-text (date/yesterday))]
      ["Today" #(get-page-ref-text (date/today))]
-     ["Current Time" (date/get-current-time)]
+     ["Current Time" #(date/get-current-time)]
      ["Date Picker" [[:editor/show-date-picker]]]
      ["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
                         [:editor/search-page]]]
