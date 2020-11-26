@@ -48,6 +48,7 @@
         "react-dom": "^16.12.0",
         "react-textarea-autosize": "^8.0.1",
         "react-transition-group": "^4.3.0",
-        "webdav": "^3.3.0"
+        "webdav": "^3.3.0",
+        "yargs-parser": "^20.2.4"
     }
 }
