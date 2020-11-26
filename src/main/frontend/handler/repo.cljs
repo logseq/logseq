@@ -571,7 +571,7 @@
 
 (defn rebuild-index!
   [{:keys [id url] :as repo}]
-  (spec/validate :me/repos+ repo)
+  (spec/validate :repos/repo repo)
   (db/remove-conn! url)
   (db/clear-query-state!)
   (-> (p/let [_ (db/remove-db! url)
