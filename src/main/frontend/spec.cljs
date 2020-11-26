@@ -12,12 +12,13 @@
 (defn validate
   "This function won't crash the current thread, just log error."
   [spec value]
-  (if (s/explain-data spec value)
-    (let [error-message (expound/expound-str spec value)
-          ex (ex-info "Error in validate" nil)]
-      (log/error :exception ex :spec/validate-failed error-message)
-      false)
-    true))
+  (when config/dev?
+    (if (s/explain-data spec value)
+     (let [error-message (expound/expound-str spec value)
+           ex (ex-info "Error in validate" nil)]
+       (log/error :exception ex :spec/validate-failed error-message)
+       false)
+     true)))
 
 ;; repo
 
