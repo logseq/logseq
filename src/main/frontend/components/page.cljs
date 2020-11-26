@@ -66,7 +66,7 @@
                       {:journal? journal?
                        :page-name page-name})
         start-level (or (:block/level (first page-blocks)) 1)
-        hiccup-config {:id page-name
+        hiccup-config {:id (if block? (str block-id) page-name)
                        :start-level start-level
                        :sidebar? sidebar?
                        :block? block?
