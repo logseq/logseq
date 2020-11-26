@@ -72,7 +72,8 @@
             pushing? (= :pushing git-status)
             pulling? (= :pulling git-status)
             push-failed? (= :push-failed git-status)
-            last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
+            last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
+            editing? (seq (state/sub :editor/editing?))]
         [:div.flex-row.flex.items-center
          (when pushing?
            [:span.lds-dual-ring.mt-1])
@@ -82,7 +83,7 @@
              {:class (cond
                        push-failed?
                        "bg-red-500"
-                       (or should-push? pushing?)
+                       (or editing? should-push? pushing?)
                        "bg-orange-400"
                        :else
                        "bg-green-600")
