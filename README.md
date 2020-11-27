@@ -102,7 +102,7 @@ export PG_PASSWORD="xxx"
 ### 5. Compile to JavaScript
 
 ``` bash
-cd web
+git clone https://github.com/logseq/logseq
 yarn
 yarn watch
 ```
@@ -111,7 +111,7 @@ yarn watch
 
 1.  Download jar
 
-    Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and put it in the web directory.
+    Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and put it in the `logseq` directory.
 
 2.  Run jar
 
