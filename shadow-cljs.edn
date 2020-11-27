@@ -18,7 +18,8 @@
                       :output-feature-set :es6
                       :externs ["datascript/externs.js"
                                 "externs.js"]}
-   :closure-defines {goog.debug.LOGGING_ENABLED true}
+   :closure-defines {goog.debug.LOGGING_ENABLED true
+                     frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
    :devtools
    ;; before live-reloading any code call this function

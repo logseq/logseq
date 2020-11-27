@@ -89,6 +89,7 @@ export ENVIRONMENT="dev"
 export JWT_SECRET="xxxxxxxxxxxxxxxxxxxx"
 export COOKIE_SECRET="xxxxxxxxxxxxxxxxxxxx"
 export DATABASE_URL="postgres://localhost:5432/logseq"
+export GITHUB_APP2_NAME="logseq-test-your-username-app"
 export GITHUB_APP2_ID="78728"
 export GITHUB_APP2_KEY="xxxxxxxxxxxxxxxxxxxx" #Your Github App's Client ID
 export GITHUB_APP2_SECRET="xxxxxxxxxxxxxxxxxxxx"

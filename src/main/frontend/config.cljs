@@ -33,7 +33,9 @@
   (if dev? path
       (str asset-domain path)))
 
-(def github-app-name (if dev? "logseq-test" "logseq"))
+(goog-define GITHUB_APP_NAME "logseq-test")
+
+(def github-app-name (if dev? GITHUB_APP_NAME "logseq"))
 
 (defn git-pull-secs
   []
