@@ -78,6 +78,12 @@ Follow the guide at <https://docs.github.com/en/free-pro-team@latest/developers/
 
 Remember to download the `private-key.pem` which will be used for the next step. Also take note of your `App ID`, `Client ID`, and your newly generated `Client Secret` for use in step 4.
 
+![Screenshot 2020-11-27 22-22-39 +0800](https://user-images.githubusercontent.com/479169/100460276-e0bad100-3101-11eb-8fed-1f7c85824b62.png)
+
+**Add contents permission**:
+![Screenshot 2020-11-27 22-22-57 +0800](https://user-images.githubusercontent.com/479169/100460271-def10d80-3101-11eb-91bb-f2339a52d4f8.png)
+
+
 ### 3. Set up PostgreSQL
 
 Make sure you have PostgreSQL running. You can check if it's running with `pg_ctl -D /usr/local/var/postgres status` and use `pg_ctl -D /usr/local/var/postgres start` to start it up. You'll also need to make a Logseq DB in PostgreSQL. Do that with `createdb logseq`.
