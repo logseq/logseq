@@ -532,6 +532,7 @@
                (concat
                 pages
                 block-retracted-attrs
+                (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
                 blocks
                 retract-refs
                 page-properties
@@ -618,6 +619,7 @@
                                             repo
                                             (concat
                                              pages
+                                             (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
                                              blocks
                                              after-blocks)
                                             {:key :block/insert

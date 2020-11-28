@@ -81,7 +81,8 @@
    :block/body {}
    :block/pre-block? {}
    :block/collapsed? {}
-   :block/children {:db/cardinality :db.cardinality/many
+   :block/children {:db/valueType   :db.type/ref
+                    :db/cardinality :db.cardinality/many
                     :db/unique :db.unique/identity}
    :block/scheduled {}
    :block/scheduled-ast {}
