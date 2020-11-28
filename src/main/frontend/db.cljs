@@ -1339,7 +1339,7 @@
   [repo-url format ast properties file content utf8-content journal? pages-fn]
   (try
     (let [now (tc/to-long (t/now))
-          [block-refs blocks] (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
+          blocks (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
           pages (pages-fn blocks ast)
           ref-pages (atom #{})
           ref-tags (atom #{})
@@ -1437,9 +1437,12 @@
                   (fn [page]
                     {:page/original-name page
                      :page/name (string/lower-case page)})
-                  @ref-pages))]
+                  @ref-pages))
+          block-ids (mapv (fn [block]
+                            {:block/uuid (:block/uuid block)})
+                          (remove nil? blocks))]
       [(remove nil? pages)
-       (remove nil? block-refs)
+       block-ids
        (remove nil? blocks)])
     (catch js/Error e
       (js/console.log e))))
@@ -1485,9 +1488,9 @@
                   (when content
                     (let [utf8-content (utf8/encode content)]
                       (extract-blocks-pages repo-url file content utf8-content))))
-                 contents)
+                contents)
         result (remove empty? result)]
-    ;; '(pages block-refs blocks)
+    ;; '(pages block-ids blocks)
     (->> (apply map concat result)
          (apply concat))))
 
@@ -1501,8 +1504,8 @@
           file-content [{:file/path file}]
           tx (if (contains? config/mldoc-support-formats format)
                (let [delete-blocks (delete-file-blocks! repo-url file)
-                     [pages block-refs blocks] (extract-blocks-pages repo-url file content utf8-content)]
-                 (concat file-content delete-blocks pages block-refs blocks))
+                     [pages block-ids blocks] (extract-blocks-pages repo-url file content utf8-content)]
+                 (concat file-content delete-blocks pages block-ids blocks))
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
@@ -1909,10 +1912,10 @@
   (mapv (fn [p]
           (let [current-page? (= p current-page)
                 color (case [dark? current-page?]
-                            [false false] "#222222"
-                            [false true]  "#045591"
-                            [true false]  "#8abbbb"
-                            [true true]   "#ffffff")] ; FIXME: Put it into CSS
+                        [false false] "#222222"
+                        [false true]  "#045591"
+                        [true false]  "#8abbbb"
+                        [true true]   "#ffffff")] ; FIXME: Put it into CSS
             {:id p
              :name p
              :val (get-connections p edges)
