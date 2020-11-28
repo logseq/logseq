@@ -676,7 +676,7 @@
                                 (not (string/blank? value))
                                 (not= (string/trim value) (string/trim content)))
                            (let [old-page-name (db/get-file-page path false)]
-                             (page-handler/rename-when-alter-title-propertiy! old-page-name path format content value)
+                             (page-handler/rename-when-alter-title-property! old-page-name path format content value)
                              (file/alter-file (state/get-current-repo) path (string/trim value)
                                               {:re-render-root? true}))))
                        (when-not (contains? #{:insert :indent-outdent} (state/get-editor-op))
@@ -685,24 +685,22 @@
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or {dummy? false}
           :as option} id config]
-  (let [content (state/sub [:editor/content id])]
-    [:div.editor {:style {:position "relative"
-                          :display "flex"
-                          :flex "1 1 0%"}
-                  :class (if block "block-editor" "non-block-editor")}
+  (let [content (state/get-edit-content)]
+    [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
-     (ui/textarea
+     (ui/ls-textarea
       {:id id
-       :value (or content "")
+       :cacheMeasurements true
+       :default-value (or content "")
        :minRows (if (state/enable-grammarly?) 2 1)
        :on-click (fn [_e]
                    (let [input (gdom/getElement id)
                          current-pos (:pos (util/get-caret-pos input))]
                      (state/set-edit-pos! current-pos)
                      (editor-handler/close-autocomplete-if-outside input)))
-       :on-key-down (fn [_e]
-                      (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                        (state/set-edit-pos! current-pos)))
+       ;:on-key-down (fn [_e]
+       ;               (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+       ;                 (state/set-edit-pos! current-pos)))
        :on-change (fn [e]
                     (let [value (util/evalue e)
                           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
@@ -716,8 +714,8 @@
                           ;; TODO: is it cross-browser compatible?
                           (when (not= (gobj/get native-e "inputType") "insertFromPaste")
                             (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
-                             (reset! *slash-caret-pos (util/get-caret-pos input))
-                             (reset! *show-commands true)))
+                              (reset! *slash-caret-pos (util/get-caret-pos input))
+                              (reset! *show-commands true)))
                           "<"
                           (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
                             (reset! *angle-bracket-caret-pos (util/get-caret-pos input))

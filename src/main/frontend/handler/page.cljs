@@ -357,7 +357,7 @@
 
           (ui-handler/re-render-root!))))))
 
-(defn rename-when-alter-title-propertiy!
+(defn rename-when-alter-title-property!
   [page path format original-content content]
   (when (and page (contains? config/mldoc-support-formats format))
     (let [old-name page

@@ -86,7 +86,7 @@
 (defn set-save-before-unload! []
   (.addEventListener js/window "beforeunload"
                      (fn [e]
-                       (when (state/repos-need-to-be-stored?)
+                       (when (and (not config/dev?) (state/repos-need-to-be-stored?))
                          (let [notification-id (atom nil)]
                            (let [id (notification/show!
                                      [:div
