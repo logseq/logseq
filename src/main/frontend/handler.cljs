@@ -33,13 +33,10 @@
 
 (defn store-schema!
   []
-  (prn "store schema!")
   (storage/set :db-schema db-schema/schema))
 
 (defn schema-changed?
   []
-  (prn "schema-changed? " (when-let [schema (storage/get :db-schema)]
-                            (not= schema db-schema/schema)))
   (when-let [schema (storage/get :db-schema)]
     (not= schema db-schema/schema)))
 
