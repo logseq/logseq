@@ -30,3 +30,6 @@ dummy.arc = function() {};
 dummy.fill = function() {};
 dummy.getData = function() {};
 dummy.zoomToFit = function() {};
+dummy.folder = function() {};
+dummy.file = function() {};
+dummy.generateAsync = function() {};
