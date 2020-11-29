@@ -1487,13 +1487,14 @@
 
 (defn extract-all-blocks-pages
   [repo-url contents]
-  (let [result (map
-                (fn [[file content] contents]
-                  (println "Parsing : " file)
-                  (when content
-                    (let [utf8-content (utf8/encode content)]
-                      (extract-blocks-pages repo-url file content utf8-content))))
-                 contents)
+  (let [result (->> contents
+                    (map
+                      (fn [[file content] contents]
+                        (println "Parsing : " file)
+                        (when content
+                          (let [utf8-content (utf8/encode content)]
+                            (extract-blocks-pages repo-url file content utf8-content)))))
+                    (remove empty?))
         [pages block-ids blocks] (apply map concat result)
         block-ids-set (set block-ids)
         blocks (map (fn [b]
