@@ -339,8 +339,7 @@
                                              "resolve any diffs first."]]
                                            :error)
                                           (route-handler/redirect! {:to :diff}))
-                                        (push repo-url {:commit-push? true
-                                                        :force? true
+                                        (push repo-url {:merge-push-no-diff? true
                                                         :commit-message "Merge push without diffed files"}))))))))
                  (p/catch (fn [error]
                             (println "Pull error:" (str error))
@@ -351,25 +350,17 @@
                               (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))))))))))))))
 
 (defn push
-  [repo-url {:keys [commit-message diff-push? commit-push? force?]
+  [repo-url {:keys [commit-message merge-push-no-diff?]
              :or {commit-message "Logseq auto save"
-                  diff-push? false
-                  commit-push? false
-                  force? false}}]
+                  merge-push-no-diff? false}}]
   (spec/validate :repos/url repo-url)
   (let [status (db/get-key-value repo-url :git/status)]
-    (if (or
-         commit-push?
-         (and
-          (db/cloned? repo-url)
-          (not (state/get-edit-input-id))
-          (not= status :pushing)
-          (empty? @state/diffs)))
+    (if (and
+         (db/cloned? repo-url)
+         (not (state/get-edit-input-id))
+         (not= status :pushing))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-            (when (or
-                   commit-push?
-                   (seq files)
-                   diff-push?)
+            (when (or (seq files) merge-push-no-diff?)
               ;; auto commit if there are any un-committed changes
               (let [commit-message (if (string/blank? commit-message)
                                      "Logseq auto save"
@@ -377,13 +368,10 @@
                 (p/let [commit-oid (git/commit repo-url commit-message)
                         token (helper/get-github-token repo-url)
                         status (db/get-key-value repo-url :git/status)]
-                  (when (and token
-                             (or
-                              commit-push?
-                              (not= status :pushing)))
+                  (when (and token (not= status :pushing))
                     (git-handler/set-git-status! repo-url :pushing)
                     (util/p-handle
-                     (git/push repo-url token force?)
+                     (git/push repo-url token merge-push-no-diff?)
                      (fn [result]
                        (git-handler/set-git-status! repo-url nil)
                        (git-handler/set-git-error! repo-url nil)
@@ -585,5 +573,4 @@
 (defn git-commit-and-push!
   [commit-message]
   (when-let [repo (state/get-current-repo)]
-    (push repo {:commit-message commit-message
-                :commit-push? true})))
+    (push repo {:commit-message commit-message})))
