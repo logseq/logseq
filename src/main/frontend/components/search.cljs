@@ -26,10 +26,12 @@
 
 (rum/defc highlight
   [content q]
-  (let [q (search/clean q)
+  (let [q-pattern (->> q
+                       (search/escape-str)
+                       (str "(?i)")
+                       (re-pattern))
         n (count content)
-        [before after] (string/split content (re-find (re-pattern (str "(?i)" q))
-                                                      content))
+        [before after] (string/split content q-pattern 2)
         [before after] (if (>= n 64)
                          [(if before (apply str (take-last 48 before)))
                           (if after (apply str (take 48 after)))]
