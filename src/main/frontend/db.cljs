@@ -1162,14 +1162,14 @@
                [?e2 :block/children ?e1]]
               [(parent ?e2 ?e1)
                [?t :block/children ?e1]
-               [?t :block/uuid ?tid]
-               (parent ?e2 ?tid)]])
+               (parent ?e2 ?t)]])
            (apply concat)))))
 
 (defn get-block-immediate-children
   [repo block-uuid]
   (when-let [conn (get-conn repo)]
-    (let [ids (:block/children (entity repo [:block/uuid block-uuid]))]
+    (let [ids (->> (:block/children (entity repo [:block/uuid block-uuid]))
+                   (map :db/id))]
       (when (seq ids)
         (pull-many repo '[*] ids)))))
 
