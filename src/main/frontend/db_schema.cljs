@@ -95,7 +95,6 @@
    :block/created-at {}
    :block/last-modified-at {}
 
-   :debug/nest2 {}
    ;; For pages
    :tag/name       {:db/unique :db.unique/identity}
    ;; ;; Definitions, useful for tags and future anki cards
