@@ -159,7 +159,6 @@
                        :default-home default-home}))
 
      [:a#download-as-html.hidden]
+     [:a#download-as-zip.hidden]
 
      (right-menu-button)]))
-
-

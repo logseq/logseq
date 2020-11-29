@@ -926,6 +926,18 @@
       react
       ffirst))))
 
+(defn get-file-contents
+  [repo]
+  (when-let [conn (get-files-conn repo)]
+    (->>
+     (d/q
+       '[:find ?path ?content
+         :where
+         [?file :file/path ?path]
+         [?file :file/content ?content]]
+       @conn)
+     (into {}))))
+
 (defn get-custom-css
   []
   (get-file "logseq/custom.css"))

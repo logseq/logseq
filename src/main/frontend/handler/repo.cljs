@@ -563,12 +563,11 @@
   (db/remove-conn! url)
   (db/clear-query-state!)
   (-> (p/let [_ (db/remove-db! url)
-              _ (db/remove-files-db! url)]
-        (fs/rmdir (util/get-repo-dir url)))
+              _ (db/remove-files-db! url)
+              _ (fs/rmdir (util/get-repo-dir url))]
+        (clone-and-pull url))
       (p/catch (fn [error]
-                 (prn "Delete repo failed, error: " error)))
-      (p/finally (fn []
-                   (clone-and-pull url)))))
+                 (prn "Delete repo failed, error: " error)))))
 
 (defn git-commit-and-push!
   [commit-message]
