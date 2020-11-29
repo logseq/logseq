@@ -97,7 +97,6 @@
 
    ;; For pages
    :tag/name       {:db/unique :db.unique/identity}
-
    ;; ;; Definitions, useful for tags and future anki cards
    ;; :definition/block {:db/valueType   :db.type/ref}
    ;; ;; Why not make :definition/key unique?

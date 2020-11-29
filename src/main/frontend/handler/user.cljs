@@ -58,19 +58,10 @@
                    (notification/show! "Workflow set successfully!" :success))
                  (fn [_e])))))
 
-(defn- clear-store!
-  []
-  (p/let [_ (.clear db/localforage-instance)
-          dbs (js/window.indexedDB.databases)]
-    (doseq [db dbs]
-      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
-
 (defn sign-out!
   [e]
   (->
-   (do
-     (storage/clear)
-     (clear-store!))
+   (db/clear-local-storage-and-idb!)
    (p/catch (fn [e]
               (println "sign out error: ")
               (js/console.dir e)))

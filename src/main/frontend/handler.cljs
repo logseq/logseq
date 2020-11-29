@@ -1,8 +1,10 @@
 (ns frontend.handler
   (:require [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.db-schema :as db-schema]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
+            [frontend.storage :as storage]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -33,7 +35,8 @@
   (let [pfs-loaded? (atom js/window.pfs)
         interval (atom nil)
         db-schema-changed-handler (if (state/logged?)
-                                    repo-handler/rebuild-index!
+                                    (fn [repo]
+                                      (repo-handler/rebuild-index! repo))
                                     (fn [_] nil))
         inner-fn (fn []
                    (when (and @interval js/window.pfs)
@@ -115,6 +118,25 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
+(defn store-schema!
+  []
+  (storage/set :db-schema db-schema/schema))
+
+(defn clear-stores-if-schema-changed!
+  [handler]
+  (if (not= (storage/get :db-schema) db-schema/schema)
+    (p/let [_ (db/clear-local-storage-and-idb!)]
+      (handler)
+      (store-schema!))
+    (do
+      (handler)
+      (store-schema!))))
+
+(defn clear-stores-and-refresh!
+  []
+  (p/let [_ (db/clear-local-storage-and-idb!)]
+    (js/window.location.reload)))
+
 (defn start!
   [render]
   (let [me (and js/window.user (bean/->clj js/window.user))
@@ -133,7 +155,8 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
-    (restore-and-setup! me repos logged?)
+    (clear-stores-if-schema-changed!
+     #(restore-and-setup! me repos logged?))
 
     (periodically-persist-repo-to-indexeddb!)
 

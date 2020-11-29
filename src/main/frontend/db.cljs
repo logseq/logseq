@@ -21,7 +21,9 @@
             [frontend.extensions.sci :as sci]
             [frontend.db-schema :as db-schema]
             [clojure.core.async :as async]
-            [lambdaisland.glogi :as log]))
+            [frontend.storage :as storage]
+            [lambdaisland.glogi :as log]
+            [goog.object :as gobj]))
 
 ;; offline db
 (def store-name "dbs")
@@ -37,13 +39,17 @@
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
 
-;; (defn clear-store!
-;;   []
-;;   (p/let [_ (.clear localforage)
-;;           dbs (js/window.indexedDB.databases)]
-;;     (doseq [db dbs]
-;;       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
+(defn clear-idb!
+  []
+  (p/let [_ (.clear localforage-instance)
+          dbs (js/window.indexedDB.databases)]
+    (doseq [db dbs]
+      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
 
+(defn clear-local-storage-and-idb!
+  []
+  (storage/clear)
+  (clear-idb!))
 
 (defn get-repo-path
   [url]
@@ -1896,7 +1902,7 @@
                       (let [stored-db (string->db stored)
                             attached-db (d/db-with stored-db [(me-tx stored-db me)])]
                         (reset-conn! db-conn attached-db)
-                        (when (not= (:schema stored-db) db-schema/schema) ;; check for code update
+                        (when (not= (:schema stored-db) db-schema/schema) ;; check for db schema changes
                           (db-schema-changed-handler {:url repo})))
                       (when logged?
                         (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
