@@ -17,7 +17,8 @@
             [frontend.handler.export :as export-handler]
             [frontend.ui :as ui]
             [goog.object :as gobj]
-            [frontend.helper :as helper]))
+            [frontend.helper :as helper]
+            [lambdaisland.glogi :as log]))
 
 (defn- watch-for-date!
   []
@@ -30,15 +31,42 @@
                             (repo-handler/create-today-journal-if-not-exists repo))))))
                   1000))
 
+(defn store-schema!
+  []
+  (prn "store schema!")
+  (storage/set :db-schema db-schema/schema))
+
+(defn schema-changed?
+  []
+  (prn "schema-changed? " (when-let [schema (storage/get :db-schema)]
+                            (not= schema db-schema/schema)))
+  (when-let [schema (storage/get :db-schema)]
+    (not= schema db-schema/schema)))
+
+(defn- get-me-and-repos
+  []
+  (let [me (and js/window.user (bean/->clj js/window.user))
+        logged? (:name me)
+        repos (if logged?
+                (:repos me)
+                [{:url config/local-repo}])]
+    {:me me
+     :logged? logged?
+     :repos repos}))
+
+(declare restore-and-setup!)
+
+(defn clear-stores-and-refresh!
+  []
+  (p/let [_ (db/clear-local-storage-and-idb!)]
+    (let [{:keys [me logged? repos]} (get-me-and-repos)]
+      (js/window.location.reload))))
+
 (defn restore-and-setup!
   [me repos logged?]
   ;; wait until pfs is loaded
   (let [pfs-loaded? (atom js/window.pfs)
         interval (atom nil)
-        db-schema-changed-handler (if (state/logged?)
-                                    (fn [repo]
-                                      (repo-handler/rebuild-index! repo))
-                                    (fn [_] nil))
         inner-fn (fn []
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
@@ -46,14 +74,33 @@
                      (-> (p/all (db/restore! (assoc me :repos repos)
                                              (fn [repo]
                                                (file-handler/restore-config! repo false)
-                                               (ui-handler/add-style-if-exists!))
-                                             db-schema-changed-handler))
+                                               (ui-handler/add-style-if-exists!))))
                          (p/then
                           (fn []
                             (if (and (not logged?)
                                      (not (seq (db/get-files config/local-repo))))
                               (repo-handler/setup-local-repo-if-not-exists!)
                               (state/set-db-restoring! false))
+
+                            (if (schema-changed?)
+                              (do
+                                (notification/show!
+                                 [:p "Database schema changed, your notes will be exported as zip files, your repos will be re-indexed then."]
+                                 :warning
+                                 false)
+                                (let [export-repos (for [repo repos]
+                                                    (when-let [url (:url repo)]
+                                                      (println "Export repo: " url)
+                                                      (export-handler/export-repo-as-zip! url)))]
+                                 (-> (p/all export-repos)
+                                     (p/then (fn []
+                                               (store-schema!)
+                                               (js/setTimeout clear-stores-and-refresh! 5000)))
+                                     (p/catch (fn [error]
+                                                (log/error :export/zip {:error error
+                                                                        :repos repos}))))))
+                              (store-schema!))
+
                             (page-handler/init-commands!)
                             (if (seq (:repos me))
                               ;; FIXME: handle error
@@ -119,33 +166,9 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
-(defn store-schema!
-  []
-  (storage/set :db-schema db-schema/schema))
-
-(defn clear-stores-if-schema-changed!
-  [handler]
-  (if (not= (storage/get :db-schema) db-schema/schema)
-    ;; TODO: export repo zip
-    (p/let [_ (db/clear-local-storage-and-idb!)]
-      (handler)
-      (store-schema!))
-    (do
-      (handler)
-      (store-schema!))))
-
-(defn clear-stores-and-refresh!
-  []
-  (p/let [_ (db/clear-local-storage-and-idb!)]
-    (js/window.location.reload)))
-
 (defn start!
   [render]
-  (let [me (and js/window.user (bean/->clj js/window.user))
-        logged? (:name me)
-        repos (if logged?
-                (:repos me)
-                [{:url config/local-repo}])]
+  (let [{:keys [me logged? repos]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
     (state/set-db-restoring! true)
     (render)
@@ -157,8 +180,7 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
-    (clear-stores-if-schema-changed!
-     #(restore-and-setup! me repos logged?))
+    (restore-and-setup! me repos logged?)
 
     (periodically-persist-repo-to-indexeddb!)
 
