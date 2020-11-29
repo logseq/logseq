@@ -132,6 +132,10 @@
            :on-click (fn [] (repo-handler/pull-current-repo)))
          (if pulling?
            [:span.lds-dual-ring.mt-1])]
+        [:a.mt-5.text-sm.opacity-50.block
+         {:on-click (fn []
+                      (export-handler/export-repo-as-zip! repo))}
+         (t :repo/download-zip)]
         [:p.pt-2.text-sm.opacity-50
          (t :git/version) (str " " version/version)]]])))]))))
 

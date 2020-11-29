@@ -41,6 +41,7 @@
         "codemirror": "^5.58.1",
         "diff": "^4.0.2",
         "dropbox": "^5.2.0",
+        "jszip": "^3.5.0",
         "localforage": "^1.7.3",
         "mousetrap": "^1.6.5",
         "parinfer-codemirror": "^1.4.2",

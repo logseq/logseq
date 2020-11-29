@@ -14,6 +14,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.ui :as ui]
             [goog.object :as gobj]
             [frontend.helper :as helper]))
@@ -125,6 +126,7 @@
 (defn clear-stores-if-schema-changed!
   [handler]
   (if (not= (storage/get :db-schema) db-schema/schema)
+    ;; TODO: export repo zip
     (p/let [_ (db/clear-local-storage-and-idb!)]
       (handler)
       (store-schema!))
