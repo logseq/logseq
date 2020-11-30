@@ -76,7 +76,7 @@ export var getSelectionText = function() {
 
 // Modified from https://github.com/GoogleChromeLabs/browser-nativefs
 // because shadow-cljs doesn't handle this babel transform
-const getFiles = async function (dirHandle, recursive, cb, path = dirHandle.name) {
+export var getFiles = async function (dirHandle, recursive, cb, path = dirHandle.name) {
   const dirs = [];
   const files = [];
   for await (const entry of dirHandle.values()) {

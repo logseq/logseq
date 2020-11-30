@@ -891,7 +891,8 @@
     (transact-react!
      repo
      [{:file/path path
-       :file/content content}]
+       :file/content content
+       :file/last-modified-at (util/time-ms)}]
      {:key [:file/content path]
       :files-db? true})))
 
@@ -925,15 +926,16 @@
       @conn)
      (into {}))))
 
-(defn get-full-file-contents
+(defn get-files-path-size-modified-at
   [repo]
   (when-let [conn (get-files-conn repo)]
     (->>
      (d/q
-      '[:find (pull ?file [*])
+      '[:find (pull ?file [:file/path :file/size :file/last-modified-at])
         :where
         [?file :file/path]]
-      @conn))))
+      @conn)
+     (flatten))))
 
 (defn get-custom-css
   []

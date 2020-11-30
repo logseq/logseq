@@ -8,6 +8,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.util :as util]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]
@@ -68,7 +69,9 @@
   (when-let [repo (state/get-current-repo)]
     (when-not (= repo config/local-repo)
       (if (config/local-db? repo)
-        [:a.ml-2.mr-1.opacity-70.hover:opacity-100 svg/refresh]
+        [:a.ml-2.mr-1.opacity-70.hover:opacity-100
+         {:on-click #(nfs-handler/refresh! repo)}
+         svg/refresh]
         (let [changed-files (state/sub [:repo/changed-files repo])
               should-push? (seq changed-files)
               git-status (state/sub [:git/status repo])
