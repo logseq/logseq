@@ -276,9 +276,11 @@
     (git/get-local-diffs repo-url local-latest-commit remote-latest-commit)))
 
 (defn pull
-  [repo-url {:keys [force-pull? show-diff?]
+  [repo-url {:keys [force-pull? show-diff? try-times]
              :or {force-pull? false
-                  show-diff? false}}]
+                  show-diff? false
+                  try-times 2}
+             :as opts}]
   (spec/validate :repos/url repo-url)
   (when (and
          (db/get-conn repo-url true)
@@ -341,13 +343,25 @@
                                           (route-handler/redirect! {:to :diff}))
                                         (push repo-url {:merge-push-no-diff? true
                                                         :commit-message "Merge push without diffed files"}))))))))
-                 (p/catch (fn [error]
-                            (println "Pull error:" (str error))
-                            (js/console.error error)
-                            (git-handler/set-git-status! repo-url :pull-failed)
-                            (when (or (string/includes? (str error) "401")
-                                      (string/includes? (str error) "404"))
-                              (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))))))))))))))
+                 (p/catch
+                   (fn [error]
+                     (cond
+                       (string/includes? (str error) "404")
+                       (do (log/error :git/pull-error error)
+                           (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url)))
+
+                       (string/includes? (str error) "401")
+                       (let [remain-times (dec try-times)]
+                         (if (> remain-times 0)
+                           (let [new-opts (merge opts {:try-times remain-times})]
+                             (pull repo-url new-opts))
+                           (let [error-msg
+                                 (util/format "Failed to fetch %s. It may be caused by token expiration or missing." repo-url)]
+                             (log/error :git/pull-error error)
+                             (notification/show! error-msg :error false))))
+
+                       :else
+                       (log/error :git/pull-error error)))))))))))))
 
 (defn push
   [repo-url {:keys [commit-message merge-push-no-diff?]
