@@ -463,21 +463,21 @@
   []
   (if js/window.pfs
     (let [repo config/local-repo]
-      (p/let [result (-> (fs/mkdir (str "/" repo))
-                         (p/catch (fn [_e] nil)))
-              _ (state/set-current-repo! repo)
-              _ (db/start-db-conn! nil repo)
-              _ (when-not config/publishing?
-                  (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
-                    (create-dummy-notes-page repo dummy-notes)))
-              _ (when-not config/publishing?
-                  (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
-                        tutorial (string/replace-first tutorial "$today" (date/today))]
-                    (create-today-journal-if-not-exists repo tutorial)))
-              _ (create-config-file-if-not-exists repo)
-              _ (create-contents-file repo)
-              _ (create-custom-theme repo)]
-        (state/set-db-restoring! false)))
+      (p/do! (-> (fs/mkdir (str "/" repo))
+                 (p/catch (fn [_e] nil)))
+             (state/set-current-repo! repo)
+             (db/start-db-conn! nil repo)
+             (when-not config/publishing?
+               (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                 (create-dummy-notes-page repo dummy-notes)))
+             (when-not config/publishing?
+               (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                     tutorial (string/replace-first tutorial "$today" (date/today))]
+                 (create-today-journal-if-not-exists repo tutorial)))
+             (create-config-file-if-not-exists repo)
+             (create-contents-file repo)
+             (create-custom-theme repo)
+             (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn periodically-pull
@@ -555,10 +555,10 @@
   (spec/validate :repos/repo repo)
   (db/remove-conn! url)
   (db/clear-query-state!)
-  (-> (p/let [_ (db/remove-db! url)
-              _ (db/remove-files-db! url)
-              _ (fs/rmdir (util/get-repo-dir url))]
-        (clone-and-pull url))
+  (-> (p/do! (db/remove-db! url)
+             (db/remove-files-db! url)
+             (fs/rmdir (util/get-repo-dir url))
+             (clone-and-pull url))
       (p/catch (fn [error]
                  (prn "Delete repo failed, error: " error)))))
 
