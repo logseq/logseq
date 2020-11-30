@@ -113,8 +113,8 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.cp__header#head
      (left-menu-button {:on-click (fn []
-                               (open-fn)
-                               (state/set-left-sidebar-open! true))})
+                                    (open-fn)
+                                    (state/set-left-sidebar-open! true))})
 
      (logo {:white? white?})
 
@@ -127,7 +127,7 @@
      [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100.mr-4
       {:on-click (fn []
                    (nfs/ls-dir-files))}
-      "Open a database"]
+      "Open a directory"]
 
      (when (and (not logged?)
                 (not config/publishing?))
