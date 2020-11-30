@@ -493,12 +493,8 @@
 
 (defn periodically-push-tasks
   [repo-url]
-  (spec/validate :repos/url repo-url)
-  (let [push (fn []
-               (when (not (false? (:git-auto-push (state/get-config repo-url))))
-                 (push repo-url nil)))]
-    (js/setInterval push
-                    (* (config/git-push-secs) 1000))))
+  (js/setInterval #(push-if-auto-enabled! repo-url)
+                  (* (config/git-push-secs) 1000)))
 
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
