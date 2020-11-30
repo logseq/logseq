@@ -507,11 +507,11 @@
   (when token-result
     (let [{:keys [token expires_at]} token-result]
       (swap! state update-in [:me :repos]
-       (fn [repos]
-         (map (fn [r]
-                (if (= repo (:url r))
-                  (merge r {:token token :expires_at expires_at})
-                  repo)) repos))))))
+             (fn [repos]
+               (map (fn [r]
+                      (if (= repo (:url r))
+                        (merge r {:token token :expires_at expires_at})
+                        repo)) repos))))))
 
 (defn set-github-installation-tokens!
   [tokens]

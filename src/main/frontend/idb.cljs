@@ -4,7 +4,8 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.string :as string]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.storage :as storage]))
 
 ;; offline db
 (def store-name "dbs")
@@ -16,12 +17,17 @@
 
 (defonce localforage-instance (.createInstance localforage store-name))
 
-(defn clear-store!
+(defn clear-idb!
   []
   (p/let [_ (.clear localforage-instance)
           dbs (js/window.indexedDB.databases)]
     (doseq [db dbs]
       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
+
+(defn clear-local-storage-and-idb!
+  []
+  (storage/clear)
+  (clear-idb!))
 
 (defn remove-item!
   [key]

@@ -62,7 +62,7 @@
 (defn sign-out!
   [e]
   (->
-   (db/clear-local-storage-and-idb!)
+   (idb/clear-local-storage-and-idb!)
    (p/catch (fn [e]
               (println "sign out error: ")
               (js/console.dir e)))

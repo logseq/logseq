@@ -19,7 +19,8 @@
             [frontend.ui :as ui]
             [goog.object :as gobj]
             [frontend.helper :as helper]
-            [frontend.idb :as idb]))
+            [frontend.idb :as idb]
+            [lambdaisland.glogi :as log]))
 
 (defn- watch-for-date!
   []
@@ -56,7 +57,7 @@
 
 (defn clear-stores-and-refresh!
   []
-  (p/let [_ (db/clear-local-storage-and-idb!)]
+  (p/let [_ (idb/clear-local-storage-and-idb!)]
     (let [{:keys [me logged? repos]} (get-me-and-repos)]
       (js/window.location.reload))))
 
@@ -111,7 +112,9 @@
                                (fn []
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
-                            (watch-for-date!))))))]
+                            (watch-for-date!)))
+                         (p/catch (fn [error]
+                                    (log/error :db/restore-failed error))))))]
     ;; clear this interval
     (let [interval-id (js/setInterval inner-fn 50)]
       (reset! interval interval-id))))

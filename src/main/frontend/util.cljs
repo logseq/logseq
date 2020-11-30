@@ -19,6 +19,11 @@
             [clojure.pprint :refer [pprint]]
             [goog.userAgent]))
 
+(extend-protocol IPrintWithWriter
+  js/Symbol
+  (-pr-writer [sym writer _]
+    (-write writer (str "\"" (.toString sym) "\""))))
+
 ;; envs
 (defn ios?
   []

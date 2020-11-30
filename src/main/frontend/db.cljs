@@ -1876,30 +1876,27 @@
              db-name (datascript-files-db repo)
              db-conn (d/create-conn db-schema/files-db-schema)]
          (swap! conns assoc db-name db-conn)
-         (->
-          (p/let [stored (-> (idb/get-item db-name)
-                             (p/then (fn [result]
-                                       result))
-                             (p/catch (fn [error]
-                                        nil)))
-                  _ (when stored
-                      (let [stored-db (string->db stored)
-                            attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (reset-conn! db-conn attached-db)))
-                  db-name (datascript-db repo)
-                  db-conn (d/create-conn db-schema/schema)
-                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
-                  _ (swap! conns assoc db-name db-conn)
-                  stored (idb/get-item db-name)
-                  _ (if stored
-                      (let [stored-db (string->db stored)
-                            attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (reset-conn! db-conn attached-db)
-                        (when (not= (:schema stored-db) db-schema/schema) ;; check for code update
-                          (db-schema-changed-handler {:url repo})))
-                      (when logged?
-                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
-                  _ (restore-config-handler repo)])))))))
+         (p/let [stored (-> (idb/get-item db-name)
+                            (p/then (fn [result]
+                                      result))
+                            (p/catch (fn [error]
+                                       nil)))
+                 _ (when stored
+                     (let [stored-db (string->db stored)
+                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                       (reset-conn! db-conn attached-db)))
+                 db-name (datascript-db repo)
+                 db-conn (d/create-conn db-schema/schema)
+                 _ (d/transact! db-conn [{:schema/version db-schema/version}])
+                 _ (swap! conns assoc db-name db-conn)
+                 stored (idb/get-item db-name)
+                 _ (if stored
+                     (let [stored-db (string->db stored)
+                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                       (reset-conn! db-conn attached-db))
+                     (when logged?
+                       (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+           (restore-config-handler repo)))))))
 
 (defn- build-edges
   [edges]
