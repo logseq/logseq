@@ -36,7 +36,7 @@
       (if (and (map? token-state)
                (string? expires_at))
         (let [expires-at (tf/parse (tf/formatters :date-time-no-ms) expires_at)
-              request-time-gap (t/minutes 1)
+              request-time-gap (t/minutes 5)
               now (t/now)
               expired? (t/after? now (t/minus expires-at request-time-gap))]
           {:exist? true
