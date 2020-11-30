@@ -23,10 +23,10 @@
         set-composition? #(reset! composition? %)
         on-composition (fn [e]
                          (case e.type
-                           "compositionend" (do (set-composition? false))
+                           "compositionend" (do (set-composition? false) (on-change e))
                            (set-composition? true)))
         props (assoc -props
-                     :on-change (fn [e] (when (not @composition?)
+                     :on-change (fn [e] (when-not @composition?
                                           (on-change e)))
                      :on-composition-start on-composition
                      :on-composition-update on-composition

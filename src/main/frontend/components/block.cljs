@@ -613,10 +613,10 @@
                                   nil)]
             (when-not (string/blank? youtube-id)
               [:iframe
-               {:allowfullscreen "allowfullscreen"
+               {:allow-full-screen "allowfullscreen"
                 :allow
                 "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                :frameborder "0"
+                :frame-border "0"
                 :src (str "https://www.youtube.com/embed/" youtube-id)
                 :height "315"
                 :width "560"}])))
