@@ -157,21 +157,23 @@
   (create-custom-theme repo-url))
 
 (defn- parse-files-and-load-to-db!
-  [repo-url files contents {:keys [first-clone? delete-files delete-blocks re-render? additional-files-info]}]
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render?]}]
   (state/set-state! :repo/loading-files? false)
   (state/set-state! :repo/importing-to-db? true)
-  (let [parsed-files (filter
-                      (fn [[file _]]
-                        (let [format (format/get-format file)]
+  (let [file-paths (map :file/path files)
+        parsed-files (filter
+                      (fn [file]
+                        (let [format (format/get-format (:file/path file))]
                           (contains? config/mldoc-support-formats format)))
-                      contents)
+                      files)
         blocks-pages (if (seq parsed-files)
                        (db/extract-all-blocks-pages repo-url parsed-files)
                        [])]
-    (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
+    (db/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (let [config-file (str config/app-name "/" config/config-file)]
-      (if (contains? (set files) config-file)
-        (when-let [content (get contents config-file)]
+      (if (contains? (set file-paths) config-file)
+        (when-let [content (some #(when (= (:file/path %) config-file)
+                                    (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
     (when first-clone? (create-default-files! repo-url))
     (state/set-state! :repo/importing-to-db? false)
@@ -179,18 +181,16 @@
       (ui-handler/re-render-root!))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files nfs-contents additional-files-info]}]
+  [repo-url {:keys [first-clone? diffs nfs-files]}]
   (spec/validate :repos/url repo-url)
   (let [load-contents (fn [files option]
                         (file-handler/load-files-contents!
                          repo-url
                          files
-                         (fn [contents] (parse-files-and-load-to-db! repo-url files contents option))))]
+                         (fn [contents] (parse-files-and-load-to-db! repo-url files option))))]
     (cond
       (seq nfs-files)
-      (parse-files-and-load-to-db! repo-url nfs-files nfs-contents
-                                   {:first-clone? true
-                                    :additional-files-info additional-files-info})
+      (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
 
       first-clone?
       (->

@@ -6,6 +6,7 @@
   {:file/path {:db/unique :db.unique/identity}
    :file/content {}
    :file/last-modified-at {}
+   :file/size {}
    :file/handle {}})
 
 ;; A page can corresponds to multiple files (same title),

@@ -57,9 +57,7 @@
                        (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                        (repo-handler/load-repo-to-db! repo
                                                       {:first-clone? true
-                                                       :nfs-files (map :file/path files)
-                                                       :nfs-contents (mapv (fn [f] [(:file/path f) (:file/content f)]) files)
-                                                       :additional-files-info files})
+                                                       :nfs-files files})
 
                        (state/add-repo! {:url repo :nfs? true}))))
            (p/catch (fn [error]

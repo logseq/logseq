@@ -65,7 +65,7 @@
                 (js/setTimeout common-handler/check-changed-files-status 1000)
                 state)}
   []
-  (let [repo (state/get-current-repo)]
+  (when-let [repo (state/get-current-repo)]
     (when-not (= repo config/local-repo)
       (if (config/local-db? repo)
         [:a.ml-2.mr-1.opacity-70.hover:opacity-100 svg/refresh]
@@ -144,44 +144,44 @@
 
 (rum/defc repos-dropdown < rum/reactive
   [head? on-click]
-  (let [current-repo (state/sub :git/current-repo)
-        logged? (state/logged?)
-        local-repo? (= current-repo config/local-repo)
-        get-repo-name (fn [repo]
-                        (if (string/starts-with? repo config/local-db-prefix)
-                          (str "local-" (string/replace-first repo config/local-db-prefix ""))
-                          (if head?
-                            (db/get-repo-path repo)
-                            (util/take-at-most (db/get-repo-name repo) 20))))]
-    (let [repos (->> (state/sub [:me :repos])
-                     (remove (fn [r] (= config/local-repo (:url r)))))]
-      (cond
-        (> (count repos) 1)
-        (ui/dropdown-with-links
-         (fn [{:keys [toggle-fn]}]
-           [:a#repo-switch {:on-click toggle-fn}
-            [:span (get-repo-name current-repo)]
-            [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-         (mapv
-          (fn [{:keys [id url]}]
-            {:title (get-repo-name url)
-             :options {:on-click (fn []
-                                   (state/set-current-repo! url)
-                                   (when-not (= :draw (state/get-current-route))
-                                     (route-handler/redirect-to-home!))
-                                   (when on-click
-                                     (on-click url)))}})
-          (remove (fn [repo]
-                    (= current-repo (:url repo)))
-                  repos))
-         {:modal-class (util/hiccup->class
-                        "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
+  (when-let [current-repo (state/sub :git/current-repo)]
+    (let [logged? (state/logged?)
+          local-repo? (= current-repo config/local-repo)
+          get-repo-name (fn [repo]
+                          (if (string/starts-with? repo config/local-db-prefix)
+                            (str "local-" (string/replace-first repo config/local-db-prefix ""))
+                            (if head?
+                              (db/get-repo-path repo)
+                              (util/take-at-most (db/get-repo-name repo) 20))))]
+      (let [repos (->> (state/sub [:me :repos])
+                       (remove (fn [r] (= config/local-repo (:url r)))))]
+        (cond
+          (> (count repos) 1)
+          (ui/dropdown-with-links
+           (fn [{:keys [toggle-fn]}]
+             [:a#repo-switch {:on-click toggle-fn}
+              [:span (get-repo-name current-repo)]
+              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+           (mapv
+            (fn [{:keys [id url]}]
+              {:title (get-repo-name url)
+               :options {:on-click (fn []
+                                     (state/set-current-repo! url)
+                                     (when-not (= :draw (state/get-current-route))
+                                       (route-handler/redirect-to-home!))
+                                     (when on-click
+                                       (on-click url)))}})
+            (remove (fn [repo]
+                      (= current-repo (:url repo)))
+                    repos))
+           {:modal-class (util/hiccup->class
+                          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
 
-        (and current-repo (not local-repo?))
-        [:a
-         {:href current-repo
-          :target "_blank"}
-         (get-repo-name current-repo)]
+          (and current-repo (not local-repo?))
+          [:a
+           {:href current-repo
+            :target "_blank"}
+           (get-repo-name current-repo)]
 
-        :else
-        nil))))
+          :else
+          nil)))))

@@ -59,11 +59,11 @@
                (subs path 1)
                path)]
     (some (fn [pattern]
-           (let [pattern (if (and (string? pattern)
-                                  (not= \/ (first pattern)))
-                           (str "/" pattern)
-                           pattern)]
-             (string/starts-with? (str "/" path) pattern))) patterns)))
+            (let [pattern (if (and (string? pattern)
+                                   (not= \/ (first pattern)))
+                            (str "/" pattern)
+                            pattern)]
+              (string/starts-with? (str "/" path) pattern))) patterns)))
 
 (defn restore-config!
   ([repo-url project-changed-check?]
@@ -98,12 +98,15 @@
         files (only-text-formats files)]
     (-> (p/all (load-multiple-files repo-url files))
         (p/then (fn [contents]
-                  (ok-handler
-                   (cond->
-                    (zipmap files contents)
+                  (let [file-contents (cond->
+                                       (zipmap files contents)
 
-                     (seq images)
-                     (merge (zipmap images (repeat (count images) "")))))))
+                                        (seq images)
+                                        (merge (zipmap images (repeat (count images) ""))))
+                        files-contents (for [[file content] file-contents]
+                                         {:file/path file
+                                          :file/content content})]
+                    (ok-handler file-contents))))
         (p/catch (fn [error]
                    (println "load files failed: ")
                    (js/console.dir error))))))
@@ -148,7 +151,7 @@
                                                 :re-render-root? false
                                                 :update-status? true})]
          (route-handler/redirect! {:to :file
-                                   :path-params {:path path}})))))  )
+                                   :path-params {:path path}}))))))
 
 (defn alter-files
   ([repo files]

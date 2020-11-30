@@ -546,6 +546,18 @@
            (let [tx-report (d/transact! conn (vec tx-data))]
              (state/mark-repo-as-changed! repo-url (get-tx-id tx-report)))))))))
 
+(defn transact-files-db!
+  ([tx-data]
+   (transact! (state/get-current-repo) tx-data))
+  ([repo-url tx-data]
+   (when-not config/publishing?
+     (let [tx-data (->> (util/remove-nils tx-data)
+                        (remove nil?)
+                        (map #(dissoc % :file/handle :file/type)))]
+       (when (seq tx-data)
+         (when-let [conn (get-files-conn repo-url)]
+           (d/transact! conn (vec tx-data))))))))
+
 (defn get-key-value
   ([key]
    (get-key-value (state/get-current-repo) key))
@@ -913,6 +925,16 @@
       @conn)
      (into {}))))
 
+(defn get-full-file-contents
+  [repo]
+  (when-let [conn (get-files-conn repo)]
+    (->>
+     (d/q
+      '[:find (pull ?file [*])
+        :where
+        [?file :file/path]]
+      @conn))))
+
 (defn get-custom-css
   []
   (get-file "logseq/custom.css"))
@@ -935,16 +957,11 @@
         ffirst)))))
 
 (defn reset-contents-and-blocks!
-  [repo-url contents blocks-pages delete-files delete-blocks]
-  (let [files (doall
-               (map (fn [[file content]]
-                      (set-file-content! repo-url file content)
-                      {:file/path file})
-                    contents))
+  [repo-url files blocks-pages delete-files delete-blocks]
+  (transact-files-db! repo-url files)
+  (let [files (map #(select-keys % [:file/path]) files)
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils))]
-    (prn {:repo-url repo-url
-          :all-data all-data})
     (transact! repo-url all-data)))
 
 (defn get-block-by-uuid
@@ -1481,14 +1498,14 @@
          [[(get-page-name file ast) blocks]])))))
 
 (defn extract-all-blocks-pages
-  [repo-url contents]
-  (let [result (->> contents
+  [repo-url files]
+  (let [result (->> files
                     (map
-                     (fn [[file content] contents]
-                       (println "Parsing : " file)
+                     (fn [{:file/keys [path content]} contents]
+                       (println "Parsing : " path)
                        (when content
                          (let [utf8-content (utf8/encode content)]
-                           (extract-blocks-pages repo-url file content utf8-content)))))
+                           (extract-blocks-pages repo-url path content utf8-content)))))
                     (remove empty?))
         [pages block-ids blocks] (apply map concat result)
         block-ids-set (set block-ids)
