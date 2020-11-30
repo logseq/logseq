@@ -229,6 +229,18 @@
   []
   (get-in @state [:me :repos]))
 
+(defn set-repos!
+  [repos]
+  (set-state! [:me :repos] repos))
+
+(defn add-repo!
+  [repo]
+  (when repo
+    (update-state! [:me :repos]
+                   (fn [repos]
+                     (->> (conj repos repo)
+                          (distinct))))))
+
 (defn set-current-repo!
   [repo]
   (swap! state assoc :git/current-repo repo)

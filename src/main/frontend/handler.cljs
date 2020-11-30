@@ -186,18 +186,21 @@
 
     ;; (nfs/trigger-check!)
     (p/let [nfs-dbs (idb/get-nfs-dbs)
-            nfs-dbs (map (fn [db] {:url db}) nfs-dbs)]
+            nfs-dbs (map (fn [db]
+                           {:url db :nfs? true}) nfs-dbs)]
       (let [repos (cond
                     logged?
                     (concat
-                     (:repos me)
-                     nfs-dbs)
+                     nfs-dbs
+                     (:repos me))
 
                     (seq nfs-dbs)
                     nfs-dbs
 
                     :else
-                    [{:url config/local-repo}])]
+                    [{:url config/local-repo
+                      :example? true}])]
+        (state/set-repos! repos)
         (restore-and-setup! me repos logged?)))
     (periodically-persist-repo-to-indexeddb!)
     (db/run-batch-txs!))
