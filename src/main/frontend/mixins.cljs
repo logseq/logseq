@@ -125,11 +125,7 @@
      :did-remount (fn [old-state new-state]
                     (detach old-state)
                     (attach-listeners new-state)
-                    new-state)
-     ;; :will-unmount (fn [state]
-     ;;                 (detach state)
-     ;;                 state)
-})))
+                    new-state)})))
 
 (defn modal
   [k]
