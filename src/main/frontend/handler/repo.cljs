@@ -11,7 +11,6 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [frontend.format :as format]
-            [goog.object :as gobj]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file-handler]
@@ -45,11 +44,6 @@
    :error
    false))
 
-(defn journal-file-changed?
-  [repo-url diffs]
-  (contains? (set (map :path diffs))
-             (db/get-current-journal-path)))
-
 (defn create-config-file-if-not-exists
   [repo-url]
   (spec/validate :repos/url repo-url)
@@ -63,19 +57,11 @@
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
                               (db/get-file repo-url path))
-                content (or
-                         (and old-content
-                              (string/replace old-content "heading" "block"))
-                         default-content)]
+                content (or old-content default-content)]
             (db/reset-file! repo-url path content)
             (db/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))
-        ;; (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
-        ;;   (let [path (str app-dir "/" config/metadata-file)]
-        ;;     (when-not file-exists?
-        ;;       (db/reset-file! repo-url path "{:tx-data []}")
-        ;;       (git-handler/git-add repo-url path))))
 ))))
 
 (defn create-contents-file
@@ -250,6 +236,7 @@
   (when (seq files)
     (file-handler/alter-files repo files)))
 
+; FIXME: Unused
 (defn persist-repo-metadata!
   [repo]
   (spec/validate :repos/url repo)
@@ -508,9 +495,7 @@
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [push (fn []
-               (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-                          ;; (not config/dev?)
-)
+               (when (not (false? (:git-auto-push (state/get-config repo-url))))
                  (push repo-url nil)))]
     (js/setInterval push
                     (* (config/git-push-secs) 1000))))
