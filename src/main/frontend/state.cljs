@@ -844,9 +844,11 @@
     (let [shortcuts (or (:shortcuts value) {})]
       (storage/set (str repo-url "-shortcuts") shortcuts))))
 
-(defn git-auto-push?
-  []
-  (true? (:git-auto-push (get-config (get-current-repo)))))
+(defn get-git-auto-push?
+  ([]
+   (get-git-auto-push? (get-current-repo)))
+  ([repo]
+   (true? (:git-auto-push (get-config repo)))))
 
 (defn set-changed-files!
   [repo changed-files]
