@@ -11,7 +11,6 @@
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
             [frontend.config :as config]
-            [goog.object :as gobj]
             [promesa.core :as p]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
@@ -21,7 +20,8 @@
             [frontend.extensions.sci :as sci]
             [frontend.db-schema :as db-schema]
             [clojure.core.async :as async]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.idb :as idb]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -569,42 +569,42 @@
   (when-not config/publishing?
     (try
       (let [repo-url (or repo-url (state/get-current-repo))
-           tx-data (->> (util/remove-nils tx-data)
-                        (remove nil?))
-           get-conn (fn [] (if files-db?
-                             (get-files-conn repo-url)
-                             (get-conn repo-url false)))]
-       (when (and (seq tx-data) (get-conn))
-         (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
-               _ (state/mark-repo-as-changed! repo-url (get-tx-id tx-result))
-               db (:db-after tx-result)
-               handler-keys (get-handler-keys handler-opts)]
-           (doseq [handler-key handler-keys]
-             (let [handler-key (vec (cons repo-url handler-key))]
-               (when-let [cache (get @query-state handler-key)]
-                 (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-                   (when (or query query-fn)
-                     (let [new-result (->
-                                       (cond
-                                         query-fn
-                                         (profile
-                                          "Query:"
-                                          (doall (query-fn db)))
+            tx-data (->> (util/remove-nils tx-data)
+                         (remove nil?))
+            get-conn (fn [] (if files-db?
+                              (get-files-conn repo-url)
+                              (get-conn repo-url false)))]
+        (when (and (seq tx-data) (get-conn))
+          (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
+                _ (state/mark-repo-as-changed! repo-url (get-tx-id tx-result))
+                db (:db-after tx-result)
+                handler-keys (get-handler-keys handler-opts)]
+            (doseq [handler-key handler-keys]
+              (let [handler-key (vec (cons repo-url handler-key))]
+                (when-let [cache (get @query-state handler-key)]
+                  (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
+                    (when (or query query-fn)
+                      (let [new-result (->
+                                        (cond
+                                          query-fn
+                                          (profile
+                                           "Query:"
+                                           (doall (query-fn db)))
 
-                                         inputs-fn
-                                         (let [inputs (inputs-fn)]
-                                           (apply d/q query db inputs))
+                                          inputs-fn
+                                          (let [inputs (inputs-fn)]
+                                            (apply d/q query db inputs))
 
-                                         (keyword? query)
-                                         (get-key-value repo-url query)
+                                          (keyword? query)
+                                          (get-key-value repo-url query)
 
-                                         (seq inputs)
-                                         (apply d/q query db inputs)
+                                          (seq inputs)
+                                          (apply d/q query db inputs)
 
-                                         :else
-                                         (d/q query db))
-                                       transform-fn)]
-                       (set-new-result! handler-key new-result))))))))))
+                                          :else
+                                          (d/q query db))
+                                        transform-fn)]
+                        (set-new-result! handler-key new-result))))))))))
       (catch js/Error e
         ;; FIXME: check error type and notice user
         (log/error :db/transact! e)))))
@@ -906,11 +906,11 @@
   (when-let [conn (get-files-conn repo)]
     (->>
      (d/q
-       '[:find ?path ?content
-         :where
-         [?file :file/path ?path]
-         [?file :file/content ?content]]
-       @conn)
+      '[:find ?path ?content
+        :where
+        [?file :file/path ?path]
+        [?file :file/content ?content]]
+      @conn)
      (into {}))))
 
 (defn get-custom-css
@@ -1484,11 +1484,11 @@
   [repo-url contents]
   (let [result (->> contents
                     (map
-                      (fn [[file content] contents]
-                        (println "Parsing : " file)
-                        (when content
-                          (let [utf8-content (utf8/encode content)]
-                            (extract-blocks-pages repo-url file content utf8-content)))))
+                     (fn [[file content] contents]
+                       (println "Parsing : " file)
+                       (when content
+                         (let [utf8-content (utf8/encode content)]
+                           (extract-blocks-pages repo-url file content utf8-content)))))
                     (remove empty?))
         [pages block-ids blocks] (apply map concat result)
         block-ids-set (set block-ids)

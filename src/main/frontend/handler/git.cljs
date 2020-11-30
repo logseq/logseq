@@ -10,9 +10,9 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
-            [frontend.helper :as helper]
             [frontend.config :as config]
-            [cljs-time.local :as tl]))
+            [cljs-time.local :as tl]
+            [frontend.helper :as helper]))
 
 (defn- set-git-status!
   [repo-url value]

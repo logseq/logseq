@@ -196,8 +196,6 @@
                     :else
                     [{:url config/local-repo}])]
         (restore-and-setup! me repos logged?)))
-
     (periodically-persist-repo-to-indexeddb!)
-
     (db/run-batch-txs!))
   (set-save-before-unload!))

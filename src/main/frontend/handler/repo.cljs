@@ -151,11 +151,10 @@
 (defn create-default-files!
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (when-let [name (get-in @state/state [:me :name])]
-    (create-config-file-if-not-exists repo-url)
-    (create-today-journal-if-not-exists repo-url)
-    (create-contents-file repo-url)
-    (create-custom-theme repo-url)))
+  (create-config-file-if-not-exists repo-url)
+  (create-today-journal-if-not-exists repo-url)
+  (create-contents-file repo-url)
+  (create-custom-theme repo-url))
 
 (defn- parse-files-and-load-to-db!
   [repo-url files contents {:keys [first-clone? delete-files delete-blocks re-render? additional-files-info]}]
