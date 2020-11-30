@@ -396,7 +396,7 @@
 (defn push-if-auto-enabled!
   [repo]
   (spec/validate :repos/url repo)
-  (when (state/git-auto-push?)
+  (when (state/get-git-auto-push? repo)
     (push repo nil)))
 
 (defn pull-current-repo
