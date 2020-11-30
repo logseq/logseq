@@ -50,8 +50,7 @@
   (let [repo-dir (util/get-repo-dir repo-url)
         app-dir config/app-name
         dir (str repo-dir "/" app-dir)]
-    (p/let [_ (-> (fs/mkdir dir)
-                  (p/catch (fn [_e])))]
+    (p/let [_ (fs/mkdir-if-not-exists dir)]
       (let [default-content config/config-default-content]
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
@@ -72,8 +71,7 @@
         path (str "pages/contents." (config/get-file-extension format))
         file-path (str "/" path)
         default-content (util/default-content-with-title format "contents")]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/pages"))
-                  (p/catch (fn [_e])))
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/pages"))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
@@ -86,8 +84,7 @@
         path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
         default-content ""]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/app-name))
-                  (p/catch (fn [_e])))
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
@@ -99,8 +96,7 @@
   (let [repo-dir (util/get-repo-dir repo-url)
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" (config/get-pages-directory)))
-                  (p/catch (fn [_e])))
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
       (db/reset-file! repo-url path content))))
 
@@ -134,8 +130,7 @@
          empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
      (when (or empty-blocks?
                (not page-exists?))
-       (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
-                     (p/catch (fn [_e])))
+       (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
          (when-not file-exists?
            (db/reset-file! repo-url path content)
@@ -463,8 +458,7 @@
   []
   (if js/window.pfs
     (let [repo config/local-repo]
-      (p/do! (-> (fs/mkdir (str "/" repo))
-                 (p/catch (fn [_e] nil)))
+      (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
              (db/start-db-conn! nil repo)
              (when-not config/publishing?
