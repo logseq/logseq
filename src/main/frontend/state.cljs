@@ -712,9 +712,14 @@
   []
   (:me @state))
 
-(defn logged?
+(defn get-name
   []
-  (some? (:name (get-me))))
+  (:name (get-me)))
+
+(defn logged?
+  "Whether the user has logged in."
+  []
+  (some? (get-name)))
 
 (defn set-draw!
   [value]
