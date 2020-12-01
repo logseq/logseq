@@ -1,6 +1,7 @@
 (ns frontend.components.journal
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
@@ -8,7 +9,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.db :as db]
             [frontend.state :as state]
-            [clojure.string :as string]
             [frontend.ui :as ui]
             [frontend.components.content :as content]
             [frontend.components.block :as block]
@@ -68,6 +68,7 @@
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))
         intro? (and (not (state/logged?))
+                    (not config/publishing?)
                     today?)]
     [:div.flex-1.journal.page {:class (if intro? "intro" "")}
      (ui/foldable
