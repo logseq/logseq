@@ -273,7 +273,7 @@
   [repo-url]
   (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
           local-latest-commit (common-handler/get-ref repo-url)]
-    (git/get-local-diffs repo-url local-latest-commit remote-latest-commit)))
+    (git/get-diffs repo-url local-latest-commit remote-latest-commit)))
 
 (defn pull
   [repo-url {:keys [force-pull? show-diff? try-times]
