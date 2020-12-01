@@ -142,7 +142,7 @@
      (when-let [repo (state/get-current-repo)]
        (p/let [remote-latest-commit (common-handler/get-remote-ref repo)
                local-latest-commit (common-handler/get-ref repo)
-               result (git/get-local-diffs repo local-latest-commit remote-latest-commit)
+               result (git/get-diffs repo local-latest-commit remote-latest-commit)
                token (helper/get-github-token repo)]
          (reset! state/diffs result)
          (reset! remote-hash-id remote-latest-commit)
