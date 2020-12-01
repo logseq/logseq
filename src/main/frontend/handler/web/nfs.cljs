@@ -124,22 +124,24 @@
                        set)))
         old-files (->set old-files ks)
         new-files (->set new-files ks)
-        new-diff (set/difference new-files old-files)
-        old-diff (set/difference old-files new-files)
-        added (set/difference new-diff old-diff)
-        deleted (set/difference old-diff new-diff)
-        modified (let [both-exist (set/difference new-diff added)]
-                   (when (seq both-exist)
-                     (->>
-                      (filter (fn [{:file/keys [path last-modified-at]}]
-                                (when-let [old-file (some #(when (= (:file/path %) path) %) old-files)]
-                                  ;; TODO: the `last-modified-at` attribute in the db is always after
-                                  ;; the file in the local file sytem because we transact to the db first and write to the
-                                  ;; file system later.
-                                  ;; It doesn't mean this is a bug, but it could impact the performance.
-                                  (> last-modified-at (:file/last-modified-at old-file))))
-                              both-exist)
-                      (map :file/path))))]
+        file-path-set-f (fn [col] (set (map :file/path col)))
+        get-file-f (fn [files path] (some #(when (= (:file/path %) path) %) files))
+        old-file-paths (file-path-set-f old-files)
+        new-file-paths (file-path-set-f new-files)
+        added (set/difference new-file-paths old-file-paths)
+        deleted (set/difference old-file-paths new-file-paths)
+        modified (let [modified (set/difference new-file-paths added)]
+                   (when (seq modified)
+                     (filter (fn [path]
+                               (let [old-file (get-file-f old-files path)
+                                     new-file (get-file-f new-files path)]
+                                 ;; TODO: the `last-modified-at` attribute in the db is always after
+                                 ;; the file in the local file sytem because we transact to the db first and write to the
+                                 ;; file system later.
+                                 ;; It doesn't mean this is a bug, but it could impact the performance.
+                                 (> (:file/last-modified-at new-file)
+                                    (:file/last-modified-at old-file))))
+                             modified)))]
     {:added added
      :modified modified
      :deleted deleted}))
@@ -160,20 +162,20 @@
               get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
               {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
               ;; Use the same labels as isomorphic-git
-              rename-f (fn [typ col] (mapv (fn [file] {:type typ :path (:file/path file)}) col))
+              rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
               diffs (concat
                      (rename-f "remove" deleted)
                      (rename-f "add" added)
                      (rename-f "modify" modified))
               _ (when (seq deleted)
-                  (p/all (map #(idb/remove-item! (str handle-path (:file/path %))) deleted)))
+                  (p/all (map #(idb/remove-item! (str handle-path %)) deleted)))
               added-or-modified (set (concat added modified))
               _ (when (seq added-or-modified)
-                  (p/all (map (fn [{:file/keys [path]}]
+                  (p/all (map (fn [path]
                                 (when-let [handle (get @path-handles path)]
                                   (idb/set-item! (str handle-path path) handle))) added-or-modified)))]
-        (-> (p/all (map (fn [file]
-                          (when-let [file (get-file-f (:file/path file) new-files)]
+        (-> (p/all (map (fn [path]
+                          (when-let [file (get-file-f path new-files)]
                             (p/let [content (.text (:file/file file))]
                               (assoc file :file/content content)))) added-or-modified))
             (p/then (fn [result]
