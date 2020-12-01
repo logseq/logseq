@@ -157,7 +157,7 @@
   (create-custom-theme repo-url))
 
 (defn- parse-files-and-load-to-db!
-  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render?]}]
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts]}]
   (state/set-state! :repo/loading-files? false)
   (state/set-state! :repo/importing-to-db? true)
   (let [file-paths (map :file/path files)
@@ -176,9 +176,9 @@
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
     (when first-clone? (create-default-files! repo-url))
-    (state/set-state! :repo/importing-to-db? false)
     (when re-render?
-      (ui-handler/re-render-root!))))
+      (ui-handler/re-render-root! re-render-opts))
+    (state/set-state! :repo/importing-to-db? false)))
 
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files]}]
@@ -187,9 +187,9 @@
                         (file-handler/load-files-contents!
                          repo-url
                          files
-                         (fn [contents] (parse-files-and-load-to-db! repo-url files option))))]
+                         (fn [files-contents] (parse-files-and-load-to-db! repo-url files-contents option))))]
     (cond
-      (seq nfs-files)
+      (and (not (seq diffs)) (seq nfs-files))
       (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
 
       first-clone?
@@ -216,12 +216,17 @@
               delete-pages (if (seq remove-files)
                              (db/delete-pages-by-files remove-files)
                              [])
-              add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files
-                         {:first-clone? first-clone?
-                          :delete-files (concat delete-files delete-pages)
-                          :delete-blocks delete-blocks
-                          :re-render? true}))))))
+              add-or-modify-files (some->>
+                                   (concat modify-files add-files)
+                                   (util/remove-nils))
+              options {:first-clone? first-clone?
+                       :delete-files (concat delete-files delete-pages)
+                       :delete-blocks delete-blocks
+                       :re-render? true}]
+          (if (seq nfs-files)
+            (parse-files-and-load-to-db! repo-url nfs-files
+                                         (assoc options :re-render-opts {:clear-all-query-state? true}))
+            (load-contents add-or-modify-files options)))))))
 
 (defn persist-repo!
   [repo]

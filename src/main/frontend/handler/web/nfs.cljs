@@ -14,7 +14,8 @@
             [frontend.ui :as ui]
             [frontend.fs :as fs]
             [frontend.db :as db]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [lambdaisland.glogi :as log]))
 
 (defn- ->db-files
   [dir-name result]
@@ -74,11 +75,9 @@
 
                        (state/add-repo! {:url repo :nfs? true}))))
            (p/catch (fn [error]
-                      (println "Load files content error: ")
-                      (js/console.dir error)))))
+                      (log/error :nfs/load-files-error error)))))
      (p/catch (fn [error]
-                (println "Open directory error: ")
-                (js/console.dir error))))))
+                (log/error :nfs/open-dir-error error))))))
 
 (defn open-file-picker
   "Shows a file picker that lets a user select a single existing file, returning a handle for the selected file. "
@@ -125,31 +124,30 @@
                        set)))
         old-files (->set old-files ks)
         new-files (->set new-files ks)
-        diff (fn [col1 col2]
-               (->> (set/difference col1 col2)
-                    (map :file/path)
-                    set))
-        new-diff (diff new-files old-files)
-        old-diff (diff old-files new-files)]
-    {:added (set/difference new-diff old-diff)
-     :modified (let [both-exist (set/union new-diff old-diff)]
-                 (when (seq both-exist)
-                   (->>
-                    (filter (fn [{:file/keys [path last-modified-at]}]
-                              (when-let [old-file (some #(when (= (:file/path %) path) %) old-files)]
-                                ;; TODO: the `last-modified-at` attribute in the db is always after
-                                ;; the file system one because we transact to db first and write to the
-                                ;; file system then.
-                                ;; It doesn't mean this is a bug, but it could impact the performance.
-                                (> last-modified-at (:file/last-modified-at old-file))))
-                            new-files)
-                    (map :file/path))))
-     :deleted (set/difference old-diff new-diff)}))
+        new-diff (set/difference new-files old-files)
+        old-diff (set/difference old-files new-files)
+        added (set/difference new-diff old-diff)
+        deleted (set/difference old-diff new-diff)
+        modified (let [both-exist (set/difference new-diff added)]
+                   (when (seq both-exist)
+                     (->>
+                      (filter (fn [{:file/keys [path last-modified-at]}]
+                                (when-let [old-file (some #(when (= (:file/path %) path) %) old-files)]
+                                  ;; TODO: the `last-modified-at` attribute in the db is always after
+                                  ;; the file in the local file sytem because we transact to the db first and write to the
+                                  ;; file system later.
+                                  ;; It doesn't mean this is a bug, but it could impact the performance.
+                                  (> last-modified-at (:file/last-modified-at old-file))))
+                              both-exist)
+                      (map :file/path))))]
+    {:added added
+     :modified modified
+     :deleted deleted}))
 
 (defn- reload-dir!
   [repo]
   (when (and repo (config/local-db? repo))
-    (let [old-files (db/get-files-path-size-modified-at repo)
+    (let [old-files (db/get-files-full repo)
           dir-name (config/get-local-dir repo)
           handle-path (str config/local-handle-prefix dir-name)
           path-handles (atom {})]
@@ -159,16 +157,38 @@
                                              (swap! path-handles assoc path handle)))
               _ (set-files! @path-handles)
               new-files (->db-files dir-name files-result)
-              diffs (compute-diffs old-files new-files)]
-        ;; (-> (p/all (map (fn [file]
-        ;;                   (p/let [content (.text (:file/file file))]
-        ;;                     (assoc file :file/content content))) files-result))
-        ;;     (p/then (fn [result]
-        ;;               (let [files (map #(select-keys % [:file/path :file/content]) result)])))
-        ;;     (p/catch (fn [error]
-        ;;                (println "Load files content error: ")
-        ;;                (js/console.dir error))))
-        (prn {:diffs diffs})))))
+              get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
+              {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
+              ;; Use the same labels as isomorphic-git
+              rename-f (fn [typ col] (mapv (fn [file] {:type typ :path (:file/path file)}) col))
+              diffs (concat
+                     (rename-f "remove" deleted)
+                     (rename-f "add" added)
+                     (rename-f "modify" modified))
+              _ (when (seq deleted)
+                  (p/all (map #(idb/remove-item! (str handle-path (:file/path %))) deleted)))
+              added-or-modified (set (concat added modified))
+              _ (when (seq added-or-modified)
+                  (p/all (map (fn [{:file/keys [path]}]
+                                (when-let [handle (get @path-handles path)]
+                                  (idb/set-item! (str handle-path path) handle))) added-or-modified)))]
+        (-> (p/all (map (fn [file]
+                          (when-let [file (get-file-f (:file/path file) new-files)]
+                            (p/let [content (.text (:file/file file))]
+                              (assoc file :file/content content)))) added-or-modified))
+            (p/then (fn [result]
+                      (let [files (->> (map #(dissoc % :file/file :file/handle) result)
+                                       (remove
+                                        (fn [file]
+                                          (let [content (:file/content file)
+                                                old-content (:file/content (get-file-f (:file/path file) old-files))]
+                                            (= content old-content)))))]
+                        (when (and (seq diffs) (seq files))
+                          (repo-handler/load-repo-to-db! repo
+                                                         {:diffs diffs
+                                                          :nfs-files files})))))
+            (p/catch (fn [error]
+                       (log/error :nfs/load-files-error error))))))))
 
 (defn- refresh!
   [repo]

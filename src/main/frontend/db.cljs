@@ -926,12 +926,12 @@
       @conn)
      (into {}))))
 
-(defn get-files-path-size-modified-at
+(defn get-files-full
   [repo]
   (when-let [conn (get-files-conn repo)]
     (->>
      (d/q
-      '[:find (pull ?file [:file/path :file/size :file/last-modified-at])
+      '[:find (pull ?file [*])
         :where
         [?file :file/path]]
       @conn)
