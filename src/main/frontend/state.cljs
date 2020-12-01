@@ -519,9 +519,9 @@
                   (if (string? token)
                     ;; Github API returns a expires_at key which is a timestamp (expires after 60 minutes at present),
                     ;; however, user's system time may be inaccurate. Here, based on the client system time, we use
-                    ;; 60-minutes duration directly.
+                    ;; 40-minutes interval to deal with some critical conditions, for e.g. http request time consume.
                     (let [formatter (tf/formatters :date-time-no-ms)
-                          expires-at (->> (t/plus (t/now) (t/minutes 60))
+                          expires-at (->> (t/plus (t/now) (t/minutes 40))
                                           (tf/unparse formatter))]
                       (merge repo {:token token :expires_at expires-at}))
                     (do (log/error :token/cannot-set-token {:repo-m repo :token-m m}) repo))))
