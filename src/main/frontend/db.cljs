@@ -1843,7 +1843,7 @@
   [page-name]
   (:page/journal? (entity [:page/name page-name])))
 
-(defn mark-repo-as-cloned
+(defn mark-repo-as-cloned!
   [repo-url]
   (transact!
    [{:repo/url repo-url

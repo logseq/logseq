@@ -32,7 +32,6 @@
     ;; repo -> {:last-stored-at :last-modified-at}
     :repo/persist-status {}
     :me nil
-    :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
     :git/status {}
     :format/loading {}
@@ -494,11 +493,6 @@
   (swap! state assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
-
-(defn set-git-clone-repo!
-  [repo]
-  (set-state! :git/clone-repo repo)
-  (storage/set :git/clone-repo repo))
 
 (defn set-github-token!
   [repo token-result]

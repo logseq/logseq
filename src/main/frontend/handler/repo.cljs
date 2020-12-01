@@ -397,7 +397,7 @@
   (when-let [repo (state/get-current-repo)]
     (pull repo {:force-pull? true})))
 
-(defn clone
+(defn- clone
   [repo-url]
   (spec/validate :repos/url repo-url)
   (p/let [token (helper/get-github-token repo-url)]
@@ -407,10 +407,9 @@
          (state/set-cloning! true)
          (git/clone repo-url token))
        (fn [result]
-         (state/set-git-clone-repo! "")
          (state/set-current-repo! repo-url)
          (db/start-db-conn! (state/get-me) repo-url)
-         (db/mark-repo-as-cloned repo-url))
+         (db/mark-repo-as-cloned! repo-url))
        (fn [e]
          (println "Clone failed, error: ")
          (js/console.error e)
@@ -510,7 +509,7 @@
                (println "Something wrong!")
                (js/console.dir error))))
 
-(defn clone-and-pull
+(defn- clone-and-pull
   [repo-url]
   (spec/validate :repos/url repo-url)
   (->
