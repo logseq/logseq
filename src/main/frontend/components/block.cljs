@@ -278,10 +278,6 @@
 (defn page-reference
   [html-export? s config label]
   [:span.page-reference
-   (when (and (not html-export?)
-              (not (= (:id config) "contents"))
-              (not (= (:id config) "Contents")))
-     [:span.text-gray-500 "[["])
    (if (string/ends-with? s ".excalidraw")
      [:a.page-ref
       {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
@@ -290,11 +286,7 @@
        (svg/excalidraw-logo)
        (string/capitalize (draw/get-file-title s))]]
      (page-cp (assoc config
-                     :label (mldoc/plain->text label)) {:page/name s}))
-   (when (and (not html-export?)
-              (not (= (:id config) "contents"))
-              (not (= (:id config) "Contents")))
-     [:span.text-gray-500 "]]"])])
+                     :label (mldoc/plain->text label)) {:page/name s}))])
 
 (defn- latex-environment-content
   [name option content]
@@ -311,8 +303,7 @@
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
     [:div.embed-block.bg-base-2 {:style {:z-index 2}}
-     [:code "Embed block:"]
-     [:div.px-2
+     [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
                                       :ref? false))]]))
@@ -323,8 +314,8 @@
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
     [:div.embed-page.py-2.my-2.px-3.bg-base-2
-     [:p
-      [:code.mr-2 "Embed page:"]
+     [:div.flex.items-center.py-1
+      [:div.mr-4 svg/page]
       (page-cp config {:page/name page-name})]
      (when (and
             (not= (string/lower-case (or current-page ""))
@@ -362,7 +353,6 @@
                      (db/pull-block (uuid id)))]
       (if block
         [:span
-         [:span.text-gray-500 "(("]
          [:a {:href (rfe/href :page {:name id})
               :on-click (fn [e]
                           (util/stop e)
@@ -375,8 +365,7 @@
 
           (->elem
            :span.block-ref
-           (map-inline config (:block/title block)))]
-         [:span.text-gray-500 "))"]]
+           (map-inline config (:block/title block)))]]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
@@ -524,7 +513,7 @@
 
             :else
             (->elem
-             :a
+             :a.external-link
              (cond->
               {:href href
                :target "_blank"}
@@ -920,7 +909,7 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (str (string/lower-case marker)
+            {:class (str (string/lower-case marker) " "
                          "flex flex-row items-center")})
           (when bg-color
             {:style {:background-color bg-color
@@ -1795,7 +1784,7 @@
                (block-container config item)
                (:block/uuid item)))))
        ;; (add-button config ref? custom-query? blocks)
-])))
+       ])))
 
 ;; headers to hiccup
 (defn ->hiccup

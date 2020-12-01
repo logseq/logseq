@@ -1,9 +1,11 @@
 :root {
-  --ls-tag-text-opacity: 0.6;
-  --ls-tag-text-hover-opacity: 0.8;
+  /* --ls-tag-text-opacity: 0.6; */
+  /* --ls-tag-text-hover-opacity: 0.8; */
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
+  --border-radius-low: 4px;
+  --border-radius-medium: 8px;
 }
 
 .dark-theme {
@@ -11,17 +13,20 @@
     --ls-secondary-background-color: #073642;
     --ls-tertiary-background-color: #0f4552;
     --ls-quaternary-background-color: #01313d;
+    --ls-active-primary-color:  #8ec2c2;
+    --ls-active-secondary-color: #d0e8e8;
 
     --ls-block-properties-background-color: #02222a;
     --ls-search-background-color: var(--ls-primary-background-color);
     --ls-border-color: #0e5263;
+    --ls-guideline-color: #0b4a5a;
     --ls-menu-hover-color: var(--ls-secondary-background-color);
 
     --ls-primary-text-color: #a4b5b6;
     --ls-secondary-text-color: #dfdfdf;
     --ls-title-text-color: #93a1a1;
-    --ls-link-text-color: #8abbbb;
-    --ls-link-text-hover-color: #d0e8e8;
+    --ls-link-text-color: var(--ls-active-primary-color);
+    --ls-link-text-hover-color: var(--ls-active-secondary-color);
     --ls-link-ref-text-color: var(--ls-link-text-color);
     --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
         --ls-tag-text-color: var(--ls-link-text-color);
@@ -29,13 +34,14 @@
 
     --ls-block-bullet-border-color: #0f4958;
     --ls-block-bullet-color: #608e91;
-    --ls-block-highlight-color: #074758;
+    --ls-block-highlight-color: #0a3d4b;
     --ls-selection-background-color: #338FFF;
+
     --ls-page-checkbox-color: #6093a0;
     --ls-page-checkbox-border-color: var(--ls-primary-background-color);
     --ls-page-blockquote-color: var(--ls-primary-text-color);
     --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
-    --ls-page-blockquote-border-color: #2f4f4f;
+    --ls-page-blockquote-border-color: var(--ls-border-color);
     --ls-page-inline-code-color: var(--ls-primary-text-color);
     --ls-page-inline-code-bg-color: #01222a;
 
@@ -52,36 +58,40 @@
 
 .white-theme {
     --ls-primary-background-color: white;
-    --ls-secondary-background-color: #D8E1E8;
-    --ls-tertiary-background-color: #f0f8ff;
-    --ls-quaternary-background-color: #f7f7f7;
+    --ls-secondary-background-color: #EDF5F2; /* #F9FAF9 */
+    --ls-tertiary-background-color: #DBEBE4;
+    --ls-quaternary-background-color: #c8e6d9;
+    --ls-active-primary-color: #4A9A79;
+    --ls-active-secondary-color: #22654A;
 
     --ls-block-properties-background-color: var(--ls-tertiary-background-color);
     --ls-search-background-color: var(--ls-primary-background-color);
     --ls-border-color: #ccc;
-    --ls-menu-hover-color: var(--ls-secondary-background-color);
+    --ls-guideline-color: rgb(232, 232,232);
+    --ls-menu-hover-color: var(--ls-a-chosen-bg);
 
     --ls-primary-text-color: #24292e;
     --ls-secondary-text-color: #161e2e;
     --ls-title-text-color: #222;
-    --ls-link-text-color: #045591;
-    --ls-link-text-hover-color: #000;
+    --ls-link-text-color: var(--ls-active-primary-color);
+    --ls-link-text-hover-color: var(--ls-active-secondary-color);
     --ls-link-ref-text-color: var(--ls-link-text-color);
     --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
-        --ls-tag-text-color: var(--ls-link-text-color);
-        --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
+	  --ls-tag-text-color: var(--ls-link-text-color);
+	  --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
 
-    --ls-block-bullet-border-color: #ced9e0;
+    --ls-block-bullet-border-color: #afcabe;
     --ls-block-bullet-color: #394b59;
-    --ls-block-highlight-color: #7cccff;
-    --ls-selection-background-color: #B1D7FF;
-    --ls-page-checkbox-color: none;
-    --ls-page-checkbox-border-color: #808080;
+    --ls-block-highlight-color: #c0e6fd;
+    --ls-selection-background-color: #e4f2ff;
+
+    --ls-page-checkbox-color: var(--ls-active-primary-color);
+    --ls-page-checkbox-border-color: #8c8c8c;
     --ls-page-blockquote-color: var(--ls-primary-text-color);
-    --ls-page-blockquote-bg-color: #f8f8f8;
-    --ls-page-blockquote-border-color: #ccc;
+    --ls-page-blockquote-bg-color: transparent;
+    --ls-page-blockquote-border-color: var(--ls-active-primary-color);
     --ls-page-inline-code-color: var(--ls-primary-text-color);
-    --ls-page-inline-code-bg-color: #eeeeee;
+    --ls-page-inline-code-bg-color: var(--ls-secondary-background-color);
 
     --ls-scrollbar-foreground-color: var(--ls-primary-text-color);
     --ls-scrollbar-background-color: var(--ls-primary-background-color);
@@ -142,7 +152,7 @@ textarea {
     overflow: hidden;
     padding: 8px;
     border: 1px solid rgba(39,41,43,.15);
-    border-radius: 4px;
+    border-radius: var(--border-radius-low);
     font-size: 1em;
     line-height: 1.5;
     width: 100%;
@@ -247,7 +257,7 @@ li {
   display: block;
   padding: 0.5rem;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .02);
-  border-radius: 4px;
+  border-radius: var(--border-radius-low);
 }
 
 .non-block-editor textarea {
@@ -346,19 +356,31 @@ h1.title {
 }
 
 a.page-ref {
-  color: var(--ls-link-ref-text-color)
+  color: var(--ls-link-text-color);
+  font-weight: 500;
 }
 
 a.page-ref:hover {
-  color: var(--ls-link-ref-text-hover-color)
+  color: var(--ls-link-text-hover-color)
 }
+
+.block-ref {
+  color: var(--ls-link-text-color);
+  font-weight: 500;
+}
+
+.block-ref:hover {
+  color: var(--ls-link-text-hover-color)
+}
+
+
 
 .ls-block {
   min-height: 24px;
 }
 
 .block-highlight, .content .selected {
-  background-color: #7cccff;
+  transition: background-color 0.15s;
   background-color: var(--ls-block-highlight-color);
 }
 
@@ -417,6 +439,7 @@ svg {
 }
 
 #right-sidebar {
+  border-radius: var(--border-radius-medium) 0 0 0;
   position: sticky;
   top: 0;
   transition: all 200ms ease-in 0s;
@@ -463,8 +486,9 @@ svg {
   }
 }
 
-.canceled {
+.canceled, .done {
   text-decoration: line-through;
+  opacity: 0.6;
 }
 
 /* Drawing */
@@ -479,13 +503,7 @@ svg {
   border: none;
 }
 
-.form-checkbox:not(:checked):focus {
-  box-shadow: none;
-}
 
-.form-checkbox:checked:focus {
-  box-shadow: none;
-}
 
 a.nav-item:hover, a.star-page:hover {
   background-color: #00242d;
@@ -535,8 +553,18 @@ a.menu-link {
   background-color: var(--ls-primary-background-color);
 }
 
+a.menu-link:first-of-type {
+  border-top-left-radius: var(--border-radius-low);
+  border-top-right-radius: var(--border-radius-low);
+}
+
+a.menu-link:last-of-type {
+  border-bottom-left-radius: var(--border-radius-low);
+  border-bottom-right-radius: var(--border-radius-low);
+}
+
 .white-theme #head a {
-    color: var(--ls-primary-text-color);
+  color: var(--ls-primary-text-color);
 }
 
 button.menu {
@@ -557,14 +585,31 @@ button.menu {
   font-size: 1em;
 }
 
+/* TODO Check this */
 .form-checkbox {
   color: #137cbd;
   color: var(--ls-page-checkbox-color);
   background-color: transparent;
-  background-color: var(--ls-page-checkbox-color);
-  border: 1px solid;
-  border-color: #808080;
-  border-color: var(--ls-page-checkbox-border-color)
+  border-radius: 0;
+  border: 2px solid;
+  border-color: var(--ls-page-checkbox-border-color);
+  appearance: none
+}
+
+.form-checkbox:checked {
+  border: none;
+}
+
+.white-theme .form-checkbox:focus{
+  border-color: var(--ls-page-checkbox-border-color);
+}
+
+.form-checkbox:not(:checked):focus {
+  box-shadow: none;
+}
+
+.form-checkbox:checked:focus {
+  box-shadow: none;
 }
 
 input {
@@ -577,9 +622,9 @@ input {
   box-shadow: 0 0 0 3px #839496;
 }
 
-/* .form-input { */
-/*     background-color: #FDF6E3; */
-/* } */
+.form-input:focus { 
+  box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+}
 
 .form-select {
   background-color: transparent;
@@ -627,8 +672,8 @@ input {
   padding: .1em .4em;
   word-spacing: -.15em;
   background-color: #eee;
-  -webkit-border-radius: 4px;
-  border-radius: 4px;
+  -webkit-border-radius: var(--border-radius-low);
+  border-radius: var(--border-radius-low);
   line-height: 1.45;
   text-rendering: optimizeSpeed
 }
@@ -673,17 +718,8 @@ a.menu-link {
   color: var(--ls-primary-text-color);
 }
 
-
-a.menu-link:hover {
-  color: var(--ls-link-text-hover-color);
-}
-
 a.chosen {
   background: var(--ls-a-chosen-bg);
-}
-
-.done, .canceled {
-  opacity: 0.7;
 }
 
 .sync-content p {
@@ -743,7 +779,7 @@ dt {
 blockquote {
   display: block;
   text-indent: 0em;
-  padding: 10px 20px;
+  padding: 8px 20px;
   border-left: 4px solid;
   border-left-color: #d3d3d3;
   border-left-color: var(--ls-page-blockquote-border-color);
@@ -752,6 +788,7 @@ blockquote {
   margin: 1rem 0;
   color: #24292e;
   color: var(--ls-page-blockquote-color);
+  font-size: 1.25rem;
 }
 
 .dark-theme ::-webkit-scrollbar, .dark-theme ::-webkit-scrollbar-track-piece {
@@ -775,22 +812,14 @@ blockquote {
   filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, .5));
 }
 
-.tip-shadow {
-  -webkit-filter: drop-shadow(1px 1px 2px rgba(155, 155, 0, .8));
-  filter: drop-shadow(1px 1px 2px rgba(155, 155, 0, .8));
-}
 
 svg.note {
   color: #19407c;
   color: var(--ls-primary-text-color);
 }
 
-.white-theme svg.tip {
-  color: #111;
-}
-
-.dark-theme svg.tip {
-  color: #b0c8af;
+svg.tip {
+  color: var(--ls-active-primary-color);
 }
 
 .admonition-icon {
@@ -867,9 +896,9 @@ svg.note {
 }
 
 .block-children {
-  border-left: 1px solid;
+  border-left: 2px solid;
   border-left-color: #ddd;
-  border-left-color: var(--ls-border-color);
+  border-left-color: var(--ls-guideline-color);
 }
 
 .dnd-separator {
@@ -907,6 +936,10 @@ iframe {
     border: 0;
   }
 
+}
+
+.embed-page, .embed-block {
+  border-radius: var(--border-radius-low);
 }
 
 .aspect-ratio-square {
@@ -1004,7 +1037,7 @@ li:first-child {
 a.warning, span.warning {
   background: #F56565;
   padding: .1em .4em;
-  border-radius: 4px;
+  border-radius: var(--border-radius-low);
   color: #fff;
 }
 
@@ -1156,6 +1189,10 @@ pre {
 }
 
 #intro .content :not(img), .foldable-title {
+  max-width: 665px;
+}
+
+.fixed-width {
   max-width: 665px;
 }
 
@@ -1410,8 +1447,8 @@ a.tag:hover {
   color: var(--ls-page-checkbox-color);
   background-color: #6093a0;
   background-color: var(--ls-page-checkbox-color);
-  border-color: #6093a0;
-  border-color: var(--ls-page-checkbox-border-color);
+  border: none;
+  border-radius: var(--border-radius-low);
 }
 
 #right-sidebar .bg-base-2,
@@ -1420,7 +1457,7 @@ a.tag:hover {
 }
 
 .white-theme a.right-sidebar-button {
-  color: var(--ls-primary-text-color);
+  color: var(--ls-link-text-color);
 }
 
 .white-theme a.right-sidebar-button:hover {

@@ -107,18 +107,18 @@
    {:viewbox "0 0 20 20"}
    [:circle.circle {:fill "#dce0e2", :r "9", :cy "10.5", :cx "10.5"}]
    [:line
-    {:stroke-width "1",
-     :stroke "#868c90",
-     :y2 "10.5",
-     :x2 "15",
-     :y1 "10.5",
+    {:stroke-width "1"
+     :stroke "#868c90"
+     :y2 "10.5"
+     :x2 "15"
+     :y1 "10.5"
      :x1 "6"}]
    [:line
-    {:stroke-width "1",
-     :stroke "#868c90",
-     :y2 "15",
-     :x2 "10.5",
-     :y1 "6",
+    {:stroke-width "1"
+     :stroke "#868c90"
+     :y2 "15"
+     :x2 "10.5"
+     :y1 "6"
      :x1 "10.5"}]])
 
 (def graph-sm [:div {:style {:transform "rotate(90deg)"}} (hero-icon "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" {:height "16" :width "16"})])
@@ -176,7 +176,7 @@
 
 (rum/defc tip
   []
-  [:svg.h-8.w-8.tip-shadow.tip
+  [:svg.h-8.w-8.tip
    {:view-box "0 0 352 512"
     :fill "currentColor"}
    [:path
@@ -395,3 +395,8 @@
      :stroke-width "2"
      :stroke-linejoin "round"
      :stroke-linecap "round"}]])
+
+(def page
+  [:svg.h-5.w-4 {:viewbox "0 0 24 24", :fill "none", :xmlns "http://www.w3.org/2000/svg"}
+   [:path {:d "M2 0.5H6.78272L13.5 7.69708V18C13.5 18.8284 12.8284 19.5 12 19.5H2C1.17157 19.5 0.5 18.8284 0.5 18V2C0.5 1.17157 1.17157 0.5 2 0.5Z", :fill "var(--ls-active-primary-color)"}]
+   [:path {:d "M7 5.5V0L14 7.5H9C7.89543 7.5 7 6.60457 7 5.5Z", :fill "var(--ls-active-secondary-color)"}]])

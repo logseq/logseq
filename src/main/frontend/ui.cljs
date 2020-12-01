@@ -70,7 +70,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                      ;; [:div {:style {:position "absolute" :right "8px"}}
                      ;;  icon]
-]]
+                     ]]
           (rum/with-key
             (menu-link new-options child)
             title)))])
@@ -329,7 +329,7 @@
                          item-render
                          class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-3 {:class class}
+    [:div.rounded-md.shadow-xs.bg-base-3 {:class class}
      (if (seq matched)
        [:div#ac-inner
         {:style {:max-height 400
