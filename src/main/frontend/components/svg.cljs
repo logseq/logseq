@@ -126,6 +126,17 @@
      :x1 "10.5"}]])
 
 (def graph-sm [:div {:style {:transform "rotate(90deg)"}} (hero-icon "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" {:height "16" :width "16"})])
+
+(def folder-add
+  [:svg
+   {:stroke "currentColor", :view-box "0 0 24 24", :fill "none" :width 24 :height 24 :display "inline-block"}
+   [:path
+    {:d
+     "M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z",
+     :stroke-width "2",
+     :stroke-linejoin "round",
+     :stroke-linecap "round"}]])
+
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
 (def folder-sm (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" {:height "16" :width "16"}))
 (def pages-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
@@ -331,10 +342,9 @@
 (def slideshow
   [:svg
    {:view-box "0 0 24 24"
-    :height 23
-    :width 23
-    :fill "currentColor"
-    :display "inline-block"}
+    :height 24
+    :width 24
+    :fill "currentColor"}
    [:path
     {:d "M10 8v8l5-4-5-4zm9-5H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"}]])
 

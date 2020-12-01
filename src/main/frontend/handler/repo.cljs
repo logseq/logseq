@@ -157,7 +157,7 @@
   (create-custom-theme repo-url))
 
 (defn- parse-files-and-load-to-db!
-  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts]}]
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts}]
   (state/set-state! :repo/loading-files? false)
   (state/set-state! :repo/importing-to-db? true)
   (let [file-paths (map :file/path files)
@@ -187,7 +187,8 @@
                         (file-handler/load-files-contents!
                          repo-url
                          files
-                         (fn [files-contents] (parse-files-and-load-to-db! repo-url files-contents option))))]
+                         (fn [files-contents]
+                           (parse-files-and-load-to-db! repo-url files-contents option))))]
     (cond
       (and (not (seq diffs)) (seq nfs-files))
       (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})

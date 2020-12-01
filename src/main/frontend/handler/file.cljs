@@ -15,7 +15,8 @@
             [frontend.format :as format]
             [clojure.string :as string]
             [frontend.history :as history]
-            [frontend.handler.project :as project-handler]))
+            [frontend.handler.project :as project-handler]
+            [lambdaisland.glogi :as log]))
 
 (defn load-file
   [repo-url path]
@@ -103,13 +104,12 @@
 
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
-                        files-contents (for [[file content] file-contents]
-                                         {:file/path file
-                                          :file/content content})]
+                        file-contents (for [[file content] file-contents]
+                                        {:file/path file
+                                         :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
-                   (println "load files failed: ")
-                   (js/console.dir error))))))
+                   (log/error :load-files-error error))))))
 
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? add-history? update-status?]
