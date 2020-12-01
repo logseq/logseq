@@ -30,7 +30,7 @@
             [frontend.text :as text]
             ["/frontend/utils" :as utils]))
 
-(def *warn-on-infer* false)
+(set! *warn-on-infer* false)
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -355,8 +355,8 @@
         false
         *slash-caret-pos)))])
 
-(def evt-passthrough! #(if (instance? goog.events.Event %) (set! (. % -pt) true)))
-(def evt-passthrough? #(if (instance? goog.events.Event %) (. % -pt)))
+(defonce evt-passthrough! #(if (instance? goog.events.Event %) (set! (. % -pt) true)))
+(defonce evt-passthrough? #(if (instance? goog.events.Event %) (. % -pt)))
 
 (rum/defcs box < rum/reactive
   (mixins/event-mixin
@@ -365,8 +365,6 @@
            input-id id
            input (gdom/getElement input-id)
            repo (:block/repo block)]
-       ;; (.addEventListener input "paste" (fn [event]
-       ;;                                    (editor-handler/append-paste-doc! format event)))
        (mixins/on-key-down
         state
         {;; enter

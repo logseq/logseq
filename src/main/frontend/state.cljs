@@ -286,7 +286,7 @@
   [input-id value]
   (when input-id
     (when-let [input (gdom/getElement input-id)]
-      (gobj/set input "value" value))
+      (util/set-change-value input value))
     (update-state! :editor/content (fn [m]
                                      (assoc m input-id value)))
     ;; followers

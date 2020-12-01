@@ -157,10 +157,8 @@
   (let [href (if (util/starts-with? href "http")
                href
                (get-file-absolute-path config href))]
-    [:img.rounded-sm.shadow-xl.mb-2.mt-2
-     {:class "object-contain object-center"
-      :loading "lazy"
-      :style {:max-height "24rem"}
+    [:img.rounded-sm.shadow-xl
+     {:loading "lazy"
       ;; :on-error (fn [])
       :src href
       :title (second (first label))}]))

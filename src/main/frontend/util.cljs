@@ -38,6 +38,11 @@
   [event]
   (gobj/getValueByKeys event "target" "value"))
 
+(defn set-change-value
+  "compatible change event for React"
+  [node value]
+  (utils/triggerInputChange node value))
+
 (defn p-handle
   ([p ok-handler]
    (p-handle p ok-handler (fn [error]
