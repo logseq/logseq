@@ -336,8 +336,7 @@
                          (> (count matched)
                             @current-idx))
                   (on-chosen (nth matched @current-idx) false)
-                  (and on-enter (on-enter state))))))}
-      nil)))
+                  (and on-enter (on-enter state))))))})))
   [state matched {:keys [on-chosen
                          on-shift-chosen
                          on-enter

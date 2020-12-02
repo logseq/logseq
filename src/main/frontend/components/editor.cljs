@@ -270,8 +270,7 @@
                       {:keys [pos]} @*slash-caret-pos
                       command (:command (first input-option))]
                   (on-submit command @input-value pos))
-                (reset! input-value nil))))}
-      nil)))
+                (reset! input-value nil))))})))
   {:did-update
    (fn [state]
      (when-let [show-input (state/get-editor-show-input)]
@@ -355,9 +354,6 @@
         false
         *slash-caret-pos)))])
 
-(defonce evt-passthrough! #(if (instance? goog.events.Event %) (set! (. % -pt) true)))
-(defonce evt-passthrough? #(if (instance? goog.events.Event %) (. % -pt)))
-
 (rum/defcs box < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -400,7 +396,6 @@
                                  insert?
                                  (not (editor-handler/in-auto-complete? input)))
                             (util/stop e)
-                            (evt-passthrough! e)
                             (profile
                              "Insert block"
                              (editor-handler/insert-new-block! state))))))))))
@@ -410,7 +405,6 @@
                      (not (gobj/get e "ctrlKey"))
                      (not (gobj/get e "metaKey"))
                      (not (editor-handler/in-auto-complete? input)))
-                (evt-passthrough! e)
                 (editor-handler/on-up-down state e true)))
          ;; down
          40 (fn [state e]
@@ -418,7 +412,6 @@
                      (not (gobj/get e "ctrlKey"))
                      (not (gobj/get e "metaKey"))
                      (not (editor-handler/in-auto-complete? input)))
-                (evt-passthrough! e)
                 (editor-handler/on-up-down state e false)))
          ;; backspace
          8  (fn [state e]
@@ -440,9 +433,7 @@
                        (not (and page
                                  (util/uuid-string? page)
                                  (= (medley/uuid page) block-id))))
-                  (do
-                    (evt-passthrough! e)
-                    (editor-handler/delete-block! state repo e))
+                  (editor-handler/delete-block! state repo e)
 
                   (and (> current-pos 1)
                        (= (util/nth-safe value (dec current-pos)) commands/slash))
@@ -499,84 +490,82 @@
                       (and input pos (js/setTimeout #(when-let [input (gdom/getElement input-id)]
                                                        (util/move-cursor-to input pos))
                                                     0)))))))}
-        (fn [e key-code]
-          (when-not (evt-passthrough? e)
-            (let [key (gobj/get e "key")
-                  value (gobj/get input "value")
-                  pos (:pos (util/get-caret-pos input))]
-              (cond
-                (or
-                 (and (= key "#")
-                      (and
-                       (> pos 0)
-                       (= "#" (util/nth-safe value (dec pos)))))
-                 (and (= key " ")
-                      (state/get-editor-show-page-search-hashtag?)))
-                (state/set-editor-show-page-search-hashtag! false)
+        {:not-matched-handler
+         (fn [e key-code]
+           (let [key (gobj/get e "key")
+                 value (gobj/get input "value")
+                 pos (:pos (util/get-caret-pos input))]
+             (cond
+               (or
+                (and (= key "#")
+                     (and
+                      (> pos 0)
+                      (= "#" (util/nth-safe value (dec pos)))))
+                (and (= key " ")
+                     (state/get-editor-show-page-search-hashtag?)))
+               (state/set-editor-show-page-search-hashtag! false)
 
-                (and
-                 (not= key-code 8)                         ;; backspace
-                 (or
-                  (editor-handler/surround-by? input "#" " ")
-                  (editor-handler/surround-by? input "#" :end)
-                  (= key "#")))
-                (do
-                  (commands/handle-step [:editor/search-page-hashtag])
-                  (state/set-last-pos! (:pos (util/get-caret-pos input)))
-                  (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+               (or
+                (editor-handler/surround-by? input "#" " ")
+                (editor-handler/surround-by? input "#" :end)
+                (= key "#"))
+               (do
+                 (commands/handle-step [:editor/search-page-hashtag])
+                 (state/set-last-pos! (:pos (util/get-caret-pos input)))
+                 (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
-                (and
-                 (= key " ")
-                 (state/get-editor-show-page-search-hashtag?))
-                (state/set-editor-show-page-search-hashtag! false)
+               (and
+                (= key " ")
+                (state/get-editor-show-page-search-hashtag?))
+               (state/set-editor-show-page-search-hashtag! false)
 
-                (and
-                 (contains? (set/difference (set (keys editor-handler/reversed-autopair-map))
-                                            #{"`"})
-                            key)
-                 (= (editor-handler/get-current-input-char input) key))
-                (do
-                  (util/stop e)
-                  (util/cursor-move-forward input 1))
+               (and
+                (contains? (set/difference (set (keys editor-handler/reversed-autopair-map))
+                                           #{"`"})
+                           key)
+                (= (editor-handler/get-current-input-char input) key))
+               (do
+                 (util/stop e)
+                 (util/cursor-move-forward input 1))
 
-                (contains? (set (keys editor-handler/autopair-map)) key)
-                (do
-                  (util/stop e)
-                  (editor-handler/autopair input-id key format nil)
-                  (cond
-                    (editor-handler/surround-by? input "[[" "]]")
-                    (do
-                      (commands/handle-step [:editor/search-page])
-                      (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-                    (editor-handler/surround-by? input "((" "))")
-                    (do
-                      (commands/handle-step [:editor/search-block :reference])
-                      (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-                    :else
-                    nil))
+               (contains? (set (keys editor-handler/autopair-map)) key)
+               (do
+                 (util/stop e)
+                 (editor-handler/autopair input-id key format nil)
+                 (cond
+                   (editor-handler/surround-by? input "[[" "]]")
+                   (do
+                     (commands/handle-step [:editor/search-page])
+                     (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+                   (editor-handler/surround-by? input "((" "))")
+                   (do
+                     (commands/handle-step [:editor/search-block :reference])
+                     (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+                   :else
+                   nil))
 
-                (let [sym "$"]
-                  (and (= key sym)
-                       (>= (count value) 1)
-                       (> pos 0)
-                       (= (nth value (dec pos)) sym)
-                       (if (> (count value) pos)
-                         (not= (nth value pos) sym)
-                         true)))
-                (commands/simple-insert! input-id "$$" {:backward-pos 2})
+               (let [sym "$"]
+                 (and (= key sym)
+                      (>= (count value) 1)
+                      (> pos 0)
+                      (= (nth value (dec pos)) sym)
+                      (if (> (count value) pos)
+                        (not= (nth value pos) sym)
+                        true)))
+               (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
-                (let [sym "^"]
-                  (and (= key sym)
-                       (>= (count value) 1)
-                       (> pos 0)
-                       (= (nth value (dec pos)) sym)
-                       (if (> (count value) pos)
-                         (not= (nth value pos) sym)
-                         true)))
-                (commands/simple-insert! input-id "^^" {:backward-pos 2})
+               (let [sym "^"]
+                 (and (= key sym)
+                      (>= (count value) 1)
+                      (> pos 0)
+                      (= (nth value (dec pos)) sym)
+                      (if (> (count value) pos)
+                        (not= (nth value pos) sym)
+                        true)))
+               (commands/simple-insert! input-id "^^" {:backward-pos 2})
 
-                :else
-                nil)))))
+               :else
+               nil)))})
        (mixins/on-key-up
         state
         {}
@@ -706,9 +695,6 @@
                          current-pos (:pos (util/get-caret-pos input))]
                      (state/set-edit-pos! current-pos)
                      (editor-handler/close-autocomplete-if-outside input)))
-       ;:on-key-down (fn [_e]
-       ;               (let [current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-       ;                 (state/set-edit-pos! current-pos)))
        :on-change (fn [e]
                     (let [value (util/evalue e)
                           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
