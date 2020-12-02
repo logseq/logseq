@@ -157,10 +157,8 @@
   (let [href (if (util/starts-with? href "http")
                href
                (get-file-absolute-path config href))]
-    [:img.rounded-sm.shadow-xl.mb-2.mt-2
-     {:class "object-contain object-center"
-      :loading "lazy"
-      :style {:max-height "24rem"}
+    [:img.rounded-sm.shadow-xl
+     {:loading "lazy"
       ;; :on-error (fn [])
       :src href
       :title (second (first label))}]))
@@ -613,10 +611,10 @@
                                   nil)]
             (when-not (string/blank? youtube-id)
               [:iframe
-               {:allowfullscreen "allowfullscreen"
+               {:allow-full-screen "allowfullscreen"
                 :allow
                 "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                :frameborder "0"
+                :frame-border "0"
                 :src (str "https://www.youtube.com/embed/" youtube-id)
                 :height "315"
                 :width "560"}])))

@@ -236,25 +236,6 @@ li {
   white-space: pre-line;
 }
 
-.editor textarea {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.non-block-editor textarea, pre {
-  display: block;
-  padding: 0.5rem;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, .02);
-  border-radius: 4px;
-}
-
-.non-block-editor textarea {
-  background: #F6F8FA;
-  background: var(--ls-secondary-background-color);
-}
-
 pre {
   background: #F6F8FA;
   background: var(--ls-secondary-background-color);
@@ -1056,8 +1037,8 @@ button.context-menu-option {
 }
 
 .content img {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
+  margin-top: .5rem;
+  margin-bottom: .5rem;
 }
 
 a.login {
@@ -1453,6 +1434,23 @@ a.tag:hover {
 
 #mobile-editor-toolbar > button {
   padding: 5px;
+}
+
+// auto complete
+#ui__ac {
+  @apply py-1 rounded-md shadow-xs bg-base-3;
+}
+
+#ui__ac-inner {
+  max-height: 400px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+
+  > .menu-link {
+    padding: 6px 0;
+  }
 }
 
 /* endregion */

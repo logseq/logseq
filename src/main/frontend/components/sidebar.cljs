@@ -294,9 +294,7 @@
               (when-let [repo-url (state/get-current-repo)]
                 (when-not (state/get-edit-input-id)
                   (util/stop e)
-                  (state/set-modal! commit/add-commit-message)))))}
-      (fn [e key-code]
-        nil))))
+                  (state/set-modal! commit/add-commit-message)))))})))
   {:did-mount (fn [state]
                 (keyboards/bind-shortcuts!)
                 state)}
@@ -359,4 +357,4 @@
          ;;   :on-click (fn []
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-         )])))
+)])))
