@@ -87,7 +87,7 @@
      :style {:background-color "#002b36"}}
     (if @open?
       [:div.absolute.top-0.right-0.-mr-14.p-1
-       [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+       [:button.close.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
         {:on-click close-fn}
         [:svg.h-6.w-6.text-white
          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}

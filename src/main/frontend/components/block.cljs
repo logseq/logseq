@@ -273,17 +273,21 @@
            label
            original-page-name))])))
 
+(defn force-close-left-sidebar
+  []
+  (prn (gdom/$ "#left-bar .close")))
+
 (defn page-reference
   [html-export? s config label]
   [:span.page-reference
+   {:on-click (fn [e] (js-debugger) (js/setTimeout #(force-close-left-sidebar)) (util/stop e))}
    (when (and (not html-export?)
               (not (= (:id config) "contents"))
               (not (= (:id config) "Contents")))
      [:span.text-gray-500 "[["])
    (if (string/ends-with? s ".excalidraw")
      [:a.page-ref
-      {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
-       :on-click (fn [e] (util/stop e))}
+      {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})}
       [:span
        (svg/excalidraw-logo)
        (string/capitalize (draw/get-file-title s))]]
