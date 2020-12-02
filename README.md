@@ -62,51 +62,12 @@ The following is for developers and designers who want to build and run Logseq l
 
 ## Set up development environment
 
-If you are on Windows, use the [Windows setup](#windows-setup) below.
-
 ### 1. Requirements
 
+- [Node.js](https://nodejs.org/en/download/) & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
 - [Java & Clojure](https://clojure.org/guides/getting_started)
 
-- [PostgreSQL](https://www.postgresql.org/download/)
-
-- [Node.js](https://nodejs.org/en/download/) & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
-
-### 2. Create a GitHub app
-
-Follow the guide at <https://docs.github.com/en/free-pro-team@latest/developers/apps/creating-a-github-app>, where the user authorization "Callback URL" should be `http://localhost:3000/auth/github`.
-
-Remember to download the `private-key.pem` which will be used for the next step. Also take note of your `App ID`, `Client ID`, and your newly generated `Client Secret` for use in step 4.
-
-![Screenshot 2020-11-27 22-22-39 +0800](https://user-images.githubusercontent.com/479169/100460276-e0bad100-3101-11eb-8fed-1f7c85824b62.png)
-
-**Add contents permission**:
-![Screenshot 2020-11-27 22-22-57 +0800](https://user-images.githubusercontent.com/479169/100460271-def10d80-3101-11eb-91bb-f2339a52d4f8.png)
-
-
-### 3. Set up PostgreSQL
-
-Make sure you have PostgreSQL running. You can check if it's running with `pg_ctl -D /usr/local/var/postgres status` and use `pg_ctl -D /usr/local/var/postgres start` to start it up. You'll also need to make a Logseq DB in PostgreSQL. Do that with `createdb logseq`.
-
-### 4. Add environment variables
-
-``` bash
-export ENVIRONMENT="dev"
-export JWT_SECRET="xxxxxxxxxxxxxxxxxxxx"
-export COOKIE_SECRET="xxxxxxxxxxxxxxxxxxxx"
-export DATABASE_URL="postgres://localhost:5432/logseq"
-export GITHUB_APP2_NAME="logseq-test-your-username-app"
-export GITHUB_APP2_ID="your id"
-export GITHUB_APP2_KEY="xxxxxxxxxxxxxxxxxxxx" #Your Github App's Client ID
-export GITHUB_APP2_SECRET="xxxxxxxxxxxxxxxxxxxx"
-# Replace your-code-directory and your-app.private-key.pem with yours
-export GITHUB_APP_PEM="/your-code-directory/your-app.private-key.pem"
-export LOG_PATH="/tmp/logseq"
-export PG_USERNAME="xxx"
-export PG_PASSWORD="xxx"
-```
-
-### 5. Compile to JavaScript
+### 2. Compile to JavaScript
 
 ``` bash
 git clone https://github.com/logseq/logseq
@@ -114,45 +75,9 @@ yarn
 yarn watch
 ```
 
-### 6. Start the Clojure server
+### 3. Open the browser
 
-1.  Download jar
-
-    Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and put it in the `logseq` directory.
-
-2.  Run jar
-
-    ``` bash
-    java -Duser.timezone=UTC -jar logseq.jar
-    ```
-
-### 7. Open the browser
-
-Open <http://localhost:3000>.
-
-## Windows setup
-
-### 1. Required software
-
-Install Clojure through scoop-clojure: <https://github.com/littleli/scoop-clojure>. You can also install [Node.js](https://nodejs.org/en/), [Yarn](https://yarnpkg.com/) and [PostgreSQL](https://www.postgresql.org/download/) through scoop if you want to.
-
-### 2. Create a GitHub app
-
-Follow [Step 2](#2-create-a-github-app) above if you want Logseq to connect to GitHub. If not, skip this section. The `GITHUB_APP_PEM` variable in the `run-windows.bat` needs to be set with the correct directory for your system.
-
-### 3. Set up PostgreSQL
-
-Make sure you have PostgreSQL running. You can check if it's running with `pg_ctl status` and use `pg_ctl start` to start it up. You'll also need to make a Logseq DB in PostgreSQL. Do that with `createdb logseq`.
-
-### 4. Download the Clojure server
-
-Go to <https://github.com/logseq/logseq/releases>, download the `logseq.jar` and move into the root directory of repo.
-
-### 5. Start Logseq
-
-Run `start-windows.bat` which is located in the repo. This will open a second terminal that runs Logseq's backend server. To completely stop Logseq, you'll need to also close that second terminal that was opened.
-
-`start-windows.bat` will try to start PostgreSQL for you if it's not already started.
+Open <http://localhost:3001>.
 
 ## Build errors
 ### 1. The required namespace `devtools.preload` is not available.
