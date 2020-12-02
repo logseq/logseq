@@ -92,7 +92,8 @@
     :preferred-language (storage/get :preferred-language)
 
     ;; all notification contents as k-v pairs
-    :notification/contents {}}))
+    :notification/contents {}
+    :graph/syncing? false}))
 
 (defn get-route-match
   []
@@ -881,6 +882,10 @@
 (defn get-commands
   []
   (:commands (get-config)))
+
+(defn set-graph-syncing?
+  [value]
+  (set-state! :graph/syncing? value))
 
 ;; TODO: Move those to the uni `state`
 (defonce editor-op (atom nil))

@@ -71,10 +71,12 @@
       (if (and
            (nfs-handler/supported?)
            (config/local-db? repo))
-        [:a.ml-2.mr-1.opacity-70.hover:opacity-100
-         {:on-click #(nfs-handler/refresh! repo)
-          :title (str "Sync files with the local directory: " (config/get-local-dir repo))}
-         svg/refresh]
+        (let [syncing? (state/sub :graph/syncing?)]
+          [:div.ml-2.mr-1 {:class (if syncing? "loader" "initial")}
+           [:a.opacity-70.hover:opacity-100
+            {:on-click #(nfs-handler/refresh! repo)
+             :title (str "Sync files with the local directory: " (config/get-local-dir repo))}
+            svg/refresh]])
         (let [changed-files (state/sub [:repo/changed-files repo])
               should-push? (seq changed-files)
               git-status (state/sub [:git/status repo])

@@ -154,6 +154,7 @@
           dir-name (config/get-local-dir repo)
           handle-path (str config/local-handle-prefix dir-name)
           path-handles (atom {})]
+      (state/set-graph-syncing? true)
       (p/let [handle (idb/get-item handle-path)
               files-result (utils/getFiles handle true
                                            (fn [path handle]
@@ -196,7 +197,9 @@
                                                          {:diffs diffs
                                                           :nfs-files modified-files})))))
             (p/catch (fn [error]
-                       (log/error :nfs/load-files-error error))))))))
+                       (log/error :nfs/load-files-error error)))
+            (p/finally (fn [_]
+                         (state/set-graph-syncing? false))))))))
 
 (defn- refresh!
   [repo]
