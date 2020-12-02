@@ -30,8 +30,6 @@
             [frontend.text :as text]
             ["/frontend/utils" :as utils]))
 
-(set! *warn-on-infer* false)
-
 (rum/defc commands < rum/reactive
   [id format]
   (when (and (util/react *show-commands)
