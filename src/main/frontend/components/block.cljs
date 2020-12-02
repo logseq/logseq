@@ -238,6 +238,10 @@
 
 (declare page-reference)
 
+(defn force-close-left-sidebar
+  []
+  (.click (d/sel1 "#left-bar .close")))
+
 (defn page-cp
   [{:keys [html-export? label children] :as config} page]
   (when-let [page-name (:page/name page)]
@@ -250,8 +254,10 @@
                  (util/encode-str page)
                  (rfe/href :page {:name page}))]
       [:a.page-ref
-       {:href href
+       {:href     href
         :on-click (fn [e]
+                    (if (state/get-left-sidebar-open?)
+                      (js/setTimeout #(force-close-left-sidebar)))
                     (util/stop e)
                     (when (gobj/get e "shiftKey")
                       (when-let [page-entity (db/entity [:page/name page])]
@@ -273,14 +279,9 @@
            label
            original-page-name))])))
 
-(defn force-close-left-sidebar
-  []
-  (prn (gdom/$ "#left-bar .close")))
-
 (defn page-reference
   [html-export? s config label]
   [:span.page-reference
-   {:on-click (fn [e] (js-debugger) (js/setTimeout #(force-close-left-sidebar)) (util/stop e))}
    (when (and (not html-export?)
               (not (= (:id config) "contents"))
               (not (= (:id config) "Contents")))
