@@ -1041,6 +1041,10 @@ button.context-menu-option {
   margin-bottom: .5rem;
 }
 
+.block-content img {
+  width: 100%;
+}
+
 a.login {
   color: #444;
   color: var(--ls-link-text-color);
