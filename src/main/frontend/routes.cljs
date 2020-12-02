@@ -7,7 +7,8 @@
             [frontend.components.draw :as draw]
             [frontend.components.journal :as journal]
             [frontend.components.settings :as settings]
-            [frontend.components.external :as external]))
+            [frontend.components.external :as external]
+            [frontend.components.publishing :as publishing]))
 
 (def routes
   [["/"
@@ -64,4 +65,8 @@
 
    ["/all-journals"
     {:name :all-journals
-     :view journal/all-journals}]])
+     :view journal/all-journals}]
+
+   ["/my-publishing"
+    {:name :my-publishing
+     :view publishing/my-publishing}]])

@@ -309,7 +309,8 @@
                               blocks)
 
                              (when pre-block?
-                               [[:contents]])
+                               [[:contents]
+                                [:page/published]])
 
                              ;; affected priority
                              (when current-priority
@@ -780,6 +781,20 @@
       (->> (pull-many repo '[:page/name] alias-ids)
            (map :page/name)
            distinct))))
+
+(defn get-published-pages
+  []
+  (when-let [repo (state/get-current-repo)]
+    (when (get-conn repo)
+      (->> (q repo [:page/published] {}
+             '[:find (pull ?page [*])
+               :in $
+               :where
+               [?page :page/properties ?properties]
+               [(get ?properties :published) ?publish]
+               [(= "true" ?publish)]])
+        react
+        first))))
 
 (defn get-files
   [repo]
