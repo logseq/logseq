@@ -17,6 +17,7 @@
             [frontend.ui :as ui]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as dnd]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.repeated :as repeated]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -241,7 +242,7 @@
 (declare page-reference)
 
 (defn page-cp
-  [{:keys [html-export? label children] :as config} page]
+  [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:page/name page)]
     (let [original-page-name (get page :page/original-name page-name)
           original-page-name (if (date/valid-journal-title? original-page-name)
@@ -261,7 +262,11 @@
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
-                         {:page page-entity}))))}
+                         {:page page-entity})))
+                    (when (and contents-page?
+                               (state/get-left-sidebar-open?))
+                      (ui-handler/close-left-sidebar!)))}
+
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
@@ -277,24 +282,23 @@
 
 (defn page-reference
   [html-export? s config label]
-  [:span.page-reference
-   (when (and (not html-export?)
-              (not (= (:id config) "contents"))
-              (not (= (:id config) "Contents")))
-     [:span.text-gray-500 "[["])
-   (if (string/ends-with? s ".excalidraw")
-     [:a.page-ref
-      {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
-       :on-click (fn [e] (util/stop e))}
-      [:span
-       (svg/excalidraw-logo)
-       (string/capitalize (draw/get-file-title s))]]
-     (page-cp (assoc config
-                     :label (mldoc/plain->text label)) {:page/name s}))
-   (when (and (not html-export?)
-              (not (= (:id config) "contents"))
-              (not (= (:id config) "Contents")))
-     [:span.text-gray-500 "]]"])])
+  (let [contents-page? (= "contents" (string/lower-case (str (:id config))))]
+    [:span.page-reference
+     (when (and (not html-export?) (not contents-page?))
+       [:span.text-gray-500 "[["])
+     (if (string/ends-with? s ".excalidraw")
+       [:a.page-ref
+        {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
+         :on-click (fn [e]
+                     (util/stop e))}
+        [:span
+         (svg/excalidraw-logo)
+         (string/capitalize (draw/get-file-title s))]]
+       (page-cp (assoc config
+                       :label (mldoc/plain->text label)
+                       :contents-page? contents-page?) {:page/name s}))
+     (when (and (not html-export?) (not contents-page?))
+       [:span.text-gray-500 "]]"])]))
 
 (defn- latex-environment-content
   [name option content]

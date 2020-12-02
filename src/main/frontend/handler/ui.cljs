@@ -8,27 +8,10 @@
             [frontend.util :as util :refer-macros [profile]]))
 
 ;; sidebars
-(defn hide-left-sidebar
+(defn close-left-sidebar!
   []
-  (dom/add-class! (dom/by-id "menu")
-                  "md:block")
-  (dom/remove-class! (dom/by-id "left-sidebar")
-                     "enter")
-  (dom/remove-class! (dom/by-id "search")
-                     "sidebar-open")
-  (dom/remove-class! (dom/by-id "main")
-                     "sidebar-open"))
-
-(defn show-left-sidebar
-  []
-  (dom/remove-class! (dom/by-id "menu")
-                     "md:block")
-  (dom/add-class! (dom/by-id "left-sidebar")
-                  "enter")
-  (dom/add-class! (dom/by-id "search")
-                  "sidebar-open")
-  (dom/add-class! (dom/by-id "main")
-                  "sidebar-open"))
+  (when-let [elem (gdom/getElement "close-left-bar")]
+    (.click elem)))
 
 (defn hide-right-sidebar
   []
@@ -92,5 +75,5 @@
                     (state/get-custom-css-link)
                     (db/get-custom-css)
                     ;; (state/get-custom-css-link)
-                    )]
+)]
     (util/add-style! style)))
