@@ -326,7 +326,7 @@ title: How to take dummy notes?
         :dark "Dark"
         :remove-background "Remove background"
         :open "Open"
-        :open-a-directory "Open a directory"}
+        :open-a-directory "Open a local directory"}
 
    :fr {:help/about "A propos de Logseq"
         :help/bug "Signaler une anomalie"
@@ -774,8 +774,8 @@ title: How to take dummy notes?
            :white "亮色"
            :dark "暗黑"
            :remove-background "去除背景"
-           :open "导入"
-           :open-a-directory "导入本地文件夹"}
+           :open "打开"
+           :open-a-directory "打开本地文件夹"}
 
    :zh-Hant {:on-boarding/title "你好，歡迎使用 Logseq！"
              :on-boarding/sharing "分享"

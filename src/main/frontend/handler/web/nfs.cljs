@@ -163,10 +163,6 @@
               {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
               ;; Use the same labels as isomorphic-git
               rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
-              diffs (concat
-                     (rename-f "remove" deleted)
-                     (rename-f "add" added)
-                     (rename-f "modify" modified))
               _ (when (seq deleted)
                   (p/all (map #(idb/remove-item! (str handle-path %)) deleted)))
               added-or-modified (set (concat added modified))
@@ -179,16 +175,25 @@
                             (p/let [content (.text (:file/file file))]
                               (assoc file :file/content content)))) added-or-modified))
             (p/then (fn [result]
-                      (let [files (->> (map #(dissoc % :file/file :file/handle) result)
-                                       (remove
-                                        (fn [file]
-                                          (let [content (:file/content file)
-                                                old-content (:file/content (get-file-f (:file/path file) old-files))]
-                                            (= content old-content)))))]
-                        (when (and (seq diffs) (seq files))
+                      (let [files (map #(dissoc % :file/file :file/handle) result)
+                            non-modified? (fn [file]
+                                            (let [content (:file/content file)
+                                                  old-content (:file/content (get-file-f (:file/path file) old-files))]
+                                              (= content old-content)))
+                            non-modified-files (->> (filter non-modified? files)
+                                                    (map :file/path))
+                            modified-files (remove non-modified? files)
+                            modified (set/difference (set modified) (set non-modified-files))
+                            diffs (concat
+                                   (rename-f "remove" deleted)
+                                   (rename-f "add" added)
+                                   (rename-f "modify" modified))]
+                        (when (or (and (seq diffs) (seq modified-files))
+                                  (seq diffs) ; delete
+)
                           (repo-handler/load-repo-to-db! repo
                                                          {:diffs diffs
-                                                          :nfs-files files})))))
+                                                          :nfs-files modified-files})))))
             (p/catch (fn [error]
                        (log/error :nfs/load-files-error error))))))))
 

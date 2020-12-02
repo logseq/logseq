@@ -18,7 +18,7 @@
 .cp__sidebar-main-content {
     padding: 3rem 1.5rem;
     margin: 0 auto;
-    max-width: 640px;
+    max-width: 700px;
 }
 
 @media (max-width: 640px) {

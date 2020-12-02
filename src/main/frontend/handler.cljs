@@ -27,7 +27,8 @@
   (js/setInterval (fn []
                     (state/set-today! (date/today))
                     (when-let [repo (state/get-current-repo)]
-                      (when (db/cloned? repo)
+                      (when (or (db/cloned? repo)
+                                (config/local-db? repo))
                         (let [today-page (string/lower-case (date/today))]
                           (when (empty? (db/get-page-blocks-no-cache repo today-page))
                             (repo-handler/create-today-journal-if-not-exists repo))))))

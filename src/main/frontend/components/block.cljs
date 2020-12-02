@@ -1076,8 +1076,7 @@
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)
                :style {:cursor "text"
-                       :min-height 24
-                       :max-width 560}}
+                       :min-height 24}}
         (not slide?)
         (merge attrs))
 
