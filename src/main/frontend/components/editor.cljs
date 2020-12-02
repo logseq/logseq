@@ -50,7 +50,7 @@
                                            (and
                                             (not (fn? command-steps))
                                             (not (contains? (set (map first command-steps)) :editor/input))
-                                            (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled"} chosen))))]
+                                            (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled" "Upload an image"} chosen))))]
                        (editor-handler/insert-command! id command-steps
                                                        format
                                                        {:restore? restore-slash?})))
@@ -716,8 +716,8 @@
                           ;; TODO: is it cross-browser compatible?
                           (when (not= (gobj/get native-e "inputType") "insertFromPaste")
                             (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
-                             (reset! *slash-caret-pos (util/get-caret-pos input))
-                             (reset! *show-commands true)))
+                              (reset! *slash-caret-pos (util/get-caret-pos input))
+                              (reset! *show-commands true)))
                           "<"
                           (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
                             (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
