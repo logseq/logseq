@@ -74,6 +74,12 @@
          {:title (t :all-journals)
           :options {:href (rfe/href :all-journals)}
           :icon svg/calendar-sm})
+       (when current-repo
+         {:title (t :my-publishing)
+          :options {:href (rfe/href :my-publishing)}})
+       {:title (t :excalidraw-title)
+        :options {:href (rfe/href :draw)}
+        :icon (svg/excalidraw-logo)}
        {:title (t :settings)
         :options {:href (rfe/href :settings)}
         :icon svg/settings-sm}
