@@ -139,3 +139,12 @@ export var verifyPermission = async function (handle, readWrite) {
   // The user didn't grant permission, so return false.
   return false;
 }
+
+export var nfsSupported = function () {
+  if ('chooseFileSystemEntries' in self) {
+    return 'chooseFileSystemEntries';
+  } else if ('showOpenFilePicker' in self) {
+    return 'showOpenFilePicker';
+  }
+  return false;
+}

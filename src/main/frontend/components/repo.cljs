@@ -68,7 +68,9 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when-not (= repo config/local-repo)
-      (if (config/local-db? repo)
+      (if (and
+           (nfs-handler/supported?)
+           (config/local-db? repo))
         [:a.ml-2.mr-1.opacity-70.hover:opacity-100
          {:on-click #(nfs-handler/refresh! repo)
           :title (str "Sync files with the local directory: " (config/get-local-dir repo))}

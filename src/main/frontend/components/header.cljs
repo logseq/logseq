@@ -141,15 +141,16 @@
        [:div.repos.hidden.md:block
         (repo/repos-dropdown true)]
 
-       [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3
-        {:on-click (fn []
-                     (nfs/ls-dir-files))
-         :title (t :open-a-directory)}
-        [:div.flex.flex-row.text-center
-         [:span.inline-block svg/folder-add]
-         (when-not config/mobile?
-           [:span.ml-1 {:style {:margin-top 2}}
-            (t :open)])]]
+       (when (nfs/supported?)
+         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3
+          {:on-click (fn []
+                       (nfs/ls-dir-files))
+           :title (t :open-a-directory)}
+          [:div.flex.flex-row.text-center
+           [:span.inline-block svg/folder-add]
+           (when-not config/mobile?
+             [:span.ml-1 {:style {:margin-top 2}}
+              (t :open)])]])
 
        (if config/publishing?
          [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}

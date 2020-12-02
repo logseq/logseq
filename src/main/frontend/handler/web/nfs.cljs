@@ -94,8 +94,9 @@
 
 (defn check-directory-permission!
   [repo]
-  (p/let [handle (idb/get-item (str "handle-" repo))]
-    (utils/verifyPermission handle true)))
+  (p/let [handle (idb/get-item (str "handle/" repo))]
+    (when handle
+      (utils/verifyPermission handle true))))
 
 (defn ask-permission
   [repo]
@@ -199,4 +200,11 @@
 
 (defn- refresh!
   [repo]
-  (reload-dir! repo))
+  (when repo
+    (p/let [verified? (check-directory-permission! repo)]
+      (when verified?
+        (reload-dir! repo)))))
+
+(defn supported?
+  []
+  (utils/nfsSupported))
