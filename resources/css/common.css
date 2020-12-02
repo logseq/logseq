@@ -96,6 +96,10 @@
 
 html {
   font-family: var(--ls-font-family), Inter, sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
+
+  /* FIXME: global revealjs.css ? */
+  height: unset !important;
+  overflow: auto !important;
 }
 
 @supports (font-variation-settings: normal) {
@@ -109,16 +113,14 @@ a svg {
 }
 
 html, body, #root, #draw {
-  height: 100%;
+  //height: 100%;
 }
 
 html, body {
-  background-color: #002b36;
-}
-
-body {
   color: #24292e;
   line-height: 1.5;
+  background-color: #002b36;
+  min-height: 100%;
 }
 
 .form-checkbox {
@@ -178,20 +180,6 @@ ol {
   border-top: none;
   padding: 0;
   min-height: 500px;
-}
-
-#sidebar-nav-wrapper {
-  margin-top: 0px;
-  border-right: 24px;
-  position: sticky;
-  top: 0;
-  transition: all 200ms ease-in 0s;
-  -webkit-transition: all 200ms ease-in 0s;
-}
-
-#sidebar-nav-wrapper.enter {
-  opacity: 1;
-  left: 0;
 }
 
 #journals {
@@ -379,43 +367,6 @@ svg {
   overflow-y: scroll
 }
 
-#left-sidebar {
-  width: 240px;
-  height: 100%;
-  top: 0;
-  left: -240px;
-  position: absolute;
-  z-index: 11;
-  opacity: 0;
-  transition: all 0.25s;
-  -webkit-transition: all 0.25s;
-  background-color: #002b36;
-}
-
-#left-sidebar.enter {
-  opacity: 1;
-  left: 0;
-}
-
-#right-sidebar {
-  position: sticky;
-  top: 0;
-  transition: all 200ms ease-in 0s;
-  -webkit-transition: all 200ms ease-in 0s;
-  background-color: #D8E1E8;
-  background-color: var(--ls-secondary-background-color);
-  padding-bottom: 48px;
-}
-
-
-#right-sidebar.enter {
-  opacity: 1;
-  right: 0;
-}
-
-#right-sidebar .page {
-  margin-top: 0;
-}
 
 .lds-dual-ring {
   display: inline-block;
@@ -484,14 +435,21 @@ a.nav-item:hover, a.star-page:hover {
 }
 
 /* primary bg */
-.h-screen {
+#app-container {
   background-color: #FFF;
   background-color: var(--ls-primary-background-color);
+
+  position: relative;
 }
 
 #head {
   background-color: #FFF;
   background-color: var(--ls-primary-background-color);
+
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
 }
 
 #search_field {
@@ -573,18 +531,6 @@ input {
   margin-bottom: 0;
 }
 
-#right-sidebar .sidebar-item {
-  border-top: 1px solid;
-  border-top-color: #ccc;
-  border-top-color: var(--ls-border-color);
-  margin-bottom: 24px;
-  padding-top: 24px;
-}
-
-#right-sidebar .sidebar-item:first-child {
-  border-top: none;
-}
-
 #global-graph, #page-graph {
   min-height: 100% !important;
   height: 100%;
@@ -654,7 +600,6 @@ a.menu-link {
   color: var(--ls-primary-text-color);
 }
 
-
 a.menu-link:hover {
   color: var(--ls-link-text-hover-color);
 }
@@ -682,15 +627,6 @@ pre.code {
   color: var(--ls-primary-text-color);
 }
 
-/* Are these reachable? */
-#right-sidebar .non-block-editor textarea, #right-sidebar pre, #right-sidebar pre.code {
-  background: var(--ls-right-sidebar-code-bg-color);
-}
-
-#right-sidebar pre.CodeMirror-line {
-  background: #FFFFFF;
-}
-
 :not(pre) > code {
   color: var(--ls-page-inline-code-color);
   background: #eeeeee;
@@ -713,12 +649,12 @@ dt {
 }
 
 :root {
-  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color) !important;
-  scrollbar-width: thin !important;
+  //scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color) !important;
+  //scrollbar-width: thin !important;
 }
 
 * {
-  scrollbar-width: thin !important;
+  //scrollbar-width: thin !important;
 }
 
 blockquote {
@@ -735,21 +671,21 @@ blockquote {
   color: var(--ls-page-blockquote-color);
 }
 
-.dark-theme ::-webkit-scrollbar, .dark-theme ::-webkit-scrollbar-track-piece {
-  background-color: var(--ls-scrollbar-background-color);
-  border: 4px solid;
-  border-color: var(--ls-scrollbar-background-color);
-}
-
-.dark-theme ::-webkit-scrollbar-thumb {
-  background-color: var(--ls-scrollbar-foreground-color);
-  background-clip: padding-box;
-  min-height: 28px;
-}
-
-.dark-theme ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--ls-scrollbar-thumb-hover-color);
-}
+//.dark-theme ::-webkit-scrollbar, .dark-theme ::-webkit-scrollbar-track-piece {
+//  background-color: var(--ls-scrollbar-background-color);
+//  border: 4px solid;
+//  border-color: var(--ls-scrollbar-background-color);
+//}
+//
+//.dark-theme ::-webkit-scrollbar-thumb {
+//  background-color: var(--ls-scrollbar-foreground-color);
+//  background-clip: padding-box;
+//  min-height: 28px;
+//}
+//
+//.dark-theme ::-webkit-scrollbar-thumb:hover {
+//  background-color: var(--ls-scrollbar-thumb-hover-color);
+//}
 
 .svg-shadow {
   -webkit-filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, .7));
@@ -1219,10 +1155,6 @@ summary {
   min-width: 12rem;
 }
 
-#right-sidebar .references {
-  margin-left: 12px;
-}
-
 img.small {
   display: inline;
   width: 20px;
@@ -1397,11 +1329,6 @@ a.tag:hover {
   background-color: var(--ls-page-checkbox-color);
   border-color: #6093a0;
   border-color: var(--ls-page-checkbox-border-color);
-}
-
-#right-sidebar .bg-base-2,
-#right-sidebar blockquote {
-  background-color: var(--ls-tertiary-background-color);
 }
 
 .white-theme a.right-sidebar-button {

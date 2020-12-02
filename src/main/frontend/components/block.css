@@ -2,6 +2,10 @@
 }
 
 .block-content {
+  min-height: 24px;
+  max-width: 100%;
+  overflow: auto;
+  cursor: text;
 }
 
 .block-children {
