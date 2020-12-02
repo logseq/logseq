@@ -1091,10 +1091,7 @@
                           (editor-handler/unhighlight-block!))}]
     [:div.flex.relative
      [:div.flex-1.flex-col.relative.block-content
-      (cond-> {:id (str "block-content-" uuid)
-               :style {:cursor "text"
-                       :min-height 24
-                       :max-width 560}}
+      (cond-> {:id (str "block-content-" uuid)}
         (not slide?)
         (merge attrs))
 
