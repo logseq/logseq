@@ -1,3 +1,7 @@
+if (typeof window === 'undefined') {
+  global.window = {}
+}
+
 // Copy from https://github.com/primetwig/react-nestable/blob/dacea9dc191399a3520f5dc7623f5edebc83e7b7/dist/utils.js
 export var closest = function closest (target, selector) {
   // closest(e.target, '.field')
