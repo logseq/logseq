@@ -1,0 +1,24 @@
+{
+  "name": "Logseq",
+  "short_name": "Logseq",
+  "description": "A privacy-first, open-source platform for knowledge sharing and management.",
+  "icons": [
+    {
+      "src": "/static/img/logo-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/static/img/logo-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#002b36",
+  "theme_color": "#002b36",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "en-US"
+}
