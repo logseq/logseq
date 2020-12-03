@@ -6,14 +6,71 @@
   max-width: 100%;
   overflow: auto;
   cursor: text;
+
+  img {
+    width: 100%;
+  }
 }
 
 .block-children {
 }
 
-.ls-block {
+.embed-page {
+  @apply py-2 my-2 px-2;
+
+  > section {
+    margin-bottom: 5px;
+  }
+
+  &.in-sidebar {
+    background-color: var(--ls-tertiary-background-color);
+  }
 }
 
-.block-content img {
-  width: 100%;
+.ls-block {
+  min-height: 24px;
+  margin: 0 auto;
+
+  img {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .1), 0 10px 10px -5px rgba(0, 0, 0, .04);
+  }
+}
+
+.ls-block h1 {
+  font-size: 2em;
+  margin: .67em 0;
+}
+
+.ls-block h2 {
+  font-size: 1.5em;
+  margin: .75em 0;
+}
+
+.ls-block h3 {
+  font-size: 1.17em;
+  margin: .83em 0;
+}
+
+.ls-block h4 {
+  margin: 1.12em 0;
+}
+
+.ls-block h5 {
+  font-size: .83em;
+  margin: 1.5em 0;
+}
+
+.ls-block h6 {
+  font-size: .75em;
+  margin: 1.67em 0;
+}
+
+.ls-block h1,
+.ls-block h2,
+.ls-block h3,
+.ls-block h4,
+.ls-block h5,
+.ls-block h6 {
+  font-weight: 600;
+  margin-bottom: 0;
 }

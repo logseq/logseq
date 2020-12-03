@@ -6,6 +6,12 @@
   --ls-font-family: 'Inter';
 }
 
+@media (prefers-color-scheme: dark) {
+  html {
+    background-color: #002b36;
+  }
+}
+
 .dark-theme {
     --ls-primary-background-color: #002b36;
     --ls-secondary-background-color: #073642;
@@ -97,7 +103,7 @@
 html {
   font-family: var(--ls-font-family), Inter, sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
 
-  /* FIXME: global revealjs.css ? */
+  /* FIXME: rewrite revealjs.css ??? */
   height: unset !important;
   overflow: auto !important;
 }
@@ -113,13 +119,13 @@ a svg {
 }
 
 html, body, #root, #draw {
-  //height: 100%;
+  /* height: 100%; */
 }
 
-html, body {
+body {
   color: #24292e;
   line-height: 1.5;
-  background-color: #002b36;
+  background-color: transparent;
   min-height: 100%;
 }
 
@@ -320,10 +326,6 @@ a.page-ref {
 
 a.page-ref:hover {
   color: var(--ls-link-ref-text-hover-color)
-}
-
-.ls-block {
-  min-height: 24px;
 }
 
 .block-highlight, .content .selected {
@@ -650,10 +652,6 @@ dt {
 
 :root {
   //scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color) !important;
-  //scrollbar-width: thin !important;
-}
-
-* {
   //scrollbar-width: thin !important;
 }
 
@@ -992,13 +990,13 @@ a.login:hover {
 }
 
 .marker-switch {
-  display: inline;
   font-size: 85%;
   margin-right: 6px;
   margin-left: 2px;
   border-radius: 3px;
   font-weight: 500;
   display: inline-block;
+  text-align: center;
   width: 16px;
   height: 18px;
   opacity: 0.5;
@@ -1080,7 +1078,7 @@ pre {
   max-width: 665px;
 }
 
-.ls-block, .editor-wrapper {
+.editor-wrapper {
   margin: 0 auto;
 }
 
@@ -1095,10 +1093,6 @@ img, video {
 
 #intro .intro-docs, img, video, .intro .ls-block {
   max-width: 653px;
-}
-
-.ls-block img {
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .1), 0 10px 10px -5px rgba(0, 0, 0, .04);
 }
 
 #intro img {
@@ -1187,39 +1181,6 @@ a.tag:hover {
   z-index: 99;
   width: 100%;
   top: 3.2em;
-}
-
-.ls-block h1 {
-  font-size: 2em;
-  margin: .67em 0
-}
-
-.ls-block h2 {
-  font-size: 1.5em;
-  margin: .75em 0
-}
-
-.ls-block h3 {
-  font-size: 1.17em;
-  margin: .83em 0
-}
-
-.ls-block h4 {
-  margin: 1.12em 0
-}
-
-.ls-block h5 {
-  font-size: .83em;
-  margin: 1.5em 0
-}
-
-.ls-block h6 {
-  font-size: .75em;
-  margin: 1.67em 0
-}
-
-.ls-block h1, .ls-block h2, .ls-block h3, .ls-block h4, .ls-block h5, .ls-block h6 {
-  font-weight: 600
 }
 
 .bullet-container .bullet-heading {

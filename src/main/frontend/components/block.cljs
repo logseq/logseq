@@ -324,8 +324,9 @@
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
-    [:div.embed-page.py-2.my-2.px-3.bg-base-2
-     [:p
+    [:div.embed-page.bg-base-2
+     {:class (if (:sidebar? config) "in-sidebar")}
+     [:section
       [:code.mr-2 "Embed page:"]
       (page-cp config {:page/name page-name})]
      (when (and
@@ -1790,7 +1791,7 @@
                                sidebar?
                                0
                                :else
-                               -18)}}
+                               -10)}}
        (let [first-block (first blocks)
              blocks' (if (and (:block/pre-block? first-block)
                               (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
