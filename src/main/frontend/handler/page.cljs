@@ -320,13 +320,14 @@
         (notification/show! "Page already exists!" :error)
         (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
           (let [old-original-name (:page/original-name page)
-                file (:page/file page)]
+                file (:page/file page)
+                journal? (:page/journal? page)]
             (d/transact! (db/get-conn repo false)
                          [{:db/id (:db/id page)
                            :page/name (string/lower-case new-name)
                            :page/original-name new-name}])
 
-            (when file
+            (when (and file (not journal?))
               (rename-file! file new-name
                             (fn []
                               (page-add-properties! (string/lower-case new-name) {:title new-name}))))
@@ -357,7 +358,7 @@
 
           (ui-handler/re-render-root!))))))
 
-(defn rename-when-alter-title-propertiy!
+(defn rename-when-alter-title-property!
   [page path format original-content content]
   (when (and page (contains? config/mldoc-support-formats format))
     (let [old-name page
@@ -410,9 +411,9 @@
                        page)
           (let [journal? (date/valid-journal-title? page)
                 ref-file-path (str (get-directory journal?)
-                          "/"
-                          (get-file-name journal? page)
-                          ".org")]
+                                   "/"
+                                   (get-file-name journal? page)
+                                   ".org")]
             (create! page {:redirect? false})
             (util/format "[[file:%s][%s]]"
                          (util/get-relative-path edit-block-file-path ref-file-path)

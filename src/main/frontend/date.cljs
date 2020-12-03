@@ -33,6 +33,7 @@
      "yyyy/MM/dd"
      "yyyy-MM-dd"
      "yyyy_MM_dd"
+     "yyyyMMdd"
      "yyyy年MM月dd日"}
    (state/get-date-formatter)))
 

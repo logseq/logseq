@@ -1,0 +1,28 @@
+.editor-wrapper {
+
+}
+
+.editor-inner {
+  position: relative;
+  display: flex;
+}
+
+.editor-inner textarea {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.non-block-editor textarea, pre {
+  display: block;
+  padding: 0.5rem;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .02);
+  border-radius: 4px;
+}
+
+.non-block-editor textarea {
+  background: #F6F8FA;
+  background: var(--ls-secondary-background-color);
+}
+

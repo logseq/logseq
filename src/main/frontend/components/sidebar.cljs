@@ -87,7 +87,7 @@
      :style {:background-color "#002b36"}}
     (if @open?
       [:div.absolute.top-0.right-0.-mr-14.p-1
-       [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+       [:button#close-left-bar.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
         {:on-click close-fn}
         [:svg.h-6.w-6.text-white
          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
@@ -294,9 +294,7 @@
               (when-let [repo-url (state/get-current-repo)]
                 (when-not (state/get-edit-input-id)
                   (util/stop e)
-                  (state/set-modal! commit/add-commit-message)))))}
-      (fn [e key-code]
-        nil))))
+                  (state/set-modal! commit/add-commit-message)))))})))
   {:did-mount (fn [state]
                 (keyboards/bind-shortcuts!)
                 state)}
@@ -359,4 +357,4 @@
          ;;   :on-click (fn []
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-         )])))
+)])))

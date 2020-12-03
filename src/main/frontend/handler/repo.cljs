@@ -11,7 +11,6 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [frontend.format :as format]
-            [goog.object :as gobj]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file-handler]
@@ -45,37 +44,23 @@
    :error
    false))
 
-(defn journal-file-changed?
-  [repo-url diffs]
-  (contains? (set (map :path diffs))
-             (db/get-current-journal-path)))
-
 (defn create-config-file-if-not-exists
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         app-dir config/app-name
         dir (str repo-dir "/" app-dir)]
-    (p/let [_ (-> (fs/mkdir dir)
-                  (p/catch (fn [_e])))]
+    (p/let [_ (fs/mkdir-if-not-exists dir)]
       (let [default-content config/config-default-content]
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
                               (db/get-file repo-url path))
-                content (or
-                         (and old-content
-                              (string/replace old-content "heading" "block"))
-                         default-content)]
+                content (or old-content default-content)]
             (db/reset-file! repo-url path content)
             (db/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))
-        ;; (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
-        ;;   (let [path (str app-dir "/" config/metadata-file)]
-        ;;     (when-not file-exists?
-        ;;       (db/reset-file! repo-url path "{:tx-data []}")
-        ;;       (git-handler/git-add repo-url path))))
 ))))
 
 (defn create-contents-file
@@ -83,13 +68,10 @@
   (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)
-        path (str "pages/contents." (if (= (name format) "markdown")
-                                      "md"
-                                      (name format)))
+        path (str "pages/contents." (config/get-file-extension format))
         file-path (str "/" path)
         default-content (util/default-content-with-title format "contents")]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/pages"))
-                  (p/catch (fn [_e])))
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/pages"))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
@@ -102,8 +84,7 @@
         path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
         default-content ""]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/app-name))
-                  (p/catch (fn [_e])))
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
@@ -115,8 +96,7 @@
   (let [repo-dir (util/get-repo-dir repo-url)
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" (config/get-pages-directory)))
-                  (p/catch (fn [_e])))
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
       (db/reset-file! repo-url path content))))
 
@@ -150,8 +130,7 @@
          empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
      (when (or empty-blocks?
                (not page-exists?))
-       (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
-                     (p/catch (fn [_e])))
+       (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
          (when-not file-exists?
            (db/reset-file! repo-url path content)
@@ -161,7 +140,7 @@
 (defn create-default-files!
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (when-let [name (get-in @state/state [:me :name])]
+  (when (state/logged?)
     (create-config-file-if-not-exists repo-url)
     (create-today-journal-if-not-exists repo-url)
     (create-contents-file repo-url)
@@ -250,6 +229,7 @@
   (when (seq files)
     (file-handler/alter-files repo files)))
 
+; FIXME: Unused
 (defn persist-repo-metadata!
   [repo]
   (spec/validate :repos/url repo)
@@ -273,7 +253,7 @@
   [repo-url]
   (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
           local-latest-commit (common-handler/get-ref repo-url)]
-    (git/get-local-diffs repo-url local-latest-commit remote-latest-commit)))
+    (git/get-diffs repo-url local-latest-commit remote-latest-commit)))
 
 (defn pull
   [repo-url {:keys [force-pull? show-diff? try-times]
@@ -409,7 +389,7 @@
 (defn push-if-auto-enabled!
   [repo]
   (spec/validate :repos/url repo)
-  (when (state/git-auto-push?)
+  (when (state/get-git-auto-push? repo)
     (push repo nil)))
 
 (defn pull-current-repo
@@ -417,7 +397,7 @@
   (when-let [repo (state/get-current-repo)]
     (pull repo {:force-pull? true})))
 
-(defn clone
+(defn- clone
   [repo-url]
   (spec/validate :repos/url repo-url)
   (p/let [token (helper/get-github-token repo-url)]
@@ -427,10 +407,9 @@
          (state/set-cloning! true)
          (git/clone repo-url token))
        (fn [result]
-         (state/set-git-clone-repo! "")
          (state/set-current-repo! repo-url)
-         (db/start-db-conn! (:me @state/state) repo-url)
-         (db/mark-repo-as-cloned repo-url))
+         (db/start-db-conn! (state/get-me) repo-url)
+         (db/mark-repo-as-cloned! repo-url))
        (fn [e]
          (println "Clone failed, error: ")
          (js/console.error e)
@@ -478,21 +457,20 @@
   []
   (if js/window.pfs
     (let [repo config/local-repo]
-      (p/let [result (-> (fs/mkdir (str "/" repo))
-                         (p/catch (fn [_e] nil)))
-              _ (state/set-current-repo! repo)
-              _ (db/start-db-conn! nil repo)
-              _ (when-not config/publishing?
-                  (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
-                    (create-dummy-notes-page repo dummy-notes)))
-              _ (when-not config/publishing?
-                  (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
-                        tutorial (string/replace-first tutorial "$today" (date/today))]
-                    (create-today-journal-if-not-exists repo tutorial)))
-              _ (create-config-file-if-not-exists repo)
-              _ (create-contents-file repo)
-              _ (create-custom-theme repo)]
-        (state/set-db-restoring! false)))
+      (p/do! (fs/mkdir-if-not-exists (str "/" repo))
+             (state/set-current-repo! repo)
+             (db/start-db-conn! nil repo)
+             (when-not config/publishing?
+               (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                 (create-dummy-notes-page repo dummy-notes)))
+             (when-not config/publishing?
+               (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                     tutorial (string/replace-first tutorial "$today" (date/today))]
+                 (create-today-journal-if-not-exists repo tutorial)))
+             (create-config-file-if-not-exists repo)
+             (create-contents-file repo)
+             (create-custom-theme repo)
+             (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn periodically-pull
@@ -506,14 +484,8 @@
 
 (defn periodically-push-tasks
   [repo-url]
-  (spec/validate :repos/url repo-url)
-  (let [push (fn []
-               (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-                          ;; (not config/dev?)
-)
-                 (push repo-url nil)))]
-    (js/setInterval push
-                    (* (config/git-push-secs) 1000))))
+  (js/setInterval #(push-if-auto-enabled! repo-url)
+                  (* (config/git-push-secs) 1000)))
 
 (defn periodically-pull-and-push
   [repo-url {:keys [pull-now?]
@@ -537,12 +509,12 @@
                (println "Something wrong!")
                (js/console.dir error))))
 
-(defn clone-and-pull
+(defn- clone-and-pull
   [repo-url]
   (spec/validate :repos/url repo-url)
   (->
    (p/let [_ (clone repo-url)
-           _ (git-handler/git-set-username-email! repo-url (:me @state/state))]
+           _ (git-handler/git-set-username-email! repo-url (state/get-me))]
      (load-db-and-journals! repo-url nil true)
      (periodically-pull-and-push repo-url {:pull-now? false})
      ;; (periodically-persist-app-metadata repo-url)
@@ -576,10 +548,10 @@
   (spec/validate :repos/repo repo)
   (db/remove-conn! url)
   (db/clear-query-state!)
-  (-> (p/let [_ (db/remove-db! url)
-              _ (db/remove-files-db! url)
-              _ (fs/rmdir (util/get-repo-dir url))]
-        (clone-and-pull url))
+  (-> (p/do! (db/remove-db! url)
+             (db/remove-files-db! url)
+             (fs/rmdir (util/get-repo-dir url))
+             (clone-and-pull url))
       (p/catch (fn [error]
                  (prn "Delete repo failed, error: " error)))))
 

@@ -6,6 +6,14 @@
   (when (and dir js/window.pfs)
     (js/window.pfs.mkdir dir)))
 
+(defn mkdir-if-not-exists
+  [dir]
+  (when (and dir js/window.pfs)
+    (util/p-handle
+     (js/window.pfs.stat dir)
+     (fn [_stat])
+     (fn [_error] (js/window.pfs.mkdir dir)))))
+
 (defn readdir
   [dir]
   (when (and dir js/window.pfs)
