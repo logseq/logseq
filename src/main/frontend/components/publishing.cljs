@@ -9,7 +9,8 @@
             [frontend.config :as config]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.handler.page :as page-handler]))
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.notification :as notification]))
 
 
 (defn get-published-pages
@@ -36,6 +37,11 @@
          (fn [error]
            (log/error :publish/delete-page-failed error)
            (reject error)))))))
+
+(defn update-state-and-notify
+  [page-name]
+  (page-handler/page-add-properties! page-name {:published false})
+  (notification/show! (util/format "Remove Page \"%s\" from Logseq server success" page-name) :success))
 
 (rum/defc my-publishing
   < rum/reactive db-mixins/query
@@ -67,11 +73,14 @@
                            (fn [e]
                              (util/stop e)
                              (-> (p/let [_ (delete-page-from-logseq current-project permalink)]
-                                   (page-handler/page-add-properties! page-name {:published false}))
+                                   (update-state-and-notify page-name))
                                  (p/catch
                                    (fn [error]
                                      (let [status (.-status error)
                                            not-found-on-server 404]
-                                       (when (= not-found-on-server status)
-                                         (page-handler/page-add-properties! page-name {:published false})))))))}
+                                       (if (= not-found-on-server status)
+                                         (update-state-and-notify page-name)
+                                         (let [message (util/format "Remove Page \"%s\" from Logseq server failed."
+                                                         page-name)]
+                                           (notification/show! message :failed))))))))}
                        (t :page/cancel-publishing)]]]]))]])])))
