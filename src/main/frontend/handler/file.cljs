@@ -16,7 +16,8 @@
             [clojure.string :as string]
             [frontend.history :as history]
             [frontend.handler.project :as project-handler]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            ["ignore" :as Ignore]))
 
 (defn load-file
   [repo-url path]
@@ -225,3 +226,10 @@
     (let [path (:file/path file)
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
+
+(defn ignore-files
+  [pattern paths]
+  (-> (Ignore)
+      (.add pattern)
+      (.filter (bean/->js paths))
+      (bean/->clj)))

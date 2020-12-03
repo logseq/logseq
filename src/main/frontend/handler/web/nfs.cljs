@@ -7,6 +7,7 @@
             [frontend.util :as util]
             ["/frontend/utils" :as utils]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.idb :as idb]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -17,6 +18,22 @@
             [frontend.config :as config]
             [lambdaisland.glogi :as log]))
 
+(defn remove-ignore-files
+  [files]
+  (let [files (remove (fn [f]
+                        (string/starts-with? (:file/path f) ".git/"))
+                      files)]
+    (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
+                                  %) files)]
+      (if-let [file (:file/file ignore-file)]
+        (p/let [content (.text file)]
+          (when content
+            (let [paths (set (file-handler/ignore-files content (map :file/path files)))]
+              (when (seq paths)
+                (filter (fn [f] (contains? paths (:file/path f))) files)))))
+        (p/resolved files))
+      (p/resolved files))))
+
 (defn- ->db-files
   [dir-name result]
   (let [result (flatten (bean/->clj result))]
@@ -25,7 +42,8 @@
                  get-attr #(gobj/get file %)
                  path (-> (get-attr "webkitRelativePath")
                           (string/replace-first (str dir-name "/") ""))]
-             {:file/path path
+             {:file/name (get-attr "name")
+              :file/path path
               :file/last-modified-at (get-attr "lastModified")
               :file/size (get-attr "size")
               :file/type (get-attr "type")
@@ -61,7 +79,8 @@
              _ (fs/add-nfs-file-handle! root-handle-path root-handle)
              _ (set-files! @path-handles)
              result (nth result 1)
-             files (->db-files dir-name result)
+             files (-> (->db-files dir-name result)
+                       remove-ignore-files)
              markup-files (filter-markup-and-built-in-files files)]
        (-> (p/all (map (fn [file]
                          (p/let [content (.text (:file/file file))]
@@ -160,7 +179,8 @@
                                            (fn [path handle]
                                              (swap! path-handles assoc path handle)))
               _ (set-files! @path-handles)
-              new-files (->db-files dir-name files-result)
+              new-files (-> (->db-files dir-name files-result)
+                            remove-ignore-files)
               get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
               {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
               ;; Use the same labels as isomorphic-git
@@ -204,9 +224,16 @@
 (defn- refresh!
   [repo]
   (when repo
-    (p/let [verified? (check-directory-permission! repo)]
-      (when verified?
-        (reload-dir! repo)))))
+    (reload-dir! repo)
+    ;; check permission is too slow
+    ;; (->
+    ;;  (p/let [verified? (check-directory-permission! repo)]
+    ;;    (prn {:verified? verified?})
+    ;;    (when verified?
+    ;;      (reload-dir! repo)))
+    ;;  (p/catch (fn [error]
+    ;;             (log/error :nfs/refresh-error error))))
+))
 
 (defn supported?
   []
