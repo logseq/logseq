@@ -4,6 +4,7 @@
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
+  --ls-main-content-max-with: 680px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -973,10 +974,6 @@ button.context-menu-option {
 .content img {
   margin-top: .5rem;
   margin-bottom: .5rem;
-}
-
-.block-content img {
-  width: 100%;
 }
 
 a.login {
