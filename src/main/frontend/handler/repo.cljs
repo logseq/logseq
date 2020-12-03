@@ -474,7 +474,8 @@
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn periodically-pull
-  [repo-url pull-now?]
+  [repo-url {:keys [pull-now?]
+             :or {pull-now? true}}]
   (spec/validate :repos/url repo-url)
   (p/let [token (helper/get-github-token repo-url)]
     (when token
@@ -482,17 +483,10 @@
       (js/setInterval #(pull repo-url nil)
                       (* (config/git-pull-secs) 1000)))))
 
-(defn periodically-push-tasks
-  [repo-url]
-  (js/setInterval #(push-if-auto-enabled! repo-url)
+(defn periodically-push-current-repo
+  []
+  (js/setInterval #(push-if-auto-enabled! (state/get-current-repo))
                   (* (config/git-push-secs) 1000)))
-
-(defn periodically-pull-and-push
-  [repo-url {:keys [pull-now?]
-             :or {pull-now? true}}]
-  (spec/validate :repos/url repo-url)
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url))
 
 (defn create-repo!
   [repo-url branch]
@@ -509,16 +503,13 @@
                (println "Something wrong!")
                (js/console.dir error))))
 
-(defn- clone-and-pull
+(defn- clone-and-load-db
   [repo-url]
   (spec/validate :repos/url repo-url)
   (->
    (p/let [_ (clone repo-url)
            _ (git-handler/git-set-username-email! repo-url (state/get-me))]
-     (load-db-and-journals! repo-url nil true)
-     (periodically-pull-and-push repo-url {:pull-now? false})
-     ;; (periodically-persist-app-metadata repo-url)
-)
+     (load-db-and-journals! repo-url nil true))
    (p/catch (fn [error]
               (js/console.error error)))))
 
@@ -535,10 +526,13 @@
                    (db/cloned? repo))
             (do
               (git-handler/git-set-username-email! repo me)
-              (periodically-pull-and-push repo {:pull-now? true})
+              (periodically-pull repo {:pull-now? true})
               ;; (periodically-persist-app-metadata repo)
-)
-            (clone-and-pull repo)))))
+              )
+            (do
+              (clone-and-load-db repo)
+              (periodically-pull repo {:pull-now? false})))
+          (periodically-push-current-repo))))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
                    500)))
@@ -551,7 +545,7 @@
   (-> (p/do! (db/remove-db! url)
              (db/remove-files-db! url)
              (fs/rmdir (util/get-repo-dir url))
-             (clone-and-pull url))
+             (clone-and-load-db url))
       (p/catch (fn [error]
                  (prn "Delete repo failed, error: " error)))))
 
