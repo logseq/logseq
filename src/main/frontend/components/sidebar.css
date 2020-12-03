@@ -44,13 +44,14 @@
   position: relative;
   flex: 1;
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: center;
 }
 
 .cp__sidebar-main-content {
   padding: 3rem 1.5rem;
-  max-width: 640px;
+  max-width: var(--ls-main-content-max-with);
   flex: 1;
 }
 
@@ -88,10 +89,12 @@
     @apply flex flex-row mb-2;
     margin: -15px;
     margin-bottom: 0;
+    overflow: auto;
 
     &-btn {
       display: block;
       padding: 10px 5px;
+      white-space: nowrap;
     }
   }
 
@@ -139,12 +142,6 @@
         transform: scale(1);
       }
     }
-  }
-}
-
-@media (max-width: 640px) {
-  .cp__sidebar-main-content {
-    max-width: 100vw;
   }
 }
 
