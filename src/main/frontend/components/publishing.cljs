@@ -25,7 +25,6 @@
                [(= "true" ?publish)]])
         db/react))))
 
-
 (defn delete-page-from-logseq
   [project permalink]
   (let [url (util/format "%s%s/%s" config/api project permalink)]
@@ -58,7 +57,6 @@
              (let [page (first page)
                    {:keys [title permalink]} (:page/properties page)
                    page-name (:page/name page)]
-               (prn page)
                [:tr {:key permalink}
                 [:td [:a {:on-click (fn [e]
                                       (util/stop e))
