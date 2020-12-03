@@ -51,7 +51,7 @@
         value]))])
 
 (rum/defc file < rum/reactive
-  [repo type path contents remote-oid component]
+  [repo type path contents remote-oid]
   (let [{:keys [collapse? resolved?]} (util/react (rum/cursor diff-state path))
         edit? (util/react *edit?)
         delete? (= type "remove")]
@@ -143,7 +143,7 @@
 ;; TODO: `n` shortcut for next diff, `p` for previous diff
 
 
-(rum/defcc diff <
+(rum/defc diff <
   rum/reactive
   {:will-mount
    (fn [state]
@@ -188,7 +188,7 @@
      (reset! *edit? false)
      (reset! *edit-content "")
      state)}
-  [component]
+  []
   (let [diffs (util/react state/diffs)
         remote-oid (util/react remote-hash-id)
         repo (state/get-current-repo)
@@ -203,7 +203,7 @@
        (seq diffs)
        [:div#diffs-body
         (for [{:keys [type path]} diffs]
-          (rum/with-key (file repo type path contents remote-oid component)
+          (rum/with-key (file repo type path contents remote-oid)
             path))
         [:div
          (ui/textarea
