@@ -38,8 +38,8 @@
     {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
     [:path
      {:d svg-d
-      :stroke-width "2",
-      :stroke-linejoin "round",
+      :stroke-width "2"
+      :stroke-linejoin "round"
       :stroke-linecap "round"}]]
    title])
 
@@ -244,9 +244,8 @@
   (when-not (state/sub :ui/sidebar-open?)
     ;; TODO: remove with-context usage
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#help.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-       {:style {:right 24}
-        :title (t :help-shortcut-title)
+      [:div.cp__sidebar-help
+       {:title (t :help-shortcut-title)
         :on-click (fn []
                     (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
        "?"])))

@@ -354,7 +354,7 @@
                          (not block?)
                          (not (state/hide-file?))
                          (not config/publishing?))
-                [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
+                [:div.text-sm.ml-1.mb-2.flex-1 {:key "page-file"}
                  [:span.opacity-50 (t :file/file)]
                  [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
                                          :href (str "/file/" (util/url-encode file-path))}
