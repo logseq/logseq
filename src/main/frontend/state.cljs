@@ -793,7 +793,6 @@
   (when-let [current-repo (get-current-repo)]
     (let [new-kvs (apply array-map (vec kv))
           projects (:projects (get-me))
-          _ (prn "new-kvs" new-kvs)
           new-projects (reduce (fn [acc project]
                                  (if (= (:repo project) current-repo)
                                    (conj acc (merge project new-kvs))
