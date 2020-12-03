@@ -10,7 +10,9 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [clojure.string :as string]
+            [frontend.ui :as ui]))
 
 
 (defn get-published-pages
@@ -31,27 +33,91 @@
   (let [url (util/format "%s%s/%s" config/api project permalink)]
     (js/Promise.
       (fn [resolve reject]
-       (util/delete url
-         (fn [result]
-           (resolve result))
-         (fn [error]
-           (log/error :publish/delete-page-failed error)
-           (reject error)))))))
+        (util/delete url
+          (fn [result]
+            (resolve result))
+          (fn [error]
+            (log/error :page/http-delete-page-failed error)
+            (reject error)))))))
 
 (defn update-state-and-notify
   [page-name]
   (page-handler/page-add-properties! page-name {:published false})
   (notification/show! (util/format "Remove Page \"%s\" from Logseq server success" page-name) :success))
 
-(rum/defc my-publishing
+(defn update-project
+  [project-name data]
+  (let [url (util/format "%sprojects/%s" config/api project-name)]
+    (js/Promise.
+      (fn [resolve reject]
+        (util/post url data
+          (fn [result]
+            (resolve result))
+          (fn [error]
+            (log/error :project/http-update-failed error)
+            (reject error)))))))
+
+(defn get-current-project
+  [current-repo projects]
+  (let [project (some (fn [p]
+                        (when (= (:repo p) current-repo)
+                          p))
+                  projects)
+        project-name (:name project)]
+    (when-not (string/blank? project-name) project-name)))
+
+(defn project
+  [editor-state current-project]
+  (if (= :display @editor-state)
+    [:h2
+     {:on-click
+      (fn [_]
+        (reset! editor-state :editor))}
+     current-project]
+    [:div.block-body
+     [:input#project-editor
+      {:placeholder current-project
+       :default-value current-project}]
+     (ui/button
+       "Save"
+       :on-click
+       (fn [e]
+         (util/stop e)
+         (let [editor (.getElementById js/document "project-editor")
+               v (.-value editor)
+               data {:name v}]
+           (-> (p/let [result (update-project current-project data)]
+                 (when (:result result)
+                   (state/update-current-project :name v)
+                   (notification/show! "Updated project name successfully." :success)
+                   (reset! editor-state :display)))
+               (p/catch
+                 (fn [error]
+                   (notification/show! "Failed to updated project name." :failed)))))))
+
+     (ui/button
+       "Cancel"
+       :on-click
+       (fn [e]
+         (util/stop e)
+         (reset! editor-state :display)))
+     ]))
+
+(rum/defcs my-publishing
   < rum/reactive db-mixins/query
-  []
+    (rum/local :display ::project-state)
+  [state]
   (let [current-repo (state/sub :git/current-repo)
-        current-project (state/get-current-project)
-        pages (get-published-pages)]
+        projects (state/sub [:me :projects])
+        pages (get-published-pages)
+        editor-state (get state ::project-state)
+        current-project (get-current-project current-repo projects)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1
        [:h1.title (t :my-publishing)]
+       [:div#project-name
+        [:span "Current Project:"
+         (project editor-state current-project)]]
        (when current-repo
          [:table.table-auto
           [:thead
