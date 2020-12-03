@@ -102,14 +102,19 @@
                 (when all-handler (all-handler e key-code)))))))
 
 (defn on-key-down
-  [state keycode-map all-handler]
-  (let [node (rum/dom-node state)]
-    (listen state js/window "keydown"
-            (fn [e]
-              (let [key-code (.-keyCode e)]
-                (when-let [f (get keycode-map key-code)]
-                  (f state e))
-                (when all-handler (all-handler e key-code)))))))
+  ([state keycode-map]
+   (on-key-down state keycode-map {}))
+  ([state keycode-map {:keys [not-matched-handler all-handler]}]
+   (let [node (rum/dom-node state)]
+     (listen state js/window "keydown"
+             (fn [e]
+               (let [key-code (.-keyCode e)]
+                 (if-let [f (get keycode-map key-code)]
+                   (f state e)
+                   (when (and not-matched-handler (fn? not-matched-handler))
+                     (not-matched-handler e key-code)))
+                 (when (and all-handler (fn? all-handler))
+                   (all-handler e key-code))))))))
 
 (defn event-mixin
   ([attach-listeners]

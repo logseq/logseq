@@ -8,7 +8,9 @@
             [goog.dom :as gdom]
             [dommy.core :as dom]
             [cljs.core.async :as async]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]))
 
 (defonce ^:private state
   (atom
@@ -32,7 +34,6 @@
     ;; repo -> {:last-stored-at :last-modified-at}
     :repo/persist-status {}
     :me nil
-    :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
     :git/status {}
     :format/loading {}
@@ -301,7 +302,7 @@
   [input-id value]
   (when input-id
     (when-let [input (gdom/getElement input-id)]
-      (gobj/set input "value" value))
+      (util/set-change-value input value))
     (update-state! :editor/content (fn [m]
                                      (assoc m input-id value)))
     ;; followers
@@ -510,11 +511,6 @@
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
 
-(defn set-git-clone-repo!
-  [repo]
-  (set-state! :git/clone-repo repo)
-  (storage/set :git/clone-repo repo))
-
 (defn set-github-token!
   [repo token-result]
   (when token-result
@@ -534,9 +530,15 @@
       (when (seq repos)
         (let [set-token-f
               (fn [{:keys [installation_id] :as repo}]
-                (let [{:keys [token expires_at] :as m} (get tokens installation_id)]
-                  (if (and token expires_at)
-                    (merge repo {:token token :expires_at expires_at})
+                (let [{:keys [token] :as m} (get tokens installation_id)]
+                  (if (string? token)
+                    ;; Github API returns a expires_at key which is a timestamp (expires after 60 minutes at present),
+                    ;; however, user's system time may be inaccurate. Here, based on the client system time, we use
+                    ;; 40-minutes interval to deal with some critical conditions, for e.g. http request time consume.
+                    (let [formatter (tf/formatters :date-time-no-ms)
+                          expires-at (->> (t/plus (t/now) (t/minutes 40))
+                                          (tf/unparse formatter))]
+                      (merge repo {:token token :expires_at expires-at}))
                     (do (log/error :token/cannot-set-token {:repo-m repo :token-m m}) repo))))
               repos (mapv set-token-f repos)]
           (swap! state assoc-in [:me :repos] repos))))))
@@ -727,9 +729,14 @@
   []
   (:me @state))
 
-(defn logged?
+(defn get-name
   []
-  (some? (:name (get-me))))
+  (:name (get-me)))
+
+(defn logged?
+  "Whether the user has logged in."
+  []
+  (some? (get-name)))
 
 (defn set-draw!
   [value]
@@ -859,9 +866,11 @@
     (let [shortcuts (or (:shortcuts value) {})]
       (storage/set (str repo-url "-shortcuts") shortcuts))))
 
-(defn git-auto-push?
-  []
-  (true? (:git-auto-push (get-config (get-current-repo)))))
+(defn get-git-auto-push?
+  ([]
+   (get-git-auto-push? (get-current-repo)))
+  ([repo]
+   (true? (:git-auto-push (get-config repo)))))
 
 (defn set-changed-files!
   [repo changed-files]

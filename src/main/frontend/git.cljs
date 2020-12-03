@@ -182,10 +182,6 @@
              (first commons)
              (find-common-base repo-url local-parent remote-parent local-commits remote-commits))))))))
 
-(defn get-local-diffs
-  [repo-url remote-id local-id]
-  (get-diffs repo-url remote-id local-id))
-
 (defn read-blob
   [repo-url oid path]
   (js/window.workerThread.readBlob (util/get-repo-dir repo-url)

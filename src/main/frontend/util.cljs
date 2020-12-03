@@ -43,6 +43,11 @@
   [event]
   (gobj/getValueByKeys event "target" "value"))
 
+(defn set-change-value
+  "compatible change event for React"
+  [node value]
+  (utils/triggerInputChange node value))
+
 (defn p-handle
   ([p ok-handler]
    (p-handle p ok-handler (fn [error]
@@ -258,7 +263,7 @@
   (try
     (bean/->clj ((gobj/get caret-pos "position") input))
     (catch js/Error e
-      nil)))
+      (js/console.error e))))
 
 (defn minimize-html
   [s]
@@ -439,12 +444,12 @@
 
 (defn textarea-cursor-first-row?
   [input line-height]
-  (< (:top (get-caret-pos input)) line-height))
+  (<= (:top (get-caret-pos input)) line-height))
 
 (defn textarea-cursor-end-row?
   [input line-height]
-  (> (+ (:top (get-caret-pos input)) line-height)
-     (get-textarea-height input)))
+  (>= (+ (:top (get-caret-pos input)) line-height)
+      (get-textarea-height input)))
 
 (defn safe-split-first [pattern s]
   (if-let [first-index (string/index-of s pattern)]

@@ -1403,7 +1403,7 @@
                                       file-name)
                          format
                          {:last-pattern (if drop? "" commands/slash)
-                          :restore? false})
+                          :restore? true})
 
         (reset! *image-uploading-process 0))
       (fn [e]
