@@ -37,7 +37,7 @@
           (fn [result]
             (resolve result))
           (fn [error]
-            (log/error :page/http-delete-page-failed error)
+            (log/error :page/http-delete-failed error)
             (reject error)))))))
 
 (defn update-state-and-notify
@@ -55,6 +55,18 @@
             (resolve result))
           (fn [error]
             (log/error :project/http-update-failed error)
+            (reject error)))))))
+
+(defn delete-project
+  [project-name]
+  (let [url (util/format "%sprojects/%s" config/api project-name)]
+    (js/Promise.
+      (fn [resolve reject]
+        (util/delete url
+          (fn [result]
+            (resolve result))
+          (fn [error]
+            (log/error :project/http-delete-failed error)
             (reject error)))))))
 
 (defn get-current-project
@@ -80,28 +92,40 @@
        :default-value current-project}]
      (ui/button
        "Save"
-       :on-click
-       (fn [e]
-         (util/stop e)
-         (let [editor (.getElementById js/document "project-editor")
-               v (.-value editor)
-               data {:name v}]
-           (-> (p/let [result (update-project current-project data)]
-                 (when (:result result)
-                   (state/update-current-project :name v)
-                   (notification/show! "Updated project name successfully." :success)
-                   (reset! editor-state :display)))
-               (p/catch
-                 (fn [error]
-                   (notification/show! "Failed to updated project name." :failed)))))))
+       :on-click (fn [e]
+                   (util/stop e)
+                   (let [editor (.getElementById js/document "project-editor")
+                         v (.-value editor)
+                         data {:name v}]
+                     (-> (p/let [result (update-project current-project data)]
+                           (when (:result result)
+                             (state/update-current-project :name v)
+                             (notification/show! "Updated project name successfully." :success)
+                             (reset! editor-state :display)))
+                         (p/catch
+                           (fn [error]
+                             (notification/show! "Failed to updated project name." :failed))))))
+       :background "green")
 
      (ui/button
        "Cancel"
-       :on-click
-       (fn [e]
-         (util/stop e)
-         (reset! editor-state :display)))
-     ]))
+       :on-click (fn [e]
+                   (util/stop e)
+                   (reset! editor-state :display))
+       :background "pink")
+     (ui/button
+       "Delete"
+       :on-click (fn [e]
+                   (util/stop e)
+                   (let [confirm-message
+                         (util/format
+                           "This operation will also delete all publishing under project \"%s\", continue?"
+                           current-project)]
+                    (when (.confirm js/window confirm-message)
+                      (p/let [result (delete-project current-project)]
+                        (when (:result result)
+                          (reset! editor-state :display))))))
+       :background "red")]))
 
 (rum/defcs my-publishing
   < rum/reactive db-mixins/query
