@@ -12,8 +12,8 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.notification :as notification]
             [clojure.string :as string]
-            [frontend.ui :as ui]))
-
+            [frontend.ui :as ui]
+            [frontend.components.svg :as svg]))
 
 (defn get-published-pages
   []
@@ -79,53 +79,64 @@
     (when-not (string/blank? project-name) project-name)))
 
 (defn project
-  [editor-state current-project]
+  [editor-state current-project pages]
   (if (= :display @editor-state)
-    [:h2
-     {:on-click
-      (fn [_]
-        (reset! editor-state :editor))}
-     current-project]
-    [:div.block-body
-     [:input#project-editor
+    [:div.cp__publishing-pj
+     [:span.cp__publishing-pj-name current-project]
+     [:span.cp__publishing-edit
+      {:on-click
+             (fn [_]
+               (reset! editor-state :editor))}
+      "edit"]]
+    [:div.flex.cp__publishing_pj_edit
+     [:input#cp__publishing-project-input
       {:placeholder current-project
        :default-value current-project}]
-     (ui/button
-       "Save"
-       :on-click (fn [e]
-                   (util/stop e)
-                   (let [editor (.getElementById js/document "project-editor")
-                         v (.-value editor)
-                         data {:name v}]
-                     (-> (p/let [result (update-project current-project data)]
-                           (when (:result result)
-                             (state/update-current-project :name v)
-                             (notification/show! "Updated project name successfully." :success)
-                             (reset! editor-state :display)))
-                         (p/catch
-                           (fn [error]
-                             (notification/show! "Failed to updated project name." :failed))))))
-       :background "green")
+     [:div.cp__publishing-pj-bt
+      (ui/button
+        "Save"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (let [editor (.getElementById js/document "cp__publishing-project-input")
+                          v (.-value editor)
+                          data {:name v}]
+                      (-> (p/let [result (update-project current-project data)]
+                            (when (:result result)
+                              (state/update-current-project :name v)
+                              (notification/show! "Updated project name successfully." :success)
+                              (reset! editor-state :display)))
+                          (p/catch
+                            (fn [error]
+                              (notification/show! "Failed to updated project name." :failed))))))
+        :background "green")]
 
-     (ui/button
-       "Cancel"
-       :on-click (fn [e]
-                   (util/stop e)
-                   (reset! editor-state :display))
-       :background "pink")
-     (ui/button
-       "Delete"
-       :on-click (fn [e]
-                   (util/stop e)
-                   (let [confirm-message
-                         (util/format
-                           "This operation will also delete all publishing under project \"%s\", continue?"
-                           current-project)]
-                    (when (.confirm js/window confirm-message)
-                      (p/let [result (delete-project current-project)]
-                        (when (:result result)
-                          (reset! editor-state :display))))))
-       :background "red")]))
+     [:div.cp__publishing-pj-bt
+      (ui/button
+        "Cancel"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (reset! editor-state :display))
+        :background "pink")]
+     [:div.cp__publishing-pj-bt
+      (ui/button
+        "Delete"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (let [confirm-message
+                          (util/format
+                            "This operation will also delete all publishing under project \"%s\", continue?"
+                            current-project)]
+                      (when (.confirm js/window confirm-message)
+                        (p/let [result (delete-project current-project)]
+                          (when (:result result)
+                            (reset! editor-state :display)
+                            (doseq [page pages]
+                              (let [page (first page)
+                                    page-name (:page/name page)]
+                                (page-handler/page-add-properties! page-name {:published false})))
+                            (state/remove-current-project)
+                            (notification/show! "Delete project successful." :success))))))
+        :background "red")]]))
 
 (rum/defcs my-publishing
   < rum/reactive db-mixins/query
@@ -139,38 +150,46 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1
        [:h1.title (t :my-publishing)]
-       [:div#project-name
-        [:span "Current Project:"
-         (project editor-state current-project)]]
+       [:div#cp__publishing-pj-ct
+        [:span "Current Project"]
+        (project editor-state current-project pages)]
        (when current-repo
-         [:table.table-auto
-          [:thead
-           [:tr
-            [:th (t :page/name)]
-            [:th (t :page/cancel-publishing)]]]
-          [:tbody
-           (for [page pages]
-             (let [page (first page)
-                   {:keys [title permalink]} (:page/properties page)
-                   page-name (:page/name page)]
-               [:tr {:key permalink}
-                [:td [:a {:on-click (fn [e]
-                                      (util/stop e))
-                          :href (rfe/href :page {:name title})}
-                      page-name]]
-                [:td [:span.text-gray-500.text-sm
-                      [:a {:on-click
-                           (fn [e]
-                             (util/stop e)
-                             (-> (p/let [_ (delete-page-from-logseq current-project permalink)]
-                                   (update-state-and-notify page-name))
-                                 (p/catch
-                                   (fn [error]
-                                     (let [status (.-status error)
-                                           not-found-on-server 404]
-                                       (if (= not-found-on-server status)
-                                         (update-state-and-notify page-name)
-                                         (let [message (util/format "Remove Page \"%s\" from Logseq server failed."
-                                                         page-name)]
-                                           (notification/show! message :failed))))))))}
-                       (t :page/cancel-publishing)]]]]))]])])))
+         [:div#cp__publishing-pg-ct
+          [:div "Pages"]
+          [:table.table-auto
+                [:thead
+                 [:tr
+                  [:th (t :page/name)]
+                  [:th "Delete from Logseq server"]]]
+                [:tbody
+                 (for [page pages]
+                   (let [page (first page)
+                         {:keys [title permalink]} (:page/properties page)
+                         page-name (:page/name page)]
+                     [:tr {:key permalink}
+                      [:td [:div.flex {}
+                            [:span [:a {:on-click (fn [e] (util/stop e))
+                                        :href (rfe/href :page {:name title})}
+                                    page-name]]
+                            [:span [:a {:href (util/format "%s/%s/%s" config/website current-project page-name)
+                                        :target "_blank"}
+                                    svg/external-link]]]
+                       ]
+                      [:td [:span.text-gray-500.text-sm
+                            [:a {:on-click
+                                 (fn [e]
+                                   (util/stop e)
+                                   (-> (p/let [_ (delete-page-from-logseq current-project permalink)]
+                                         (update-state-and-notify page-name))
+                                       (p/catch
+                                         (fn [error]
+                                           (let [status (.-status error)
+                                                 not-found-on-server 404]
+                                             (if (= not-found-on-server status)
+                                               (update-state-and-notify page-name)
+                                               (let [message (util/format "Remove Page \"%s\" from Logseq server failed."
+                                                               page-name)]
+                                                 (notification/show! message :failed))))))))}
+                             "delete"]]]]))]]])])))
+
+

@@ -801,6 +801,13 @@
                          projects)]
       (set-state! [:me :projects] new-projects))))
 
+(defn remove-current-project
+  []
+  (when-let [current-repo (get-current-repo)]
+    (update-state! [:me :projects]
+      (fn [projects]
+        (remove #(= (:repo %) current-repo) projects)))))
+
 (defn set-indexedb-support!
   [value]
   (set-state! :indexeddb/support? value))
