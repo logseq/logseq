@@ -84,7 +84,6 @@
 
                               :else
                               (state/set-db-restoring! false))
-
                             (if (schema-changed?)
                               (do
                                 (notification/show!
@@ -113,7 +112,7 @@
                                (fn []
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
-                            (watch-for-date!)))
+                            (nfs/trigger-check! watch-for-date!)))
                          (p/catch (fn [error]
                                     (log/error :db/restore-failed error))))))]
     ;; clear this interval
@@ -185,7 +184,6 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
-    ;; (nfs/trigger-check!)
     (p/let [nfs-dbs (idb/get-nfs-dbs)
             nfs-dbs (map (fn [db]
                            {:url db :nfs? true}) nfs-dbs)]

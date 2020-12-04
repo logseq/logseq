@@ -122,13 +122,13 @@
           sub-dir (->> (butlast parts)
                        (remove string/blank?)
                        (string/join "/"))
-          handle-path (str "handle/"
-                           (subs dir 1)
-                           (if sub-dir
-                             (str "/" sub-dir)))
-          handle-path (if (= "/" (last handle-path))
-                        (subs handle-path 0 (dec (count handle-path)))
-                        handle-path)
+          sub-dir-handle-path (str "handle/"
+                                   (subs dir 1)
+                                   (if sub-dir
+                                     (str "/" sub-dir)))
+          handle-path (if (= "/" (last sub-dir-handle-path))
+                        (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
+                        sub-dir-handle-path)
           basename-handle-path (str handle-path "/" basename)
           file-handle-cache (get-nfs-file-handle basename-handle-path)]
       (p/let [file-handle (or file-handle-cache (idb/get-item basename-handle-path))]
@@ -174,23 +174,23 @@
 (defn stat
   [dir path]
   (let [append-path (if path
-               (str "/" (string/replace-first path "/" ""))
-               "")]
+                      (str "/" (string/replace-first path "/" ""))
+                      "")]
     (cond
-     (local-db? dir)
-     (if-let [file (get-nfs-file-handle (str "handle/"
-                                             (string/replace-first dir "/" "")
-                                             append-path))]
-       (p/let [file (.getFile file)]
-         (let [get-attr #(gobj/get file %)]
-           {:file/last-modified-at (get-attr "lastModified")
-            :file/size (get-attr "size")
-            :file/type (get-attr "type")}))
-       (p/rejected "File not exists"))
+      (local-db? dir)
+      (if-let [file (get-nfs-file-handle (str "handle/"
+                                              (string/replace-first dir "/" "")
+                                              append-path))]
+        (p/let [file (.getFile file)]
+          (let [get-attr #(gobj/get file %)]
+            {:file/last-modified-at (get-attr "lastModified")
+             :file/size (get-attr "size")
+             :file/type (get-attr "type")}))
+        (p/rejected "File not exists"))
 
-     :else
+      :else
      ;; FIXME: same format
-     (js/window.pfs.stat (str dir append-path)))))
+      (js/window.pfs.stat (str dir append-path)))))
 
 (defn mkdir-if-not-exists
   [dir]

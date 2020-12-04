@@ -148,8 +148,8 @@
 
 (defn- parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts}]
-  (state/set-state! :repo/loading-files? false)
-  (state/set-state! :repo/importing-to-db? true)
+  (state/set-loading-files! false)
+  (state/set-importing-to-db! true)
   (let [file-paths (map :file/path files)
         parsed-files (filter
                       (fn [file]
@@ -168,7 +168,7 @@
     (when first-clone? (create-default-files! repo-url))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
-    (state/set-state! :repo/importing-to-db? false)))
+    (state/set-importing-to-db! false)))
 
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files]}]
@@ -192,7 +192,7 @@
                   (js/console.dir error)
                   ;; Empty repo
                   (create-default-files! repo-url)
-                  (state/set-state! :repo/loading-files? false))))
+                  (state/set-loading-files! false))))
 
       :else
       (when (seq diffs)

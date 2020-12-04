@@ -111,21 +111,6 @@ export var getFiles = async function (dirHandle, recursive, cb, path = dirHandle
   return [(await Promise.all(dirs)), (await Promise.all(files))];
 };
 
-export var openDirectory = async function (options = {}, cb) {
-  options.recursive = options.recursive || false;
-  const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-  return [handle, getFiles(handle, options.recursive, cb)];
-};
-
-export var writeFile = async function (fileHandle, contents) {
-  // Create a FileSystemWritableFileStream to write to.
-  const writable = await fileHandle.createWritable();
-  // Write the contents of the file to the stream.
-  await writable.write(contents);
-  // Close the file and write the contents to disk.
-  await writable.close();
-};
-
 export var verifyPermission = async function (handle, readWrite) {
   const options = {};
   if (readWrite) {
@@ -142,6 +127,22 @@ export var verifyPermission = async function (handle, readWrite) {
   // The user didn't grant permission, so return false.
   return false;
 }
+
+export var openDirectory = async function (options = {}, cb) {
+  options.recursive = options.recursive || false;
+  const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  const _ask = await verifyPermission(handle, true);
+  return [handle, getFiles(handle, options.recursive, cb)];
+};
+
+export var writeFile = async function (fileHandle, contents) {
+  // Create a FileSystemWritableFileStream to write to.
+  const writable = await fileHandle.createWritable();
+  // Write the contents of the file to the stream.
+  await writable.write(contents);
+  // Close the file and write the contents to disk.
+  await writable.close();
+};
 
 export var nfsSupported = function () {
   if ('chooseFileSystemEntries' in self) {

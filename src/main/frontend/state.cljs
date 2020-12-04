@@ -16,7 +16,6 @@
   (atom
    {:route-match nil
     :today nil
-    :daily/migrating? nil
     :db/batch-txs (async/chan 100)
     :notification/show? false
     :notification/content nil
@@ -25,6 +24,7 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
+    :nfs/loading-files? nil
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
@@ -822,10 +822,6 @@
   [value]
   (set-state! :ui/left-sidebar-open? value))
 
-(defn set-daily-migrating!
-  [value]
-  (set-state! :daily/migrating? value))
-
 (defn set-developer-mode!
   [value]
   (set-state! :ui/developer-mode? value)
@@ -896,7 +892,16 @@
   [value]
   (set-state! :graph/syncing? value))
 
+(defn set-loading-files!
+  [value]
+  (set-state! :repo/loading-files? value))
+
+(defn set-importing-to-db!
+  [value]
+  (set-state! :repo/importing-to-db? value))
+
 ;; TODO: Move those to the uni `state`
+
 (defonce editor-op (atom nil))
 (defn set-editor-op!
   [value]

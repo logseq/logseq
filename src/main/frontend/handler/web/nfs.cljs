@@ -71,6 +71,7 @@
      (p/let [result (utils/openDirectory #js {:recursive true}
                                          (fn [path handle]
                                            (swap! path-handles assoc path handle)))
+             _ (state/set-loading-files! true)
              root-handle (nth result 0)
              dir-name (gobj/get root-handle "name")
              repo (str config/local-db-prefix dir-name)
@@ -86,6 +87,7 @@
                          (p/let [content (.text (:file/file file))]
                            (assoc file :file/content content))) markup-files))
            (p/then (fn [result]
+                     _ (state/set-loading-files! false)
                      (let [files (map #(dissoc % :file/file) result)]
                        (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                        (repo-handler/load-repo-to-db! repo
@@ -118,7 +120,7 @@
       (utils/verifyPermission handle true))))
 
 (defn ask-permission
-  [repo]
+  [repo cb]
   (fn [close-fn]
     [:div
      [:p.text-gray-700
@@ -127,12 +129,13 @@
      (ui/button
       "Grant"
       :on-click (fn []
-                  (check-directory-permission! repo)
+                  (p/let [_ (check-directory-permission! repo)]
+                    (cb))
                   (close-fn)))]))
 
-(defn trigger-check! []
+(defn trigger-check! [cb]
   (when-let [repo (get-local-repo)]
-    (state/set-modal! (ask-permission repo))))
+    (state/set-modal! (ask-permission repo cb))))
 
 (defn- compute-diffs
   [old-files new-files]
@@ -223,17 +226,7 @@
 
 (defn- refresh!
   [repo]
-  (when repo
-    (reload-dir! repo)
-    ;; check permission is too slow
-    ;; (->
-    ;;  (p/let [verified? (check-directory-permission! repo)]
-    ;;    (prn {:verified? verified?})
-    ;;    (when verified?
-    ;;      (reload-dir! repo)))
-    ;;  (p/catch (fn [error]
-    ;;             (log/error :nfs/refresh-error error))))
-))
+  (when repo (reload-dir! repo)))
 
 (defn supported?
   []
