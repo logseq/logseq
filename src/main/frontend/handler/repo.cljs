@@ -473,15 +473,15 @@
              (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
-(defn periodically-pull
-  [repo-url {:keys [pull-now?]
-             :or {pull-now? true}}]
-  (spec/validate :repos/url repo-url)
-  (p/let [token (helper/get-github-token repo-url)]
-    (when token
-      (when pull-now? (pull repo-url nil))
-      (js/setInterval #(pull repo-url nil)
-                      (* (config/git-pull-secs) 1000)))))
+(defn periodically-pull-current-repo
+  []
+  (js/setInterval
+   (fn []
+     (p/let [repo-url (state/get-current-repo)
+             token (helper/get-github-token repo-url)]
+       (when token
+         (pull repo-url nil))))
+   (* (config/git-pull-secs) 1000)))
 
 (defn periodically-push-current-repo
   []
@@ -526,12 +526,12 @@
                    (db/cloned? repo))
             (do
               (git-handler/git-set-username-email! repo me)
-              (periodically-pull repo {:pull-now? true})
+              (pull repo nil)
               ;; (periodically-persist-app-metadata repo)
               )
             (do
-              (clone-and-load-db repo)
-              (periodically-pull repo {:pull-now? false})))
+              (clone-and-load-db repo)))
+          (periodically-pull-current-repo)
           (periodically-push-current-repo))))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
