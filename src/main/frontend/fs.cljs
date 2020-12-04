@@ -64,14 +64,6 @@
     :else
     (println (str "mkdir " dir " failed"))))
 
-(defn mkdir-if-not-exists
-  [dir]
-  (when (and dir js/window.pfs)
-    (util/p-handle
-     (js/window.pfs.stat dir)
-     (fn [_stat])
-     (fn [_error] (js/window.pfs.mkdir dir)))))
-
 (defn readdir
   [dir]
   (cond
@@ -181,22 +173,33 @@
 
 (defn stat
   [dir path]
-  (cond
-    (local-db? dir)
-    (if-let [file (get-nfs-file-handle (str "handle/"
-                                              (string/replace-first dir "/" "")
-                                              "/"
-                                              (string/replace-first path "/" "")))]
-      (p/let [file (.getFile file)]
-        (let [get-attr #(gobj/get file %)]
-          {:file/last-modified-at (get-attr "lastModified")
-           :file/size (get-attr "size")
-           :file/type (get-attr "type")}))
-      (p/rejected "File not exists"))
+  (let [append-path (if path
+               (str "/" (string/replace-first path "/" ""))
+               "")]
+    (cond
+     (local-db? dir)
+     (if-let [file (get-nfs-file-handle (str "handle/"
+                                             (string/replace-first dir "/" "")
+                                             append-path))]
+       (p/let [file (.getFile file)]
+         (let [get-attr #(gobj/get file %)]
+           {:file/last-modified-at (get-attr "lastModified")
+            :file/size (get-attr "size")
+            :file/type (get-attr "type")}))
+       (p/rejected "File not exists"))
 
-    :else
-    ;; FIXME: same format
-    (js/window.pfs.stat (str dir "/" (string/replace-first path "/" "")))))
+     :else
+     ;; FIXME: same format
+     (js/window.pfs.stat (str dir append-path)))))
+
+(defn mkdir-if-not-exists
+  [dir]
+  (when (and dir js/window.pfs)
+    (util/p-handle
+     (stat dir nil)
+     (fn [_stat])
+     (fn [error]
+       (mkdir dir)))))
 
 (defn create-if-not-exists
   ([dir path]

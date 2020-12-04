@@ -79,6 +79,8 @@ yarn watch
 
 Open <http://localhost:3001>.
 
-## Build errors
-### 1. The required namespace `devtools.preload` is not available.
-Upload your clojure to at least version `1.10.1.739`.
+### 4. Build a release
+
+``` bash
+yarn release
+```
