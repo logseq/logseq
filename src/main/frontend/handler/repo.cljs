@@ -519,22 +519,22 @@
   [me]
   (spec/validate :state/me me)
   (if (and js/window.git js/window.pfs)
-    (doseq [{:keys [id url]} (:repos me)]
-      (let [repo url]
-        (p/let [config-exists? (fs/file-exists?
-                                (util/get-repo-dir url)
-                                ".git/config")]
-          (if (and config-exists?
-                   (db/cloned? repo))
-            (do
-              (git-handler/git-set-username-email! repo me)
-              (pull repo nil)
-              ;; (periodically-persist-app-metadata repo)
-)
-            (do
-              (clone-and-load-db repo)))
-          (periodically-pull-current-repo)
-          (periodically-push-current-repo))))
+    (do
+      (doseq [{:keys [id url]} (:repos me)]
+        (let [repo url]
+          (p/let [config-exists? (fs/file-exists?
+                                  (util/get-repo-dir url)
+                                  ".git/config")]
+            (if (and config-exists?
+                     (db/cloned? repo))
+              (do
+                (git-handler/git-set-username-email! repo me)
+                (pull repo nil))
+              (do
+                (clone-and-load-db repo))))))
+
+      (periodically-pull-current-repo)
+      (periodically-push-current-repo))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
                    500)))
