@@ -60,8 +60,7 @@
             (db/reset-file! repo-url path content)
             (db/reset-config! repo-url content)
             (when-not (= content old-content)
-              (git-handler/git-add repo-url path))))
-))))
+              (git-handler/git-add repo-url path))))))))
 
 (defn create-contents-file
   [repo-url]
@@ -324,35 +323,37 @@
                                         (push repo-url {:merge-push-no-diff? true
                                                         :commit-message "Merge push without diffed files"}))))))))
                  (p/catch
-                   (fn [error]
-                     (cond
-                       (string/includes? (str error) "404")
-                       (do (log/error :git/pull-error error)
-                           (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url)))
+                  (fn [error]
+                    (cond
+                      (string/includes? (str error) "404")
+                      (do (log/error :git/pull-error error)
+                          (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url)))
 
-                       (string/includes? (str error) "401")
-                       (let [remain-times (dec try-times)]
-                         (if (> remain-times 0)
-                           (let [new-opts (merge opts {:try-times remain-times})]
-                             (pull repo-url new-opts))
-                           (let [error-msg
-                                 (util/format "Failed to fetch %s. It may be caused by token expiration or missing." repo-url)]
-                             (log/error :git/pull-error error)
-                             (notification/show! error-msg :error false))))
+                      (string/includes? (str error) "401")
+                      (let [remain-times (dec try-times)]
+                        (if (> remain-times 0)
+                          (let [new-opts (merge opts {:try-times remain-times})]
+                            (pull repo-url new-opts))
+                          (let [error-msg
+                                (util/format "Failed to fetch %s. It may be caused by token expiration or missing." repo-url)]
+                            (log/error :git/pull-error error)
+                            (notification/show! error-msg :error false))))
 
-                       :else
-                       (log/error :git/pull-error error)))))))))))))
+                      :else
+                      (log/error :git/pull-error error)))))))))))))
 
 (defn push
-  [repo-url {:keys [commit-message merge-push-no-diff?]
-             :or {commit-message "Logseq auto save"
+  [repo-url {:keys [commit-message merge-push-no-diff? custom-commit?]
+             :or {custom-commit false
+                  commit-message "Logseq auto save"
                   merge-push-no-diff? false}}]
   (spec/validate :repos/url repo-url)
   (let [status (db/get-key-value repo-url :git/status)]
     (if (and
          (db/cloned? repo-url)
          (not (state/get-edit-input-id))
-         (not= status :pushing))
+         (or (not= status :pushing)
+             custom-commit?))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or (seq files) merge-push-no-diff?)
               ;; auto commit if there are any un-committed changes
@@ -362,7 +363,8 @@
                 (p/let [commit-oid (git/commit repo-url commit-message)
                         token (helper/get-github-token repo-url)
                         status (db/get-key-value repo-url :git/status)]
-                  (when (and token (not= status :pushing))
+                  (when (and token (or (not= status :pushing)
+                                       custom-commit?))
                     (git-handler/set-git-status! repo-url :pushing)
                     (util/p-handle
                      (git/push repo-url token merge-push-no-diff?)
@@ -528,7 +530,7 @@
               (git-handler/git-set-username-email! repo me)
               (pull repo nil)
               ;; (periodically-persist-app-metadata repo)
-              )
+)
             (do
               (clone-and-load-db repo)))
           (periodically-pull-current-repo)
@@ -552,4 +554,5 @@
 (defn git-commit-and-push!
   [commit-message]
   (when-let [repo (state/get-current-repo)]
-    (push repo {:commit-message commit-message})))
+    (push repo {:commit-message commit-message
+                :custom-commit? true})))
