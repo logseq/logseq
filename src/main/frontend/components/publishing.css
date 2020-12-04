@@ -1,0 +1,46 @@
+#cp__publishing-pj-ct{
+ padding: 10px;
+ background-color: #243c42;
+}
+
+.cp__publishing-pj{
+ padding: 5px;
+ margin: 5px;
+}
+
+.cp__publishing-pj-name {
+ font-size: 25px;
+ color: #bacdd2;
+}
+
+.cp__publishing-edit{
+  font-size: 20px;
+  margin-left: 40px;
+}
+
+.cp__publishing-edit:hover{
+  font-size: 20px;
+  margin-left: 40px;
+  color: grey;
+}
+
+.cp__publishing_pj_edit {
+  padding: 5px;
+  margin: 5px;
+}
+
+.cp__publishing-pj-bt {
+  margin: 5px 5px;
+}
+
+#cp__publishing-project-input{
+  border-width: thin;
+  padding: 0px 10px;
+  display: inline-block;
+  margin: 5px;
+}
+
+#cp__publishing-pg-ct {
+  margin-top: 30px;
+  padding: 10px;
+}
