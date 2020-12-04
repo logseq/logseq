@@ -219,14 +219,6 @@
                                          (assoc options :re-render-opts {:clear-all-query-state? true}))
             (load-contents add-or-modify-files options)))))))
 
-(defn persist-repo!
-  [repo]
-  (spec/validate :repos/url repo)
-  (when-let [files-conn (db/get-files-conn repo)]
-    (db/persist repo @files-conn true))
-  (when-let [db (db/get-conn repo)]
-    (db/persist repo db false)))
-
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
   (spec/validate :repos/url repo-url)
@@ -250,24 +242,6 @@
           (db/transact! repo children-tx)))))
   (when (seq files)
     (file-handler/alter-files repo files)))
-
-; FIXME: Unused
-(defn persist-repo-metadata!
-  [repo]
-  (spec/validate :repos/url repo)
-  (let [files (db/get-files repo)]
-    (when (seq files)
-      (let [data (db/get-sync-metadata repo)
-            data-str (pr-str data)]
-        (file-handler/alter-file repo
-                                 (str config/app-name "/" config/metadata-file)
-                                 data-str
-                                 {:reset? false})))))
-
-(defn periodically-persist-app-metadata
-  [repo-url]
-  (js/setInterval #(persist-repo-metadata! repo-url)
-                  (* 5 60 1000)))
 
 (declare push)
 
@@ -373,7 +347,7 @@
   (let [status (db/get-key-value repo-url :git/status)]
     (if (and
          (db/cloned? repo-url)
-         (not (state/get-edit-input-id))
+         (state/input-idle? repo-url)
          (not= status :pushing))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or (seq files) merge-push-no-diff?)
@@ -543,9 +517,7 @@
    (p/let [_ (clone repo-url)
            _ (git-handler/git-set-username-email! repo-url (state/get-me))]
      (load-db-and-journals! repo-url nil true)
-     (periodically-pull-and-push repo-url {:pull-now? false})
-     ;; (periodically-persist-app-metadata repo-url)
-)
+     (periodically-pull-and-push repo-url {:pull-now? false}))
    (p/catch (fn [error]
               (js/console.error error)))))
 
@@ -562,9 +534,7 @@
                    (db/cloned? repo))
             (do
               (git-handler/git-set-username-email! repo me)
-              (periodically-pull-and-push repo {:pull-now? true})
-              ;; (periodically-persist-app-metadata repo)
-)
+              (periodically-pull-and-push repo {:pull-now? true}))
             (clone-and-pull repo)))))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))

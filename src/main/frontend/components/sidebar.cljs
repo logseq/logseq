@@ -118,8 +118,6 @@
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width (or global-graph-pages?
-                                (and (not logged?)
-                                     home?)
                                 (contains? #{:all-files :all-pages} route-name))}
        (cond
          (not indexeddb-support?)

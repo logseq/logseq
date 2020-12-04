@@ -13,6 +13,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.web.nfs :as nfs]
@@ -112,53 +113,12 @@
                                (fn []
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
-                            (nfs/trigger-check! watch-for-date!)))
+                            (watch-for-date!)))
                          (p/catch (fn [error]
                                     (log/error :db/restore-failed error))))))]
     ;; clear this interval
     (let [interval-id (js/setInterval inner-fn 50)]
       (reset! interval interval-id))))
-
-(defn persist-repo-to-indexeddb!
-  ([]
-   (persist-repo-to-indexeddb! false))
-  ([force?]
-   (let [status (state/get-repo-persist-status)]
-     (doseq [[repo {:keys [last-stored-at last-modified-at] :as repo-status}] status]
-       (when (and (> last-modified-at last-stored-at)
-                  (or force?
-                      (and (state/get-edit-input-id)
-                           (> (- (util/time-ms) last-stored-at) (* 5 60 1000)) ; 5 minutes
-)
-                      (nil? (state/get-edit-input-id))))
-         (p/let [_ (repo-handler/persist-repo! repo)]
-           (state/update-repo-last-stored-at! repo)))))))
-
-(defn periodically-persist-repo-to-indexeddb!
-  []
-  (js/setInterval persist-repo-to-indexeddb! (* 5 1000)))
-
-(defn set-save-before-unload! []
-  (.addEventListener js/window "beforeunload"
-                     (fn [e]
-                       (when (and (not config/dev?) (state/repos-need-to-be-stored?))
-                         (let [notification-id (atom nil)]
-                           (let [id (notification/show!
-                                     [:div
-                                      [:p "It seems that you have some unsaved changes!"]
-                                      (ui/button "Save"
-                                                 :on-click (fn [e]
-                                                             (persist-repo-to-indexeddb!)
-                                                             (notification/show!
-                                                              "Saved successfully!"
-                                                              :success)
-                                                             (and @notification-id (notification/clear! @notification-id))))]
-                                     :warning
-                                     false)]
-                             (reset! notification-id id)))
-                         (let [message "\\o/"]
-                           (set! (.-returnValue (or e js/window.event)) message)
-                           message)))))
 
 (defn- handle-connection-change
   [e]
@@ -201,6 +161,5 @@
                       :example? true}])]
         (state/set-repos! repos)
         (restore-and-setup! me repos logged?)))
-    (periodically-persist-repo-to-indexeddb!)
-    (db/run-batch-txs!))
-  (set-save-before-unload!))
+    (db/run-batch-txs!)
+    (editor-handler/periodically-save!)))

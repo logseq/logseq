@@ -119,23 +119,13 @@
     (when handle
       (utils/verifyPermission handle true))))
 
-(defn ask-permission
-  [repo cb]
-  (fn [close-fn]
-    [:div
-     [:p.text-gray-700
-      "Grant native filesystem permission for directory: "
-      [:b (config/get-local-dir repo)]]
-     (ui/button
-      "Grant"
-      :on-click (fn []
-                  (p/let [_ (check-directory-permission! repo)]
-                    (cb))
-                  (close-fn)))]))
-
 (defn trigger-check! [cb]
-  (when-let [repo (get-local-repo)]
-    (state/set-modal! (ask-permission repo cb))))
+  (let [repo (state/get-current-repo)
+        nfs-repo? (config/local-db? repo)]
+    (if nfs-repo?
+      (p/let [_ (check-directory-permission! repo)]
+        (cb))
+      (cb))))
 
 (defn- compute-diffs
   [old-files new-files]
@@ -226,7 +216,9 @@
 
 (defn- refresh!
   [repo]
-  (when repo (reload-dir! repo)))
+  (when repo
+    (p/let [_ (check-directory-permission! repo)]
+      (reload-dir! repo))))
 
 (defn supported?
   []

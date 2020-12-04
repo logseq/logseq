@@ -28,11 +28,6 @@
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
-    ;; TODO: save in local storage so that if :changed? is true when user
-    ;; reloads the browser, the app should re-index the repo (another way
-    ;; is to save all the tx data since :last-stored-at)
-    ;; repo -> {:last-stored-at :last-modified-at}
-    :repo/persist-status {}
     :me nil
     :git/current-repo (storage/get :git/current-repo)
     :git/status {}
@@ -78,6 +73,10 @@
     :editor/block nil
     :editor/block-dom-id nil
     :editor/set-timestamp-block nil
+    :editor/last-input-time nil
+    :db/last-transact-time {}
+    ;; whether database is persisted
+    :db/persisted? {}
     :cursor-range nil
 
     :selection/mode false
@@ -784,18 +783,6 @@
          :modal/show? false
          :modal/panel-content nil))
 
-(defn update-repo-last-stored-at!
-  [repo]
-  (swap! state assoc-in [:repo/persist-status repo :last-stored-at] (util/time-ms)))
-
-(defn get-repo-persist-status
-  []
-  (:repo/persist-status @state))
-
-(defn mark-repo-as-changed!
-  [repo _tx-id]
-  (swap! state assoc-in [:repo/persist-status repo :last-modified-at] (util/time-ms)))
-
 (defn get-db-batch-txs-chan
   []
   (:db/batch-txs @state))
@@ -806,13 +793,6 @@
   (when f
     (when-let [chan (get-db-batch-txs-chan)]
       (async/put! chan f))))
-
-(defn repos-need-to-be-stored?
-  []
-  (let [status (vals (get-repo-persist-status))]
-    (some (fn [{:keys [last-stored-at last-modified-at]}]
-            (> last-modified-at last-stored-at))
-          status)))
 
 (defn get-left-sidebar-open?
   []
@@ -899,6 +879,38 @@
 (defn set-importing-to-db!
   [value]
   (set-state! :repo/importing-to-db? value))
+
+(defn set-editor-last-input-time!
+  [repo time]
+  (swap! state assoc-in [:editor/last-input-time repo] time))
+
+(defn set-last-transact-time!
+  [repo time]
+  (swap! state assoc-in [:db/last-transact-time repo] time)
+
+  ;; THINK: new block, indent/outdent, drag && drop, etc.
+  (set-editor-last-input-time! repo time))
+
+(defn set-db-persisted!
+  [repo value]
+  (swap! state assoc-in [:db/persisted? repo] value))
+
+(defn db-idle?
+  [repo]
+  (when repo
+    (when-let [last-time (get-in @state [:db/last-transact-time repo])]
+      (let [now (util/time-ms)]
+        (>= (- now last-time) 5000)))))
+
+(defn input-idle?
+  [repo]
+  (when repo
+    (or
+     (when-let [last-time (get-in @state [:editor/last-input-time repo])]
+       (let [now (util/time-ms)]
+         (>= (- now last-time) 5000)))
+     ;; not in editing mode
+     (not (get-edit-input-id)))))
 
 ;; TODO: Move those to the uni `state`
 

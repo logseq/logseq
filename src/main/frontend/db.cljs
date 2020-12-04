@@ -100,12 +100,14 @@
 (defn string->db [s]
   (dt/read-transit-str s))
 
-;; persisting DB between page reloads
-(defn persist [repo db files-db?]
-  (let [key (if files-db?
-              (datascript-files-db repo)
-              (datascript-db repo))]
-    (idb/set-item! key (db->string db))))
+;; persisting DBs between page reloads
+(defn persist! [repo]
+  (let [file-key (datascript-files-db repo)
+        non-file-key (datascript-db repo)
+        file-db (d/db (get-files-conn repo))
+        non-file-db (d/db (get-conn repo false))]
+    (p/let [_ (idb/set-item! file-key (db->string file-db))]
+      (idb/set-item! non-file-key (db->string non-file-db)))))
 
 (defn reset-conn! [conn db]
   (reset! conn db))
@@ -543,8 +545,7 @@
                         (remove nil?))]
        (when (seq tx-data)
          (when-let [conn (get-conn repo-url false)]
-           (let [tx-report (d/transact! conn (vec tx-data))]
-             (state/mark-repo-as-changed! repo-url (get-tx-id tx-report)))))))))
+           (d/transact! conn (vec tx-data))))))))
 
 (defn transact-files-db!
   ([tx-data]
@@ -588,7 +589,6 @@
                               (get-conn repo-url false)))]
         (when (and (seq tx-data) (get-conn))
           (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
-                _ (state/mark-repo-as-changed! repo-url (get-tx-id tx-result))
                 db (:db-after tx-result)
                 handler-keys (get-handler-keys handler-opts)]
             (doseq [handler-key handler-keys]
@@ -1872,6 +1872,45 @@
       (state/set-config! repo-url config)
       config)))
 
+(defonce persistent-jobs (atom {}))
+
+(defn clear-repo-persistent-job!
+  [repo]
+  (when-let [old-job (get @persistent-jobs repo)]
+    (js/clearTimeout old-job)))
+
+(defn- persist-if-idle!
+  [repo]
+  (clear-repo-persistent-job! repo)
+  (let [job (js/setTimeout
+             (fn []
+               (if (and (state/input-idle? repo)
+                        (state/db-idle? repo))
+                 (do
+                   (persist! repo)
+                   ;; (state/set-db-persisted! repo true)
+)
+                 (let [job (get persistent-jobs repo)]
+                   (persist-if-idle! repo))))
+             5000)]
+    (swap! persistent-jobs assoc repo job)))
+
+;; only save when user's idle
+(defn- repo-listen-to-tx!
+  [repo conn files-db?]
+  (d/listen! conn :persistence
+             (fn [tx-report]
+               (state/set-last-transact-time! repo (util/time-ms))
+               ;; (state/set-db-persisted! repo false)
+               (persist-if-idle! repo))))
+
+(defn- listen-and-persist!
+  [repo]
+  (when-let [conn (get-files-conn repo)]
+    (repo-listen-to-tx! repo conn true))
+  (when-let [conn (get-conn repo false)]
+    (repo-listen-to-tx! repo conn false)))
+
 (defn start-db-conn!
   ([me repo]
    (start-db-conn! me repo {}))
@@ -1886,7 +1925,9 @@
                              db-type
                              (assoc :db/type db-type))])
      (when me
-       (d/transact! db-conn [(me-tx (d/db db-conn) me)])))))
+       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+
+     (listen-and-persist! repo))))
 
 (defn restore!
   [{:keys [repos] :as me} restore-config-handler]
@@ -1894,6 +1935,7 @@
     (doall
      (for [{:keys [url]} repos]
        (let [repo url
+
              db-name (datascript-files-db repo)
              db-conn (d/create-conn db-schema/files-db-schema)]
          (swap! conns assoc db-name db-conn)
@@ -1917,6 +1959,7 @@
                        (reset-conn! db-conn attached-db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+           (listen-and-persist! repo)
            (restore-config-handler repo)))))))
 
 (defn- build-edges
