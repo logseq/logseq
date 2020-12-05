@@ -382,6 +382,28 @@
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
+(defn inline-text
+  [format v]
+  (when (string? v)
+    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+      [:div.inline.mr-1 (map-inline {} inline-list)])))
+
+(defn- render-macro
+  [config name arguments macro-content format]
+  (if macro-content
+    (let [ast (->> (mldoc/->edn macro-content (mldoc/default-config format))
+                   (map first))
+          block? (contains? #{"Paragraph"
+                              "Raw_Html"
+                              "Hiccup"}
+                            (ffirst ast))]
+      (if block?
+        [:div
+         (markup-elements-cp (assoc config :block/format format) ast)]
+        (inline-text format macro-content)))
+    [:span.warning {:title (str "Unsupported macro name: " name)}
+     (macro->text name arguments)]))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -650,7 +672,8 @@
 
         :else
         (if-let [block-uuid (:block/uuid config)]
-          (let [macro-content (or
+          (let [format (get-in config [:block :block/format] :markdown)
+                macro-content (or
                                (-> (db/entity [:block/uuid block-uuid])
                                    (:block/page)
                                    (:db/id)
@@ -659,17 +682,15 @@
                                    :macros
                                    (get name))
                                (get-in (state/get-config) [:macros name])
-                               (get-in (state/get-config) [:macros (keyword name)]))]
-            [:span
-             (if (and (seq arguments) macro-content)
-               (block/macro-subs macro-content arguments)
-               (or
-                macro-content
-                [:span.warning {:title (str "Unsupported macro name: " name)}
-                 (macro->text name arguments)]))])
+                               (get-in (state/get-config) [:macros (keyword name)]))
+                macro-content (if (and (seq arguments) macro-content)
+                                (block/macro-subs macro-content arguments)
+                                macro-content)]
+            (render-macro config name arguments macro-content format))
 
-          [:span
-           (macro->text name arguments)])))
+          (when-let [macro-txt (macro->text name arguments)]
+            (let [format (get-in config [:block :block/format] :markdown)]
+              (render-macro config name arguments macro-txt format))))))
 
     :else
     ""))
@@ -978,12 +999,6 @@
     [:div.pre-block.bg-base-2.p-2
      (markup-elements-cp (assoc config :block/format format) ast)]))
 
-(defn property-value
-  [format v]
-  (when (string? v)
-    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
-      [:div.inline.mr-1 (map-inline {} inline-list)])))
-
 (rum/defc properties-cp
   [block]
   (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
@@ -993,7 +1008,7 @@
          [:div.my-1
           [:b k]
           [:span.mr-1 ":"]
-          (property-value (:block/format block) v)])])))
+          (inline-text (:block/format block) v)])])))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)
@@ -1579,14 +1594,14 @@
                   (if (or (= k :tags)
                           (= k :alias))
                     (if (string/includes? item "[[")
-                      (property-value format item)
+                      (inline-text format item)
                       (let [tag (-> item
                                     (string/replace "[" "")
                                     (string/replace "]" ""))]
                         [:a.tag.mr-1 {:href (rfe/href :page {:name tag})}
                          tag]))
-                    (property-value format item)))
-                (property-value format v))])))]
+                    (inline-text format item)))
+                (inline-text format v))])))]
 
       ["Paragraph" l]
       ;; TODO: speedup

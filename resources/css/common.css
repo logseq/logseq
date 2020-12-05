@@ -1465,3 +1465,10 @@ a.tag:hover {
 .hide-scrollbar::-webkit-scrollbar {
     display: none;
 }
+
+.left {
+    float: left;
+}
+.right {
+    float: right;
+}
