@@ -142,6 +142,15 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defonce built-in-macros
+  {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
+
+(defn get-macros
+  []
+  (merge
+   built-in-macros
+   (:macros (get-config))))
+
 (defn sub-config
   []
   (sub :config))

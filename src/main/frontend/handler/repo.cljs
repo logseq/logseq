@@ -340,15 +340,17 @@
                       (log/error :git/pull-error error)))))))))))))
 
 (defn push
-  [repo-url {:keys [commit-message merge-push-no-diff?]
-             :or {commit-message "Logseq auto save"
+  [repo-url {:keys [commit-message merge-push-no-diff? custom-commit?]
+             :or {custom-commit false
+                  commit-message "Logseq auto save"
                   merge-push-no-diff? false}}]
   (spec/validate :repos/url repo-url)
   (let [status (db/get-key-value repo-url :git/status)]
     (if (and
          (db/cloned? repo-url)
          (state/input-idle? repo-url)
-         (not= status :pushing))
+         (or (not= status :pushing)
+             custom-commit?))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
             (when (or (seq files) merge-push-no-diff?)
               ;; auto commit if there are any un-committed changes
@@ -358,7 +360,8 @@
                 (p/let [commit-oid (git/commit repo-url commit-message)
                         token (helper/get-github-token repo-url)
                         status (db/get-key-value repo-url :git/status)]
-                  (when (and token (not= status :pushing))
+                  (when (and token (or (not= status :pushing)
+                                       custom-commit?))
                     (git-handler/set-git-status! repo-url :pushing)
                     (util/p-handle
                      (git/push repo-url token merge-push-no-diff?)
@@ -474,26 +477,20 @@
              (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
-(defn periodically-pull
-  [repo-url pull-now?]
-  (spec/validate :repos/url repo-url)
-  (p/let [token (helper/get-github-token repo-url)]
-    (when token
-      (when pull-now? (pull repo-url nil))
-      (js/setInterval #(pull repo-url nil)
-                      (* (config/git-pull-secs) 1000)))))
+(defn periodically-pull-current-repo
+  []
+  (js/setInterval
+   (fn []
+     (p/let [repo-url (state/get-current-repo)
+             token (helper/get-github-token repo-url)]
+       (when token
+         (pull repo-url nil))))
+   (* (config/git-pull-secs) 1000)))
 
-(defn periodically-push-tasks
-  [repo-url]
-  (js/setInterval #(push-if-auto-enabled! repo-url)
+(defn periodically-push-current-repo
+  []
+  (js/setInterval #(push-if-auto-enabled! (state/get-current-repo))
                   (* (config/git-push-secs) 1000)))
-
-(defn periodically-pull-and-push
-  [repo-url {:keys [pull-now?]
-             :or {pull-now? true}}]
-  (spec/validate :repos/url repo-url)
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url))
 
 (defn create-repo!
   [repo-url branch]
@@ -510,14 +507,13 @@
                (println "Something wrong!")
                (js/console.dir error))))
 
-(defn- clone-and-pull
+(defn- clone-and-load-db
   [repo-url]
   (spec/validate :repos/url repo-url)
   (->
    (p/let [_ (clone repo-url)
            _ (git-handler/git-set-username-email! repo-url (state/get-me))]
-     (load-db-and-journals! repo-url nil true)
-     (periodically-pull-and-push repo-url {:pull-now? false}))
+     (load-db-and-journals! repo-url nil true))
    (p/catch (fn [error]
               (js/console.error error)))))
 
@@ -525,17 +521,22 @@
   [me]
   (spec/validate :state/me me)
   (if (and js/window.git js/window.pfs)
-    (doseq [{:keys [id url]} (:repos me)]
-      (let [repo url]
-        (p/let [config-exists? (fs/file-exists?
-                                (util/get-repo-dir url)
-                                ".git/config")]
-          (if (and config-exists?
-                   (db/cloned? repo))
-            (do
-              (git-handler/git-set-username-email! repo me)
-              (periodically-pull-and-push repo {:pull-now? true}))
-            (clone-and-pull repo)))))
+    (do
+      (doseq [{:keys [id url]} (:repos me)]
+        (let [repo url]
+          (p/let [config-exists? (fs/file-exists?
+                                  (util/get-repo-dir url)
+                                  ".git/config")]
+            (if (and config-exists?
+                     (db/cloned? repo))
+              (do
+                (git-handler/git-set-username-email! repo me)
+                (pull repo nil))
+              (do
+                (clone-and-load-db repo))))))
+
+      (periodically-pull-current-repo)
+      (periodically-push-current-repo))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
                    500)))
@@ -548,11 +549,12 @@
   (-> (p/do! (db/remove-db! url)
              (db/remove-files-db! url)
              (fs/rmdir (util/get-repo-dir url))
-             (clone-and-pull url))
+             (clone-and-load-db url))
       (p/catch (fn [error]
                  (prn "Delete repo failed, error: " error)))))
 
 (defn git-commit-and-push!
   [commit-message]
   (when-let [repo (state/get-current-repo)]
-    (push repo {:commit-message commit-message})))
+    (push repo {:commit-message commit-message
+                :custom-commit? true})))
