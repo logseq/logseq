@@ -19,7 +19,7 @@
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 
 (rum/defc ls-textarea < rum/reactive
-  [{:keys [on-change] :as -props}]
+  [{:keys [on-change] :as props}]
   (let [skip-composition? (or
                            (state/sub :editor/show-page-search?)
                            (state/sub :editor/show-block-search?)
@@ -32,7 +32,7 @@
                            (case e.type
                              "compositionend" (do (set-composition? false) (on-change e))
                              (set-composition? true))))
-        props (assoc -props
+        props (assoc props
                      :on-change (fn [e] (when-not @composition?
                                           (on-change e)))
                      :on-composition-start on-composition
