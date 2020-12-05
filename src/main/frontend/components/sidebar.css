@@ -77,8 +77,7 @@
   z-index: 9;
 
   box-sizing: border-box;
-  background-color: #D8E1E8;
-  background-color: var(--ls-secondary-background-color);
+  background-color: var(--ls-secondary-background-color, #D8E1E8);
   padding-bottom: 48px;
 
   &-inner {

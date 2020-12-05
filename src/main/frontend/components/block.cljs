@@ -1605,7 +1605,7 @@
       ;; TODO: speedup
       (if (re-find #"\"Export_Snippet\" \"embed\"" (str l))
         (->elem :div (map-inline config l))
-        (->elem :p (map-inline config l)))
+        (->elem :div.is-paragraph (map-inline config l)))
 
       ["Horizontal_Rule"]
       (when-not (:slide? config)
