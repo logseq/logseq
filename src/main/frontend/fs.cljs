@@ -174,7 +174,10 @@
 (defn stat
   [dir path]
   (let [append-path (if path
-                      (str "/" (string/replace-first path "/" ""))
+                      (str "/"
+                           (if (= \/ (first path))
+                             (subs path 1)
+                             path))
                       "")]
     (cond
       (local-db? dir)
@@ -189,8 +192,8 @@
         (p/rejected "File not exists"))
 
       :else
-     ;; FIXME: same format
-      (js/window.pfs.stat (str dir append-path)))))
+      (do
+        (js/window.pfs.stat (str dir append-path))))))
 
 (defn mkdir-if-not-exists
   [dir]

@@ -1,5 +1,4 @@
 (ns frontend.handler.git
-  (:refer-clojure :exclude [clone load-file])
   (:require [frontend.util :as util :refer-macros [profile]]
             [promesa.core :as p]
             [frontend.state :as state]

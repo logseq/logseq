@@ -79,7 +79,9 @@
   (let [{:keys [data path-params]} route
         title (get-title (:name data) path-params)]
     (util/set-title! title)
-    (ui-handler/scroll-and-highlight! nil)))
+    (if-let [fragment (util/get-fragment)]
+      (ui-handler/highlight-element! fragment)
+      (util/scroll-to-top))))
 
 (defn go-to-search!
   []

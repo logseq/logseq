@@ -1981,7 +1981,7 @@
 
 (defn periodically-save!
   []
-  (js/setInterval save-current-block-when-idle! 5000))
+  (js/setInterval save-current-block-when-idle! 3000))
 
 (defn get-current-input-value
   []

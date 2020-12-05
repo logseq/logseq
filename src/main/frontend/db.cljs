@@ -1892,7 +1892,7 @@
 )
                  (let [job (get persistent-jobs repo)]
                    (persist-if-idle! repo))))
-             5000)]
+             3000)]
     (swap! persistent-jobs assoc repo job)))
 
 ;; only save when user's idle
