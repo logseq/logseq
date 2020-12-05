@@ -73,7 +73,8 @@
   ([repo-url config-content project-changed-check?]
    (let [old-project (:project (state/get-config))
          new-config (db/reset-config! repo-url config-content)]
-     (when project-changed-check?
+     (when (and (not (config/local-db? repo-url))
+                project-changed-check?)
        (let [new-project (:project new-config)
              project-name (:name old-project)]
          (when-not (= new-project old-project)

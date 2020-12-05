@@ -75,8 +75,10 @@
     :editor/set-timestamp-block nil
     :editor/last-input-time nil
     :db/last-transact-time {}
+    :db/last-persist-transact-ids {}
     ;; whether database is persisted
     :db/persisted? {}
+    :db/latest-txs (or (storage/get-transit :db/latest-txs) {})
     :cursor-range nil
 
     :selection/mode false
@@ -920,6 +922,34 @@
          (>= (- now last-time) 3000)))
      ;; not in editing mode
      (not (get-edit-input-id)))))
+
+(defn set-last-persist-transact-id!
+  [repo files? id]
+  (swap! state assoc-in [:db/last-persist-transact-ids :repo files?] id))
+
+(defn get-last-persist-transact-id
+  [repo files?]
+  (get-in @state [:db/last-persist-transact-ids :repo files?]))
+
+(defn persist-transaction!
+  [repo files? tx-id tx-data]
+  (when (seq tx-data)
+    (let [latest-txs (:db/latest-txs @state)
+          last-persist-tx-id (get-last-persist-transact-id repo files?)
+          latest-txs (if last-persist-tx-id
+                      (update-in latest-txs [repo files?]
+                                 (fn [result]
+                                   (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
+                      latest-txs)
+         new-txs (update-in latest-txs [repo files?] (fn [result]
+                                                       (vec (conj result {:tx-id tx-id
+                                                                          :tx-data tx-data}))))]
+     (storage/set-transit! :db/latest-txs new-txs)
+     (set-state! :db/latest-txs new-txs))))
+
+(defn get-repo-latest-txs
+  [repo file?]
+  (get-in (:db/latest-txs @state) [repo file?]))
 
 ;; TODO: Move those to the uni `state`
 

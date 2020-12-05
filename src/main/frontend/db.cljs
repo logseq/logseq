@@ -86,6 +86,13 @@
   (swap! conns dissoc (datascript-db repo))
   (swap! conns dissoc (datascript-files-db repo)))
 
+(defn get-tx-id [tx-report]
+  (get-in tx-report [:tempids :db/current-tx]))
+
+(defn get-max-tx-id
+  [db]
+  (:max-tx db))
+
 ;; transit serialization
 
 (defn db->string [db]
@@ -106,8 +113,10 @@
         non-file-key (datascript-db repo)
         file-db (d/db (get-files-conn repo))
         non-file-db (d/db (get-conn repo false))]
-    (p/let [_ (idb/set-item! file-key (db->string file-db))]
-      (idb/set-item! non-file-key (db->string non-file-db)))))
+    (p/let [_ (idb/set-item! file-key (db->string file-db))
+            _ (idb/set-item! non-file-key (db->string non-file-db))]
+      (state/set-last-persist-transact-id! repo true (get-max-tx-id file-db))
+      (state/set-last-persist-transact-id! repo false (get-max-tx-id non-file-db)))))
 
 (defn reset-conn! [conn db]
   (reset! conn db))
@@ -532,9 +541,6 @@
             result)
           (group-by-page result)))
       result)))
-
-(defn get-tx-id [tx-report]
-  (get-in tx-report [:tempids :db/current-tx]))
 
 (defn transact!
   ([tx-data]
@@ -1900,9 +1906,10 @@
   [repo conn files-db?]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (state/set-last-transact-time! repo (util/time-ms))
-               ;; (state/set-db-persisted! repo false)
-               (persist-if-idle! repo))))
+               (let [tx-id (get-tx-id tx-report)]
+                 (state/set-last-transact-time! repo (util/time-ms))
+                 ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
+                 (persist-if-idle! repo)))))
 
 (defn- listen-and-persist!
   [repo]
@@ -1928,6 +1935,17 @@
        (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
 
      (listen-and-persist! repo))))
+
+(defonce tx-data-debug (atom nil))
+(defn with-latest-txs!
+  [db repo file?]
+  (let [txs (state/get-repo-latest-txs repo file?)
+        tx-data (when (seq txs) (map :tx-data txs))]
+    (if (seq tx-data)
+      (do
+        (swap! tx-data-debug assoc file? tx-data)
+        (d/db-with db tx-data))
+      db)))
 
 (defn restore!
   [{:keys [repos] :as me} restore-config-handler]
@@ -1959,8 +1977,8 @@
                        (reset-conn! db-conn attached-db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
-           (listen-and-persist! repo)
-           (restore-config-handler repo)))))))
+           (restore-config-handler repo)
+           (listen-and-persist! repo)))))))
 
 (defn- build-edges
   [edges]
