@@ -681,8 +681,8 @@
                                    :page/properties
                                    :macros
                                    (get name))
-                               (get-in (state/get-config) [:macros name])
-                               (get-in (state/get-config) [:macros (keyword name)]))
+                               (get (state/get-macros) name)
+                               (get (state/get-macros) (keyword name)))
                 macro-content (if (and (seq arguments) macro-content)
                                 (block/macro-subs macro-content arguments)
                                 macro-content)]

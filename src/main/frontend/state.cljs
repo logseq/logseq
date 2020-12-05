@@ -142,6 +142,15 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defonce built-in-macros
+  {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
+
+(defn get-macros
+  []
+  (merge
+   built-in-macros
+   (:macros (get-config))))
+
 (defn sub-config
   []
   (sub :config))
@@ -501,11 +510,11 @@
   (when token-result
     (let [{:keys [token expires_at]} token-result]
       (swap! state update-in [:me :repos]
-       (fn [repos]
-         (map (fn [r]
-                (if (= repo (:url r))
-                  (merge r {:token token :expires_at expires_at})
-                  repo)) repos))))))
+             (fn [repos]
+               (map (fn [r]
+                      (if (= repo (:url r))
+                        (merge r {:token token :expires_at expires_at})
+                        repo)) repos))))))
 
 (defn set-github-installation-tokens!
   [tokens]
