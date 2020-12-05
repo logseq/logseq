@@ -129,7 +129,7 @@
         (db/reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file (util/get-repo-dir repo) path content)
+     (fs/write-file (util/get-repo-dir repo) path content original-content)
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))
@@ -162,19 +162,23 @@
                 :or {add-history? true
                      update-status? true
                      reset? false}}]
-   (let [files-tx (mapv (fn [[path content]]
-                          (let [original-content (db/get-file-no-sub repo path)]
+   (let [file->content (let [paths (map first files)]
+                             (zipmap paths
+                                  (map (fn [path] (db/get-file-no-sub repo path)) paths)))
+         files-tx (mapv (fn [[path content]]
+                          (let [original-content (get file->content path)]
                             [path original-content content])) files)
          write-file-f (fn [[path content]]
                         (if reset?
                           (db/reset-file! repo path content)
                           (db/set-file-content! repo path content))
-                        (util/p-handle
-                         (fs/write-file (util/get-repo-dir repo) path content)
-                         (fn [_])
-                         (fn [error]
-                           (println "Write file failed, path: " path ", content: " content)
-                           (js/console.error error))))
+                        (let [original-content (get file->content path)]
+                          (util/p-handle
+                           (fs/write-file (util/get-repo-dir repo) path content original-content)
+                           (fn [_])
+                           (fn [error]
+                             (println "Write file failed, path: " path ", content: " content)
+                             (js/console.error error)))))
          git-add-f (fn [_result]
                      (let [add-helper
                            (fn []

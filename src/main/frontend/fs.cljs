@@ -114,45 +114,54 @@
      (js/window.pfs.readFile (str dir "/" path) option))))
 
 (defn write-file
-  [dir path content]
-  (cond
-    (local-db? dir)
-    (let [parts (string/split path "/")
-          basename (last parts)
-          sub-dir (->> (butlast parts)
-                       (remove string/blank?)
-                       (string/join "/"))
-          sub-dir-handle-path (str "handle/"
-                                   (subs dir 1)
-                                   (if sub-dir
-                                     (str "/" sub-dir)))
-          handle-path (if (= "/" (last sub-dir-handle-path))
-                        (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
-                        sub-dir-handle-path)
-          basename-handle-path (str handle-path "/" basename)
-          file-handle-cache (get-nfs-file-handle basename-handle-path)]
-      (p/let [file-handle (or file-handle-cache (idb/get-item basename-handle-path))]
-        (when-not file-handle-cache
-          (add-nfs-file-handle! basename-handle-path file-handle))
-        (if file-handle
-          (utils/writeFile file-handle content)
-          ;; create file handle
-          (->
-           (p/let [handle (idb/get-item handle-path)]
-             (if handle
-               (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
-                       _ (idb/set-item! basename-handle-path file-handle)]
-                 (utils/writeFile file-handle content))
-               (println "Error: directory handle not exists: " handle-path)))
-           (p/catch (fn [error]
-                      (println "Write local file failed: " {:path path})
-                      (js/console.error error)))))))
+  ([dir path content]
+   (write-file dir path content nil))
+  ([dir path content old-content]
+   (cond
+     (local-db? dir)
+     (let [parts (string/split path "/")
+           basename (last parts)
+           sub-dir (->> (butlast parts)
+                        (remove string/blank?)
+                        (string/join "/"))
+           sub-dir-handle-path (str "handle/"
+                                    (subs dir 1)
+                                    (if sub-dir
+                                      (str "/" sub-dir)))
+           handle-path (if (= "/" (last sub-dir-handle-path))
+                         (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
+                         sub-dir-handle-path)
+           basename-handle-path (str handle-path "/" basename)
+           file-handle-cache (get-nfs-file-handle basename-handle-path)]
+       (p/let [file-handle (or file-handle-cache (idb/get-item basename-handle-path))]
+         (when-not file-handle-cache
+           (add-nfs-file-handle! basename-handle-path file-handle))
+         (if file-handle
+           (p/let [local-file (.getFile file-handle)
+                   local-content (.text local-file)]
+             (if (and local-content old-content
+                        (= (string/trim local-content)
+                           (string/trim old-content))) ; to prevent overwritten
+               (utils/writeFile file-handle content)
+               (js/alert (str "The file has been modified in your local disk! File path: " path
+                              ", save your changes and click the refresh button to reload it."))))
+           ;; create file handle
+           (->
+            (p/let [handle (idb/get-item handle-path)]
+              (if handle
+                (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
+                        _ (idb/set-item! basename-handle-path file-handle)]
+                  (utils/writeFile file-handle content))
+                (println "Error: directory handle not exists: " handle-path)))
+            (p/catch (fn [error]
+                       (println "Write local file failed: " {:path path})
+                       (js/console.error error)))))))
 
-    js/window.pfs
-    (js/window.pfs.writeFile (str dir "/" path) content)
+     js/window.pfs
+     (js/window.pfs.writeFile (str dir "/" path) content)
 
-    :else
-    nil))
+     :else
+     nil)))
 
 (defn rename
   [old-path new-path]
