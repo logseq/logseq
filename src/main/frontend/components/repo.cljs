@@ -160,7 +160,7 @@
           local-repo? (= current-repo config/local-repo)
           get-repo-name (fn [repo]
                           (if (string/starts-with? repo config/local-db-prefix)
-                            (str "local-" (string/replace-first repo config/local-db-prefix ""))
+                            (string/replace-first repo config/local-db-prefix "")
                             (if head?
                               (db/get-repo-path repo)
                               (util/take-at-most (db/get-repo-name repo) 20))))]
