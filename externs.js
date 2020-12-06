@@ -33,3 +33,5 @@ dummy.zoomToFit = function() {};
 dummy.folder = function() {};
 dummy.file = function() {};
 dummy.generateAsync = function() {};
+dummy.showOpenFilePicker = function() {};
+dummy.text = function() {};
