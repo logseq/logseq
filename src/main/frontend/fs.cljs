@@ -157,10 +157,6 @@
          (if file-handle
            (p/let [local-file (.getFile file-handle)
                    local-content (.text local-file)]
-             (profile
-              (diff/diff-words
-               (string/trim local-content)
-               (string/trim old-content)))
              (let [format (-> (util/get-file-ext path)
                               (config/get-file-format))]
                (if (and local-content old-content
