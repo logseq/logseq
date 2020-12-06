@@ -34,4 +34,7 @@ dummy.folder = function() {};
 dummy.file = function() {};
 dummy.generateAsync = function() {};
 dummy.showOpenFilePicker = function() {};
+dummy.getDirectoryHandle = function() {};
+dummy.removeEntry = function() {};
+dummy.getFile = function() {};
 dummy.text = function() {};
