@@ -78,10 +78,17 @@
              root-handle-path (str config/local-handle-prefix dir-name)
              _ (idb/set-item! root-handle-path root-handle)
              _ (fs/add-nfs-file-handle! root-handle-path root-handle)
-             _ (set-files! @path-handles)
              result (nth result 1)
              files (-> (->db-files dir-name result)
                        remove-ignore-files)
+             _ (let [file-paths (set (map :file/path files))]
+                 (swap! path-handles (fn [handles]
+                                       (->> handles
+                                            (filter (fn [[path _handle]]
+                                                      (contains? file-paths
+                                                                 (string/replace-first path (str dir-name "/") ""))))
+                                            (into {})))))
+             _ (set-files! @path-handles)
              markup-files (filter-markup-and-built-in-files files)]
        (-> (p/all (map (fn [file]
                          (p/let [content (.text (:file/file file))]
@@ -113,12 +120,6 @@
     (when (config/local-db? repo)
       repo)))
 
-(defn check-directory-permission!
-  [repo]
-  (p/let [handle (idb/get-item (str "handle/" repo))]
-    (when handle
-      (utils/verifyPermission handle true))))
-
 (defn ask-permission
   [repo]
   (fn [close-fn]
@@ -129,7 +130,7 @@
      (ui/button
       "Grant"
       :on-click (fn []
-                  (check-directory-permission! repo)
+                  (fs/check-directory-permission! repo)
                   (close-fn)))]))
 
 (defn ask-permission-if-local? []
@@ -166,18 +167,29 @@
           path-handles (atom {})]
       (state/set-graph-syncing? true)
       (p/let [handle (idb/get-item handle-path)
+              _ (when handle (utils/verifyPermission handle true))
               files-result (utils/getFiles handle true
                                            (fn [path handle]
                                              (swap! path-handles assoc path handle)))
-              _ (set-files! @path-handles)
               new-files (-> (->db-files dir-name files-result)
                             remove-ignore-files)
+              _ (let [file-paths (set (map :file/path new-files))]
+                  (swap! path-handles (fn [handles]
+                                        (->> handles
+                                             (filter (fn [[path _handle]]
+                                                       (contains? file-paths
+                                                                  (string/replace-first path (str dir-name "/") ""))))
+                                             (into {})))))
+              _ (set-files! @path-handles)
               get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
               {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
               ;; Use the same labels as isomorphic-git
               rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
               _ (when (seq deleted)
-                  (p/all (map #(idb/remove-item! (str handle-path %)) deleted)))
+                  (p/all (map (fn [path]
+                                (let [handle-path (str handle-path path)]
+                                  (idb/remove-item! handle-path)
+                                  (fs/remove-nfs-file-handle! handle-path))) deleted)))
               added-or-modified (set (concat added modified))
               _ (when (seq added-or-modified)
                   (p/all (map (fn [path]

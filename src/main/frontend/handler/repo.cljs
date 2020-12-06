@@ -106,6 +106,8 @@
    (create-today-journal-if-not-exists repo-url nil))
   ([repo-url content]
    (spec/validate :repos/url repo-url)
+   (when (config/local-db? repo-url)
+     (fs/check-directory-permission! repo-url))
    (let [repo-dir (util/get-repo-dir repo-url)
          format (state/get-preferred-format repo-url)
          title (date/today)
@@ -442,15 +444,21 @@
 (defn remove-repo!
   [{:keys [id url] :as repo}]
   (spec/validate :repos/repo repo)
-  (util/delete (str config/api "repos/" id)
-               (fn []
-                 (db/remove-conn! url)
-                 (db/remove-db! url)
-                 (db/remove-files-db! url)
-                 (fs/rmdir (util/get-repo-dir url))
-                 (state/delete-repo! repo))
-               (fn [error]
-                 (prn "Delete repo failed, error: " error))))
+  (let [delete-db-f (fn []
+                      (db/remove-conn! url)
+                      (db/remove-db! url)
+                      (db/remove-files-db! url)
+                      (fs/rmdir (util/get-repo-dir url))
+                      (state/delete-repo! repo))]
+    (if (config/local-db? url)
+      (do
+        (delete-db-f)
+        ;; clear handles
+)
+      (util/delete (str config/api "repos/" id)
+                   delete-db-f
+                   (fn [error]
+                     (prn "Delete repo failed, error: " error))))))
 
 (defn start-repo-db-if-not-exists!
   [repo option]

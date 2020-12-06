@@ -59,7 +59,7 @@
           :options {:href (rfe/href :graph)}
           :icon svg/graph-sm})
        (when logged?
-         {:title (t :all-repos)
+         {:title (t :all-graphs)
           :options {:href (rfe/href :repos)}
           :icon svg/repos-sm})
        (when current-repo
@@ -113,7 +113,8 @@
 
 (rum/defc header
   [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
-  (let [local-repo? (= current-repo config/local-repo)]
+  (let [local-repo? (= current-repo config/local-repo)
+        repos (state/sub [:me :repos])]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
        (left-menu-button {:on-click (fn []
@@ -141,7 +142,7 @@
        [:div.repos.hidden.md:block
         (repo/repos-dropdown true)]
 
-       (when (nfs/supported?)
+       (when (and (nfs/supported?) (empty? repos))
          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3
           {:on-click (fn []
                        (nfs/ls-dir-files))

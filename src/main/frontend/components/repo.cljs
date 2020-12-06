@@ -26,40 +26,53 @@
   []
   (let [{:keys [repos]} (state/sub :me)
         repos (util/distinct-by :url repos)]
-    (if (seq repos)
-      [:div#repos
-       [:h1.title "All Repos"]
+    (rum/with-context [[t] i18n/*tongue-context*]
+      (if (seq repos)
+        [:div#repos
+         [:h1.title "All Graphs"]
 
-       [:div.pl-1.content
-        [:div.flex.my-4 {:key "add-button"}
-         (ui/button
-          "Add another repo"
-          :href (rfe/href :repo-add))]
+         [:div.pl-1.content
+          [:div.flex.flex-row.my-4
+           (ui/button
+            "Add another git repo"
+            :href (rfe/href :repo-add))
+           [:div.ml-8
+            (ui/button
+             (t :open-a-directory)
+             :on-click nfs-handler/ls-dir-files)]]
 
-        (for [{:keys [id url] :as repo} repos]
-          [:div.flex.justify-between.mb-1 {:key id}
-           [:a {:target "_blank"
-                :href url}
-            (db/get-repo-path url)]
-           [:div.controls
-            [:a.control {:title "Clone again and re-index the db"
-                         :on-click (fn []
-                                     (repo-handler/rebuild-index! repo)
-                                     (js/setTimeout
-                                      (fn []
-                                        (route-handler/redirect! {:to :home}))
-                                      500))}
-             "Re-index"]
-            [:a.control.ml-4 {:title "Clone again and re-index the db"
-                              :on-click (fn []
-                                          (export-handler/export-repo-as-json! (:url repo)))}
-             "Export as JSON"]
-            [:a.text-gray-400.ml-4 {:on-click (fn []
-                                                (repo-handler/remove-repo! repo))}
-             "Unlink"]]])]
+          (for [{:keys [id url] :as repo} repos]
+            (let [local? (config/local-db? url)]
+              [:div.flex.justify-between.mb-1 {:key id}
+               (if local?
+                 [:a
+                  (config/get-local-dir url)]
+                 [:a {:target "_blank"
+                      :href url}
+                  (db/get-repo-path url)])
+               [:div.controls
+                [:a.control {:title (if local?
+                                      "Sync with the local directory"
+                                      "Clone again and re-index the db")
+                             :on-click (fn []
+                                         (if local?
+                                           (nfs-handler/refresh! url)
+                                           (repo-handler/rebuild-index! url))
+                                         (js/setTimeout
+                                          (fn []
+                                            (route-handler/redirect! {:to :home}))
+                                          500))}
+                 "Re-index"]
+                [:a.control.ml-4 {:title "Clone again and re-index the db"
+                                  :on-click (fn []
+                                              (export-handler/export-repo-as-json! (:url repo)))}
+                 "Export as JSON"]
+                [:a.text-gray-400.ml-4 {:on-click (fn []
+                                                    (repo-handler/remove-repo! repo))}
+                 "Unlink"]]]))]
 
-       [:a#download-as-json.hidden]]
-      (widgets/add-repo))))
+         [:a#download-as-json.hidden]]
+        (widgets/add-repo)))))
 
 (rum/defc sync-status < rum/reactive
   {:did-mount (fn [state]
@@ -159,8 +172,8 @@
     (let [logged? (state/logged?)
           local-repo? (= current-repo config/local-repo)
           get-repo-name (fn [repo]
-                          (if (string/starts-with? repo config/local-db-prefix)
-                            (string/replace-first repo config/local-db-prefix "")
+                          (if (config/local-db? repo)
+                            (config/get-local-dir repo)
                             (if head?
                               (db/get-repo-path repo)
                               (util/take-at-most (db/get-repo-name repo) 20))))]
@@ -191,10 +204,13 @@
                           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
 
           (and current-repo (not local-repo?))
-          [:a
-           {:href current-repo
-            :target "_blank"}
-           (get-repo-name current-repo)]
+          (let [repo-name (get-repo-name current-repo)]
+            (if (config/local-db? current-repo)
+              repo-name
+              [:a
+               {:href current-repo
+                :target "_blank"}
+               repo-name]))
 
           :else
           nil)))))

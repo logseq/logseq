@@ -7,6 +7,7 @@
             [goog.object :as gobj]
             [frontend.diff :as diff]
             [clojure.set :as set]
+            [lambdaisland.glogi :as log]
             ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
@@ -20,6 +21,10 @@
 (defn add-nfs-file-handle!
   [handle-path handle]
   (swap! nfs-file-handles-cache assoc handle-path handle))
+
+(defn remove-nfs-file-handle!
+  [handle-path]
+  (swap! nfs-file-handles-cache dissoc handle-path))
 
 ;; TODO:
 ;; We need to support several platforms:
@@ -48,6 +53,7 @@
     (let [[root new-dir] (rest (string/split dir "/"))
           root-handle (str "handle/" root)]
       (p/let [handle (idb/get-item root-handle)]
+        (when handle (utils/verifyPermission handle true))
         (when (and handle new-dir
                    (not (string/blank? new-dir)))
           (-> (p/let [handle (.getDirectoryHandle ^js handle new-dir
@@ -87,9 +93,16 @@
   [path opts]
   (cond
     (local-db? path)
-    (let [[dir basename] (util/get-dir-and-basename path)]
-      (p/let [handle (idb/get-item (str "handle" dir))]
-        (.removeEntry ^js handle basename)))
+    (let [[dir basename] (util/get-dir-and-basename path)
+          handle-path (str "handle" path)]
+      (->
+       (p/let [handle (idb/get-item (str "handle" dir))
+               _ (idb/remove-item! handle-path)]
+         (.removeEntry ^js handle basename)
+         (remove-nfs-file-handle! handle-path))
+       (p/catch (fn [error]
+                  (log/error :unlink/path {:path path
+                                           :error error})))))
 
     :else
     (js/window.pfs.unlink path opts)))
@@ -149,33 +162,35 @@
            handle-path (if (= "/" (last sub-dir-handle-path))
                          (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
                          sub-dir-handle-path)
-           basename-handle-path (str handle-path "/" basename)
-           file-handle-cache (get-nfs-file-handle basename-handle-path)]
-       (p/let [file-handle (or file-handle-cache (idb/get-item basename-handle-path))]
-         (when-not file-handle-cache
-           (add-nfs-file-handle! basename-handle-path file-handle))
+           basename-handle-path (str handle-path "/" basename)]
+       (p/let [file-handle (idb/get-item basename-handle-path)]
+         (add-nfs-file-handle! basename-handle-path file-handle)
          (if file-handle
            (p/let [local-file (.getFile file-handle)
                    local-content (.text local-file)]
              (let [format (-> (util/get-file-ext path)
                               (config/get-file-format))]
                (if (and local-content old-content
-                       ;; To prevent data loss, it's not enough to just compare using `=`.
-                       ;; Also, we need to benchmark the performance of `diff/diff-words `
+                        ;; To prevent data loss, it's not enough to just compare using `=`.
+                        ;; Also, we need to benchmark the performance of `diff/diff-words `
                         (not (diff-removed?
                               format
                               (string/trim local-content)
                               (string/trim old-content))))
-                 (utils/writeFile file-handle content)
+                 (do
+                   (utils/verifyPermission file-handle true)
+                   (utils/writeFile file-handle content))
                  (js/alert (str "The file has been modified in your local disk! File path: " path
                                 ", save your changes and click the refresh button to reload it.")))))
            ;; create file handle
            (->
             (p/let [handle (idb/get-item handle-path)]
               (if handle
-                (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
-                        _ (idb/set-item! basename-handle-path file-handle)]
-                  (utils/writeFile file-handle content))
+                (do
+                  (utils/verifyPermission handle true)
+                  (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
+                          _ (idb/set-item! basename-handle-path file-handle)]
+                    (utils/writeFile file-handle content)))
                 (println "Error: directory handle not exists: " handle-path)))
             (p/catch (fn [error]
                        (println "Write local file failed: " {:path path})
@@ -257,3 +272,9 @@
    (stat dir path)
    (fn [_stat] true)
    (fn [_e] false)))
+
+(defn check-directory-permission!
+  [repo]
+  (p/let [handle (idb/get-item (str "handle/" repo))]
+    (when handle
+      (utils/verifyPermission handle true))))
