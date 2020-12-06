@@ -2,6 +2,7 @@
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.idb :as idb]
             [frontend.config :as config]
             [frontend.storage :as storage]
             [promesa.core :as p]
@@ -61,7 +62,7 @@
 (defn sign-out!
   [e]
   (->
-   (db/clear-local-storage-and-idb!)
+   (idb/clear-local-storage-and-idb!)
    (p/catch (fn [e]
               (println "sign out error: ")
               (js/console.dir e)))

@@ -26,6 +26,8 @@
    {:before-load frontend.core/stop
     ;; after live-reloading finishes call this function
     :after-load frontend.core/start
+    :http-root    "public"
+    :http-port    3001
     :preloads     [devtools.preload]}}
 
   :test

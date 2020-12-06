@@ -1,5 +1,4 @@
 (ns frontend.handler.git
-  (:refer-clojure :exclude [clone load-file])
   (:require [frontend.util :as util :refer-macros [profile]]
             [promesa.core :as p]
             [frontend.state :as state]
@@ -10,6 +9,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.config :as config]
             [cljs-time.local :as tl]
             [frontend.helper :as helper]))
 
@@ -31,12 +31,13 @@
   ([repo-url file]
    (git-add repo-url file true))
   ([repo-url file update-status?]
-   (-> (p/let [result (git/add repo-url file)]
-         (when update-status?
-           (common-handler/check-changed-files-status)))
-       (p/catch (fn [error]
-                  (println "git add '" file "' failed: " error)
-                  (js/console.error error))))))
+   (when-not (config/local-db? repo-url)
+     (-> (p/let [result (git/add repo-url file)]
+           (when update-status?
+             (common-handler/check-changed-files-status)))
+         (p/catch (fn [error]
+                    (println "git add '" file "' failed: " error)
+                    (js/console.error error)))))))
 
 (defn commit-and-force-push!
   [commit-message pushing?]

@@ -69,11 +69,11 @@
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
-    {:will-mount (fn [state]
-                   (let [[page-name n-ref] (:rum/args state)
-                         ref-blocks (db/get-page-unlinked-references page-name)]
-                     (reset! n-ref (count ref-blocks))
-                     (assoc state ::ref-blocks ref-blocks)))}
+  {:will-mount (fn [state]
+                 (let [[page-name n-ref] (:rum/args state)
+                       ref-blocks (db/get-page-unlinked-references page-name)]
+                   (reset! n-ref (count ref-blocks))
+                   (assoc state ::ref-blocks ref-blocks)))}
   [state page-name n-ref]
   (let [ref-blocks (::ref-blocks state)]
     [:div.references-blocks
@@ -100,5 +100,5 @@
             (if @n-ref
               (str @n-ref " Unlinked References")
               "Unlinked References")]
-            (fn [] (unlinked-references-aux page-name n-ref))
+           (fn [] (unlinked-references-aux page-name n-ref))
            true)]]))))

@@ -444,6 +444,10 @@ svg {
   }
 }
 
+.loader {
+    -webkit-animation: lds-dual-ring 2s infinite linear;
+}
+
 .canceled {
   text-decoration: line-through;
 }
@@ -1121,23 +1125,13 @@ pre {
   margin: 1em 0 0.5em;
 }
 
-
-/* .page .content *, #intro .content *, .page .title { */
-/*     margin-left: auto; */
-/*     margin-right: auto; */
-/* } */
-
-/* .page .blocks-container .ls-block { */
-/*     align-self: center; */
-/* } */
-
 #intro .content {
   flex-direction: column;
   align-items: center;
 }
 
-#intro .content :not(img), .foldable-title {
-  max-width: 665px;
+.ls-block, .foldable-title {
+    max-width: 700px;
 }
 
 .ls-block, .editor-wrapper {
@@ -1151,10 +1145,6 @@ pre {
 img, video {
   margin-left: auto;
   margin-right: auto;
-}
-
-#intro .intro-docs, img, video, .intro .ls-block {
-  max-width: 653px;
 }
 
 .ls-block img {

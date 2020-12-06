@@ -1093,8 +1093,7 @@
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)
                :style {:cursor "text"
-                       :min-height 24
-                       :max-width 560}}
+                       :min-height 24}}
         (not slide?)
         (merge attrs))
 
@@ -1502,9 +1501,9 @@
 
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
-                 (let [[config query] (:rum/args state)]
-                   (let [query-atom (db/custom-query query)]
-                     (assoc state :query-atom query-atom))))
+                 (let [[config query] (:rum/args state)
+                       query-atom (db/custom-query query)]
+                   (assoc state :query-atom query-atom)))
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
@@ -1552,11 +1551,13 @@
                                :margin-left "0.25rem"}})
 
             (seq result)                     ;TODO: table
-            [:pre
-             (for [record result]
-               (if (map? record)
-                 (str (util/pp-str record) "\n")
-                 record))]
+            (let [result (->>
+                          (for [record result]
+                            (if (map? record)
+                              (str (util/pp-str record) "\n")
+                              record))
+                          (remove nil?))]
+              [:pre result])
 
             :else
             [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])

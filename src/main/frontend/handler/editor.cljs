@@ -5,6 +5,7 @@
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.draw :as draw]
             [frontend.handler.expand :as expand]
@@ -614,6 +615,7 @@
                                  (block/parse-block (assoc block :block/content new-value) format))
                                parse-result)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
+                             files [[file-path new-content]]
                              transact-fn (fn []
                                            (repo-handler/transact-react-and-alter-file!
                                             repo
@@ -624,7 +626,7 @@
                                              after-blocks)
                                             {:key :block/insert
                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                                            [[file-path new-content]])
+                                            files)
                                            (state/set-editor-op! nil))]
 
                          ;; Replace with batch transactions
@@ -1320,17 +1322,38 @@
               nil)
             (state/conj-selection-block! element up?)))))))
 
+(defn save-block-aux!
+  [block value format]
+  (let [value (text/remove-level-spaces value format true)
+        new-value (block/with-levels value format block)
+        properties (with-timetracking-properties block value)]
+    ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
+    ;; maybe we shouldn't save the block/file in "will-unmount" event?
+    (save-block-if-changed! block new-value
+                            {:custom-properties properties})))
+
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
-    (let [value (text/remove-level-spaces value format true)
-          new-value (block/with-levels value format block)
-          properties (with-timetracking-properties block value)]
-      ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-      ;; maybe we shouldn't save the block/file in "will-unmount" event?
-      (save-block-if-changed! block new-value
-                              {:custom-properties properties}))))
+    (save-block-aux! block value format)))
+
+(defn save-current-block-when-idle!
+  []
+  (when-let [repo (state/get-current-repo)]
+    (when (state/input-idle? repo)
+      (let [input-id (state/get-edit-input-id)
+            block (state/get-edit-block)
+            elem (and input-id (gdom/getElement input-id))
+            db-block (db/entity [:block/uuid (:block/uuid block)])
+            db-content (:block/content db-block)
+            db-content-without-heading (and db-content
+                                            (util/safe-subs db-content (:block/level db-block)))
+            value (and elem (gobj/get elem "value"))]
+        (when (and block value db-content-without-heading
+                   (not= (string/trim db-content-without-heading)
+                         (string/trim value)))
+          (save-block-aux! block value (:block/format block)))))))
 
 (defn on-up-down
   [state e up?]
@@ -1957,3 +1980,14 @@
           (state/set-editor-show-block-search! false)
           (state/set-editor-show-page-search! false)
           (state/set-editor-show-page-search-hashtag! false))))))
+
+(defn periodically-save!
+  []
+  (js/setInterval save-current-block-when-idle! 3000))
+
+(defn get-current-input-value
+  []
+  (let [edit-input-id (state/get-edit-input-id)
+        input (and edit-input-id (gdom/getElement edit-input-id))]
+    (when input
+      (gobj/get input "value"))))

@@ -384,11 +384,16 @@
       :aria-hidden "true"}]]])
 
 (defn tooltip
-  [label children]
-  [:div.Tooltip {:style {:display "inline"}}
-   [:div {:class "Tooltip__label"}
-    label]
-   children])
+  ([label children]
+   (tooltip label children {}))
+  ([label children {:keys [label-style]}]
+   [:div.Tooltip {:style {:display "inline"}}
+    [:div (cond->
+            {:class "Tooltip__label"}
+            label-style
+            (assoc :style label-style))
+     label]
+    children]))
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
