@@ -9,6 +9,19 @@
   (-> ((gobj/get jsdiff "diffLines") s1 s2)
       bean/->clj))
 
+(defn diff-words
+  [s1 s2]
+  (-> ((gobj/get jsdiff "diffWords") s1 s2)
+      bean/->clj))
+
+(defn removed?
+  [s1 s2]
+  (when (and s1 s2)
+    (let [diff-result (diff-words s1 s2)]
+      (->> diff-result
+           (some :removed)
+           (boolean)))))
+
 ;; (find-position "** hello _w_" "hello w")
 (defn find-position
   [markup text]

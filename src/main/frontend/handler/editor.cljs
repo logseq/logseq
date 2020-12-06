@@ -5,6 +5,7 @@
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.draw :as draw]
             [frontend.handler.expand :as expand]
@@ -614,6 +615,7 @@
                                  (block/parse-block (assoc block :block/content new-value) format))
                                parse-result)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
+                             files [[file-path new-content]]
                              transact-fn (fn []
                                            (repo-handler/transact-react-and-alter-file!
                                             repo
@@ -624,7 +626,7 @@
                                              after-blocks)
                                             {:key :block/insert
                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                                            [[file-path new-content]])
+                                            files)
                                            (state/set-editor-op! nil))]
 
                          ;; Replace with batch transactions

@@ -104,6 +104,8 @@
                                                                          :repos repos}))))))
                               (store-schema!))
 
+                            (nfs/ask-permission-if-local?)
+
                             (page-handler/init-commands!)
                             (if (seq (:repos me))
                               ;; FIXME: handle error

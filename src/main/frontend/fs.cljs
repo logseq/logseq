@@ -5,6 +5,7 @@
             [frontend.idb :as idb]
             [promesa.core :as p]
             [goog.object :as gobj]
+            [frontend.diff :as diff]
             ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
@@ -55,7 +56,7 @@
                 (add-nfs-file-handle! handle-path handle)
                 (println "Stored handle: " (str root-handle "/" new-dir)))
               (p/catch (fn [error]
-                         (println "mkdir error: " error)
+                         (println "mkdir error: " error ", dir: " dir)
                          (js/console.error error)))))))
 
     (and dir js/window.pfs)
@@ -140,8 +141,11 @@
            (p/let [local-file (.getFile file-handle)
                    local-content (.text local-file)]
              (if (and local-content old-content
-                        (= (string/trim local-content)
-                           (string/trim old-content))) ; to prevent overwritten
+                      ;; To prevent data loss, it's not enough to just compare using `=`.
+                      ;; Also, we need to benchmark the performance of `diff/diff-words `
+                      (not (diff/removed?
+                            (string/trim local-content)
+                            (string/trim old-content))))
                (utils/writeFile file-handle content)
                (js/alert (str "The file has been modified in your local disk! File path: " path
                               ", save your changes and click the refresh button to reload it."))))
