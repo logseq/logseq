@@ -24,7 +24,8 @@
 
 (rum/defc repos < rum/reactive
   []
-  (let [{:keys [repos]} (state/sub :me)
+  (let [repos (->> (state/sub [:me :repos])
+                   (remove #(= (:url %) config/local-repo)))
         repos (util/distinct-by :url repos)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (if (seq repos)
@@ -33,13 +34,14 @@
 
          [:div.pl-1.content
           [:div.flex.flex-row.my-4
+           (when (state/logged?)
+             [:div.mr-8
+              (ui/button
+               "Add another git repo"
+               :href (rfe/href :repo-add))])
            (ui/button
-            "Add another git repo"
-            :href (rfe/href :repo-add))
-           [:div.ml-8
-            (ui/button
-             (t :open-a-directory)
-             :on-click nfs-handler/ls-dir-files)]]
+            (t :open-a-directory)
+            :on-click nfs-handler/ls-dir-files)]
 
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]

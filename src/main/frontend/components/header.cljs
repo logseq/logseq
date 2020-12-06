@@ -58,7 +58,7 @@
          {:title (t :graph)
           :options {:href (rfe/href :graph)}
           :icon svg/graph-sm})
-       (when logged?
+       (when (or logged? (nfs/supported?))
          {:title (t :all-graphs)
           :options {:href (rfe/href :repos)}
           :icon svg/repos-sm})
@@ -114,7 +114,8 @@
 (rum/defc header
   [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
   (let [local-repo? (= current-repo config/local-repo)
-        repos (state/sub [:me :repos])]
+        repos (->> (state/sub [:me :repos])
+                   (remove #(= (:url %) config/local-repo)))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
        (left-menu-button {:on-click (fn []
