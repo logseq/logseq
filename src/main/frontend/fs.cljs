@@ -98,7 +98,8 @@
       (->
        (p/let [handle (idb/get-item (str "handle" dir))
                _ (idb/remove-item! handle-path)]
-         (.removeEntry ^js handle basename)
+         (when handle
+           (.removeEntry ^js handle basename))
          (remove-nfs-file-handle! handle-path))
        (p/catch (fn [error]
                   (log/error :unlink/path {:path path

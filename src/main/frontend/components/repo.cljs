@@ -43,7 +43,6 @@
              (ui/button
               (t :open-a-directory)
               :on-click nfs-handler/ls-dir-files))]
-
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}
@@ -134,7 +133,7 @@
                        [:p (t :git/push-failed)]
                        (and should-push? (seq changed-files))
                        [:div.changes
-                        [:ul
+                        [:ul.overflow-y-scroll {:style {:max-height 250}}
                          (for [file changed-files]
                            [:li {:key (str "sync-" file)}
                             [:div.flex.flex-row.justify-between.align-items
