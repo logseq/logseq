@@ -113,7 +113,7 @@
   ([]
    (open-file-picker {}))
   ([option]
-   (js/window.showOpenFilePicker (bean/->js option))))
+   (.showOpenFilePicker js/window (bean/->js option))))
 
 (defn get-local-repo
   []
