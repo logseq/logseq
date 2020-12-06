@@ -144,15 +144,17 @@
         (repo/repos-dropdown true)]
 
        (when (and (nfs/supported?) (empty? repos))
-         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3
-          {:on-click (fn []
-                       (nfs/ls-dir-files))
-           :title (t :open-a-directory)}
-          [:div.flex.flex-row.text-center
-           [:span.inline-block svg/folder-add]
-           (when-not config/mobile?
-             [:span.ml-1 {:style {:margin-top 2}}
-              (t :open)])]])
+         (ui/tooltip
+          "Warning: this is an experimental feature, please only use it for testing purpose."
+          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
+           {:on-click (fn []
+                        (nfs/ls-dir-files))}
+           [:div.flex.flex-row.text-center
+            [:span.inline-block svg/folder-add]
+            (when-not config/mobile?
+              [:span.ml-1 {:style {:margin-top 2}}
+               (t :open)])]]
+          {:label-style {:width 200}}))
 
        (if config/publishing?
          [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}

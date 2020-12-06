@@ -105,7 +105,8 @@
            (p/catch (fn [error]
                       (log/error :nfs/load-files-error error)))))
      (p/catch (fn [error]
-                (log/error :nfs/open-dir-error error))))))
+                (when (not= "AbortError" (gobj/get error "name"))
+                  (log/error :nfs/open-dir-error error)))))))
 
 (defn open-file-picker
   "Shows a file picker that lets a user select a single existing file, returning a handle for the selected file. "

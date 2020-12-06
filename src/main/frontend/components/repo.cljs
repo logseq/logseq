@@ -40,9 +40,11 @@
                "Add another git repo"
                :href (rfe/href :repo-add))])
            (when (nfs-handler/supported?)
-             (ui/button
-              (t :open-a-directory)
-              :on-click nfs-handler/ls-dir-files))]
+             [:div.flex.flex-col
+              [:div (ui/button
+                      (t :open-a-directory)
+                      :on-click nfs-handler/ls-dir-files)]
+              [:span.warning.mt-2.text-sm "Warning: this is an experimental feature, please only use it for testing purpose."]])]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}
