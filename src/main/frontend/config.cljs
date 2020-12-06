@@ -226,6 +226,15 @@
     "md"
     (name format)))
 
+(defn get-file-format
+  [extension]
+  (case (keyword extension)
+    :markdown
+    :markdown
+    :md
+    :markdown
+    (keyword extension)))
+
 (defn default-empty-block
   ([format]
    (default-empty-block format 2))

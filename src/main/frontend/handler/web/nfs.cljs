@@ -127,10 +127,10 @@
       "Grant native filesystem permission for directory: "
       [:b (config/get-local-dir repo)]]
      (ui/button
-       "Grant"
-       :on-click (fn []
-                   (check-directory-permission! repo)
-                   (close-fn)))]))
+      "Grant"
+      :on-click (fn []
+                  (check-directory-permission! repo)
+                  (close-fn)))]))
 
 (defn ask-permission-if-local? []
   (when-let [repo (get-local-repo)]
@@ -152,18 +152,7 @@
         new-file-paths (file-path-set-f new-files)
         added (set/difference new-file-paths old-file-paths)
         deleted (set/difference old-file-paths new-file-paths)
-        modified (let [modified (set/difference new-file-paths added)]
-                   (when (seq modified)
-                     (filter (fn [path]
-                               (let [old-file (get-file-f old-files path)
-                                     new-file (get-file-f new-files path)]
-                                 ;; TODO: the `last-modified-at` attribute in the db is always after
-                                 ;; the file in the local file sytem because we transact to the db first and write to the
-                                 ;; file system later.
-                                 ;; It doesn't mean this is a bug, but it could impact the performance.
-                                 (> (:file/last-modified-at new-file)
-                                    (:file/last-modified-at old-file))))
-                             modified)))]
+        modified (set/difference new-file-paths added)]
     {:added added
      :modified modified
      :deleted deleted}))
@@ -214,7 +203,7 @@
                                    (rename-f "modify" modified))]
                         (when (or (and (seq diffs) (seq modified-files))
                                   (seq diffs) ; delete
-                                  )
+)
                           (repo-handler/load-repo-to-db! repo
                                                          {:diffs diffs
                                                           :nfs-files modified-files})))))

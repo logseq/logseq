@@ -1,11 +1,12 @@
 (ns frontend.fs
-  (:require [frontend.util :as util]
+  (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [clojure.string :as string]
             [frontend.idb :as idb]
             [promesa.core :as p]
             [goog.object :as gobj]
             [frontend.diff :as diff]
+            [clojure.set :as set]
             ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
@@ -109,10 +110,26 @@
   ([dir path option]
    (cond
      (local-db? dir)
-     nil
+     (let [handle-path (str "handle" dir "/" path)]
+       (p/let [handle (idb/get-item handle-path)
+               local-file (and handle (.getFile handle))]
+         (and local-file (.text local-file))))
 
      :else
      (js/window.pfs.readFile (str dir "/" path) option))))
+
+(defn diff-removed?
+  [format s1 s2]
+  (when (and s1 s2)
+    (let [diff-result (diff/diff-words s1 s2)
+          block-pattern (config/get-block-pattern format)]
+      (some (fn [{:keys [removed value]}]
+              (and removed
+                   value
+                   ;; FIXME: not sure why this happened, it might be related to
+                   ;; the async block operations (inserting blocks)
+                   (not (set/superset? #{"#" "\n"} (set (distinct value))))))
+            diff-result))))
 
 (defn write-file
   ([dir path content]
@@ -140,15 +157,22 @@
          (if file-handle
            (p/let [local-file (.getFile file-handle)
                    local-content (.text local-file)]
-             (if (and local-content old-content
-                      ;; To prevent data loss, it's not enough to just compare using `=`.
-                      ;; Also, we need to benchmark the performance of `diff/diff-words `
-                      (not (diff/removed?
-                            (string/trim local-content)
-                            (string/trim old-content))))
-               (utils/writeFile file-handle content)
-               (js/alert (str "The file has been modified in your local disk! File path: " path
-                              ", save your changes and click the refresh button to reload it."))))
+             (profile
+              (diff/diff-words
+               (string/trim local-content)
+               (string/trim old-content)))
+             (let [format (-> (util/get-file-ext path)
+                              (config/get-file-format))]
+               (if (and local-content old-content
+                       ;; To prevent data loss, it's not enough to just compare using `=`.
+                       ;; Also, we need to benchmark the performance of `diff/diff-words `
+                        (not (diff-removed?
+                              format
+                              (string/trim local-content)
+                              (string/trim old-content))))
+                 (utils/writeFile file-handle content)
+                 (js/alert (str "The file has been modified in your local disk! File path: " path
+                                ", save your changes and click the refresh button to reload it.")))))
            ;; create file handle
            (->
             (p/let [handle (idb/get-item handle-path)]
