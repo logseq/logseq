@@ -36,6 +36,7 @@ dummy.generateAsync = function() {};
 dummy.showOpenFilePicker = function() {};
 dummy.showDirectoryPicker = function() {};
 dummy.getDirectoryHandle = function() {};
+dummy.getFileHandle = function() {};
 dummy.removeEntry = function() {};
 dummy.getFile = function() {};
 dummy.text = function() {};
