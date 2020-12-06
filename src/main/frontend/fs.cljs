@@ -245,12 +245,14 @@
 
 (defn mkdir-if-not-exists
   [dir]
-  (when (and dir js/window.pfs)
-    (util/p-handle
-     (stat dir nil)
-     (fn [_stat])
-     (fn [error]
-       (mkdir dir)))))
+  (when dir
+    (let [local? (config/local-db? dir)]
+      (when (or local? js/window.pfs)
+        (util/p-handle
+         (stat dir nil)
+         (fn [_stat])
+         (fn [error]
+           (mkdir dir)))))))
 
 (defn create-if-not-exists
   ([dir path]

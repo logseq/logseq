@@ -39,9 +39,10 @@
               (ui/button
                "Add another git repo"
                :href (rfe/href :repo-add))])
-           (ui/button
-            (t :open-a-directory)
-            :on-click nfs-handler/ls-dir-files)]
+           (when (nfs-handler/supported?)
+             (ui/button
+              (t :open-a-directory)
+              :on-click nfs-handler/ls-dir-files))]
 
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]

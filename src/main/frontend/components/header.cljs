@@ -58,7 +58,7 @@
          {:title (t :graph)
           :options {:href (rfe/href :graph)}
           :icon svg/graph-sm})
-       (when (or logged? (nfs/supported?))
+       (when (or logged? (and (nfs/supported?) current-repo))
          {:title (t :all-graphs)
           :options {:href (rfe/href :repos)}
           :icon svg/repos-sm})
