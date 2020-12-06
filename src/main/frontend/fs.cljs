@@ -275,6 +275,7 @@
 
 (defn check-directory-permission!
   [repo]
-  (p/let [handle (idb/get-item (str "handle/" repo))]
-    (when handle
-      (utils/verifyPermission handle true))))
+  (when (config/local-db? repo)
+    (p/let [handle (idb/get-item (str "handle/" repo))]
+      (when handle
+        (utils/verifyPermission handle true)))))

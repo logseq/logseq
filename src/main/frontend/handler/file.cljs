@@ -173,12 +173,12 @@
                             (db/reset-file! repo path content)
                             (db/set-file-content! repo path content))
                           (let [original-content (get file->content path)]
-                            (util/p-handle
-                             (fs/write-file (util/get-repo-dir repo) path content original-content)
-                             (fn [_])
-                             (fn [error]
-                               (println "Write file failed, path: " path ", content: " content)
-                               (js/console.error error)))))
+                            (-> (p/let [_ (fs/check-directory-permission! repo)]
+                                  (fs/write-file (util/get-repo-dir repo) path content original-content))
+                                (p/catch (fn [error]
+                                           (log/error :write-file/failed {:path path
+                                                                          :content content
+                                                                          :error error}))))))
            git-add-f (fn [_result]
                        (let [add-helper
                              (fn []
