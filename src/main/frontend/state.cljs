@@ -16,7 +16,6 @@
   (atom
    {:route-match nil
     :today nil
-    :daily/migrating? nil
     :db/batch-txs (async/chan 100)
     :notification/show? false
     :notification/content nil
@@ -25,14 +24,10 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
+    :nfs/loading-files? nil
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
-    ;; TODO: save in local storage so that if :changed? is true when user
-    ;; reloads the browser, the app should re-index the repo (another way
-    ;; is to save all the tx data since :last-stored-at)
-    ;; repo -> {:last-stored-at :last-modified-at}
-    :repo/persist-status {}
     :me nil
     :git/current-repo (storage/get :git/current-repo)
     :git/status {}
@@ -78,6 +73,12 @@
     :editor/block nil
     :editor/block-dom-id nil
     :editor/set-timestamp-block nil
+    :editor/last-input-time nil
+    :db/last-transact-time {}
+    :db/last-persist-transact-ids {}
+    ;; whether database is persisted
+    :db/persisted? {}
+    :db/latest-txs (or (storage/get-transit :db/latest-txs) {})
     :cursor-range nil
 
     :selection/mode false
@@ -93,7 +94,8 @@
     :preferred-language (storage/get :preferred-language)
 
     ;; all notification contents as k-v pairs
-    :notification/contents {}}))
+    :notification/contents {}
+    :graph/syncing? false}))
 
 (defn get-route-match
   []
@@ -194,8 +196,10 @@
 
 (defn get-pages-directory
   []
-  (when-let [repo (get-current-repo)]
-    (:pages-directory (get-config repo))))
+  (or
+   (when-let [repo (get-current-repo)]
+     (:pages-directory (get-config repo)))
+   "pages"))
 
 (defn org-mode-file-link?
   [repo]
@@ -236,6 +240,18 @@
 (defn get-repos
   []
   (get-in @state [:me :repos]))
+
+(defn set-repos!
+  [repos]
+  (set-state! [:me :repos] repos))
+
+(defn add-repo!
+  [repo]
+  (when repo
+    (update-state! [:me :repos]
+                   (fn [repos]
+                     (->> (conj repos repo)
+                          (distinct))))))
 
 (defn set-current-repo!
   [repo]
@@ -778,18 +794,6 @@
          :modal/show? false
          :modal/panel-content nil))
 
-(defn update-repo-last-stored-at!
-  [repo]
-  (swap! state assoc-in [:repo/persist-status repo :last-stored-at] (util/time-ms)))
-
-(defn get-repo-persist-status
-  []
-  (:repo/persist-status @state))
-
-(defn mark-repo-as-changed!
-  [repo _tx-id]
-  (swap! state assoc-in [:repo/persist-status repo :last-modified-at] (util/time-ms)))
-
 (defn get-db-batch-txs-chan
   []
   (:db/batch-txs @state))
@@ -801,13 +805,6 @@
     (when-let [chan (get-db-batch-txs-chan)]
       (async/put! chan f))))
 
-(defn repos-need-to-be-stored?
-  []
-  (let [status (vals (get-repo-persist-status))]
-    (some (fn [{:keys [last-stored-at last-modified-at]}]
-            (> last-modified-at last-stored-at))
-          status)))
-
 (defn get-left-sidebar-open?
   []
   (get-in @state [:ui/left-sidebar-open?]))
@@ -815,10 +812,6 @@
 (defn set-left-sidebar-open!
   [value]
   (set-state! :ui/left-sidebar-open? value))
-
-(defn set-daily-migrating!
-  [value]
-  (set-state! :daily/migrating? value))
 
 (defn set-developer-mode!
   [value]
@@ -886,7 +879,80 @@
   []
   (:commands (get-config)))
 
+(defn set-graph-syncing?
+  [value]
+  (set-state! :graph/syncing? value))
+
+(defn set-loading-files!
+  [value]
+  (set-state! :repo/loading-files? value))
+
+(defn set-importing-to-db!
+  [value]
+  (set-state! :repo/importing-to-db? value))
+
+(defn set-editor-last-input-time!
+  [repo time]
+  (swap! state assoc-in [:editor/last-input-time repo] time))
+
+(defn set-last-transact-time!
+  [repo time]
+  (swap! state assoc-in [:db/last-transact-time repo] time)
+
+  ;; THINK: new block, indent/outdent, drag && drop, etc.
+  (set-editor-last-input-time! repo time))
+
+(defn set-db-persisted!
+  [repo value]
+  (swap! state assoc-in [:db/persisted? repo] value))
+
+(defn db-idle?
+  [repo]
+  (when repo
+    (when-let [last-time (get-in @state [:db/last-transact-time repo])]
+      (let [now (util/time-ms)]
+        (>= (- now last-time) 3000)))))
+
+(defn input-idle?
+  [repo]
+  (when repo
+    (or
+     (when-let [last-time (get-in @state [:editor/last-input-time repo])]
+       (let [now (util/time-ms)]
+         (>= (- now last-time) 3000)))
+     ;; not in editing mode
+     (not (get-edit-input-id)))))
+
+(defn set-last-persist-transact-id!
+  [repo files? id]
+  (swap! state assoc-in [:db/last-persist-transact-ids :repo files?] id))
+
+(defn get-last-persist-transact-id
+  [repo files?]
+  (get-in @state [:db/last-persist-transact-ids :repo files?]))
+
+(defn persist-transaction!
+  [repo files? tx-id tx-data]
+  (when (seq tx-data)
+    (let [latest-txs (:db/latest-txs @state)
+          last-persist-tx-id (get-last-persist-transact-id repo files?)
+          latest-txs (if last-persist-tx-id
+                      (update-in latest-txs [repo files?]
+                                 (fn [result]
+                                   (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
+                      latest-txs)
+         new-txs (update-in latest-txs [repo files?] (fn [result]
+                                                       (vec (conj result {:tx-id tx-id
+                                                                          :tx-data tx-data}))))]
+     (storage/set-transit! :db/latest-txs new-txs)
+     (set-state! :db/latest-txs new-txs))))
+
+(defn get-repo-latest-txs
+  [repo file?]
+  (get-in (:db/latest-txs @state) [repo file?]))
+
 ;; TODO: Move those to the uni `state`
+
 (defonce editor-op (atom nil))
 (defn set-editor-op!
   [value]

@@ -10,6 +10,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.config :as config]
             [frontend.components.content :as content]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
@@ -68,6 +69,7 @@
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))
         intro? (and (not (state/logged?))
+                    (not (config/local-db? repo))
                     (not config/publishing?)
                     today?)]
     [:div.flex-1.journal.page {:class (if intro? "intro" "")}

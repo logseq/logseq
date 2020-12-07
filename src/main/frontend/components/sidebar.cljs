@@ -118,8 +118,6 @@
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width (or global-graph-pages?
-                                (and (not logged?)
-                                     home?)
                                 (contains? #{:all-files :all-pages} route-name))}
        (cond
          (not indexeddb-support?)
@@ -174,21 +172,21 @@
         current-repo (state/sub :git/current-repo)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
-        logged? (:name me)
-        token (state/sub :encrypt/token)
-        ;; TODO: remove this
-        daily-migrating? (state/sub [:daily/migrating?])]
+        logged? (:name me)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.max-w-7xl.mx-auto
        (cond
-         daily-migrating?
-         (ui/loading "Migrating to daily notes")
-
          (and default-home
               (= :home (state/get-current-route))
               (not (state/route-has-p?)))
          (route-handler/redirect! {:to :page
                                    :path-params {:name (:page default-home)}})
+
+         importing-to-db?
+         (ui/loading (t :parsing-files))
+
+         loading-files?
+         (ui/loading (t :loading-files))
 
          (and (not logged?) (seq latest-journals))
          (journal/journals latest-journals)
@@ -205,12 +203,6 @@
 
          (seq latest-journals)
          (journal/journals latest-journals)
-
-         importing-to-db?
-         (ui/loading (t :parsing-files))
-
-         loading-files?
-         (ui/loading (t :loading-files))
 
          (and logged? (empty? (:repos me)))
          (widgets/add-repo)

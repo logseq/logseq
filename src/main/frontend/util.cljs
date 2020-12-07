@@ -19,6 +19,11 @@
             [clojure.pprint :refer [pprint]]
             [goog.userAgent]))
 
+(extend-protocol IPrintWithWriter
+  js/Symbol
+  (-pr-writer [sym writer _]
+    (-write writer (str "\"" (.toString sym) "\""))))
+
 ;; envs
 (defn ios?
   []
@@ -945,6 +950,14 @@
 (defn get-file-ext
   [file]
   (last (string/split file #"\.")))
+
+(defn get-dir-and-basename
+  [path]
+  (let [parts (string/split path "/")
+        basename (last parts)
+        dir (->> (butlast parts)
+                 (string/join "/"))]
+    [dir basename]))
 
 (defn get-relative-path
   [current-file-path another-file-path]

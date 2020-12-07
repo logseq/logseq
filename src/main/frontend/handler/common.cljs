@@ -18,8 +18,6 @@
     ;; TODO: what if the remote is not named "origin", check the api from isomorphic-git
     (git/resolve-ref repo-url (str "refs/remotes/origin/" branch))))
 
-
-;; Should include un-pushed committed files too
 (defn check-changed-files-status
   ([]
    (check-changed-files-status (state/get-current-repo)))
