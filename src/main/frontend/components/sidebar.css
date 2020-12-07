@@ -57,8 +57,8 @@
 
 .cp__sidebar-help {
   @apply font-bold fixed bottom-4
-  rounded-full h-8 w-8 flex items-center justify-center font-bold
-  opacity-70 hover:opacity-100;
+    rounded-full h-8 w-8 flex items-center justify-center font-bold
+    opacity-70 hover:opacity-100;
 
   user-select: none;
   cursor: help;
@@ -77,7 +77,7 @@
   z-index: 9;
 
   box-sizing: border-box;
-  background-color: var(--ls-secondary-background-color, #D8E1E8);
+  background-color: var(--ls-secondary-background-color, #d8e1e8);
   padding-bottom: 48px;
 
   &-inner {
@@ -110,12 +110,14 @@
     margin-top: 0;
   }
 
-  .non-block-editor textarea, pre, pre.code {
+  .non-block-editor textarea,
+  pre,
+  pre.code {
     background: var(--ls-right-sidebar-code-bg-color);
   }
 
   pre.CodeMirror-line {
-    background: #FFFFFF;
+    background: #fff;
   }
 
   .references {
@@ -134,8 +136,8 @@
     }
 
     .close {
-      transform: scale(.8);
-      transition: transform .1s;
+      transform: scale(0.8);
+      transition: transform 0.1s;
 
       &:hover {
         transform: scale(1);

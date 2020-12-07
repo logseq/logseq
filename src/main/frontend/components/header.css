@@ -1,6 +1,5 @@
 .cp__header {
   @apply shadow z-10 h-12 pr-4;
-
   position: relative;
   display: flex;
   align-items: center;

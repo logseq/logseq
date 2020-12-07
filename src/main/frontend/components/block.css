@@ -32,23 +32,23 @@
   margin: 0 auto;
 
   img {
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .1), 0 10px 10px -5px rgba(0, 0, 0, .04);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   }
 }
 
 .ls-block h1 {
   font-size: 2em;
-  margin: .67em 0;
+  margin: 0.67em 0;
 }
 
 .ls-block h2 {
   font-size: 1.5em;
-  margin: .75em 0;
+  margin: 0.75em 0;
 }
 
 .ls-block h3 {
   font-size: 1.17em;
-  margin: .83em 0;
+  margin: 0.83em 0;
 }
 
 .ls-block h4 {
@@ -56,12 +56,12 @@
 }
 
 .ls-block h5 {
-  font-size: .83em;
+  font-size: 0.83em;
   margin: 1.5em 0;
 }
 
 .ls-block h6 {
-  font-size: .75em;
+  font-size: 0.75em;
   margin: 1.67em 0;
 }
 
