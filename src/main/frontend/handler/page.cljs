@@ -435,3 +435,8 @@
           (fn [error]
             (log/error :page/http-delete-failed error)
             (reject error)))))))
+
+(defn update-state-and-notify
+  [page-name]
+  (page-add-properties! page-name {:published false})
+  (notification/show! (util/format "Remove Page \"%s\" from Logseq server success" page-name) :success))
