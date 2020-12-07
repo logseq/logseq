@@ -1353,7 +1353,11 @@
         (when (and block value db-content-without-heading
                    (not= (string/trim db-content-without-heading)
                          (string/trim value)))
-          (save-block-aux! block value (:block/format block)))))))
+          (let [cur-pos (util/get-input-pos elem)]
+            (save-block-aux! block value (:block/format block))
+            ;; Restore the cursor after saving the block
+            (when (and elem cur-pos)
+              (util/set-caret-pos! elem cur-pos))))))))
 
 (defn on-up-down
   [state e up?]
