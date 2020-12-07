@@ -15,11 +15,6 @@
             [frontend.components.svg :as svg]
             [frontend.handler.project :as project-handler]))
 
-(defn update-state-and-notify
-  [page-name]
-  (page-handler/page-add-properties! page-name {:published false})
-  (notification/show! (util/format "Remove Page \"%s\" from Logseq server success" page-name) :success))
-
 
 (defn project
   [editor-state current-project pages]
@@ -125,13 +120,13 @@
                                  (fn [e]
                                    (util/stop e)
                                    (-> (p/let [_ (page-handler/delete-page-from-logseq current-project permalink)]
-                                         (update-state-and-notify page-name))
+                                         (page-handler/update-state-and-notify page-name))
                                        (p/catch
                                          (fn [error]
                                            (let [status (.-status error)
                                                  not-found-on-server 404]
                                              (if (= not-found-on-server status)
-                                               (update-state-and-notify page-name)
+                                               (page-handler/update-state-and-notify page-name)
                                                (let [message (util/format "Failed to remove the page \"%s\" from Logseq"
                                                                page-name)]
                                                  (notification/show! message :failed))))))))}
