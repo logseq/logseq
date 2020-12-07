@@ -38,7 +38,7 @@
                       (swap! state/state
                              update-in [:me :projects]
                              (fn [projects]
-                               (util/distinct-by :name (conj projects result))))
+                               (util/distinct-by :name (conj projects (:result result)))))
                       (ok-handler project)))
                   (fn [error]
                     (js/console.dir error)
