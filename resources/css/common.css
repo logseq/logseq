@@ -119,6 +119,10 @@ a svg {
   color: var(--ls-icon-color);
 }
 
+.reveal {
+  color: var(--ls-primary-text-color);
+}
+
 html, body, #root, #draw {
   /* height: 100%; */
 }
@@ -1324,24 +1328,6 @@ a.tag:hover {
 #mobile-editor-toolbar > button {
   padding: 5px;
 }
-
-// auto complete
-#ui__ac {
-  @apply py-1 rounded-md shadow-xs bg-base-3;
-}
-
-#ui__ac-inner {
-  max-height: 400px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  position: relative;
-  -webkit-overflow-scrolling: touch;
-
-  > .menu-link {
-    padding: 6px 0;
-  }
-}
-
 /* endregion */
 
 /* Hide scrollbar for IE, Edge and Firefox */

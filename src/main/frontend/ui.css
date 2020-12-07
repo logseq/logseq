@@ -1,0 +1,15 @@
+/* auto complete */
+#ui__ac {
+
+  &-inner {
+    max-height: 400px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+
+    > .menu-link {
+      padding: 6px 8px;
+    }
+  }
+}
