@@ -5,6 +5,15 @@
             [frontend.config :as config]
             [frontend.handler.notification :as notification]))
 
+(defn get-current-project
+  [current-repo projects]
+  (let [project (some (fn [p]
+                        (when (= (:repo p) current-repo)
+                          p))
+                  projects)
+        project-name (:name project)]
+    (when-not (string/blank? project-name) project-name)))
+
 ;; project exists and current user owns it
 ;; if project not exists, the server will create it
 (defn project-exists?
