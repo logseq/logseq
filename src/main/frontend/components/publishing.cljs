@@ -13,7 +13,8 @@
             [frontend.handler.notification :as notification]
             [clojure.string :as string]
             [frontend.ui :as ui]
-            [frontend.components.svg :as svg]))
+            [frontend.components.svg :as svg]
+            [frontend.handler.project :as project-handler]))
 
 (defn get-published-pages
   []
@@ -69,25 +70,17 @@
             (log/error :project/http-delete-failed error)
             (reject error)))))))
 
-(defn get-current-project
-  [current-repo projects]
-  (let [project (some (fn [p]
-                        (when (= (:repo p) current-repo)
-                          p))
-                  projects)
-        project-name (:name project)]
-    (when-not (string/blank? project-name) project-name)))
-
 (defn project
   [editor-state current-project pages]
   (if (= :display @editor-state)
-    [:div.cp__publishing-pj
-     [:span.cp__publishing-pj-name current-project]
-     [:span.cp__publishing-edit
-      {:on-click
-             (fn [_]
-               (reset! editor-state :editor))}
-      "edit"]]
+    (when current-project
+      [:div.cp__publishing-pj
+       [:span.cp__publishing-pj-name current-project]
+       [:span.cp__publishing-edit
+        {:on-click
+         (fn [_]
+           (reset! editor-state :editor))}
+        "edit"]])
     [:div.flex.cp__publishing_pj_edit
      [:input#cp__publishing-project-input
       {:placeholder current-project
@@ -146,7 +139,7 @@
         projects (state/sub [:me :projects])
         pages (get-published-pages)
         editor-state (get state ::project-state)
-        current-project (get-current-project current-repo projects)]
+        current-project (project-handler/get-current-project current-repo projects)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1
        [:h1.title (t :my-publishing)]
