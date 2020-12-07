@@ -106,13 +106,6 @@
 
        [:div.cp__publishing-pj-bt
         (ui/button
-          (t :publishing/cancel)
-          :on-click (fn [e]
-                      (util/stop e)
-                      (reset! editor-state :display))
-          :background "pink")]
-       [:div.cp__publishing-pj-bt
-        (ui/button
           (t :publishing/delete)
           :on-click (fn [e]
                       (util/stop e)
@@ -130,7 +123,14 @@
                                   (page-handler/page-add-properties! page-name {:published false})))
                               (state/remove-current-project)
                               (notification/show! "Delete project successful." :success))))))
-          :background "red")]])))
+          :background "pink")]
+
+       [:div.cp__publishing-pj-bt
+        (ui/button
+          (t :publishing/cancel)
+          :on-click (fn [e]
+                      (util/stop e)
+                      (reset! editor-state :display)))]])))
 
 (rum/defcs my-publishing
   < rum/reactive db-mixins/query
