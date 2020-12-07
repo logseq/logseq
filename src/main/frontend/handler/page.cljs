@@ -21,7 +21,7 @@
             [frontend.git :as git]
             [frontend.fs :as fs]
             [promesa.core :as p]
-            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [frontend.format.mldoc :as mldoc]))
 
 (defn- get-directory
@@ -423,3 +423,15 @@
 (defn init-commands!
   []
   (commands/init-commands! get-page-ref-text))
+
+(defn delete-page-from-logseq
+  [project permalink]
+  (let [url (util/format "%s%s/%s" config/api project permalink)]
+    (js/Promise.
+      (fn [resolve reject]
+        (util/delete url
+          (fn [result]
+            (resolve result))
+          (fn [error]
+            (log/error :page/http-delete-failed error)
+            (reject error)))))))

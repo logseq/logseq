@@ -786,15 +786,14 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when (get-conn repo)
-      (->> (q repo [:page/published] {}
+      (->> (q repo [:page/published] {:use-cache? false}
              '[:find (pull ?page [*])
                :in $
                :where
                [?page :page/properties ?properties]
                [(get ?properties :published) ?publish]
                [(= "true" ?publish)]])
-        react
-        first))))
+        react))))
 
 (defn get-files
   [repo]

@@ -84,6 +84,20 @@
             {:title (t :my-publishing)
              :options {:href (rfe/href :my-publishing)}})
 
+          (when-let [project (and current-repo
+                                  (project-handler/get-current-project current-repo projects))]
+            (let [link (str config/website "/" project)]
+              {:title (str (t :go-to) "/" project)
+               :options {:href link
+                         :target "_blank"}
+               :icon svg/external-link}))
+
+          (when (and logged? current-repo)
+            {:title (t :export)
+             :options {:on-click (fn []
+                                   (export/export-repo-as-html! current-repo))}
+             :icon nil})
+
           {:title (t :settings)
            :options {:href (rfe/href :settings)}
            :icon svg/settings-sm}
@@ -148,14 +162,6 @@
 
        [:div.repos.hidden.md:block
         (repo/repos-dropdown true)]
-
-       (let [projects (state/sub [:me :projects])]
-         (when-let [project (project-handler/get-current-project current-repo projects)]
-           [:a.opacity-70.hover:opacity-100.ml-4
-            {:title (str (t :go-to) "/" project)
-             :href (str config/website "/" project)
-             :target "_blank"}
-            svg/external-link]))
 
        (when (and (nfs/supported?) (empty? repos))
          (ui/tooltip
