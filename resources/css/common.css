@@ -119,10 +119,6 @@ a svg {
   color: var(--ls-icon-color);
 }
 
-.reveal {
-  color: var(--ls-primary-text-color);
-}
-
 html, body, #root, #draw {
   /* height: 100%; */
 }
