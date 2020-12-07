@@ -209,6 +209,9 @@
    text])
 
 ;; scroll
+(defn get-doc-scroll-top []
+  (.-scrollTop js/document.documentElement))
+
 (defn main-node
   []
   (gdom/getElement "main-content"))
@@ -268,7 +271,7 @@
 ;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
   [on-load on-top-reached]
-  (let [node (main-node)
+  (let [node js/document.documentElement
         full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
@@ -286,7 +289,7 @@
         debounced-on-scroll (util/debounce 500 #(on-scroll
                                                  (:on-load opts) ; bottom reached
                                                  (:on-top-reached opts)))]
-    (mixins/listen state (main-node) :scroll debounced-on-scroll)))
+    (mixins/listen state js/document :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)

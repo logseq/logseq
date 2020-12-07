@@ -52,6 +52,7 @@
 .cp__sidebar-main-content {
   padding: 3rem 1.5rem;
   max-width: var(--ls-main-content-max-with);
+  min-height: 100vh;
   flex: 1;
 }
 
@@ -79,6 +80,10 @@
   box-sizing: border-box;
   background-color: var(--ls-secondary-background-color, #d8e1e8);
   padding-bottom: 48px;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 
   &-inner {
     padding: 15px;
