@@ -72,64 +72,66 @@
 
 (defn project
   [editor-state current-project pages]
-  (if (= :display @editor-state)
-    (when current-project
-      [:div.cp__publishing-pj
-       [:span.cp__publishing-pj-name current-project]
-       [:span.cp__publishing-edit
-        {:on-click
-         (fn [_]
-           (reset! editor-state :editor))}
-        "edit"]])
-    [:div.flex.cp__publishing_pj_edit
-     [:input#cp__publishing-project-input
-      {:placeholder current-project
-       :default-value current-project}]
-     [:div.cp__publishing-pj-bt
-      (ui/button
-        "Save"
-        :on-click (fn [e]
-                    (util/stop e)
-                    (let [editor (.getElementById js/document "cp__publishing-project-input")
-                          v (.-value editor)
-                          data {:name v}]
-                      (-> (p/let [result (update-project current-project data)]
-                            (when (:result result)
-                              (state/update-current-project :name v)
-                              (notification/show! "Updated project name successfully." :success)
-                              (reset! editor-state :display)))
-                          (p/catch
-                            (fn [error]
-                              (notification/show! "Failed to updated project name." :failed))))))
-        :background "green")]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (if (= :display @editor-state)
+      (when current-project
+        (do (prn "abc" current-project)
+            [:div.cp__publishing-pj
+             [:span.cp__publishing-pj-name current-project]
+             [:span.cp__publishing-edit
+              {:on-click
+               (fn [_]
+                 (reset! editor-state :editor))}
+              (t :publishing/edit)]]))
+      [:div.flex.cp__publishing_pj_edit
+       [:input#cp__publishing-project-input
+        {:placeholder current-project
+         :default-value current-project}]
+       [:div.cp__publishing-pj-bt
+        (ui/button
+          (t :publishing/save)
+          :on-click (fn [e]
+                      (util/stop e)
+                      (let [editor (.getElementById js/document "cp__publishing-project-input")
+                            v (.-value editor)
+                            data {:name v}]
+                        (-> (p/let [result (update-project current-project data)]
+                              (when (:result result)
+                                (state/update-current-project :name v)
+                                (notification/show! "Updated project name successfully." :success)
+                                (reset! editor-state :display)))
+                            (p/catch
+                              (fn [error]
+                                (notification/show! "Failed to updated project name." :failed))))))
+          :background "green")]
 
-     [:div.cp__publishing-pj-bt
-      (ui/button
-        "Cancel"
-        :on-click (fn [e]
-                    (util/stop e)
-                    (reset! editor-state :display))
-        :background "pink")]
-     [:div.cp__publishing-pj-bt
-      (ui/button
-        "Delete"
-        :on-click (fn [e]
-                    (util/stop e)
-                    (let [confirm-message
-                          (util/format
-                            "This operation will also delete all publishing under project \"%s\", continue?"
-                            current-project)]
-                      (when (.confirm js/window confirm-message)
-                        (p/let [result (delete-project current-project)]
-                          (when (:result result)
-                            (reset! editor-state :display)
-                            (doseq [page pages]
-                              (let [page (first page)
-                                    page-name (:page/name page)]
-                                (page-handler/page-add-properties! page-name {:published false})))
-                            (state/remove-current-project)
-                            (notification/show! "Delete project successful." :success))))))
-        :background "red")]]))
+       [:div.cp__publishing-pj-bt
+        (ui/button
+          (t :publishing/cancel)
+          :on-click (fn [e]
+                      (util/stop e)
+                      (reset! editor-state :display))
+          :background "pink")]
+       [:div.cp__publishing-pj-bt
+        (ui/button
+          (t :publishing/delete)
+          :on-click (fn [e]
+                      (util/stop e)
+                      (let [confirm-message
+                            (util/format
+                              "This operation will also delete all publishing under project \"%s\", continue?"
+                              current-project)]
+                        (when (.confirm js/window confirm-message)
+                          (p/let [result (delete-project current-project)]
+                            (when (:result result)
+                              (reset! editor-state :display)
+                              (doseq [page pages]
+                                (let [page (first page)
+                                      page-name (:page/name page)]
+                                  (page-handler/page-add-properties! page-name {:published false})))
+                              (state/remove-current-project)
+                              (notification/show! "Delete project successful." :success))))))
+          :background "red")]])))
 
 (rum/defcs my-publishing
   < rum/reactive db-mixins/query
@@ -144,16 +146,16 @@
       [:div.flex-1
        [:h1.title (t :my-publishing)]
        [:div#cp__publishing-pj-ct
-        [:span "Current Project"]
+        [:span (t :publishing/current-project)]
         (project editor-state current-project pages)]
        (when current-repo
          [:div#cp__publishing-pg-ct
-          [:div "Pages"]
+          [:div (t :publishing/pages)]
           [:table.table-auto
                 [:thead
                  [:tr
-                  [:th (t :page/name)]
-                  [:th "Delete from Logseq server"]]]
+                  [:th (t :publishing/page-name)]
+                  [:th (t :publishing/delete-from-logseq)]]]
                 [:tbody
                  (for [page pages]
                    (let [page (first page)
@@ -183,6 +185,6 @@
                                                (let [message (util/format "Remove Page \"%s\" from Logseq server failed."
                                                                page-name)]
                                                  (notification/show! message :failed))))))))}
-                             "delete"]]]]))]]])])))
+                             (t :publishing/delete)]]]]))]]])])))
 
 
