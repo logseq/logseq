@@ -75,14 +75,13 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     (if (= :display @editor-state)
       (when current-project
-        (do (prn "abc" current-project)
-            [:div.cp__publishing-pj
-             [:span.cp__publishing-pj-name current-project]
-             [:span.cp__publishing-edit
-              {:on-click
-               (fn [_]
-                 (reset! editor-state :editor))}
-              (t :publishing/edit)]]))
+        [:div.cp__publishing-pj
+         [:span.cp__publishing-pj-name current-project]
+         [:span.cp__publishing-edit
+          {:on-click
+           (fn [_]
+             (reset! editor-state :editor))}
+          (t :publishing/edit)]])
       [:div.flex.cp__publishing_pj_edit
        [:input#cp__publishing-project-input
         {:placeholder current-project
