@@ -30,12 +30,17 @@
 
 
 (defn re-render-root!
-  []
-  (when-let [component (state/get-root-component)]
-    (db/clear-query-state-without-refs-and-embeds!)
-    (rum/request-render component)
-    (doseq [component (state/get-custom-query-components)]
-      (rum/request-render component))))
+  ([]
+   (re-render-root! {}))
+  ([{:keys [clear-all-query-state?]
+     :or {clear-all-query-state? false}}]
+   (when-let [component (state/get-root-component)]
+     (if clear-all-query-state?
+       (db/clear-query-state!)
+       (db/clear-query-state-without-refs-and-embeds!))
+     (rum/request-render component)
+     (doseq [component (state/get-custom-query-components)]
+       (rum/request-render component)))))
 
 (defn re-render-file!
   []
@@ -65,8 +70,7 @@
 (defn scroll-and-highlight!
   [state]
   (if-let [fragment (util/get-fragment)]
-    (highlight-element! fragment)
-    (util/scroll-to-top))
+    (highlight-element! fragment))
   state)
 
 (defn add-style-if-exists!

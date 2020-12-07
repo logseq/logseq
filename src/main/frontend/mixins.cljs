@@ -61,16 +61,16 @@
                  ;; If the click target is outside of current node
                   (when-not (dom/contains dom-node (.. e -target))
                     (on-hide state e :click))))
-        (when visibilitychange?
-          (listen state js/window "visibilitychange"
-                  (fn [e]
-                    (on-hide state e :visibilitychange))))
-        (listen state dom-node "keydown"
+        (listen state js/window "keydown"
                 (fn [e]
                   (case (.-keyCode e)
                     ;; Esc
                     27 (on-hide state e :esc)
-                    nil)))))
+                    nil)))
+        (when visibilitychange?
+          (listen state js/window "visibilitychange"
+                  (fn [e]
+                    (on-hide state e :visibilitychange))))))
     (catch js/Error e
       ;; TODO: Unable to find node on an unmounted component.
       nil)))
@@ -130,11 +130,7 @@
      :did-remount (fn [old-state new-state]
                     (detach old-state)
                     (attach-listeners new-state)
-                    new-state)
-     ;; :will-unmount (fn [state]
-     ;;                 (detach state)
-     ;;                 state)
-})))
+                    new-state)})))
 
 (defn modal
   [k]

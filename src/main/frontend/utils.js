@@ -74,7 +74,83 @@ export var getSelectionText = function () {
     }
   }
 
-  return ''
+  return '';
+}
+
+// Modified from https://github.com/GoogleChromeLabs/browser-nativefs
+// because shadow-cljs doesn't handle this babel transform
+export var getFiles = async function (dirHandle, recursive, cb, path = dirHandle.name) {
+  const dirs = [];
+  const files = [];
+  for await (const entry of dirHandle.values()) {
+    const nestedPath = `${path}/${entry.name}`;
+    if (entry.kind === 'file') {
+      cb(nestedPath, entry);
+      files.push(
+        entry.getFile().then((file) => {
+          Object.defineProperty(file, 'webkitRelativePath', {
+            configurable: true,
+            enumerable: true,
+            get: () => nestedPath,
+          });
+          Object.defineProperty(file, 'handle', {
+            configurable: true,
+            enumerable: true,
+            get: () => entry,
+          });
+          return file;
+        }
+        )
+      );
+    } else if (entry.kind === 'directory' && recursive) {
+      cb(nestedPath, entry);
+      dirs.push(getFiles(entry, recursive, cb, nestedPath));
+    }
+  }
+
+  return [(await Promise.all(dirs)), (await Promise.all(files))];
+};
+
+export var verifyPermission = async function (handle, readWrite) {
+  const options = {};
+  if (readWrite) {
+    options.mode = 'readwrite';
+  }
+  // Check if permission was already granted. If so, return true.
+  if ((await handle.queryPermission(options)) === 'granted') {
+    return true;
+  }
+  // Request permission. If the user grants permission, return true.
+  if ((await handle.requestPermission(options)) === 'granted') {
+    return true;
+  }
+  // The user didn't grant permission, so return false.
+  return false;
+}
+
+export var openDirectory = async function (options = {}, cb) {
+  options.recursive = options.recursive || false;
+  const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  const _ask = await verifyPermission(handle, true);
+  return [handle, getFiles(handle, options.recursive, cb)];
+};
+
+export var writeFile = async function (fileHandle, contents) {
+  // Create a FileSystemWritableFileStream to write to.
+  const writable = await fileHandle.createWritable();
+  // Write the contents of the file to the stream.
+  await writable.write(contents);
+  // Close the file and write the contents to disk.
+  await writable.close();
+};
+
+export var nfsSupported = function () {
+  if ('chooseFileSystemEntries' in self) {
+    return 'chooseFileSystemEntries';
+  } else if ('showOpenFilePicker' in self) {
+    return 'showOpenFilePicker';
+  }
+  return false;
 }
 
 const inputTypes = [

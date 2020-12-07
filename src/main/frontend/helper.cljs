@@ -16,15 +16,15 @@
     (when (or (seq repos)
               (seq installation-ids))
       (util/post (str config/api "refresh_github_token")
-        {:installation-ids installation-ids
-         :repos repos}
-        (fn [result]
-          (state/set-github-installation-tokens! result)
-          (when ok-handler (ok-handler)))
-        (fn [error]
-          (log/error :token/http-request-failed error)
-          (js/console.dir error)
-          (when error-handler (error-handler)))))))
+                 {:installation-ids installation-ids
+                  :repos repos}
+                 (fn [result]
+                   (state/set-github-installation-tokens! result)
+                   (when ok-handler (ok-handler)))
+                 (fn [error]
+                   (log/error :token/http-request-failed error)
+                   (js/console.dir error)
+                   (when error-handler (error-handler)))))))
 
 (defn- get-github-token*
   [repo]
@@ -47,20 +47,19 @@
   ([]
    (get-github-token  (state/get-current-repo)))
   ([repo]
-   (js/Promise.
-     (fn [resolve reject]
-       (let [{:keys [expired? token exist?]} (get-github-token* repo)
-             valid-token? (and exist? (not expired?))]
-        (if valid-token?
-          (resolve token)
-          (request-app-tokens!
-            (fn []
-              (let [{:keys [expired? token exist?] :as token-m} (get-github-token* repo)
-                    valid-token? (and exist? (not expired?))]
-                (if valid-token?
-                  (resolve token)
-                  (do (log/error :token/failed-get-token token-m)
-                      (reject)))))
-            nil)))))))
-
-
+   (when-not (config/local-db? repo)
+     (js/Promise.
+      (fn [resolve reject]
+        (let [{:keys [expired? token exist?]} (get-github-token* repo)
+              valid-token? (and exist? (not expired?))]
+          (if valid-token?
+            (resolve token)
+            (request-app-tokens!
+             (fn []
+               (let [{:keys [expired? token exist?] :as token-m} (get-github-token* repo)
+                     valid-token? (and exist? (not expired?))]
+                 (if valid-token?
+                   (resolve token)
+                   (do (log/error :token/failed-get-token token-m)
+                       (reject)))))
+             nil))))))))

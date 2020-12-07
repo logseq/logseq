@@ -698,6 +698,10 @@
                           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
                       (state/set-edit-content! id value)
                       (state/set-edit-pos! current-pos)
+                      (when-let [repo (or (:block/repo block)
+                                          (state/get-current-repo))]
+                        (state/set-editor-last-input-time! repo (util/time-ms))
+                        (db/clear-repo-persistent-job! repo))
                       (let [input (gdom/getElement id)
                             native-e (gobj/get e "nativeEvent")
                             last-input-char (util/nth-safe value (dec current-pos))]

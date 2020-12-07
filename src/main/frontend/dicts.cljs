@@ -67,13 +67,13 @@ title: How to take dummy notes?
 
 ## Hello, I'm a block!
 :PROPERTIES:
-:custom_id: 5f713e91-8a3c-4b04-a33a-c39482428e2d
+:id: 5f713e91-8a3c-4b04-a33a-c39482428e2d
 :END:
 ### I'm a child block!
 ### I'm another child block!
 ## Hey, I'm another block!
 :PROPERTIES:
-:custom_id: 5f713ea8-8cba-403d-ac00-9964b1ec7190
+:id: 5f713ea8-8cba-403d-ac00-9964b1ec7190
 :END:
 "
         :on-boarding/title "Hi, welcome to Logseq!"
@@ -301,7 +301,9 @@ title: How to take dummy notes?
         :new-file "New file"
         :graph "Graph"
         :publishing "Publishing"
+        :export "Export public pages"
         :all-repos "All repos"
+        :all-graphs "All graphs"
         :all-pages "All pages"
         :all-files "All files"
         :all-journals "All journals"
@@ -316,7 +318,6 @@ title: How to take dummy notes?
         :parsing-files "Parsing files"
         :loading-files "Loading files"
         :login-github "Login with Github"
-        :excalidraw-title "Draw with Excalidraw"
         :go-to "Go to "
         :or "or"
         :download "Download"
@@ -324,7 +325,9 @@ title: How to take dummy notes?
         :language "Language"
         :white "Light"
         :dark "Dark"
-        :remove-background "Remove background"}
+        :remove-background "Remove background"
+        :open "Open"
+        :open-a-directory "Open a local directory"}
 
    :fr {:help/about "A propos de Logseq"
         :help/bug "Signaler une anomalie"
@@ -517,7 +520,6 @@ title: How to take dummy notes?
         :parsing-files "Analyse des fichiers"
         :loading-files "Chargement des fichiers"
         :login-github "S'authentifier avec Github"
-        :excalidraw-title "Dessiner avec Excalidraw"
         :go-to "Aller à "
         :or "ou"
         :download "Télécharger"
@@ -749,7 +751,9 @@ title: How to take dummy notes?
            :new-page "新页面"
            :new-file "新文件"
            :graph "图谱"
-           :publishing "发布/下载 HTML 文件"
+           :publishing "发布"
+           :export "导出公开页面"
+           :all-graphs "所有库"
            :all-repos "所有库"
            :all-pages "所有页面"
            :all-files "所有文件"
@@ -764,7 +768,6 @@ title: How to take dummy notes?
            :parsing-files "正在解析文件"
            :loading-files "正在加载文件"
            :login-github "用 Github 登录"
-           :excalidraw-title "用 Excalidraw 画图"
            :go-to "转到"
            :or "或"
            :download "下载"
@@ -772,7 +775,9 @@ title: How to take dummy notes?
            :language "语言"
            :white "亮色"
            :dark "暗黑"
-           :remove-background "去除背景"}
+           :remove-background "去除背景"
+           :open "打开"
+           :open-a-directory "打开本地文件夹"}
 
    :zh-Hant {:on-boarding/title "你好，歡迎使用 Logseq！"
              :on-boarding/sharing "分享"
@@ -1008,7 +1013,6 @@ title: How to take dummy notes?
              :parsing-files "正在解析文件"
              :loading-files "正在加載文件"
              :login-github "用 Github 登錄"
-             :excalidraw-title "用 Excalidraw 畫圖"
              :go-to "轉到"
              :or "或"
              :download "下載"
@@ -1246,7 +1250,6 @@ title: How to take dummy notes?
         :parsing-files "Lêer ontleding"
         :loading-files "Laai lêers"
         :login-github "Aantekening deur Github"
-        :excalidraw-title "Teken met Excalidraw"
         :go-to "Gaan na "
         :or "of"
         :download "Laai af"

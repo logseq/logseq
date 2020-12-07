@@ -18,14 +18,21 @@
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 
-(rum/defc ls-textarea [{:keys [on-change] :as -props}]
-  (let [composition? (atom false)
+(rum/defc ls-textarea < rum/reactive
+  [{:keys [on-change] :as props}]
+  (let [skip-composition? (or
+                           (state/sub :editor/show-page-search?)
+                           (state/sub :editor/show-block-search?)
+                           (state/sub :editor/show-template-search?))
+        composition? (atom false)
         set-composition? #(reset! composition? %)
         on-composition (fn [e]
-                         (case e.type
-                           "compositionend" (do (set-composition? false) (on-change e))
-                           (set-composition? true)))
-        props (assoc -props
+                         (if skip-composition?
+                           (on-change e)
+                           (case e.type
+                             "compositionend" (do (set-composition? false) (on-change e))
+                             (set-composition? true))))
+        props (assoc props
                      :on-change (fn [e] (when-not @composition?
                                           (on-change e)))
                      :on-composition-start on-composition
@@ -377,11 +384,16 @@
       :aria-hidden "true"}]]])
 
 (defn tooltip
-  [label children]
-  [:div.Tooltip {:style {:display "inline"}}
-   [:div {:class "Tooltip__label"}
-    label]
-   children])
+  ([label children]
+   (tooltip label children {}))
+  ([label children {:keys [label-style]}]
+   [:div.Tooltip {:style {:display "inline"}}
+    [:div (cond->
+            {:class "Tooltip__label"}
+            label-style
+            (assoc :style label-style))
+     label]
+    children]))
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
