@@ -59,18 +59,22 @@
             {:title (t :graph)
              :options {:href (rfe/href :graph)}
              :icon svg/graph-sm})
+
           (when (or logged? (and (nfs/supported?) current-repo))
             {:title (t :all-graphs)
              :options {:href (rfe/href :repos)}
              :icon svg/repos-sm})
+
           (when current-repo
             {:title (t :all-pages)
              :options {:href (rfe/href :all-pages)}
              :icon svg/pages-sm})
+
           (when current-repo
             {:title (t :all-files)
              :options {:href (rfe/href :all-files)}
              :icon svg/folder-sm})
+
           (when (and default-home current-repo)
             {:title (t :all-journals)
              :options {:href (rfe/href :all-journals)}
@@ -80,21 +84,10 @@
             {:title (t :my-publishing)
              :options {:href (rfe/href :my-publishing)}})
 
-          (when current-repo
-            {:title (t :my-publishing)
-             :options {:href (rfe/href :my-publishing)}})
-          {:title (t :excalidraw-title)
-           :options {:href (rfe/href :draw)}
-           :icon (svg/excalidraw-logo)}
           {:title (t :settings)
            :options {:href (rfe/href :settings)}
            :icon svg/settings-sm}
-          (when-let [project (and current-repo (state/get-current-project))]
-            (let [link (str config/website "/" project)]
-              {:title (str (t :go-to) "/" project)
-               :options {:href link
-                         :target "_blank"}
-               :icon svg/external-link}))
+          
           (when (and logged? current-repo)
             {:title (t :export)
              :options {:on-click (fn []
