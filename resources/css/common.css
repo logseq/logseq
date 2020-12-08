@@ -1339,9 +1339,9 @@ a.tag:hover {
   border-radius: var(--border-radius-low);
 }
 
-#right-sidebar .bg-base-2 {
+/* #right-sidebar .bg-base-2 {
   background-color: var(--ls-tertiary-background-color);
-}
+} */
 
 .white-theme a.right-sidebar-button {
   color: var(--ls-link-text-color);
