@@ -92,12 +92,6 @@
                          :target "_blank"}
                :icon svg/external-link}))
 
-          (when (and logged? current-repo)
-            {:title (t :export)
-             :options {:on-click (fn []
-                                   (export/export-repo-as-html! current-repo))}
-             :icon nil})
-
           {:title (t :settings)
            :options {:href (rfe/href :settings)}
            :icon svg/settings-sm}
