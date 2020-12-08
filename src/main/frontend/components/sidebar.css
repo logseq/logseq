@@ -74,7 +74,8 @@
   width: 0;
   opacity: 0.5;
   height: calc(100vh - 3rem);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   z-index: 9;
   transition: width 0.3s, opacity 0.2s;
 
