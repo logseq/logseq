@@ -946,9 +946,7 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (str (string/lower-case marker)
-                         ; " flex flex-row items-center"
-                         )})
+            {:class (str (string/lower-case marker))})
           (when bg-color
             {:style {:background-color bg-color
                      :padding-left 6
