@@ -282,6 +282,10 @@
   [html-export? s config label]
   (let [contents-page? (= "contents" (string/lower-case (str (:id config))))]
     [:span.page-reference
+     (when (and (not html-export?)
+                (not (= (:id config) "contents"))
+                (not (= (:id config) "Contents")))
+       [:span.text-gray-500 "[["])
      (if (string/ends-with? s ".excalidraw")
        [:a.page-ref
         {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
@@ -292,7 +296,11 @@
          (string/capitalize (draw/get-file-title s))]]
        (page-cp (assoc config
                        :label (mldoc/plain->text label)
-                       :contents-page? contents-page?) {:page/name s}))]))
+                       :contents-page? contents-page?) {:page/name s}))
+     (when (and (not html-export?)
+                (not (= (:id config) "contents"))
+                (not (= (:id config) "Contents")))
+       [:span.text-gray-500 "]]"])]))
 
 (defn- latex-environment-content
   [name option content]
@@ -308,7 +316,7 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.embed-block.bg-base-2 {:style {:z-index 2}}
+    [:div.embed.embed-block.bg-base-2 {:style {:z-index 2}}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
@@ -319,9 +327,9 @@
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
-    [:div.embed-page.py-2.my-2.px-3.bg-base-2
+    [:div.embed.embed-page.py-2.my-2.px-3.bg-base-2
      [:div.flex.items-center.py-1
-      [:div.mr-4 svg/page]
+      [:div.mr-2 svg/page]
       (page-cp config {:page/name page-name})]
      (when (and
             (not= (string/lower-case (or current-page ""))
@@ -359,6 +367,7 @@
                      (db/pull-block (uuid id)))]
       (if block
         [:span
+         [:span.text-gray-500 "(("]
          [:a {:href (rfe/href :page {:name id})
               :on-click (fn [e]
                           (util/stop e)
@@ -371,7 +380,8 @@
 
           (->elem
            :span.block-ref
-           (map-inline config (:block/title block)))]]
+           (map-inline config (:block/title block)))]
+         [:span.text-gray-500 "))"]]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
@@ -936,8 +946,9 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (str (string/lower-case marker) " "
-                         "flex flex-row items-center")})
+            {:class (str (string/lower-case marker)
+                         ; " flex flex-row items-center"
+                         )})
           (when bg-color
             {:style {:background-color bg-color
                      :padding-left 6
@@ -1314,7 +1325,7 @@
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.pt-1
+    [:div.ls-block.flex.flex-col.mt-1
      (cond->
       {:id block-id
        :style {:position "relative"}

@@ -13,3 +13,141 @@
 .block-content img {
   width: 100%;
 }
+
+/* copied from https://github.com/drdogbot7/tailwindcss-responsive-embed */
+.embed-responsive {
+  position: relative;
+  display: block;
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+
+  .embed-responsive-item,
+  iframe,
+  embed,
+  object,
+  video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100%;
+    width: 100%;
+    border: 0;
+  }
+
+}
+
+.embed {
+  border-radius: var(--border-radius-low);
+}
+
+.embed-page, .embed-block {
+  
+}
+
+.dark-theme {
+  --embed-level-1: var(--ls-secondary-background-color); 
+  --embed-level-2: var(--ls-tertiary-background-color);
+  --embed-level-3: var(--ls-quaternary-background-color);
+  --embed-level-4: #195D6C;
+  --embed-level-5: #266C7D;
+  --embed-level-6: #3A7E8E;
+}
+
+.white-theme {
+  --embed-level-1: var(--ls-secondary-background-color); 
+  --embed-level-2: var(--ls-tertiary-background-color);
+  --embed-level-3: var(--ls-quaternary-background-color);
+  --embed-level-4: #b7d7c9;
+  --embed-level-5: #a5cdbc;
+  --embed-level-6: #92c2af;
+}
+
+.embed {
+  background-color: var(--embed-level-1);
+}
+.embed .embed {
+  background-color: var(--embed-level-2);
+}
+.embed .embed .embed {
+  background-color: var(--embed-level-3);
+}
+.embed .embed .embed .embed {
+  background-color: var(--embed-level-4);
+}
+.embed .embed .embed .embed .embed {
+  background-color: var(--embed-level-5);
+}
+.embed .embed .embed .embed .embed .embed{
+  background-color: var(--embed-level-3);
+}
+.embed .embed .embed .embed .embed .embed .embed {
+  background-color: var(--embed-level-4);
+}
+.embed .embed .embed .embed .embed .embed .embed .embed {
+  background-color: var(--embed-level-5);
+}
+.embed .embed .embed .embed .embed .embed .embed .embed .embed {
+  background-color: var(--embed-level-3);
+}
+.embed .embed .embed .embed .embed .embed .embed .embed .embed .embed {
+  background-color: var(--embed-level-4);
+}
+.embed .embed .embed .embed .embed .embed .embed .embed .embed .embed .embed {
+  background-color: var(--embed-level-5);
+}
+.embed .embed .embed .embed .embed .embed .embed .embed .embed .embed .embed .embed {
+  background-color: var(--embed-level-3);
+}
+
+.ls-block {
+  min-height: 24px;
+}
+
+.ls-block, .foldable-title {
+  max-width: 700px;
+}
+
+.ls-block, .editor-wrapper {
+margin-right: auto;
+margin-left: auto;
+}
+
+.ls-block img {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .1), 0 10px 10px -5px rgba(0, 0, 0, .04);
+}
+
+
+.ls-block h1 {
+  font-size: 2em;
+  margin: .67em 0
+}
+
+.ls-block h2 {
+  font-size: 1.5em;
+  margin: .75em 0
+}
+
+.ls-block h3 {
+  font-size: 1.17em;
+  margin: .83em 0
+}
+
+.ls-block h4 {
+  margin: 1.12em 0
+}
+
+.ls-block h5 {
+  font-size: .83em;
+  margin: 1.5em 0
+}
+
+.ls-block h6 {
+  font-size: .75em;
+  margin: 1.67em 0
+}
+
+.ls-block h1, .ls-block h2, .ls-block h3, .ls-block h4, .ls-block h5, .ls-block h6 {
+  font-weight: 600
+}
