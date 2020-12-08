@@ -71,14 +71,17 @@
   ([repo-url project-changed-check?]
    (restore-config! repo-url nil project-changed-check?))
   ([repo-url config-content project-changed-check?]
-   (let [old-project (:project (state/get-config))
-         new-config (db/reset-config! repo-url config-content)]
-     (when (and (not (config/local-db? repo-url))
-                project-changed-check?)
-       (let [new-project (:project new-config)
-             project-name (:name old-project)]
-         (when-not (= new-project old-project)
-           (project-handler/sync-project-settings! project-name new-project)))))))
+   (let [config-content (if config-content config-content
+                            (db/get-config repo-url))]
+     (when config-content
+       (let [old-project (:project (state/get-config))
+             new-config (db/reset-config! repo-url config-content)]
+         (when (and (not (config/local-db? repo-url))
+                    project-changed-check?)
+           (let [new-project (:project new-config)
+                 project-name (:name old-project)]
+             (when-not (= new-project old-project)
+               (project-handler/sync-project-settings! project-name new-project)))))))))
 
 (defn load-files
   [repo-url]

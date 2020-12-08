@@ -149,7 +149,8 @@
   (create-custom-theme repo-url))
 
 (defn- parse-files-and-load-to-db!
-  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts}]
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
+                   :or {re-render? true}}]
   (state/set-loading-files! false)
   (state/set-importing-to-db! true)
   (let [file-paths (map :file/path files)
@@ -550,16 +551,16 @@
                    500)))
 
 (defn rebuild-index!
-  [{:keys [id url] :as repo}]
-  (spec/validate :repos/repo repo)
-  (db/remove-conn! url)
-  (db/clear-query-state!)
-  (-> (p/do! (db/remove-db! url)
-             (db/remove-files-db! url)
-             (fs/rmdir (util/get-repo-dir url))
-             (clone-and-load-db url))
-      (p/catch (fn [error]
-                 (prn "Delete repo failed, error: " error)))))
+  [url]
+  (when url
+    (db/remove-conn! url)
+    (db/clear-query-state!)
+    (-> (p/do! (db/remove-db! url)
+               (db/remove-files-db! url)
+               (fs/rmdir (util/get-repo-dir url))
+               (clone-and-load-db url))
+        (p/catch (fn [error]
+                   (prn "Delete repo failed, error: " error))))))
 
 (defn git-commit-and-push!
   [commit-message]
