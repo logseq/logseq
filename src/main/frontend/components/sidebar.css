@@ -71,11 +71,12 @@
   position: fixed;
   top: 3rem;
   right: 0;
-  width: 40%;
+  width: 0;
+  opacity: 0.5;
   height: calc(100vh - 3rem);
-  overflow: auto;
-  display: none;
+  overflow: hidden;
   z-index: 9;
+  transition: width 0.3s, opacity 0.2s;
 
   box-sizing: border-box;
   background-color: var(--ls-secondary-background-color, #d8e1e8);
@@ -104,11 +105,8 @@
 
   &.is-open {
     display: block;
-  }
-
-  &.enter {
+    width: 40%;
     opacity: 1;
-    right: 0;
   }
 
   .page {
