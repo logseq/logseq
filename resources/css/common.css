@@ -32,6 +32,7 @@ html[data-theme=dark] {
   --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
   --ls-tag-text-color: var(--ls-link-text-color);
   --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
+  --ls-slide-background-color: var(--ls-primary-background-color);
   --ls-block-bullet-border-color: #0f4958;
   --ls-block-bullet-color: #608e91;
   --ls-block-highlight-color: #074758;
@@ -72,6 +73,7 @@ html[data-theme=light] {
   --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
   --ls-tag-text-color: var(--ls-link-text-color);
   --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
+  --ls-slide-background-color: #002b36;
   --ls-block-bullet-border-color: #ced9e0;
   --ls-block-bullet-color: #394b59;
   --ls-block-highlight-color: #7cccff;
@@ -1325,4 +1327,16 @@ a.tag:hover {
 
 .right {
   float: right;
+}
+
+.reveal {
+  background: var(--ls-slide-background-color);
+}
+
+#right-sidebar .reveal pre.code {
+  background: transparent;
+}
+
+.reveal .hljs {
+  background: none;
 }
