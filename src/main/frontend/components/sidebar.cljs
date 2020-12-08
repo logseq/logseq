@@ -1,6 +1,7 @@
 (ns frontend.components.sidebar
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
+            [frontend.components.theme :as theme]
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [frontend.db :as db]
@@ -309,45 +310,49 @@
         home? (= :home route-name)
         default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div {:class (if white? "white-theme" "dark-theme")
-             :on-click editor-handler/unhighlight-block!}
-       (sidebar-mobile-sidebar {:open? open?
-                                :close-fn close-fn
-                                :route-match route-match})
+      (theme/container
+       {:theme theme
+        :on-click editor-handler/unhighlight-block!}
 
-       [:div.#app-container.cp__sidebar-layout
-        {:class (if sidebar-open? "is-right-sidebar-open")}
-        (header/header {:open-fn open-fn
-                        :white? white?
-                        :current-repo current-repo
-                        :logged? logged?
-                        :page? page?
-                        :route-match route-match
-                        :me me
-                        :default-home default-home
-                        :new-block-mode new-block-mode})
+       [:div.theme-inner
+        (sidebar-mobile-sidebar
+         {:open?       open?
+          :close-fn    close-fn
+          :route-match route-match})
+        [:div.#app-container.cp__sidebar-layout
+         {:class (if sidebar-open? "is-right-sidebar-open")}
+         (header/header {:open-fn        open-fn
+                         :white?         white?
+                         :current-repo   current-repo
+                         :logged?        logged?
+                         :page?          page?
+                         :route-match    route-match
+                         :me             me
+                         :default-home   default-home
+                         :new-block-mode new-block-mode})
 
-        (sidebar-main {:route-match route-match
-                       :global-graph-pages? global-graph-pages?
-                       :logged? logged?
-                       :home? home?
-                       :route-name route-name
-                       :indexeddb-support? indexeddb-support?
-                       :white? white?
-                       :db-restoring? db-restoring?
-                       :main-content main-content})]
+         (sidebar-main {:route-match         route-match
+                        :global-graph-pages? global-graph-pages?
+                        :logged?             logged?
+                        :home?               home?
+                        :route-name          route-name
+                        :indexeddb-support?  indexeddb-support?
+                        :white?              white?
+                        :db-restoring?       db-restoring?
+                        :main-content        main-content})]
 
-       (ui/notification)
-       (ui/modal)
-       (custom-context-menu)
-       [:a#download.hidden]
-       (when (and (not config/mobile?)
-                  (not config/publishing?))
-         (help-button)
+        (ui/notification)
+        (ui/modal)
+        (custom-context-menu)
+        [:a#download.hidden]
+        (when
+         (and (not config/mobile?)
+              (not config/publishing?))
+          (help-button)
          ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
          ;;  {:style {:left 24}
          ;;   :title "Click to show/hide sidebar"
          ;;   :on-click (fn []
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-)])))
+)]))))

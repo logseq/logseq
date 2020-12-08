@@ -51,7 +51,7 @@
 
 .cp__sidebar-main-content {
   padding: 3rem 1.5rem;
-  max-width: var(--ls-main-content-max-with);
+  max-width: var(--ls-main-content-max-width);
   min-height: 100vh;
   flex: 1;
 }

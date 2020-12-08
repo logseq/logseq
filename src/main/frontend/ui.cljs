@@ -226,6 +226,7 @@
 (defn inject-document-devices-envs!
   []
   (let [cl (.-classList js/document.documentElement)]
+    (if (util/mac?) (.add cl "is-mac"))
     (if (util/ios?) (.add cl "is-ios"))
     (if (util/safari?) (.add cl "is-safari"))))
 
