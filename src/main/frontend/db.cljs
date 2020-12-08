@@ -537,7 +537,11 @@
                             (sort-blocks))]
         (if-let [result-transform (:result-transform q)]
           (if-let [f (sci/eval-string (pr-str result-transform))]
-            (sci/call-fn f result)
+            (try
+              (sci/call-fn f result)
+              (catch js/Error e
+                (log/error :sci/call-error e)
+                result))
             result)
           (group-by-page result)))
       result)))
