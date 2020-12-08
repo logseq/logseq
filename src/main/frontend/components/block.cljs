@@ -39,7 +39,8 @@
             [frontend.date :as date]
             [frontend.security :as security]
             [reitit.frontend.easy :as rfe]
-            [frontend.commands :as commands]))
+            [frontend.commands :as commands]
+            [lambdaisland.glogi :as log]))
 
 (defn safe-read-string
   [s]
@@ -1548,7 +1549,13 @@
            title]
           (cond
             (and (seq result) view-f)
-            (let [result (sci/call-fn view-f result)]
+            (let [result (try
+                           (sci/call-fn view-f result)
+                           (catch js/Error error
+                             (log/error :custom-view-failed {:error error
+                                                             :result result})
+                             [:div "Custom view failed: "
+                              (str error)]))]
               (util/hiccup-keywordize result))
 
             (and (seq result)
