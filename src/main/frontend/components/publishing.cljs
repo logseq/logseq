@@ -69,14 +69,15 @@
                                   (page-handler/page-add-properties! page-name {:published false})))
                               (state/remove-current-project)
                               (notification/show! "The project was deleted successfully." :success))))))
-          :background "pink")]
+          :background "red")]
 
        [:div.cp__publishing-pj-bt
         (ui/button
           (t :publishing/cancel)
           :on-click (fn [e]
                       (util/stop e)
-                      (reset! editor-state :display)))]])))
+                      (reset! editor-state :display))
+          :background "pink")]])))
 
 (rum/defcs my-publishing
   < rum/reactive db-mixins/query
