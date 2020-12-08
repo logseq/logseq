@@ -5,7 +5,6 @@
             [frontend.idb :as idb]
             [promesa.core :as p]
             [goog.object :as gobj]
-            [frontend.diff :as diff]
             [clojure.set :as set]
             [lambdaisland.glogi :as log]
             ["/frontend/utils" :as utils]))
@@ -131,19 +130,6 @@
 
      :else
      (js/window.pfs.readFile (str dir "/" path) option))))
-
-(defn diff-removed?
-  [format s1 s2]
-  (when (and s1 s2)
-    (let [diff-result (diff/diff-words s1 s2)
-          block-pattern (or (config/get-block-pattern format) "#")]
-      (some (fn [{:keys [removed value]}]
-              (and removed
-                   value
-                   ;; FIXME: not sure why this happened, it might be related to
-                   ;; the async block operations (inserting blocks)
-                   (not (set/superset? #{block-pattern "\n"} (set (distinct value))))))
-            diff-result))))
 
 (defn write-file
   ([dir path content]
