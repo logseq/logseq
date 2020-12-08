@@ -136,13 +136,13 @@
   [format s1 s2]
   (when (and s1 s2)
     (let [diff-result (diff/diff-words s1 s2)
-          block-pattern (config/get-block-pattern format)]
+          block-pattern (or (config/get-block-pattern format) "#")]
       (some (fn [{:keys [removed value]}]
               (and removed
                    value
                    ;; FIXME: not sure why this happened, it might be related to
                    ;; the async block operations (inserting blocks)
-                   (not (set/superset? #{"#" "\n"} (set (distinct value))))))
+                   (not (set/superset? #{block-pattern "\n"} (set (distinct value))))))
             diff-result))))
 
 (defn write-file
@@ -164,23 +164,22 @@
                          (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
                          sub-dir-handle-path)
            basename-handle-path (str handle-path "/" basename)]
-       (p/let [file-handle (idb/get-item basename-handle-path)]
-         (add-nfs-file-handle! basename-handle-path file-handle)
+       (p/let [file-handle (idb/get-item basename-handle-path)
+               _ (add-nfs-file-handle! basename-handle-path file-handle)]
          (if file-handle
            (p/let [local-file (.getFile file-handle)
-                   local-content (.text local-file)]
-             (let [format (-> (util/get-file-ext path)
+                   local-content (.text local-file)
+                   local-last-modified-at (gobj/get local-file "lastModified")
+                   current-time (util/time-ms)
+                   new? (> current-time local-last-modified-at)
+                   format (-> (util/get-file-ext path)
                               (config/get-file-format))]
-               (if (and local-content old-content
-                        ;; To prevent data loss, it's not enough to just compare using `=`.
-                        ;; Also, we need to benchmark the performance of `diff/diff-words `
-                        (not (diff-removed?
-                              format
-                              (string/trim local-content)
-                              (string/trim old-content))))
-                 (do
-                   (utils/verifyPermission file-handle true)
-                   (utils/writeFile file-handle content))
+             (if (and local-content old-content new?
+                      (= local-content old-content))
+               (do
+                 (utils/verifyPermission file-handle true)
+                 (utils/writeFile file-handle content))
+               (do
                  (js/alert (str "The file has been modified in your local disk! File path: " path
                                 ", save your changes and click the refresh button to reload it.")))))
            ;; create file handle
