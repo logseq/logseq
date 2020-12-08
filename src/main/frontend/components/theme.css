@@ -21,3 +21,19 @@ html:not(.is-mac)[data-theme=dark] {
     background-color: var(--ls-scrollbar-thumb-hover-color);
   }
 }
+
+html[data-theme=dark] {
+  input {
+    color: var(--ls-secondary-text-color);
+  }
+
+  input.form-input {
+    background: none;
+  }
+
+  .form-checkbox {
+    color: var(--ls-page-checkbox-color, #6093a0);
+    background-color: var(--ls-page-checkbox-color, #6093a0);
+    border-color: var(--ls-page-checkbox-border-color, #6093a0);
+  }
+}

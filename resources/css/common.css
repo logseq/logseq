@@ -113,18 +113,16 @@ a svg {
   color: var(--ls-icon-color);
 }
 
-html,
-body,
-#root,
-#draw {
-  /* height: 100%; */
-}
-
 body {
   color: #24292e;
   line-height: 1.5;
   background-color: transparent;
   min-height: 100%;
+}
+
+.form-input {
+  border-width: 1px;
+  border-color: var(--ls-border-color);
 }
 
 .form-checkbox {
@@ -278,20 +276,6 @@ a:hover {
   border-bottom-color: var(--ls-link-text-hover-color);
 }
 
-/* .content a[href^="http"]:after { */
-
-/*     content: '⤴'; */
-
-/* } */
-
-/* .content a:visited { */
-
-/*     color: #921b51; */
-
-/*     border-bottom: 1px solid #921b51; */
-
-/* } */
-
 .content a.initial-color,
 .content a.initial-color:hover {
   color: initial;
@@ -380,33 +364,6 @@ svg {
 .noscroll {
   position: fixed;
   overflow-y: scroll
-}
-
-.lds-dual-ring {
-  display: inline-block;
-}
-
-.lds-dual-ring::after {
-  content: " ";
-  display: block;
-  width: 20px;
-  height: 20px;
-  margin: 3px;
-  border-radius: 50%;
-  border-width: 2px;
-  border-style: solid;
-  border-color: var(--ls-primary-text-color, #24292e);
-  animation: lds-dual-ring 1.2s linear infinite;
-}
-
-@keyframes lds-dual-ring {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 .canceled {
@@ -1254,23 +1211,6 @@ a.tag:hover {
 }
 
 /* FIXME: */
-
-.dark-theme input {
-  color: var(--ls-secondary-text-color);
-}
-
-.dark-theme input.form-input {
-  background: none;
-}
-
-.dark-theme .form-checkbox {
-  color: #6093a0;
-  color: var(--ls-page-checkbox-color);
-  background-color: #6093a0;
-  background-color: var(--ls-page-checkbox-color);
-  border-color: #6093a0;
-  border-color: var(--ls-page-checkbox-border-color);
-}
 
 .white-theme a.right-sidebar-button {
   color: var(--ls-primary-text-color);

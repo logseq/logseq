@@ -452,10 +452,9 @@
 
 (defn loading
   [content]
-  [:div.flex.flex-row.align-center
-   [:span.lds-dual-ring.mr-2]
-   [:span {:style {:margin-top 2}}
-    content]])
+  [:div.flex.flex-row.items-center
+   [:span.icon.flex.items-center svg/loading]
+   [:span.text.pl-2 content]])
 
 (rum/defcs foldable <
   (rum/local false ::control?)

@@ -72,6 +72,17 @@
    [:path
     {:d
      "M64.177 100.069a7.889 7.889 0 01-5.6-2.316l-55.98-55.98a7.92 7.92 0 010-11.196c3.086-3.085 8.105-3.092 11.196 0l50.382 50.382 50.382-50.382a7.92 7.92 0 0111.195 0c3.086 3.086 3.092 8.104 0 11.196l-55.98 55.98a7.892 7.892 0 01-5.595 2.316z"}]])
+
+(defonce loading
+  [:svg.h-5.w-5.animate-spin
+   {:version "1.1"
+    :view-box "0 0 24 24"
+    :fill "none"
+    :display "inline-block"}
+   [:circle.opacity-25 {:cx 12 :cy 12 :r 10 :stroke "currentColor" :stroke-width 4}]
+   [:path.opacity-75 {:fill "currentColor"
+                      :d "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"}]])
+
 (defn- hero-icon
   ([d]
    (hero-icon d {}))
@@ -111,18 +122,18 @@
    {:viewbox "0 0 20 20"}
    [:circle.circle {:fill "#dce0e2", :r "9", :cy "10.5", :cx "10.5"}]
    [:line
-    {:stroke-width "1",
-     :stroke "#868c90",
-     :y2 "10.5",
-     :x2 "15",
-     :y1 "10.5",
+    {:stroke-width "1"
+     :stroke "#868c90"
+     :y2 "10.5"
+     :x2 "15"
+     :y1 "10.5"
      :x1 "6"}]
    [:line
-    {:stroke-width "1",
-     :stroke "#868c90",
-     :y2 "15",
-     :x2 "10.5",
-     :y1 "6",
+    {:stroke-width "1"
+     :stroke "#868c90"
+     :y2 "15"
+     :x2 "10.5"
+     :y1 "6"
      :x1 "10.5"}]])
 
 (def graph-sm [:div {:style {:transform "rotate(90deg)"}} (hero-icon "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" {:height "16" :width "16"})])
@@ -132,9 +143,9 @@
    {:stroke "currentColor", :view-box "0 0 24 24", :fill "none" :width 24 :height 24 :display "inline-block"}
    [:path
     {:d
-     "M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z",
-     :stroke-width "2",
-     :stroke-linejoin "round",
+     "M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+     :stroke-width "2"
+     :stroke-linejoin "round"
      :stroke-linecap "round"}]])
 
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
@@ -169,7 +180,6 @@
      :stroke-linecap "round"
      :stroke-width "2"
      :d "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"}]])
-
 (def save
   [:svg
    {:fill "currentColor", :view-box "0 0 448 512", :height "24", :width "24"}

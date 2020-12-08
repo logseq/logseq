@@ -230,7 +230,7 @@
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner
-          [:div.cp__right-sidebar-settings {:key "right-sidebar-settings"}
+          [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
            [:div.ml-4.text-sm
             [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
                                                   (state/sidebar-add-block! repo "contents" :contents nil))}
