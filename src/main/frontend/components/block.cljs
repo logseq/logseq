@@ -997,9 +997,19 @@
 (defn- pre-block-cp
   [config content format]
   (let [ast (mldoc/->edn content (mldoc/default-config format))
-        ast (map first ast)]
-    [:div.pre-block.bg-base-2.p-2
-     (markup-elements-cp (assoc config :block/format format) ast)]))
+        ast (map first ast)
+        slide? (:slide? config)
+        only-title? (and (= 1 (count ast))
+                         (= "Properties" (ffirst ast))
+                         (let [m (second (first ast))]
+                           (= (keys m) [:title])))
+        block-cp [:div.pre-block.bg-base-2.p-2
+                  (markup-elements-cp (assoc config :block/format format) ast)]]
+    (if slide?
+      [:div [:h1 (:page-name config)]
+       (when-not only-title?
+         block-cp)]
+      block-cp)))
 
 (rum/defc properties-cp
   [block]
@@ -1114,7 +1124,8 @@
 
       (when (and (seq properties)
                  (let [hidden? (text/properties-hidden? properties)]
-                   (not hidden?)))
+                   (not hidden?))
+                 (not (:slide? config)))
         (properties-cp block))
 
       (when (and (not pre-block?) (seq body))
@@ -1649,10 +1660,12 @@
 
           :else
           (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} language) "text/x-clojure" language)]
-            [:div
-             (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
-             (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
-               (sci/eval-result code))])))
+            (if (:slide? config)
+              (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
+              [:div
+               (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
+               (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
+                 (sci/eval-result code))]))))
       ["Quote" l]
       (->elem
        :blockquote
