@@ -11,6 +11,7 @@
              {:entries [frontend.extensions.code]
               :depends-on #{:main}}}
 
+   :source-map true
    :output-dir "./static/js"
    :asset-path "/static/js"
    :release {:asset-path "https://asset.logseq.com/static/js"}
