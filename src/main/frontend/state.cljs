@@ -549,7 +549,12 @@
                           expires-at (->> (t/plus (t/now) (t/minutes 40))
                                           (tf/unparse formatter))]
                       (merge repo {:token token :expires_at expires-at}))
-                    (do (log/error :token/cannot-set-token {:repo-m repo :token-m m}) repo))))
+                    (do
+                      (when (and
+                             (:url repo)
+                             (string/starts-with? (:url repo) "https://"))
+                        (log/error :token/cannot-set-token {:repo-m repo :token-m m}))
+                      repo))))
               repos (mapv set-token-f repos)]
           (swap! state assoc-in [:me :repos] repos))))))
 

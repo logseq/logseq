@@ -151,7 +151,8 @@
           sections (block/build-slide-sections blocks {:id "slide-reveal-js"
                                                        :start-level 2
                                                        :slide? true
-                                                       :sidebar? true})]
+                                                       :sidebar? true
+                                                       :page-name page-name})]
       [[:a {:href (str "/page/" (util/url-encode page-name))}
         (util/capitalize-all page-name)]
        [:div.ml-2.slide.mt-2

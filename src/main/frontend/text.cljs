@@ -124,8 +124,8 @@
           (string/starts-with? content' (string/lower-case properties-text)))
          (and (contains-properties? content)
               ;; not changed
-              (= (:block/properties (db/entity [:block/uuid (:block/uuid block)]))
-                 properties)))
+              (= (seq (:block/properties (db/entity [:block/uuid (:block/uuid block)])))
+                 (seq properties))))
       content
       (-> (remove-properties! content)
           (rejoin-properties properties)))))
