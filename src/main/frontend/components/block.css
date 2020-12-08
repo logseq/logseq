@@ -42,63 +42,56 @@
   border-radius: var(--border-radius-low);
 }
 
-.embed-page, .embed-block {
-  
-}
-
 .dark-theme {
-  --embed-level-1: var(--ls-secondary-background-color); 
-  --embed-level-2: var(--ls-tertiary-background-color);
-  --embed-level-3: var(--ls-quaternary-background-color);
-  --embed-level-4: #195D6C;
-  --embed-level-5: #266C7D;
-  --embed-level-6: #3A7E8E;
+  --color-level-1: var(--ls-secondary-background-color); 
+  --color-level-2: var(--ls-tertiary-background-color);
+  --color-level-3: var(--ls-quaternary-background-color);
+  --color-level-4: #195D6C;
+  --color-level-5: #266C7D;
+  --color-level-6: #3A7E8E;
 }
 
 .white-theme {
-  --embed-level-1: var(--ls-secondary-background-color); 
-  --embed-level-2: var(--ls-tertiary-background-color);
-  --embed-level-3: var(--ls-quaternary-background-color);
-  --embed-level-4: #b7d7c9;
-  --embed-level-5: #a5cdbc;
-  --embed-level-6: #92c2af;
+  --color-level-1: var(--ls-secondary-background-color); 
+  --color-level-2: var(--ls-tertiary-background-color);
+  --color-level-3: var(--ls-quaternary-background-color);
+  --color-level-4: #b7d7c9;
+  --color-level-5: #a5cdbc;
+  --color-level-6: #92c2af;
 }
 
-.embed {
-  background-color: var(--embed-level-1);
+.color-level {
+  background-color: var(--color-level-1);
 }
-.embed .embed {
-  background-color: var(--embed-level-2);
+.color-level .color-level {
+  background-color: var(--color-level-2);
 }
-.embed .embed .embed {
-  background-color: var(--embed-level-3);
+.color-level .color-level .color-level {
+  background-color: var(--color-level-3);
 }
-.embed .embed .embed .embed {
-  background-color: var(--embed-level-4);
+.color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
 }
-.embed .embed .embed .embed .embed {
-  background-color: var(--embed-level-5);
+.color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
 }
-.embed .embed .embed .embed .embed .embed{
-  background-color: var(--embed-level-3);
+.color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-3);
 }
-.embed .embed .embed .embed .embed .embed .embed {
-  background-color: var(--embed-level-4);
+.color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
 }
-.embed .embed .embed .embed .embed .embed .embed .embed {
-  background-color: var(--embed-level-5);
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
 }
-.embed .embed .embed .embed .embed .embed .embed .embed .embed {
-  background-color: var(--embed-level-3);
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-3);
 }
-.embed .embed .embed .embed .embed .embed .embed .embed .embed .embed {
-  background-color: var(--embed-level-4);
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
 }
-.embed .embed .embed .embed .embed .embed .embed .embed .embed .embed .embed {
-  background-color: var(--embed-level-5);
-}
-.embed .embed .embed .embed .embed .embed .embed .embed .embed .embed .embed .embed {
-  background-color: var(--embed-level-3);
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
 }
 
 .ls-block {

@@ -316,7 +316,7 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.embed.embed-block.bg-base-2 {:style {:z-index 2}}
+    [:div.color-level.embed.embed-block.bg-base-2 {:style {:z-index 2}}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
@@ -327,7 +327,7 @@
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
-    [:div.embed.embed-page.py-2.my-2.px-3.bg-base-2
+    [:div.color-level.embed.embed-page.py-2.my-2.px-3.bg-base-2
      [:div.flex.items-center.py-1
       [:div.mr-2 svg/page]
       (page-cp config {:page/name page-name})]
@@ -1830,7 +1830,7 @@
         (let [page (db/entity (:db/id page))]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
-                       (assoc :class "bg-base-2 px-7 py-2 rounded"))
+                       (assoc :class "color-level px-7 py-2 rounded"))
            (ui/foldable
             (page-cp config page)
             (blocks-container blocks config))]))]
