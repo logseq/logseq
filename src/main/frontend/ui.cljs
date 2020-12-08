@@ -357,7 +357,7 @@
   (let [current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
-       [:div#ui__ac-inner
+       [:div#ui__ac-inner.hide-scrollbar
         (for [[idx item] (medley/indexed matched)]
           (rum/with-key
             (menu-link
