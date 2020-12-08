@@ -16,7 +16,10 @@
             [frontend.components.commit :as commit]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.declares :as declares]))
 
 (rum/defc add-repo
   []
@@ -55,7 +58,7 @@
                   (config/get-local-dir url)]
                  [:a {:target "_blank"
                       :href url}
-                  (db/get-repo-path url)])
+                  (declares/get-repo-path url)])
                [:div.controls
                 [:a.control {:title (if local?
                                       "Sync with the local directory"
@@ -101,7 +104,7 @@
                 pushing? (= :pushing git-status)
                 pulling? (= :pulling git-status)
                 push-failed? (= :push-failed git-status)
-                last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
+                last-pulled-at (react-queries/sub-key-value repo :git/last-pulled-at)
                 ;; db-persisted? (state/sub [:db/persisted? repo])
                 editing? (seq (state/sub :editor/editing?))]
             [:div.flex-row.flex.items-center
@@ -181,8 +184,8 @@
                           (if (config/local-db? repo)
                             (config/get-local-dir repo)
                             (if head?
-                              (db/get-repo-path repo)
-                              (util/take-at-most (db/get-repo-name repo) 20))))]
+                              (declares/get-repo-path repo)
+                              (util/take-at-most (db-utils/get-repo-name repo) 20))))]
       (let [repos (->> (state/sub [:me :repos])
                        (remove (fn [r] (= config/local-repo (:url r)))))]
         (cond

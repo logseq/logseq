@@ -4,7 +4,8 @@
             [goog.object :as gobj]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.db.queries :as db-queries]))
 
 (defn- hide!
   [element]
@@ -27,7 +28,7 @@
         (let [elements (d/by-class node "ls-block")]
           (doseq [element elements]
             (hide! element))))
-      (db/collapse-block! block))))
+      (db-queries/collapse-block! block))))
 
 (defn expand!
   [block]
@@ -41,7 +42,7 @@
           (doseq [element elements]
             (show! element)))
         (show! e))
-      (db/expand-block! block))))
+      (db-queries/expand-block! block))))
 
 (defn set-bullet-closed!
   [element]

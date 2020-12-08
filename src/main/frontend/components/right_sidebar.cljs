@@ -21,7 +21,10 @@
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.db-mixins :as db-mixins]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -42,8 +45,8 @@
   (let [theme (:ui/theme @state/state)
         dark? (= theme "dark")
         graph (if (util/uuid-string? page)
-                (db/build-block-graph (uuid page) theme)
-                (db/build-page-graph page theme))]
+                (react-queries/build-block-graph (uuid page) theme)
+                (db-queries/build-page-graph page theme))]
     (when (seq (:nodes graph))
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph
@@ -54,7 +57,7 @@
 
 (defn recent-pages
   []
-  (let [pages (db/get-key-value :recent/pages)]
+  (let [pages (db-queries/get-key-value :recent/pages)]
     [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
      (if (seq pages)
        (for [page pages]
@@ -89,7 +92,7 @@
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
-   (when-let [contents (db/entity [:page/name "contents"])]
+   (when-let [contents (db-utils/entity [:page/name "contents"])]
      (page/contents-page contents))])
 
 (defn build-sidebar-item
@@ -98,7 +101,7 @@
     :contents
     [[:a {:on-click (fn [e]
                       (util/stop e)
-                      (if-not (db/entity [:page/name "contents"])
+                      (if-not (db-utils/entity [:page/name "contents"])
                         (page-handler/create! "contents")
                         (route-handler/redirect! {:to :page
                                                   :path-params {:name "contents"}})))}
@@ -116,7 +119,7 @@
      (page-graph block-data)]
 
     :block-ref
-    (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
+    (when-let [block (db-utils/entity repo [:block/uuid (:block/uuid (:block block-data))])]
       [(t :right-side-bar/block-ref)
        (let [block (:block block-data)
              block-id (:block/uuid block)
@@ -127,7 +130,7 @@
            (block-cp repo idx block)]])])
 
     :block
-    (when-let [block (db/entity repo [:block/uuid (:block/uuid block-data)])]
+    (when-let [block (db-utils/entity repo [:block/uuid (:block/uuid block-data)])]
       (let [block-id (:block/uuid block-data)
             format (:block/format block-data)]
         [(block/block-parents repo block-id format)
@@ -144,7 +147,7 @@
     :page-presentation
     (let [page-name (get-in block-data [:page :page/name])
           journal? (:journal? block-data)
-          blocks (db/get-page-blocks repo page-name)
+          blocks (db-queries/get-page-blocks repo page-name)
           blocks (if journal?
                    (rest blocks)
                    blocks)
@@ -174,7 +177,7 @@
   [repo idx db-id block-type block-data t]
   (let [item
         (if (= :page block-type)
-          (let [page (db/query-entity-in-component db-id)]
+          (let [page (react-queries/query-entity-in-component db-id)]
             (when (seq page)
               (build-sidebar-item repo idx db-id block-type page t)))
           (build-sidebar-item repo idx db-id block-type block-data t))]

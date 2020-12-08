@@ -9,7 +9,8 @@
             [frontend.date :as date]
             [clojure.string :as string]
             [medley.core :as medley]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.db.queries :as db-queries]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -53,7 +54,7 @@
     (let [name (:name path-params)
           block? (util/uuid-string? name)]
       (if block?
-        (if-let [block (db/entity [:block/uuid (medley/uuid name)])]
+        (if-let [block (db-utils/entity [:block/uuid (medley/uuid name)])]
           (let [content (text/remove-level-spaces (:block/content block)
                                                   (:block/format block))]
             (if (> (count content) 48)
@@ -99,9 +100,9 @@
 
 (defn- redirect-to-file!
   [page]
-  (when-let [path (-> (db/get-page-file (string/lower-case page))
+  (when-let [path (-> (db-queries/get-page-file (string/lower-case page))
                       :db/id
-                      (db/entity)
+                      (db-utils/entity)
                       :file/path)]
     (redirect! {:to :file
                 :path-params {:path path}})))
@@ -122,7 +123,7 @@
 
       :file
       (when-let [path (get-in (state/get-route-match) [:path-params :path])]
-        (when-let [page (db/get-file-page path)]
+        (when-let [page (db-queries/get-file-page path)]
           (redirect! {:to :page
                       :path-params {:name page}})))
 

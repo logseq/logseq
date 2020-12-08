@@ -6,28 +6,31 @@
             [clojure.string :as string]
             [goog.dom :as gdom]
             [frontend.publishing.html :as html]
-            [frontend.text :as text]
             [frontend.handler.common :as common-handler]
             [frontend.extensions.zip :as zip]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.declares :as declares]))
 
 (defn copy-block!
   [block-id]
-  (when-let [block (db/pull [:block/uuid block-id])]
+  (when-let [block (db-utils/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
       (common-handler/copy-to-clipboard-without-id-property! content))))
 
 (defn copy-block-as-json!
   [block-id]
   (when-let [repo (state/get-current-repo)]
-    (let [block-children (db/get-block-and-children repo block-id)]
+    (let [block-children (db-queries/get-block-and-children repo block-id)]
       (util/copy-to-clipboard! (js/JSON.stringify (bean/->js block-children))))))
 
 (defn copy-page-as-json!
   [page-name]
   (when-let [repo (state/get-current-repo)]
-    (let [properties (db/get-page-properties page-name)
-          blocks (db/get-page-blocks repo page-name)]
+    (let [properties (db-queries/get-page-properties page-name)
+          blocks (db-queries/get-page-blocks repo page-name)]
       (util/copy-to-clipboard!
        (js/JSON.stringify
         (bean/->js
@@ -36,8 +39,8 @@
 
 (defn export-repo-as-json!
   [repo]
-  (when-let [db (db/get-conn repo)]
-    (let [db-json (db/db->json db)
+  (when-let [db (declares/get-conn repo)]
+    (let [db-json (db-utils/db->json db)
           data-str (str "data:text/json;charset=utf-8," (js/encodeURIComponent db-json))]
       (when-let [anchor (gdom/getElement "download-as-json")]
         (.setAttribute anchor "href" data-str)
@@ -47,7 +50,7 @@
 (defn download-file!
   [file-path]
   (when-let [repo (state/get-current-repo)]
-    (when-let [content (db/get-file repo file-path)]
+    (when-let [content (react-queries/get-file repo file-path)]
       (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
                            (clj->js {:type "text/plain;charset=utf-8,"}))]
         (let [anchor (gdom/getElement "download")
@@ -58,11 +61,11 @@
 
 (defn export-repo-as-html!
   [repo]
-  (when-let [db (db/get-conn repo)]
+  (when-let [db (declares/get-conn repo)]
     (let [db (if (state/all-pages-public?)
-               (db/clean-export! db)
-               (db/filter-only-public-pages-and-blocks db))
-          db-str (db/db->string db)
+               (db-queries/clean-export! db)
+               (db-queries/filter-only-public-pages-and-blocks db))
+          db-str (db-utils/db->string db)
           state (select-keys @state/state
                              [:ui/theme :ui/cycle-collapse
                               :ui/collapsed-blocks
@@ -80,7 +83,7 @@
 
 (defn export-repo-as-zip!
   [repo]
-  (let [files (db/get-file-contents repo)
+  (let [files (db-queries/get-file-contents repo)
         [owner repo-name] (util/get-git-owner-and-repo repo)
         repo-name (str owner "-" repo-name)]
     (when (seq files)

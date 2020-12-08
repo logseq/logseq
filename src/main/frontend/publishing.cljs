@@ -9,7 +9,9 @@
             [frontend.routes :as routes]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.declares :as declares]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -32,8 +34,8 @@
   (when-let [data js/window.logseq_db]
     (let [data (js/JSON.stringify data)
           db-conn (d/create-conn db-schema/schema)
-          _ (swap! db/conns assoc "logseq-db/local" db-conn)
-          db (db/string->db data)]
+          _ (swap! declares/conns assoc "logseq-db/local" db-conn)
+          db (db-utils/string->db data)]
       (reset! db-conn db))))
 
 (defn restore-state!

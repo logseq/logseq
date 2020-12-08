@@ -22,7 +22,11 @@
             [frontend.fs :as fs]
             [promesa.core :as p]
             [goog.object :as gobj]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.declares :as declares]))
 
 (defn- get-directory
   [journal?]
@@ -64,12 +68,12 @@
                ;; create the file
                (let [content (util/default-content-with-title format title)]
                  (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                   (db/reset-file! repo path content)
+                   (db-queries/reset-file! repo path content)
                    (git-handler/git-add repo path)
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})
-                     (let [blocks (db/get-page-blocks page)
+                     (let [blocks (db-queries/get-page-blocks page)
                            last-block (last blocks)]
                        (when last-block
                          (js/setTimeout
@@ -78,17 +82,17 @@
 
 (defn page-add-properties!
   [page-name properties]
-  (let [page (db/entity [:page/name page-name])
-        page-format (db/get-page-format page-name)
-        properties-content (db/get-page-properties-content page-name)
+  (let [page (db-utils/entity [:page/name page-name])
+        page-format (db-queries/get-page-format page-name)
+        properties-content (db-queries/get-page-properties-content page-name)
         properties-content (if properties-content
                              (string/trim properties-content)
                              (config/properties-wrapper page-format))]
-    (let [file (db/entity (:db/id (:page/file page)))
+    (let [file (db-utils/entity (:db/id (:page/file page)))
           file-path (:file/path file)
-          file-content (db/get-file file-path)
+          file-content (react-queries/get-file file-path)
           after-content (subs file-content (inc (count properties-content)))
-          new-properties-content (db/add-properties! page-format properties-content properties)
+          new-properties-content (db-queries/add-properties! page-format properties-content properties)
           full-content (str new-properties-content "\n\n" (string/trim after-content))]
       (file-handler/alter-file (state/get-current-repo)
                                file-path
@@ -98,13 +102,13 @@
 
 (defn page-remove-property!
   [page-name k]
-  (when-let [properties-content (string/trim (db/get-page-properties-content page-name))]
-    (let [page (db/entity [:page/name page-name])
-          file (db/entity (:db/id (:page/file page)))
+  (when-let [properties-content (string/trim (db-queries/get-page-properties-content page-name))]
+    (let [page (db-utils/entity [:page/name page-name])
+          file (db-utils/entity (:db/id (:page/file page)))
           file-path (:file/path file)
-          file-content (db/get-file file-path)
+          file-content (react-queries/get-file file-path)
           after-content (subs file-content (count properties-content))
-          page-format (db/get-page-format page-name)
+          page-format (db-queries/get-page-format page-name)
           new-properties-content (let [lines (string/split-lines properties-content)
                                        prefix (case page-format
                                                 :org (str "#+" (string/upper-case k) ": ")
@@ -164,13 +168,13 @@
 
 (defn publish-page-as-slide!
   ([page-name project-add-modal]
-   (publish-page-as-slide! page-name (db/get-page-blocks page-name) project-add-modal))
+   (publish-page-as-slide! page-name (db-queries/get-page-blocks page-name) project-add-modal))
   ([page-name blocks project-add-modal]
    (project-handler/exists-or-create!
     (fn [project]
       (page-add-properties! page-name {"published" true
                                        "slide" true})
-      (let [properties (db/get-page-properties page-name)
+      (let [properties (db-queries/get-page-properties page-name)
             plugins (get-plugins blocks)
             data {:project project
                   :title page-name
@@ -193,11 +197,11 @@
   [page-name project-add-modal]
   (project-handler/exists-or-create!
    (fn [project]
-     (let [properties (db/get-page-properties page-name)
+     (let [properties (db-queries/get-page-properties page-name)
            slide? (let [slide (:slide properties)]
                     (or (true? slide)
                         (= "true" slide)))
-           blocks (db/get-page-blocks page-name)
+           blocks (db-queries/get-page-blocks page-name)
            plugins (get-plugins blocks)]
        (if slide?
          (publish-page-as-slide! page-name blocks project-add-modal)
@@ -232,7 +236,7 @@
 (defn unpublish-page!
   [page-name]
   (page-add-properties! page-name {"published" false})
-  (let [properties (db/get-page-properties page-name)
+  (let [properties (db-queries/get-page-properties page-name)
         permalink (:permalink properties)
         project (state/get-current-project)]
     (if (and project permalink)
@@ -248,20 +252,20 @@
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (string/lower-case page-name)]
-        (let [file (db/get-page-file page-name)
+        (let [file (db-queries/get-page-file page-name)
               file-path (:file/path file)]
           ;; delete file
           (when file-path
-            (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-            (when-let [files-conn (db/get-files-conn repo)]
+            (db-queries/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+            (when-let [files-conn (declares/get-files-conn repo)]
               (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
-            (let [blocks (db/get-page-blocks page-name)
+            (let [blocks (db-queries/get-page-blocks page-name)
                   tx-data (mapv
                            (fn [block]
                              [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
                            blocks)]
-              (db/transact! tx-data)
+              (db-queries/transact! tx-data)
               ;; remove file
               (->
                (p/let [_ (git/remove-file repo file-path)
@@ -274,7 +278,7 @@
                (p/catch (fn [err]
                           (prn "error: " err))))))
 
-          (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+          (db-queries/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
           (ok-handler))))))
 
@@ -296,11 +300,11 @@
      (p/let [_ (fs/rename (str (util/get-repo-dir repo) "/" old-path)
                           (str (util/get-repo-dir repo) "/" new-path))]
        ;; update db
-       (db/transact! repo [{:db/id (:db/id file)
+       (db-queries/transact! repo [{:db/id (:db/id file)
                             :file/path new-path}])
 
        ;; update files db
-       (let [conn (db/get-files-conn repo)]
+       (let [conn (declares/get-files-conn repo)]
          (when-let [file (d/entity (d/db conn) [:file/path old-path])]
            (d/transact! conn [{:db/id (:db/id file)
                                :file/path new-path}])))
@@ -316,13 +320,13 @@
   (when (and old-name new-name
              (not= (string/lower-case old-name) (string/lower-case new-name)))
     (when-let [repo (state/get-current-repo)]
-      (if (db/entity [:page/name (string/lower-case new-name)])
+      (if (db-utils/entity [:page/name (string/lower-case new-name)])
         (notification/show! "Page already exists!" :error)
-        (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
+        (when-let [page (db-utils/entity [:page/name (string/lower-case old-name)])]
           (let [old-original-name (:page/original-name page)
                 file (:page/file page)
                 journal? (:page/journal? page)]
-            (d/transact! (db/get-conn repo false)
+            (d/transact! (declares/get-conn repo false)
                          [{:db/id (:db/id page)
                            :page/name (string/lower-case new-name)
                            :page/original-name new-name}])
@@ -333,9 +337,9 @@
                               (page-add-properties! (string/lower-case new-name) {:title new-name}))))
 
             ;; update all files which have references to this page
-            (let [files (db/get-files-that-referenced-page (:db/id page))]
+            (let [files (db-queries/get-files-that-referenced-page (:db/id page))]
               (doseq [file-path files]
-                (let [file-content (db/get-file file-path)
+                (let [file-content (react-queries/get-file file-path)
                       ;; FIXME: not safe
                       new-content (string/replace file-content
                                                   (util/format "[[%s]]" old-original-name)
@@ -363,13 +367,13 @@
   (when (and page (contains? config/mldoc-support-formats format))
     (let [old-name page
           new-name (let [ast (mldoc/->edn content (mldoc/default-config format))]
-                     (db/get-page-name path ast))]
+                     (db-utils/get-page-name path ast))]
       (when (not= old-name new-name)
         (rename! old-name new-name)))))
 
 (defn handle-add-page-to-contents!
   [page-name]
-  (let [last-block (last (db/get-page-blocks (state/get-current-repo) "contents"))
+  (let [last-block (last (db-queries/get-page-blocks (state/get-current-repo) "contents"))
         last-empty? (>= 3 (count (:block/content last-block)))
         heading-pattern (config/get-block-pattern (state/get-preferred-format))
         pre-str (str heading-pattern heading-pattern)
@@ -389,7 +393,7 @@
 (defn load-more-journals!
   []
   (let [current-length (:journals-length @state/state)]
-    (when (< current-length (db/get-journals-length))
+    (when (< current-length (db-queries/get-journals-length))
       (state/update-state! :journals-length inc))))
 
 (defn update-public-attribute!
@@ -401,11 +405,11 @@
   (when-let [edit-block (state/get-edit-block)]
     (let [page-name (string/lower-case page)
           edit-block-file-path (-> (:db/id (:block/file edit-block))
-                                   (db/entity)
+                                   (db-utils/entity)
                                    :file/path)]
       (if (and edit-block-file-path
                (state/org-mode-file-link? (state/get-current-repo)))
-        (if-let [ref-file-path (:file/path (:page/file (db/entity [:page/name page-name])))]
+        (if-let [ref-file-path (:file/path (:page/file (db-utils/entity [:page/name page-name])))]
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
                        page)

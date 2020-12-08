@@ -21,17 +21,18 @@
             [goog.object :as gobj]
             [frontend.helper :as helper]
             [frontend.idb :as idb]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.db.queries :as db-queries]))
 
 (defn- watch-for-date!
   []
   (js/setInterval (fn []
                     (state/set-today! (date/today))
                     (when-let [repo (state/get-current-repo)]
-                      (when (or (db/cloned? repo)
+                      (when (or (db-queries/cloned? repo)
                                 (config/local-db? repo))
                         (let [today-page (string/lower-case (date/today))]
-                          (when (empty? (db/get-page-blocks-no-cache repo today-page))
+                          (when (empty? (db-queries/get-page-blocks-no-cache repo today-page))
                             (repo-handler/create-today-journal-if-not-exists repo))))))
                   1000))
 
@@ -70,15 +71,15 @@
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     (-> (p/all (db/restore! (assoc me :repos repos)
-                                             (fn [repo]
-                                               (file-handler/restore-config! repo false)
-                                               (ui-handler/add-style-if-exists!))))
+                     (-> (p/all (db-queries/restore! (assoc me :repos repos)
+                                  (fn [repo]
+                                    (file-handler/restore-config! repo false)
+                                    (ui-handler/add-style-if-exists!))))
                          (p/then
                           (fn []
                             (cond
                               (and (not logged?)
-                                   (not (seq (db/get-files config/local-repo)))
+                                   (not (seq (db-queries/get-files config/local-repo)))
                                    ;; Not native local directory
                                    (not (some config/local-db? (map :url repos))))
                               (repo-handler/setup-local-repo-if-not-exists!)
@@ -163,5 +164,5 @@
                       :example? true}])]
         (state/set-repos! repos)
         (restore-and-setup! me repos logged?)))
-    (db/run-batch-txs!)
+    (db-queries/run-batch-txs!)
     (editor-handler/periodically-save!)))

@@ -39,7 +39,10 @@
             [frontend.date :as date]
             [frontend.security :as security]
             [reitit.frontend.easy :as rfe]
-            [frontend.commands :as commands]))
+            [frontend.commands :as commands]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.utils :as db-utils]))
 
 (defn safe-read-string
   [s]
@@ -121,7 +124,7 @@
   (let [path (string/replace path "file:" "")
         block-id (:block/uuid config)
         current-file (and block-id
-                          (:file/path (:page/file (:block/page (db/entity [:block/uuid block-id])))))]
+                          (:file/path (:page/file (:block/page (db-utils/entity [:block/uuid block-id])))))]
     (when current-file
       (let [parts (string/split current-file #"/")
             parts-2 (string/split path #"/")
@@ -255,7 +258,7 @@
         :on-click (fn [e]
                     (util/stop e)
                     (when (gobj/get e "shiftKey")
-                      (when-let [page-entity (db/entity [:page/name page])]
+                      (when-let [page-entity (db-utils/entity [:page/name page])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
@@ -311,7 +314,7 @@
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
-  (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
+  (let [blocks (db-queries/get-block-and-children (state/get-current-repo) id)]
     [:div.embed-block.bg-base-2 {:style {:z-index 2}}
      [:code "Embed block:"]
      [:div.px-2
@@ -322,7 +325,7 @@
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
   (let [page-name (string/lower-case page-name)
-        page-original-name (:page/original-name (db/entity [:page/name page-name]))
+        page-original-name (:page/original-name (db-utils/entity [:page/name page-name]))
         current-page (state/get-current-page)]
     [:div.embed-page.py-2.my-2.px-3.bg-base-2
      [:p
@@ -333,7 +336,7 @@
                   page-name)
             (not= (string/lower-case (get config :id ""))
                   page-name))
-       (let [blocks (db/get-page-blocks (state/get-current-repo) page-name)]
+       (let [blocks (db-queries/get-page-blocks (state/get-current-repo) page-name)]
          (blocks-container blocks (assoc config
                                          :embed? true
                                          :ref? false))))]))
@@ -348,7 +351,7 @@
 (defn- get-page
   [label]
   (when-let [label-text (get-label-text label)]
-    (db/entity [:page/name (string/lower-case label-text)])))
+    (db-utils/entity [:page/name (string/lower-case label-text)])))
 
 (defn- macro->text
   [name arguments]
@@ -361,7 +364,7 @@
   [config id]
   (when-not (string/blank? id)
     (let [block (and (util/uuid-string? id)
-                     (db/pull-block (uuid id)))]
+                     (react-queries/pull-block (uuid id)))]
       (if block
         [:span
          [:span.text-gray-500 "(("]
@@ -421,7 +424,7 @@
                     :on-click (fn [e]
                                 (util/stop e)
                                 (let [repo (state/get-current-repo)
-                                      page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
+                                      page (db-utils/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
                                   (when (gobj/get e "shiftKey")
                                     (state/sidebar-add-block!
                                      repo
@@ -524,7 +527,7 @@
               (image-link config url href label)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
-                           {:page/name (db/get-file-page (string/replace href "file:" ""))}
+                           {:page/name (db-queries/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
                 (if (and page
                          (when-let [ext (util/get-file-ext href)]
@@ -674,10 +677,10 @@
         (if-let [block-uuid (:block/uuid config)]
           (let [format (get-in config [:block :block/format] :markdown)
                 macro-content (or
-                               (-> (db/entity [:block/uuid block-uuid])
+                               (-> (db-utils/entity [:block/uuid block-uuid])
                                    (:block/page)
                                    (:db/id)
-                                   (db/entity)
+                                   (db-utils/entity)
                                    :page/properties
                                    :macros
                                    (get name))
@@ -1204,8 +1207,8 @@
   ([repo block-id format]
    (block-parents repo block-id format true))
   ([repo block-id format show-page?]
-   (let [parents (db/get-block-parents repo block-id 3)
-         page (db/get-block-page repo block-id)
+   (let [parents (db-queries/get-block-parents repo block-id 3)
+         page (db-queries/get-block-page repo block-id)
          page-name (:page/name page)]
      (when (or (seq parents)
                show-page?
@@ -1369,8 +1372,8 @@
                 (:block/uuid child)))))])
 
      (when ref?
-       (let [children (-> (db/get-block-immediate-children repo uuid)
-                          db/sort-by-pos)]
+       (let [children (-> (db-queries/get-block-immediate-children repo uuid)
+                          (db-utils/sort-by-pos))]
          (when (seq children)
            [:div.ref-children.ml-12
             (blocks-container children (assoc config
@@ -1513,7 +1516,7 @@
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
                  (let [[config query] (:rum/args state)
-                       query-atom (db/custom-query query)]
+                       query-atom (db-queries/custom-query query)]
                    (assoc state :query-atom query-atom)))
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
@@ -1522,7 +1525,7 @@
    :will-unmount (fn [state]
                    (when-let [query (last (:rum/args state))]
                      (state/remove-custom-query-component! query)
-                     (db/remove-custom-query! (state/get-current-repo) query))
+                     (react-queries/remove-custom-query! (state/get-current-repo) query))
                    state)}
   [state config {:keys [title query inputs view collapsed? children?] :as q}]
   (let [query-atom (:query-atom state)]
@@ -1532,7 +1535,7 @@
           remove-blocks (if current-block-uuid [current-block-uuid] nil)
           query-result (and query-atom (rum/react query-atom))
           result (if query-result
-                   (db/custom-query-result-transform query-result remove-blocks q))
+                   (db-queries/custom-query-result-transform query-result remove-blocks q))
           view-f (sci/eval-string (pr-str view))
           only-blocks? (:block/uuid (first result))
           blocks-grouped-by-page? (and (seq result)
@@ -1799,7 +1802,7 @@
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
-        blocks->vec-tree #(if (or custom-query? ref?) % (db/blocks->vec-tree %))
+        blocks->vec-tree #(if (or custom-query? ref?) % (db-queries/blocks->vec-tree %))
         blocks (blocks->vec-tree blocks)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
@@ -1810,7 +1813,7 @@
                                -18)}}
        (let [first-block (first blocks)
              blocks' (if (and (:block/pre-block? first-block)
-                              (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
+                              (db-queries/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
                        (rest blocks)
                        blocks)
              first-id (:block/uuid (first blocks'))]
@@ -1838,7 +1841,7 @@
    (if (:group-by-page? config)
      [:div.flex.flex-col
       (for [[page blocks] blocks]
-        (let [page (db/entity (:db/id page))]
+        (let [page (db-utils/entity (:db/id page))]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
                        (assoc :class "bg-base-2 px-7 py-2 rounded"))

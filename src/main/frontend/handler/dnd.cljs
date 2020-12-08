@@ -9,17 +9,19 @@
             [clojure.string :as string]
             [frontend.utf8 :as utf8]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.react-queries :as react-queries]))
 
 (defn- remove-block-child!
   [target-block parent-block]
-  (let [child-ids (set (db/get-block-ids target-block))]
-    (db/get-block-content-rec
-     parent-block
-     (fn [{:block/keys [uuid level content]}]
-       (if (contains? child-ids uuid)
-         ""
-         content)))))
+  (let [child-ids (set (db-queries/get-block-ids target-block))]
+    (db-queries/get-block-content-rec
+      parent-block
+      (fn [{:block/keys [uuid level content]}]
+        (if (contains? child-ids uuid)
+          ""
+          content)))))
 
 (defn- recompute-block-level
   [to-block nested?]
@@ -33,7 +35,7 @@
         format (:block/format target-block)
         pattern (config/get-block-pattern format)
         block-changes (atom [])
-        all-content (db/get-block-content-rec
+        all-content (db-queries/get-block-content-rec
                      target-block
                      (fn [{:block/keys [uuid level content]
                            :as block}]
@@ -92,7 +94,7 @@
   (when (seq target-blocks)
     (let [file-id (:db/id file)
           target-block-ids (set (map :block/uuid target-blocks))
-          after-blocks (->> (db/get-file-after-blocks repo file-id start-pos)
+          after-blocks (->> (db-queries/get-file-after-blocks repo file-id start-pos)
                             (remove (fn [h] (contains? target-block-ids (:block/uuid h)))))
 
           after-blocks (cond
@@ -185,9 +187,9 @@
     (= direction :up)
     (let [offset-block-id (if nested?
                             (:block/uuid to-block)
-                            (last (db/get-block-ids to-block)))
+                            (last (db-queries/get-block-ids to-block)))
           offset-end-pos (get-end-pos
-                          (db/entity repo [:block/uuid offset-block-id]))]
+                          (db-utils/entity repo [:block/uuid offset-block-id]))]
       (rebuild-dnd-blocks repo target-file target-child?
                           offset-end-pos
                           block-changes
@@ -197,7 +199,7 @@
     (= direction :down)
     (let [offset-block-id (if nested?
                             (:block/uuid to-block)
-                            (last (db/get-block-ids to-block)))
+                            (last (db-queries/get-block-ids to-block)))
           target-start-pos (get-start-pos target-block)]
       (rebuild-dnd-blocks repo target-file target-child?
                           target-start-pos
@@ -210,10 +212,10 @@
   [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
   (if (move-parent-to-child? target-block to-block)
     nil
-    (let [old-file-content (db/get-file (:file/path (db/entity (:db/id (:block/file target-block)))))
+    (let [old-file-content (react-queries/get-file (:file/path (db-utils/entity (:db/id (:block/file target-block)))))
           old-file-content (utf8/encode old-file-content)
           subs (fn [start-pos end-pos] (utf8/substring old-file-content start-pos end-pos))
-          bottom-content (db/get-block-content-rec bottom-block)
+          bottom-content (db-queries/get-block-content-rec bottom-block)
           top-content (remove-block-child! bottom-block top-block)
           top-area (subs 0 (get-start-pos top-block))
           bottom-area (subs
@@ -221,13 +223,13 @@
                          (and nested? (= direction :down))
                          (get-end-pos bottom-block)
                          target-child?
-                         (db/get-block-end-pos-rec repo top-block)
+                         (db-queries/get-block-end-pos-rec repo top-block)
                          :else
-                         (db/get-block-end-pos-rec repo bottom-block))
+                         (db-queries/get-block-end-pos-rec repo bottom-block))
                        nil)
           between-area (if (= direction :down)
-                         (subs (db/get-block-end-pos-rec repo target-block) (get-start-pos to-block))
-                         (subs (db/get-block-end-pos-rec repo to-block) (get-start-pos target-block)))
+                         (subs (db-queries/get-block-end-pos-rec repo target-block) (get-start-pos to-block))
+                         (subs (db-queries/get-block-end-pos-rec repo to-block) (get-start-pos target-block)))
           up-content (when (= direction :up)
                        (cond
                          nested?
@@ -235,7 +237,7 @@
                                             target-content
                                             (if target-child?
                                               (remove-block-child! target-block (:block/children to-block))
-                                              (db/get-block-content-rec (:block/children top-block))))
+                                              (db-queries/get-block-content-rec (:block/children top-block))))
                          (and top? target-child?)
                          (util/join-newline target-content (remove-block-child! target-block to-block))
 
@@ -276,7 +278,7 @@
                              bottom-area))
           after-blocks (->> (compute-after-blocks-in-same-file repo target-block to-block direction top? nested? target-child? target-file original-top-block-start-pos block-changes)
                             (remove nil?))
-          path (:file/path (db/entity repo (:db/id (:block/file to-block))))
+          path (:file/path (db-utils/entity repo (:db/id (:block/file to-block))))
           modified-time (let [modified-at (tc/to-long (t/now))]
                           (->
                            [[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
@@ -303,18 +305,18 @@
 
 (defn- move-block-in-different-files
   [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
-  (let [target-file (db/entity repo (:db/id (:block/file target-block)))
+  (let [target-file (db-utils/entity repo (:db/id (:block/file target-block)))
         target-file-path (:file/path target-file)
-        target-file-content (db/get-file repo target-file-path)
-        to-file (db/entity repo (:db/id (:block/file to-block)))
+        target-file-content (react-queries/get-file repo target-file-path)
+        to-file (db-utils/entity repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-block-end-pos (db/get-block-end-pos-rec repo target-block)
+        target-block-end-pos (db-queries/get-block-end-pos-rec repo target-block)
         to-block-start-pos (get-start-pos to-block)
-        to-block-end-pos (db/get-block-end-pos-rec repo to-block)
+        to-block-end-pos (db-queries/get-block-end-pos-rec repo to-block)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)
-        to-file-content (utf8/encode (db/get-file repo to-file-path))
+        to-file-content (utf8/encode (react-queries/get-file repo to-file-path))
         new-to-file-content (let [separate-pos (cond nested?
                                                      (get-end-pos to-block)
                                                      top?
@@ -348,9 +350,9 @@
                           :else
                           (let [offset-block-id (if nested?
                                                   (:block/uuid to-block)
-                                                  (last (db/get-block-ids to-block)))
+                                                  (last (db-queries/get-block-ids to-block)))
                                 offset-end-pos (get-end-pos
-                                                (db/entity repo [:block/uuid offset-block-id]))]
+                                                (db-utils/entity repo [:block/uuid offset-block-id]))]
                             (rebuild-dnd-blocks repo to-file target-child?
                                                 offset-end-pos
                                                 block-changes
@@ -371,18 +373,18 @@
 
 (defn- move-block-in-different-repos
   [target-block-repo to-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
-  (let [target-file (db/entity target-block-repo (:db/id (:block/file target-block)))
+  (let [target-file (db-utils/entity target-block-repo (:db/id (:block/file target-block)))
         target-file-path (:file/path target-file)
-        target-file-content (db/get-file target-block-repo target-file-path)
-        to-file (db/entity to-block-repo (:db/id (:block/file to-block)))
+        target-file-content (react-queries/get-file target-block-repo target-file-path)
+        to-file (db-utils/entity to-block-repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-block-end-pos (db/get-block-end-pos-rec target-block-repo target-block)
+        target-block-end-pos (db-queries/get-block-end-pos-rec target-block-repo target-block)
         to-block-start-pos (get-start-pos to-block)
-        to-block-end-pos (db/get-block-end-pos-rec to-block-repo to-block)
+        to-block-end-pos (db-queries/get-block-end-pos-rec to-block-repo to-block)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)
-        to-file-content (utf8/encode (db/get-file to-block-repo to-file-path))
+        to-file-content (utf8/encode (react-queries/get-file to-block-repo to-file-path))
         new-to-file-content (let [separate-pos (cond nested?
                                                      (get-end-pos to-block)
                                                      top?
@@ -396,7 +398,7 @@
                                 (utf8/substring to-file-content separate-pos))))
         target-delete-tx (map (fn [id]
                                 [:db.fn/retractEntity [:block/uuid id]])
-                              (db/get-block-ids target-block))
+                              (db-queries/get-block-ids target-block))
         [target-modified-time to-modified-time]
         (let [modified-at (tc/to-long (t/now))]
           [[[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
@@ -417,9 +419,9 @@
                           :else
                           (let [offset-block-id (if nested?
                                                   (:block/uuid to-block)
-                                                  (last (db/get-block-ids to-block)))
+                                                  (last (db-queries/get-block-ids to-block)))
                                 offset-end-pos (get-end-pos
-                                                (db/entity to-block-repo [:block/uuid offset-block-id]))]
+                                                (db-utils/entity to-block-repo [:block/uuid offset-block-id]))]
                             (rebuild-dnd-blocks to-block-repo to-file target-child?
                                                 offset-end-pos
                                                 block-changes
@@ -479,10 +481,10 @@
             to-block-repo (:block/repo to-block)
             target-block (assoc target-block
                                 :block/meta
-                                (:block/meta (db/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
+                                (:block/meta (db-utils/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
             to-block (assoc to-block
                             :block/meta
-                            (:block/meta (db/entity [:block/uuid (:block/uuid to-block)])))
+                            (:block/meta (db-utils/entity [:block/uuid (:block/uuid to-block)])))
             same-repo? (= target-block-repo to-block-repo)
             target-file (:block/file target-block)
             same-file? (and

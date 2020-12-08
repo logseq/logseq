@@ -18,7 +18,8 @@
             [promesa.core :as p]
             [frontend.github :as github]
             [frontend.diff :as diff]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.db.react-queries :as react-queries]))
 
 (defonce remote-hash-id (atom nil))
 (defonce diff-state (atom {}))
@@ -70,7 +71,7 @@
      (let [content (get contents path)]
        (if (or (and delete? (nil? content))
                content)
-         (let [local-content (db/get-file path)]
+         (let [local-content (react-queries/get-file path)]
            (if (not= content local-content)
              (let [local-content (or local-content "")
                    content (or content "")

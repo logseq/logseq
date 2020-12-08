@@ -34,7 +34,10 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.utils :as db-utils]))
 
 (defn- get-page-name
   [state]
@@ -45,18 +48,18 @@
   [repo page-name page-original-name block? block-id]
   (when page-name
     (if block?
-      (db/get-block-and-children repo block-id)
+      (db-queries/get-block-and-children repo block-id)
       (do
-        (db/add-page-to-recent! repo page-original-name)
-        (db/get-page-blocks repo page-name)))))
+        (db-queries/add-page-to-recent! repo page-original-name)
+        (db-queries/get-page-blocks repo page-name)))))
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-        page-blocks (db/with-dummy-block raw-page-blocks format
+        page-blocks (db-queries/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
-                        (let [content (db/get-file repo file-path)]
+                        (let [content (react-queries/get-file repo file-path)]
                           {:block/page {:db/id (:db/id page)}
                            :block/file {:db/id (:db/id (:page/file page))}
                            :block/meta
@@ -82,7 +85,7 @@
 (defn contents-page
   [{:page/keys [name original-name file] :as contents}]
   (when-let [repo (state/get-current-repo)]
-    (let [format (db/get-page-format name)
+    (let [format (db-utils/get-page-format name)
           file-path (:file/path file)]
       (page-blocks-cp repo contents file-path name original-name name true false false nil format))))
 
@@ -191,7 +194,7 @@
 
 (defn tagged-pages
   [repo tag]
-  (let [pages (db/get-tag-pages repo tag)]
+  (let [pages (db-queries/get-tag-pages repo tag)]
     (when (seq pages)
       [:div.references.mt-6.flex-1.flex-row
        [:div.content
@@ -225,8 +228,8 @@
         path-page-name page-name
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
-        format (db/get-page-format page-name)
-        journal? (db/journal-page? page-name)
+        format (db-queries/get-page-format page-name)
+        journal? (db-queries/journal-page? page-name)
         block? (util/uuid-string? page-name)
         block-id (and block? (uuid page-name))
         sidebar? (:sidebar? option)]
@@ -249,17 +252,17 @@
         :else
         (let [route-page-name page-name
               page (if block?
-                     (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
-                          (db/entity repo))
-                     (db/entity repo [:page/name page-name]))
+                     (->> (:db/id (:block/page (db-utils/entity repo [:block/uuid block-id])))
+                          (db-utils/entity repo))
+                     (db-utils/entity repo [:page/name page-name]))
               page (if page page (do
-                                   (db/transact! repo [{:page/name page-name}])
-                                   (db/entity repo [:page/name page-name])))
+                                   (db-queries/transact! repo [{:page/name page-name}])
+                                   (db-utils/entity repo [:page/name page-name])))
               properties (:page/properties page)
               page-name (:page/name page)
               page-original-name (:page/original-name page)
               file (:page/file page)
-              file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
+              file-path (and (:db/id file) (:file/path (db-utils/entity repo (:db/id file))))
               today? (and
                       journal?
                       (= page-name (string/lower-case (date/journal-name))))
@@ -300,7 +303,7 @@
                             (when developer-mode?
                               {:title "(Dev) Show page data"
                                :options {:on-click (fn []
-                                                     (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                                     (let [page-data (with-out-str (pprint/pprint (db-utils/pull (:db/id page))))]
                                                        (println page-data)
                                                        (notification/show!
                                                         [:div
@@ -330,7 +333,7 @@
               [:a {:on-click (fn [e]
                                (util/stop e)
                                (when (gobj/get e "shiftKey")
-                                 (when-let [page (db/pull repo '[*] [:page/name page-name])]
+                                 (when-let [page (db-utils/pull repo '[*] [:page/name page-name])]
                                    (state/sidebar-add-block!
                                     repo
                                     (:db/id page)
@@ -365,7 +368,7 @@
                    (presentation repo page))])]
 
              (when (and repo (not block?))
-               (let [alias (db/get-page-alias-names repo page-name)]
+               (let [alias (db-queries/get-page-alias-names repo page-name)]
                  (when (seq alias)
                    [:div.text-sm.ml-1.mb-4 {:key "page-file"}
                     [:span.opacity-50 "Alias: "]
@@ -404,7 +407,7 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         [width height] (rum/react layout)
         dark? (= theme "dark")
-        graph (db/build-global-graph theme (rum/react show-journal?))
+        graph (db-queries/build-global-graph theme (rum/react show-journal?))
         dot-mode-value? (rum/react dot-mode?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph
@@ -449,7 +452,7 @@
       [:div.flex-1
        [:h1.title (t :all-pages)]
        (when current-repo
-         (let [pages (db/get-pages-with-modified-at current-repo)]
+         (let [pages (db-queries/get-pages-with-modified-at current-repo)]
            [:table.table-auto
             [:thead
              [:tr
@@ -462,7 +465,7 @@
                   [:td [:a {:on-click (fn [e]
                                         (util/stop e)
                                         (let [repo (state/get-current-repo)
-                                              page (db/pull repo '[*] [:page/name (string/lower-case page)])]
+                                              page (db-utils/pull repo '[*] [:page/name (string/lower-case page)])]
                                           (when (gobj/get e "shiftKey")
                                             (state/sidebar-add-block!
                                              repo

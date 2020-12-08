@@ -10,7 +10,9 @@
             [frontend.date :as date]
             [frontend.components.editor :as editor]
             [frontend.db-mixins :as db-mixins]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.queries :as db-queries]))
 
 (rum/defc references < rum/reactive db-mixins/query
   [page-name marker? priority?]
@@ -21,16 +23,16 @@
           journal? (date/valid-journal-title? (string/capitalize page-name))
           ref-blocks (cond
                        priority?
-                       (db/get-blocks-by-priority (state/get-current-repo) page-name)
+                       (react-queries/get-blocks-by-priority (state/get-current-repo) page-name)
 
                        marker?
-                       (db/get-marker-blocks (state/get-current-repo) page-name)
+                       (db-queries/get-marker-blocks (state/get-current-repo) page-name)
                        block-id
-                       (db/get-block-referenced-blocks block-id)
+                       (react-queries/get-block-referenced-blocks block-id)
                        :else
-                       (db/get-page-referenced-blocks page-name))
+                       (db-queries/get-page-referenced-blocks page-name))
           scheduled-or-deadlines (if journal?
-                                   (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
+                                   (react-queries/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           n-ref (count ref-blocks)]
       (when (or (> n-ref 0)
@@ -69,11 +71,11 @@
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
-  {:will-mount (fn [state]
-                 (let [[page-name n-ref] (:rum/args state)
-                       ref-blocks (db/get-page-unlinked-references page-name)]
-                   (reset! n-ref (count ref-blocks))
-                   (assoc state ::ref-blocks ref-blocks)))}
+    {:will-mount (fn [state]
+                   (let [[page-name n-ref] (:rum/args state)
+                         ref-blocks (db-queries/get-page-unlinked-references page-name)]
+                     (reset! n-ref (count ref-blocks))
+                     (assoc state ::ref-blocks ref-blocks)))}
   [state page-name n-ref]
   (let [ref-blocks (::ref-blocks state)]
     [:div.references-blocks

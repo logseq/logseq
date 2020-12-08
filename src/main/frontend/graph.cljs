@@ -5,7 +5,8 @@
             [goog.object :as gobj]
             [frontend.state :as state]
             [frontend.db :as db]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.db.utils :as db-utils]))
 
 ;; translated from https://github.com/vasturiano/react-force-graph/blob/master/example/highlight/index.html
 (defonce graph-mode (atom :dot-text))
@@ -142,53 +143,53 @@
   (let [nodes-count (count (:nodes graph))
         graph-data (build-graph-data graph)]
     (merge
-     {:graphData (bean/->js graph-data)
-      ;; :nodeRelSize node-r
-      :linkWidth (fn [link]
-                   (let [link {:source (gobj/get link "source")
-                               :target (gobj/get link "target")}]
-                     (if (contains? @highlight-links link) 5 1)))
-      :linkDirectionalParticles 4
-      :linkDirectionalParticleWidth (fn [link] (let [link {:source (-> (gobj/get link "source")
-                                                                       (gobj/get "id"))
-                                                           :target (-> (gobj/get link "target")
-                                                                       (gobj/get "id"))}]
-                                                 (if (contains? @highlight-links link) 4 0)))
-      :onNodeHover on-node-hover
-      :onLinkHover on-link-hover
-      :nodeLabel "id"
-      :linkColor (fn [] (if dark? "rgba(255,255,255,0.2)" "rgba(0,0,0,0.1)"))
-      :onZoom (fn [z]
-                (let [k (:k (bean/->clj z))]
-                  (reset! graph-mode
-                          (cond
-                            (or dot-mode? (< k 0.4))
-                            :dot
+      {:graphData (bean/->js graph-data)
+       ;; :nodeRelSize node-r
+       :linkWidth (fn [link]
+                    (let [link {:source (gobj/get link "source")
+                                :target (gobj/get link "target")}]
+                      (if (contains? @highlight-links link) 5 1)))
+       :linkDirectionalParticles 4
+       :linkDirectionalParticleWidth (fn [link] (let [link {:source (-> (gobj/get link "source")
+                                                                        (gobj/get "id"))
+                                                            :target (-> (gobj/get link "target")
+                                                                        (gobj/get "id"))}]
+                                                  (if (contains? @highlight-links link) 4 0)))
+       :onNodeHover on-node-hover
+       :onLinkHover on-link-hover
+       :nodeLabel "id"
+       :linkColor (fn [] (if dark? "rgba(255,255,255,0.2)" "rgba(0,0,0,0.1)"))
+       :onZoom (fn [z]
+                 (let [k (:k (bean/->clj z))]
+                   (reset! graph-mode
+                     (cond
+                       (or dot-mode? (< k 0.4))
+                       :dot
 
-                            :else
-                            :dot-text))))
-      :onNodeClick (fn [node event]
-                     (let [page-name (string/lower-case (gobj/get node "id"))]
-                       (if (gobj/get event "shiftKey")
-                         (let [repo (state/get-current-repo)
-                               page (db/entity repo [:page/name page-name])]
-                           (state/sidebar-add-block!
-                            repo
-                            (:db/id page)
-                            :page
-                            {:page page}))
-                         (route-handler/redirect! {:to :page
-                                                   :path-params {:name page-name}}))))
-      ;; :cooldownTicks 100
-      ;; :onEngineStop (fn []
-      ;;                 (when-let [ref (:ref-atom option)]
-      ;;                   (.zoomToFit @ref 400)))
-      :nodeCanvasObject
-      (fn [node ^CanvasRenderingContext2D ctx global-scale]
-        (case @graph-mode
-          :dot-text
-          (dot-text-mode node ctx global-scale dark?)
-          :dot
-          (dot-mode node ctx global-scale dark?)
-          (text-mode node ctx global-scale dark?)))}
+                       :else
+                       :dot-text))))
+       :onNodeClick (fn [node event]
+                      (let [page-name (string/lower-case (gobj/get node "id"))]
+                        (if (gobj/get event "shiftKey")
+                          (let [repo (state/get-current-repo)
+                                page (db-utils/entity repo [:page/name page-name])]
+                            (state/sidebar-add-block!
+                              repo
+                              (:db/id page)
+                              :page
+                              {:page page}))
+                          (route-handler/redirect! {:to :page
+                                                    :path-params {:name page-name}}))))
+       ;; :cooldownTicks 100
+       ;; :onEngineStop (fn []
+       ;;                 (when-let [ref (:ref-atom option)]
+       ;;                   (.zoomToFit @ref 400)))
+       :nodeCanvasObject
+       (fn [node ^CanvasRenderingContext2D ctx global-scale]
+         (case @graph-mode
+           :dot-text
+           (dot-text-mode node ctx global-scale dark?)
+           :dot
+           (dot-mode node ctx global-scale dark?)
+           (text-mode node ctx global-scale dark?)))}
      option)))

@@ -6,7 +6,8 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [clojure.string :as string]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.db.queries :as db-queries]))
 
 (defn index-files!
   [repo files git-add-cb]
@@ -42,7 +43,7 @@
                                    :page/journal-day (date/journal-title->int title)}))
                               titles))]
       (when (seq journal-pages-tx)
-        (db/transact! repo journal-pages-tx)))))
+        (db-queries/transact! repo journal-pages-tx)))))
 
 (defn import-from-roam-json!
   [data finished-ok-handler]

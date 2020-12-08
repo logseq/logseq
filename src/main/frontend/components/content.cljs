@@ -19,7 +19,9 @@
             [frontend.handler.notification :as notification]
             [frontend.components.editor :as editor]
             [frontend.context.i18n :as i18n]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]))
 
 (defn- set-format-js-loading!
   [format value]
@@ -89,7 +91,7 @@
                     :on-click (fn []
                                 (let [title (string/trim @input)]
                                   (when (not (string/blank? title))
-                                    (if (db/template-exists? title)
+                                    (if (db-queries/template-exists? title)
                                       (notification/show!
                                        [:p "Template already exists!"]
                                        :error)
@@ -106,7 +108,7 @@
 (rum/defc block-context-menu-content
   [target block-id]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (when-let [block (db/entity [:block/uuid block-id])]
+    (when-let [block (db-utils/entity [:block/uuid block-id])]
       (let [properties (:block/properties block)
             heading (get properties "heading")
             heading? (= heading "true")]
@@ -207,18 +209,18 @@
 
           (when (state/sub [:ui/developer-mode?])
             (ui/menu-link
-             {:key "(Dev) Show block data"
-              :on-click (fn []
-                          (let [block-data (with-out-str (pprint/pprint (db/pull [:block/uuid block-id])))]
-                            (println block-data)
-                            (notification/show!
-                             [:div
-                              [:pre.code block-data]
-                              [:br]
-                              (ui/button "Copy to clipboard"
-                                         :on-click #(.writeText js/navigator.clipboard block-data))]
-                             :success
-                             false)))}
+              {:key "(Dev) Show block data"
+               :on-click (fn []
+                           (let [block-data (with-out-str (pprint/pprint (db-utils/pull [:block/uuid block-id])))]
+                             (println block-data)
+                             (notification/show!
+                               [:div
+                                [:pre.code block-data]
+                                [:br]
+                                (ui/button "Copy to clipboard"
+                                  :on-click #(.writeText js/navigator.clipboard block-data))]
+                               :success
+                               false)))}
              "(Dev) Show block data"))]]))))
 
 ;; TODO: content could be changed

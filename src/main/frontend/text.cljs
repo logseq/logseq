@@ -3,7 +3,8 @@
             [frontend.util :as util]
             [clojure.string :as string]
             [clojure.set :as set]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.db.utils :as db-utils]))
 
 (defn remove-level-spaces
   ([text format]
@@ -124,7 +125,7 @@
           (string/starts-with? content' (string/lower-case properties-text)))
          (and (contains-properties? content)
               ;; not changed
-              (= (seq (:block/properties (db/entity [:block/uuid (:block/uuid block)])))
+              (= (seq (:block/properties (db-utils/entity [:block/uuid (:block/uuid block)])))
                  (seq properties))))
       content
       (-> (remove-properties! content)

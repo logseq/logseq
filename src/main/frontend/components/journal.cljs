@@ -18,7 +18,9 @@
             [frontend.components.page :as page]
             [frontend.components.onboarding :as onboarding]
             [goog.object :as gobj]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]))
 
 (rum/defc blocks-inner < rum/static
   {:did-mount (fn [state]
@@ -53,11 +55,11 @@
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
   [repo page format]
-  (let [raw-blocks (db/get-page-blocks repo page)
+  (let [raw-blocks (db-queries/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
-                (db/with-dummy-block raw-blocks format nil {:journal? true})
-                (db/with-block-refs-count repo))]
+                (db-queries/with-dummy-block raw-blocks format nil {:journal? true})
+                (db-queries/with-block-refs-count repo))]
     (blocks-inner blocks page document-mode?)))
 
 (rum/defc journal-cp < rum/reactive
@@ -79,13 +81,13 @@
         :on-click (fn [e]
                     (util/stop e)
                     (when (gobj/get e "shiftKey")
-                      (when-let [page (db/pull [:page/name (string/lower-case title)])]
+                      (when-let [page (db-utils/pull [:page/name (string/lower-case title)])]
                         (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page)
-                         :page
-                         {:page page
-                          :journal? true}))))}
+                          (state/get-current-repo)
+                          (:db/id page)
+                          :page
+                          {:page page
+                           :journal? true}))))}
        [:h1.title
         (util/capitalize-all title)]]
 
@@ -114,5 +116,5 @@
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
   (let [journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
+        latest-journals (db-queries/get-latest-journals (state/get-current-repo) journals-length)]
     (journals latest-journals)))

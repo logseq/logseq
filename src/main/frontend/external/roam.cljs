@@ -122,5 +122,5 @@
       (->files data))))
 
 (comment
-  (defonce test-roam-json (frontend.db/get-file "same.json"))
+  (defonce test-roam-json (frontend.db.react-queries/get-file "same.json"))
   (defonce edn-data (bean/->clj (js/JSON.parse test-roam-json))))

@@ -28,7 +28,9 @@
             [medley.core :as medley]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.text :as text]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -189,22 +191,22 @@
                  "")
               matched-templates (editor-handler/get-matched-templates q)
               chosen-handler (fn [[template db-id] _click?]
-                               (if-let [block (db/entity db-id)]
+                               (if-let [block (db-utils/entity db-id)]
                                  (let [new-level (:block/level edit-block)
                                        template-parent-level (:block/level block)
                                        pattern (config/get-block-pattern format)
                                        content
-                                       (db/get-block-full-content
-                                        (state/get-current-repo)
-                                        (:block/uuid block)
-                                        (fn [{:block/keys [level content properties] :as block}]
-                                          (let [new-level (+ new-level (- level template-parent-level))
-                                                properties' (dissoc (into {} properties) "id" "custom_id" "template")]
-                                            (-> content
-                                                (string/replace-first (apply str (repeat level pattern))
-                                                                      (apply str (repeat new-level pattern)))
-                                                text/remove-properties!
-                                                (text/rejoin-properties properties')))))
+                                       (db-queries/get-block-full-content
+                                         (state/get-current-repo)
+                                         (:block/uuid block)
+                                         (fn [{:block/keys [level content properties] :as block}]
+                                           (let [new-level (+ new-level (- level template-parent-level))
+                                                 properties' (dissoc (into {} properties) "id" "custom_id" "template")]
+                                             (-> content
+                                                 (string/replace-first (apply str (repeat level pattern))
+                                                   (apply str (repeat new-level pattern)))
+                                                 text/remove-properties!
+                                                 (text/rejoin-properties properties')))))
                                        content (if (string/includes? (string/trim edit-content) "\n")
                                                  content
                                                  (text/remove-level-spaces content format))]
@@ -664,13 +666,13 @@
                      (editor-handler/clear-when-saved!)
                      (if file?
                        (let [path (:file-path config)
-                             content (db/get-file-no-sub path)
+                             content (db-queries/get-file-no-sub path)
                              value (some-> (gdom/getElement path)
                                            (gobj/get "value"))]
                          (when (and
                                 (not (string/blank? value))
                                 (not= (string/trim value) (string/trim content)))
-                           (let [old-page-name (db/get-file-page path false)]
+                           (let [old-page-name (db-queries/get-file-page path false)]
                              (page-handler/rename-when-alter-title-property! old-page-name path format content value)
                              (file/alter-file (state/get-current-repo) path (string/trim value)
                                               {:re-render-root? true}))))
@@ -701,7 +703,7 @@
                       (when-let [repo (or (:block/repo block)
                                           (state/get-current-repo))]
                         (state/set-editor-last-input-time! repo (util/time-ms))
-                        (db/clear-repo-persistent-job! repo))
+                        (db-queries/clear-repo-persistent-job! repo))
                       (let [input (gdom/getElement id)
                             native-e (gobj/get e "nativeEvent")
                             last-input-char (util/nth-safe value (dec current-pos))]

@@ -6,7 +6,8 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.regex :as regex]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.db.queries :as db-queries]))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
@@ -84,12 +85,12 @@
      (let [q (escape-str q)
            q-pattern (re-pattern (str "(?i)" q))]
        (when-not (string/blank? q)
-         (let [blocks (db/get-matched-blocks
-                       (fn [content]
-                         (re-find q-pattern content))
-                       ;; (fn [content]
-                       ;;   (> (score q (.toLowerCase content)) 0))
-                       limit)]
+         (let [blocks (db-queries/get-matched-blocks
+                        (fn [content]
+                          (re-find q-pattern content))
+                        ;; (fn [content]
+                        ;;   (> (score q (.toLowerCase content)) 0))
+                        limit)]
            (map (fn [{:block/keys [content format _properties] :as block}]
                   (assoc block :block/content
                          (->> (text/remove-level-spaces content format)
@@ -101,7 +102,7 @@
   ([q limit]
    (let [q (clean-str q)]
      (when-not (string/blank? q)
-       (let [pages (db/get-pages (state/get-current-repo))]
+       (let [pages (db-queries/get-pages (state/get-current-repo))]
          (when (seq pages)
            (fuzzy-search pages q :limit limit)))))))
 
@@ -112,7 +113,7 @@
    (let [q (clean-str q)]
      (when-not (string/blank? q)
        (let [mldoc-exts (set (map name config/mldoc-support-formats))
-             files (->> (db/get-files (state/get-current-repo))
+             files (->> (db-queries/get-files (state/get-current-repo))
                         (map first)
                         (remove (fn [file]
                                   (mldoc-exts (util/get-file-ext file)))))]
@@ -124,7 +125,7 @@
    (template-search q 10))
   ([q limit]
    (let [q (clean-str q)]
-     (let [templates (db/get-all-templates)]
+     (let [templates (db-queries/get-all-templates)]
        (when (seq templates)
          (let [result (fuzzy-search (keys templates) q :limit limit)]
            (vec (select-keys templates result))))))))

@@ -37,8 +37,9 @@
             ["codemirror/mode/sql/sql"]
             ["codemirror/mode/swift/swift"]
             ["codemirror/mode/xml/xml"]
-            ;; ["parinfer-codemirror" :as par-cm]
-))
+    ;; ["parinfer-codemirror" :as par-cm]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]))
 
 ;; codemirror
 
@@ -51,7 +52,7 @@
         default-value (gobj/get textarea "defaultValue")]
     (cond
       (:block/uuid config)
-      (let [block (db/pull [:block/uuid (:block/uuid config)])
+      (let [block (db-utils/pull [:block/uuid (:block/uuid config)])
             format (:block/format block)
             ;; Get newest state
             pos-meta (:pos-meta state)
@@ -69,7 +70,7 @@
 
       (:file-path config)
       (let [path (:file-path config)
-            content (db/get-file-no-sub path)
+            content (db-queries/get-file-no-sub path)
             value (some-> (gdom/getElement path)
                           (gobj/get "value"))]
         (when (and
@@ -99,7 +100,7 @@
                                    :extraKeys #js {"Esc" (fn [cm]
                                                            (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
                                                              (if-let [block-id (:block/uuid config)]
-                                                               (let [block (db/pull [:block/uuid block-id])
+                                                               (let [block (db-utils/pull [:block/uuid block-id])
                                                                      value (.getValue cm)
                                                                      textarea-value (gobj/get textarea "value")
                                                                      changed? (not= value textarea-value)]

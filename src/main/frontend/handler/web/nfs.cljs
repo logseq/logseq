@@ -16,7 +16,8 @@
             [frontend.fs :as fs]
             [frontend.db :as db]
             [frontend.config :as config]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.db.queries :as db-queries]))
 
 (defn remove-ignore-files
   [files]
@@ -162,7 +163,7 @@
 (defn- reload-dir!
   [repo]
   (when (and repo (config/local-db? repo))
-    (let [old-files (db/get-files-full repo)
+    (let [old-files (db-queries/get-files-full repo)
           dir-name (config/get-local-dir repo)
           handle-path (str config/local-handle-prefix dir-name)
           path-handles (atom {})]

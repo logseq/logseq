@@ -27,7 +27,9 @@
             [goog.object :as gobj]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -138,7 +140,7 @@
   []
   (when-let [default-home (state/get-default-home)]
     (when-let [page (:page default-home)]
-      (when (db/entity [:page/name (string/lower-case page)])
+      (when (db-utils/entity [:page/name (string/lower-case page)])
         default-home))))
 
 (defonce sidebar-inited? (atom false))
@@ -170,7 +172,7 @@
         me (state/sub :me)
         journals-length (state/sub :journals-length)
         current-repo (state/sub :git/current-repo)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
+        latest-journals (db-queries/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)]
     (rum/with-context [[t] i18n/*tongue-context*]

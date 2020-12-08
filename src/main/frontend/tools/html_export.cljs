@@ -6,7 +6,8 @@
             [hiccups.runtime :as hiccupsrt]
             [clojure.walk :as walk]
             [clojure.set :as set]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.db.queries :as db-queries]))
 
 ;; Consider generate a db index so that search can still works
 
@@ -28,7 +29,7 @@
 
 (defn export-page
   [page-name blocks show-notification!]
-  (let [{:keys [slide] :as properties} (db/get-page-properties page-name)
+  (let [{:keys [slide] :as properties} (db-queries/get-page-properties page-name)
         slide? slide
         blocks (if (:block/pre-block? (first blocks))
                  (rest blocks)

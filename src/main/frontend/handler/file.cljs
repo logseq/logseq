@@ -17,7 +17,9 @@
             [frontend.history :as history]
             [frontend.handler.project :as project-handler]
             [lambdaisland.glogi :as log]
-            ["ignore" :as Ignore]))
+            ["ignore" :as Ignore]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.react-queries :as react-queries]))
 
 (defn load-file
   [repo-url path]
@@ -72,7 +74,7 @@
    (restore-config! repo-url nil project-changed-check?))
   ([repo-url config-content project-changed-check?]
    (let [old-project (:project (state/get-config))
-         new-config (db/reset-config! repo-url config-content)]
+         new-config (db-queries/reset-config! repo-url config-content)]
      (when (and (not (config/local-db? repo-url))
                 project-changed-check?)
        (let [new-project (:project new-config)
@@ -119,15 +121,15 @@
                            re-render-root? false
                            add-history? true
                            update-status? false}}]
-  (let [original-content (db/get-file-no-sub repo path)]
+  (let [original-content (db-queries/get-file-no-sub repo path)]
     (if reset?
       (do
-        (when-let [page-id (db/get-file-page-id path)]
-          (db/transact! repo
+        (when-let [page-id (db-queries/get-file-page-id path)]
+          (db-queries/transact! repo
                         [[:db/retract page-id :page/alias]
                          [:db/retract page-id :page/tags]]))
-        (db/reset-file! repo path content))
-      (db/set-file-content! repo path content))
+        (db-queries/reset-file! repo path content))
+      (db-queries/set-file-content! repo path content))
     (util/p-handle
      (fs/write-file (util/get-repo-dir repo) path content original-content)
      (fn [_]
@@ -164,14 +166,14 @@
                      reset? false}}]
    (p/let [file->content (let [paths (map first files)]
                            (zipmap paths
-                                   (map (fn [path] (db/get-file-no-sub repo path)) paths)))]
+                                   (map (fn [path] (db-queries/get-file-no-sub repo path)) paths)))]
      (let [files-tx (mapv (fn [[path content]]
                             (let [original-content (get file->content path)]
                               [path original-content content])) files)
            write-file-f (fn [[path content]]
                           (if reset?
-                            (db/reset-file! repo path content)
-                            (db/set-file-content! repo path content))
+                            (db-queries/reset-file! repo path content)
+                            (db-queries/set-file-content! repo path content))
                           (let [original-content (get file->content path)]
                             (-> (p/let [_ (fs/check-directory-permission! repo)]
                                   (fs/write-file (util/get-repo-dir repo) path content original-content))
@@ -212,16 +214,16 @@
                                     "/"
                                     file)
                                nil)]
-       (when-let [file (db/entity repo [:file/path file])]
+       (when-let [file (db-utils/entity repo [:file/path file])]
          (common-handler/check-changed-files-status)
          (let [file-id (:db/id file)
-               page-id (db/get-file-page-id (:file/path file))
+               page-id (db-queries/get-file-page-id (:file/path file))
                tx-data (map
                         (fn [db-id]
                           [:db.fn/retractEntity db-id])
                         (remove nil? [file-id page-id]))]
            (when (seq tx-data)
-             (db/transact! repo tx-data)))))
+             (db-queries/transact! repo tx-data)))))
      (p/catch (fn [err]
                 (prn "error: " err))))))
 
@@ -229,7 +231,7 @@
   [file]
   (when-let [repo (state/get-current-repo)]
     (let [path (:file/path file)
-          content (db/get-file path)]
+          content (react-queries/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
 
 (defn ignore-files

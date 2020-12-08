@@ -22,7 +22,10 @@
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [frontend.helper :as helper]
-            [frontend.spec :as spec]))
+            [frontend.spec :as spec]
+            [frontend.db.queries :as db-queries]
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.declares :as declares]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -55,10 +58,10 @@
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
-                              (db/get-file repo-url path))
+                              (react-queries/get-file repo-url path))
                 content (or old-content default-content)]
-            (db/reset-file! repo-url path content)
-            (db/reset-config! repo-url content)
+            (db-queries/reset-file! repo-url path content)
+            (db-queries/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))))))
 
@@ -75,7 +78,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
-        (db/reset-file! repo-url path default-content)
+        (db-queries/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-custom-theme
@@ -88,7 +91,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
-        (db/reset-file! repo-url path default-content)
+        (db-queries/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-dummy-notes-page
@@ -99,7 +102,7 @@
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-      (db/reset-file! repo-url path content))))
+      (db-queries/reset-file! repo-url path content))))
 
 (defn create-today-journal-if-not-exists
   ([repo-url]
@@ -129,14 +132,14 @@
          path (str config/default-journals-directory "/" file-name "."
                    (config/get-file-extension format))
          file-path (str "/" path)
-         page-exists? (db/entity repo-url [:page/name (string/lower-case title)])
-         empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
+         page-exists? (db-utils/entity repo-url [:page/name (string/lower-case title)])
+         empty-blocks? (empty? (db-queries/get-page-blocks-no-cache repo-url (string/lower-case title)))]
      (when (or empty-blocks?
                (not page-exists?))
        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
          (when-not file-exists?
-           (db/reset-file! repo-url path content)
+           (db-queries/reset-file! repo-url path content)
            (ui-handler/re-render-root!)
            (git-handler/git-add repo-url path)))))))
 
@@ -159,9 +162,9 @@
                           (contains? config/mldoc-support-formats format)))
                       files)
         blocks-pages (if (seq parsed-files)
-                       (db/extract-all-blocks-pages repo-url parsed-files)
+                       (db-queries/extract-all-blocks-pages repo-url parsed-files)
                        [])]
-    (db/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (db-queries/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (let [config-file (str config/app-name "/" config/config-file)]
       (if (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
@@ -204,10 +207,10 @@
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
               delete-files (if (seq remove-files)
-                             (db/delete-files remove-files))
-              delete-blocks (db/delete-blocks repo-url (concat remove-files modify-files))
+                             (db-queries/delete-files remove-files))
+              delete-blocks (db-queries/delete-blocks repo-url (concat remove-files modify-files))
               delete-pages (if (seq remove-files)
-                             (db/delete-pages-by-files remove-files)
+                             (db-queries/delete-pages-by-files remove-files)
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)
@@ -232,16 +235,16 @@
   [repo tx transact-option files]
   (spec/validate :repos/url repo)
   (let [files (remove nil? files)
-        pages (->> (map db/get-file-page (map first files))
+        pages (->> (map db-queries/get-file-page (map first files))
                    (remove nil?))]
-    (db/transact-react!
-     repo
-     tx
-     transact-option)
+    (db-queries/transact-react!
+      repo
+      tx
+      transact-option)
     (when (seq pages)
-      (let [children-tx (mapcat #(db/rebuild-page-blocks-children repo %) pages)]
+      (let [children-tx (mapcat #(db-queries/rebuild-page-blocks-children repo %) pages)]
         (when (seq children-tx)
-          (db/transact! repo children-tx))))
+          (db-queries/transact! repo children-tx))))
     (when (seq files)
       (file-handler/alter-files repo files))))
 
@@ -261,8 +264,8 @@
              :as opts}]
   (spec/validate :repos/url repo-url)
   (when (and
-         (db/get-conn repo-url true)
-         (db/cloned? repo-url))
+         (declares/get-conn repo-url true)
+         (db-queries/cloned? repo-url))
     (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
             local-latest-commit (common-handler/get-ref repo-url)
             descendent? (git/descendent? repo-url local-latest-commit remote-latest-commit)]
@@ -272,7 +275,7 @@
                 force-pull?)
         (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo-url))]
           (when (empty? files)
-            (let [status (db/get-key-value repo-url :git/status)]
+            (let [status (db-queries/get-key-value repo-url :git/status)]
               (when (or
                      force-pull?
                      (and
@@ -347,9 +350,9 @@
                   commit-message "Logseq auto save"
                   merge-push-no-diff? false}}]
   (spec/validate :repos/url repo-url)
-  (let [status (db/get-key-value repo-url :git/status)]
+  (let [status (db-queries/get-key-value repo-url :git/status)]
     (if (and
-         (db/cloned? repo-url)
+         (db-queries/cloned? repo-url)
          (state/input-idle? repo-url)
          (or (not= status :pushing)
              custom-commit?))
@@ -361,7 +364,7 @@
                                      commit-message)]
                 (p/let [commit-oid (git/commit repo-url commit-message)
                         token (helper/get-github-token repo-url)
-                        status (db/get-key-value repo-url :git/status)]
+                        status (db-queries/get-key-value repo-url :git/status)]
                   (when (and token (or (not= status :pushing)
                                        custom-commit?))
                     (git-handler/set-git-status! repo-url :pushing)
@@ -409,8 +412,8 @@
          (git/clone repo-url token))
        (fn [result]
          (state/set-current-repo! repo-url)
-         (db/start-db-conn! (state/get-me) repo-url)
-         (db/mark-repo-as-cloned! repo-url))
+         (db-queries/start-db-conn! (state/get-me) repo-url)
+         (db-queries/mark-repo-as-cloned! repo-url))
        (fn [e]
          (println "Clone failed, error: ")
          (js/console.error e)
@@ -429,7 +432,7 @@
   [k v]
   (when-let [repo (state/get-current-repo)]
     (let [path (str config/app-name "/" config/config-file)]
-      (when-let [config (db/get-file-no-sub path)]
+      (when-let [config (db-queries/get-file-no-sub path)]
         (let [config (try
                        (reader/read-string config)
                        (catch js/Error e
@@ -445,9 +448,9 @@
   [{:keys [id url] :as repo}]
   (spec/validate :repos/repo repo)
   (let [delete-db-f (fn []
-                      (db/remove-conn! url)
-                      (db/remove-db! url)
-                      (db/remove-files-db! url)
+                      (declares/remove-conn! url)
+                      (declares/remove-db! url)
+                      (declares/remove-files-db! url)
                       (fs/rmdir (util/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)
@@ -463,7 +466,7 @@
 (defn start-repo-db-if-not-exists!
   [repo option]
   (state/set-current-repo! repo)
-  (db/start-db-conn! nil repo option))
+  (db-queries/start-db-conn! nil repo option))
 
 (defn setup-local-repo-if-not-exists!
   []
@@ -471,7 +474,7 @@
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
-             (db/start-db-conn! nil repo)
+             (db-queries/start-db-conn! nil repo)
              (when-not config/publishing?
                (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
                  (create-dummy-notes-page repo dummy-notes)))
@@ -536,7 +539,7 @@
                                   (util/get-repo-dir url)
                                   ".git/config")]
             (if (and config-exists?
-                     (db/cloned? repo))
+                     (db-queries/cloned? repo))
               (do
                 (git-handler/git-set-username-email! repo me)
                 (pull repo nil))
@@ -552,10 +555,10 @@
 (defn rebuild-index!
   [{:keys [id url] :as repo}]
   (spec/validate :repos/repo repo)
-  (db/remove-conn! url)
-  (db/clear-query-state!)
-  (-> (p/do! (db/remove-db! url)
-             (db/remove-files-db! url)
+  (declares/remove-conn! url)
+  (react-queries/clear-query-state!)
+  (-> (p/do! (declares/remove-db! url)
+             (declares/remove-files-db! url)
              (fs/rmdir (util/get-repo-dir url))
              (clone-and-load-db url))
       (p/catch (fn [error]
