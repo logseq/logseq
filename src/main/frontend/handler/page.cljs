@@ -436,6 +436,27 @@
             (log/error :page/http-delete-failed error)
             (reject error)))))))
 
+(defn get-page-list-by-project-name
+  [project]
+  (js/Promise.
+    (fn [resolve _]
+      (if-not (string? project)
+        (resolve :project-name-is-invalid)
+        (let [url (util/format "%sprojects/%s/pages" config/api project)]
+         (util/fetch url
+           (fn [result]
+             (log/debug :page/get-page-list result)
+             (let [data (:result result)]
+               (if (sequential? data)
+                 (do
+                   (when-let [repo (state/get-current-repo)]
+                     (state/set-state! [:me :published-pages repo] data))
+                   (resolve data))
+                 (log/error :page/http-get-list-result-malformed result))))
+           (fn [error]
+             (log/error :page/http-get-list-failed error)
+             (resolve error))))))))
+
 (defn update-state-and-notify
   [page-name]
   (page-add-properties! page-name {:published false})
