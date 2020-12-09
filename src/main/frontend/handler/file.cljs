@@ -139,7 +139,10 @@
         (db/reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file (util/get-repo-dir repo) path content {:old-content original-content})
+     (fs/write-file (util/get-repo-dir repo) path content {:old-content original-content
+                                                           :last-modified-at (db/get-file-last-modified-at repo path)
+                                                           :nfs-saved-handler (fn [file]
+                                                                                (nfs-saved-handler repo path file))})
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))

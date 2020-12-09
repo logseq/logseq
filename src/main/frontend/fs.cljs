@@ -179,7 +179,9 @@
                   (utils/verifyPermission handle true)
                   (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
                           _ (idb/set-item! basename-handle-path file-handle)
-                          _ (utils/writeFile file-handle content)]))
+                          _ (utils/writeFile file-handle content)
+                          file (.getFile file-handle)]
+                    (nfs-saved-handler file)))
                 (println "Error: directory handle not exists: " handle-path)))
             (p/catch (fn [error]
                        (println "Write local file failed: " {:path path})
