@@ -206,11 +206,10 @@
           git-add-f (fn []
                       (let [add-helper
                             (fn []
-                              (doall
-                               (map
-                                (fn [[path content]]
-                                  (git-handler/git-add repo path update-status?))
-                                files)))]
+                              (map
+                               (fn [[path content]]
+                                 (git-handler/git-add repo path update-status?))
+                               files))]
                         (-> (p/all (add-helper))
                             (p/then (fn [_]
                                       (when git-add-cb
@@ -224,7 +223,7 @@
                                                (let [original-content (get file->content path)]
                                                  [path original-content content])) files)]
                           (history/add-history! repo files-tx))))]
-      (-> (p/all (doall (map write-file-f files)))
+      (-> (p/all (map write-file-f files))
           (p/then (fn []
                     (git-add-f)
                     ;; TODO: save logseq/metadata
