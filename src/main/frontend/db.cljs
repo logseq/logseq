@@ -786,19 +786,6 @@
            (map :page/name)
            distinct))))
 
-(defn get-published-pages
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (get-conn repo)
-      (->> (q repo [:page/published] {:use-cache? false}
-             '[:find (pull ?page [*])
-               :in $
-               :where
-               [?page :page/properties ?properties]
-               [(get ?properties :published) ?publish]
-               [(= "true" ?publish)]])
-        react))))
-
 (defn get-files
   [repo]
   (when-let [conn (get-conn repo)]
