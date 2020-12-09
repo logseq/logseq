@@ -10,7 +10,7 @@
             [frontend.config :as config]
             [clojure.string :as string]
             [frontend.ui :as ui]
-            [frontend.db :as db]
+
             [frontend.version :as version]
             [frontend.components.commit :as commit]
             [frontend.context.i18n :as i18n]

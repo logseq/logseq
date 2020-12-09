@@ -5,7 +5,7 @@
             [frontend.state :as state]
             [goog.dom :as gdom]
             [frontend.handler.ui :as ui-handler]
-            [frontend.db :as db]
+
             [frontend.date :as date]
             [clojure.string :as string]
             [medley.core :as medley]

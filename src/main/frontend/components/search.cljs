@@ -4,7 +4,7 @@
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
             [frontend.handler.file :as file-handler]
-            [frontend.db :as db]
+
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
             [frontend.state :as state]

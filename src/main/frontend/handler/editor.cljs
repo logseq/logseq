@@ -14,7 +14,7 @@
             [frontend.image :as image]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [frontend.db :as db]
+
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]

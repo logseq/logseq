@@ -5,6 +5,7 @@
             [frontend.config :as config]
             [frontend.idb :as idb]))
 
+(defonce conns (atom {}))
 
 (defn get-repo-path
   [url]
@@ -23,7 +24,13 @@
   (when repo
     (str "logseq-files-db/" (get-repo-path repo))))
 
-(defonce conns (atom {}))
+(defn remove-db!
+  [repo]
+  (idb/remove-item! (datascript-db repo)))
+
+(defn remove-files-db!
+  [repo]
+  (idb/remove-item! (datascript-files-db repo)))
 
 (defn get-conn
   ([]
@@ -53,10 +60,3 @@
   (swap! conns dissoc (datascript-db repo))
   (swap! conns dissoc (datascript-files-db repo)))
 
-(defn remove-files-db!
-  [repo]
-  (idb/remove-item! (datascript-files-db repo)))
-
-(defn remove-db!
-  [repo]
-  (idb/remove-item! (datascript-db repo)))

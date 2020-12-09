@@ -14,7 +14,7 @@
             [clojure.set :as set]
             [frontend.ui :as ui]
             [frontend.fs :as fs]
-            [frontend.db :as db]
+
             [frontend.config :as config]
             [lambdaisland.glogi :as log]
             [frontend.db.queries :as db-queries]))

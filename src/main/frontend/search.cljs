@@ -1,5 +1,5 @@
 (ns frontend.search
-  (:require [frontend.db :as db]
+  (:require
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.util :as util]

@@ -280,7 +280,7 @@
 
 
 
-(defn- with-repo
+(defn with-repo
   [repo blocks]
   (map (fn [block]
          (assoc block :block/repo repo))
@@ -315,3 +315,9 @@
 (defn get-repo-name
   [url]
   (last (string/split url #"/")))
+
+(defn kv
+  [key value]
+  {:db/id -1
+   :db/ident key
+   key value})

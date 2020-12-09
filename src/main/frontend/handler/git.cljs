@@ -2,7 +2,7 @@
   (:require [frontend.util :as util :refer-macros [profile]]
             [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.db :as db]
+
             [frontend.git :as git]
             [frontend.date :as date]
             [goog.object :as gobj]

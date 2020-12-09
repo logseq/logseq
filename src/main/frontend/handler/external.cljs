@@ -6,7 +6,7 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [clojure.string :as string]
-            [frontend.db :as db]
+
             [frontend.db.queries :as db-queries]))
 
 (defn index-files!

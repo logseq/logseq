@@ -6,7 +6,7 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.state :as state]
-            [frontend.db :as db]
+
             [dommy.core :as d]
             [datascript.core :as dc]
             [goog.dom :as gdom]

@@ -1,6 +1,6 @@
 (ns frontend.handler
   (:require [frontend.state :as state]
-            [frontend.db :as db]
+
             [frontend.db-schema :as db-schema]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]

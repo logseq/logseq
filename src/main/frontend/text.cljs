@@ -3,7 +3,7 @@
             [frontend.util :as util]
             [clojure.string :as string]
             [clojure.set :as set]
-            [frontend.db :as db]
+
             [frontend.db.utils :as db-utils]))
 
 (defn remove-level-spaces

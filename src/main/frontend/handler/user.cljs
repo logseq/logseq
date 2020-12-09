@@ -1,7 +1,7 @@
 (ns frontend.handler.user
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.state :as state]
-            [frontend.db :as db]
+
             [frontend.idb :as idb]
             [frontend.config :as config]
             [frontend.storage :as storage]

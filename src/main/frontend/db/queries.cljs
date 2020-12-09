@@ -26,9 +26,6 @@
             [medley.core :as medley]
             [frontend.extensions.sci :as sci]))
 
-
-
-
 (defn- get-public-pages
   [db]
   (-> (d/q
@@ -86,12 +83,6 @@
                     aliases)]
       (set (conj aliases page-id)))))
 
-(defn- with-repo
-  [repo blocks]
-  (map (fn [block]
-         (assoc block :block/repo repo))
-    blocks))
-
 (defn get-block-refs-count
   [repo]
   (->> (d/q
@@ -114,7 +105,7 @@
   [repo-url result]
   (let [result (db-utils/seq-flatten result)
         sorted (db-utils/sort-by-pos result)]
-    (->> (with-repo repo-url sorted)
+    (->> (db-utils/with-repo repo-url sorted)
       (with-block-refs-count repo-url))))
 
 (defn get-page-blocks-no-cache
@@ -338,16 +329,10 @@
         ;; FIXME: check error type and notice user
         (log/error :db/transact! e)))))
 
-(defn kv
-  [key value]
-  {:db/id -1
-   :db/ident key
-   key value})
-
 (defn set-key-value
   [repo-url key value]
   (if value
-    (transact-react! repo-url [(kv key value)]
+    (transact-react! repo-url [(db-utils/kv key value)]
       {:key [:kv key]})
     (remove-key repo-url key)))
 
@@ -367,7 +352,7 @@
                            (= (:block/uuid h)
                              block-uuid)
                            (> (:block/level h) level))))
-           (with-repo repo-url)
+           (db-utils/with-repo repo-url)
            (with-block-refs-count repo-url)))
 
 
@@ -985,7 +970,7 @@
 (defn set-key-value
   [repo-url key value]
   (if value
-    (transact-react! repo-url [(kv key value)]
+    (transact-react! repo-url [(db-utils/kv key value)]
       {:key [:kv key]})
     (remove-key repo-url key)))
 
@@ -1010,7 +995,7 @@
       (react-queries/react)
       (db-utils/seq-flatten)
       (db-utils/sort-by-pos)
-      (with-repo repo-url)
+      (db-utils/with-repo repo-url)
       (with-block-refs-count repo-url)
       (db-utils/sort-blocks)
       (db-utils/group-by-page))))
@@ -1323,7 +1308,7 @@
            _ (.setDate date (- (.getDate date) (dec n)))
            today (db-utils/date->int (js/Date.))
            pages (->>
-                   (q repo-url [:journals] {:use-cache? false}
+                   (react-queries/q repo-url [:journals] {:use-cache? false}
                      '[:find ?page-name ?journal-day
                        :in $ ?today
                        :where
@@ -1598,9 +1583,9 @@
                         other-pages)
                       []))
             edges (db-utils/build-edges (remove
-                                 (fn [[_ to]]
-                                   (nil? to))
-                                 nodes))
+                                          (fn [[_ to]]
+                                            (nil? to))
+                                          nodes))
             nodes (db-utils/build-nodes dark? current-page edges nodes)]
         (db-utils/normalize-page-name
           {:nodes nodes
@@ -1683,7 +1668,7 @@
             pre-block?
             (recur others (cons item children))
 
-            (> bottom-level cur-level)      ; parent
+            (> bottom-level cur-level)                      ; parent
             (let [[children other-children] (split-with (fn [h]
                                                           (> (:block/level h) cur-level))
                                               children)
@@ -1785,7 +1770,7 @@
                            (mapv :e))]
           (when (seq block-eids)
             (let [blocks (db-utils/pull-many repo '[:block/meta] block-eids)]
-              (-> (last (sort-by-pos blocks))
+              (-> (last (db-utils/sort-by-pos blocks))
                   (get-in [:block/meta :end-pos])))))))
     ;; TODO: need more thoughts
     0))
@@ -1864,7 +1849,7 @@
       (if (seq blocks)
         (let [[{:block/keys [uuid level] :as block} & others] blocks
               [tx children] (cond
-                              (< level last-level)        ; parent
+                              (< level last-level)          ; parent
                               (let [cur-children (get children last-level)
                                     tx (if (seq cur-children)
                                          (vec
@@ -1880,11 +1865,11 @@
                                                  (update level conj uuid))]
                                 [tx children])
 
-                              (> level last-level)        ; child of sibling
+                              (> level last-level)          ; child of sibling
                               (let [children (update children level conj uuid)]
                                 [tx children])
 
-                              :else                       ; sibling
+                              :else                         ; sibling
                               (let [children (update children last-level conj uuid)]
                                 [tx children]))]
           (recur others tx children level))
@@ -1940,4 +1925,3 @@
 (defn local-native-fs?
   [repo]
   (= :local-native-fs (get-db-type repo)))
-

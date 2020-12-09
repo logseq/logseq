@@ -1,6 +1,6 @@
 (ns frontend.tools.html-export
   (:require-macros [hiccups.core :as hiccups :refer [html]])
-  (:require [frontend.db :as db]
+  (:require
             [frontend.components.block :as block]
             [frontend.extensions.slide :as slide]
             [hiccups.runtime :as hiccupsrt]

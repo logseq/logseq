@@ -1,6 +1,6 @@
 (ns frontend.components.content
   (:require [rum.core :as rum]
-            [frontend.db :as db]
+
             [frontend.format :as format]
             [frontend.format.protocol :as protocol]
             [frontend.handler.editor :as editor-handler]

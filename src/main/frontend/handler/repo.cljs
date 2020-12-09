@@ -5,7 +5,7 @@
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.state :as state]
-            [frontend.db :as db]
+
             [frontend.git :as git]
             [cljs-bean.core :as bean]
             [frontend.date :as date]

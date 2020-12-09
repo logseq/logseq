@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [reitit.frontend.easy :as rfe]
             [clojure.string :as string]
-            [frontend.db :as db]
+
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.state :as state]

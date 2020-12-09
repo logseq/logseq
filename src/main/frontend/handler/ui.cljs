@@ -1,7 +1,7 @@
 (ns frontend.handler.ui
   (:require [dommy.core :as dom]
             [frontend.state :as state]
-            [frontend.db :as db]
+
             [rum.core :as rum]
             [goog.dom :as gdom]
             [goog.object :as gobj]

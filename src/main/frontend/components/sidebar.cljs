@@ -3,7 +3,7 @@
             [frontend.ui :as ui]
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db :as db]
+
             [frontend.components.widgets :as widgets]
             [frontend.components.journal :as journal]
             [frontend.components.page :as page]

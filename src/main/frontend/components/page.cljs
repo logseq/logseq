@@ -10,7 +10,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [clojure.string :as string]
-            [frontend.db :as db]
+
             [dommy.core :as d]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
@@ -21,7 +21,7 @@
             [frontend.components.content :as content]
             [frontend.components.project :as project]
             [frontend.config :as config]
-            [frontend.db :as db]
+
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [goog.dom :as gdom]

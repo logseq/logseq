@@ -6,7 +6,7 @@
             [frontend.util :as util]
             [frontend.text :as text]
             [frontend.git :as git]
-            [frontend.db :as db]
+
             [frontend.db.queries :as db-queries]))
 
 (defn get-ref

@@ -1,6 +1,6 @@
 (ns frontend.handler.page
   (:require [clojure.string :as string]
-            [frontend.db :as db]
+
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.util :as util :refer-macros [profile]]

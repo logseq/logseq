@@ -11,7 +11,7 @@
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]
-            [frontend.db :as db]
+
             [frontend.config :as config]
             [dommy.core :as d]
             [goog.object :as gobj]

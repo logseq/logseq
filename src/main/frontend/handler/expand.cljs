@@ -4,7 +4,7 @@
             [goog.object :as gobj]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.db :as db]
+
             [frontend.db.queries :as db-queries]))
 
 (defn- hide!

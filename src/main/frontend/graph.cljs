@@ -4,7 +4,7 @@
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
             [frontend.state :as state]
-            [frontend.db :as db]
+
             [cljs-bean.core :as bean]
             [frontend.db.utils :as db-utils]))
 
