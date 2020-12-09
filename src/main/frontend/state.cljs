@@ -17,6 +17,8 @@
    {:route-match nil
     :today nil
     :db/batch-txs (async/chan 100)
+    :file/writes (async/chan 100)
+    :file/writing? false
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -803,6 +805,10 @@
   []
   (:db/batch-txs @state))
 
+(defn get-file-write-chan
+  []
+  (:file/writes @state))
+
 (defn add-tx!
   ;; TODO: replace f with data for batch transactions
   [f]
@@ -942,15 +948,23 @@
     (let [latest-txs (:db/latest-txs @state)
           last-persist-tx-id (get-last-persist-transact-id repo files?)
           latest-txs (if last-persist-tx-id
-                      (update-in latest-txs [repo files?]
-                                 (fn [result]
-                                   (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
-                      latest-txs)
-         new-txs (update-in latest-txs [repo files?] (fn [result]
-                                                       (vec (conj result {:tx-id tx-id
-                                                                          :tx-data tx-data}))))]
-     (storage/set-transit! :db/latest-txs new-txs)
-     (set-state! :db/latest-txs new-txs))))
+                       (update-in latest-txs [repo files?]
+                                  (fn [result]
+                                    (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
+                       latest-txs)
+          new-txs (update-in latest-txs [repo files?] (fn [result]
+                                                        (vec (conj result {:tx-id tx-id
+                                                                           :tx-data tx-data}))))]
+      (storage/set-transit! :db/latest-txs new-txs)
+      (set-state! :db/latest-txs new-txs))))
+
+(defn set-file-writing!
+  [v]
+  (set-state! :file/writing? v))
+
+(defn file-in-writing!
+  []
+  (:file/writing? @state))
 
 (defn get-repo-latest-txs
   [repo file?]

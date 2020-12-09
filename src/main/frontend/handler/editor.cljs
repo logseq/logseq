@@ -763,7 +763,8 @@
   [state]
   (when (and (not config/publishing?)
              ;; skip this operation if it's inserting
-             (not= :insert (state/get-editor-op)))
+             (not= :insert (state/get-editor-op))
+             (not (state/file-in-writing!)))
     (state/set-editor-op! :insert)
     (let [{:keys [block value format id config]} (get-state state)
           block-id (:block/uuid block)
@@ -953,17 +954,22 @@
             :data [block]}
            [[file-path new-content]])
 
+          (state/set-editor-op! nil)
+
           (when (or (seq ref-pages) (seq ref-blocks))
             (ui-handler/re-render-root!)))))))
 
 (defn delete-block!
   [state repo e]
   (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
-    (when block-id
-      (when-let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))]
-        (let [page-blocks-count (db/get-page-blocks-count repo page-id)
-              page (db/entity page-id)]
-          (when (> page-blocks-count 1)
+    (when (and block-id
+               (not= :block/delete (state/get-editor-op)))
+      (state/set-editor-op! :block/delete)
+      (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
+            page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))
+            page (and page-id (db/entity page-id))]
+        (if (> page-blocks-count 1)
+          (do
             (util/stop e)
             ;; delete block, edit previous block
             (let [block (db/pull [:block/uuid block-id])
@@ -983,7 +989,8 @@
                                0)]
                       (edit-block! block pos format id
                                    {:custom-content new-value
-                                    :tail-len tail-len}))))))))))))
+                                    :tail-len tail-len})))))))
+          (state/set-editor-op! nil))))))
 
 (defn delete-blocks!
   [repo block-uuids]
