@@ -309,21 +309,23 @@
   (:editor/set-timestamp-block @state))
 
 (defn set-edit-content!
-  [input-id value]
-  (when input-id
-    (when-let [input (gdom/getElement input-id)]
-      (util/set-change-value input value))
-    (update-state! :editor/content (fn [m]
-                                     (assoc m input-id value)))
-    ;; followers
-    ;; (when-let [s (util/extract-uuid input-id)]
-    ;;   (let [input (gdom/getElement input-id)
-    ;;         leader-parent (util/rec-get-block-node input)
-    ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-    ;;                        (remove #(= leader-parent %)))]
-    ;;     (prn "followers: " (count followers))
-    ;;     ))
-))
+  ([input-id value] (set-edit-content! input-id value false))
+  ([input-id value skip-set-input-value?]
+   (when input-id
+     (when-not skip-set-input-value?
+       (when-let [input (gdom/getElement input-id)]
+         (util/set-change-value input value)))
+     (update-state! :editor/content (fn [m]
+                                      (assoc m input-id value)))
+     ;; followers
+     ;; (when-let [s (util/extract-uuid input-id)]
+     ;;   (let [input (gdom/getElement input-id)
+     ;;         leader-parent (util/rec-get-block-node input)
+     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
+     ;;                        (remove #(= leader-parent %)))]
+     ;;     (prn "followers: " (count followers))
+     ;;     ))
+)))
 
 (defn get-edit-input-id
   []
@@ -942,15 +944,15 @@
     (let [latest-txs (:db/latest-txs @state)
           last-persist-tx-id (get-last-persist-transact-id repo files?)
           latest-txs (if last-persist-tx-id
-                      (update-in latest-txs [repo files?]
-                                 (fn [result]
-                                   (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
-                      latest-txs)
-         new-txs (update-in latest-txs [repo files?] (fn [result]
-                                                       (vec (conj result {:tx-id tx-id
-                                                                          :tx-data tx-data}))))]
-     (storage/set-transit! :db/latest-txs new-txs)
-     (set-state! :db/latest-txs new-txs))))
+                       (update-in latest-txs [repo files?]
+                                  (fn [result]
+                                    (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
+                       latest-txs)
+          new-txs (update-in latest-txs [repo files?] (fn [result]
+                                                        (vec (conj result {:tx-id tx-id
+                                                                           :tx-data tx-data}))))]
+      (storage/set-transit! :db/latest-txs new-txs)
+      (set-state! :db/latest-txs new-txs))))
 
 (defn get-repo-latest-txs
   [repo file?]

@@ -717,7 +717,7 @@
                             (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
                             (reset! *show-block-commands true))
                           nil))))
-       :auto-focus true})
+       :auto-focus false})
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp
