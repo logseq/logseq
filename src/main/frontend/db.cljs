@@ -955,19 +955,6 @@
       @conn)
      (into {}))))
 
-;; (defn get-file-last-modified-at
-;;   [repo path]
-;;   (when-let [conn (get-files-conn repo)]
-;;     (-> (d/q
-;;          '[:find ?last-modified-at
-;;            :in $ ?path
-;;            :where
-;;            [?file :file/path ?path]
-;;            [?file :file/last-modified-at ?last-modified-at]]
-;;          @conn
-;;          path)
-;;         ffirst)))
-
 (defn get-files-full
   [repo]
   (when-let [conn (get-files-conn repo)]
