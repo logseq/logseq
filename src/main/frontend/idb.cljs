@@ -31,15 +31,18 @@
 
 (defn remove-item!
   [key]
-  (.removeItem localforage-instance key))
+  (when key
+    (.removeItem localforage-instance key)))
 
 (defn set-item!
   [key value]
-  (.setItem localforage-instance key value))
+  (when key
+    (.setItem localforage-instance key value)))
 
 (defn get-item
   [key]
-  (.getItem localforage-instance key))
+  (when key
+    (.getItem localforage-instance key)))
 
 (defn get-keys
   []

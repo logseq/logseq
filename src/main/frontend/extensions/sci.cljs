@@ -11,15 +11,7 @@
 
 (defn call-fn
   [f & args]
-  (try
-    (apply f args)
-    (catch js/Error e
-      (println "Call fn: failed: " {:args args})
-      (js/console.error e)))
-  ;; (-> (apply f (bean/->js args))
-  ;;     (->js)
-  ;;     (bean/->clj))
-)
+  (apply f args))
 
 (defn eval-result
   [code]

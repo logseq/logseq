@@ -39,7 +39,8 @@
             [frontend.date :as date]
             [frontend.security :as security]
             [reitit.frontend.easy :as rfe]
-            [frontend.commands :as commands]))
+            [frontend.commands :as commands]
+            [lambdaisland.glogi :as log]))
 
 (defn safe-read-string
   [s]
@@ -282,9 +283,7 @@
   [html-export? s config label]
   (let [contents-page? (= "contents" (string/lower-case (str (:id config))))]
     [:span.page-reference
-     (when (and (not html-export?)
-                (not (= (:id config) "contents"))
-                (not (= (:id config) "Contents")))
+     (when (and (not html-export?) (not contents-page?))
        [:span.text-gray-500 "[["])
      (if (string/ends-with? s ".excalidraw")
        [:a.page-ref
@@ -297,9 +296,7 @@
        (page-cp (assoc config
                        :label (mldoc/plain->text label)
                        :contents-page? contents-page?) {:page/name s}))
-     (when (and (not html-export?)
-                (not (= (:id config) "contents"))
-                (not (= (:id config) "Contents")))
+     (when (and (not html-export?) (not contents-page?))
        [:span.text-gray-500 "]]"])]))
 
 (defn- latex-environment-content
@@ -1550,7 +1547,13 @@
            title]
           (cond
             (and (seq result) view-f)
-            (let [result (sci/call-fn view-f result)]
+            (let [result (try
+                           (sci/call-fn view-f result)
+                           (catch js/Error error
+                             (log/error :custom-view-failed {:error error
+                                                             :result result})
+                             [:div "Custom view failed: "
+                              (str error)]))]
               (util/hiccup-keywordize result))
 
             (and (seq result)

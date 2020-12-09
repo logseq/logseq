@@ -537,7 +537,11 @@
                             (sort-blocks))]
         (if-let [result-transform (:result-transform q)]
           (if-let [f (sci/eval-string (pr-str result-transform))]
-            (sci/call-fn f result)
+            (try
+              (sci/call-fn f result)
+              (catch js/Error e
+                (log/error :sci/call-error e)
+                result))
             result)
           (group-by-page result)))
       result)))
@@ -1866,9 +1870,13 @@
           repo-url)
      ffirst)))
 
+(defn get-config
+  [repo-url]
+  (get-file repo-url (str config/app-name "/" config/config-file)))
+
 (defn reset-config!
   [repo-url content]
-  (when-let [content (or content (get-file repo-url (str config/app-name "/" config/config-file)))]
+  (when-let [content (or content (get-config repo-url))]
     (let [config (try
                    (reader/read-string content)
                    (catch js/Error e
