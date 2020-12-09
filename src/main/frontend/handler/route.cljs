@@ -10,7 +10,8 @@
             [clojure.string :as string]
             [medley.core :as medley]
             [frontend.text :as text]
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.queries :as db-queries]
+            [frontend.db.utils :as db-utils]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."

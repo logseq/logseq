@@ -25,7 +25,8 @@
             [frontend.spec :as spec]
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
-            [frontend.db.declares :as declares]))
+            [frontend.db.declares :as declares]
+            [frontend.db.utils :as db-utils]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)

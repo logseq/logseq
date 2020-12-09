@@ -19,7 +19,8 @@
             [lambdaisland.glogi :as log]
             ["ignore" :as Ignore]
             [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]))
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.utils :as db-utils]))
 
 (defn load-file
   [repo-url path]

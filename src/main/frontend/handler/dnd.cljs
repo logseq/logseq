@@ -11,7 +11,8 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]))
+            [frontend.db.react-queries :as react-queries]
+            [frontend.db.utils :as db-utils]))
 
 (defn- remove-block-child!
   [target-block parent-block]
@@ -480,11 +481,11 @@
             target-block-repo (:block/repo target-block)
             to-block-repo (:block/repo to-block)
             target-block (assoc target-block
-                                :block/meta
-                                (:block/meta (db-utils/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
+                           :block/meta
+                           (:block/meta (db-utils/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
             to-block (assoc to-block
-                            :block/meta
-                            (:block/meta (db-utils/entity [:block/uuid (:block/uuid to-block)])))
+                       :block/meta
+                       (:block/meta (db-utils/entity [:block/uuid (:block/uuid to-block)])))
             same-repo? (= target-block-repo to-block-repo)
             target-file (:block/file target-block)
             same-file? (and

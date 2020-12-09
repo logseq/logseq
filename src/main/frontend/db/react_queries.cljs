@@ -106,24 +106,6 @@
        react
        ffirst))))
 
-(defn get-file
-  ([path]
-   (get-file (state/get-current-repo) path))
-  ([repo path]
-   (when (and repo path)
-     (->
-       (q repo [:file/content path]
-         {:files-db? true
-          :use-cache? true}
-         '[:find ?content
-           :in $ ?path
-           :where
-           [?file :file/path ?path]
-           [?file :file/content ?content]]
-         path)
-       react
-       ffirst))))
-
 (defn remove-q!
   [k]
   (swap! query-state dissoc k))
@@ -228,23 +210,6 @@
           db-utils/group-by-page
           (remove (fn [[page _blocks]]
                     (= journal-title (:page/original-name page)))))))))
-
-(defn get-block-referenced-blocks
-  [block-uuid]
-  (when-let [repo (state/get-current-repo)]
-    (when (declares/get-conn repo)
-      (->> (q repo [:block/refed-blocks block-uuid] {}
-             '[:find (pull ?ref-block [*])
-               :in $ ?block-uuid
-               :where
-               [?block :block/uuid ?block-uuid]
-               [?ref-block :block/ref-blocks ?block]]
-             block-uuid)
-        react
-        db-utils/seq-flatten
-        db-utils/sort-blocks
-        db-utils/group-by-page))))
-
 
 (defn build-block-graph
   "Builds a citation/reference graph for a given block uuid."

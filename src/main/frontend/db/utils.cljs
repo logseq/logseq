@@ -9,7 +9,8 @@
             [frontend.date :as date]
             [frontend.utf8 :as utf8]
             [frontend.format.block :as block]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [promesa.core :as p]))
 
 ;; transit serialization
 
@@ -212,30 +213,6 @@
       (map string/lower-case)
       (distinct))))
 
-(defn get-page-name
-  [file ast]
-  ;; headline
-  (let [ast (map first ast)]
-    (if (util/starts-with? file "pages/contents.")
-      "Contents"
-      (let [first-block (last (first (filter block/heading-block? ast)))
-            property-name (when (and (= "Properties" (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
-            first-block-name (and first-block
-                                  ;; FIXME:
-                                  (str (last (first (:title first-block)))))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (when-let [file-name (first (util/split-last "." file-name))]
-                          (-> file-name
-                              (string/replace "-" " ")
-                              (string/replace "_" " ")
-                              (util/capitalize-all))))]
-        (or property-name
-          (if (= (state/page-name-order) "file")
-            (or file-name first-block-name)
-            (or first-block-name file-name)))))))
-
 (defn parse-properties
   [content format]
   (let [ast (->> (mldoc/->edn content
@@ -247,30 +224,6 @@
                      (if (and properties (seq properties))
                        properties))]
     (into {} properties)))
-
-(defn get-page-name
-  [file ast]
-  ;; headline
-  (let [ast (map first ast)]
-    (if (util/starts-with? file "pages/contents.")
-      "Contents"
-      (let [first-block (last (first (filter block/heading-block? ast)))
-            property-name (when (and (= "Properties" (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
-            first-block-name (and first-block
-                                  ;; FIXME:
-                                  (str (last (first (:title first-block)))))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (when-let [file-name (first (util/split-last "." file-name))]
-                          (-> file-name
-                              (string/replace "-" " ")
-                              (string/replace "_" " ")
-                              (util/capitalize-all))))]
-        (or property-name
-          (if (= (state/page-name-order) "file")
-            (or file-name first-block-name)
-            (or first-block-name file-name)))))))
 
 (defn get-page
   [page-name]
@@ -300,18 +253,6 @@
        (catch js/Error e
          nil)))))
 
-(defn string->db [s]
-  (dt/read-transit-str s))
-
-(defn db->json [db]
-  (js/JSON.stringify
-    (into-array
-      (for [d (d/datoms db :eavt)]
-        #js [(:e d) (name (:a d)) (:v d)]))))
-
-(defn db->string [db]
-  (dt/write-transit-str db))
-
 (defn get-repo-name
   [url]
   (last (string/split url #"/")))
@@ -321,3 +262,27 @@
   {:db/id -1
    :db/ident key
    key value})
+
+(defn get-page-name
+  [file ast]
+  ;; headline
+  (let [ast (map first ast)]
+    (if (util/starts-with? file "pages/contents.")
+      "Contents"
+      (let [first-block (last (first (filter block/heading-block? ast)))
+            property-name (when (and (= "Properties" (ffirst ast))
+                                     (not (string/blank? (:title (last (first ast))))))
+                            (:title (last (first ast))))
+            first-block-name (and first-block
+                                  ;; FIXME:
+                                  (str (last (first (:title first-block)))))
+            file-name (when-let [file-name (last (string/split file #"/"))]
+                        (when-let [file-name (first (util/split-last "." file-name))]
+                          (-> file-name
+                              (string/replace "-" " ")
+                              (string/replace "_" " ")
+                              (util/capitalize-all))))]
+        (or property-name
+          (if (= (state/page-name-order) "file")
+            (or file-name first-block-name)
+            (or first-block-name file-name)))))))
