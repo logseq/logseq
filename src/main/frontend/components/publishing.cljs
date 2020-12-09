@@ -33,6 +33,7 @@
         [:div.flex.cp__publishing_pj_edit
          [:input#cp__publishing-project-input
           {:placeholder current-project
+           :auto-focus true
            :default-value current-project}]
          [:div.cp__publishing-pj-bt
           (ui/button
