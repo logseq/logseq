@@ -66,10 +66,10 @@
                             (p/let [result (project-handler/delete-project current-project)]
                               (when (:result result)
                                 (reset! editor-state :display)
+                                (state/remove-current-project)
                                 (state/reset-published-pages)
                                 (doseq [{:keys [title]} pages]
                                   (page-handler/page-add-properties! title {:published false}))
-                                (state/remove-current-project)
                                 (notification/show! "The project was deleted successfully." :success))))))
             :background "red")]
 
