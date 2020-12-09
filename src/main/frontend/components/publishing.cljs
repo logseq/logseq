@@ -25,7 +25,7 @@
         (when current-project
           [:div.cp__publishing-pj
            [:span.cp__publishing-pj-name current-project]
-           [:span.cp__publishing-edit
+           [:a.cp__publishing-edit
             {:on-click
              (fn [_]
                (reset! editor-state :editor))}
