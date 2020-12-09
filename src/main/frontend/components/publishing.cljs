@@ -66,6 +66,7 @@
                             (p/let [result (project-handler/delete-project current-project)]
                               (when (:result result)
                                 (reset! editor-state :display)
+                                (state/reset-published-pages)
                                 (doseq [{:keys [title]} pages]
                                   (page-handler/page-add-properties! title {:published false}))
                                 (state/remove-current-project)
@@ -80,10 +81,10 @@
                         (reset! editor-state :display))
             :background "pink")]]))))
 
-(rum/defcs my-publishing
+(rum/defc my-publishing
   < rum/reactive db-mixins/query
     (rum/local :display ::project-state)
-  [state]
+  []
   (let [current-repo (state/sub :git/current-repo)
         projects (state/sub [:me :projects])
         current-project (project-handler/get-current-project current-repo projects)]
