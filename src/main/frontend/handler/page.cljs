@@ -448,10 +448,8 @@
              (log/debug :page/get-page-list result)
              (let [data (:result result)]
                (if (sequential? data)
-                 (do
-                   (when-let [repo (state/get-current-repo)]
-                     (state/set-state! [:me :published-pages repo] data))
-                   (resolve data))
+                 (do (state/set-published-pages data)
+                     (resolve data))
                  (log/error :page/http-get-list-result-malformed result))))
            (fn [error]
              (log/error :page/http-get-list-failed error)

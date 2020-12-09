@@ -936,6 +936,15 @@
   ;; THINK: new block, indent/outdent, drag && drop, etc.
   (set-editor-last-input-time! repo time))
 
+(defn set-published-pages
+  [pages]
+  (when-let [repo (get-current-repo)]
+   (set-state! [:me :published-pages repo] pages)))
+
+(defn reset-published-pages
+  []
+  (set-published-pages []))
+
 (defn set-db-persisted!
   [repo value]
   (swap! state assoc-in [:db/persisted? repo] value))
