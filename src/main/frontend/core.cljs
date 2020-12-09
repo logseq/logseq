@@ -7,7 +7,8 @@
             [frontend.spec]
             [frontend.log]
             [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [api]))
 
 (defn set-router!
   []
@@ -20,7 +21,7 @@
 (defn display-welcome-message
   []
   (js/console.log
-    "
+   "
     Welcome to Logseq!
     If you encounter any problem, feel free to file an issue on GitHub (https://github.com/logseq/logseq)
     or join our Discord server (https://discord.gg/KpN4eHY).
@@ -30,7 +31,7 @@
     |    |__(  <_> ) /_/  >___ \\\\  ___< <_|  |
     |_______ \\____/\\___  /____  >\\___  >__   |
             \\/    /_____/     \\/     \\/   |__|
-     " ))
+     "))
 
 (defn start []
   (when-let [node (.getElementById js/document "root")]
@@ -49,7 +50,7 @@
   ;; (handler/request-notifications-if-not-asked)
 
   ;; (handler/run-notify-worker!)
-  )
+)
 
 (defn stop []
   ;; stop is called before any code is reloaded
