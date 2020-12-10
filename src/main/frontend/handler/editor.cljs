@@ -458,10 +458,9 @@
                                       (or (:page/original-name page)
                                           (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
-                   (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                   (p/let [_ (fs/create-if-not-exists dir file-path content)
+                           _ (git-handler/git-add repo path)]
                      (db/reset-file! repo path content)
-                     (git-handler/git-add repo path)
-
                      (ui-handler/re-render-root!)
 
                      ;; Continue to edit the last block
@@ -697,13 +696,13 @@
             (let [content (util/default-content-with-title format (or
                                                                    (:page/original-name page)
                                                                    (:page/name page)))]
-              (p/let [_ (fs/create-if-not-exists dir file-path content)]
+              (p/let [_ (fs/create-if-not-exists dir file-path content)
+                      _ (git-handler/git-add repo path)]
                 (db/reset-file! repo path
                                 (str content
                                      (text/remove-level-spaces value (keyword format))
                                      "\n"
                                      snd-block-text))
-                (git-handler/git-add repo path)
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
