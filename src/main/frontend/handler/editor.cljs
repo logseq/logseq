@@ -1351,22 +1351,29 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when (state/input-idle? repo)
-      (let [input-id (state/get-edit-input-id)
-            block (state/get-edit-block)
-            elem (and input-id (gdom/getElement input-id))
-            db-block (db/entity [:block/uuid (:block/uuid block)])
-            db-content (:block/content db-block)
-            db-content-without-heading (and db-content
-                                            (util/safe-subs db-content (:block/level db-block)))
-            value (and elem (gobj/get elem "value"))]
-        (when (and block value db-content-without-heading
-                   (not= (string/trim db-content-without-heading)
-                         (string/trim value)))
-          (let [cur-pos (util/get-input-pos elem)]
-            (save-block-aux! block value (:block/format block))
-            ;; Restore the cursor after saving the block
-            (when (and elem cur-pos)
-              (util/set-caret-pos! elem cur-pos))))))))
+      (state/set-editor-op! :auto-save)
+      (try
+        (let [input-id (state/get-edit-input-id)
+              block (state/get-edit-block)
+              db-block (when-let [block-id (:block/uuid block)]
+                         (db/pull [:block/uuid block-id]))
+              elem (and input-id (gdom/getElement input-id))
+              db-content (:block/content db-block)
+              db-content-without-heading (and db-content
+                                              (util/safe-subs db-content (:block/level db-block)))
+              value (and elem (gobj/get elem "value"))]
+          (when (and block value db-content-without-heading
+                     (or
+                      (not= (string/trim db-content-without-heading)
+                            (string/trim value))))
+            (let [cur-pos (util/get-input-pos elem)]
+              (save-block-aux! db-block value (:block/format db-block))
+              ;; Restore the cursor after saving the block
+              (when (and elem cur-pos)
+                (util/set-caret-pos! elem cur-pos)))))
+        (catch js/Error error
+          (log/error :save-block-failed error)))
+      (state/set-editor-op! nil))))
 
 (defn on-up-down
   [state e up?]
