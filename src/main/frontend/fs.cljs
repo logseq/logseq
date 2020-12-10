@@ -132,69 +132,95 @@
      :else
      (js/window.pfs.readFile (str dir "/" path) option))))
 
+(defn nfs-saved-handler
+  [repo path file]
+  (when-let [last-modified (gobj/get file "lastModified")]
+    ;; TODO: extract
+    (let [path (if (= \/ (first path))
+                 (subs path 1)
+                 path)]
+      (db/set-file-last-modified-at! repo path last-modified))))
+
 (defn write-file
-  ([dir path content]
-   (write-file dir path content nil))
-  ([dir path content {:keys [old-content nfs-saved-handler last-modified-at]}]
-   (cond
-     (local-db? dir)
-     (let [parts (string/split path "/")
-           basename (last parts)
-           sub-dir (->> (butlast parts)
-                        (remove string/blank?)
-                        (string/join "/"))
-           sub-dir-handle-path (str "handle/"
-                                    (subs dir 1)
-                                    (if sub-dir
-                                      (str "/" sub-dir)))
-           handle-path (if (= "/" (last sub-dir-handle-path))
-                         (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
-                         sub-dir-handle-path)
-           basename-handle-path (str handle-path "/" basename)]
-       (p/let [file-handle (idb/get-item basename-handle-path)
-               _ (add-nfs-file-handle! basename-handle-path file-handle)]
-         (if file-handle
-           (p/let [local-file (.getFile file-handle)
-                   local-content (.text local-file)
-                   local-last-modified-at (gobj/get local-file "lastModified")
-                   current-time (util/time-ms)
-                   new? (> current-time local-last-modified-at)
-                   not-changed? (= last-modified-at local-last-modified-at)
-                   format (-> (util/get-file-ext path)
-                              (config/get-file-format))]
-             (if (and local-content old-content new? not-changed?)
-               (do
-                 (utils/verifyPermission file-handle true)
-                 (p/let [_ (utils/writeFile file-handle content)
-                         file (.getFile file-handle)]
-                   (nfs-saved-handler file)))
-               (do
-                 (js/alert (str "The file has been modified in your local disk! File path: " path
-                                ", save your changes and click the refresh button to reload it.")))))
-           ;; create file handle
-           (->
-            (p/let [handle (idb/get-item handle-path)]
-              (if handle
+  ([repo dir path content]
+   (write-file repo dir path content nil))
+  ([repo dir path content {:keys [old-content last-modified-at]}]
+   (->
+    (cond
+      (local-db? dir)
+      (let [parts (string/split path "/")
+            basename (last parts)
+            sub-dir (->> (butlast parts)
+                         (remove string/blank?)
+                         (string/join "/"))
+            sub-dir-handle-path (str "handle/"
+                                     (subs dir 1)
+                                     (if sub-dir
+                                       (str "/" sub-dir)))
+            handle-path (if (= "/" (last sub-dir-handle-path))
+                          (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
+                          sub-dir-handle-path)
+            basename-handle-path (str handle-path "/" basename)]
+        (p/let [file-handle (idb/get-item basename-handle-path)]
+          (when file-handle
+            (add-nfs-file-handle! basename-handle-path file-handle))
+          (if file-handle
+            (p/let [local-file (.getFile file-handle)
+                    local-content (.text local-file)
+                    local-last-modified-at (gobj/get local-file "lastModified")
+                    current-time (util/time-ms)
+                    new? (> current-time local-last-modified-at)
+                    new-created? (nil? last-modified-at)
+                    not-changed? (= last-modified-at local-last-modified-at)
+                    format (-> (util/get-file-ext path)
+                               (config/get-file-format))]
+              ;; (println {:last-modified-at last-modified-at
+              ;;           :local-last-modified-at local-last-modified-at
+              ;;           :not-changed? not-changed?
+              ;;           :new-created? new-created?})
+              (if (and local-content old-content new?
+                       (or not-changed? new-created?))
                 (do
-                  (utils/verifyPermission handle true)
-                  (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
-                          _ (idb/set-item! basename-handle-path file-handle)
-                          _ (utils/writeFile file-handle content)
+                  (utils/verifyPermission file-handle true)
+                  (p/let [_ (utils/writeFile file-handle content)
                           file (.getFile file-handle)]
-                    (nfs-saved-handler file)))
-                (println "Error: directory handle not exists: " handle-path)))
-            (p/catch (fn [error]
-                       (println "Write local file failed: " {:path path})
-                       (js/console.error error)))))))
+                    (when file
+                      (nfs-saved-handler repo path file))))
+                (do
+                  (js/alert (str "The file has been modified in your local disk! File path: " path
+                                 ", save your changes and click the refresh button to reload it.")))))
+            ;; create file handle
+            (->
+             (p/let [handle (idb/get-item handle-path)]
+               (if handle
+                 (do
+                   (utils/verifyPermission handle true)
+                   (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
+                           _ (idb/set-item! basename-handle-path file-handle)
+                           _ (utils/writeFile file-handle content)
+                           file (.getFile file-handle)]
+                     (when file
+                       (nfs-saved-handler repo path file))))
+                 (println "Error: directory handle not exists: " handle-path)))
+             (p/catch (fn [error]
+                        (println "Write local file failed: " {:path path})
+                        (js/console.error error)))))))
 
-     js/window.pfs
-     (js/window.pfs.writeFile (str dir "/" path) content)
+      js/window.pfs
+      (js/window.pfs.writeFile (str dir "/" path) content)
 
-     :else
-     nil)))
+      :else
+      nil)
+    (p/catch (fn [error]
+               (log/error :file/write-failed? {:dir dir
+                                               :path path
+                                               :error error})
+               ;; Disable this temporarily
+               ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+)))))
 
 (defn rename
-  [old-path new-path]
+  [repo old-path new-path]
   (cond
     (local-db? old-path)
     ;; create new file
@@ -204,7 +230,7 @@
             handle (idb/get-item (str "handle" old-path))
             file (.getFile handle)
             content (.text file)
-            _ (write-file dir new-basename content)]
+            _ (write-file repo dir new-basename content)]
       (unlink old-path nil))
 
     :else
@@ -246,9 +272,9 @@
            (mkdir dir)))))))
 
 (defn create-if-not-exists
-  ([dir path]
-   (create-if-not-exists dir path ""))
-  ([dir path initial-content]
+  ([repo dir path]
+   (create-if-not-exists repo dir path ""))
+  ([repo dir path initial-content]
    (let [path (if (util/starts-with? path "/")
                 path
                 (str "/" path))]
@@ -257,7 +283,7 @@
         true)
       (p/catch
        (fn [_error]
-         (p/let [_ (write-file dir path initial-content)]
+         (p/let [_ (write-file repo dir path initial-content)]
            false)))))))
 
 (defn file-exists?

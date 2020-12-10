@@ -118,11 +118,6 @@
         (p/catch (fn [error]
                    (log/error :load-files-error error))))))
 
-(defn nfs-saved-handler
-  [repo path file]
-  (when-let [last-modified (gobj/get file "lastModified")]
-    (db/set-file-last-modified-at! repo path last-modified)))
-
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? add-history? update-status?]
                       :or {reset? true
@@ -139,10 +134,8 @@
         (db/reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file (util/get-repo-dir repo) path content {:old-content original-content
-                                                           :last-modified-at (db/get-file-last-modified-at repo path)
-                                                           :nfs-saved-handler (fn [file]
-                                                                                (nfs-saved-handler repo path file))})
+     (fs/write-file repo (util/get-repo-dir repo) path content {:old-content original-content
+                                                                :last-modified-at (db/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))
@@ -194,11 +187,9 @@
     (let [write-file-f (fn [[path content]]
                          (let [original-content (get file->content path)]
                            (-> (p/let [_ (fs/check-directory-permission! repo)]
-                                 (fs/write-file (util/get-repo-dir repo) path content
+                                 (fs/write-file repo (util/get-repo-dir repo) path content
                                                 {:old-content original-content
-                                                 :last-modified-at (db/get-file-last-modified-at repo path)
-                                                 :nfs-saved-handler (fn [file]
-                                                                      (nfs-saved-handler repo path file))}))
+                                                 :last-modified-at (db/get-file-last-modified-at repo path)}))
                                (p/catch (fn [error]
                                           (log/error :write-file/failed {:path path
                                                                          :content content
@@ -206,11 +197,10 @@
           git-add-f (fn []
                       (let [add-helper
                             (fn []
-                              (doall
-                               (map
-                                (fn [[path content]]
-                                  (git-handler/git-add repo path update-status?))
-                                files)))]
+                              (map
+                               (fn [[path content]]
+                                 (git-handler/git-add repo path update-status?))
+                               files))]
                         (-> (p/all (add-helper))
                             (p/then (fn [_]
                                       (when git-add-cb
@@ -224,7 +214,7 @@
                                                (let [original-content (get file->content path)]
                                                  [path original-content content])) files)]
                           (history/add-history! repo files-tx))))]
-      (-> (p/all (doall (map write-file-f files)))
+      (-> (p/all (map write-file-f files))
           (p/then (fn []
                     (git-add-f)
                     ;; TODO: save logseq/metadata

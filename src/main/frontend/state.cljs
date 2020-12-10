@@ -27,6 +27,7 @@
     :repo/sync-status {}
     :repo/changed-files nil
     :nfs/loading-files? nil
+    :nfs/refreshing? nil
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
@@ -797,16 +798,16 @@
                                  (if (= (:repo project) current-repo)
                                    (conj acc (merge project new-kvs))
                                    (conj acc project)))
-                         []
-                         projects)]
+                               []
+                               projects)]
       (set-state! [:me :projects] new-projects))))
 
 (defn remove-current-project
   []
   (when-let [current-repo (get-current-repo)]
     (update-state! [:me :projects]
-      (fn [projects]
-        (remove #(= (:repo %) current-repo) projects)))))
+                   (fn [projects]
+                     (remove #(= (:repo %) current-repo) projects)))))
 
 (defn set-indexedb-support!
   [value]
@@ -939,7 +940,7 @@
 (defn set-published-pages
   [pages]
   (when-let [repo (get-current-repo)]
-   (set-state! [:me :published-pages repo] pages)))
+    (set-state! [:me :published-pages repo] pages)))
 
 (defn reset-published-pages
   []
@@ -1001,6 +1002,14 @@
 (defn get-repo-latest-txs
   [repo file?]
   (get-in (:db/latest-txs @state) [repo file?]))
+
+(defn set-nfs-refreshing!
+  [value]
+  (set-state! :nfs/refreshing? value))
+
+(defn nfs-refreshing?
+  []
+  (:nfs/refreshing? @state))
 
 ;; TODO: Move those to the uni `state`
 

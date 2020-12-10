@@ -384,9 +384,10 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties rebuild-content?]
+    {:keys [indent-left? custom-properties remove-property? rebuild-content?]
      :or {rebuild-content? true
-          custom-properties nil}}]
+          custom-properties nil
+          remove-property? false}}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -414,7 +415,8 @@
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
          value (cond
-                 (seq custom-properties)
+                 (or (seq custom-properties)
+                     remove-property?)
                  (text/re-construct-block-properties block value custom-properties)
 
                  (and (seq (:block/properties block))
@@ -456,10 +458,9 @@
                                       (or (:page/original-name page)
                                           (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
-                   (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                   (p/let [_ (fs/create-if-not-exists repo dir file-path content)
+                           _ (git-handler/git-add repo path)]
                      (db/reset-file! repo path content)
-                     (git-handler/git-add repo path)
-
                      (ui-handler/re-render-root!)
 
                      ;; Continue to edit the last block
@@ -695,13 +696,13 @@
             (let [content (util/default-content-with-title format (or
                                                                    (:page/original-name page)
                                                                    (:page/name page)))]
-              (p/let [_ (fs/create-if-not-exists dir file-path content)]
+              (p/let [_ (fs/create-if-not-exists repo dir file-path content)
+                      _ (git-handler/git-add repo path)]
                 (db/reset-file! repo path
                                 (str content
                                      (text/remove-level-spaces value (keyword format))
                                      "\n"
                                      snd-block-text))
-                (git-handler/git-add repo path)
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
@@ -1042,7 +1043,8 @@
       (let [{:block/keys [content properties]} block]
         (when (get properties key)
           (save-block-if-changed! block content
-                                  {:custom-properties (dissoc properties key)}))))))
+                                  {:custom-properties (dissoc properties key)
+                                   :remove-property? true}))))))
 
 (defn set-block-property!
   [block-id key value]
@@ -1349,22 +1351,29 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when (state/input-idle? repo)
-      (let [input-id (state/get-edit-input-id)
-            block (state/get-edit-block)
-            elem (and input-id (gdom/getElement input-id))
-            db-block (db/entity [:block/uuid (:block/uuid block)])
-            db-content (:block/content db-block)
-            db-content-without-heading (and db-content
-                                            (util/safe-subs db-content (:block/level db-block)))
-            value (and elem (gobj/get elem "value"))]
-        (when (and block value db-content-without-heading
-                   (not= (string/trim db-content-without-heading)
-                         (string/trim value)))
-          (let [cur-pos (util/get-input-pos elem)]
-            (save-block-aux! block value (:block/format block))
-            ;; Restore the cursor after saving the block
-            (when (and elem cur-pos)
-              (util/set-caret-pos! elem cur-pos))))))))
+      (state/set-editor-op! :auto-save)
+      (try
+        (let [input-id (state/get-edit-input-id)
+              block (state/get-edit-block)
+              db-block (when-let [block-id (:block/uuid block)]
+                         (db/pull [:block/uuid block-id]))
+              elem (and input-id (gdom/getElement input-id))
+              db-content (:block/content db-block)
+              db-content-without-heading (and db-content
+                                              (util/safe-subs db-content (:block/level db-block)))
+              value (and elem (gobj/get elem "value"))]
+          (when (and block value db-content-without-heading
+                     (or
+                      (not= (string/trim db-content-without-heading)
+                            (string/trim value))))
+            (let [cur-pos (util/get-input-pos elem)]
+              (save-block-aux! db-block value (:block/format db-block))
+              ;; Restore the cursor after saving the block
+              (when (and elem cur-pos)
+                (util/set-caret-pos! elem cur-pos)))))
+        (catch js/Error error
+          (log/error :save-block-failed error)))
+      (state/set-editor-op! nil))))
 
 (defn on-up-down
   [state e up?]
