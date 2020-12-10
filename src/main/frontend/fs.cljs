@@ -252,12 +252,13 @@
    (let [path (if (util/starts-with? path "/")
                 path
                 (str "/" path))]
-     (util/p-handle
-      (stat dir path)
-      (fn [_stat] true)
-      (fn [error]
-        (write-file dir path initial-content)
-        false)))))
+     (->
+      (p/let [_ (stat dir path)]
+        true)
+      (p/catch
+       (fn [_error]
+         (p/let [_ (write-file dir path initial-content)]
+           false)))))))
 
 (defn file-exists?
   [dir path]
