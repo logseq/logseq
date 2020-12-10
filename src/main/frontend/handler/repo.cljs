@@ -6,6 +6,7 @@
             [lambdaisland.glogi :as log]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.idb :as idb]
             [frontend.git :as git]
             [cljs-bean.core :as bean]
             [frontend.date :as date]
@@ -52,7 +53,7 @@
         dir (str repo-dir "/" app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
       (let [default-content config/config-default-content]
-        (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
+        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
                               (db/get-file repo-url path))
@@ -73,7 +74,7 @@
         file-path (str "/" path)
         default-content (util/default-content-with-title format "contents")]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
-            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
@@ -86,7 +87,7 @@
         file-path (str "/" path)
         default-content ""]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
@@ -98,7 +99,7 @@
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
-            _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
       (db/reset-file! repo-url path content))))
 
 (defn create-today-journal-if-not-exists
@@ -134,11 +135,21 @@
      (when (or empty-blocks?
                (not page-exists?))
        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
-               file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+               file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
          (when-not file-exists?
            (db/reset-file! repo-url path content)
            (ui-handler/re-render-root!)
            (git-handler/git-add repo-url path)))))))
+
+(defn create-today-journal!
+  []
+  (state/set-today! (date/today))
+  (when-let [repo (state/get-current-repo)]
+    (when (or (db/cloned? repo)
+              (config/local-db? repo))
+      (let [today-page (string/lower-case (date/today))]
+        (when (empty? (db/get-page-blocks-no-cache repo today-page))
+          (create-today-journal-if-not-exists repo))))))
 
 (defn create-default-files!
   [repo-url]
@@ -452,10 +463,8 @@
                       (fs/rmdir (util/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)
-      (do
-        (delete-db-f)
-        ;; clear handles
-)
+      (p/let [_ (idb/clear-local-db! url)] ; clear file handles
+        (delete-db-f))
       (util/delete (str config/api "repos/" id)
                    delete-db-f
                    (fn [error]
