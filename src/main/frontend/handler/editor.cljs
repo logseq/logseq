@@ -458,7 +458,7 @@
                                       (or (:page/original-name page)
                                           (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
-                   (p/let [_ (fs/create-if-not-exists dir file-path content)
+                   (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                            _ (git-handler/git-add repo path)]
                      (db/reset-file! repo path content)
                      (ui-handler/re-render-root!)
@@ -696,7 +696,7 @@
             (let [content (util/default-content-with-title format (or
                                                                    (:page/original-name page)
                                                                    (:page/name page)))]
-              (p/let [_ (fs/create-if-not-exists dir file-path content)
+              (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                       _ (git-handler/git-add repo path)]
                 (db/reset-file! repo path
                                 (str content

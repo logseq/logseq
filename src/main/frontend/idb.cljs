@@ -5,6 +5,7 @@
             [promesa.core :as p]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.util :as util]
             [frontend.storage :as storage]))
 
 ;; offline db
@@ -53,3 +54,12 @@
   (p/let [ks (get-keys)]
     (->> (filter (fn [k] (string/starts-with? k (str config/idb-db-prefix config/local-db-prefix))) ks)
          (map #(string/replace-first % config/idb-db-prefix "")))))
+
+(defn clear-local-db!
+  [repo]
+  (when repo
+    (p/let [ks (get-keys)
+            ks (filter (fn [k] (string/starts-with? k (str config/local-handle "/" repo))) ks)]
+      (when (seq ks)
+        (p/all (map (fn [key]
+                      (remove-item! key)) ks))))))
