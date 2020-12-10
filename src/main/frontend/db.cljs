@@ -898,13 +898,32 @@
 (defn set-file-content!
   [repo path content]
   (when (and repo path)
-    (transact-react!
-     repo
-     [{:file/path path
-       :file/content content
-       :file/last-modified-at (util/time-ms)}]
-     {:key [:file/content path]
-      :files-db? true})))
+    (let [tx-data {:file/path path
+                   :file/content content
+                   :file/last-modified-at (util/time-ms)}
+          tx-data (if (config/local-db? repo)
+                    (dissoc tx-data :file/last-modified-at)
+                    tx-data)]
+      (transact-react!
+       repo
+       [tx-data]
+       {:key [:file/content path]
+        :files-db? true}))))
+
+(defn set-file-last-modified-at!
+  [repo path last-modified-at]
+  (when (and repo path last-modified-at)
+    (when-let [conn (get-files-conn repo)]
+      (d/transact! conn
+                   [{:file/path path
+                     :file/last-modified-at last-modified-at}]))))
+
+(defn get-file-last-modified-at
+  [repo path]
+  (when (and repo path)
+    (when-let [conn (get-files-conn repo)]
+      (-> (d/entity (d/db conn) [:file/path path])
+          :file/last-modified-at))))
 
 (defn get-file
   ([path]

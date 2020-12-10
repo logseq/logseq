@@ -17,6 +17,8 @@
    {:route-match nil
     :today nil
     :db/batch-txs (async/chan 100)
+    :file/writes (async/chan 100)
+    :file/writing? false
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -309,23 +311,21 @@
   (:editor/set-timestamp-block @state))
 
 (defn set-edit-content!
-  ([input-id value] (set-edit-content! input-id value true))
-  ([input-id value set-input-value?]
-   (when input-id
-     (when set-input-value?
-       (when-let [input (gdom/getElement input-id)]
-         (util/set-change-value input value)))
-     (update-state! :editor/content (fn [m]
-                                      (assoc m input-id value)))
-     ;; followers
-     ;; (when-let [s (util/extract-uuid input-id)]
-     ;;   (let [input (gdom/getElement input-id)
-     ;;         leader-parent (util/rec-get-block-node input)
-     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-     ;;                        (remove #(= leader-parent %)))]
-     ;;     (prn "followers: " (count followers))
-     ;;     ))
-)))
+  [input-id value]
+  (when input-id
+    (when-let [input (gdom/getElement input-id)]
+      (util/set-change-value input value))
+    (update-state! :editor/content (fn [m]
+                                     (assoc m input-id value)))
+    ;; followers
+    ;; (when-let [s (util/extract-uuid input-id)]
+    ;;   (let [input (gdom/getElement input-id)
+    ;;         leader-parent (util/rec-get-block-node input)
+    ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
+    ;;                        (remove #(= leader-parent %)))]
+    ;;     (prn "followers: " (count followers))
+    ;;     ))
+))
 
 (defn get-edit-input-id
   []
@@ -805,6 +805,10 @@
   []
   (:db/batch-txs @state))
 
+(defn get-file-write-chan
+  []
+  (:file/writes @state))
+
 (defn add-tx!
   ;; TODO: replace f with data for batch transactions
   [f]
@@ -953,6 +957,14 @@
                                                                            :tx-data tx-data}))))]
       (storage/set-transit! :db/latest-txs new-txs)
       (set-state! :db/latest-txs new-txs))))
+
+(defn set-file-writing!
+  [v]
+  (set-state! :file/writing? v))
+
+(defn file-in-writing!
+  []
+  (:file/writing? @state))
 
 (defn get-repo-latest-txs
   [repo file?]

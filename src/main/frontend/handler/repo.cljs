@@ -244,7 +244,7 @@
         (when (seq children-tx)
           (db/transact! repo children-tx))))
     (when (seq files)
-      (file-handler/alter-files repo files))))
+      (file-handler/alter-files repo files {}))))
 
 (declare push)
 
