@@ -309,10 +309,10 @@
   (:editor/set-timestamp-block @state))
 
 (defn set-edit-content!
-  ([input-id value] (set-edit-content! input-id value false))
-  ([input-id value skip-set-input-value?]
+  ([input-id value] (set-edit-content! input-id value true))
+  ([input-id value set-input-value?]
    (when input-id
-     (when-not skip-set-input-value?
+     (when set-input-value?
        (when-let [input (gdom/getElement input-id)]
          (util/set-change-value input value)))
      (update-state! :editor/content (fn [m]

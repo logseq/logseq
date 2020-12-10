@@ -696,7 +696,7 @@
        :on-change (fn [e]
                     (let [value (util/evalue e)
                           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                      (state/set-edit-content! id value)
+                      (state/set-edit-content! id value false)
                       (state/set-edit-pos! current-pos)
                       (when-let [repo (or (:block/repo block)
                                           (state/get-current-repo))]
