@@ -26,17 +26,6 @@
             [medley.core :as medley]
             [frontend.extensions.sci :as sci]))
 
-(defn- get-public-pages
-  [db]
-  (-> (d/q
-        '[:find ?p
-          :where
-          [?p :page/properties ?d]
-          [(get ?d :public) ?pub]
-          [(= "true" ?pub)]]
-        db)
-      (db-utils/seq-flatten)))
-
 (defn get-pages
   [repo]
   (->> (d/q
@@ -136,17 +125,10 @@
          (when-let [conn (declares/get-conn repo-url false)]
            (d/transact! conn (vec tx-data))))))))
 
-(defn set-new-result!
-  [k new-result]
-  (when-let [result-atom (get-in @react-queries/query-state [k :result])]
-    (reset! result-atom new-result)))
 
-
-(defn remove-key
+(defn retract-by-key
   [repo-url key]
-  (transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
-  (set-new-result! [repo-url :kv key] nil))
-
+  (transact! repo-url [[:db.fn/retractEntity [:db/ident key]]]))
 
 (defn get-key-value
   ([key]
@@ -319,18 +301,10 @@
                                            :else
                                            (d/q query db))
                                          transform-fn)]
-                        (set-new-result! handler-key new-result))))))))))
+                        (react-queries/set-new-result! handler-key new-result))))))))))
       (catch js/Error e
         ;; FIXME: check error type and notice user
         (log/error :db/transact! e)))))
-
-(defn set-key-value
-  [repo-url key value]
-  (if value
-    (transact-react! repo-url [(db-utils/kv key value)]
-      {:key [:kv key]})
-    (remove-key repo-url key)))
-
 
 (defn get-block-parent
   [repo block-id]
@@ -349,7 +323,6 @@
                            (> (:block/level h) level))))
            (db-utils/with-repo repo-url)
            (with-block-refs-count repo-url)))
-
 
 (defn get-block-and-children-no-cache
   [repo block-uuid]
@@ -655,44 +628,16 @@
           (declares/get-conn repo-url) pred)
         (db-utils/seq-flatten))))
 
-(defn- resolve-input
-  [input]
-  (cond
-    (= :today input)
-    (db-utils/date->int (t/today))
-    (= :yesterday input)
-    (db-utils/date->int (t/yesterday))
-    (= :tomorrow input)
-    (db-utils/date->int (t/plus (t/today) (t/days 1)))
-    (= :current-page input)
-    (string/lower-case (state/get-current-page))
-    (and (keyword? input)
-         (re-find #"^\d+d(-before)?$" (name input)))
-    (let [input (name input)
-          days (util/parse-int (subs input 0 (dec (count input))))]
-      (db-utils/date->int (t/minus (t/today) (t/days days))))
-    (and (keyword? input)
-         (re-find #"^\d+d(-after)?$" (name input)))
-    (let [input (name input)
-          days (util/parse-int (subs input 0 (dec (count input))))]
-      (db-utils/date->int (t/plus (t/today) (t/days days))))
-
-    :else
-    input))
-
 (defn custom-query-aux
   [{:keys [query inputs result-transform] :as query'} query-opts]
   (try
-    (let [inputs (map resolve-input inputs)
+    (let [inputs (map db-utils/resolve-input inputs)
           repo (state/get-current-repo)
           k [:custom query']]
       (apply react-queries/q repo k query-opts query inputs))
     (catch js/Error e
       (println "Custom query failed: ")
       (js/console.dir e))))
-
-
-;;; refactor here
 
 (defn custom-query
   ([query]
@@ -1357,11 +1302,6 @@
       (state/set-config! repo-url config)
       config)))
 
-(defn clear-repo-persistent-job!
-  [repo]
-  (when-let [old-job (get @db-utils/persistent-jobs repo)]
-    (js/clearTimeout old-job)))
-
 (defn start-db-conn!
   ([me repo]
    (start-db-conn! me repo {}))
@@ -1551,7 +1491,6 @@
              block)]
      (apply util/join-newline @contents))))
 
-
 (defn get-block-full-content
   ([repo block-id]
    (get-block-full-content repo block-id (fn [block] (:block/content block))))
@@ -1633,14 +1572,12 @@
     ;; TODO: need more thoughts
     0))
 
-
 (defn add-page-to-recent!
   [repo page]
   (let [pages (or (get-key-value repo :recent/pages)
                 '())
         new-pages (take 12 (distinct (cons page pages)))]
     (set-key-value repo :recent/pages new-pages)))
-
 
 (defn pre-block-with-only-title?
   [repo block-id]
@@ -1654,7 +1591,6 @@
                (every? (fn [[[typ break-lines]] _]
                          (and (= typ "Paragraph")
                               (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
-
 
 (defn run-batch-txs!
   []
@@ -1748,6 +1684,17 @@
                           (not (remove? ns)))))
         datoms (d/datoms filtered-db :eavt)]
     @(d/conn-from-datoms datoms db-schema/schema)))
+
+(defn- get-public-pages
+  [db]
+  (-> (d/q
+        '[:find ?p
+          :where
+          [?p :page/properties ?d]
+          [(get ?d :public) ?pub]
+          [(= "true" ?pub)]]
+        db)
+      (db-utils/seq-flatten)))
 
 (defn filter-only-public-pages-and-blocks
   [db]

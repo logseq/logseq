@@ -1,6 +1,6 @@
 (ns frontend.db.tools)
 
-;;;; unsed
+;;;; unused
 
 #_(defn remove-orphaned-pages!
   [repo]

@@ -16,14 +16,6 @@
 
 (def ^:dynamic *query-component*)
 
-(defonce query-components (atom {}))
-
-(defn add-query-component!
-  [key component]
-  (swap! query-components update key
-    (fn [components]
-      (distinct (conj components component)))))
-
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
   (swap! query-state assoc k {:query query
@@ -33,6 +25,50 @@
                               :query-fn query-fn
                               :inputs-fn inputs-fn})
   result-atom)
+
+(defn remove-q!
+  [k]
+  (swap! query-state dissoc k))
+
+(defn clear-query-state!
+  []
+  (reset! query-state {}))
+
+(defn set-new-result!
+  [k new-result]
+  (when-let [result-atom (get-in @query-state [k :result])]
+    (reset! result-atom new-result)))
+
+;; query-components
+
+(defonce query-components (atom {}))
+
+(defn add-query-component!
+  [key component]
+  (swap! query-components update key
+    (fn [components]
+      (distinct (conj components component)))))
+
+(defn remove-query-component!
+  [component]
+  (reset!
+    query-components
+    (->> (for [[k components] @query-components
+               :let [new-components (remove #(= component %) components)]]
+           (if (empty? new-components) ; no subscribed components
+             (do (remove-q! k)
+                 nil)
+             [k new-components]))
+      (keep identity)
+      (into {}))))
+
+(defn clear-query-state-without-refs-and-embeds!
+  []
+  (let [state @query-state
+        state (->> (filter (fn [[[_repo k] v]]
+                             (contains? #{:blocks :block/block :custom} k)) state)
+                (into {}))]
+    (reset! query-state state)))
 
 (defn q
   [repo k {:keys [use-cache? files-db? transform-fn query-fn inputs-fn]
@@ -105,38 +141,6 @@
          path)
        react
        ffirst))))
-
-(defn remove-q!
-  [k]
-  (swap! query-state dissoc k))
-
-
-;;; refactor here
-
-(defn clear-query-state!
-  []
-  (reset! query-state {}))
-
-(defn clear-query-state-without-refs-and-embeds!
-  []
-  (let [state @query-state
-        state (->> (filter (fn [[[_repo k] v]]
-                             (contains? #{:blocks :block/block :custom} k)) state)
-                (into {}))]
-    (reset! query-state state)))
-
-(defn remove-query-component!
-  [component]
-  (reset!
-    query-components
-    (->> (for [[k components] @query-components
-               :let [new-components (remove #(= component %) components)]]
-           (if (empty? new-components) ; no subscribed components
-             (do (remove-q! k)
-                 nil)
-             [k new-components]))
-      (keep identity)
-      (into {}))))
 
 (defn get-page-blocks-cache-atom
   [repo page-id]

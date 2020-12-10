@@ -703,7 +703,7 @@
                       (when-let [repo (or (:block/repo block)
                                           (state/get-current-repo))]
                         (state/set-editor-last-input-time! repo (util/time-ms))
-                        (db-queries/clear-repo-persistent-job! repo))
+                        (db-utils/clear-repo-persistent-job! repo))
                       (let [input (gdom/getElement id)
                             native-e (gobj/get e "nativeEvent")
                             last-input-char (util/nth-safe value (dec current-pos))]

@@ -10,7 +10,8 @@
             [frontend.utf8 :as utf8]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs-time.core :as t]))
 
 ;; transit serialization
 
@@ -31,8 +32,6 @@
   (util/remove-nils {:me/name name
                      :me/email email
                      :me/avatar avatar}))
-
-
 
 (defn seq-flatten [col]
   (flatten (seq col)))
@@ -231,8 +230,6 @@
     (entity [:block/uuid (uuid page-name)])
     (entity [:page/name page-name])))
 
-
-
 (defn with-repo
   [repo blocks]
   (map (fn [block]
@@ -286,3 +283,28 @@
           (if (= (state/page-name-order) "file")
             (or file-name first-block-name)
             (or first-block-name file-name)))))))
+
+(defn resolve-input
+  [input]
+  (cond
+    (= :today input)
+    (date->int (t/today))
+    (= :yesterday input)
+    (date->int (t/yesterday))
+    (= :tomorrow input)
+    (date->int (t/plus (t/today) (t/days 1)))
+    (= :current-page input)
+    (string/lower-case (state/get-current-page))
+    (and (keyword? input)
+      (re-find #"^\d+d(-before)?$" (name input)))
+    (let [input (name input)
+          days (util/parse-int (subs input 0 (dec (count input))))]
+      (date->int (t/minus (t/today) (t/days days))))
+    (and (keyword? input)
+      (re-find #"^\d+d(-after)?$" (name input)))
+    (let [input (name input)
+          days (util/parse-int (subs input 0 (dec (count input))))]
+      (date->int (t/plus (t/today) (t/days days))))
+
+    :else
+    input))

@@ -12,21 +12,22 @@
             [frontend.config :as config]
             [cljs-time.local :as tl]
             [frontend.helper :as helper]
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.queries :as db-queries]
+            [frontend.handler.utils :as h-utils]))
 
 (defn- set-git-status!
   [repo-url value]
-  (db-queries/set-key-value repo-url :git/status value)
+  (h-utils/set-key-value repo-url :git/status value)
   (state/set-git-status! repo-url value))
 
 (defn- set-git-last-pulled-at!
   [repo-url]
-  (db-queries/set-key-value repo-url :git/last-pulled-at
+  (h-utils/set-key-value repo-url :git/last-pulled-at
                     (date/get-date-time-string (tl/local-now))))
 
 (defn- set-git-error!
   [repo-url value]
-  (db-queries/set-key-value repo-url :git/error (if value (str value))))
+  (h-utils/set-key-value repo-url :git/error (if value (str value))))
 
 (defn git-add
   ([repo-url file]
