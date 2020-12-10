@@ -384,9 +384,10 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties rebuild-content?]
+    {:keys [indent-left? custom-properties remove-property? rebuild-content?]
      :or {rebuild-content? true
-          custom-properties nil}}]
+          custom-properties nil
+          remove-property? false}}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -414,7 +415,8 @@
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
          value (cond
-                 (seq custom-properties)
+                 (or (seq custom-properties)
+                     remove-property?)
                  (text/re-construct-block-properties block value custom-properties)
 
                  (and (seq (:block/properties block))
@@ -1042,7 +1044,8 @@
       (let [{:block/keys [content properties]} block]
         (when (get properties key)
           (save-block-if-changed! block content
-                                  {:custom-properties (dissoc properties key)}))))))
+                                  {:custom-properties (dissoc properties key)
+                                   :remove-property? true}))))))
 
 (defn set-block-property!
   [block-id key value]
