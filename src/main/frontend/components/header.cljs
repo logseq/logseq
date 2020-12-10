@@ -13,8 +13,8 @@
             [frontend.handler.export :as export]
             [frontend.components.svg :as svg]
             [frontend.components.repo :as repo]
-            [frontend.components.page :as page]
             [frontend.components.search :as search]
+            [frontend.handler.project :as project-handler]
             [frontend.handler.web.nfs :as nfs]))
 
 (rum/defc logo < rum/reactive
@@ -43,67 +43,80 @@
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
-  (ui/dropdown-with-links
-   (fn [{:keys [toggle-fn]}]
-     [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7.ml-2
-      {:on-click toggle-fn}
-      (if-let [avatar (:avatar me)]
-        [:img.h-7.w-7.rounded-full
-         {:src avatar}]
-        [:div.h-7.w-7.rounded-full.bg-base-2.opacity-70.hover:opacity-100 {:style {:padding 1.5}}
-         [:a svg/user]])])
-   (let [logged? (:name me)]
-     (->>
-      [(when current-repo
-         {:title (t :graph)
-          :options {:href (rfe/href :graph)}
-          :icon svg/graph-sm})
-       (when (or logged? (and (nfs/supported?) current-repo))
-         {:title (t :all-graphs)
-          :options {:href (rfe/href :repos)}
-          :icon svg/repos-sm})
-       (when current-repo
-         {:title (t :all-pages)
-          :options {:href (rfe/href :all-pages)}
-          :icon svg/pages-sm})
-       (when current-repo
-         {:title (t :all-files)
-          :options {:href (rfe/href :all-files)}
-          :icon svg/folder-sm})
-       (when (and default-home current-repo)
-         {:title (t :all-journals)
-          :options {:href (rfe/href :all-journals)}
-          :icon svg/calendar-sm})
-       {:title (t :settings)
-        :options {:href (rfe/href :settings)}
-        :icon svg/settings-sm}
-       (when-let [project (and current-repo (state/get-current-project))]
-         (let [link (str config/website "/" project)]
-           {:title (str (t :go-to) "/" project)
-            :options {:href link
-                      :target "_blank"}
-            :icon svg/external-link}))
-       (when (and logged? current-repo)
-         {:title (t :export)
-          :options {:on-click (fn []
-                                (export/export-repo-as-html! current-repo))}
-          :icon nil})
-       (when current-repo
-         {:title (t :import)
-          :options {:href (rfe/href :import)}
-          :icon svg/import-sm})
-       {:title [:div.flex-row.flex.justify-between.items-center
-                [:span (t :join-community)]]
-        :options {:href "https://discord.gg/KpN4eHY"
-                  :title (t :discord-title)
-                  :target "_blank"}
-        :icon svg/discord}
-       (when logged?
-         {:title (t :sign-out)
-          :options {:on-click user-handler/sign-out!}
-          :icon svg/logout-sm})]
-      (remove nil?)))
-   {}))
+  (let [projects (state/sub [:me :projects])]
+    (ui/dropdown-with-links
+     (fn [{:keys [toggle-fn]}]
+       [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7.ml-2
+        {:on-click toggle-fn}
+        (if-let [avatar (:avatar me)]
+          [:img.h-7.w-7.rounded-full
+           {:src avatar}]
+          [:div.h-7.w-7.rounded-full.bg-base-2.opacity-70.hover:opacity-100 {:style {:padding 1.5}}
+           [:a svg/user]])])
+     (let [logged? (:name me)]
+       (->>
+         [(when current-repo
+            {:title (t :graph)
+             :options {:href (rfe/href :graph)}
+             :icon svg/graph-sm})
+
+          (when (or logged? (and (nfs/supported?) current-repo))
+            {:title (t :all-graphs)
+             :options {:href (rfe/href :repos)}
+             :icon svg/repos-sm})
+
+          (when current-repo
+            {:title (t :all-pages)
+             :options {:href (rfe/href :all-pages)}
+             :icon svg/pages-sm})
+
+          (when current-repo
+            {:title (t :all-files)
+             :options {:href (rfe/href :all-files)}
+             :icon svg/folder-sm})
+
+          (when (and default-home current-repo)
+            {:title (t :all-journals)
+             :options {:href (rfe/href :all-journals)}
+             :icon svg/calendar-sm})
+
+          (when (project-handler/get-current-project current-repo projects)
+            {:title (t :my-publishing)
+             :options {:href (rfe/href :my-publishing)}})
+
+          (when-let [project (and current-repo
+                                  (project-handler/get-current-project current-repo projects))]
+            (let [link (str config/website "/" project)]
+              {:title (str (t :go-to) "/" project)
+               :options {:href link
+                         :target "_blank"}
+               :icon svg/external-link}))
+
+          {:title (t :settings)
+           :options {:href (rfe/href :settings)}
+           :icon svg/settings-sm}
+          
+          (when (and logged? current-repo)
+            {:title (t :export)
+             :options {:on-click (fn []
+                                   (export/export-repo-as-html! current-repo))}
+             :icon nil})
+          (when current-repo
+            {:title (t :import)
+             :options {:href (rfe/href :import)}
+             :icon svg/import-sm})
+          {:title [:div.flex-row.flex.justify-between.items-center
+                   [:span (t :join-community)]]
+           :options {:href "https://discord.gg/KpN4eHY"
+                     :title (t :discord-title)
+                     :target "_blank"}
+           :icon svg/discord}
+          (when logged?
+            {:title (t :sign-out)
+             :options {:on-click user-handler/sign-out!}
+             :icon svg/logout-sm})]
+         (remove nil?)))
+     {})))
 
 (rum/defc right-menu-button < rum/reactive
   []
@@ -112,6 +125,7 @@
    (svg/menu)])
 
 (rum/defc header
+  < rum/reactive
   [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
   (let [local-repo? (= current-repo config/local-repo)
         repos (->> (state/sub [:me :repos])

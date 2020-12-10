@@ -3,7 +3,17 @@
             [frontend.util :as util :refer-macros [profile]]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [lambdaisland.glogi :as log]))
+
+(defn get-current-project
+  [current-repo projects]
+  (let [project (some (fn [p]
+                        (when (= (:repo p) current-repo)
+                          p))
+                  projects)
+        project-name (:name project)]
+    (when-not (string/blank? project-name) project-name)))
 
 ;; project exists and current user owns it
 ;; if project not exists, the server will create it
@@ -29,7 +39,7 @@
                       (swap! state/state
                              update-in [:me :projects]
                              (fn [projects]
-                               (util/distinct-by :name (conj projects result))))
+                               (util/distinct-by :name (conj projects (:result result)))))
                       (ok-handler project)))
                   (fn [error]
                     (js/console.dir error)
@@ -74,3 +84,27 @@
                     (not (string/blank? (:name settings)))
                     (>= (count (string/trim (:name settings))) 2))
            (add-project! (:name settings))))))))
+
+(defn update-project
+  [project-name data]
+  (let [url (util/format "%sprojects/%s" config/api project-name)]
+    (js/Promise.
+      (fn [resolve reject]
+        (util/post url data
+          (fn [result]
+            (resolve result))
+          (fn [error]
+            (log/error :project/http-update-failed error)
+            (reject error)))))))
+
+(defn delete-project
+  [project-name]
+  (let [url (util/format "%sprojects/%s" config/api project-name)]
+    (js/Promise.
+      (fn [resolve reject]
+        (util/delete url
+          (fn [result]
+            (resolve result))
+          (fn [error]
+            (log/error :project/http-delete-failed error)
+            (reject error)))))))

@@ -384,9 +384,10 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties rebuild-content?]
+    {:keys [indent-left? custom-properties remove-property? rebuild-content?]
      :or {rebuild-content? true
-          custom-properties nil}}]
+          custom-properties nil
+          remove-property? false}}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -414,7 +415,8 @@
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
          value (cond
-                 (seq custom-properties)
+                 (or (seq custom-properties)
+                     remove-property?)
                  (text/re-construct-block-properties block value custom-properties)
 
                  (and (seq (:block/properties block))
@@ -456,10 +458,9 @@
                                       (or (:page/original-name page)
                                           (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
-                   (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                   (p/let [_ (fs/create-if-not-exists dir file-path content)
+                           _ (git-handler/git-add repo path)]
                      (db/reset-file! repo path content)
-                     (git-handler/git-add repo path)
-
                      (ui-handler/re-render-root!)
 
                      ;; Continue to edit the last block
@@ -695,13 +696,13 @@
             (let [content (util/default-content-with-title format (or
                                                                    (:page/original-name page)
                                                                    (:page/name page)))]
-              (p/let [_ (fs/create-if-not-exists dir file-path content)]
+              (p/let [_ (fs/create-if-not-exists dir file-path content)
+                      _ (git-handler/git-add repo path)]
                 (db/reset-file! repo path
                                 (str content
                                      (text/remove-level-spaces value (keyword format))
                                      "\n"
                                      snd-block-text))
-                (git-handler/git-add repo path)
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
@@ -763,7 +764,8 @@
   [state]
   (when (and (not config/publishing?)
              ;; skip this operation if it's inserting
-             (not= :insert (state/get-editor-op)))
+             (not= :insert (state/get-editor-op))
+             (not (state/file-in-writing!)))
     (state/set-editor-op! :insert)
     (let [{:keys [block value format id config]} (get-state state)
           block-id (:block/uuid block)
@@ -953,17 +955,22 @@
             :data [block]}
            [[file-path new-content]])
 
+          (state/set-editor-op! nil)
+
           (when (or (seq ref-pages) (seq ref-blocks))
             (ui-handler/re-render-root!)))))))
 
 (defn delete-block!
   [state repo e]
   (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
-    (when block-id
-      (when-let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))]
-        (let [page-blocks-count (db/get-page-blocks-count repo page-id)
-              page (db/entity page-id)]
-          (when (> page-blocks-count 1)
+    (when (and block-id
+               (not= :block/delete (state/get-editor-op)))
+      (state/set-editor-op! :block/delete)
+      (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
+            page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))
+            page (and page-id (db/entity page-id))]
+        (if (> page-blocks-count 1)
+          (do
             (util/stop e)
             ;; delete block, edit previous block
             (let [block (db/pull [:block/uuid block-id])
@@ -983,7 +990,8 @@
                                0)]
                       (edit-block! block pos format id
                                    {:custom-content new-value
-                                    :tail-len tail-len}))))))))))))
+                                    :tail-len tail-len})))))))
+          (state/set-editor-op! nil))))))
 
 (defn delete-blocks!
   [repo block-uuids]
@@ -1035,7 +1043,8 @@
       (let [{:block/keys [content properties]} block]
         (when (get properties key)
           (save-block-if-changed! block content
-                                  {:custom-properties (dissoc properties key)}))))))
+                                  {:custom-properties (dissoc properties key)
+                                   :remove-property? true}))))))
 
 (defn set-block-property!
   [block-id key value]

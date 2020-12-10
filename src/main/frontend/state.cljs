@@ -17,6 +17,8 @@
    {:route-match nil
     :today nil
     :db/batch-txs (async/chan 100)
+    :file/writes (async/chan 100)
+    :file/writing? false
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -309,21 +311,23 @@
   (:editor/set-timestamp-block @state))
 
 (defn set-edit-content!
-  [input-id value]
-  (when input-id
-    (when-let [input (gdom/getElement input-id)]
-      (util/set-change-value input value))
-    (update-state! :editor/content (fn [m]
-                                     (assoc m input-id value)))
-    ;; followers
-    ;; (when-let [s (util/extract-uuid input-id)]
-    ;;   (let [input (gdom/getElement input-id)
-    ;;         leader-parent (util/rec-get-block-node input)
-    ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-    ;;                        (remove #(= leader-parent %)))]
-    ;;     (prn "followers: " (count followers))
-    ;;     ))
-))
+  ([input-id value] (set-edit-content! input-id value true))
+  ([input-id value set-input-value?]
+   (when input-id
+     (when set-input-value?
+       (when-let [input (gdom/getElement input-id)]
+         (util/set-change-value input value)))
+     (update-state! :editor/content (fn [m]
+                                      (assoc m input-id value)))
+     ;; followers
+     ;; (when-let [s (util/extract-uuid input-id)]
+     ;;   (let [input (gdom/getElement input-id)
+     ;;         leader-parent (util/rec-get-block-node input)
+     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
+     ;;                        (remove #(= leader-parent %)))]
+     ;;     (prn "followers: " (count followers))
+     ;;     ))
+)))
 
 (defn get-edit-input-id
   []
@@ -783,6 +787,27 @@
       (when-not (string/blank? project)
         project))))
 
+(defn update-current-project
+  [& kv]
+  {:pre [(even? (count kv))]}
+  (when-let [current-repo (get-current-repo)]
+    (let [new-kvs (apply array-map (vec kv))
+          projects (:projects (get-me))
+          new-projects (reduce (fn [acc project]
+                                 (if (= (:repo project) current-repo)
+                                   (conj acc (merge project new-kvs))
+                                   (conj acc project)))
+                         []
+                         projects)]
+      (set-state! [:me :projects] new-projects))))
+
+(defn remove-current-project
+  []
+  (when-let [current-repo (get-current-repo)]
+    (update-state! [:me :projects]
+      (fn [projects]
+        (remove #(= (:repo %) current-repo) projects)))))
+
 (defn set-indexedb-support!
   [value]
   (set-state! :indexeddb/support? value))
@@ -802,6 +827,10 @@
 (defn get-db-batch-txs-chan
   []
   (:db/batch-txs @state))
+
+(defn get-file-write-chan
+  []
+  (:file/writes @state))
 
 (defn add-tx!
   ;; TODO: replace f with data for batch transactions
@@ -907,6 +936,15 @@
   ;; THINK: new block, indent/outdent, drag && drop, etc.
   (set-editor-last-input-time! repo time))
 
+(defn set-published-pages
+  [pages]
+  (when-let [repo (get-current-repo)]
+   (set-state! [:me :published-pages repo] pages)))
+
+(defn reset-published-pages
+  []
+  (set-published-pages []))
+
 (defn set-db-persisted!
   [repo value]
   (swap! state assoc-in [:db/persisted? repo] value))
@@ -942,15 +980,23 @@
     (let [latest-txs (:db/latest-txs @state)
           last-persist-tx-id (get-last-persist-transact-id repo files?)
           latest-txs (if last-persist-tx-id
-                      (update-in latest-txs [repo files?]
-                                 (fn [result]
-                                   (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
-                      latest-txs)
-         new-txs (update-in latest-txs [repo files?] (fn [result]
-                                                       (vec (conj result {:tx-id tx-id
-                                                                          :tx-data tx-data}))))]
-     (storage/set-transit! :db/latest-txs new-txs)
-     (set-state! :db/latest-txs new-txs))))
+                       (update-in latest-txs [repo files?]
+                                  (fn [result]
+                                    (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
+                       latest-txs)
+          new-txs (update-in latest-txs [repo files?] (fn [result]
+                                                        (vec (conj result {:tx-id tx-id
+                                                                           :tx-data tx-data}))))]
+      (storage/set-transit! :db/latest-txs new-txs)
+      (set-state! :db/latest-txs new-txs))))
+
+(defn set-file-writing!
+  [v]
+  (set-state! :file/writing? v))
+
+(defn file-in-writing!
+  []
+  (:file/writing? @state))
 
 (defn get-repo-latest-txs
   [repo file?]

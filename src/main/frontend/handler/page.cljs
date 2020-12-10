@@ -21,7 +21,7 @@
             [frontend.git :as git]
             [frontend.fs :as fs]
             [promesa.core :as p]
-            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [frontend.format.mldoc :as mldoc]))
 
 (defn- get-directory
@@ -63,9 +63,9 @@
                 :error)
                ;; create the file
                (let [content (util/default-content-with-title format title)]
-                 (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                 (p/let [_ (fs/create-if-not-exists dir file-path content)
+                         _ (git-handler/git-add repo path)]
                    (db/reset-file! repo path content)
-                   (git-handler/git-add repo path)
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})
@@ -423,3 +423,39 @@
 (defn init-commands!
   []
   (commands/init-commands! get-page-ref-text))
+
+(defn delete-page-from-logseq
+  [project permalink]
+  (let [url (util/format "%s%s/%s" config/api project permalink)]
+    (js/Promise.
+      (fn [resolve reject]
+        (util/delete url
+          (fn [result]
+            (resolve result))
+          (fn [error]
+            (log/error :page/http-delete-failed error)
+            (reject error)))))))
+
+(defn get-page-list-by-project-name
+  [project]
+  (js/Promise.
+    (fn [resolve _]
+      (if-not (string? project)
+        (resolve :project-name-is-invalid)
+        (let [url (util/format "%sprojects/%s/pages" config/api project)]
+         (util/fetch url
+           (fn [result]
+             (log/debug :page/get-page-list result)
+             (let [data (:result result)]
+               (if (sequential? data)
+                 (do (state/set-published-pages data)
+                     (resolve data))
+                 (log/error :page/http-get-list-result-malformed result))))
+           (fn [error]
+             (log/error :page/http-get-list-failed error)
+             (resolve error))))))))
+
+(defn update-state-and-notify
+  [page-name]
+  (page-add-properties! page-name {:published false})
+  (notification/show! (util/format "Remove Page \"%s\" from Logseq server success" page-name) :success))
