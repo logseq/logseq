@@ -188,10 +188,15 @@
                   ;; Use the same labels as isomorphic-git
                   rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
                   _ (when (seq deleted)
-                      (p/all (map (fn [path]
-                                    (let [handle-path (str handle-path path)]
-                                      (idb/remove-item! handle-path)
-                                      (fs/remove-nfs-file-handle! handle-path))) deleted)))
+                      (let [deleted (doall
+                                     (-> (map (fn [path] (if (= "/" (first path))
+                                                           path
+                                                           (str "/" path))) deleted)
+                                         (distinct)))]
+                        (p/all (map (fn [path]
+                                      (let [handle-path (str handle-path path)]
+                                        (idb/remove-item! handle-path)
+                                        (fs/remove-nfs-file-handle! handle-path))) deleted))))
                   added-or-modified (set (concat added modified))
                   _ (when (seq added-or-modified)
                       (p/all (map (fn [path]
@@ -226,10 +231,13 @@
                 (p/finally (fn [_]
                              (state/set-graph-syncing? false))))))))))
 
-(defn- refresh!
-  [repo]
+(defn refresh!
+  [repo ok-handler]
   (when repo
-    (reload-dir! repo)))
+    (state/set-nfs-refreshing! true)
+    (p/let [_ (reload-dir! repo)
+            _ (ok-handler)]
+      (state/set-nfs-refreshing! false))))
 
 (defn supported?
   []

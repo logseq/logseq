@@ -63,7 +63,7 @@
                 :error)
                ;; create the file
                (let [content (util/default-content-with-title format title)]
-                 (p/let [_ (fs/create-if-not-exists dir file-path content)
+                 (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                          _ (git-handler/git-add repo path)]
                    (db/reset-file! repo path content)
                    (when redirect?
@@ -293,7 +293,8 @@
         old-path (:file/path file)
         new-path (compute-new-file-path old-path new-name)]
     (->
-     (p/let [_ (fs/rename (str (util/get-repo-dir repo) "/" old-path)
+     (p/let [_ (fs/rename repo
+                          (str (util/get-repo-dir repo) "/" old-path)
                           (str (util/get-repo-dir repo) "/" new-path))]
        ;; update db
        (db/transact! repo [{:db/id (:db/id file)
@@ -428,32 +429,32 @@
   [project permalink]
   (let [url (util/format "%s%s/%s" config/api project permalink)]
     (js/Promise.
-      (fn [resolve reject]
-        (util/delete url
-          (fn [result]
-            (resolve result))
-          (fn [error]
-            (log/error :page/http-delete-failed error)
-            (reject error)))))))
+     (fn [resolve reject]
+       (util/delete url
+                    (fn [result]
+                      (resolve result))
+                    (fn [error]
+                      (log/error :page/http-delete-failed error)
+                      (reject error)))))))
 
 (defn get-page-list-by-project-name
   [project]
   (js/Promise.
-    (fn [resolve _]
-      (if-not (string? project)
-        (resolve :project-name-is-invalid)
-        (let [url (util/format "%sprojects/%s/pages" config/api project)]
+   (fn [resolve _]
+     (if-not (string? project)
+       (resolve :project-name-is-invalid)
+       (let [url (util/format "%sprojects/%s/pages" config/api project)]
          (util/fetch url
-           (fn [result]
-             (log/debug :page/get-page-list result)
-             (let [data (:result result)]
-               (if (sequential? data)
-                 (do (state/set-published-pages data)
-                     (resolve data))
-                 (log/error :page/http-get-list-result-malformed result))))
-           (fn [error]
-             (log/error :page/http-get-list-failed error)
-             (resolve error))))))))
+                     (fn [result]
+                       (log/debug :page/get-page-list result)
+                       (let [data (:result result)]
+                         (if (sequential? data)
+                           (do (state/set-published-pages data)
+                               (resolve data))
+                           (log/error :page/http-get-list-result-malformed result))))
+                     (fn [error]
+                       (log/error :page/http-get-list-failed error)
+                       (resolve error))))))))
 
 (defn update-state-and-notify
   [page-name]

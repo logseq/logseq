@@ -27,6 +27,7 @@
     :repo/sync-status {}
     :repo/changed-files nil
     :nfs/loading-files? nil
+    :nfs/refreshing? nil
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
@@ -1001,6 +1002,14 @@
 (defn get-repo-latest-txs
   [repo file?]
   (get-in (:db/latest-txs @state) [repo file?]))
+
+(defn set-nfs-refreshing!
+  [value]
+  (set-state! :nfs/refreshing? value))
+
+(defn nfs-refreshing?
+  []
+  (:nfs/refreshing? @state))
 
 ;; TODO: Move those to the uni `state`
 
