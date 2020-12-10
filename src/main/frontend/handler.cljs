@@ -165,5 +165,4 @@
         (restore-and-setup! me repos logged?)))
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    ;; (editor-handler/periodically-save!)
-))
+    (editor-handler/periodically-save!)))

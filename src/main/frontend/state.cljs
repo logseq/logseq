@@ -797,16 +797,16 @@
                                  (if (= (:repo project) current-repo)
                                    (conj acc (merge project new-kvs))
                                    (conj acc project)))
-                         []
-                         projects)]
+                               []
+                               projects)]
       (set-state! [:me :projects] new-projects))))
 
 (defn remove-current-project
   []
   (when-let [current-repo (get-current-repo)]
     (update-state! [:me :projects]
-      (fn [projects]
-        (remove #(= (:repo %) current-repo) projects)))))
+                   (fn [projects]
+                     (remove #(= (:repo %) current-repo) projects)))))
 
 (defn set-indexedb-support!
   [value]
@@ -939,7 +939,7 @@
 (defn set-published-pages
   [pages]
   (when-let [repo (get-current-repo)]
-   (set-state! [:me :published-pages repo] pages)))
+    (set-state! [:me :published-pages repo] pages)))
 
 (defn reset-published-pages
   []
