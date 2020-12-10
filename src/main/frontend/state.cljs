@@ -311,21 +311,23 @@
   (:editor/set-timestamp-block @state))
 
 (defn set-edit-content!
-  [input-id value]
-  (when input-id
-    (when-let [input (gdom/getElement input-id)]
-      (util/set-change-value input value))
-    (update-state! :editor/content (fn [m]
-                                     (assoc m input-id value)))
-    ;; followers
-    ;; (when-let [s (util/extract-uuid input-id)]
-    ;;   (let [input (gdom/getElement input-id)
-    ;;         leader-parent (util/rec-get-block-node input)
-    ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-    ;;                        (remove #(= leader-parent %)))]
-    ;;     (prn "followers: " (count followers))
-    ;;     ))
-))
+  ([input-id value] (set-edit-content! input-id value true))
+  ([input-id value set-input-value?]
+   (when input-id
+     (when set-input-value?
+       (when-let [input (gdom/getElement input-id)]
+         (util/set-change-value input value)))
+     (update-state! :editor/content (fn [m]
+                                      (assoc m input-id value)))
+     ;; followers
+     ;; (when-let [s (util/extract-uuid input-id)]
+     ;;   (let [input (gdom/getElement input-id)
+     ;;         leader-parent (util/rec-get-block-node input)
+     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
+     ;;                        (remove #(= leader-parent %)))]
+     ;;     (prn "followers: " (count followers))
+     ;;     ))
+)))
 
 (defn get-edit-input-id
   []

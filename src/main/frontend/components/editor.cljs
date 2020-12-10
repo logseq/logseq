@@ -696,7 +696,7 @@
        :on-change (fn [e]
                     (let [value (util/evalue e)
                           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                      (state/set-edit-content! id value)
+                      (state/set-edit-content! id value false)
                       (state/set-edit-pos! current-pos)
                       (when-let [repo (or (:block/repo block)
                                           (state/get-current-repo))]
@@ -717,7 +717,7 @@
                             (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
                             (reset! *show-block-commands true))
                           nil))))
-       :auto-focus true})
+       :auto-focus false})
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp
