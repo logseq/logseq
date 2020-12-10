@@ -63,9 +63,9 @@
                 :error)
                ;; create the file
                (let [content (util/default-content-with-title format title)]
-                 (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                 (p/let [_ (fs/create-if-not-exists dir file-path content)
+                         _ (git-handler/git-add repo path)]
                    (db/reset-file! repo path content)
-                   (git-handler/git-add repo path)
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})
