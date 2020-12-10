@@ -215,7 +215,9 @@
                (log/error :file/write-failed? {:dir dir
                                                :path path
                                                :error error})
-               (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button."))))))
+               ;; Disable this temporarily
+               ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+)))))
 
 (defn rename
   [repo old-path new-path]
