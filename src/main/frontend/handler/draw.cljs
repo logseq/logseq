@@ -59,25 +59,23 @@
         repo (state/get-current-repo)]
     (when repo
       (let [repo-dir (util/get-repo-dir repo)]
-        (p/let [_ (create-draws-directory! repo)]
-          (util/p-handle
+        (->
+         (p/do!
+           (create-draws-directory! repo)
            (fs/write-file repo-dir path data)
-           (fn [_]
-             (util/p-handle
-              (git-handler/git-add repo path)
-              (fn [_]
-                (ok-handler file)
-                (let [modified-at (tc/to-long (t/now))]
-                  (db/transact! repo
-                                [{:file/path path
-                                  :file/last-modified-at modified-at}
-                                 {:page/name file
-                                  :page/file path
-                                  :page/last-modified-at (tc/to-long (t/now))
-                                  :page/journal? false}])))))
-           (fn [error]
-             (prn "Write file failed, path: " path ", data: " data)
-             (js/console.dir error))))))))
+           (git-handler/git-add repo path)
+           (ok-handler file)
+           (let [modified-at (tc/to-long (t/now))]
+             (db/transact! repo
+                           [{:file/path path
+                             :file/last-modified-at modified-at}
+                            {:page/name file
+                             :page/file path
+                             :page/last-modified-at (tc/to-long (t/now))
+                             :page/journal? false}])))
+         (p/catch (fn [error]
+                    (prn "Write file failed, path: " path ", data: " data)
+                    (js/console.dir error))))))))
 
 (defn get-all-excalidraw-files
   [ok-handler]
