@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.state :as state]
-            [clojure.set :as set]
             [frontend.date :as date]))
 
 (def react util/react)
