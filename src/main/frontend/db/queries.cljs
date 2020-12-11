@@ -70,18 +70,6 @@
              db-utils/seq-flatten
              distinct)))
 
-(defn page-alias-set
-  [repo-url page]
-  (when-let [page-id (get-page-id-by-name page)]
-    (let [aliases (get-page-alias repo-url page)
-          aliases (if (seq aliases)
-                    (set
-                      (concat
-                        (mapcat #(get-alias-page repo-url %) aliases)
-                        aliases))
-                    aliases)]
-      (set (conj aliases page-id)))))
-
 (defn get-block-refs-count
   [repo]
   (->> (d/q
@@ -681,13 +669,9 @@
                   (and modified-at
                        (> modified-at now-long))))))))
 
-(defn get-page-alias-names
-  [repo page-name]
-  (let [alias-ids (get-page-alias repo page-name)]
-    (when (seq alias-ids)
-      (->> (db-utils/pull-many repo '[:page/name] alias-ids)
-        (map :page/name)
-        distinct))))
+(defn get-pages-by-names
+  [repo page-names]
+  (db-utils/pull-many repo '[:page/name] page-names))
 
 (defn get-files
   [repo]
@@ -1147,7 +1131,6 @@
          (conj blocks dummy))))))
 
 
-
 (defn get-files-that-referenced-page
   [page-id]
   (when-let [repo (state/get-current-repo)]
@@ -1165,30 +1148,16 @@
         (db-utils/seq-flatten)))))
 
 (defn get-page-unlinked-references
-  [page]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [conn (declares/get-conn repo)]
-      (let [page-id (:db/id (db-utils/entity [:page/name page]))
-            pages (page-alias-set repo page)
-            pattern (re-pattern (str "(?i)" page))]
-        (->> (d/q
-               '[:find (pull ?block [*])
-                 :in $ ?pattern
-                 :where
-                 [?block :block/content ?content]
-                 [(re-find ?pattern ?content)]]
-               conn
-               pattern)
-          db-utils/seq-flatten
-          (remove (fn [block]
-                    (let [ref-pages (set (map :db/id (:block/ref-pages block)))]
-                      (or
-                        (= (get-in block [:block/page :db/id]) page-id)
-                        (seq (set/intersection
-                               ref-pages
-                               pages))))))
-          db-utils/sort-blocks
-          db-utils/group-by-page)))))
+  [conn pattern]
+  (-> (d/q
+        '[:find (pull ?block [*])
+          :in $ ?pattern
+          :where
+          [?block :block/content ?content]
+          [(re-find ?pattern ?content)]]
+        conn
+        pattern)
+      (db-utils/seq-flatten)))
 
 (defn get-matched-blocks
   [match-fn limit]

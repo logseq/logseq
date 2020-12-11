@@ -368,7 +368,7 @@
                    (presentation repo page))])]
 
              (when (and repo (not block?))
-               (let [alias (db-queries/get-page-alias-names repo page-name)]
+               (let [alias (page-handler/get-page-alias-names repo page-name)]
                  (when (seq alias)
                    [:div.text-sm.ml-1.mb-4 {:key "page-file"}
                     [:span.opacity-50 "Alias: "]

@@ -543,3 +543,30 @@
                          (contains? exclude-pages (:db/id (:block/page block))))))
              db-utils/sort-blocks
              db-utils/group-by-page)))))
+
+(defn get-page-unlinked-references
+  [page]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (declares/get-conn repo)]
+      (let [page-id (:db/id (db-utils/entity [:page/name page]))
+            pages (page-alias-set repo page)
+            pattern (re-pattern (str "(?i)" page))]
+        (->> (db-queries/get-page-unlinked-references conn pattern)
+             (remove (fn [block]
+                       (let [ref-pages (set (map :db/id (:block/ref-pages block)))]
+                         (or
+                           (= (get-in block [:block/page :db/id]) page-id)
+                           (seq (set/intersection
+                                  ref-pages
+                                  pages))))))
+             db-utils/sort-blocks
+             db-utils/group-by-page)))))
+
+(defn get-page-alias-names
+  [repo page-name]
+  (let [alias-ids (get-page-alias repo page-name)]
+    (when (seq alias-ids)
+      (->> (db-queries/get-pages-by-names repo alias-ids)
+           (map :page/name)
+           distinct))))
+

@@ -74,7 +74,7 @@
   < rum/reactive db-mixins/query
     {:will-mount (fn [state]
                    (let [[page-name n-ref] (:rum/args state)
-                         ref-blocks (db-queries/get-page-unlinked-references page-name)]
+                         ref-blocks (page-handler/get-page-unlinked-references page-name)]
                      (reset! n-ref (count ref-blocks))
                      (assoc state ::ref-blocks ref-blocks)))}
   [state page-name n-ref]
