@@ -645,6 +645,11 @@
                                blocks-container-id (and blocks-container-id
                                                         (util/uuid-string? blocks-container-id)
                                                         (medley/uuid blocks-container-id))]
+
+                           ; WORKAROUND: The block won't refresh itself even if the content is empty.
+                           (when edit-self?
+                             (gobj/set input "value" ""))
+
                            (when ok-handler
                              (ok-handler
                               (if edit-self? (first blocks) (last blocks))))
