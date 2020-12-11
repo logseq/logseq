@@ -2,6 +2,7 @@
   "The File System Access API, https://web.dev/file-system-access/."
   (:require [cljs-bean.core :as bean]
             [promesa.core :as p]
+            [medley.core :as medley]
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.util :as util]
@@ -57,12 +58,30 @@
                        (keyword (util/get-file-ext (:file/path file)))))
           files))
 
+(defn- set-batch!
+  [handles]
+  (let [handles (map (fn [[path handle]]
+                       {:key path
+                        :value handle}) handles)]
+    (idb/set-batch! handles)))
+
+(defn- set-files-aux!
+  [handles]
+  (if (seq handles)
+    (let [[h t] (split-at 50 handles)]
+      (p/let [_ (p/promise (fn [_]
+                             (js/setTimeout (fn []
+                                              (p/resolved nil)) 10)))
+              _ (set-batch! h)]
+        (when (seq t)
+          (set-files-aux! t))))))
+
 (defn- set-files!
   [handles]
   (doseq [[path handle] handles]
     (let [handle-path (str config/local-handle-prefix path)]
-      (idb/set-item! handle-path handle)
-      (fs/add-nfs-file-handle! handle-path handle))))
+      (fs/add-nfs-file-handle! handle-path handle)))
+  (set-files-aux! handles))
 
 (defn ls-dir-files
   []
@@ -223,7 +242,7 @@
                                         (rename-f "modify" modified))]
                              (when (or (and (seq diffs) (seq modified-files))
                                        (seq diffs) ; delete
-                                       )
+)
                                (repo-handler/load-repo-to-db! repo
                                                               {:diffs diffs
                                                                :nfs-files modified-files})))))))))

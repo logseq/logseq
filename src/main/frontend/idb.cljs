@@ -1,26 +1,24 @@
 (ns frontend.idb
-  (:require ["localforage" :as localforage]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.storage :as storage]))
+            [frontend.storage :as storage]
+            ["/frontend/idbkv" :as idb-keyval :refer [Store]]))
+
 
 ;; offline db
-(def store-name "dbs")
-(.config localforage
-         (bean/->js
-          {:name "logseq-datascript"
-           :version 1.0
-           :storeName store-name}))
 
-(defonce localforage-instance (.createInstance localforage store-name))
+;; To maintain backward compatibility
+
+
+(defonce store (Store. "localforage" "keyvaluepairs" 2))
 
 (defn clear-idb!
   []
-  (p/let [_ (.clear localforage-instance)
+  (p/let [_ (idb-keyval/clear store)
           dbs (js/window.indexedDB.databases)]
     (doseq [db dbs]
       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
@@ -33,21 +31,26 @@
 (defn remove-item!
   [key]
   (when key
-    (.removeItem localforage-instance key)))
+    (idb-keyval/del key store)))
 
 (defn set-item!
   [key value]
   (when key
-    (.setItem localforage-instance key value)))
+    (idb-keyval/set key value store)))
+
+(defn set-batch!
+  [items]
+  (when (seq items)
+    (idb-keyval/setBatch (clj->js items) store)))
 
 (defn get-item
   [key]
   (when key
-    (.getItem localforage-instance key)))
+    (idb-keyval/get key store)))
 
 (defn get-keys
   []
-  (.keys localforage-instance))
+  (idb-keyval/keys store))
 
 (defn get-nfs-dbs
   []
