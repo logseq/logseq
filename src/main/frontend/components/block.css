@@ -39,7 +39,11 @@
 }
 
 .embed {
-  border-radius: var(--border-radius-low);
+  border-radius: var(--ls-border-radius-low);
+}
+
+.embed-header {
+  font-weight: 600;
 }
 
 .dark-theme {
@@ -58,6 +62,9 @@
   --color-level-4: #b7d7c9;
   --color-level-5: #a5cdbc;
   --color-level-6: #92c2af;
+  /* --color-level-4: #b7d7c9;
+  --color-level-5: #a5cdbc;
+  --color-level-6: #92c2af; */
 }
 
 .color-level {
