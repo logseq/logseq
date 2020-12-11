@@ -66,7 +66,7 @@
                               (react-queries/get-file repo-url path))
                 content (or old-content default-content)]
             (h-utils/reset-file! repo-url path content)
-            (db-queries/reset-config! repo-url content)
+            (h-utils/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))))))
 
@@ -265,7 +265,7 @@
                              (db-queries/delete-files remove-files))
               delete-blocks (db-queries/delete-blocks repo-url (concat remove-files modify-files))
               delete-pages (if (seq remove-files)
-                             (db-queries/delete-pages-by-files remove-files)
+                             (delete-pages-by-files remove-files)
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)

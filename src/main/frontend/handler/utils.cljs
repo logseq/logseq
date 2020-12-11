@@ -18,7 +18,8 @@
             [datascript.core :as d]
             [frontend.util :as util :refer-macros [profile]]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [cljs.reader :as reader]))
 
 (defn- remove-key
   [repo-url key]
@@ -466,3 +467,15 @@
            [page
             (db-queries/get-page-format page)])
          pages)))))
+
+(defn reset-config!
+  [repo-url content]
+  (when-let [content (or content (react-queries/get-file repo-url (str config/app-name "/" config/config-file)))]
+    (let [config (try
+                   (reader/read-string content)
+                   (catch js/Error e
+                     (println "Parsing config file failed: ")
+                     (js/console.dir e)
+                     {}))]
+      (state/set-config! repo-url config)
+      config)))

@@ -574,19 +574,6 @@
         repo-url)
       ffirst)))
 
-
-(defn reset-config!
-  [repo-url content]
-  (when-let [content (or content (react-queries/get-file repo-url (str config/app-name "/" config/config-file)))]
-    (let [config (try
-                   (reader/read-string content)
-                   (catch js/Error e
-                     (println "Parsing config file failed: ")
-                     (js/console.dir e)
-                     {}))]
-      (state/set-config! repo-url config)
-      config)))
-
 (defn start-db-conn!
   ([me repo]
    (start-db-conn! me repo {}))

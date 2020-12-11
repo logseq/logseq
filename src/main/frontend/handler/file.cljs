@@ -76,7 +76,7 @@
    (restore-config! repo-url nil project-changed-check?))
   ([repo-url config-content project-changed-check?]
    (let [old-project (:project (state/get-config))
-         new-config (db-queries/reset-config! repo-url config-content)]
+         new-config (h-utils/reset-config! repo-url config-content)]
      (when (and (not (config/local-db? repo-url))
                 project-changed-check?)
        (let [new-project (:project new-config)

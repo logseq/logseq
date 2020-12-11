@@ -11,7 +11,8 @@
             [frontend.db.queries :as db-queries]
             [frontend.db.declares :as declares]
             [frontend.config :as config]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [datascript.core :as d]))
 
 (defn custom-query-aux
   [{:keys [query inputs] :as query'} query-opts]
