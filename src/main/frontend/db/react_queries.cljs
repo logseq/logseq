@@ -291,3 +291,15 @@
          page-name)
     react
     db-utils/seq-flatten))
+
+(defn get-page-referenced-blocks
+  [repo page-id pages]
+  (->> (q repo [:page/refed-blocks page-id] {}
+         '[:find (pull ?block [*])
+           :in $ ?pages
+           :where
+           [?block :block/ref-pages ?ref-page]
+           [(contains? ?pages ?ref-page)]]
+         pages)
+    react
+    db-utils/seq-flatten))

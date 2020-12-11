@@ -530,3 +530,16 @@
                 '())
         new-pages (take 12 (distinct (cons page pages)))]
     (h-utils/set-key-value repo :recent/pages new-pages)))
+
+(defn get-page-referenced-blocks
+  [page]
+  (when-let [repo (state/get-current-repo)]
+    (when (declares/get-conn repo)
+      (let [page-id (:db/id (db-utils/entity [:page/name page]))
+            pages (page-alias-set repo page)]
+        (->> (react-queries/get-page-referenced-blocks repo page-id pages)
+             (remove (fn [block]
+                       (let [exclude-pages pages]
+                         (contains? exclude-pages (:db/id (:block/page block))))))
+             db-utils/sort-blocks
+             db-utils/group-by-page)))))

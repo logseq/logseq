@@ -12,7 +12,8 @@
             [frontend.db-mixins :as db-mixins]
             [clojure.string :as string]
             [frontend.db.react-queries :as react-queries]
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.queries :as db-queries]
+            [frontend.handler.page :as page-handler]))
 
 (rum/defc references < rum/reactive db-mixins/query
   [page-name marker? priority?]
@@ -30,7 +31,7 @@
                        block-id
                        (react-queries/get-block-referenced-blocks block-id)
                        :else
-                       (db-queries/get-page-referenced-blocks page-name))
+                       (page-handler/get-page-referenced-blocks page-name))
           scheduled-or-deadlines (if journal?
                                    (react-queries/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)

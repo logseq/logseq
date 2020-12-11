@@ -116,7 +116,7 @@
                    :or {pull-keys '[*]}}]
    (let [page (string/lower-case page)
          page-id (or (:db/id (db-utils/entity repo-url [:page/name page]))
-                   (:db/id (db-utils/entity repo-url [:page/original-name page])))
+                     (:db/id (db-utils/entity repo-url [:page/original-name page])))
          db (declares/get-conn repo-url)]
      (when page-id
        (let [datoms (d/datoms db :avet :block/page page-id)
@@ -1146,26 +1146,7 @@
                      default-option)]
          (conj blocks dummy))))))
 
-(defn get-page-referenced-blocks
-  [page]
-  (when-let [repo (state/get-current-repo)]
-    (when (declares/get-conn repo)
-      (let [page-id (:db/id (db-utils/entity [:page/name page]))
-            pages (page-alias-set repo page)]
-        (->> (react-queries/q repo [:page/refed-blocks page-id] {}
-               '[:find (pull ?block [*])
-                 :in $ ?pages
-                 :where
-                 [?block :block/ref-pages ?ref-page]
-                 [(contains? ?pages ?ref-page)]]
-               pages)
-          react-queries/react
-          db-utils/seq-flatten
-          (remove (fn [block]
-                    (let [exclude-pages pages]
-                      (contains? exclude-pages (:db/id (:block/page block))))))
-          db-utils/sort-blocks
-          db-utils/group-by-page)))))
+
 
 (defn get-files-that-referenced-page
   [page-id]
