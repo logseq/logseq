@@ -46,8 +46,17 @@
   font-weight: 600;
 }
 
+.ls-embed-page {
+    @apply color-level embed py-2 my-2 px-3;
+}
+
+.ls-embed-block {
+    @apply color-level embed;
+    z-index: 2;
+}
+
 .dark-theme {
-  --color-level-1: var(--ls-secondary-background-color); 
+  --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
   --color-level-4: #195D6C;
@@ -56,7 +65,7 @@
 }
 
 .white-theme {
-  --color-level-1: var(--ls-secondary-background-color); 
+  --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
   --color-level-4: #d0e6fa;

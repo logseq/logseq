@@ -313,7 +313,7 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.color-level.embed.embed-block.bg-base-2 {:style {:z-index 2}}
+    [:div.ls-embed-block.bg-base-2
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
@@ -324,7 +324,7 @@
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
-    [:div.color-level.embed.embed-page.py-2.my-2.px-3.bg-base-2
+    [:div.ls-embed-page.bg-base-2
      [:div.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:page/name page-name})]
@@ -1831,7 +1831,7 @@
                (block-container config item)
                (:block/uuid item)))))
        ;; (add-button config ref? custom-query? blocks)
-       ])))
+])))
 
 ;; headers to hiccup
 (defn ->hiccup
