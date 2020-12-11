@@ -162,16 +162,18 @@
                                    :path-params {:path path}}))))))
 
 (defn alter-files
-  [repo files {:keys [add-history? update-status? git-add-cb reset?]
+  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db?]
                :or {add-history? true
                     update-status? true
-                    reset? false}
+                    reset? false
+                    update-db? true}
                :as opts}]
   ;; update db
-  (doseq [[path content] files]
-    (if reset?
-      (db/reset-file! repo path content)
-      (db/set-file-content! repo path content)))
+  (when update-db?
+    (doseq [[path content] files]
+      (if reset?
+        (db/reset-file! repo path content)
+        (db/set-file-content! repo path content))))
 
   (when-let [chan (state/get-file-write-chan)]
     (async/put! chan [repo files opts])))

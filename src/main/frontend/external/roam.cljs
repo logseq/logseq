@@ -92,13 +92,17 @@
 (defn ->file
   [page-data]
   (let [{:keys [create-time title children edit-time]} page-data
-        initial-level 2]
-    {:title title
-     :created-at create-time
-     :last-modified-at edit-time
-     :text (when-let [text (children->text children initial-level)]
-             (let [front-matter (util/format "---\ntitle: %s\n---\n\n" title)]
-               (str front-matter (transform text))))}))
+        initial-level 2
+        text (when (seq children)
+               (when-let [text (children->text children initial-level)]
+                 (let [front-matter (util/format "---\ntitle: %s\n---\n\n" title)]
+                   (str front-matter (transform text)))))]
+    (when (and (not (string/blank? title))
+               text)
+      {:title title
+       :created-at create-time
+       :last-modified-at edit-time
+       :text text})))
 
 (defn ->files
   [edn-data]

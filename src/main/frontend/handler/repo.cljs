@@ -158,7 +158,7 @@
   (create-contents-file repo-url)
   (create-custom-theme repo-url))
 
-(defn- parse-files-and-load-to-db!
+(defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
                    :or {re-render? true}}]
   (state/set-loading-files! false)
