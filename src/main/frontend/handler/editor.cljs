@@ -44,7 +44,8 @@
             [frontend.db.queries :as db-queries]
             [frontend.db.utils :as db-utils]
             [frontend.db.react-queries :as react-queries]
-            [frontend.handler.utils :as h-utils]))
+            [frontend.handler.utils :as h-utils]
+            [frontend.handler.block :as block-handler]))
 
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
@@ -776,7 +777,7 @@
           collapsed? (:block/collapsed? block)
           repo (or (:block/repo block) (state/get-current-repo))
           last-child (and collapsed?
-                          (last (db-queries/get-block-and-children-no-cache repo (:block/uuid block))))
+                          (last (block-handler/get-block-and-children-no-cache repo (:block/uuid block))))
           last-child (when (not= (:block/uuid last-child)
                                  (:block/uuid block))
                        last-child)
@@ -1711,10 +1712,10 @@
         (when-let [sibling-block-id (d/attr sibling-block "blockid")]
           (when-let [sibling-block (react-queries/pull-block (medley/uuid sibling-block-id))]
             (let [sibling-meta (:block/meta sibling-block)
-                  hc1 (db-queries/get-block-and-children-no-cache repo (:block/uuid block))
+                  hc1 (block-handler/get-block-and-children-no-cache repo (:block/uuid block))
                   hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
                         [sibling-block]
-                        (db-queries/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
+                        (block-handler/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
               ;; Same page and next to the other
               (when (and
                      (= (:db/id (:block/page block))

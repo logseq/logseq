@@ -175,15 +175,6 @@
          page
          pred))))
 
-(defn get-block-and-children-no-cache
-  [repo block-uuid]
-  (let [block (db-utils/entity repo [:block/uuid block-uuid])
-        page (:db/id (:block/page block))
-        pos (:start-pos (:block/meta block))
-        level (:block/level block)]
-    (-> (get-block-and-children repo page pos)
-        (block-and-children-transform repo block-uuid level))))
-
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (declares/get-conn repo)]

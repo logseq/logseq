@@ -94,11 +94,33 @@
           (db-utils/group-by-page result)))
       result)))
 
+(defn block-and-children-transform
+  [result repo-url block-uuid level]
+  (some->> result
+           db-utils/seq-flatten
+           (db-utils/sort-by-pos)
+           (take-while (fn [h]
+                         (or
+                           (= (:block/uuid h)
+                             block-uuid)
+                           (> (:block/level h) level))))
+           (db-utils/with-repo repo-url)
+           (db-queries/with-block-refs-count repo-url)))
+
+(defn get-block-and-children-no-cache
+  [repo block-uuid]
+  (let [block (db-utils/entity repo [:block/uuid block-uuid])
+        page (:db/id (:block/page block))
+        pos (:start-pos (:block/meta block))
+        level (:block/level block)]
+    (-> (db-queries/get-block-and-children repo page pos)
+        (block-and-children-transform repo block-uuid level))))
+
 (defn get-block-full-content
   ([repo block-id]
    (get-block-full-content repo block-id (fn [block] (:block/content block))))
   ([repo block-id transform-fn]
-   (let [blocks (db-queries/get-block-and-children-no-cache repo block-id)]
+   (let [blocks (get-block-and-children-no-cache repo block-id)]
      (->> blocks
           (map transform-fn)
           (apply util/join-newline)))))
