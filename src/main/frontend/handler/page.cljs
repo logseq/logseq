@@ -27,7 +27,9 @@
             [frontend.db.react-queries :as react-queries]
             [frontend.db.declares :as declares]
             [clojure.set :as set]
-            [frontend.handler.utils :as h-utils]))
+            [frontend.handler.utils :as h-utils]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]))
 
 (defn- get-directory
   [journal?]
@@ -653,3 +655,16 @@
         (normalize-page-name
           {:nodes nodes
            :links edges})))))
+
+(defn get-pages-with-modified-at
+  [repo]
+  (let [now-long (tc/to-long (t/now))]
+    (->> (db-queries/get-pages-with-modified repo)
+         (seq)
+         (sort-by (fn [[page modified-at]]
+                    [modified-at page]))
+         (reverse)
+         (remove (fn [[page modified-at]]
+                   (or (util/file-page? page)
+                       (and modified-at
+                         (> modified-at now-long))))))))

@@ -130,19 +130,6 @@
   (when-let [conn (declares/get-conn repo)]
     (d/entity conn [:block/children [:block/uuid block-id]])))
 
-(defn block-and-children-transform
-  [result repo-url block-uuid level]
-  (some->> result
-           db-utils/seq-flatten
-           (db-utils/sort-by-pos)
-           (take-while (fn [h]
-                         (or
-                           (= (:block/uuid h)
-                             block-uuid)
-                           (> (:block/level h) level))))
-           (db-utils/with-repo repo-url)
-           (with-block-refs-count repo-url)))
-
 (defn get-block-and-children
   [repo page pos]
   (let [pred (fn [data meta] (>= (:start-pos meta) pos))]
@@ -272,23 +259,14 @@
     (declares/get-conn repo)
     tag-name))
 
-(defn get-pages-with-modified-at
+(defn get-pages-with-modified
   [repo]
-  (let [now-long (tc/to-long (t/now))]
-    (->> (d/q
-           '[:find ?page-name ?modified-at
-             :where
-             [?page :page/original-name ?page-name]
-             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
-           (declares/get-conn repo))
-      (seq)
-      (sort-by (fn [[page modified-at]]
-                 [modified-at page]))
-      (reverse)
-      (remove (fn [[page modified-at]]
-                (or (util/file-page? page)
-                  (and modified-at
-                       (> modified-at now-long))))))))
+  (->> (d/q
+         '[:find ?page-name ?modified-at
+           :where
+           [?page :page/original-name ?page-name]
+           [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
+         (declares/get-conn repo))))
 
 (defn get-pages-by-names
   [repo page-names]
