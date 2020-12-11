@@ -75,7 +75,8 @@
     --ls-block-properties-background-color: var(--ls-tertiary-background-color);
     --ls-search-background-color: var(--ls-primary-background-color);
     --ls-border-color: #ccc;
-    --ls-guideline-color: rgb(232, 232,232);
+    /* --ls-guideline-color: rgb(232, 232,232); */
+    --ls-guideline-color: var(--ls-border-color);
     --ls-menu-hover-color: var(--ls-a-chosen-bg);
 
     --ls-primary-text-color: #24292e;
@@ -89,7 +90,8 @@
 	  --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
     --ls-slide-background-color: #002b36;
 
-    --ls-block-bullet-border-color: #afcabe;
+    /* --ls-block-bullet-border-color: #afcabe; */
+    --ls-block-bullet-border-color: var(--ls-border-color);
     --ls-block-bullet-color: #394b59;
     --ls-block-highlight-color: #c0e6fd;
     --ls-selection-background-color: #e4f2ff;
@@ -426,7 +428,7 @@ svg {
 }
 
 #right-sidebar {
-  border-radius: var(--ls-border-radius-medium) 0 0 0;
+  border-radius: var(--ls-border-radius-low) 0 0 0;
   position: sticky;
   top: 0;
   transition: all 200ms ease-in 0s;
@@ -1355,7 +1357,8 @@ a.tag:hover {
 } */
 
 .white-theme a.right-sidebar-button {
-  color: var(--ls-link-text-color);
+  color: #696969;
+  font-weight: 500;
 }
 
 .white-theme a.right-sidebar-button:hover {

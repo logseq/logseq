@@ -314,7 +314,7 @@
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
     [:div.color-level.embed.embed-block.bg-base-2 {:style {:z-index 2}}
-     [:div.px-3.py-2
+     [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
                                       :ref? false))]]))
