@@ -20,7 +20,8 @@
             [goog.object :as gobj]
             [clojure.string :as string]
             [frontend.db.queries :as db-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.utils :as h-utils]))
 
 (rum/defc blocks-inner < rum/static
   {:did-mount (fn [state]
@@ -58,8 +59,8 @@
   (let [raw-blocks (db-queries/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
-                (db-queries/with-dummy-block raw-blocks format nil {:journal? true})
-                (db-queries/with-block-refs-count repo))]
+                 (db-queries/with-dummy-block raw-blocks format nil {:journal? true})
+                 (h-utils/with-block-refs-count repo))]
     (blocks-inner blocks page document-mode?)))
 
 (rum/defc journal-cp < rum/reactive

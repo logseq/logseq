@@ -66,7 +66,7 @@
     (map first)
     (frequencies)))
 
-(defn- with-block-refs-count
+(defn with-block-refs-count
   [repo blocks]
   (let [refs (get-block-refs-count repo)]
     (map (fn [block]
@@ -79,7 +79,7 @@
   (let [result (db-utils/seq-flatten result)
         sorted (db-utils/sort-by-pos result)]
     (->> (db-utils/with-repo repo-url sorted)
-      (with-block-refs-count repo-url))))
+         (with-block-refs-count repo-url))))
 
 (defn get-page-blocks-no-cache
   ([page]
@@ -575,33 +575,6 @@
           (declares/get-conn repo-url) pred)
         (db-utils/seq-flatten))))
 
-(defn custom-query-aux
-  [{:keys [query inputs result-transform] :as query'} query-opts]
-  (try
-    (let [inputs (map db-utils/resolve-input inputs)
-          repo (state/get-current-repo)
-          k [:custom query']]
-      (apply react-queries/q repo k query-opts query inputs))
-    (catch js/Error e
-      (println "Custom query failed: ")
-      (js/console.dir e))))
-
-(defn custom-query
-  ([query]
-   (custom-query query {}))
-  ([query query-opts]
-   (when-let [query' (cond
-                       (and (string? query)
-                            (not (string/blank? query)))
-                       (reader/read-string query)
-
-                       (map? query)
-                       query
-
-                       :else
-                       nil)]
-     (custom-query-aux query' query-opts))))
-
 (defn custom-query-result-transform
   [query-result remove-blocks q]
   (let [repo (state/get-current-repo)
@@ -763,26 +736,6 @@
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils))]
     (transact! repo-url all-data)))
-
-(defn get-marker-blocks
-  [repo-url marker]
-  (let [marker (string/upper-case marker)]
-    (some->>
-      (react-queries/q repo-url [:marker/blocks marker]
-        {:use-cache? true}
-        '[:find (pull ?h [*])
-          :in $ ?marker
-          :where
-          [?h :block/marker ?m]
-          [(= ?marker ?m)]]
-        marker)
-      (react-queries/react)
-      (db-utils/seq-flatten)
-      (db-utils/sort-by-pos)
-      (db-utils/with-repo repo-url)
-      (with-block-refs-count repo-url)
-      (db-utils/sort-blocks)
-      (db-utils/group-by-page))))
 
 (defn get-page-properties
   [page]

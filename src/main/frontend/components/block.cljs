@@ -42,7 +42,8 @@
             [frontend.commands :as commands]
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.block :as block-handler]))
 
 (defn safe-read-string
   [s]
@@ -1516,7 +1517,7 @@
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
                  (let [[config query] (:rum/args state)
-                       query-atom (db-queries/custom-query query)]
+                       query-atom (block-handler/custom-query query)]
                    (assoc state :query-atom query-atom)))
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]

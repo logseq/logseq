@@ -303,3 +303,16 @@
          pages)
     react
     db-utils/seq-flatten))
+
+(defn get-marker-blocks
+  [repo-url marker]
+  (-> (q repo-url [:marker/blocks marker]
+        {:use-cache? true}
+        '[:find (pull ?h [*])
+          :in $ ?marker
+          :where
+          [?h :block/marker ?m]
+          [(= ?marker ?m)]]
+        marker)
+      react
+      db-utils/seq-flatten))

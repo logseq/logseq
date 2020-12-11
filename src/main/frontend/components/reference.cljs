@@ -27,7 +27,7 @@
                        (react-queries/get-blocks-by-priority (state/get-current-repo) page-name)
 
                        marker?
-                       (db-queries/get-marker-blocks (state/get-current-repo) page-name)
+                       (page-handler/get-marker-blocks (state/get-current-repo) page-name)
                        block-id
                        (react-queries/get-block-referenced-blocks block-id)
                        :else

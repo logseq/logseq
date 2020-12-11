@@ -570,3 +570,12 @@
            (map :page/name)
            distinct))))
 
+(defn get-marker-blocks
+  [repo-url marker]
+  (let [marker (string/upper-case marker)]
+    (some->> (react-queries/get-marker-blocks repo-url marker)
+             (db-utils/sort-by-pos)
+             (db-utils/with-repo repo-url)
+             (h-utils/with-block-refs-count repo-url)
+             (db-utils/sort-blocks)
+             (db-utils/group-by-page))))

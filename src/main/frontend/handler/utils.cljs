@@ -14,3 +14,11 @@
     (db-queries/transact-react! repo-url [(db-utils/kv key value)]
       {:key [:kv key]})
     (remove-key repo-url key)))
+
+(defn with-block-refs-count
+  [repo blocks]
+  (let [refs (db-queries/get-block-refs-count repo)]
+    (map (fn [block]
+           (assoc block :block/block-refs-count
+                        (get refs (:db/id block))))
+      blocks)))
