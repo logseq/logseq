@@ -26,6 +26,10 @@
             [medley.core :as medley]
             [frontend.extensions.sci :as sci]))
 
+(defn get-page-id-by-name
+  [page-name]
+  (:db/id (db-utils/entity [:page/name page-name])))
+
 (defn get-pages
   [repo]
   (->> (d/q
@@ -35,34 +39,40 @@
          (declares/get-conn repo))
     (map first)))
 
+(defn get-page-alias*
+  [conn page-name]
+  (d/q '[:find ?alias
+         :in $ ?page-name
+         :where
+         [?page :page/name ?page-name]
+         [?page :page/alias ?alias]]
+    conn page-name))
+
 (defn get-page-alias
   [repo page-name]
   (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (d/q '[:find ?alias
-                    :in $ ?page-name
-                    :where
-                    [?page :page/name ?page-name]
-                    [?page :page/alias ?alias]]
-               conn
-               page-name)
+    (some->> (get-page-alias* conn page-name)
              db-utils/seq-flatten
              distinct)))
+
+(defn get-alias-page*
+  [conn alias]
+  (d/q '[:find ?page
+         :in $ ?alias
+         :where
+         [?page :page/alias ?alias]]
+    conn alias))
 
 (defn get-alias-page
   [repo alias]
   (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (d/q '[:find ?page
-                    :in $ ?alias
-                    :where
-                    [?page :page/alias ?alias]]
-               conn
-               alias)
+    (some->> (get-alias-page* conn alias)
              db-utils/seq-flatten
              distinct)))
 
 (defn page-alias-set
   [repo-url page]
-  (when-let [page-id (:db/id (db-utils/entity [:page/name page]))]
+  (when-let [page-id (get-page-id-by-name page)]
     (let [aliases (get-page-alias repo-url page)
           aliases (if (seq aliases)
                     (set
@@ -343,24 +353,6 @@
           page
           pred)
         (block-and-children-transform repo block-uuid level))))
-
-(defn get-page-referenced-pages
-  [repo page]
-  (when (declares/get-conn repo)
-    (let [pages (page-alias-set repo page)
-          page-id (:db/id (db-utils/entity [:page/name page]))
-          ref-pages (->> (react-queries/q repo [:page/ref-pages page-id] {:use-cache? false}
-                           '[:find ?ref-page-name
-                             :in $ ?pages
-                             :where
-                             [?block :block/page ?p]
-                             [(contains? ?pages ?p)]
-                             [?block :block/ref-pages ?ref-page]
-                             [?ref-page :page/name ?ref-page-name]]
-                           pages)
-                      react-queries/react
-                      db-utils/seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 (defn get-pages-that-mentioned-page
   [repo page]
@@ -1385,59 +1377,6 @@
                                             (nil? to))
                                           nodes))
             nodes (db-utils/build-nodes dark? current-page edges nodes)]
-        (db-utils/normalize-page-name
-          {:nodes nodes
-           :links edges})))))
-
-
-(defn build-page-graph
-  [page theme]
-  (let [dark? (= "dark" theme)]
-    (when-let [repo (state/get-current-repo)]
-      (let [page (string/lower-case page)
-            page-entity (db-utils/entity [:page/name page])
-            original-page-name (:page/original-name page-entity)
-            tags (->> (:page/tags page-entity)
-                   (map :tag/name))
-            tags (remove #(= page %) tags)
-            ref-pages (get-page-referenced-pages repo page)
-            mentioned-pages (get-pages-that-mentioned-page repo page)
-            edges (concat
-                    (map (fn [[p aliases]]
-                           [page p]) ref-pages)
-                    (map (fn [[p aliases]]
-                           [p page]) mentioned-pages)
-                    (map (fn [tag]
-                           [page tag])
-                      tags))
-            other-pages (->> (concat (map first ref-pages)
-                               (map first mentioned-pages))
-                          (remove nil?)
-                          (set))
-            other-pages-edges (mapcat
-                                (fn [page]
-                                  (let [ref-pages (-> (map first (get-page-referenced-pages repo page))
-                                                      (set)
-                                                      (set/intersection other-pages))
-                                        mentioned-pages (-> (map first (get-pages-that-mentioned-page repo page))
-                                                            (set)
-                                                            (set/intersection other-pages))]
-                                    (concat
-                                      (map (fn [p] [page p]) ref-pages)
-                                      (map (fn [p] [p page]) mentioned-pages))))
-                                other-pages)
-            edges (->> (concat edges other-pages-edges)
-                    (remove nil?)
-                    (distinct)
-                    (db-utils/build-edges))
-            nodes (->> (concat
-                         [page]
-                         (map first ref-pages)
-                         (map first mentioned-pages)
-                         tags)
-                    (remove nil?)
-                    (distinct)
-                    (db-utils/build-nodes dark? page edges))]
         (db-utils/normalize-page-name
           {:nodes nodes
            :links edges})))))

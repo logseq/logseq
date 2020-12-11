@@ -46,7 +46,7 @@
         dark? (= theme "dark")
         graph (if (util/uuid-string? page)
                 (react-queries/build-block-graph (uuid page) theme)
-                (db-queries/build-page-graph page theme))]
+                (page-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph

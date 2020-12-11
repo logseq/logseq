@@ -262,3 +262,17 @@
         db-utils/seq-flatten
         db-utils/sort-blocks
         db-utils/group-by-page))))
+
+(defn get-ref-pages
+  [repo page-id pages]
+  (->> (q repo [:page/ref-pages page-id] {:use-cache? false}
+         '[:find ?ref-page-name
+           :in $ ?pages
+           :where
+           [?block :block/page ?p]
+           [(contains? ?pages ?p)]
+           [?block :block/ref-pages ?ref-page]
+           [?ref-page :page/name ?ref-page-name]]
+         pages)
+    react
+    db-utils/seq-flatten))
