@@ -52,19 +52,20 @@
     (local-db? dir)
     (let [[root new-dir] (rest (string/split dir "/"))
           root-handle (str "handle/" root)]
-      (p/let [handle (idb/get-item root-handle)
-              _ (when handle (utils/verifyPermission handle true))]
-        (when (and handle new-dir
-                   (not (string/blank? new-dir)))
-          (-> (p/let [handle (.getDirectoryHandle ^js handle new-dir
-                                                  #js {:create true})
-                      handle-path (str root-handle "/" new-dir)
-                      _ (idb/set-item! handle-path handle)]
-                (add-nfs-file-handle! handle-path handle)
-                (println "Stored handle: " (str root-handle "/" new-dir)))
-              (p/catch (fn [error]
-                         (println "mkdir error: " error ", dir: " dir)
-                         (js/console.error error)))))))
+      (->
+       (p/let [handle (idb/get-item root-handle)
+               _ (when handle (utils/verifyPermission handle true))]
+         (when (and handle new-dir
+                    (not (string/blank? new-dir)))
+           (p/let [handle (.getDirectoryHandle ^js handle new-dir
+                                               #js {:create true})
+                   handle-path (str root-handle "/" new-dir)
+                   _ (idb/set-item! handle-path handle)]
+             (add-nfs-file-handle! handle-path handle)
+             (println "Stored handle: " (str root-handle "/" new-dir)))))
+       (p/catch (fn [error]
+                  (println "mkdir error: " error ", dir: " dir)
+                  (js/console.error error)))))
 
     (and dir js/window.pfs)
     (js/window.pfs.mkdir dir)
