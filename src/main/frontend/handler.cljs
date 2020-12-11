@@ -211,5 +211,5 @@
                       :example? true}])]
         (state/set-repos! repos)
         (restore-and-setup! me repos logged?)))
-    (db-queries/run-batch-txs!)
+    (run-batch-txs!)
     (editor-handler/periodically-save!)))
