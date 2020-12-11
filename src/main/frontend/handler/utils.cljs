@@ -19,7 +19,9 @@
             [frontend.util :as util :refer-macros [profile]]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            [frontend.idb :as idb]
+            [promesa.core :as p]))
 
 (defn- remove-key
   [repo-url key]
@@ -39,6 +41,25 @@
   (let [blocks (db-queries/get-file-blocks repo-url path)]
     (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
 
+(defn extract-page-list
+  [content]
+  (when-not (string/blank? content)
+    (->> (re-seq #"\[\[([^\]]+)]]" content)
+         (map last)
+         (remove nil?)
+         (map string/lower-case)
+         (distinct))))
+
+(defn get-block-content
+  [utf8-content block]
+  (let [meta (:block/meta block)]
+    (if-let [end-pos (:end-pos meta)]
+      (utf8/substring utf8-content
+        (:start-pos meta)
+        end-pos)
+      (utf8/substring utf8-content
+        (:start-pos meta)))))
+
 (defn extract-pages-and-blocks
   [repo-url format ast properties file content utf8-content journal? pages-fn]
   (try
@@ -57,7 +78,7 @@
                                     (swap! ref-pages set/union (set block-ref-pages)))
                                   (-> block
                                       (dissoc :ref-pages)
-                                      (assoc :block/content (db-utils/get-block-content utf8-content block)
+                                      (assoc :block/content (get-block-content utf8-content block)
                                              :block/file [:file/path file]
                                              :block/format format
                                              :block/page [:page/name (string/lower-case page)]
@@ -79,7 +100,7 @@
                             journal-date-long (if journal?
                                                 (date/journal-title->long (string/capitalize page)))
                             page-list (when-let [list-content (:list properties)]
-                                        (db-utils/extract-page-list list-content))]
+                                        (extract-page-list list-content))]
                         (cond->
                           (util/remove-nils
                             {:page/name (string/lower-case page)
@@ -151,6 +172,30 @@
     (catch js/Error e
       (js/console.log e))))
 
+(defn get-page-name
+  [file ast]
+  ;; headline
+  (let [ast (map first ast)]
+    (if (util/starts-with? file "pages/contents.")
+      "Contents"
+      (let [first-block (last (first (filter block/heading-block? ast)))
+            property-name (when (and (= "Properties" (ffirst ast))
+                                  (not (string/blank? (:title (last (first ast))))))
+                            (:title (last (first ast))))
+            first-block-name (and first-block
+                               ;; FIXME:
+                               (str (last (first (:title first-block)))))
+            file-name (when-let [file-name (last (string/split file #"/"))]
+                        (when-let [file-name (first (util/split-last "." file-name))]
+                          (-> file-name
+                              (string/replace "-" " ")
+                              (string/replace "_" " ")
+                              (util/capitalize-all))))]
+        (or property-name
+            (if (= (state/page-name-order) "file")
+              (or file-name first-block-name)
+              (or first-block-name file-name)))))))
+
 (defn extract-blocks-pages
   [repo-url file content utf8-content]
   (if (string/blank? content)
@@ -170,7 +215,7 @@
         format ast properties
         file content utf8-content journal?
         (fn [blocks ast]
-          [[(db-utils/get-page-name file ast) blocks]])))))
+          [[(get-page-name file ast) blocks]])))))
 
 (defn- get-current-priority
   []
@@ -320,10 +365,16 @@
         ;; FIXME: check error type and notice user
         (log/error :db/transact! e)))))
 
+(defn kv
+  [key value]
+  {:db/id -1
+   :db/ident key
+   key value})
+
 (defn set-key-value
   [repo-url key value]
   (if value
-    (transact-react! repo-url [(db-utils/kv key value)]
+    (transact-react! repo-url [(kv key value)]
       {:key [:kv key]})
     (remove-key repo-url key)))
 
@@ -479,3 +530,91 @@
                      {}))]
       (state/set-config! repo-url config)
       config)))
+
+(defn get-repo-name
+  [url]
+  (last (string/split url #"/")))
+
+(defonce persistent-jobs (atom {}))
+
+(defn clear-repo-persistent-job!
+  [repo]
+  (when-let [old-job (get @persistent-jobs repo)]
+    (js/clearTimeout old-job)))
+
+;; persisting DBs between page reloads
+
+(defn persist! [repo]
+  (let [file-key (declares/datascript-files-db repo)
+        non-file-key (declares/datascript-db repo)
+        file-db (d/db (declares/get-files-conn repo))
+        non-file-db (d/db (declares/get-conn repo false))]
+    (p/let [_ (idb/set-item! file-key (db-utils/db->string file-db))
+            _ (idb/set-item! non-file-key (db-utils/db->string non-file-db))]
+      (state/set-last-persist-transact-id! repo true (db-utils/get-max-tx-id file-db))
+      (state/set-last-persist-transact-id! repo false (db-utils/get-max-tx-id non-file-db)))))
+
+(defn- persist-if-idle!
+  [repo]
+  (clear-repo-persistent-job! repo)
+  (let [job (js/setTimeout
+              (fn []
+                (if (and (state/input-idle? repo)
+                      (state/db-idle? repo))
+                  (do
+                    (persist! repo)
+                    ;; (state/set-db-persisted! repo true)
+                    )
+                  (let [job (get persistent-jobs repo)]
+                    (persist-if-idle! repo))))
+              3000)]
+    (swap! persistent-jobs assoc repo job)))
+
+;; only save when user's idle
+
+(defn- repo-listen-to-tx!
+  [repo conn files-db?]
+  (d/listen! conn :persistence
+    (fn [tx-report]
+      (let [tx-id (db-utils/get-tx-id tx-report)]
+        (state/set-last-transact-time! repo (util/time-ms))
+        ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
+        (persist-if-idle! repo)))))
+
+(defn listen-and-persist!
+  [repo]
+  (when-let [conn (declares/get-files-conn repo)]
+    (repo-listen-to-tx! repo conn true))
+  (when-let [conn (declares/get-conn repo false)]
+    (repo-listen-to-tx! repo conn false)))
+
+(defn- get-connections
+  [page edges]
+  (count (filter (fn [{:keys [source target]}]
+                   (or (= source page)
+                       (= target page)))
+           edges)))
+
+(defn build-nodes
+  [dark? current-page edges nodes]
+  (mapv (fn [p]
+          (let [current-page? (= p current-page)
+                color (case [dark? current-page?]
+                        [false false] "#222222"
+                        [false true]  "#045591"
+                        [true false]  "#8abbbb"
+                        [true true]   "#ffffff")] ; FIXME: Put it into CSS
+            {:id p
+             :name p
+             :val (get-connections p edges)
+             :autoColorBy "group"
+             :group (js/Math.ceil (* (js/Math.random) 12))
+             :color color}))
+    (set (flatten nodes))))
+
+(defn build-edges
+  [edges]
+  (map (fn [[from to]]
+         {:source from
+          :target to})
+    edges))

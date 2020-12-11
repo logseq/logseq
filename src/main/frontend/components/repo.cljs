@@ -19,7 +19,8 @@
             [clojure.string :as string]
             [frontend.db.react-queries :as react-queries]
             [frontend.db.utils :as db-utils]
-            [frontend.db.declares :as declares]))
+            [frontend.db.declares :as declares]
+            [frontend.handler.utils :as h-utils]))
 
 (rum/defc add-repo
   []
@@ -185,7 +186,7 @@
                             (config/get-local-dir repo)
                             (if head?
                               (declares/get-repo-path repo)
-                              (util/take-at-most (db-utils/get-repo-name repo) 20))))]
+                              (util/take-at-most (h-utils/get-repo-name repo) 20))))]
       (let [repos (->> (state/sub [:me :repos])
                        (remove (fn [r] (= config/local-repo (:url r)))))]
         (cond

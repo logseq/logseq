@@ -13,12 +13,38 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [datascript.core :as d]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [cljs-time.core :as t]))
+
+(defn resolve-input
+  [input]
+  (cond
+    (= :today input)
+    (db-utils/date->int (t/today))
+    (= :yesterday input)
+    (db-utils/date->int (t/yesterday))
+    (= :tomorrow input)
+    (db-utils/date->int (t/plus (t/today) (t/days 1)))
+    (= :current-page input)
+    (string/lower-case (state/get-current-page))
+    (and (keyword? input)
+      (re-find #"^\d+d(-before)?$" (name input)))
+    (let [input (name input)
+          days (util/parse-int (subs input 0 (dec (count input))))]
+      (db-utils/date->int (t/minus (t/today) (t/days days))))
+    (and (keyword? input)
+      (re-find #"^\d+d(-after)?$" (name input)))
+    (let [input (name input)
+          days (util/parse-int (subs input 0 (dec (count input))))]
+      (db-utils/date->int (t/plus (t/today) (t/days days))))
+
+    :else
+    input))
 
 (defn custom-query-aux
   [{:keys [query inputs] :as query'} query-opts]
   (try
-    (let [inputs (map db-utils/resolve-input inputs)
+    (let [inputs (map resolve-input inputs)
           repo (state/get-current-repo)
           k [:custom query']]
       (apply react-queries/q repo k query-opts query inputs))
@@ -66,13 +92,13 @@
             edges (->> (concat edges other-blocks-edges)
                        (remove nil?)
                        (distinct)
-                       (db-utils/build-edges))
+                       (h-utils/build-edges))
             nodes (->> (concat
                          [block]
                          (map first ref-blocks))
                        (remove nil?)
                        (distinct)
-                       (db-utils/build-nodes dark? block edges))]
+                       (h-utils/build-nodes dark? block edges))]
         {:nodes nodes
          :links edges}))))
 

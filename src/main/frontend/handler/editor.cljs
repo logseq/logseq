@@ -45,7 +45,8 @@
             [frontend.db.utils :as db-utils]
             [frontend.db.react-queries :as react-queries]
             [frontend.handler.utils :as h-utils]
-            [frontend.handler.block :as block-handler]))
+            [frontend.handler.block :as block-handler]
+            [frontend.format.mldoc :as mldoc]))
 
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
@@ -384,6 +385,18 @@
                      "ls-block"
                      "edit-block"))))
 
+(defn- parse-properties
+  [content format]
+  (let [ast (->> (mldoc/->edn content
+                   (mldoc/default-config format))
+                 (map first))
+        properties (let [properties (and (seq ast)
+                                      (= "Properties" (ffirst ast))
+                                      (last (first ast)))]
+                     (if (and properties (seq properties))
+                       properties))]
+    (into {} properties)))
+
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
@@ -401,7 +414,7 @@
          page (db-utils/entity repo (:db/id page))
          [old-properties new-properties] (when pre-block?
                                            [(:page/properties (db-utils/entity (:db/id page)))
-                                            (db-utils/parse-properties value format)])
+                                            (parse-properties value format)])
          page-tags (when-let [tags (:tags new-properties)]
                      (util/->tags tags))
          page-alias (when-let [alias (:alias new-properties)]

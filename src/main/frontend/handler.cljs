@@ -100,7 +100,7 @@
                       (when logged?
                         (d/transact! db-conn [(db-utils/me-tx (d/db db-conn) me)])))]
             (restore-config-handler repo)
-            (db-utils/listen-and-persist! repo)))))))
+            (h-utils/listen-and-persist! repo)))))))
 
 (defn restore-and-setup!
   [me repos logged?]

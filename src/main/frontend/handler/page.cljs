@@ -388,7 +388,7 @@
   (when (and page (contains? config/mldoc-support-formats format))
     (let [old-name page
           new-name (let [ast (mldoc/->edn content (mldoc/default-config format))]
-                     (db-utils/get-page-name path ast))]
+                     (h-utils/get-page-name path ast))]
       (when (not= old-name new-name)
         (rename! old-name new-name)))))
 
@@ -493,6 +493,24 @@
           mentioned-pages (react-queries/get-mentioned-pages repo page-id pages page)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
+(defn normalize-page-name
+  [{:keys [nodes links] :as g}]
+  (let [all-pages (->> (set (apply concat
+                              [(map :id nodes)
+                               (map :source links)
+                               (map :target links)]))
+                       (map string/lower-case))
+        names (db-utils/pull-many '[:page/name :page/original-name] (mapv (fn [page] [:page/name page]) all-pages))
+        names (zipmap (map :page/name names)
+                (map (fn [x] (get x :page/original-name (util/capitalize-all (:page/name x)))) names))
+        nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
+        links (mapv (fn [{:keys [source target]}]
+                      {:source (get names source)
+                       :target (get names target)})
+                links)]
+    {:nodes nodes
+     :links links}))
+
 (defn build-page-graph
   [page theme]
   (let [dark? (= "dark" theme)]
@@ -531,7 +549,7 @@
             edges (->> (concat edges other-pages-edges)
                     (remove nil?)
                     (distinct)
-                    (db-utils/build-edges))
+                    (h-utils/build-edges))
             nodes (->> (concat
                          [page]
                          (map first ref-pages)
@@ -539,8 +557,8 @@
                          tags)
                     (remove nil?)
                     (distinct)
-                    (db-utils/build-nodes dark? page edges))]
-        (db-utils/normalize-page-name
+                    (h-utils/build-nodes dark? page edges))]
+        (normalize-page-name
           {:nodes nodes
            :links edges})))))
 
@@ -627,11 +645,11 @@
                              [page])
                         other-pages)
                       []))
-            edges (db-utils/build-edges (remove
+            edges (h-utils/build-edges (remove
                                           (fn [[_ to]]
                                             (nil? to))
                                           nodes))
-            nodes (db-utils/build-nodes dark? current-page edges nodes)]
-        (db-utils/normalize-page-name
+            nodes (h-utils/build-nodes dark? current-page edges nodes)]
+        (normalize-page-name
           {:nodes nodes
            :links edges})))))

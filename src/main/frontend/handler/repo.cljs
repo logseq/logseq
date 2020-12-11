@@ -177,7 +177,7 @@
         format ast properties
         file content utf8-content journal?
         (fn [blocks ast]
-          [[(db-utils/get-page-name file ast) blocks]])))))
+          [[(h-utils/get-page-name file ast) blocks]])))))
 
 
 (defn- extract-all-blocks-pages
@@ -524,7 +524,7 @@
      (when me
        (d/transact! db-conn [(db-utils/me-tx (d/db db-conn) me)]))
 
-     (db-utils/listen-and-persist! repo))))
+     (h-utils/listen-and-persist! repo))))
 
 (defn- clone
   [repo-url]
