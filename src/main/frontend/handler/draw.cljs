@@ -61,18 +61,18 @@
       (let [repo-dir (util/get-repo-dir repo)]
         (->
          (p/do!
-           (create-draws-directory! repo)
-           (fs/write-file repo-dir path data)
-           (git-handler/git-add repo path)
-           (ok-handler file)
-           (let [modified-at (tc/to-long (t/now))]
-             (db/transact! repo
-                           [{:file/path path
-                             :file/last-modified-at modified-at}
-                            {:page/name file
-                             :page/file path
-                             :page/last-modified-at (tc/to-long (t/now))
-                             :page/journal? false}])))
+          (create-draws-directory! repo)
+          (fs/write-file repo repo-dir path data)
+          (git-handler/git-add repo path)
+          (ok-handler file)
+          (let [modified-at (tc/to-long (t/now))]
+            (db/transact! repo
+                          [{:file/path path
+                            :file/last-modified-at modified-at}
+                           {:page/name file
+                            :page/file path
+                            :page/last-modified-at (tc/to-long (t/now))
+                            :page/journal? false}])))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))

@@ -1981,15 +1981,10 @@
     (doall
      (for [{:keys [url]} repos]
        (let [repo url
-
              db-name (datascript-files-db repo)
              db-conn (d/create-conn db-schema/files-db-schema)]
          (swap! conns assoc db-name db-conn)
-         (p/let [stored (-> (idb/get-item db-name)
-                            (p/then (fn [result]
-                                      result))
-                            (p/catch (fn [error]
-                                       nil)))
+         (p/let [stored (idb/get-item db-name)
                  _ (when stored
                      (let [stored-db (string->db stored)
                            attached-db (d/db-with stored-db [(me-tx stored-db me)])]

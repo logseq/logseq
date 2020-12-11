@@ -281,7 +281,8 @@
 
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
-(defonce local-handle-prefix (str "handle/" local-db-prefix))
+(defonce local-handle "handle")
+(defonce local-handle-prefix (str local-handle "/" local-db-prefix))
 
 (defn local-db?
   [s]

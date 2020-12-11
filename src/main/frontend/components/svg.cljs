@@ -201,7 +201,7 @@
 
 (rum/defc tip
   []
-  [:svg.h-8.w-8.tip-shadow.tip
+  [:svg.h-8.w-8.tip
    {:view-box "0 0 352 512"
     :fill "currentColor"}
    [:path
@@ -419,6 +419,11 @@
      :stroke-width "2"
      :stroke-linejoin "round"
      :stroke-linecap "round"}]])
+
+(def page
+  [:svg.h-5.w-4 {:viewbox "0 0 24 24", :fill "none", :xmlns "http://www.w3.org/2000/svg"}
+   [:path {:d "M2 0.5H6.78272L13.5 7.69708V18C13.5 18.8284 12.8284 19.5 12 19.5H2C1.17157 19.5 0.5 18.8284 0.5 18V2C0.5 1.17157 1.17157 0.5 2 0.5Z", :fill "var(--ls-active-primary-color)"}]
+   [:path {:d "M7 5.5V0L14 7.5H9C7.89543 7.5 7 6.60457 7 5.5Z", :fill "var(--ls-active-secondary-color)"}]])
 
 (def online
   (hero-icon "M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"))
