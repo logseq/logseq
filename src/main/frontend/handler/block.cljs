@@ -6,7 +6,9 @@
             [frontend.db.react-queries :as react-queries]
             [clojure.set :as set]
             [frontend.extensions.sci :as sci]
-            [frontend.handler.utils :as h-utils]))
+            [frontend.handler.utils :as h-utils]
+            [frontend.util :as util]
+            [frontend.db.queries :as db-queries]))
 
 (defn custom-query-aux
   [{:keys [query inputs] :as query'} query-opts]
@@ -92,4 +94,11 @@
           (db-utils/group-by-page result)))
       result)))
 
-
+(defn get-block-full-content
+  ([repo block-id]
+   (get-block-full-content repo block-id (fn [block] (:block/content block))))
+  ([repo block-id transform-fn]
+   (let [blocks (db-queries/get-block-and-children-no-cache repo block-id)]
+     (->> blocks
+          (map transform-fn)
+          (apply util/join-newline)))))

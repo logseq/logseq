@@ -161,24 +161,27 @@
            (db-utils/with-repo repo-url)
            (with-block-refs-count repo-url)))
 
+(defn get-block-and-children
+  [repo page pos]
+  (let [pred (fn [data meta] (>= (:start-pos meta) pos))]
+   (-> (d/q
+         '[:find (pull ?block [*])
+           :in $ ?page ?pred
+           :where
+           [?block :block/page ?page]
+           [?block :block/meta ?meta]
+           [(?pred $ ?meta)]]
+         (declares/get-conn repo)
+         page
+         pred))))
+
 (defn get-block-and-children-no-cache
   [repo block-uuid]
   (let [block (db-utils/entity repo [:block/uuid block-uuid])
         page (:db/id (:block/page block))
         pos (:start-pos (:block/meta block))
-        level (:block/level block)
-        pred (fn [data meta]
-               (>= (:start-pos meta) pos))]
-    (-> (d/q
-          '[:find (pull ?block [*])
-            :in $ ?page ?pred
-            :where
-            [?block :block/page ?page]
-            [?block :block/meta ?meta]
-            [(?pred $ ?meta)]]
-          (declares/get-conn repo)
-          page
-          pred)
+        level (:block/level block)]
+    (-> (get-block-and-children repo page pos)
         (block-and-children-transform repo block-uuid level))))
 
 (defn get-pages-relation
@@ -943,15 +946,6 @@
                form)
              block)]
      (apply util/join-newline @contents))))
-
-(defn get-block-full-content
-  ([repo block-id]
-   (get-block-full-content repo block-id (fn [block] (:block/content block))))
-  ([repo block-id transform-fn]
-   (let [blocks (get-block-and-children-no-cache repo block-id)]
-     (->> blocks
-       (map transform-fn)
-       (apply util/join-newline)))))
 
 (defn get-block-end-pos-rec
   [repo block]

@@ -30,7 +30,8 @@
             [frontend.text :as text]
             ["/frontend/utils" :as utils]
             [frontend.db.queries :as db-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.block :as block-handler]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -196,7 +197,7 @@
                                        template-parent-level (:block/level block)
                                        pattern (config/get-block-pattern format)
                                        content
-                                       (db-queries/get-block-full-content
+                                       (block-handler/get-block-full-content
                                          (state/get-current-repo)
                                          (:block/uuid block)
                                          (fn [{:block/keys [level content properties] :as block}]
