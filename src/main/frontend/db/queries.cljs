@@ -284,29 +284,6 @@
           (declares/get-conn repo-url) pred)
         (db-utils/seq-flatten))))
 
-(defn custom-query-result-transform
-  [query-result remove-blocks q]
-  (let [repo (state/get-current-repo)
-        result (db-utils/seq-flatten query-result)
-        block? (:block/uuid (first result))]
-    (if block?
-      (let [result (if (seq remove-blocks)
-                     (let [remove-blocks (set remove-blocks)]
-                       (remove (fn [h]
-                                 (contains? remove-blocks (:block/uuid h)))
-                         result))
-                     result)
-            result (some->> result
-                            (db-utils/with-repo repo)
-                            (with-block-refs-count repo)
-                            (db-utils/sort-blocks))]
-        (if-let [result-transform (:result-transform q)]
-          (if-let [f (sci/eval-string (pr-str result-transform))]
-            (sci/call-fn f result)
-            result)
-          (db-utils/group-by-page result)))
-      result)))
-
 (defn get-tag-pages
   [repo tag-name]
   (d/q '[:find ?original-name ?name

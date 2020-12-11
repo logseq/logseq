@@ -1536,7 +1536,7 @@
           remove-blocks (if current-block-uuid [current-block-uuid] nil)
           query-result (and query-atom (rum/react query-atom))
           result (if query-result
-                   (db-queries/custom-query-result-transform query-result remove-blocks q))
+                   (block-handler/custom-query-result-transform query-result remove-blocks q))
           view-f (sci/eval-string (pr-str view))
           only-blocks? (:block/uuid (first result))
           blocks-grouped-by-page? (and (seq result)
