@@ -356,3 +356,51 @@
                              new?
                              (assoc :file/created-at t)))])]
       (db-queries/transact! repo-url tx))))
+
+(defn page-blocks-transform
+  [repo-url result]
+  (let [result (db-utils/seq-flatten result)
+        sorted (db-utils/sort-by-pos result)]
+    (->> (db-utils/with-repo repo-url sorted)
+         (with-block-refs-count repo-url))))
+
+(defn get-page-blocks-no-cache
+  ([page]
+   (get-page-blocks-no-cache (state/get-current-repo) page nil))
+  ([repo-url page]
+   (get-page-blocks-no-cache repo-url page nil))
+  ([repo-url page {:keys [pull-keys]
+                   :or {pull-keys '[*]}}]
+   (let [page (string/lower-case page)
+         page-id (or (db-queries/get-page-id-by-name repo-url page)
+                     (db-queries/get-page-id-by-original-name repo-url page))
+         db (declares/get-conn repo-url)]
+     (when page-id
+       (let [datoms (d/datoms db :avet :block/page page-id)
+             block-eids (mapv :e datoms)]
+         (some->> (db-utils/pull-many repo-url pull-keys block-eids)
+                  (page-blocks-transform repo-url)))))))
+
+(defn get-page-blocks
+  ([page]
+   (get-page-blocks (state/get-current-repo) page nil))
+  ([repo-url page]
+   (get-page-blocks repo-url page nil))
+  ([repo-url page {:keys [use-cache? pull-keys]
+                   :or {use-cache? true
+                        pull-keys '[*]}}]
+   (let [page (string/lower-case page)
+         page-id (or (db-queries/get-page-id-by-name repo-url page)
+                     (db-queries/get-page-id-by-original-name repo-url page))
+         db (declares/get-conn repo-url)]
+     (when page-id
+       (some->
+         (react-queries/q repo-url [:page/blocks page-id]
+           {:use-cache? use-cache?
+            :transform-fn #(page-blocks-transform repo-url %)
+            :query-fn (fn [db]
+                        (let [datoms (d/datoms db :avet :block/page page-id)
+                              block-eids (mapv :e datoms)]
+                          (db-utils/pull-many repo-url pull-keys block-eids)))}
+           nil)
+         react-queries/react)))))

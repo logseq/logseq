@@ -43,7 +43,8 @@
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.block :as block-handler]))
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.utils :as h-utils]))
 
 (defn safe-read-string
   [s]
@@ -337,7 +338,7 @@
                   page-name)
             (not= (string/lower-case (get config :id ""))
                   page-name))
-       (let [blocks (db-queries/get-page-blocks (state/get-current-repo) page-name)]
+       (let [blocks (h-utils/get-page-blocks (state/get-current-repo) page-name)]
          (blocks-container blocks (assoc config
                                          :embed? true
                                          :ref? false))))]))

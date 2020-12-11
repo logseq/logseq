@@ -74,18 +74,38 @@
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})
-                     (let [blocks (db-queries/get-page-blocks page)
+                     (let [blocks (h-utils/get-page-blocks page)
                            last-block (last blocks)]
                        (when last-block
                          (js/setTimeout
                           #(editor-handler/edit-last-block-for-new-page! last-block 0)
                           100))))))))))))))
 
+(defn get-page-properties-content
+  [page]
+  (when-let [content (let [blocks (h-utils/get-page-blocks page)]
+                       (and (:block/pre-block? (first blocks))
+                         (:block/content (first blocks))))]
+    (let [format (db-queries/get-page-format page)]
+      (case format
+        :org
+        (->> (string/split-lines content)
+             (take-while (fn [line]
+                           (or (string/blank? line)
+                               (string/starts-with? line "#+"))))
+             (string/join "\n"))
+
+        :markdown
+        (str (subs content 0 (string/last-index-of content "---\n\n"))
+          "---\n\n")
+
+        content))))
+
 (defn page-add-properties!
   [page-name properties]
   (let [page (db-utils/entity [:page/name page-name])
         page-format (db-queries/get-page-format page-name)
-        properties-content (db-queries/get-page-properties-content page-name)
+        properties-content (get-page-properties-content page-name)
         properties-content (if properties-content
                              (string/trim properties-content)
                              (config/properties-wrapper page-format))]
@@ -103,7 +123,7 @@
 
 (defn page-remove-property!
   [page-name k]
-  (when-let [properties-content (string/trim (db-queries/get-page-properties-content page-name))]
+  (when-let [properties-content (string/trim (get-page-properties-content page-name))]
     (let [page (db-utils/entity [:page/name page-name])
           file (db-utils/entity (:db/id (:page/file page)))
           file-path (:file/path file)
@@ -169,7 +189,7 @@
 
 (defn publish-page-as-slide!
   ([page-name project-add-modal]
-   (publish-page-as-slide! page-name (db-queries/get-page-blocks page-name) project-add-modal))
+   (publish-page-as-slide! page-name (h-utils/get-page-blocks page-name) project-add-modal))
   ([page-name blocks project-add-modal]
    (project-handler/exists-or-create!
     (fn [project]
@@ -202,7 +222,7 @@
            slide? (let [slide (:slide properties)]
                     (or (true? slide)
                         (= "true" slide)))
-           blocks (db-queries/get-page-blocks page-name)
+           blocks (h-utils/get-page-blocks page-name)
            plugins (get-plugins blocks)]
        (if slide?
          (publish-page-as-slide! page-name blocks project-add-modal)
@@ -261,7 +281,7 @@
             (when-let [files-conn (declares/get-files-conn repo)]
               (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
-            (let [blocks (db-queries/get-page-blocks page-name)
+            (let [blocks (h-utils/get-page-blocks page-name)
                   tx-data (mapv
                            (fn [block]
                              [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
@@ -374,7 +394,7 @@
 
 (defn handle-add-page-to-contents!
   [page-name]
-  (let [last-block (last (db-queries/get-page-blocks (state/get-current-repo) "contents"))
+  (let [last-block (last (h-utils/get-page-blocks (state/get-current-repo) "contents"))
         last-empty? (>= 3 (count (:block/content last-block)))
         heading-pattern (config/get-block-pattern (state/get-preferred-format))
         pre-str (str heading-pattern heading-pattern)

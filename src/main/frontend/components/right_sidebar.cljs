@@ -25,7 +25,8 @@
             [frontend.db.react-queries :as react-queries]
             [frontend.db.queries :as db-queries]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.block :as block-handler]))
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.utils :as h-utils]))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -148,7 +149,7 @@
     :page-presentation
     (let [page-name (get-in block-data [:page :page/name])
           journal? (:journal? block-data)
-          blocks (db-queries/get-page-blocks repo page-name)
+          blocks (h-utils/get-page-blocks repo page-name)
           blocks (if journal?
                    (rest blocks)
                    blocks)

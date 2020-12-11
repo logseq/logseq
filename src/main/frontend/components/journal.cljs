@@ -56,7 +56,7 @@
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
   [repo page format]
-  (let [raw-blocks (db-queries/get-page-blocks repo page)
+  (let [raw-blocks (h-utils/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
                  (db-queries/with-dummy-block raw-blocks format nil {:journal? true})

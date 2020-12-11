@@ -13,7 +13,8 @@
             [frontend.db.react-queries :as react-queries]
             [frontend.db.utils :as db-utils]
             [frontend.db.declares :as declares]
-            [frontend.handler.block :as block-handler]))
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.utils :as h-utils]))
 
 (defn copy-block!
   [block-id]
@@ -31,7 +32,7 @@
   [page-name]
   (when-let [repo (state/get-current-repo)]
     (let [properties (db-queries/get-page-properties page-name)
-          blocks (db-queries/get-page-blocks repo page-name)]
+          blocks (h-utils/get-page-blocks repo page-name)]
       (util/copy-to-clipboard!
        (js/JSON.stringify
         (bean/->js

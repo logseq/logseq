@@ -27,8 +27,16 @@
             [frontend.extensions.sci :as sci]))
 
 (defn get-page-id-by-name
-  [page-name]
-  (:db/id (db-utils/entity [:page/name page-name])))
+  ([page-name]
+   (:db/id (db-utils/entity [:page/name page-name])))
+  ([repo-url page-name]
+   (:db/id (db-utils/entity repo-url [:page/name page-name]))))
+
+(defn get-page-id-by-original-name
+  ([page-name]
+   (:db/id (db-utils/entity [:page/original-name page-name])))
+  ([repo-url page-name]
+   (:db/id (db-utils/entity repo-url [:page/original-name page-name]))))
 
 (defn get-pages
   [repo]
@@ -80,23 +88,6 @@
         sorted (db-utils/sort-by-pos result)]
     (->> (db-utils/with-repo repo-url sorted)
          (with-block-refs-count repo-url))))
-
-(defn get-page-blocks-no-cache
-  ([page]
-   (get-page-blocks-no-cache (state/get-current-repo) page nil))
-  ([repo-url page]
-   (get-page-blocks-no-cache repo-url page nil))
-  ([repo-url page {:keys [pull-keys]
-                   :or {pull-keys '[*]}}]
-   (let [page (string/lower-case page)
-         page-id (or (:db/id (db-utils/entity repo-url [:page/name page]))
-                     (:db/id (db-utils/entity repo-url [:page/original-name page])))
-         db (declares/get-conn repo-url)]
-     (when page-id
-       (let [datoms (d/datoms db :avet :block/page page-id)
-             block-eids (mapv :e datoms)]
-         (some->> (db-utils/pull-many repo-url pull-keys block-eids)
-                  (page-blocks-transform repo-url)))))))
 
 (defn transact!
   ([tx-data]
@@ -462,54 +453,10 @@
       (config/properties-wrapper-pattern page-format)
       (string/join "\n" lines))))
 
-(defn get-page-blocks
-  ([page]
-   (get-page-blocks (state/get-current-repo) page nil))
-  ([repo-url page]
-   (get-page-blocks repo-url page nil))
-  ([repo-url page {:keys [use-cache? pull-keys]
-                   :or {use-cache? true
-                        pull-keys '[*]}}]
-   (let [page (string/lower-case page)
-         page-id (or (:db/id (db-utils/entity repo-url [:page/name page]))
-                   (:db/id (db-utils/entity repo-url [:page/original-name page])))
-         db (declares/get-conn repo-url)]
-     (when page-id
-       (some->
-         (react-queries/q repo-url [:page/blocks page-id]
-           {:use-cache? use-cache?
-            :transform-fn #(page-blocks-transform repo-url %)
-            :query-fn (fn [db]
-                        (let [datoms (d/datoms db :avet :block/page page-id)
-                              block-eids (mapv :e datoms)]
-                          (db-utils/pull-many repo-url pull-keys block-eids)))}
-           nil)
-         react-queries/react)))))
-
 (defn get-page-blocks-count
   [repo page-id]
   (when-let [db (declares/get-conn repo)]
     (count (d/datoms db :avet :block/page page-id))))
-
-(defn get-page-properties-content
-  [page]
-  (when-let [content (let [blocks (get-page-blocks page)]
-                       (and (:block/pre-block? (first blocks))
-                            (:block/content (first blocks))))]
-    (let [format (get-page-format page)]
-      (case format
-        :org
-        (->> (string/split-lines content)
-          (take-while (fn [line]
-                        (or (string/blank? line)
-                          (string/starts-with? line "#+"))))
-          (string/join "\n"))
-
-        :markdown
-        (str (subs content 0 (string/last-index-of content "---\n\n"))
-          "---\n\n")
-
-        content))))
 
 (defn get-block-children-ids
   [repo block-uuid]

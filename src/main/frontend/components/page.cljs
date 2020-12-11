@@ -38,7 +38,8 @@
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.block :as block-handler]))
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.utils :as h-utils]))
 
 (defn- get-page-name
   [state]
@@ -52,7 +53,7 @@
       (block-handler/get-block-and-children-react repo block-id)
       (do
         (page-handler/add-page-to-recent! repo page-original-name)
-        (db-queries/get-page-blocks repo page-name)))))
+        (h-utils/get-page-blocks repo page-name)))))
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query

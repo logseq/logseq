@@ -22,7 +22,8 @@
             [frontend.helper :as helper]
             [frontend.idb :as idb]
             [lambdaisland.glogi :as log]
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.queries :as db-queries]
+            [frontend.handler.utils :as h-utils]))
 
 (defn- watch-for-date!
   []
@@ -32,7 +33,7 @@
                       (when (or (db-queries/cloned? repo)
                                 (config/local-db? repo))
                         (let [today-page (string/lower-case (date/today))]
-                          (when (empty? (db-queries/get-page-blocks-no-cache repo today-page))
+                          (when (empty? (h-utils/get-page-blocks-no-cache repo today-page))
                             (repo-handler/create-today-journal-if-not-exists repo))))))
                   1000))
 

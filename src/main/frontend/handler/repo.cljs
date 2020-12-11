@@ -138,7 +138,7 @@
                    (config/get-file-extension format))
          file-path (str "/" path)
          page-exists? (db-utils/entity repo-url [:page/name (string/lower-case title)])
-         empty-blocks? (empty? (db-queries/get-page-blocks-no-cache repo-url (string/lower-case title)))]
+         empty-blocks? (empty? (h-utils/get-page-blocks-no-cache repo-url (string/lower-case title)))]
      (when (or empty-blocks?
                (not page-exists?))
        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
@@ -284,7 +284,7 @@
   We can improve it if the performance is really an issue."
   [repo page]
   (let [blocks (->>
-                 (db-queries/get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block? :block/meta]})
+                 (h-utils/get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block? :block/meta]})
                  (remove :block/pre-block?)
                  (map #(select-keys % [:db/id :block/uuid :block/level]))
                  (reverse))

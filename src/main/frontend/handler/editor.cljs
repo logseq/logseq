@@ -468,7 +468,7 @@
                      (ui-handler/re-render-root!)
 
                      ;; Continue to edit the last block
-                     (let [blocks (db-queries/get-page-blocks repo (:page/name page))
+                     (let [blocks (h-utils/get-page-blocks repo (:page/name page))
                            last-block (last blocks)]
                        (edit-last-block-for-new-page! last-block :max)))))))
 
@@ -710,7 +710,7 @@
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
-                (let [blocks (db-queries/get-page-blocks repo (:page/name page))
+                (let [blocks (h-utils/get-page-blocks repo (:page/name page))
                       last-block (last blocks)]
                   (edit-last-block-for-new-page! last-block 0))
 
