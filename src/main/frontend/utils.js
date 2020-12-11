@@ -116,16 +116,16 @@ export var verifyPermission = async function (handle, readWrite) {
   if (readWrite) {
     options.mode = 'readwrite';
   }
-  // Check if permission was already granted. If so, return true.
+  // Check if permission was already granted.
   if ((await handle.queryPermission(options)) === 'granted') {
-    return true;
+    return;
   }
-  // Request permission. If the user grants permission, return true.
+  // Request permission. If the user grants permission, just return.
   if ((await handle.requestPermission(options)) === 'granted') {
-    return true;
+    return;
   }
-  // The user didn't grant permission, so return false.
-  return false;
+  // The user didn't grant permission, throw an error.
+  throw new Error("Permission is not granted");
 }
 
 export var openDirectory = async function (options = {}, cb) {

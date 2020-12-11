@@ -52,8 +52,8 @@
     (local-db? dir)
     (let [[root new-dir] (rest (string/split dir "/"))
           root-handle (str "handle/" root)]
-      (p/let [handle (idb/get-item root-handle)]
-        (when handle (utils/verifyPermission handle true))
+      (p/let [handle (idb/get-item root-handle)
+              _ (when handle (utils/verifyPermission handle true))]
         (when (and handle new-dir
                    (not (string/blank? new-dir)))
           (-> (p/let [handle (.getDirectoryHandle ^js handle new-dir
@@ -181,8 +181,8 @@
               (if (and local-content old-content new?
                        (or not-changed? new-created?))
                 (do
-                  (utils/verifyPermission file-handle true)
-                  (p/let [_ (utils/writeFile file-handle content)
+                  (p/let [_ (utils/verifyPermission file-handle true)
+                          _ (utils/writeFile file-handle content)
                           file (.getFile file-handle)]
                     (when file
                       (nfs-saved-handler repo path file))))
@@ -194,8 +194,8 @@
              (p/let [handle (idb/get-item handle-path)]
                (if handle
                  (do
-                   (utils/verifyPermission handle true)
-                   (p/let [file-handle (.getFileHandle ^js handle basename #js {:create true})
+                   (p/let [_ (utils/verifyPermission handle true)
+                           file-handle (.getFileHandle ^js handle basename #js {:create true})
                            _ (idb/set-item! basename-handle-path file-handle)
                            _ (utils/writeFile file-handle content)
                            file (.getFile file-handle)]
