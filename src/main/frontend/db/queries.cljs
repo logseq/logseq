@@ -1227,56 +1227,6 @@
         (let [templates (map string/lower-case templates)]
           (contains? (set templates) (string/lower-case title)))))))
 
-(defn rebuild-page-blocks-children
-  "For performance reason, we can update the :block/children value after every operation,
-  but it's hard to make sure that it's correct, also it needs more time to implement it.
-  We can improve it if the performance is really an issue."
-  [repo page]
-  (let [blocks (->>
-                 (get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block? :block/meta]})
-                 (remove :block/pre-block?)
-                 (map #(select-keys % [:db/id :block/uuid :block/level]))
-                 (reverse))
-        original-blocks blocks]
-    (loop [blocks blocks
-           tx []
-           children {}
-           last-level 10000]
-      (if (seq blocks)
-        (let [[{:block/keys [uuid level] :as block} & others] blocks
-              [tx children] (cond
-                              (< level last-level)          ; parent
-                              (let [cur-children (get children last-level)
-                                    tx (if (seq cur-children)
-                                         (vec
-                                           (concat
-                                             tx
-                                             (map
-                                               (fn [child]
-                                                 [:db/add (:db/id block) :block/children [:block/uuid child]])
-                                               cur-children)))
-                                         tx)
-                                    children (-> children
-                                                 (dissoc last-level)
-                                                 (update level conj uuid))]
-                                [tx children])
-
-                              (> level last-level)          ; child of sibling
-                              (let [children (update children level conj uuid)]
-                                [tx children])
-
-                              :else                         ; sibling
-                              (let [children (update children last-level conj uuid)]
-                                [tx children]))]
-          (recur others tx children level))
-        ;; TODO: add top-level children to the "Page" block (we might remove the Page from db schema)
-        (when (seq tx)
-          (let [delete-tx (map (fn [block]
-                                 [:db/retract (:db/id block) :block/children])
-                            original-blocks)]
-            (->> (concat delete-tx tx)
-              (remove nil?))))))))
-
 (defn clean-export!
   [db]
   (let [remove? #(contains? #{"me" "recent" "file"} %)
