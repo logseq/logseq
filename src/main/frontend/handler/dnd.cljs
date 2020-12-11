@@ -15,7 +15,7 @@
             [frontend.db.utils :as db-utils]))
 
 ;; recursively with children content for tree
-(defn get-block-content-rec
+(defn- get-block-content-rec
   ([block]
    (get-block-content-rec block (fn [block] (:block/content block))))
   ([block transform-fn]
@@ -29,9 +29,23 @@
              block)]
      (apply util/join-newline @contents))))
 
+;; non recursive query
+
+(defn- get-block-ids
+  [block]
+  (let [ids (atom [])
+        _ (walk/prewalk
+            (fn [form]
+              (when (map? form)
+                (when-let [id (:block/uuid form)]
+                  (swap! ids conj id)))
+              form)
+            block)]
+    @ids))
+
 (defn- remove-block-child!
   [target-block parent-block]
-  (let [child-ids (set (db-queries/get-block-ids target-block))]
+  (let [child-ids (set (get-block-ids target-block))]
     (get-block-content-rec
       parent-block
       (fn [{:block/keys [uuid level content]}]
@@ -203,7 +217,7 @@
     (= direction :up)
     (let [offset-block-id (if nested?
                             (:block/uuid to-block)
-                            (last (db-queries/get-block-ids to-block)))
+                            (last (get-block-ids to-block)))
           offset-end-pos (get-end-pos
                           (db-utils/entity repo [:block/uuid offset-block-id]))]
       (rebuild-dnd-blocks repo target-file target-child?
@@ -215,7 +229,7 @@
     (= direction :down)
     (let [offset-block-id (if nested?
                             (:block/uuid to-block)
-                            (last (db-queries/get-block-ids to-block)))
+                            (last (get-block-ids to-block)))
           target-start-pos (get-start-pos target-block)]
       (rebuild-dnd-blocks repo target-file target-child?
                           target-start-pos
@@ -376,7 +390,7 @@
                           :else
                           (let [offset-block-id (if nested?
                                                   (:block/uuid to-block)
-                                                  (last (db-queries/get-block-ids to-block)))
+                                                  (last (get-block-ids to-block)))
                                 offset-end-pos (get-end-pos
                                                 (db-utils/entity repo [:block/uuid offset-block-id]))]
                             (rebuild-dnd-blocks repo to-file target-child?
@@ -424,7 +438,7 @@
                                 (utf8/substring to-file-content separate-pos))))
         target-delete-tx (map (fn [id]
                                 [:db.fn/retractEntity [:block/uuid id]])
-                              (db-queries/get-block-ids target-block))
+                              (get-block-ids target-block))
         [target-modified-time to-modified-time]
         (let [modified-at (tc/to-long (t/now))]
           [[[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
@@ -445,7 +459,7 @@
                           :else
                           (let [offset-block-id (if nested?
                                                   (:block/uuid to-block)
-                                                  (last (db-queries/get-block-ids to-block)))
+                                                  (last (get-block-ids to-block)))
                                 offset-end-pos (get-end-pos
                                                 (db-utils/entity to-block-repo [:block/uuid offset-block-id]))]
                             (rebuild-dnd-blocks to-block-repo to-file target-child?

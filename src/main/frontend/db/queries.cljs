@@ -581,40 +581,12 @@
       [{:block/uuid (:block/uuid block)
         :block/collapsed? true}])))
 
-
 (defn expand-block!
   [block]
   (let [repo (:block/repo block)]
     (transact! repo
       [{:block/uuid (:block/uuid block)
         :block/collapsed? false}])))
-
-;; non recursive query
-
-(defn get-block-ids
-  [block]
-  (let [ids (atom [])
-        _ (walk/prewalk
-            (fn [form]
-              (when (map? form)
-                (when-let [id (:block/uuid form)]
-                  (swap! ids conj id)))
-              form)
-            block)]
-    @ids))
-
-(defn get-block-parents
-  [repo block-id depth]
-  (when-let [conn (declares/get-conn repo)]
-    (loop [block-id block-id
-           parents (list)
-           d 1]
-      (if (> d depth)
-        parents
-        (if-let [parent (get-block-parent repo block-id)]
-          (recur (:block/uuid parent) (conj parents parent) (inc d))
-          parents)))))
-
 
 (defn get-block-page
   [repo block-id]
@@ -628,7 +600,7 @@
     (when-let [page-id (:db/id (db-utils/entity repo [:page/name (string/lower-case page-name)]))]
       (when-let [db (declares/get-conn repo)]
         (let [block-eids (->> (d/datoms db :avet :block/page page-id)
-                           (mapv :e))]
+                              (mapv :e))]
           (when (seq block-eids)
             (let [blocks (db-utils/pull-many repo '[:block/meta] block-eids)]
               (-> (last (db-utils/sort-by-pos blocks))

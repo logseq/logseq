@@ -239,3 +239,15 @@
                              (assoc item :block/children children)
                              other-children)]
               (recur others children))))))))
+
+(defn- get-block-parents
+  [repo block-id depth]
+  (when-let [conn (declares/get-conn repo)]
+    (loop [block-id block-id
+           parents (list)
+           d 1]
+      (if (> d depth)
+        parents
+        (if-let [parent (db-queries/get-block-parent repo block-id)]
+          (recur (:block/uuid parent) (conj parents parent) (inc d))
+          parents)))))

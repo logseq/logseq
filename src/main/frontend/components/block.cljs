@@ -44,7 +44,8 @@
             [frontend.db.react-queries :as react-queries]
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.utils :as h-utils]))
+            [frontend.handler.utils :as h-utils]
+            [frontend.db.declares :as declares]))
 
 (defn safe-read-string
   [s]
@@ -1205,11 +1206,12 @@
        (not (d/has-class? (gobj/get e "target") "bullet"))
        (not @*dragging?)))
 
+
 (defn block-parents
   ([repo block-id format]
    (block-parents repo block-id format true))
   ([repo block-id format show-page?]
-   (let [parents (db-queries/get-block-parents repo block-id 3)
+   (let [parents (block-handler/get-block-parents repo block-id 3)
          page (db-queries/get-block-page repo block-id)
          page-name (:page/name page)]
      (when (or (seq parents)
