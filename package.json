@@ -11,7 +11,7 @@
         "gulp-concat": "^2.6.1",
         "gulp-postcss": "^9.0.0",
         "npm-run-all": "^4.1.5",
-        "postcss": "8.1.10",
+        "postcss": "8.2.1",
         "postcss-cli": "8.3.0",
         "postcss-nested": "^5.0.1",
         "purgecss": "3.0.0",
