@@ -59,9 +59,8 @@
   --color-level-1: var(--ls-secondary-background-color); 
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
-  --color-level-4: #b7d7c9;
-  --color-level-5: #a5cdbc;
-  --color-level-6: #92c2af;
+  --color-level-4: #d0e6fa;
+  --color-level-5: #bbdaf6;
   /* --color-level-4: #b7d7c9;
   --color-level-5: #a5cdbc;
   --color-level-6: #92c2af; */
@@ -82,22 +81,22 @@
 .color-level .color-level .color-level .color-level .color-level {
   background-color: var(--color-level-5);
 }
-.color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-3);
-}
 .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-4);
+  background-color: var(--color-level-3);
 }
 .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-5);
-}
-.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
-  background-color: var(--color-level-3);
-}
-.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
   background-color: var(--color-level-4);
 }
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-3);
+}
 .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
   background-color: var(--color-level-5);
 }
 
