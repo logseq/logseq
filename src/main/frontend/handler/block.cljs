@@ -8,7 +8,8 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.utils :as h-utils]
             [frontend.util :as util]
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.queries :as db-queries]
+            [frontend.db.declares :as declares]))
 
 (defn custom-query-aux
   [{:keys [query inputs] :as query'} query-opts]
@@ -151,3 +152,12 @@
                  [?block :block/meta ?meta]
                  [(?pred $ ?meta)]])
        react-queries/react))))
+
+
+(defn get-block-immediate-children
+  [repo block-uuid]
+  (when (declares/get-conn repo)
+    (let [ids (->> (:block/children (db-queries/get-block-by-uuid repo block-uuid))
+                   (map :db/id))]
+      (when (seq ids)
+        (db-utils/pull-many repo '[*] ids)))))

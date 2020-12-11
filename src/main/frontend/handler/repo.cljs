@@ -222,6 +222,14 @@
       (ui-handler/re-render-root! re-render-opts))
     (state/set-importing-to-db! false)))
 
+(defn- delete-pages-by-files
+  [files]
+  (let [pages (->> (mapv db-queries/get-file-page files)
+                   (remove nil?))]
+    (when (seq pages)
+      (mapv (fn [page] [:db.fn/retractEntity [:page/name page]])
+        (map string/lower-case pages)))))
+
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files]}]
   (spec/validate :repos/url repo-url)

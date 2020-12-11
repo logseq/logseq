@@ -26,6 +26,10 @@
             [medley.core :as medley]
             [frontend.extensions.sci :as sci]))
 
+(defn get-block-by-uuid
+  [repo block-uuid]
+  (db-utils/entity repo [:block/uuid block-uuid]))
+
 (defn get-page-id-by-name
   ([page-name]
    (:db/id (db-utils/entity [:page/name page-name])))
@@ -421,7 +425,7 @@
 (defn get-block-children-ids
   [repo block-uuid]
   (when-let [conn (declares/get-conn repo)]
-    (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
+    (let [eid (:db/id (get-block-by-uuid repo block-uuid))]
       (->> (d/q
              '[:find ?e1
                :in $ ?e2 %
@@ -435,14 +439,6 @@
                 [?t :block/children ?e1]
                 (parent ?e2 ?t)]])
         (apply concat)))))
-
-(defn get-block-immediate-children
-  [repo block-uuid]
-  (when-let [conn (declares/get-conn repo)]
-    (let [ids (->> (:block/children (db-utils/entity repo [:block/uuid block-uuid]))
-                (map :db/id))]
-      (when (seq ids)
-        (db-utils/pull-many repo '[*] ids)))))
 
 (defn get-file-page
   ([file-path]
@@ -468,14 +464,6 @@
            conn file-path)
          db-utils/seq-flatten
          first)))))
-
-(defn delete-pages-by-files
-  [files]
-  (let [pages (->> (mapv get-file-page files)
-                (remove nil?))]
-    (when (seq pages)
-      (mapv (fn [page] [:db.fn/retractEntity [:page/name page]])
-        (map string/lower-case pages)))))
 
 (defn get-page-file
   [page-name]
