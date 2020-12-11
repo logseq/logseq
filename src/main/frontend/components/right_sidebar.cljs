@@ -24,7 +24,8 @@
             [frontend.config :as config]
             [frontend.db.react-queries :as react-queries]
             [frontend.db.queries :as db-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.block :as block-handler]))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -45,7 +46,7 @@
   (let [theme (:ui/theme @state/state)
         dark? (= theme "dark")
         graph (if (util/uuid-string? page)
-                (react-queries/build-block-graph (uuid page) theme)
+                (block-handler/build-block-graph (uuid page) theme)
                 (page-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
       [:div.sidebar-item.flex-col.flex-1

@@ -215,39 +215,6 @@
           (remove (fn [[page _blocks]]
                     (= journal-title (:page/original-name page)))))))))
 
-(defn build-block-graph
-  "Builds a citation/reference graph for a given block uuid."
-  [block theme]
-  (let [dark? (= "dark" theme)]
-    (when-let [repo (state/get-current-repo)]
-      (let [ref-blocks (get-block-referenced-blocks block)
-            edges (concat
-                    (map (fn [[p aliases]]
-                           [block p]) ref-blocks))
-            other-blocks (->> (concat (map first ref-blocks))
-                           (remove nil?)
-                           (set))
-            other-blocks-edges (mapcat
-                                 (fn [block]
-                                   (let [ref-blocks (-> (map first (get-block-referenced-blocks block))
-                                                        (set)
-                                                        (set/intersection other-blocks))]
-                                     (concat
-                                       (map (fn [p] [block p]) ref-blocks))))
-                                 other-blocks)
-            edges (->> (concat edges other-blocks-edges)
-                    (remove nil?)
-                    (distinct)
-                    (db-utils/build-edges))
-            nodes (->> (concat
-                         [block]
-                         (map first ref-blocks))
-                    (remove nil?)
-                    (distinct)
-                    (db-utils/build-nodes dark? block edges))]
-        {:nodes nodes
-         :links edges}))))
-
 (defn get-blocks-by-priority
   [repo priority]
   (let [priority (string/capitalize priority)]
