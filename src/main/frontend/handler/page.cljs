@@ -432,14 +432,14 @@
 (defn get-page-alias
   [repo page-name]
   (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (db-queries/get-page-alias* conn page-name)
+    (some->> (db-queries/get-page-alias conn page-name)
              db-utils/seq-flatten
              distinct)))
 
 (defn get-alias-page
   [repo alias]
   (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (db-queries/get-alias-page* conn alias)
+    (some->> (db-queries/get-alias-page conn alias)
              db-utils/seq-flatten
              distinct)))
 
@@ -463,7 +463,7 @@
           ref-pages (->> (react-queries/get-ref-pages repo page-id pages)
                       react-queries/react
                       db-utils/seq-flatten)]
-      (mapv (fn [page] [page (db-queries/get-page-alias repo page)]) ref-pages))))
+      (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 (defn get-pages-that-mentioned-page
   [repo page]

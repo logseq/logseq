@@ -39,7 +39,7 @@
          (declares/get-conn repo))
     (map first)))
 
-(defn get-page-alias*
+(defn get-page-alias
   [conn page-name]
   (d/q '[:find ?alias
          :in $ ?page-name
@@ -48,27 +48,13 @@
          [?page :page/alias ?alias]]
     conn page-name))
 
-(defn get-page-alias
-  [repo page-name]
-  (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (get-page-alias* conn page-name)
-             db-utils/seq-flatten
-             distinct)))
-
-(defn get-alias-page*
+(defn get-alias-page
   [conn alias]
   (d/q '[:find ?page
          :in $ ?alias
          :where
          [?page :page/alias ?alias]]
     conn alias))
-
-(defn get-alias-page
-  [repo alias]
-  (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (get-alias-page* conn alias)
-             db-utils/seq-flatten
-             distinct)))
 
 (defn get-block-refs-count
   [repo]
