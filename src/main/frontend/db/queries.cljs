@@ -943,26 +943,6 @@
         db-utils/seq-flatten
         first))))
 
-(defn extract-all-blocks-pages
-  [repo-url files]
-  (when (seq files)
-    (let [result (->> files
-                   (map
-                     (fn [{:file/keys [path content]} contents]
-                       (println "Parsing : " path)
-                       (when content
-                         (let [utf8-content (utf8/encode content)]
-                           (extract-blocks-pages repo-url path content utf8-content)))))
-                   (remove empty?))]
-      (when (seq result)
-        (let [[pages block-ids blocks] (apply map concat result)
-              block-ids-set (set block-ids)
-              blocks (map (fn [b]
-                            (-> b
-                                (update :block/ref-blocks #(set/intersection (set %) block-ids-set))
-                                (update :block/embed-blocks #(set/intersection (set %) block-ids-set)))) blocks)]
-          (apply concat [pages block-ids blocks]))))))
-
 (defn get-journals-length
   []
   (let [today (db-utils/date->int (js/Date.))]

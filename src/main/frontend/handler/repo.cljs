@@ -27,7 +27,10 @@
             [frontend.db.react-queries :as react-queries]
             [frontend.db.declares :as declares]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.utils :as h-utils]))
+            [frontend.handler.utils :as h-utils]
+            [frontend.utf8 :as utf8]
+            [clojure.set :as set]
+            [frontend.format.mldoc :as mldoc]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -153,6 +156,48 @@
   (create-contents-file repo-url)
   (create-custom-theme repo-url))
 
+(defn- extract-blocks-pages
+  [repo-url file content utf8-content]
+  (if (string/blank? content)
+    []
+    (let [journal? (util/starts-with? file "journals/")
+          format (format/get-format file)
+          ast (mldoc/->edn content
+                (mldoc/default-config format))
+          first-block (first ast)
+          properties (let [properties (and (seq first-block)
+                                        (= "Properties" (ffirst first-block))
+                                        (last (first first-block)))]
+                       (if (and properties (seq properties))
+                         properties))]
+      (h-utils/extract-pages-and-blocks
+        repo-url
+        format ast properties
+        file content utf8-content journal?
+        (fn [blocks ast]
+          [[(db-utils/get-page-name file ast) blocks]])))))
+
+
+(defn- extract-all-blocks-pages
+  [repo-url files]
+  (when (seq files)
+    (let [result (->> files
+                      (map
+                        (fn [{:file/keys [path content]} contents]
+                          (println "Parsing : " path)
+                          (when content
+                            (let [utf8-content (utf8/encode content)]
+                              (extract-blocks-pages repo-url path content utf8-content)))))
+                      (remove empty?))]
+      (when (seq result)
+        (let [[pages block-ids blocks] (apply map concat result)
+              block-ids-set (set block-ids)
+              blocks (map (fn [b]
+                            (-> b
+                                (update :block/ref-blocks #(set/intersection (set %) block-ids-set))
+                                (update :block/embed-blocks #(set/intersection (set %) block-ids-set)))) blocks)]
+          (apply concat [pages block-ids blocks]))))))
+
 (defn- parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts}]
   (state/set-loading-files! false)
@@ -164,7 +209,7 @@
                           (contains? config/mldoc-support-formats format)))
                       files)
         blocks-pages (if (seq parsed-files)
-                       (db-queries/extract-all-blocks-pages repo-url parsed-files)
+                       (extract-all-blocks-pages repo-url parsed-files)
                        [])]
     (db-queries/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (let [config-file (str config/app-name "/" config/config-file)]
