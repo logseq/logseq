@@ -445,3 +445,24 @@
     (util/format
       (config/properties-wrapper-pattern page-format)
       (string/join "\n" lines))))
+
+;; cache this
+
+(defn get-latest-journals
+  ([n]
+   (get-latest-journals (state/get-current-repo) n))
+  ([repo-url n]
+   (when (declares/get-conn repo-url)
+     (let [date (js/Date.)
+           _ (.setDate date (- (.getDate date) (dec n)))
+           today (db-utils/date->int (js/Date.))
+           pages (->> (react-queries/get-journals-before-ts repo-url today)
+                      (sort-by last)
+                      (reverse)
+                      (map first)
+                      (take n))]
+       (mapv
+         (fn [page]
+           [page
+            (db-queries/get-page-format page)])
+         pages)))))

@@ -504,79 +504,6 @@
       (declares/get-conn (state/get-current-repo))
       today)))
 
-;; cache this
-(defn get-latest-journals
-  ([n]
-   (get-latest-journals (state/get-current-repo) n))
-  ([repo-url n]
-   (when (declares/get-conn repo-url)
-     (let [date (js/Date.)
-           _ (.setDate date (- (.getDate date) (dec n)))
-           today (db-utils/date->int (js/Date.))
-           pages (->>
-                   (react-queries/q repo-url [:journals] {:use-cache? false}
-                     '[:find ?page-name ?journal-day
-                       :in $ ?today
-                       :where
-                       [?page :page/name ?page-name]
-                       [?page :page/journal? true]
-                       [?page :page/journal-day ?journal-day]
-                       [(<= ?journal-day ?today)]]
-                     today)
-                   (react-queries/react)
-                   (sort-by last)
-                   (reverse)
-                   (map first)
-                   (take n))]
-       (mapv
-         (fn [page]
-           [page
-            (get-page-format page)])
-         pages)))))
-
-(defn with-dummy-block
-  ([blocks format]
-   (with-dummy-block blocks format {} {}))
-  ([blocks format default-option {:keys [journal? page-name]
-                                  :or {journal? false}}]
-   (let [format (or format (state/get-preferred-format) :markdown)
-         blocks (if (and journal?
-                         (seq blocks)
-                         (when-let [title (second (first (:block/title (first blocks))))]
-                           (date/valid-journal-title? title)))
-                  (rest blocks)
-                  blocks)
-         blocks (vec blocks)]
-     (cond
-       (and (seq blocks)
-            (or (and (> (count blocks) 1)
-                     (:block/pre-block? (first blocks)))
-              (and (>= (count blocks) 1)
-                   (not (:block/pre-block? (first blocks))))))
-       blocks
-
-       :else
-       (let [last-block (last blocks)
-             end-pos (get-in last-block [:block/meta :end-pos] 0)
-             dummy (merge last-block
-                     (let [uuid (d/squuid)]
-                       {:block/uuid uuid
-                        :block/title ""
-                        :block/content (config/default-empty-block format)
-                        :block/format format
-                        :block/level 2
-                        :block/priority nil
-                        :block/anchor (str uuid)
-                        :block/meta {:start-pos end-pos
-                                     :end-pos end-pos}
-                        :block/body nil
-                        :block/dummy? true
-                        :block/marker nil
-                        :block/pre-block? false})
-                     default-option)]
-         (conj blocks dummy))))))
-
-
 (defn get-files-that-referenced-page
   [page-id]
   (when-let [repo (state/get-current-repo)]
@@ -606,26 +533,15 @@
       (db-utils/seq-flatten)))
 
 (defn get-matched-blocks
-  [match-fn limit]
-  (when-let [repo (state/get-current-repo)]
-    (let [pred (fn [db content]
-                 (match-fn content))]
-      (->> (d/q
-             '[:find ?block
-               :in $ ?pred
-               :where
-               [?block :block/content ?content]
-               [(?pred $ ?content)]]
-             (declares/get-conn)
-             pred)
-        (take limit)
-        db-utils/seq-flatten
-        (db-utils/pull-many '[:block/uuid
-                              :block/content
-                              :block/properties
-                              :block/format
-                              {:block/page [:page/name]}])))))
-
+  [pred]
+  (d/q
+    '[:find ?block
+      :in $ ?pred
+      :where
+      [?block :block/content ?content]
+      [(?pred $ ?content)]]
+    (declares/get-conn)
+    pred))
 
 ;; TODO: Does the result preserves the order of the arguments?
 (defn get-blocks-contents

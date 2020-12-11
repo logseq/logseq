@@ -1,13 +1,14 @@
 (ns frontend.search
   (:require
-            [frontend.config :as config]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            [frontend.regex :as regex]
-            [frontend.text :as text]
-            [frontend.db.queries :as db-queries]))
+    [frontend.config :as config]
+    [frontend.state :as state]
+    [frontend.util :as util]
+    [cljs-bean.core :as bean]
+    [clojure.string :as string]
+    [frontend.regex :as regex]
+    [frontend.text :as text]
+    [frontend.db.queries :as db-queries]
+    [frontend.db.utils :as db-utils]))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
@@ -76,6 +77,20 @@
                                      :score (score query (.toLowerCase s))})))))
          (map :data))))
 
+(defn- get-matched-blocks
+  [match-fn limit]
+  (when-let [repo (state/get-current-repo)]
+    (let [pred (fn [db content]
+                 (match-fn content))]
+      (->> (db-queries/get-matched-blocks pred)
+           (take limit)
+           db-utils/seq-flatten
+           (db-utils/pull-many '[:block/uuid
+                                 :block/content
+                                 :block/properties
+                                 :block/format
+                                 {:block/page [:page/name]}])))))
+
 (defn search
   "Block search"
   ([q]
@@ -85,7 +100,7 @@
      (let [q (escape-str q)
            q-pattern (re-pattern (str "(?i)" q))]
        (when-not (string/blank? q)
-         (let [blocks (db-queries/get-matched-blocks
+         (let [blocks (get-matched-blocks
                         (fn [content]
                           (re-find q-pattern content))
                         ;; (fn [content]

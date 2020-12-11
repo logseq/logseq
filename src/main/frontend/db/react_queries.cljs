@@ -283,3 +283,17 @@
         marker)
       react
       db-utils/seq-flatten))
+
+(defn get-journals-before-ts
+  [repo-url ts-in-int]
+  (->>
+    (q repo-url [:journals] {:use-cache? false}
+      '[:find ?page-name ?journal-day
+        :in $ ?today
+        :where
+        [?page :page/name ?page-name]
+        [?page :page/journal? true]
+        [?page :page/journal-day ?journal-day]
+        [(<= ?journal-day ?today)]]
+      ts-in-int)
+    (react)))

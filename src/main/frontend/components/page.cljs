@@ -59,7 +59,7 @@
   db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-        page-blocks (db-queries/with-dummy-block raw-page-blocks format
+        page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
                         (let [content (react-queries/get-file repo file-path)]
                           {:block/page {:db/id (:db/id page)}

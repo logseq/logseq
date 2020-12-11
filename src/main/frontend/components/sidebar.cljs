@@ -29,7 +29,8 @@
             [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
             [frontend.db.queries :as db-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.utils :as h-utils]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -172,7 +173,7 @@
         me (state/sub :me)
         journals-length (state/sub :journals-length)
         current-repo (state/sub :git/current-repo)
-        latest-journals (db-queries/get-latest-journals (state/get-current-repo) journals-length)
+        latest-journals (h-utils/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)]
     (rum/with-context [[t] i18n/*tongue-context*]
