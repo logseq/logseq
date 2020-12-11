@@ -265,3 +265,11 @@
             (every? (fn [[[typ break-lines]] _]
                       (and (= typ "Paragraph")
                         (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
+
+(defn template-exists?
+  [title]
+  (when title
+    (let [templates (keys (db-queries/get-all-templates))]
+      (when (seq templates)
+        (let [templates (map string/lower-case templates)]
+          (contains? (set templates) (string/lower-case title)))))))

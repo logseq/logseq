@@ -21,7 +21,8 @@
             [frontend.context.i18n :as i18n]
             [frontend.text :as text]
             [frontend.db.queries :as db-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.block :as block-handler]))
 
 (defn- set-format-js-loading!
   [format value]
@@ -91,7 +92,7 @@
                     :on-click (fn []
                                 (let [title (string/trim @input)]
                                   (when (not (string/blank? title))
-                                    (if (db-queries/template-exists? title)
+                                    (if (block-handler/template-exists? title)
                                       (notification/show!
                                        [:p "Template already exists!"]
                                        :error)
