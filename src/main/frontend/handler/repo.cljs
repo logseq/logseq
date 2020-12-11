@@ -107,8 +107,6 @@
    (create-today-journal-if-not-exists repo-url nil))
   ([repo-url content]
    (spec/validate :repos/url repo-url)
-   (when (config/local-db? repo-url)
-     (fs/check-directory-permission! repo-url))
    (let [repo-dir (util/get-repo-dir repo-url)
          format (state/get-preferred-format repo-url)
          title (date/today)
@@ -134,7 +132,8 @@
          empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
      (when (or empty-blocks?
                (not page-exists?))
-       (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
+       (p/let [_ (fs/check-directory-permission! repo-url)
+               _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
          (when-not file-exists?
            (db/reset-file! repo-url path content)
