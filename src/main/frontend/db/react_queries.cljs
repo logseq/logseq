@@ -276,3 +276,18 @@
          pages)
     react
     db-utils/seq-flatten))
+
+(defn get-mentioned-pages
+  [repo page-id pages page-name]
+  (->> (q repo [:page/mentioned-pages page-id] {:use-cache? false}
+         '[:find ?mentioned-page-name
+           :in $ ?pages ?page-name
+           :where
+           [?block :block/ref-pages ?p]
+           [(contains? ?pages ?p)]
+           [?block :block/page ?mentioned-page]
+           [?mentioned-page :page/name ?mentioned-page-name]]
+         pages
+         page-name)
+    react
+    db-utils/seq-flatten))

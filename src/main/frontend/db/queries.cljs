@@ -354,25 +354,6 @@
           pred)
         (block-and-children-transform repo block-uuid level))))
 
-(defn get-pages-that-mentioned-page
-  [repo page]
-  (when (declares/get-conn repo)
-    (let [page-id (:db/id (db-utils/entity [:page/name page]))
-          pages (page-alias-set repo page)
-          mentioned-pages (->> (react-queries/q repo [:page/mentioned-pages page-id] {:use-cache? false}
-                                 '[:find ?mentioned-page-name
-                                   :in $ ?pages ?page-name
-                                   :where
-                                   [?block :block/ref-pages ?p]
-                                   [(contains? ?pages ?p)]
-                                   [?block :block/page ?mentioned-page]
-                                   [?mentioned-page :page/name ?mentioned-page-name]]
-                                 pages
-                                 page)
-                            react-queries/react
-                            db-utils/seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
-
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (declares/get-conn repo)]

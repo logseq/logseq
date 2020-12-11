@@ -464,6 +464,14 @@
                       db-utils/seq-flatten)]
       (mapv (fn [page] [page (db-queries/get-page-alias repo page)]) ref-pages))))
 
+(defn get-pages-that-mentioned-page
+  [repo page]
+  (when (declares/get-conn repo)
+    (let [page-id (db-queries/get-page-id-by-name page)
+          pages (page-alias-set repo page)
+          mentioned-pages (react-queries/get-mentioned-pages repo page-id pages page)]
+      (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
+
 (defn build-page-graph
   [page theme]
   (let [dark? (= "dark" theme)]
@@ -474,7 +482,7 @@
                    (map :tag/name))
             tags (remove #(= page %) tags)
             ref-pages (get-page-referenced-pages repo page)
-            mentioned-pages (db-queries/get-pages-that-mentioned-page repo page)
+            mentioned-pages (get-pages-that-mentioned-page repo page)
             edges (concat
                     (map (fn [[p aliases]]
                            [page p]) ref-pages)
@@ -492,7 +500,7 @@
                                   (let [ref-pages (-> (map first (get-page-referenced-pages repo page))
                                                       (set)
                                                       (set/intersection other-pages))
-                                        mentioned-pages (-> (map first (db-queries/get-pages-that-mentioned-page repo page))
+                                        mentioned-pages (-> (map first (get-pages-that-mentioned-page repo page))
                                                             (set)
                                                             (set/intersection other-pages))]
                                     (concat
