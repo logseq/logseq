@@ -14,10 +14,25 @@
             [frontend.db.react-queries :as react-queries]
             [frontend.db.utils :as db-utils]))
 
+;; recursively with children content for tree
+(defn get-block-content-rec
+  ([block]
+   (get-block-content-rec block (fn [block] (:block/content block))))
+  ([block transform-fn]
+   (let [contents (atom [])
+         _ (walk/prewalk
+             (fn [form]
+               (when (map? form)
+                 (when-let [content (:block/content form)]
+                   (swap! contents conj (transform-fn form))))
+               form)
+             block)]
+     (apply util/join-newline @contents))))
+
 (defn- remove-block-child!
   [target-block parent-block]
   (let [child-ids (set (db-queries/get-block-ids target-block))]
-    (db-queries/get-block-content-rec
+    (get-block-content-rec
       parent-block
       (fn [{:block/keys [uuid level content]}]
         (if (contains? child-ids uuid)
@@ -36,7 +51,7 @@
         format (:block/format target-block)
         pattern (config/get-block-pattern format)
         block-changes (atom [])
-        all-content (db-queries/get-block-content-rec
+        all-content (get-block-content-rec
                      target-block
                      (fn [{:block/keys [uuid level content]
                            :as block}]
@@ -216,7 +231,7 @@
     (let [old-file-content (react-queries/get-file (:file/path (db-utils/entity (:db/id (:block/file target-block)))))
           old-file-content (utf8/encode old-file-content)
           subs (fn [start-pos end-pos] (utf8/substring old-file-content start-pos end-pos))
-          bottom-content (db-queries/get-block-content-rec bottom-block)
+          bottom-content (get-block-content-rec bottom-block)
           top-content (remove-block-child! bottom-block top-block)
           top-area (subs 0 (get-start-pos top-block))
           bottom-area (subs
@@ -238,7 +253,7 @@
                                             target-content
                                             (if target-child?
                                               (remove-block-child! target-block (:block/children to-block))
-                                              (db-queries/get-block-content-rec (:block/children top-block))))
+                                              (get-block-content-rec (:block/children top-block))))
                          (and top? target-child?)
                          (util/join-newline target-content (remove-block-child! target-block to-block))
 

@@ -574,21 +574,6 @@
         repo-url)
       ffirst)))
 
-;; recursively with children content for tree
-(defn get-block-content-rec
-  ([block]
-   (get-block-content-rec block (fn [block] (:block/content block))))
-  ([block transform-fn]
-   (let [contents (atom [])
-         _ (walk/prewalk
-             (fn [form]
-               (when (map? form)
-                 (when-let [content (:block/content form)]
-                   (swap! contents conj (transform-fn form))))
-               form)
-             block)]
-     (apply util/join-newline @contents))))
-
 (defn get-block-end-pos-rec
   [repo block]
   (let [children (:block/children block)]
