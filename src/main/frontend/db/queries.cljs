@@ -593,6 +593,7 @@
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
+;; TODO: need to extract datascript query. @defclass
 
 (defn get-block-page-end-pos
   [repo page-name]
@@ -607,19 +608,6 @@
                   (get-in [:block/meta :end-pos])))))))
     ;; TODO: need more thoughts
     0))
-
-(defn pre-block-with-only-title?
-  [repo block-id]
-  (when-let [block (db-utils/entity repo [:block/uuid block-id])]
-    (let [properties (:page/properties (:block/page block))]
-      (and (:title properties)
-           (= 1 (count properties))
-           (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
-             (or
-               (empty? (rest ast))
-               (every? (fn [[[typ break-lines]] _]
-                         (and (= typ "Paragraph")
-                              (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
 
 (defn run-batch-txs!
   []

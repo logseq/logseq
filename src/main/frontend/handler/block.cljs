@@ -12,7 +12,8 @@
             [frontend.db.declares :as declares]
             [frontend.config :as config]
             [frontend.date :as date]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.format.mldoc :as mldoc]))
 
 (defn custom-query-aux
   [{:keys [query inputs] :as query'} query-opts]
@@ -251,3 +252,16 @@
         (if-let [parent (db-queries/get-block-parent repo block-id)]
           (recur (:block/uuid parent) (conj parents parent) (inc d))
           parents)))))
+
+(defn pre-block-with-only-title?
+  [repo block-id]
+  (when-let [block (db-queries/get-block-by-uuid repo block-id)]
+    (let [properties (:page/properties (:block/page block))]
+      (and (:title properties)
+        (= 1 (count properties))
+        (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
+          (or
+            (empty? (rest ast))
+            (every? (fn [[[typ break-lines]] _]
+                      (and (= typ "Paragraph")
+                        (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
