@@ -223,6 +223,16 @@
                           offset-block-id
                           {}))))
 
+(defn get-block-end-pos-rec
+  [repo block]
+  (let [children (:block/children block)]
+    (if (seq children)
+      (get-block-end-pos-rec repo (last children))
+      (if-let [end-pos (get-in block [:block/meta :end-pos])]
+        end-pos
+        (when-let [block (db-queries/get-block-by-uuid repo (:block/uuid block))]
+          (get-in block [:block/meta :end-pos]))))))
+
 ;; TODO: still could be different pages, e.g. move a block from one journal to another journal
 (defn- move-block-in-same-file
   [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
@@ -239,13 +249,13 @@
                          (and nested? (= direction :down))
                          (get-end-pos bottom-block)
                          target-child?
-                         (db-queries/get-block-end-pos-rec repo top-block)
+                         (get-block-end-pos-rec repo top-block)
                          :else
-                         (db-queries/get-block-end-pos-rec repo bottom-block))
+                         (get-block-end-pos-rec repo bottom-block))
                        nil)
           between-area (if (= direction :down)
-                         (subs (db-queries/get-block-end-pos-rec repo target-block) (get-start-pos to-block))
-                         (subs (db-queries/get-block-end-pos-rec repo to-block) (get-start-pos target-block)))
+                         (subs (get-block-end-pos-rec repo target-block) (get-start-pos to-block))
+                         (subs (get-block-end-pos-rec repo to-block) (get-start-pos target-block)))
           up-content (when (= direction :up)
                        (cond
                          nested?
@@ -326,9 +336,9 @@
         target-file-content (react-queries/get-file repo target-file-path)
         to-file (db-utils/entity repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-block-end-pos (db-queries/get-block-end-pos-rec repo target-block)
+        target-block-end-pos (get-block-end-pos-rec repo target-block)
         to-block-start-pos (get-start-pos to-block)
-        to-block-end-pos (db-queries/get-block-end-pos-rec repo to-block)
+        to-block-end-pos (get-block-end-pos-rec repo to-block)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)
@@ -394,9 +404,9 @@
         target-file-content (react-queries/get-file target-block-repo target-file-path)
         to-file (db-utils/entity to-block-repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-block-end-pos (db-queries/get-block-end-pos-rec target-block-repo target-block)
+        target-block-end-pos (get-block-end-pos-rec target-block-repo target-block)
         to-block-start-pos (get-start-pos to-block)
-        to-block-end-pos (db-queries/get-block-end-pos-rec to-block-repo to-block)
+        to-block-end-pos (get-block-end-pos-rec to-block-repo to-block)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)

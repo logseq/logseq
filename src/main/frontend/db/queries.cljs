@@ -574,16 +574,6 @@
         repo-url)
       ffirst)))
 
-(defn get-block-end-pos-rec
-  [repo block]
-  (let [children (:block/children block)]
-    (if (seq children)
-      (get-block-end-pos-rec repo (last children))
-      (if-let [end-pos (get-in block [:block/meta :end-pos])]
-        end-pos
-        (when-let [block (db-utils/entity repo [:block/uuid (:block/uuid block)])]
-          (get-in block [:block/meta :end-pos]))))))
-
 (defn collapse-block!
   [block]
   (let [repo (:block/repo block)]
