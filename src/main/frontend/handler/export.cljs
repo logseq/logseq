@@ -12,7 +12,8 @@
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
             [frontend.db.utils :as db-utils]
-            [frontend.db.declares :as declares]))
+            [frontend.db.declares :as declares]
+            [frontend.handler.block :as block-handler]))
 
 (defn copy-block!
   [block-id]
@@ -23,7 +24,7 @@
 (defn copy-block-as-json!
   [block-id]
   (when-let [repo (state/get-current-repo)]
-    (let [block-children (db-queries/get-block-and-children repo block-id)]
+    (let [block-children (block-handler/get-block-and-children-react repo block-id)]
       (util/copy-to-clipboard! (js/JSON.stringify (bean/->js block-children))))))
 
 (defn copy-page-as-json!

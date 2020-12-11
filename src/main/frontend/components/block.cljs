@@ -315,7 +315,7 @@
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
-  (let [blocks (db-queries/get-block-and-children (state/get-current-repo) id)]
+  (let [blocks (block-handler/get-block-and-children-react (state/get-current-repo) id)]
     [:div.embed-block.bg-base-2 {:style {:z-index 2}}
      [:code "Embed block:"]
      [:div.px-2

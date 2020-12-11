@@ -37,7 +37,8 @@
             [reitit.frontend.easy :as rfe]
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.block :as block-handler]))
 
 (defn- get-page-name
   [state]
@@ -48,7 +49,7 @@
   [repo page-name page-original-name block? block-id]
   (when page-name
     (if block?
-      (db-queries/get-block-and-children repo block-id)
+      (block-handler/get-block-and-children-react repo block-id)
       (do
         (page-handler/add-page-to-recent! repo page-original-name)
         (db-queries/get-page-blocks repo page-name)))))
