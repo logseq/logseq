@@ -3,7 +3,9 @@
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.idb :as idb]))
+            [frontend.idb :as idb]
+            [datascript.core :as d]
+            [frontend.db-schema :as db-schema]))
 
 (defonce conns (atom {}))
 
@@ -59,4 +61,3 @@
   [repo]
   (swap! conns dissoc (datascript-db repo))
   (swap! conns dissoc (datascript-files-db repo)))
-

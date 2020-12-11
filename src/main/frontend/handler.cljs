@@ -23,7 +23,10 @@
             [frontend.idb :as idb]
             [lambdaisland.glogi :as log]
             [frontend.db.queries :as db-queries]
-            [frontend.handler.utils :as h-utils]))
+            [frontend.handler.utils :as h-utils]
+            [frontend.db.declares :as declares]
+            [frontend.db.utils :as db-utils]
+            [datascript.core :as d]))
 
 (defn- watch-for-date!
   []
@@ -65,6 +68,39 @@
     (let [{:keys [me logged? repos]} (get-me-and-repos)]
       (js/window.location.reload))))
 
+(defn- restore!
+  [{:keys [repos] :as me} restore-config-handler]
+  (let [logged? (:name me)]
+    (doall
+      (for [{:keys [url]} repos]
+        (let [repo url
+
+              db-name (declares/datascript-files-db repo)
+              db-conn (d/create-conn db-schema/files-db-schema)]
+          (swap! declares/conns assoc db-name db-conn)
+          (p/let [stored (-> (idb/get-item db-name)
+                             (p/then (fn [result]
+                                       result))
+                             (p/catch (fn [error]
+                                        nil)))
+                  _ (when stored
+                      (let [stored-db (db-utils/string->db stored)
+                            attached-db (d/db-with stored-db [(db-utils/me-tx stored-db me)])]
+                        (declares/reset-conn! db-conn attached-db)))
+                  db-name (declares/datascript-db repo)
+                  db-conn (d/create-conn db-schema/schema)
+                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
+                  _ (swap! declares/conns assoc db-name db-conn)
+                  stored (idb/get-item db-name)
+                  _ (if stored
+                      (let [stored-db (db-utils/string->db stored)
+                            attached-db (d/db-with stored-db [(db-utils/me-tx stored-db me)])]
+                        (declares/reset-conn! db-conn attached-db))
+                      (when logged?
+                        (d/transact! db-conn [(db-utils/me-tx (d/db db-conn) me)])))]
+            (restore-config-handler repo)
+            (db-utils/listen-and-persist! repo)))))))
+
 (defn restore-and-setup!
   [me repos logged?]
   (let [interval (atom nil)
@@ -72,7 +108,7 @@
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     (-> (p/all (db-queries/restore! (assoc me :repos repos)
+                     (-> (p/all (restore! (assoc me :repos repos)
                                   (fn [repo]
                                     (file-handler/restore-config! repo false)
                                     (ui-handler/add-style-if-exists!))))

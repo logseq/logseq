@@ -574,57 +574,6 @@
         repo-url)
       ffirst)))
 
-(defn start-db-conn!
-  ([me repo]
-   (start-db-conn! me repo {}))
-  ([me repo {:keys [db-type]}]
-   (let [files-db-name (declares/datascript-files-db repo)
-         files-db-conn (d/create-conn db-schema/files-db-schema)
-         db-name (declares/datascript-db repo)
-         db-conn (d/create-conn db-schema/schema)]
-     (swap! declares/conns assoc files-db-name files-db-conn)
-     (swap! declares/conns assoc db-name db-conn)
-     (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
-                             db-type
-                             (assoc :db/type db-type))])
-     (when me
-       (d/transact! db-conn [(db-utils/me-tx (d/db db-conn) me)]))
-
-     (db-utils/listen-and-persist! repo))))
-
-(defn restore!
-  [{:keys [repos] :as me} restore-config-handler]
-  (let [logged? (:name me)]
-    (doall
-      (for [{:keys [url]} repos]
-        (let [repo url
-
-              db-name (declares/datascript-files-db repo)
-              db-conn (d/create-conn db-schema/files-db-schema)]
-          (swap! declares/conns assoc db-name db-conn)
-          (p/let [stored (-> (idb/get-item db-name)
-                             (p/then (fn [result]
-                                       result))
-                             (p/catch (fn [error]
-                                        nil)))
-                  _ (when stored
-                      (let [stored-db (db-utils/string->db stored)
-                            attached-db (d/db-with stored-db [(db-utils/me-tx stored-db me)])]
-                        (declares/reset-conn! db-conn attached-db)))
-                  db-name (declares/datascript-db repo)
-                  db-conn (d/create-conn db-schema/schema)
-                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
-                  _ (swap! declares/conns assoc db-name db-conn)
-                  stored (idb/get-item db-name)
-                  _ (if stored
-                      (let [stored-db (db-utils/string->db stored)
-                            attached-db (d/db-with stored-db [(db-utils/me-tx stored-db me)])]
-                        (declares/reset-conn! db-conn attached-db))
-                      (when logged?
-                        (d/transact! db-conn [(db-utils/me-tx (d/db db-conn) me)])))]
-            (restore-config-handler repo)
-            (db-utils/listen-and-persist! repo)))))))
-
 (defn build-global-graph
   [theme show-journal?]
   (let [dark? (= "dark" theme)

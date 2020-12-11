@@ -30,7 +30,9 @@
             [frontend.handler.utils :as h-utils]
             [frontend.utf8 :as utf8]
             [clojure.set :as set]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [frontend.db-schema :as db-schema]
+            [datascript.core :as d]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -506,6 +508,24 @@
   (when-let [repo (state/get-current-repo)]
     (pull repo {:force-pull? true})))
 
+(defn start-db-conn!
+  ([me repo]
+   (start-db-conn! me repo {}))
+  ([me repo {:keys [db-type]}]
+   (let [files-db-name (declares/datascript-files-db repo)
+         files-db-conn (d/create-conn db-schema/files-db-schema)
+         db-name (declares/datascript-db repo)
+         db-conn (d/create-conn db-schema/schema)]
+     (swap! declares/conns assoc files-db-name files-db-conn)
+     (swap! declares/conns assoc db-name db-conn)
+     (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
+                             db-type
+                             (assoc :db/type db-type))])
+     (when me
+       (d/transact! db-conn [(db-utils/me-tx (d/db db-conn) me)]))
+
+     (db-utils/listen-and-persist! repo))))
+
 (defn- clone
   [repo-url]
   (spec/validate :repos/url repo-url)
@@ -517,7 +537,7 @@
          (git/clone repo-url token))
        (fn [result]
          (state/set-current-repo! repo-url)
-         (db-queries/start-db-conn! (state/get-me) repo-url)
+         (start-db-conn! (state/get-me) repo-url)
          (db-queries/mark-repo-as-cloned! repo-url))
        (fn [e]
          (println "Clone failed, error: ")
@@ -571,7 +591,7 @@
 (defn start-repo-db-if-not-exists!
   [repo option]
   (state/set-current-repo! repo)
-  (db-queries/start-db-conn! nil repo option))
+  (start-db-conn! nil repo option))
 
 (defn setup-local-repo-if-not-exists!
   []
@@ -579,7 +599,7 @@
     (let [repo config/local-repo]
       (p/do! (fs/mkdir-if-not-exists (str "/" repo))
              (state/set-current-repo! repo)
-             (db-queries/start-db-conn! nil repo)
+             (start-db-conn! nil repo)
              (when-not config/publishing?
                (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
                  (create-dummy-notes-page repo dummy-notes)))
