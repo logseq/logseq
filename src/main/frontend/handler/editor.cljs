@@ -413,7 +413,7 @@
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
          value (if permalink-changed?
-                 (db-queries/add-properties! format value {:old_permalink (:permalink old-properties)})
+                 (h-utils/add-properties! format value {:old_permalink (:permalink old-properties)})
                  value)
          new-properties (if permalink-changed?
                           (assoc new-properties :old_permalink (:permalink old-properties))
