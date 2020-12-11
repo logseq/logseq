@@ -609,15 +609,6 @@
     ;; TODO: need more thoughts
     0))
 
-(defn run-batch-txs!
-  []
-  (let [chan (state/get-db-batch-txs-chan)]
-    (async/go-loop []
-      (let [f (async/<! chan)]
-        (f))
-      (recur))
-    chan))
-
 (defn get-all-templates
   []
   (let [pred (fn [_ properties]

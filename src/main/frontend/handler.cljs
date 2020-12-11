@@ -26,7 +26,8 @@
             [frontend.handler.utils :as h-utils]
             [frontend.db.declares :as declares]
             [frontend.db.utils :as db-utils]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [cljs.core.async :as async]))
 
 (defn- watch-for-date!
   []
@@ -169,6 +170,15 @@
   []
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
+
+(defn- run-batch-txs!
+  []
+  (let [chan (state/get-db-batch-txs-chan)]
+    (async/go-loop []
+      (let [f (async/<! chan)]
+        (f))
+      (recur))
+    chan))
 
 (defn start!
   [render]
