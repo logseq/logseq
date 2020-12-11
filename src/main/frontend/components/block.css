@@ -13,3 +13,140 @@
 .block-content img {
   width: 100%;
 }
+
+/* copied from https://github.com/drdogbot7/tailwindcss-responsive-embed */
+.embed-responsive {
+  position: relative;
+  display: block;
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+
+  .embed-responsive-item,
+  iframe,
+  embed,
+  object,
+  video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100%;
+    width: 100%;
+    border: 0;
+  }
+
+}
+
+.embed {
+  border-radius: var(--ls-border-radius-low);
+}
+
+.embed-header {
+  font-weight: 600;
+}
+
+.dark-theme {
+  --color-level-1: var(--ls-secondary-background-color); 
+  --color-level-2: var(--ls-tertiary-background-color);
+  --color-level-3: var(--ls-quaternary-background-color);
+  --color-level-4: #195D6C;
+  --color-level-5: #266C7D;
+  --color-level-6: #3A7E8E;
+}
+
+.white-theme {
+  --color-level-1: var(--ls-secondary-background-color); 
+  --color-level-2: var(--ls-tertiary-background-color);
+  --color-level-3: var(--ls-quaternary-background-color);
+  --color-level-4: #d0e6fa;
+  --color-level-5: #bbdaf6;
+  /* --color-level-4: #b7d7c9;
+  --color-level-5: #a5cdbc;
+  --color-level-6: #92c2af; */
+}
+
+.color-level {
+  background-color: var(--color-level-1);
+}
+.color-level .color-level {
+  background-color: var(--color-level-2);
+}
+.color-level .color-level .color-level {
+  background-color: var(--color-level-3);
+}
+.color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
+}
+.color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-3);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-3);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-4);
+}
+.color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
+  background-color: var(--color-level-5);
+}
+
+.ls-block {
+  min-height: 24px;
+}
+
+.ls-block, .foldable-title {
+  max-width: 700px;
+}
+
+.ls-block, .editor-wrapper {
+margin-right: auto;
+margin-left: auto;
+}
+
+.ls-block img {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .1), 0 10px 10px -5px rgba(0, 0, 0, .04);
+}
+
+
+.ls-block h1 {
+  font-size: 2em;
+  margin: .67em 0
+}
+
+.ls-block h2 {
+  font-size: 1.5em;
+  margin: .75em 0
+}
+
+.ls-block h3 {
+  font-size: 1.17em;
+  margin: .83em 0
+}
+
+.ls-block h4 {
+  margin: 1.12em 0
+}
+
+.ls-block h5 {
+  font-size: .83em;
+  margin: 1.5em 0
+}
+
+.ls-block h6 {
+  font-size: .75em;
+  margin: 1.67em 0
+}
+
+.ls-block h1, .ls-block h2, .ls-block h3, .ls-block h4, .ls-block h5, .ls-block h6 {
+  font-weight: 600
+}

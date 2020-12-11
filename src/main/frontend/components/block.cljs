@@ -313,9 +313,8 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.embed-block.bg-base-2 {:style {:z-index 2}}
-     [:code "Embed block:"]
-     [:div.px-2
+    [:div.color-level.embed.embed-block.bg-base-2 {:style {:z-index 2}}
+     [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
                                       :ref? false))]]))
@@ -325,9 +324,9 @@
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
-    [:div.embed-page.py-2.my-2.px-3.bg-base-2
-     [:p
-      [:code.mr-2 "Embed page:"]
+    [:div.color-level.embed.embed-page.py-2.my-2.px-3.bg-base-2
+     [:div.flex.items-center.p-1.embed-header
+      [:div.mr-3 svg/page]
       (page-cp config {:page/name page-name})]
      (when (and
             (not= (string/lower-case (or current-page ""))
@@ -549,7 +548,7 @@
 
             :else
             (->elem
-             :a
+             :a.external-link
              (cond->
               {:href href
                :target "_blank"}
@@ -944,8 +943,7 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (str (string/lower-case marker)
-                         "flex flex-row items-center")})
+            {:class (str (string/lower-case marker))})
           (when bg-color
             {:style {:background-color bg-color
                      :padding-left 6
@@ -1333,7 +1331,7 @@
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.pt-1
+    [:div.ls-block.flex.flex-col.mt-1
      (cond->
       {:id block-id
        :style {:position "relative"}
@@ -1833,7 +1831,7 @@
                (block-container config item)
                (:block/uuid item)))))
        ;; (add-button config ref? custom-query? blocks)
-])))
+       ])))
 
 ;; headers to hiccup
 (defn ->hiccup
@@ -1848,7 +1846,7 @@
         (let [page (db/entity (:db/id page))]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
-                       (assoc :class "bg-base-2 px-7 py-2 rounded"))
+                       (assoc :class "color-level px-7 py-2 rounded"))
            (ui/foldable
             (page-cp config page)
             (blocks-container blocks config))]))]

@@ -93,7 +93,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                      ;; [:div {:style {:position "absolute" :right "8px"}}
                      ;;  icon]
-]]
+                     ]]
           (rum/with-key
             (menu-link new-options child)
             title)))])
