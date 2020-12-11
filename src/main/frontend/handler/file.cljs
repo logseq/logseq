@@ -20,7 +20,8 @@
             ["ignore" :as Ignore]
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.utils :as h-utils]))
 
 (defn load-file
   [repo-url path]
@@ -129,7 +130,7 @@
           (db-queries/transact! repo
                         [[:db/retract page-id :page/alias]
                          [:db/retract page-id :page/tags]]))
-        (db-queries/reset-file! repo path content))
+        (h-utils/reset-file! repo path content))
       (db-queries/set-file-content! repo path content))
     (util/p-handle
      (fs/write-file (util/get-repo-dir repo) path content original-content)
@@ -173,7 +174,7 @@
                               [path original-content content])) files)
            write-file-f (fn [[path content]]
                           (if reset?
-                            (db-queries/reset-file! repo path content)
+                            (h-utils/reset-file! repo path content)
                             (db-queries/set-file-content! repo path content))
                           (let [original-content (get file->content path)]
                             (-> (p/let [_ (fs/check-directory-permission! repo)]

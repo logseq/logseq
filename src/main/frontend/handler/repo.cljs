@@ -26,7 +26,8 @@
             [frontend.db.queries :as db-queries]
             [frontend.db.react-queries :as react-queries]
             [frontend.db.declares :as declares]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.utils :as h-utils]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -61,7 +62,7 @@
                 old-content (when file-exists?
                               (react-queries/get-file repo-url path))
                 content (or old-content default-content)]
-            (db-queries/reset-file! repo-url path content)
+            (h-utils/reset-file! repo-url path content)
             (db-queries/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))))))
@@ -79,7 +80,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
-        (db-queries/reset-file! repo-url path default-content)
+        (h-utils/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-custom-theme
@@ -92,7 +93,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
             file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
       (when-not file-exists?
-        (db-queries/reset-file! repo-url path default-content)
+        (h-utils/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-dummy-notes-page
@@ -103,7 +104,7 @@
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
-      (db-queries/reset-file! repo-url path content))))
+      (h-utils/reset-file! repo-url path content))))
 
 (defn create-today-journal-if-not-exists
   ([repo-url]
@@ -140,7 +141,7 @@
        (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
                file-exists? (fs/create-if-not-exists repo-dir file-path content)]
          (when-not file-exists?
-           (db-queries/reset-file! repo-url path content)
+           (h-utils/reset-file! repo-url path content)
            (ui-handler/re-render-root!)
            (git-handler/git-add repo-url path)))))))
 

@@ -963,28 +963,6 @@
                                 (update :block/embed-blocks #(set/intersection (set %) block-ids-set)))) blocks)]
           (apply concat [pages block-ids blocks]))))))
 
-;; TODO: compare blocks
-(defn reset-file!
-  [repo-url file content]
-  (let [new? (nil? (db-utils/entity [:file/path file]))]
-    (set-file-content! repo-url file content)
-    (let [format (format/get-format file)
-          utf8-content (utf8/encode content)
-          file-content [{:file/path file}]
-          tx (if (contains? config/mldoc-support-formats format)
-               (let [delete-blocks (delete-file-blocks! repo-url file)
-                     [pages block-ids blocks] (extract-blocks-pages repo-url file content utf8-content)]
-                 (concat file-content delete-blocks pages block-ids blocks))
-               file-content)
-          tx (concat tx [(let [t (tc/to-long (t/now))]
-                           (cond->
-                             {:file/path file
-                              :file/last-modified-at t}
-                             new?
-                             (assoc :file/created-at t)))])]
-      (transact! repo-url tx))))
-
-
 (defn get-journals-length
   []
   (let [today (db-utils/date->int (js/Date.))]

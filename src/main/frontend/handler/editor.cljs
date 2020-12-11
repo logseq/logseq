@@ -43,7 +43,8 @@
             [lambdaisland.glogi :as log]
             [frontend.db.queries :as db-queries]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react-queries :as react-queries]))
+            [frontend.db.react-queries :as react-queries]
+            [frontend.handler.utils :as h-utils]))
 
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
@@ -460,7 +461,7 @@
                                           (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
                    (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                     (db-queries/reset-file! repo path content)
+                     (h-utils/reset-file! repo path content)
                      (git-handler/git-add repo path)
 
                      (ui-handler/re-render-root!)
@@ -699,7 +700,7 @@
                                                                    (:page/original-name page)
                                                                    (:page/name page)))]
               (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                (db-queries/reset-file! repo path
+                (h-utils/reset-file! repo path
                                 (str content
                                      (text/remove-level-spaces value (keyword format))
                                      "\n"

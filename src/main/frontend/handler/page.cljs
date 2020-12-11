@@ -69,7 +69,7 @@
                ;; create the file
                (let [content (util/default-content-with-title format title)]
                  (p/let [_ (fs/create-if-not-exists dir file-path content)]
-                   (db-queries/reset-file! repo path content)
+                   (h-utils/reset-file! repo path content)
                    (git-handler/git-add repo path)
                    (when redirect?
                      (route-handler/redirect! {:to :page
