@@ -35,5 +35,6 @@ html[data-theme=dark] {
     color: var(--ls-page-checkbox-color, #6093a0);
     background-color: var(--ls-page-checkbox-color, #6093a0);
     border-color: var(--ls-page-checkbox-border-color, #6093a0);
+    border: none;
   }
 }

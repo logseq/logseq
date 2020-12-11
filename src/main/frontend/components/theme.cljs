@@ -4,7 +4,7 @@
 (rum/defc container
   [{:keys [theme on-click] :as props} child]
   (rum/use-effect! #(-> js/document.documentElement
-                        (.setAttribute "data-theme" theme))
+                        (.setAttribute "data-theme" (if (= theme "white") "light" theme)))
                    [theme])
   [:div
    {:class (str theme "-theme")
