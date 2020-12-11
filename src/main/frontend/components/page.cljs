@@ -409,7 +409,7 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         [width height] (rum/react layout)
         dark? (= theme "dark")
-        graph (db-queries/build-global-graph theme (rum/react show-journal?))
+        graph (page-handler/build-global-graph theme (rum/react show-journal?))
         dot-mode-value? (rum/react dot-mode?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph

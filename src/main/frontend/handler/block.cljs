@@ -206,3 +206,36 @@
                         :block/pre-block? false})
                      default-option)]
          (conj blocks dummy))))))
+
+(defn blocks->vec-tree [col]
+  (let [col (map (fn [h] (cond->
+                           h
+                           (not (:block/dummy? h))
+                           (dissoc h :block/meta))) col)]
+    (loop [col (reverse col)
+           children (list)]
+      (if (empty? col)
+        children
+        (let [[item & others] col
+              cur-level (:block/level item)
+              bottom-level (:block/level (first children))
+              pre-block? (:block/pre-block? item)]
+          (cond
+            (empty? children)
+            (recur others (list item))
+
+            (<= bottom-level cur-level)
+            (recur others (conj children item))
+
+            pre-block?
+            (recur others (cons item children))
+
+            (> bottom-level cur-level)                      ; parent
+            (let [[children other-children] (split-with (fn [h]
+                                                          (> (:block/level h) cur-level))
+                                              children)
+
+                  children (cons
+                             (assoc item :block/children children)
+                             other-children)]
+              (recur others children))))))))

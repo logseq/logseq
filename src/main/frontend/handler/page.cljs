@@ -599,3 +599,39 @@
              (h-utils/with-block-refs-count repo-url)
              (db-utils/sort-blocks)
              (db-utils/group-by-page))))
+
+(defn build-global-graph
+  [theme show-journal?]
+  (let [dark? (= "dark" theme)
+        current-page (:page/name (db-queries/get-current-page))]
+    (when-let [repo (state/get-current-repo)]
+      (let [relation (db-queries/get-pages-relation repo show-journal?)
+            tagged-pages (db-queries/get-all-tagged-pages repo)
+            linked-pages (-> (concat
+                               relation
+                               tagged-pages)
+                             flatten
+                             set)
+            all-pages (db-queries/get-pages repo)
+            other-pages (->> (remove linked-pages all-pages)
+                             (remove nil?))
+            other-pages (if show-journal? other-pages
+                                          (remove date/valid-journal-title? other-pages))
+            other-pages (if (seq other-pages)
+                          (map string/lower-case other-pages)
+                          other-pages)
+            nodes (concat (seq relation)
+                    (seq tagged-pages)
+                    (if (seq other-pages)
+                      (map (fn [page]
+                             [page])
+                        other-pages)
+                      []))
+            edges (db-utils/build-edges (remove
+                                          (fn [[_ to]]
+                                            (nil? to))
+                                          nodes))
+            nodes (db-utils/build-nodes dark? current-page edges nodes)]
+        (db-utils/normalize-page-name
+          {:nodes nodes
+           :links edges})))))

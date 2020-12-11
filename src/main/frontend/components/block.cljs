@@ -1804,7 +1804,7 @@
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
-        blocks->vec-tree #(if (or custom-query? ref?) % (db-queries/blocks->vec-tree %))
+        blocks->vec-tree #(if (or custom-query? ref?) % (block-handler/blocks->vec-tree %))
         blocks (blocks->vec-tree blocks)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
