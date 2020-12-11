@@ -131,7 +131,7 @@
                         [[:db/retract page-id :page/alias]
                          [:db/retract page-id :page/tags]]))
         (h-utils/reset-file! repo path content))
-      (db-queries/set-file-content! repo path content))
+      (h-utils/set-file-content! repo path content))
     (util/p-handle
      (fs/write-file (util/get-repo-dir repo) path content original-content)
      (fn [_]
@@ -175,7 +175,7 @@
            write-file-f (fn [[path content]]
                           (if reset?
                             (h-utils/reset-file! repo path content)
-                            (db-queries/set-file-content! repo path content))
+                            (h-utils/set-file-content! repo path content))
                           (let [original-content (get file->content path)]
                             (-> (p/let [_ (fs/check-directory-permission! repo)]
                                   (fs/write-file (util/get-repo-dir repo) path content original-content))

@@ -109,7 +109,6 @@
          (when-let [conn (declares/get-conn repo-url false)]
            (d/transact! conn (vec tx-data))))))))
 
-
 (defn retract-by-key
   [repo-url key]
   (transact! repo-url [[:db.fn/retractEntity [:db/ident key]]]))
@@ -121,24 +120,6 @@
    (when-let [db (declares/get-conn repo-url)]
      (some-> (d/entity db key)
        key))))
-
-(defn get-current-priority
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])]
-    (when (= route-name :page)
-      (when-let [page-name (get-in match [:path-params :name])]
-        (and (contains? #{"a" "b" "c"} (string/lower-case page-name))
-             (string/upper-case page-name))))))
-
-(defn get-current-marker
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])]
-    (when (= route-name :page)
-      (when-let [page-name (get-in match [:path-params :name])]
-        (and (util/marker? page-name)
-             (string/upper-case page-name))))))
 
 (defn get-current-page
   []
@@ -161,134 +142,6 @@
         (db-utils/entity (if tag?
                            [:tag/name page-name]
                            [:page/name page-name]))))))
-
-(defn get-handler-keys
-  [{:keys [key data]}]
-  (cond
-    (coll? key)
-    [key]
-
-    :else
-    (case key
-      (:block/change :block/insert)
-      (when-let [blocks (seq data)]
-        (let [pre-block? (:block/pre-block? (first blocks))
-              current-priority (get-current-priority)
-              current-marker (get-current-marker)
-              current-page-id (:db/id (get-current-page))
-              {:block/keys [page]} (first blocks)
-              handler-keys (->>
-                             (util/concat-without-nil
-                               (mapcat
-                                 (fn [block]
-                                   (when-let [page-id (:db/id (:block/page block))]
-                                     [[:blocks (:block/uuid block)]
-                                      [:page/blocks page-id]
-                                      [:page/ref-pages page-id]]))
-                                 blocks)
-
-                               (when pre-block?
-                                 [[:contents]])
-
-                               ;; affected priority
-                               (when current-priority
-                                 [[:priority/blocks current-priority]])
-
-                               (when current-marker
-                                 [[:marker/blocks current-marker]])
-
-                               (when current-page-id
-                                 [[:page/ref-pages current-page-id]
-                                  [:page/refed-blocks current-page-id]
-                                  [:page/mentioned-pages current-page-id]])
-
-                               ;; refed-pages
-                               (apply concat
-                                 (for [{:block/keys [ref-pages]} blocks]
-                                   (map (fn [page]
-                                          (when-let [page (db-utils/entity [:page/name (:page/name page)])]
-                                            [:page/refed-blocks (:db/id page)]))
-                                     ref-pages)))
-
-                               ;; refed-blocks
-                               (apply concat
-                                 (for [{:block/keys [ref-blocks]} blocks]
-                                   (map (fn [ref-block]
-                                          [:block/refed-blocks (last ref-block)])
-                                     ref-blocks))))
-                             (distinct))
-              refed-pages (map
-                            (fn [[k page-id]]
-                              (if (= k :page/refed-blocks)
-                                [:page/ref-pages page-id]))
-                            handler-keys)
-              custom-queries (some->>
-                               (filter (fn [v]
-                                         (and (= (first v) (state/get-current-repo))
-                                              (= (second v) :custom)))
-                                 (keys @react-queries/query-state))
-                               (map (fn [v]
-                                      (vec (drop 1 v)))))
-              block-blocks (some->>
-                             (filter (fn [v]
-                                       (and (= (first v) (state/get-current-repo))
-                                            (= (second v) :block/block)))
-                               (keys @react-queries/query-state))
-                             (map (fn [v]
-                                    (vec (drop 1 v)))))]
-          (->>
-            (util/concat-without-nil
-              handler-keys
-              refed-pages
-              custom-queries
-              block-blocks)
-            distinct)))
-      [[key]])))
-
-(defn transact-react!
-  [repo-url tx-data {:keys [key data files-db?] :as handler-opts
-                     :or {files-db? false}}]
-  (when-not config/publishing?
-    (try
-      (let [repo-url (or repo-url (state/get-current-repo))
-            tx-data (->> (util/remove-nils tx-data)
-                      (remove nil?))
-            get-conn (fn [] (if files-db?
-                              (declares/get-files-conn repo-url)
-                              (declares/get-conn repo-url false)))]
-        (when (and (seq tx-data) (get-conn))
-          (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
-                db (:db-after tx-result)
-                handler-keys (get-handler-keys handler-opts)]
-            (doseq [handler-key handler-keys]
-              (let [handler-key (vec (cons repo-url handler-key))]
-                (when-let [cache (get @react-queries/query-state handler-key)]
-                  (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-                    (when (or query query-fn)
-                      (let [new-result (->
-                                         (cond
-                                           query-fn
-                                           (profile
-                                             "Query:"
-                                             (doall (query-fn db)))
-
-                                           inputs-fn
-                                           (let [inputs (inputs-fn)]
-                                             (apply d/q query db inputs))
-
-                                           (keyword? query)
-                                           (get-key-value repo-url query)
-
-                                           (seq inputs)
-                                           (apply d/q query db inputs)
-
-                                           :else
-                                           (d/q query db))
-                                         transform-fn)]
-                        (react-queries/set-new-result! handler-key new-result))))))))))
-      (catch js/Error e
-        ;; FIXME: check error type and notice user
-        (log/error :db/transact! e)))))
 
 (defn get-block-parent
   [repo block-id]
@@ -365,17 +218,6 @@
   (when-let [file (:page/file (db-utils/entity [:page/name page-name]))]
     (when-let [path (:file/path (db-utils/entity (:db/id file)))]
       (format/get-format path))))
-
-(defn set-file-content!
-  [repo path content]
-  (when (and repo path)
-    (transact-react!
-      repo
-      [{:file/path path
-        :file/content content
-        :file/last-modified-at (util/time-ms)}]
-      {:key [:file/content path]
-       :files-db? true})))
 
 (defn get-file-blocks
   [repo-url path]

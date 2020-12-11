@@ -284,7 +284,7 @@
   (let [files (remove nil? files)
         pages (->> (map db-queries/get-file-page (map first files))
                    (remove nil?))]
-    (db-queries/transact-react!
+    (h-utils/transact-react!
       repo
       tx
       transact-option)
