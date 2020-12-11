@@ -1492,13 +1492,6 @@
     ;; TODO: need more thoughts
     0))
 
-(defn add-page-to-recent!
-  [repo page]
-  (let [pages (or (get-key-value repo :recent/pages)
-                '())
-        new-pages (take 12 (distinct (cons page pages)))]
-    (set-key-value repo :recent/pages new-pages)))
-
 (defn pre-block-with-only-title?
   [repo block-id]
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]

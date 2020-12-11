@@ -26,7 +26,8 @@
             [frontend.db.utils :as db-utils]
             [frontend.db.react-queries :as react-queries]
             [frontend.db.declares :as declares]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.handler.utils :as h-utils]))
 
 (defn- get-directory
   [journal?]
@@ -522,3 +523,10 @@
         (db-utils/normalize-page-name
           {:nodes nodes
            :links edges})))))
+
+(defn add-page-to-recent!
+  [repo page]
+  (let [pages (or (db-queries/get-key-value repo :recent/pages)
+                '())
+        new-pages (take 12 (distinct (cons page pages)))]
+    (h-utils/set-key-value repo :recent/pages new-pages)))

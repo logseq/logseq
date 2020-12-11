@@ -50,7 +50,7 @@
     (if block?
       (db-queries/get-block-and-children repo block-id)
       (do
-        (db-queries/add-page-to-recent! repo page-original-name)
+        (page-handler/add-page-to-recent! repo page-original-name)
         (db-queries/get-page-blocks repo page-name)))))
 
 (rum/defc page-blocks-cp < rum/reactive
