@@ -1157,8 +1157,7 @@
          (when (and start-time finish-time (> finish-time start-time))
            [:div.text-sm.absolute.time-spent {:style {:top 0
                                                       :right 0
-                                                      :padding-left 2
-                                                      :z-index 4}
+                                                      :padding-left 2}
                                               :title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
             [:span.opacity-70
              (utils/timeConversion (- finish-time start-time))]])))]))
