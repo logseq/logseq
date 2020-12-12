@@ -1,0 +1,6 @@
+.cp__repo-indicator {
+  .sync-content {
+    max-height: 80vh;
+    overflow: auto;
+  }
+}
