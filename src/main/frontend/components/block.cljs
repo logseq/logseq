@@ -17,6 +17,7 @@
             [frontend.ui :as ui]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as dnd]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.repeated :as repeated]
             [goog.object :as gobj]
             [medley.core :as medley]
@@ -38,7 +39,8 @@
             [frontend.date :as date]
             [frontend.security :as security]
             [reitit.frontend.easy :as rfe]
-            [frontend.commands :as commands]))
+            [frontend.commands :as commands]
+            [lambdaisland.glogi :as log]))
 
 (defn safe-read-string
   [s]
@@ -157,10 +159,8 @@
   (let [href (if (util/starts-with? href "http")
                href
                (get-file-absolute-path config href))]
-    [:img.rounded-sm.shadow-xl.mb-2.mt-2
-     {:class "object-contain object-center"
-      :loading "lazy"
-      :style {:max-height "24rem"}
+    [:img.rounded-sm.shadow-xl
+     {:loading "lazy"
       ;; :on-error (fn [])
       :src href
       :title (second (first label))}]))
@@ -241,7 +241,7 @@
 (declare page-reference)
 
 (defn page-cp
-  [{:keys [html-export? label children] :as config} page]
+  [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:page/name page)]
     (let [original-page-name (get page :page/original-name page-name)
           original-page-name (if (date/valid-journal-title? original-page-name)
@@ -261,7 +261,11 @@
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
-                         {:page page-entity}))))}
+                         {:page page-entity})))
+                    (when (and contents-page?
+                               (state/get-left-sidebar-open?))
+                      (ui-handler/close-left-sidebar!)))}
+
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
@@ -277,24 +281,23 @@
 
 (defn page-reference
   [html-export? s config label]
-  [:span.page-reference
-   (when (and (not html-export?)
-              (not (= (:id config) "contents"))
-              (not (= (:id config) "Contents")))
-     [:span.text-gray-500 "[["])
-   (if (string/ends-with? s ".excalidraw")
-     [:a.page-ref
-      {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
-       :on-click (fn [e] (util/stop e))}
-      [:span
-       (svg/excalidraw-logo)
-       (string/capitalize (draw/get-file-title s))]]
-     (page-cp (assoc config
-                     :label (mldoc/plain->text label)) {:page/name s}))
-   (when (and (not html-export?)
-              (not (= (:id config) "contents"))
-              (not (= (:id config) "Contents")))
-     [:span.text-gray-500 "]]"])])
+  (let [contents-page? (= "contents" (string/lower-case (str (:id config))))]
+    [:span.page-reference
+     (when (and (not html-export?) (not contents-page?))
+       [:span.text-gray-500 "[["])
+     (if (string/ends-with? s ".excalidraw")
+       [:a.page-ref
+        {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
+         :on-click (fn [e]
+                     (util/stop e))}
+        [:span
+         (svg/excalidraw-logo)
+         (string/capitalize (draw/get-file-title s))]]
+       (page-cp (assoc config
+                       :label (mldoc/plain->text label)
+                       :contents-page? contents-page?) {:page/name s}))
+     (when (and (not html-export?) (not contents-page?))
+       [:span.text-gray-500 "]]"])]))
 
 (defn- latex-environment-content
   [name option content]
@@ -310,9 +313,8 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.embed-block.bg-base-2 {:style {:z-index 2}}
-     [:code "Embed block:"]
-     [:div.px-2
+    [:div.ls-embed-block.bg-base-2
+     [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
                                       :ref? false))]]))
@@ -321,12 +323,20 @@
   [config page-name]
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
-        blocks (db/get-page-blocks (state/get-current-repo) page-name)]
-    [:div.embed-page.py-2.my-2.px-3.bg-base-2
-     [:p
-      [:code.mr-2 "Embed page:"]
+        current-page (state/get-current-page)]
+    [:div.ls-embed-page.bg-base-2
+     [:div.flex.items-center.p-1.embed-header
+      [:div.mr-3 svg/page]
       (page-cp config {:page/name page-name})]
-     (blocks-container blocks (assoc config :embed? true))]))
+     (when (and
+            (not= (string/lower-case (or current-page ""))
+                  page-name)
+            (not= (string/lower-case (get config :id ""))
+                  page-name))
+       (let [blocks (db/get-page-blocks (state/get-current-repo) page-name)]
+         (blocks-container blocks (assoc config
+                                         :embed? true
+                                         :ref? false))))]))
 
 (defn- get-label-text
   [label]
@@ -371,6 +381,28 @@
          [:span.text-gray-500 "))"]]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
+
+(defn inline-text
+  [format v]
+  (when (string? v)
+    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
+      [:div.inline.mr-1 (map-inline {} inline-list)])))
+
+(defn- render-macro
+  [config name arguments macro-content format]
+  (if macro-content
+    (let [ast (->> (mldoc/->edn macro-content (mldoc/default-config format))
+                   (map first))
+          block? (contains? #{"Paragraph"
+                              "Raw_Html"
+                              "Hiccup"}
+                            (ffirst ast))]
+      (if block?
+        [:div
+         (markup-elements-cp (assoc config :block/format format) ast)]
+        (inline-text format macro-content)))
+    [:span.warning {:title (str "Unsupported macro name: " name)}
+     (macro->text name arguments)]))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -516,7 +548,7 @@
 
             :else
             (->elem
-             :a
+             :a.external-link
              (cond->
               {:href href
                :target "_blank"}
@@ -605,10 +637,10 @@
                                   nil)]
             (when-not (string/blank? youtube-id)
               [:iframe
-               {:allowfullscreen "allowfullscreen"
+               {:allow-full-screen "allowfullscreen"
                 :allow
                 "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                :frameborder "0"
+                :frame-border "0"
                 :src (str "https://www.youtube.com/embed/" youtube-id)
                 :height "315"
                 :width "560"}])))
@@ -640,7 +672,8 @@
 
         :else
         (if-let [block-uuid (:block/uuid config)]
-          (let [macro-content (or
+          (let [format (get-in config [:block :block/format] :markdown)
+                macro-content (or
                                (-> (db/entity [:block/uuid block-uuid])
                                    (:block/page)
                                    (:db/id)
@@ -648,18 +681,16 @@
                                    :page/properties
                                    :macros
                                    (get name))
-                               (get-in (state/get-config) [:macros name])
-                               (get-in (state/get-config) [:macros (keyword name)]))]
-            [:span
-             (if (and (seq arguments) macro-content)
-               (block/macro-subs macro-content arguments)
-               (or
-                macro-content
-                [:span.warning {:title (str "Unsupported macro name: " name)}
-                 (macro->text name arguments)]))])
+                               (get (state/get-macros) name)
+                               (get (state/get-macros) (keyword name)))
+                macro-content (if (and (seq arguments) macro-content)
+                                (block/macro-subs macro-content arguments)
+                                macro-content)]
+            (render-macro config name arguments macro-content format))
 
-          [:span
-           (macro->text name arguments)])))
+          (when-let [macro-txt (macro->text name arguments)]
+            (let [format (get-in config [:block :block/format] :markdown)]
+              (render-macro config name arguments macro-txt format))))))
 
     :else
     ""))
@@ -912,8 +943,7 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (str (string/lower-case marker)
-                         "flex flex-row items-center")})
+            {:class (str (string/lower-case marker))})
           (when bg-color
             {:style {:background-color bg-color
                      :padding-left 6
@@ -964,15 +994,19 @@
 (defn- pre-block-cp
   [config content format]
   (let [ast (mldoc/->edn content (mldoc/default-config format))
-        ast (map first ast)]
-    [:div.pre-block.bg-base-2.p-2
-     (markup-elements-cp (assoc config :block/format format) ast)]))
-
-(defn property-value
-  [format v]
-  (when (string? v)
-    (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
-      [:div.inline.mr-1 (map-inline {} inline-list)])))
+        ast (map first ast)
+        slide? (:slide? config)
+        only-title? (and (= 1 (count ast))
+                         (= "Properties" (ffirst ast))
+                         (let [m (second (first ast))]
+                           (= (keys m) [:title])))
+        block-cp [:div.pre-block.bg-base-2.p-2
+                  (markup-elements-cp (assoc config :block/format format) ast)]]
+    (if slide?
+      [:div [:h1 (:page-name config)]
+       (when-not only-title?
+         block-cp)]
+      block-cp)))
 
 (rum/defc properties-cp
   [block]
@@ -983,7 +1017,7 @@
          [:div.my-1
           [:b k]
           [:span.mr-1 ":"]
-          (property-value (:block/format block) v)])])))
+          (inline-text (:block/format block) v)])])))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)
@@ -1068,8 +1102,7 @@
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)
                :style {:cursor "text"
-                       :min-height 24
-                       :max-width 560}}
+                       :min-height 24}}
         (not slide?)
         (merge attrs))
 
@@ -1088,7 +1121,8 @@
 
       (when (and (seq properties)
                  (let [hidden? (text/properties-hidden? properties)]
-                   (not hidden?)))
+                   (not hidden?))
+                 (not (:slide? config)))
         (properties-cp block))
 
       (when (and (not pre-block?) (seq body))
@@ -1200,7 +1234,8 @@
                             (reset! parents-atom parents)
                             (when (seq parents)
                               (interpose [:span.mx-2.opacity-50 "➤"]
-                                         parents))))]]
+                                         parents))))]
+             component (filterv identity component)]
          (when (or (seq @parents-atom) show-page?)
            component))))))
 
@@ -1296,7 +1331,7 @@
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.pt-1
+    [:div.ls-block.flex.flex-col.mt-1
      (cond->
       {:id block-id
        :style {:position "relative"}
@@ -1476,9 +1511,9 @@
 
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
-                 (let [[config query] (:rum/args state)]
-                   (let [query-atom (db/custom-query query)]
-                     (assoc state :query-atom query-atom))))
+                 (let [[config query] (:rum/args state)
+                       query-atom (db/custom-query query)]
+                   (assoc state :query-atom query-atom)))
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
@@ -1512,7 +1547,13 @@
            title]
           (cond
             (and (seq result) view-f)
-            (let [result (sci/call-fn view-f result)]
+            (let [result (try
+                           (sci/call-fn view-f result)
+                           (catch js/Error error
+                             (log/error :custom-view-failed {:error error
+                                                             :result result})
+                             [:div "Custom view failed: "
+                              (str error)]))]
               (util/hiccup-keywordize result))
 
             (and (seq result)
@@ -1526,11 +1567,13 @@
                                :margin-left "0.25rem"}})
 
             (seq result)                     ;TODO: table
-            [:pre
-             (for [record result]
-               (if (map? record)
-                 (str (util/pp-str record) "\n")
-                 record))]
+            (let [result (->>
+                          (for [record result]
+                            (if (map? record)
+                              (str (util/pp-str record) "\n")
+                              record))
+                          (remove nil?))]
+              [:pre result])
 
             :else
             [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])
@@ -1568,14 +1611,14 @@
                   (if (or (= k :tags)
                           (= k :alias))
                     (if (string/includes? item "[[")
-                      (property-value format item)
+                      (inline-text format item)
                       (let [tag (-> item
                                     (string/replace "[" "")
                                     (string/replace "]" ""))]
                         [:a.tag.mr-1 {:href (rfe/href :page {:name tag})}
                          tag]))
-                    (property-value format item)))
-                (property-value format v))])))]
+                    (inline-text format item)))
+                (inline-text format v))])))]
 
       ["Paragraph" l]
       ;; TODO: speedup
@@ -1620,10 +1663,12 @@
 
           :else
           (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} language) "text/x-clojure" language)]
-            [:div
-             (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
-             (when (and (= language "clojure") (contains? (set options) ":results"))
-               (sci/eval-result code))])))
+            (if (:slide? config)
+              (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
+              [:div
+               (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
+               (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
+                 (sci/eval-result code))]))))
       ["Quote" l]
       (->elem
        :blockquote
@@ -1801,7 +1846,7 @@
         (let [page (db/entity (:db/id page))]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
-                       (assoc :class "bg-base-2 px-7 py-2 rounded"))
+                       (assoc :class "color-level px-7 py-2 rounded"))
            (ui/foldable
             (page-cp config page)
             (blocks-container blocks config))]))]

@@ -8,6 +8,7 @@
             [clojure.string :as string]
             ["/frontend/caret_pos" :as caret-pos]
             ["/frontend/selection" :as selection]
+            ["/frontend/utils" :as utils]
             [goog.string :as gstring]
             [goog.string.format]
             [dommy.core :as d]
@@ -17,6 +18,11 @@
             [frontend.regex :as regex]
             [clojure.pprint :refer [pprint]]
             [goog.userAgent]))
+
+(extend-protocol IPrintWithWriter
+  js/Symbol
+  (-pr-writer [sym writer _]
+    (-write writer (str "\"" (.toString sym) "\""))))
 
 ;; envs
 (defn ios?
@@ -36,6 +42,11 @@
 (defn evalue
   [event]
   (gobj/getValueByKeys event "target" "value"))
+
+(defn set-change-value
+  "compatible change event for React"
+  [node value]
+  (utils/triggerInputChange node value))
 
 (defn p-handle
   ([p ok-handler]
@@ -252,7 +263,7 @@
   (try
     (bean/->clj ((gobj/get caret-pos "position") input))
     (catch js/Error e
-      nil)))
+      (js/console.error e))))
 
 (defn minimize-html
   [s]
@@ -322,9 +333,10 @@
 
 (defn scroll-to
   [pos]
-  (.scroll (gdom/getElement "main-content")
-           #js {:top pos
-                :behavior "smooth"}))
+  (when-let [main-content (gdom/getElement "main-content")]
+    (.scroll main-content
+             #js {:top pos
+                  :behavior "smooth"})))
 
 (defn scroll-to-top
   []
@@ -432,12 +444,12 @@
 
 (defn textarea-cursor-first-row?
   [input line-height]
-  (< (:top (get-caret-pos input)) line-height))
+  (<= (:top (get-caret-pos input)) line-height))
 
 (defn textarea-cursor-end-row?
   [input line-height]
-  (> (+ (:top (get-caret-pos input)) line-height)
-     (get-textarea-height input)))
+  (>= (+ (:top (get-caret-pos input)) line-height)
+      (get-textarea-height input)))
 
 (defn safe-split-first [pattern s]
   (if-let [first-index (string/index-of s pattern)]
@@ -621,15 +633,9 @@
   [input]
   (and input (.-selectionStart input)))
 
-(defn get-selection
-  []
-  (when (gobj/get js/window "getSelection")
-    (js/window.getSelection)))
-
 (defn get-selected-text
   []
-  (some-> (get-selection)
-          (.toString)))
+  (utils/getSelectionText))
 
 (def clear-selection! selection/clearSelection)
 
@@ -945,6 +951,14 @@
   [file]
   (last (string/split file #"\.")))
 
+(defn get-dir-and-basename
+  [path]
+  (let [parts (string/split path "/")
+        basename (last parts)
+        dir (->> (butlast parts)
+                 (string/join "/"))]
+    [dir basename]))
+
 (defn get-relative-path
   [current-file-path another-file-path]
   (let [directories-f #(butlast (string/split % "/"))
@@ -968,5 +982,4 @@
      "./2020_11_19.org")
 
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
-     "../e/f.org")
-  )
+     "../e/f.org"))

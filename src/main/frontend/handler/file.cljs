@@ -15,7 +15,11 @@
             [frontend.format :as format]
             [clojure.string :as string]
             [frontend.history :as history]
-            [frontend.handler.project :as project-handler]))
+            [frontend.handler.project :as project-handler]
+            [lambdaisland.glogi :as log]
+            [clojure.core.async :as async]
+            [goog.object :as gobj]
+            ["ignore" :as Ignore]))
 
 (defn load-file
   [repo-url path]
@@ -59,28 +63,32 @@
                (subs path 1)
                path)]
     (some (fn [pattern]
-           (let [pattern (if (and (string? pattern)
-                                  (not= \/ (first pattern)))
-                           (str "/" pattern)
-                           pattern)]
-             (string/starts-with? (str "/" path) pattern))) patterns)))
+            (let [pattern (if (and (string? pattern)
+                                   (not= \/ (first pattern)))
+                            (str "/" pattern)
+                            pattern)]
+              (string/starts-with? (str "/" path) pattern))) patterns)))
 
 (defn restore-config!
   ([repo-url project-changed-check?]
    (restore-config! repo-url nil project-changed-check?))
   ([repo-url config-content project-changed-check?]
-   (let [old-project (:project (state/get-config))
-         new-config (db/reset-config! repo-url config-content)]
-     (when project-changed-check?
-       (let [new-project (:project new-config)
-             project-name (:name old-project)]
-         (when-not (= new-project old-project)
-           (project-handler/sync-project-settings! project-name new-project)))))))
+   (let [config-content (if config-content config-content
+                            (db/get-config repo-url))]
+     (when config-content
+       (let [old-project (:project (state/get-config))
+             new-config (db/reset-config! repo-url config-content)]
+         (when (and (not (config/local-db? repo-url))
+                    project-changed-check?)
+           (let [new-project (:project new-config)
+                 project-name (:name old-project)]
+             (when-not (= new-project old-project)
+               (project-handler/sync-project-settings! project-name new-project)))))))))
 
 (defn load-files
   [repo-url]
   (state/set-cloning! false)
-  (state/set-state! :repo/loading-files? true)
+  (state/set-loading-files! true)
   (p/let [files (git/list-files repo-url)
           files (bean/->clj files)
           config-content (load-file repo-url (str config/app-name "/" config/config-file))
@@ -98,15 +106,17 @@
         files (only-text-formats files)]
     (-> (p/all (load-multiple-files repo-url files))
         (p/then (fn [contents]
-                  (ok-handler
-                   (cond->
-                    (zipmap files contents)
+                  (let [file-contents (cond->
+                                       (zipmap files contents)
 
-                     (seq images)
-                     (merge (zipmap images (repeat (count images) "")))))))
+                                        (seq images)
+                                        (merge (zipmap images (repeat (count images) ""))))
+                        file-contents (for [[file content] file-contents]
+                                        {:file/path file
+                                         :file/content content})]
+                    (ok-handler file-contents))))
         (p/catch (fn [error]
-                   (println "load files failed: ")
-                   (js/console.dir error))))))
+                   (log/error :load-files-error error))))))
 
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? add-history? update-status?]
@@ -124,7 +134,8 @@
         (db/reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file (util/get-repo-dir repo) path content)
+     (fs/write-file repo (util/get-repo-dir repo) path content {:old-content original-content
+                                                                :last-modified-at (db/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))
@@ -148,51 +159,71 @@
                                                 :re-render-root? false
                                                 :update-status? true})]
          (route-handler/redirect! {:to :file
-                                   :path-params {:path path}})))))  )
+                                   :path-params {:path path}}))))))
 
 (defn alter-files
-  ([repo files]
-   (alter-files repo files {}))
-  ([repo files {:keys [add-history? update-status? git-add-cb reset?]
-                :or {add-history? true
-                     update-status? true
-                     reset? false}}]
-   (let [files-tx (mapv (fn [[path content]]
-                          (let [original-content (db/get-file-no-sub repo path)]
-                            [path original-content content])) files)
-         write-file-f (fn [[path content]]
-                        (if reset?
-                          (db/reset-file! repo path content)
-                          (db/set-file-content! repo path content))
-                        (util/p-handle
-                         (fs/write-file (util/get-repo-dir repo) path content)
-                         (fn [_])
-                         (fn [error]
-                           (println "Write file failed, path: " path ", content: " content)
-                           (js/console.error error))))
-         git-add-f (fn [_result]
-                     (let [add-helper
-                           (fn []
-                             (doall
+  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db?]
+               :or {add-history? true
+                    update-status? true
+                    reset? false
+                    update-db? true}
+               :as opts}]
+  ;; update db
+  (when update-db?
+    (doseq [[path content] files]
+      (if reset?
+        (db/reset-file! repo path content)
+        (db/set-file-content! repo path content))))
+
+  (when-let [chan (state/get-file-write-chan)]
+    (async/put! chan [repo files opts])))
+
+(defn alter-files-handler!
+  [repo files {:keys [add-history? update-status? git-add-cb reset?]
+               :or {add-history? true
+                    update-status? true
+                    reset? false}}]
+  (p/let [file->content (let [paths (map first files)]
+                          (zipmap paths
+                                  (map (fn [path] (db/get-file-no-sub repo path)) paths)))]
+    (let [write-file-f (fn [[path content]]
+                         (let [original-content (get file->content path)]
+                           (-> (p/let [_ (fs/check-directory-permission! repo)]
+                                 (fs/write-file repo (util/get-repo-dir repo) path content
+                                                {:old-content original-content
+                                                 :last-modified-at (db/get-file-last-modified-at repo path)}))
+                               (p/catch (fn [error]
+                                          (log/error :write-file/failed {:path path
+                                                                         :content content
+                                                                         :error error}))))))
+          git-add-f (fn []
+                      (let [add-helper
+                            (fn []
                               (map
                                (fn [[path content]]
                                  (git-handler/git-add repo path update-status?))
-                               files)))]
-                       (-> (p/all (add-helper))
-                           (p/then (fn [_]
-                                     (when git-add-cb
-                                       (git-add-cb))))
-                           (p/catch (fn [error]
-                                      (println "Git add failed:")
-                                      (js/console.error error)))))
-                     (ui-handler/re-render-file!)
-                     (when add-history?
-                       (history/add-history! repo files-tx)))]
-     (-> (p/all (doall (map write-file-f files)))
-         (p/then git-add-f)
-         (p/catch (fn [error]
-                    (println "Alter files failed:")
-                    (js/console.error error)))))))
+                               files))]
+                        (-> (p/all (add-helper))
+                            (p/then (fn [_]
+                                      (when git-add-cb
+                                        (git-add-cb))))
+                            (p/catch (fn [error]
+                                       (println "Git add failed:")
+                                       (js/console.error error)))))
+                      (ui-handler/re-render-file!)
+                      (when add-history?
+                        (let [files-tx (mapv (fn [[path content]]
+                                               (let [original-content (get file->content path)]
+                                                 [path original-content content])) files)]
+                          (history/add-history! repo files-tx))))]
+      (-> (p/all (map write-file-f files))
+          (p/then (fn []
+                    (git-add-f)
+                    ;; TODO: save logseq/metadata
+))
+          (p/catch (fn [error]
+                     (println "Alter files failed:")
+                     (js/console.error error)))))))
 
 (defn remove-file!
   [repo file]
@@ -222,3 +253,23 @@
     (let [path (:file/path file)
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
+
+(defn ignore-files
+  [pattern paths]
+  (-> (Ignore)
+      (.add pattern)
+      (.filter (bean/->js paths))
+      (bean/->clj)))
+
+;; TODO: batch writes, how to deal with file history?
+(defn run-writes-chan!
+  []
+  (let [chan (state/get-file-write-chan)]
+    (async/go-loop []
+      (let [args (async/<! chan)]
+        (state/set-file-writing! true)
+        (p/let [_ (apply alter-files-handler! args)]
+          (state/set-file-writing! false))
+        nil)
+      (recur))
+    chan))

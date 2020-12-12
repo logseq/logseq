@@ -61,16 +61,16 @@
                  ;; If the click target is outside of current node
                   (when-not (dom/contains dom-node (.. e -target))
                     (on-hide state e :click))))
-        (when visibilitychange?
-          (listen state js/window "visibilitychange"
-                  (fn [e]
-                    (on-hide state e :visibilitychange))))
-        (listen state dom-node "keydown"
+        (listen state js/window "keydown"
                 (fn [e]
                   (case (.-keyCode e)
                     ;; Esc
                     27 (on-hide state e :esc)
-                    nil)))))
+                    nil)))
+        (when visibilitychange?
+          (listen state js/window "visibilitychange"
+                  (fn [e]
+                    (on-hide state e :visibilitychange))))))
     (catch js/Error e
       ;; TODO: Unable to find node on an unmounted component.
       nil)))
@@ -102,14 +102,19 @@
                 (when all-handler (all-handler e key-code)))))))
 
 (defn on-key-down
-  [state keycode-map all-handler]
-  (let [node (rum/dom-node state)]
-    (listen state js/window "keydown"
-            (fn [e]
-              (let [key-code (.-keyCode e)]
-                (when-let [f (get keycode-map key-code)]
-                  (f state e))
-                (when all-handler (all-handler e key-code)))))))
+  ([state keycode-map]
+   (on-key-down state keycode-map {}))
+  ([state keycode-map {:keys [not-matched-handler all-handler]}]
+   (let [node (rum/dom-node state)]
+     (listen state js/window "keydown"
+             (fn [e]
+               (let [key-code (.-keyCode e)]
+                 (if-let [f (get keycode-map key-code)]
+                   (f state e)
+                   (when (and not-matched-handler (fn? not-matched-handler))
+                     (not-matched-handler e key-code)))
+                 (when (and all-handler (fn? all-handler))
+                   (all-handler e key-code))))))))
 
 (defn event-mixin
   ([attach-listeners]
@@ -125,11 +130,7 @@
      :did-remount (fn [old-state new-state]
                     (detach old-state)
                     (attach-listeners new-state)
-                    new-state)
-     ;; :will-unmount (fn [state]
-     ;;                 (detach state)
-     ;;                 state)
-})))
+                    new-state)})))
 
 (defn modal
   [k]

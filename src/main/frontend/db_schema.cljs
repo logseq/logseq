@@ -4,13 +4,17 @@
 
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
-   :file/content {}})
+   :file/content {}
+   :file/last-modified-at {}
+   :file/size {}
+   :file/handle {}})
 
 ;; A page can corresponds to multiple files (same title),
 ;; a month journal file can have multiple pages,
 ;; also, each block can be treated as a page too.
 (def schema
-  {:schema/version {}
+  {:schema/version  {}
+   :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
 
    ;; user
@@ -81,7 +85,8 @@
    :block/body {}
    :block/pre-block? {}
    :block/collapsed? {}
-   :block/children {:db/cardinality :db.cardinality/many
+   :block/children {:db/valueType   :db.type/ref
+                    :db/cardinality :db.cardinality/many
                     :db/unique :db.unique/identity}
    :block/scheduled {}
    :block/scheduled-ast {}
@@ -96,7 +101,6 @@
 
    ;; For pages
    :tag/name       {:db/unique :db.unique/identity}
-
    ;; ;; Definitions, useful for tags and future anki cards
    ;; :definition/block {:db/valueType   :db.type/ref}
    ;; ;; Why not make :definition/key unique?

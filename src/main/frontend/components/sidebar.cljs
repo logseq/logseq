@@ -87,7 +87,7 @@
      :style {:background-color "#002b36"}}
     (if @open?
       [:div.absolute.top-0.right-0.-mr-14.p-1
-       [:button.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+       [:button#close-left-bar.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
         {:on-click close-fn}
         [:svg.h-6.w-6.text-white
          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
@@ -118,9 +118,7 @@
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width (or global-graph-pages?
-                                (and (not logged?)
-                                     home?)
-                                (contains? #{:all-files :all-pages} route-name))}
+                                (contains? #{:all-files :all-pages :my-publishing} route-name))}
        (cond
          (not indexeddb-support?)
          nil
@@ -174,21 +172,21 @@
         current-repo (state/sub :git/current-repo)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
-        logged? (:name me)
-        token (state/sub :encrypt/token)
-        ;; TODO: remove this
-        daily-migrating? (state/sub [:daily/migrating?])]
+        logged? (:name me)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.max-w-7xl.mx-auto
        (cond
-         daily-migrating?
-         (ui/loading "Migrating to daily notes")
-
          (and default-home
               (= :home (state/get-current-route))
               (not (state/route-has-p?)))
          (route-handler/redirect! {:to :page
                                    :path-params {:name (:page default-home)}})
+
+         importing-to-db?
+         (ui/loading (t :parsing-files))
+
+         loading-files?
+         (ui/loading (t :loading-files))
 
          (and (not logged?) (seq latest-journals))
          (journal/journals latest-journals)
@@ -205,12 +203,6 @@
 
          (seq latest-journals)
          (journal/journals latest-journals)
-
-         importing-to-db?
-         (ui/loading (t :parsing-files))
-
-         loading-files?
-         (ui/loading (t :loading-files))
 
          (and logged? (empty? (:repos me)))
          (widgets/add-repo)
@@ -294,9 +286,7 @@
               (when-let [repo-url (state/get-current-repo)]
                 (when-not (state/get-edit-input-id)
                   (util/stop e)
-                  (state/set-modal! commit/add-commit-message)))))}
-      (fn [e key-code]
-        nil))))
+                  (state/set-modal! commit/add-commit-message)))))})))
   {:did-mount (fn [state]
                 (keyboards/bind-shortcuts!)
                 state)}
@@ -352,11 +342,11 @@
        [:a#download.hidden]
        (when (and (not config/mobile?)
                   (not config/publishing?))
-         [(help-button)
+         (help-button)
          ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
          ;;  {:style {:left 24}
          ;;   :title "Click to show/hide sidebar"
          ;;   :on-click (fn []
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-])])))
+)])))

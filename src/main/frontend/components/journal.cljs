@@ -1,6 +1,7 @@
 (ns frontend.components.journal
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
@@ -8,8 +9,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.db :as db]
             [frontend.state :as state]
-            [clojure.string :as string]
             [frontend.ui :as ui]
+            [frontend.config :as config]
             [frontend.components.content :as content]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
@@ -21,7 +22,7 @@
 
 (rum/defc blocks-inner < rum/static
   {:did-mount (fn [state]
-                (let [[blocks _ page] (:rum/args state)
+                (let [[blocks page] (:rum/args state)
                       first-title (second (first (:block/title (first blocks))))
                       journal? (and (string? first-title)
                                     (date/valid-journal-title? first-title))]
@@ -39,25 +40,25 @@
                      :error
                      false)))
                 state)}
-  [blocks encoded-page-name page document-mode?]
+  [blocks page document-mode?]
   (let [start-level (or (:block/level (first blocks)) 1)
-        config {:id encoded-page-name
+        config {:id page
                 :start-level 2
                 :editor-box editor/box
                 :document/mode? document-mode?}]
     (content/content
-     encoded-page-name
+     page
      {:hiccup (block/->hiccup blocks config {})})))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
-  [repo page encoded-page-name format]
+  [repo page format]
   (let [raw-blocks (db/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
-                (db/with-dummy-block raw-blocks format nil true)
+                (db/with-dummy-block raw-blocks format nil {:journal? true})
                 (db/with-block-refs-count repo))]
-    (blocks-inner blocks encoded-page-name page document-mode?)))
+    (blocks-inner blocks page document-mode?)))
 
 (rum/defc journal-cp < rum/reactive
   [[title format]]
@@ -68,6 +69,8 @@
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))
         intro? (and (not (state/logged?))
+                    (not (config/local-db? repo))
+                    (not config/publishing?)
                     today?)]
     [:div.flex-1.journal.page {:class (if intro? "intro" "")}
      (ui/foldable
@@ -86,7 +89,7 @@
        [:h1.title
         (util/capitalize-all title)]]
 
-      (blocks-cp repo page encoded-page-name format))
+      (blocks-cp repo page format))
 
      (page/today-queries repo today? false)
 

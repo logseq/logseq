@@ -63,9 +63,10 @@
                            (let [file-id (:db/id (:page/file page))]
                              {:start-pos (utf8/length (utf8/encode content))
                               :end-pos nil})}))
-                      journal?)
+                      {:journal? journal?
+                       :page-name page-name})
         start-level (or (:block/level (first page-blocks)) 1)
-        hiccup-config {:id encoded-page-name
+        hiccup-config {:id (if block? (str block-id) page-name)
                        :start-level start-level
                        :sidebar? sidebar?
                        :block? block?
@@ -73,7 +74,7 @@
         hiccup-config (common-handler/config-with-document-mode hiccup-config)
         hiccup (block/->hiccup page-blocks hiccup-config {})]
     (rum/with-key
-      (content/content encoded-page-name
+      (content/content page-name
                        {:hiccup hiccup
                         :sidebar? sidebar?})
       (str encoded-page-name "-hiccup"))))
@@ -86,16 +87,15 @@
       (page-blocks-cp repo contents file-path name original-name name true false false nil format))))
 
 (defn presentation
-  [repo page journal?]
-  [:a.opacity-50.hover:opacity-100.ml-4
+  [repo page]
+  [:a.opacity-50.hover:opacity-100
    {:title "Presentation mode (Powered by Reveal.js)"
     :on-click (fn []
                 (state/sidebar-add-block!
                  repo
                  (:db/id page)
                  :page-presentation
-                 {:page page
-                  :journal? journal?}))}
+                 {:page page}))}
    svg/slideshow])
 
 (rum/defc today-queries < rum/reactive
@@ -252,6 +252,9 @@
                      (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                           (db/entity repo))
                      (db/entity repo [:page/name page-name]))
+              page (if page page (do
+                                   (db/transact! repo [{:page/name page-name}])
+                                   (db/entity repo [:page/name page-name])))
               properties (:page/properties page)
               page-name (:page/name page)
               page-original-name (:page/original-name page)
@@ -350,11 +353,16 @@
                          (not block?)
                          (not (state/hide-file?))
                          (not config/publishing?))
-                [:div.text-sm.ml-1.mb-4.flex-1 {:key "page-file"}
-                 [:span.opacity-50 (t :file/file)]
-                 [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                         :href (str "/file/" (util/url-encode file-path))}
-                  file-path]])]
+                [:div.text-sm.ml-1.mb-4.flex-1.inline-flex
+                 {:key "page-file"}
+                 [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
+                 [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4}
+                                               :href (str "/file/" (util/url-encode file-path))}
+                  file-path]
+
+                 (when (and (not config/mobile?)
+                            (not journal?))
+                   (presentation repo page))])]
 
              (when (and repo (not block?))
                (let [alias (db/get-page-alias-names repo page-name)]

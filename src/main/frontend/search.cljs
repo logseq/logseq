@@ -5,6 +5,7 @@
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.regex :as regex]
             [frontend.text :as text]))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
@@ -27,9 +28,7 @@
   [s]
   (string/replace (string/lower-case s) #"[\[ \\/_\]\(\)]+" ""))
 
-(defn clean
-  [s]
-  (string/replace (string/lower-case s) #"[\[\\/\]\(\)]+" ""))
+(def escape-str regex/escape)
 
 (defn char-array
   [s]
@@ -77,19 +76,21 @@
          (map :data))))
 
 (defn search
+  "Block search"
   ([q]
    (search q 20))
   ([q limit]
    (when-not (string/blank? q)
-     (let [q (clean q)]
+     (let [q (escape-str q)
+           q-pattern (re-pattern (str "(?i)" q))]
        (when-not (string/blank? q)
          (let [blocks (db/get-matched-blocks
                        (fn [content]
-                         (re-find (re-pattern (str "(?i)" q)) content))
+                         (re-find q-pattern content))
                        ;; (fn [content]
                        ;;   (> (score q (.toLowerCase content)) 0))
                        limit)]
-           (map (fn [{:block/keys [content format properties] :as block}]
+           (map (fn [{:block/keys [content format _properties] :as block}]
                   (assoc block :block/content
                          (->> (text/remove-level-spaces content format)
                               (text/remove-properties!)))) blocks)))))))

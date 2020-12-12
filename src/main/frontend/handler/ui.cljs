@@ -8,27 +8,10 @@
             [frontend.util :as util :refer-macros [profile]]))
 
 ;; sidebars
-(defn hide-left-sidebar
+(defn close-left-sidebar!
   []
-  (dom/add-class! (dom/by-id "menu")
-                  "md:block")
-  (dom/remove-class! (dom/by-id "left-sidebar")
-                     "enter")
-  (dom/remove-class! (dom/by-id "search")
-                     "sidebar-open")
-  (dom/remove-class! (dom/by-id "main")
-                     "sidebar-open"))
-
-(defn show-left-sidebar
-  []
-  (dom/remove-class! (dom/by-id "menu")
-                     "md:block")
-  (dom/add-class! (dom/by-id "left-sidebar")
-                  "enter")
-  (dom/add-class! (dom/by-id "search")
-                  "sidebar-open")
-  (dom/add-class! (dom/by-id "main")
-                  "sidebar-open"))
+  (when-let [elem (gdom/getElement "close-left-bar")]
+    (.click elem)))
 
 (defn hide-right-sidebar
   []
@@ -47,12 +30,17 @@
 
 
 (defn re-render-root!
-  []
-  (when-let [component (state/get-root-component)]
-    (db/clear-query-state-without-refs-and-embeds!)
-    (rum/request-render component)
-    (doseq [component (state/get-custom-query-components)]
-      (rum/request-render component))))
+  ([]
+   (re-render-root! {}))
+  ([{:keys [clear-all-query-state?]
+     :or {clear-all-query-state? false}}]
+   (when-let [component (state/get-root-component)]
+     (if clear-all-query-state?
+       (db/clear-query-state!)
+       (db/clear-query-state-without-refs-and-embeds!))
+     (rum/request-render component)
+     (doseq [component (state/get-custom-query-components)]
+       (rum/request-render component)))))
 
 (defn re-render-file!
   []
@@ -81,7 +69,7 @@
 
 (defn scroll-and-highlight!
   [state]
-  (when-let [fragment (util/get-fragment)]
+  (if-let [fragment (util/get-fragment)]
     (highlight-element! fragment))
   state)
 
@@ -91,5 +79,5 @@
                     (state/get-custom-css-link)
                     (db/get-custom-css)
                     ;; (state/get-custom-css-link)
-                    )]
+)]
     (util/add-style! style)))

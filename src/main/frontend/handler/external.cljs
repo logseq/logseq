@@ -1,13 +1,16 @@
 (ns frontend.handler.external
   (:require [frontend.external :as external]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.common :as common-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.config :as config]
             [clojure.string :as string]
+            [promesa.core :as p]
             [frontend.db :as db]))
 
+(defonce debug-files (atom nil))
 (defn index-files!
   [repo files git-add-cb]
   (let [titles (->> files
@@ -26,13 +29,17 @@
                                            (date/journal-title->default title)
                                            (string/replace title "/" "-"))
                                          ".md")]
-                           [path text]))))
-                   files)]
-    ;; TODO: git add is quite slow
-    (file-handler/alter-files repo files {:add-history? false
-                                          :update-status? false
-                                          :reset? true
-                                          :git-add-cb git-add-cb})
+                           {:file/path path
+                            :file/content text}))))
+                   files)
+        files (remove nil? files)
+        _ (reset! debug-files files)]
+    (repo-handler/parse-files-and-load-to-db! repo files nil)
+    (let [files (map (fn [{:file/keys [path content]}] [path content]) files)]
+      (file-handler/alter-files repo files {:add-history? false
+                                            :update-db? false
+                                            :update-status? false
+                                            :git-add-cb git-add-cb}))
     (let [journal-pages-tx (let [titles (filter date/valid-journal-title? titles)]
                              (map
                               (fn [title]

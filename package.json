@@ -4,6 +4,7 @@
     "private": true,
     "devDependencies": {
         "@tailwindcss/ui": "^0.1.3",
+        "cross-env": "^7.0.3",
         "cssnano": "^4.1.10",
         "del": "^6.0.0",
         "gulp": "^4.0.2",
@@ -18,28 +19,34 @@
         "tailwindcss": "^1.3.4"
     },
     "scripts": {
-        "watch": "run-p cljs:watch gulp:watch",
+        "watch": "run-p cljs:watch gulp:build gulp:watch",
         "release": "run-s cljs:release gulp:build",
         "watch-app": "run-p cljs:watch-app gulp:watch",
         "release-app": "run-s cljs:release-app gulp:build",
         "release-publishing": "run-s cljs:release-publishing gulp:build",
         "dev-release-app": "run-s cljs:dev-release-app gulp:build",
         "clean": "gulp clean",
+        "test": "run-s cljs:test cljs:run-test",
+        "report": "run-s cljs:report",
         "gulp:watch": "gulp watch",
-        "gulp:build": "NODE_ENV=production gulp build",
-        "cljs:watch": "clojure -A:cljs watch app publishing",
-        "cljs:release": "clojure -A:cljs release app publishing",
-        "cljs:watch-app": "clojure -A:cljs watch app",
-        "cljs:release-app": "clojure -A:cljs release app",
-        "cljs:release-publishing": "clojure -A:cljs release publishing",
-        "cljs:dev-release-app": "clojure -A:cljs release app --config-merge '{:closure-defines {frontend.config/DEV-RELEASE true}}'",
-        "cljs:debug": "clojure -A:cljs release app --debug",
-        "cljs:report": "clojure -A:cljs run shadow.cljs.build-report app report.html"
+        "gulp:build": "cross-env NODE_ENV=production gulp build",
+        "cljs:watch": "clojure -M:cljs watch app publishing",
+        "cljs:release": "clojure -M:cljs release app publishing",
+        "cljs:test": "clojure -A:test compile test",
+        "cljs:run-test": "node static/tests.js",
+        "cljs:watch-app": "clojure -M:cljs watch app",
+        "cljs:release-app": "clojure -M:cljs release app",
+        "cljs:release-publishing": "clojure -M:cljs release publishing",
+        "cljs:dev-release-app": "clojure -M:cljs release app --config-merge '{:closure-defines {frontend.config/DEV-RELEASE true}}'",
+        "cljs:debug": "clojure -M:cljs release app --debug",
+        "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html"
     },
     "dependencies": {
         "codemirror": "^5.58.1",
         "diff": "^4.0.2",
         "dropbox": "^5.2.0",
+        "ignore": "^5.1.8",
+        "jszip": "^3.5.0",
         "localforage": "^1.7.3",
         "mousetrap": "^1.6.5",
         "parinfer-codemirror": "^1.4.2",
@@ -47,6 +54,7 @@
         "react-dom": "^16.12.0",
         "react-textarea-autosize": "^8.0.1",
         "react-transition-group": "^4.3.0",
-        "webdav": "^3.3.0"
+        "webdav": "^3.3.0",
+        "yargs-parser": "^20.2.4"
     }
 }

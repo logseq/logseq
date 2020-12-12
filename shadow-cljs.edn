@@ -16,14 +16,25 @@
    :release {:asset-path "https://asset.logseq.com/static/js"}
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es6
+                      :source-map true
                       :externs ["datascript/externs.js"
                                 "externs.js"]}
+   :closure-defines {goog.debug.LOGGING_ENABLED true
+                     frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
+
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop
     ;; after live-reloading finishes call this function
     :after-load frontend.core/start
+    :http-root    "public"
+    :http-port    3001
     :preloads     [devtools.preload]}}
+
+  :test
+  {:target :node-test
+   :output-to "static/tests.js"}
+
   :publishing
   {:target :browser
    :module-loader true
@@ -32,12 +43,11 @@
              {:entries [frontend.extensions.code]
               :depends-on #{:main}}}
 
-   :release {:asset-path "https://asset.logseq.com/static/js"}
-
    :output-dir "./static/js/publishing"
    :asset-path "/static/js"
 
-   :closure-defines {frontend.config/PUBLISHING true}
+   :closure-defines {frontend.config/PUBLISHING true
+                     goog.debug.LOGGING_ENABLED true}
 
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es6

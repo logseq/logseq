@@ -1,5 +1,4 @@
 (ns frontend.handler.git
-  (:refer-clojure :exclude [clone load-file])
   (:require [frontend.util :as util :refer-macros [profile]]
             [promesa.core :as p]
             [frontend.state :as state]
@@ -10,7 +9,9 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
-            [cljs-time.local :as tl]))
+            [frontend.config :as config]
+            [cljs-time.local :as tl]
+            [frontend.helper :as helper]))
 
 (defn- set-git-status!
   [repo-url value]
@@ -30,12 +31,13 @@
   ([repo-url file]
    (git-add repo-url file true))
   ([repo-url file update-status?]
-   (-> (p/let [result (git/add repo-url file)]
-         (when update-status?
-           (common-handler/check-changed-files-status)))
-       (p/catch (fn [error]
-                  (println "git add '" file "' failed: " error)
-                  (js/console.error error))))))
+   (when-not (config/local-db? repo-url)
+     (-> (p/let [result (git/add repo-url file)]
+           (when update-status?
+             (common-handler/check-changed-files-status)))
+         (p/catch (fn [error]
+                    (println "git add '" file "' failed: " error)
+                    (js/console.error error)))))))
 
 (defn commit-and-force-push!
   [commit-message pushing?]
@@ -43,9 +45,8 @@
     (p/let [remote-oid (common-handler/get-remote-ref repo)
             commit-oid (git/commit repo commit-message (array remote-oid))
             result (git/write-ref! repo commit-oid)
-            push-result (git/push repo
-                                  (state/get-github-token repo)
-                                  true)]
+            token (helper/get-github-token repo)
+            push-result (git/push repo token true)]
       (reset! pushing? false)
       (notification/clear! nil)
       (route-handler/redirect! {:to :home}))))

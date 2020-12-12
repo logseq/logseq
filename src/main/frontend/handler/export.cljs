@@ -7,7 +7,9 @@
             [goog.dom :as gdom]
             [frontend.publishing.html :as html]
             [frontend.text :as text]
-            [frontend.handler.common :as common-handler]))
+            [frontend.handler.common :as common-handler]
+            [frontend.extensions.zip :as zip]
+            [promesa.core :as p]))
 
 (defn copy-block!
   [block-id]
@@ -75,3 +77,15 @@
         (.setAttribute anchor "href" html-str)
         (.setAttribute anchor "download" "index.html")
         (.click anchor)))))
+
+(defn export-repo-as-zip!
+  [repo]
+  (let [files (db/get-file-contents repo)
+        [owner repo-name] (util/get-git-owner-and-repo repo)
+        repo-name (str owner "-" repo-name)]
+    (when (seq files)
+      (p/let [zipfile (zip/make-zip repo-name files)]
+        (when-let [anchor (gdom/getElement "download-as-zip")]
+          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+          (.setAttribute anchor "download" (.-name zipfile))
+          (.click anchor))))))

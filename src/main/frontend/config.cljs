@@ -33,13 +33,13 @@
   (if dev? path
       (str asset-domain path)))
 
-(def github-app-name (if dev? "logseq-test" "logseq"))
+(goog-define GITHUB_APP_NAME "logseq-test")
+
+(def github-app-name (if dev? GITHUB_APP_NAME "logseq"))
 
 (defn git-pull-secs
   []
-  (if dev?
-    (* 60 5)
-    (or 60 (get-in @state/state [:config :git-pull-secs]))))
+  (or 60 (get-in @state/state [:config :git-pull-secs])))
 
 (defn git-push-secs
   []
@@ -226,6 +226,15 @@
     "md"
     (name format)))
 
+(defn get-file-format
+  [extension]
+  (case (keyword extension)
+    :markdown
+    :markdown
+    :md
+    :markdown
+    (keyword extension)))
+
 (defn default-empty-block
   ([format]
    (default-empty-block format 2))
@@ -269,3 +278,16 @@
 (def markers
   #{"now" "later" "todo" "doing" "done" "wait" "waiting"
     "canceled" "cancelled" "started" "in-progress"})
+
+(defonce idb-db-prefix "logseq-db/")
+(defonce local-db-prefix "logseq_local_")
+(defonce local-handle "handle")
+(defonce local-handle-prefix (str local-handle "/" local-db-prefix))
+
+(defn local-db?
+  [s]
+  (string/starts-with? s local-db-prefix))
+
+(defn get-local-dir
+  [s]
+  (string/replace s local-db-prefix ""))

@@ -7,14 +7,18 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [dommy.core :as dom]
-            [cljs.core.async :as async]))
+            [cljs.core.async :as async]
+            [lambdaisland.glogi :as log]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]))
 
 (defonce ^:private state
   (atom
    {:route-match nil
     :today nil
-    :daily/migrating? nil
     :db/batch-txs (async/chan 100)
+    :file/writes (async/chan 100)
+    :file/writing? false
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -22,16 +26,12 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
+    :nfs/loading-files? nil
+    :nfs/refreshing? nil
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
-    ;; TODO: save in local storage so that if :changed? is true when user
-    ;; reloads the browser, the app should re-index the repo (another way
-    ;; is to save all the tx data since :last-stored-at)
-    ;; repo -> {:last-stored-at :last-modified-at}
-    :repo/persist-status {}
     :me nil
-    :git/clone-repo (or (storage/get :git/clone-repo) "")
     :git/current-repo (storage/get :git/current-repo)
     :git/status {}
     :format/loading {}
@@ -76,6 +76,12 @@
     :editor/block nil
     :editor/block-dom-id nil
     :editor/set-timestamp-block nil
+    :editor/last-input-time nil
+    :db/last-transact-time {}
+    :db/last-persist-transact-ids {}
+    ;; whether database is persisted
+    :db/persisted? {}
+    :db/latest-txs (or (storage/get-transit :db/latest-txs) {})
     :cursor-range nil
 
     :selection/mode false
@@ -91,7 +97,8 @@
     :preferred-language (storage/get :preferred-language)
 
     ;; all notification contents as k-v pairs
-    :notification/contents {}}))
+    :notification/contents {}
+    :graph/syncing? false}))
 
 (defn get-route-match
   []
@@ -140,6 +147,15 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(defonce built-in-macros
+  {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
+
+(defn get-macros
+  []
+  (merge
+   built-in-macros
+   (:macros (get-config))))
+
 (defn sub-config
   []
   (sub :config))
@@ -183,8 +199,10 @@
 
 (defn get-pages-directory
   []
-  (when-let [repo (get-current-repo)]
-    (:pages-directory (get-config repo))))
+  (or
+   (when-let [repo (get-current-repo)]
+     (:pages-directory (get-config repo)))
+   "pages"))
 
 (defn org-mode-file-link?
   [repo]
@@ -225,6 +243,18 @@
 (defn get-repos
   []
   (get-in @state [:me :repos]))
+
+(defn set-repos!
+  [repos]
+  (set-state! [:me :repos] repos))
+
+(defn add-repo!
+  [repo]
+  (when repo
+    (update-state! [:me :repos]
+                   (fn [repos]
+                     (->> (conj repos repo)
+                          (distinct))))))
 
 (defn set-current-repo!
   [repo]
@@ -282,21 +312,23 @@
   (:editor/set-timestamp-block @state))
 
 (defn set-edit-content!
-  [input-id value]
-  (when input-id
-    (when-let [input (gdom/getElement input-id)]
-      (gobj/set input "value" value))
-    (update-state! :editor/content (fn [m]
-                                     (assoc m input-id value)))
-    ;; followers
-    ;; (when-let [s (util/extract-uuid input-id)]
-    ;;   (let [input (gdom/getElement input-id)
-    ;;         leader-parent (util/rec-get-block-node input)
-    ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
-    ;;                        (remove #(= leader-parent %)))]
-    ;;     (prn "followers: " (count followers))
-    ;;     ))
-))
+  ([input-id value] (set-edit-content! input-id value true))
+  ([input-id value set-input-value?]
+   (when input-id
+     (when set-input-value?
+       (when-let [input (gdom/getElement input-id)]
+         (util/set-change-value input value)))
+     (update-state! :editor/content (fn [m]
+                                      (assoc m input-id value)))
+     ;; followers
+     ;; (when-let [s (util/extract-uuid input-id)]
+     ;;   (let [input (gdom/getElement input-id)
+     ;;         leader-parent (util/rec-get-block-node input)
+     ;;         followers (->> (array-seq (js/document.getElementsByClassName s))
+     ;;                        (remove #(= leader-parent %)))]
+     ;;     (prn "followers: " (count followers))
+     ;;     ))
+)))
 
 (defn get-edit-input-id
   []
@@ -494,42 +526,48 @@
          :custom-context-menu/show? false
          :custom-context-menu/links nil))
 
-(defn set-git-clone-repo!
-  [repo]
-  (set-state! :git/clone-repo repo)
-  (storage/set :git/clone-repo repo))
-
 (defn set-github-token!
-  [repo token]
-  (when token
-    (swap! state update-in [:me :repos]
-           (fn [repos]
-             (map (fn [r]
-                    (if (= repo (:url r))
-                      (assoc r :token token)
-                      repo)) repos)))))
+  [repo token-result]
+  (when token-result
+    (let [{:keys [token expires_at]} token-result]
+      (swap! state update-in [:me :repos]
+             (fn [repos]
+               (map (fn [r]
+                      (if (= repo (:url r))
+                        (merge r {:token token :expires_at expires_at})
+                        repo)) repos))))))
 
 (defn set-github-installation-tokens!
   [tokens]
   (when (seq tokens)
-    (let [tokens (medley/map-keys name tokens)
+    (let [tokens  (medley/index-by :installation_id tokens)
           repos (get-repos)]
       (when (seq repos)
-        (let [repos (mapv (fn [{:keys [installation_id] :as r}]
-                            (if-let [token (get tokens installation_id)]
-                              (assoc r :token token)
-                              r)) repos)]
+        (let [set-token-f
+              (fn [{:keys [installation_id] :as repo}]
+                (let [{:keys [token] :as m} (get tokens installation_id)]
+                  (if (string? token)
+                    ;; Github API returns a expires_at key which is a timestamp (expires after 60 minutes at present),
+                    ;; however, user's system time may be inaccurate. Here, based on the client system time, we use
+                    ;; 40-minutes interval to deal with some critical conditions, for e.g. http request time consume.
+                    (let [formatter (tf/formatters :date-time-no-ms)
+                          expires-at (->> (t/plus (t/now) (t/minutes 40))
+                                          (tf/unparse formatter))]
+                      (merge repo {:token token :expires_at expires-at}))
+                    (do
+                      (when (and
+                             (:url repo)
+                             (string/starts-with? (:url repo) "https://"))
+                        (log/error :token/cannot-set-token {:repo-m repo :token-m m}))
+                      repo))))
+              repos (mapv set-token-f repos)]
           (swap! state assoc-in [:me :repos] repos))))))
 
 (defn get-github-token
-  ([]
-   (get-github-token (get-current-repo)))
-  ([repo]
-   (when repo
-     (let [repos (get-repos)]
-       (-> (filter #(= repo (:url %)) repos)
-           first
-           :token)))))
+  [repo]
+  (when repo
+    (let [repos (get-repos)]
+      (some #(when (= repo (:url %)) %) repos))))
 
 (defn toggle-sidebar-open?!
   []
@@ -711,9 +749,14 @@
   []
   (:me @state))
 
-(defn logged?
+(defn get-name
   []
-  (some? (:name (get-me))))
+  (:name (get-me)))
+
+(defn logged?
+  "Whether the user has logged in."
+  []
+  (some? (get-name)))
 
 (defn set-draw!
   [value]
@@ -745,6 +788,27 @@
       (when-not (string/blank? project)
         project))))
 
+(defn update-current-project
+  [& kv]
+  {:pre [(even? (count kv))]}
+  (when-let [current-repo (get-current-repo)]
+    (let [new-kvs (apply array-map (vec kv))
+          projects (:projects (get-me))
+          new-projects (reduce (fn [acc project]
+                                 (if (= (:repo project) current-repo)
+                                   (conj acc (merge project new-kvs))
+                                   (conj acc project)))
+                               []
+                               projects)]
+      (set-state! [:me :projects] new-projects))))
+
+(defn remove-current-project
+  []
+  (when-let [current-repo (get-current-repo)]
+    (update-state! [:me :projects]
+                   (fn [projects]
+                     (remove #(= (:repo %) current-repo) projects)))))
+
 (defn set-indexedb-support!
   [value]
   (set-state! :indexeddb/support? value))
@@ -761,21 +825,13 @@
          :modal/show? false
          :modal/panel-content nil))
 
-(defn update-repo-last-stored-at!
-  [repo]
-  (swap! state assoc-in [:repo/persist-status repo :last-stored-at] (util/time-ms)))
-
-(defn get-repo-persist-status
-  []
-  (:repo/persist-status @state))
-
-(defn mark-repo-as-changed!
-  [repo _tx-id]
-  (swap! state assoc-in [:repo/persist-status repo :last-modified-at] (util/time-ms)))
-
 (defn get-db-batch-txs-chan
   []
   (:db/batch-txs @state))
+
+(defn get-file-write-chan
+  []
+  (:file/writes @state))
 
 (defn add-tx!
   ;; TODO: replace f with data for batch transactions
@@ -784,13 +840,6 @@
     (when-let [chan (get-db-batch-txs-chan)]
       (async/put! chan f))))
 
-(defn repos-need-to-be-stored?
-  []
-  (let [status (vals (get-repo-persist-status))]
-    (some (fn [{:keys [last-stored-at last-modified-at]}]
-            (> last-modified-at last-stored-at))
-          status)))
-
 (defn get-left-sidebar-open?
   []
   (get-in @state [:ui/left-sidebar-open?]))
@@ -798,10 +847,6 @@
 (defn set-left-sidebar-open!
   [value]
   (set-state! :ui/left-sidebar-open? value))
-
-(defn set-daily-migrating!
-  [value]
-  (set-state! :daily/migrating? value))
 
 (defn set-developer-mode!
   [value]
@@ -843,9 +888,11 @@
     (let [shortcuts (or (:shortcuts value) {})]
       (storage/set (str repo-url "-shortcuts") shortcuts))))
 
-(defn git-auto-push?
-  []
-  (true? (:git-auto-push (get-config (get-current-repo)))))
+(defn get-git-auto-push?
+  ([]
+   (get-git-auto-push? (get-current-repo)))
+  ([repo]
+   (true? (:git-auto-push (get-config repo)))))
 
 (defn set-changed-files!
   [repo changed-files]
@@ -867,6 +914,105 @@
   []
   (:commands (get-config)))
 
+(defn set-graph-syncing?
+  [value]
+  (set-state! :graph/syncing? value))
+
+(defn set-loading-files!
+  [value]
+  (set-state! :repo/loading-files? value))
+
+(defn set-importing-to-db!
+  [value]
+  (set-state! :repo/importing-to-db? value))
+
+(defn set-editor-last-input-time!
+  [repo time]
+  (swap! state assoc-in [:editor/last-input-time repo] time))
+
+(defn set-last-transact-time!
+  [repo time]
+  (swap! state assoc-in [:db/last-transact-time repo] time)
+
+  ;; THINK: new block, indent/outdent, drag && drop, etc.
+  (set-editor-last-input-time! repo time))
+
+(defn set-published-pages
+  [pages]
+  (when-let [repo (get-current-repo)]
+    (set-state! [:me :published-pages repo] pages)))
+
+(defn reset-published-pages
+  []
+  (set-published-pages []))
+
+(defn set-db-persisted!
+  [repo value]
+  (swap! state assoc-in [:db/persisted? repo] value))
+
+(defn db-idle?
+  [repo]
+  (when repo
+    (when-let [last-time (get-in @state [:db/last-transact-time repo])]
+      (let [now (util/time-ms)]
+        (>= (- now last-time) 3000)))))
+
+(defn input-idle?
+  [repo]
+  (when repo
+    (or
+     (when-let [last-time (get-in @state [:editor/last-input-time repo])]
+       (let [now (util/time-ms)]
+         (>= (- now last-time) 3000)))
+     ;; not in editing mode
+     (not (get-edit-input-id)))))
+
+(defn set-last-persist-transact-id!
+  [repo files? id]
+  (swap! state assoc-in [:db/last-persist-transact-ids :repo files?] id))
+
+(defn get-last-persist-transact-id
+  [repo files?]
+  (get-in @state [:db/last-persist-transact-ids :repo files?]))
+
+(defn persist-transaction!
+  [repo files? tx-id tx-data]
+  (when (seq tx-data)
+    (let [latest-txs (:db/latest-txs @state)
+          last-persist-tx-id (get-last-persist-transact-id repo files?)
+          latest-txs (if last-persist-tx-id
+                       (update-in latest-txs [repo files?]
+                                  (fn [result]
+                                    (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
+                       latest-txs)
+          new-txs (update-in latest-txs [repo files?] (fn [result]
+                                                        (vec (conj result {:tx-id tx-id
+                                                                           :tx-data tx-data}))))]
+      (storage/set-transit! :db/latest-txs new-txs)
+      (set-state! :db/latest-txs new-txs))))
+
+(defn set-file-writing!
+  [v]
+  (set-state! :file/writing? v))
+
+(defn file-in-writing!
+  []
+  (:file/writing? @state))
+
+(defn get-repo-latest-txs
+  [repo file?]
+  (get-in (:db/latest-txs @state) [repo file?]))
+
+(defn set-nfs-refreshing!
+  [value]
+  (set-state! :nfs/refreshing? value))
+
+(defn nfs-refreshing?
+  []
+  (:nfs/refreshing? @state))
+
+;; TODO: Move those to the uni `state`
+
 (defonce editor-op (atom nil))
 (defn set-editor-op!
   [value]
@@ -874,3 +1020,5 @@
 (defn get-editor-op
   []
   @editor-op)
+
+(defonce diffs (atom nil))

@@ -151,7 +151,8 @@
           sections (block/build-slide-sections blocks {:id "slide-reveal-js"
                                                        :start-level 2
                                                        :slide? true
-                                                       :sidebar? true})]
+                                                       :sidebar? true
+                                                       :page-name page-name})]
       [[:a {:href (str "/page/" (util/url-encode page-name))}
         (util/capitalize-all page-name)]
        [:div.ml-2.slide.mt-2
@@ -179,7 +180,7 @@
           (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content
+        [:div.sidebar-item.content.color-level
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
@@ -232,11 +233,11 @@
                                                     "0 0 0px")}}
        (if sidebar-open?
          [:div.hide-scrollbar {:style {:flex "1 1 auto"
-                        :padding 12
-                        :height "100%"
-                        :overflow-y "auto"
-                        :overflow-x "hidden"
-                        :box-sizing "content-box"}}
+                                       :padding 12
+                                       :height "100%"
+                                       :overflow-y "auto"
+                                       :overflow-x "hidden"
+                                       :box-sizing "content-box"}}
           [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
            [:div.mr-4.text-sm
             [:a.right-sidebar-button {:on-click (fn [e]

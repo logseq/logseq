@@ -18,7 +18,6 @@
     (let [block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
-          encoded-page-name (util/url-encode page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
           ref-blocks (cond
                        priority?
@@ -44,13 +43,13 @@
                                          "SCHEDULED AND DEADLINE")]
              [:div.references-blocks.mb-6
               (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
-                                               {:id (str encoded-page-name "-agenda")
+                                               {:id (str page-name "-agenda")
                                                 :start-level 2
                                                 :ref? true
                                                 :group-by-page? true
                                                 :editor-box editor/box}
                                                {})]
-                (content/content encoded-page-name
+                (content/content page-name
                                  {:hiccup ref-hiccup}))]))
 
           (ui/foldable
@@ -58,30 +57,34 @@
                                        (str n-ref " Linked References"))]
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup ref-blocks
-                                             {:id encoded-page-name
+                                             {:id page-name
                                               :start-level 2
                                               :ref? true
                                               :breadcrumb-show? true
                                               :group-by-page? true
                                               :editor-box editor/box}
                                              {})]
-              (content/content encoded-page-name
+              (content/content page-name
                                {:hiccup ref-hiccup}))])]]))))
 
-(rum/defc unlinked-references-aux < rum/reactive db-mixins/query
-  [page-name n-ref]
-  (let [ref-blocks (db/get-page-unlinked-references page-name)
-        encoded-page-name (util/url-encode page-name)]
-    (reset! n-ref (count ref-blocks))
+(rum/defcs unlinked-references-aux
+  < rum/reactive db-mixins/query
+  {:will-mount (fn [state]
+                 (let [[page-name n-ref] (:rum/args state)
+                       ref-blocks (db/get-page-unlinked-references page-name)]
+                   (reset! n-ref (count ref-blocks))
+                   (assoc state ::ref-blocks ref-blocks)))}
+  [state page-name n-ref]
+  (let [ref-blocks (::ref-blocks state)]
     [:div.references-blocks
      (let [ref-hiccup (block/->hiccup ref-blocks
-                                      {:id (str encoded-page-name "-unlinked-")
+                                      {:id (str page-name "-unlinked-")
                                        :start-level 2
                                        :ref? true
                                        :group-by-page? true
                                        :editor-box editor/box}
                                       {})]
-       (content/content encoded-page-name
+       (content/content page-name
                         {:hiccup ref-hiccup}))]))
 
 (rum/defcs unlinked-references < rum/reactive
@@ -97,6 +100,5 @@
             (if @n-ref
               (str @n-ref " Unlinked References")
               "Unlinked References")]
-           (fn []
-             (unlinked-references-aux page-name n-ref))
+           (fn [] (unlinked-references-aux page-name n-ref))
            true)]]))))

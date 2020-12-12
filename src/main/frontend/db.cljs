@@ -1,6 +1,5 @@
 (ns frontend.db
   (:require [datascript.core :as d]
-            [frontend.util :as util]
             [frontend.date :as date]
             [medley.core :as medley]
             [datascript.transit :as dt]
@@ -11,10 +10,7 @@
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
-            [cljs-bean.core :as bean]
             [frontend.config :as config]
-            [goog.object :as gobj]
-            ["localforage" :as localforage]
             [promesa.core :as p]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
@@ -22,33 +18,14 @@
             [clojure.walk :as walk]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.extensions.sci :as sci]
-            [goog.array :as garray]
             [frontend.db-schema :as db-schema]
-            [clojure.core.async :as async]))
-
-;; offline db
-(def store-name "dbs")
-(.config localforage
-         (bean/->js
-          {:name "logseq-datascript"
-           :version 1.0
-           :storeName store-name}))
-
-(defonce localforage-instance (.createInstance localforage store-name))
+            [clojure.core.async :as async]
+            [lambdaisland.glogi :as log]
+            [frontend.idb :as idb]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 (defonce query-state (atom {}))
-
-(defonce async-chan (atom nil))
-
-;; (defn clear-store!
-;;   []
-;;   (p/let [_ (.clear localforage)
-;;           dbs (js/window.indexedDB.databases)]
-;;     (doseq [db dbs]
-;;       (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
-
 
 (defn get-repo-path
   [url]
@@ -60,7 +37,7 @@
 (defn datascript-db
   [repo]
   (when repo
-    (str "logseq-db/" (get-repo-path repo))))
+    (str config/idb-db-prefix (get-repo-path repo))))
 
 (defn datascript-files-db
   [repo]
@@ -69,11 +46,11 @@
 
 (defn remove-db!
   [repo]
-  (.removeItem localforage-instance (datascript-db repo)))
+  (idb/remove-item! (datascript-db repo)))
 
 (defn remove-files-db!
   [repo]
-  (.removeItem localforage-instance (datascript-files-db repo)))
+  (idb/remove-item! (datascript-files-db repo)))
 
 (def react util/react)
 
@@ -109,8 +86,14 @@
   (swap! conns dissoc (datascript-db repo))
   (swap! conns dissoc (datascript-files-db repo)))
 
-;; transit serialization
+(defn get-tx-id [tx-report]
+  (get-in tx-report [:tempids :db/current-tx]))
 
+(defn get-max-tx-id
+  [db]
+  (:max-tx db))
+
+;; transit serialization
 
 (defn db->string [db]
   (dt/write-transit-str db))
@@ -124,13 +107,16 @@
 (defn string->db [s]
   (dt/read-transit-str s))
 
-;; persisting DB between page reloads
-(defn persist [repo db files-db?]
-  (.setItem localforage-instance
-            (if files-db?
-              (datascript-files-db repo)
-              (datascript-db repo))
-            (db->string db)))
+;; persisting DBs between page reloads
+(defn persist! [repo]
+  (let [file-key (datascript-files-db repo)
+        non-file-key (datascript-db repo)
+        file-db (d/db (get-files-conn repo))
+        non-file-db (d/db (get-conn repo false))]
+    (p/let [_ (idb/set-item! file-key (db->string file-db))
+            _ (idb/set-item! non-file-key (db->string non-file-db))]
+      (state/set-last-persist-transact-id! repo true (get-max-tx-id file-db))
+      (state/set-last-persist-transact-id! repo false (get-max-tx-id non-file-db)))))
 
 (defn reset-conn! [conn db]
   (reset! conn db))
@@ -159,8 +145,8 @@
   (swap! query-state assoc k {:query query
                               :inputs inputs
                               :result result-atom
-                              :query-fn query-fn
                               :transform-fn transform-fn
+                              :query-fn query-fn
                               :inputs-fn inputs-fn})
   result-atom)
 
@@ -176,16 +162,16 @@
 
 (defn remove-query-component!
   [component]
-  (let [ks (->> (filter (fn [[_ components]]
-                          (contains? (set components) component))
-                        @query-components)
-                (map first))]
-    (doseq [k ks]
-      (swap! query-components update k (fn [components]
-                                         (remove #(= component %) components)))
-      (when (zero? (count (get @query-components k))) ; no subscribed components
-        (swap! query-components dissoc k)
-        (remove-q! k)))))
+  (reset!
+   query-components
+   (->> (for [[k components] @query-components
+              :let [new-components (remove #(= component %) components)]]
+          (if (empty? new-components) ; no subscribed components
+            (do (remove-q! k)
+                nil)
+            [k new-components]))
+        (keep identity)
+        (into {}))))
 
 (defn get-page-blocks-cache-atom
   [repo page-id]
@@ -305,10 +291,9 @@
 
     :else
     (case key
-      (list :block/change :block/insert)
-      (when (seq data)
-        (let [blocks data
-              pre-block? (:block/pre-block? (first blocks))
+      (:block/change :block/insert)
+      (when-let [blocks (seq data)]
+        (let [pre-block? (:block/pre-block? (first blocks))
               current-priority (get-current-priority)
               current-marker (get-current-marker)
               current-page-id (:db/id (get-current-page))
@@ -324,7 +309,8 @@
                               blocks)
 
                              (when pre-block?
-                               [[:contents]])
+                               [[:contents]
+                                [:page/published]])
 
                              ;; affected priority
                              (when current-priority
@@ -480,7 +466,7 @@
   [blocks]
   (some->> blocks
            (group-by :block/page)
-           (sort-by (fn [[p blocks]] (:page/last-modified-at p)) >)))
+           (sort-by (fn [[p _blocks]] (:page/last-modified-at p)) >)))
 
 (defn- with-repo
   [repo blocks]
@@ -552,17 +538,14 @@
                             (sort-blocks))]
         (if-let [result-transform (:result-transform q)]
           (if-let [f (sci/eval-string (pr-str result-transform))]
-            (sci/call-fn f result)
+            (try
+              (sci/call-fn f result)
+              (catch js/Error e
+                (log/error :sci/call-error e)
+                result))
             result)
           (group-by-page result)))
       result)))
-
-;; (defn get-repo-tx-id [repo]
-;;   (when-let [db (get-conn repo)]
-;;     ))
-
-(defn get-tx-id [tx-report]
-  (get-in tx-report [:tempids :db/current-tx]))
 
 (defn transact!
   ([tx-data]
@@ -573,8 +556,19 @@
                         (remove nil?))]
        (when (seq tx-data)
          (when-let [conn (get-conn repo-url false)]
-           (let [tx-report (d/transact! conn (vec tx-data))]
-             (state/mark-repo-as-changed! repo-url (get-tx-id tx-report)))))))))
+           (d/transact! conn (vec tx-data))))))))
+
+(defn transact-files-db!
+  ([tx-data]
+   (transact! (state/get-current-repo) tx-data))
+  ([repo-url tx-data]
+   (when-not config/publishing?
+     (let [tx-data (->> (util/remove-nils tx-data)
+                        (remove nil?)
+                        (map #(dissoc % :file/handle :file/type)))]
+       (when (seq tx-data)
+         (when-let [conn (get-files-conn repo-url)]
+           (d/transact! conn (vec tx-data))))))))
 
 (defn get-key-value
   ([key]
@@ -597,43 +591,46 @@
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
                      :or {files-db? false}}]
   (when-not config/publishing?
-    (let [repo-url (or repo-url (state/get-current-repo))
-          tx-data (->> (util/remove-nils tx-data)
-                       (remove nil?))
-          get-conn (fn [] (if files-db?
-                            (get-files-conn repo-url)
-                            (get-conn repo-url false)))]
-      (when (and (seq tx-data) (get-conn))
-        (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
-              _ (state/mark-repo-as-changed! repo-url (get-tx-id tx-result))
-              db (:db-after tx-result)
-              handler-keys (get-handler-keys handler-opts)]
-          (doseq [handler-key handler-keys]
-            (let [handler-key (vec (cons repo-url handler-key))]
-              (when-let [cache (get @query-state handler-key)]
-                (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-                  (when (or query query-fn)
-                    (let [new-result (->
-                                      (cond
-                                        query-fn
-                                        (profile
-                                         "Query:"
-                                         (doall (query-fn db)))
+    (try
+      (let [repo-url (or repo-url (state/get-current-repo))
+            tx-data (->> (util/remove-nils tx-data)
+                         (remove nil?))
+            get-conn (fn [] (if files-db?
+                              (get-files-conn repo-url)
+                              (get-conn repo-url false)))]
+        (when (and (seq tx-data) (get-conn))
+          (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
+                db (:db-after tx-result)
+                handler-keys (get-handler-keys handler-opts)]
+            (doseq [handler-key handler-keys]
+              (let [handler-key (vec (cons repo-url handler-key))]
+                (when-let [cache (get @query-state handler-key)]
+                  (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
+                    (when (or query query-fn)
+                      (let [new-result (->
+                                        (cond
+                                          query-fn
+                                          (profile
+                                           "Query:"
+                                           (doall (query-fn db)))
 
-                                        inputs-fn
-                                        (let [inputs (inputs-fn)]
-                                          (apply d/q query db inputs))
+                                          inputs-fn
+                                          (let [inputs (inputs-fn)]
+                                            (apply d/q query db inputs))
 
-                                        (keyword? query)
-                                        (get-key-value repo-url query)
+                                          (keyword? query)
+                                          (get-key-value repo-url query)
 
-                                        (seq inputs)
-                                        (apply d/q query db inputs)
+                                          (seq inputs)
+                                          (apply d/q query db inputs)
 
-                                        :else
-                                        (d/q query db))
-                                      transform-fn)]
-                      (set-new-result! handler-key new-result))))))))))))
+                                          :else
+                                          (d/q query db))
+                                        transform-fn)]
+                        (set-new-result! handler-key new-result))))))))))
+      (catch js/Error e
+        ;; FIXME: check error type and notice user
+        (log/error :db/transact! e)))))
 
 (defn pull-block
   [id]
@@ -694,7 +691,7 @@
          :where
          [?page :page/tags ?e]
          [?e :tag/name ?tag]
-         [?tag-page :page/name ?tag]
+         [_ :page/name ?tag]
          [?page :page/name ?page-name]]
        (get-conn repo)))
 
@@ -711,7 +708,7 @@
         '[:find ?page-name
           :where
           [?page :page/original-name ?page-name]]
-        (get-conn))
+        (get-conn repo))
        (map first)))
 
 (defn get-sync-metadata
@@ -745,7 +742,6 @@
           '[:find ?page-name ?modified-at
             :where
             [?page :page/original-name ?page-name]
-            [(get-else $ ?page :page/journal? false) ?journal]
             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
           (get-conn repo))
          (seq)
@@ -806,7 +802,7 @@
 (defn get-files-blocks
   [repo-url paths]
   (let [paths (set paths)
-        pred (fn [db e]
+        pred (fn [_db e]
                (contains? paths e))]
     (-> (d/q '[:find ?block
                :in $ ?pred
@@ -903,12 +899,32 @@
 (defn set-file-content!
   [repo path content]
   (when (and repo path)
-    (transact-react!
-     repo
-     [{:file/path path
-       :file/content content}]
-     {:key [:file/content path]
-      :files-db? true})))
+    (let [tx-data {:file/path path
+                   :file/content content
+                   :file/last-modified-at (util/time-ms)}
+          tx-data (if (config/local-db? repo)
+                    (dissoc tx-data :file/last-modified-at)
+                    tx-data)]
+      (transact-react!
+       repo
+       [tx-data]
+       {:key [:file/content path]
+        :files-db? true}))))
+
+(defn set-file-last-modified-at!
+  [repo path last-modified-at]
+  (when (and repo path last-modified-at)
+    (when-let [conn (get-files-conn repo)]
+      (d/transact! conn
+                   [{:file/path path
+                     :file/last-modified-at last-modified-at}]))))
+
+(defn get-file-last-modified-at
+  [repo path]
+  (when (and repo path)
+    (when-let [conn (get-files-conn repo)]
+      (-> (d/entity (d/db conn) [:file/path path])
+          :file/last-modified-at))))
 
 (defn get-file
   ([path]
@@ -927,6 +943,29 @@
          path)
       react
       ffirst))))
+
+(defn get-file-contents
+  [repo]
+  (when-let [conn (get-files-conn repo)]
+    (->>
+     (d/q
+      '[:find ?path ?content
+        :where
+        [?file :file/path ?path]
+        [?file :file/content ?content]]
+      @conn)
+     (into {}))))
+
+(defn get-files-full
+  [repo]
+  (when-let [conn (get-files-conn repo)]
+    (->>
+     (d/q
+      '[:find (pull ?file [*])
+        :where
+        [?file :file/path]]
+      @conn)
+     (flatten))))
 
 (defn get-custom-css
   []
@@ -950,12 +989,9 @@
         ffirst)))))
 
 (defn reset-contents-and-blocks!
-  [repo-url contents blocks-pages delete-files delete-blocks]
-  (let [files (doall
-               (map (fn [[file content]]
-                      (set-file-content! repo-url file content)
-                      {:file/path file})
-                    contents))
+  [repo-url files blocks-pages delete-files delete-blocks]
+  (transact-files-db! repo-url files)
+  (let [files (map #(select-keys % [:file/path]) files)
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils))]
     (transact! repo-url all-data)))
@@ -1175,14 +1211,14 @@
                [?e2 :block/children ?e1]]
               [(parent ?e2 ?e1)
                [?t :block/children ?e1]
-               [?t :block/uuid ?tid]
-               (parent ?e2 ?tid)]])
+               (parent ?e2 ?t)]])
            (apply concat)))))
 
 (defn get-block-immediate-children
   [repo block-uuid]
   (when-let [conn (get-conn repo)]
-    (let [ids (:block/children (entity repo [:block/uuid block-uuid]))]
+    (let [ids (->> (:block/children (entity repo [:block/uuid block-uuid]))
+                   (map :db/id))]
       (when (seq ids)
         (pull-many repo '[*] ids)))))
 
@@ -1352,7 +1388,7 @@
   [repo-url format ast properties file content utf8-content journal? pages-fn]
   (try
     (let [now (tc/to-long (t/now))
-          [block-refs blocks] (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
+          blocks (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
           pages (pages-fn blocks ast)
           ref-pages (atom #{})
           ref-tags (atom #{})
@@ -1450,9 +1486,12 @@
                   (fn [page]
                     {:page/original-name page
                      :page/name (string/lower-case page)})
-                  @ref-pages))]
+                  @ref-pages))
+          block-ids (mapv (fn [block]
+                            {:block/uuid (:block/uuid block)})
+                          (remove nil? blocks))]
       [(remove nil? pages)
-       (remove nil? block-refs)
+       block-ids
        (remove nil? blocks)])
     (catch js/Error e
       (js/console.log e))))
@@ -1491,18 +1530,24 @@
          [[(get-page-name file ast) blocks]])))))
 
 (defn extract-all-blocks-pages
-  [repo-url contents]
-  (let [result (map
-                (fn [[file content] contents]
-                  (println "Parsing : " file)
-                  (when content
-                    (let [utf8-content (utf8/encode content)]
-                      (extract-blocks-pages repo-url file content utf8-content))))
-                 contents)
-        result (remove empty? result)]
-    ;; '(pages block-refs blocks)
-    (->> (apply map concat result)
-         (apply concat))))
+  [repo-url files]
+  (when (seq files)
+    (let [result (->> files
+                      (map
+                       (fn [{:file/keys [path content]} contents]
+                         (println "Parsing : " path)
+                         (when content
+                           (let [utf8-content (utf8/encode content)]
+                             (extract-blocks-pages repo-url path content utf8-content)))))
+                      (remove empty?))]
+      (when (seq result)
+        (let [[pages block-ids blocks] (apply map concat result)
+              block-ids-set (set block-ids)
+              blocks (map (fn [b]
+                            (-> b
+                                (update :block/ref-blocks #(set/intersection (set %) block-ids-set))
+                                (update :block/embed-blocks #(set/intersection (set %) block-ids-set)))) blocks)]
+          (apply concat [pages block-ids blocks]))))))
 
 ;; TODO: compare blocks
 (defn reset-file!
@@ -1514,8 +1559,8 @@
           file-content [{:file/path file}]
           tx (if (contains? config/mldoc-support-formats format)
                (let [delete-blocks (delete-file-blocks! repo-url file)
-                     [pages block-refs blocks] (extract-blocks-pages repo-url file content utf8-content)]
-                 (concat file-content delete-blocks pages block-refs blocks))
+                     [pages block-ids blocks] (extract-blocks-pages repo-url file content utf8-content)]
+                 (concat file-content delete-blocks pages block-ids blocks))
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
@@ -1573,15 +1618,16 @@
         pages)))))
 
 (defn me-tx
-  [db {:keys [name email avatar repos]}]
+  [db {:keys [name email avatar]}]
   (util/remove-nils {:me/name name
                      :me/email email
                      :me/avatar avatar}))
 
 (defn with-dummy-block
   ([blocks format]
-   (with-dummy-block blocks format {} false))
-  ([blocks format default-option journal?]
+   (with-dummy-block blocks format {} {}))
+  ([blocks format default-option {:keys [journal? page-name]
+                                  :or {journal? false}}]
    (let [format (or format (state/get-preferred-format) :markdown)
          blocks (if (and journal?
                          (seq blocks)
@@ -1664,8 +1710,8 @@
                 [?ref-page :page/name ?ref-page-name]]
               '[:find ?page ?ref-page-name
                 :where
-                [?p :page/name ?page]
                 [?p :page/journal? false]
+                [?p :page/name ?page]
                 [?block :block/page ?p]
                 [?block :block/ref-pages ?ref-page]
                 [?ref-page :page/name ?ref-page-name]])]
@@ -1825,7 +1871,7 @@
   [page-name]
   (:page/journal? (entity [:page/name page-name])))
 
-(defn mark-repo-as-cloned
+(defn mark-repo-as-cloned!
   [repo-url]
   (transact!
    [{:repo/url repo-url
@@ -1844,9 +1890,13 @@
           repo-url)
      ffirst)))
 
+(defn get-config
+  [repo-url]
+  (get-file repo-url (str config/app-name "/" config/config-file)))
+
 (defn reset-config!
   [repo-url content]
-  (when-let [content (or content (get-file repo-url (str config/app-name "/" config/config-file)))]
+  (when-let [content (or content (get-config repo-url))]
     (let [config (try
                    (reader/read-string content)
                    (catch js/Error e
@@ -1856,20 +1906,77 @@
       (state/set-config! repo-url config)
       config)))
 
+(defonce persistent-jobs (atom {}))
+
+(defn clear-repo-persistent-job!
+  [repo]
+  (when-let [old-job (get @persistent-jobs repo)]
+    (js/clearTimeout old-job)))
+
+(defn- persist-if-idle!
+  [repo]
+  (clear-repo-persistent-job! repo)
+  (let [job (js/setTimeout
+             (fn []
+               (if (and (state/input-idle? repo)
+                        (state/db-idle? repo))
+                 (do
+                   (persist! repo)
+                   ;; (state/set-db-persisted! repo true)
+)
+                 (let [job (get persistent-jobs repo)]
+                   (persist-if-idle! repo))))
+             3000)]
+    (swap! persistent-jobs assoc repo job)))
+
+;; only save when user's idle
+(defn- repo-listen-to-tx!
+  [repo conn files-db?]
+  (d/listen! conn :persistence
+             (fn [tx-report]
+               (let [tx-id (get-tx-id tx-report)]
+                 (state/set-last-transact-time! repo (util/time-ms))
+                 ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
+                 (persist-if-idle! repo)))))
+
+(defn- listen-and-persist!
+  [repo]
+  (when-let [conn (get-files-conn repo)]
+    (repo-listen-to-tx! repo conn true))
+  (when-let [conn (get-conn repo false)]
+    (repo-listen-to-tx! repo conn false)))
+
 (defn start-db-conn!
-  [me repo]
-  (let [files-db-name (datascript-files-db repo)
-        files-db-conn (d/create-conn db-schema/files-db-schema)
-        db-name (datascript-db repo)
-        db-conn (d/create-conn db-schema/schema)]
-    (swap! conns assoc files-db-name files-db-conn)
-    (swap! conns assoc db-name db-conn)
-    (d/transact! db-conn [{:schema/version db-schema/version}])
-    (when me
-      (d/transact! db-conn [(me-tx (d/db db-conn) me)]))))
+  ([me repo]
+   (start-db-conn! me repo {}))
+  ([me repo {:keys [db-type]}]
+   (let [files-db-name (datascript-files-db repo)
+         files-db-conn (d/create-conn db-schema/files-db-schema)
+         db-name (datascript-db repo)
+         db-conn (d/create-conn db-schema/schema)]
+     (swap! conns assoc files-db-name files-db-conn)
+     (swap! conns assoc db-name db-conn)
+     (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
+                             db-type
+                             (assoc :db/type db-type))])
+     (when me
+       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+
+     (listen-and-persist! repo))))
+
+(defonce tx-data-debug (atom nil))
+(defn with-latest-txs!
+  [db repo file?]
+  (let [txs (state/get-repo-latest-txs repo file?)
+        tx-data (when (seq txs) (map :tx-data txs))]
+    (if (seq tx-data)
+      (do
+        (swap! tx-data-debug assoc file? tx-data)
+        (d/db-with db tx-data))
+      db)))
 
 (defn restore!
-  [{:keys [repos] :as me} restore-config-handler db-schema-changed-handler]
+  [{:keys [repos] :as me} restore-config-handler]
   (let [logged? (:name me)]
     (doall
      (for [{:keys [url]} repos]
@@ -1877,30 +1984,24 @@
              db-name (datascript-files-db repo)
              db-conn (d/create-conn db-schema/files-db-schema)]
          (swap! conns assoc db-name db-conn)
-         (->
-          (p/let [stored (-> (.getItem localforage-instance db-name)
-                             (p/then (fn [result]
-                                       result))
-                             (p/catch (fn [error]
-                                        nil)))
-                  _ (when stored
-                      (let [stored-db (string->db stored)
-                            attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (reset-conn! db-conn attached-db)))
-                  db-name (datascript-db repo)
-                  db-conn (d/create-conn db-schema/schema)
-                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
-                  _ (swap! conns assoc db-name db-conn)
-                  stored (.getItem localforage-instance db-name)
-                  _ (if stored
-                      (let [stored-db (string->db stored)
-                            attached-db (d/db-with stored-db [(me-tx stored-db me)])]
-                        (reset-conn! db-conn attached-db)
-                        (when (not= (:schema stored-db) db-schema/schema) ;; check for code update
-                          (db-schema-changed-handler {:url repo})))
-                      (when logged?
-                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))
-                  _ (restore-config-handler repo)])))))))
+         (p/let [stored (idb/get-item db-name)
+                 _ (when stored
+                     (let [stored-db (string->db stored)
+                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                       (reset-conn! db-conn attached-db)))
+                 db-name (datascript-db repo)
+                 db-conn (d/create-conn db-schema/schema)
+                 _ (d/transact! db-conn [{:schema/version db-schema/version}])
+                 _ (swap! conns assoc db-name db-conn)
+                 stored (idb/get-item db-name)
+                 _ (if stored
+                     (let [stored-db (string->db stored)
+                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                       (reset-conn! db-conn attached-db))
+                     (when logged?
+                       (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
+           (restore-config-handler repo)
+           (listen-and-persist! repo)))))))
 
 (defn- build-edges
   [edges]
@@ -1919,19 +2020,18 @@
 (defn- build-nodes
   [dark? current-page edges nodes]
   (mapv (fn [p]
-          (cond->
-           {:id p
-            :name p
-            :val (get-connections p edges)
-            :autoColorBy "group"
-            :group (js/Math.ceil (* (js/Math.random) 12))
-            :color "#222222"}
-            dark?
-            (assoc :color "#8abbbb")
-            (= p current-page)
-            (assoc :color (if dark?
-                            "#ffffff"
-                            "#045591"))))
+          (let [current-page? (= p current-page)
+                color (case [dark? current-page?]
+                        [false false] "#222222"
+                        [false true]  "#045591"
+                        [true false]  "#8abbbb"
+                        [true true]   "#ffffff")] ; FIXME: Put it into CSS
+            {:id p
+             :name p
+             :val (get-connections p edges)
+             :autoColorBy "group"
+             :group (js/Math.ceil (* (js/Math.random) 12))
+             :color color}))
         (set (flatten nodes))))
 
 (defn normalize-page-name
@@ -2195,8 +2295,8 @@
   (d/q
    '[:find ?content
      :where
-     [?h :block/content ?content]
-     [?h :block/collapsed? true]]
+     [?h :block/collapsed? true]
+     [?h :block/content ?content]]
    (get-conn)))
 
 (defn get-block-parent
@@ -2302,7 +2402,6 @@
       (let [f (async/<! chan)]
         (f))
       (recur))
-    (reset! async-chan chan)
     chan))
 
 (defonce blocks-count-cache (atom nil))
@@ -2433,6 +2532,14 @@
                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))
             datoms (d/datoms filtered-db :eavt)]
         @(d/conn-from-datoms datoms db-schema/schema)))))
+
+(defn get-db-type
+  [repo]
+  (get-key-value repo :db/type))
+
+(defn local-native-fs?
+  [repo]
+  (= :local-native-fs (get-db-type repo)))
 
 ;; shortcut for query a block with string ref
 (defn qb

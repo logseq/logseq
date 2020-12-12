@@ -511,7 +511,7 @@
           :else
           (move-block-in-different-repos target-block-repo to-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes))
 
-        (when (state/git-auto-push?)
+        (when (state/get-git-auto-push?)
           (doseq [repo (->> #{target-block-repo to-block-repo}
                             (remove nil?))]
             (repo-handler/push repo nil)))))))

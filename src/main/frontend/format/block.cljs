@@ -31,7 +31,8 @@
                  (or
                   (and
                    (= typ "Search")
-                   (not (contains? #{\# \* \/ \( \[} (first (second (:url (second block))))))
+                   ;; FIXME: alert error
+                   (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
                    (let [page (second (:url (second block)))]
                      (when (and (not (util/starts-with? page "http"))
                                 (not (util/starts-with? page "file"))
@@ -253,9 +254,8 @@
 
 (defn extract-blocks
   [blocks last-pos encoded-content]
-  (let [[block-refs blocks]
-        (loop [block-refs []
-               headings []
+  (let [blocks
+        (loop [headings []
                block-body []
                blocks (reverse blocks)
                timestamps {}
@@ -272,11 +272,11 @@
                       timestamps' (merge timestamps timestamps)
                       other-body (->> (remove timestamp-block? (second block))
                                       (drop-while #(= ["Break_Line"] %)))]
-                  (recur block-refs headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
+                  (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
                 (properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]
-                  (recur block-refs headings block-body (rest blocks) timestamps properties last-pos last-level children))
+                  (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
                 (let [id (or (when-let [custom-id (or (get-in properties [:properties "custom_id"])
@@ -315,47 +315,38 @@
                       block (with-page-refs block)
                       block (with-block-refs block)
                       block (update-src-pos-meta! block)
-                      block-refs (into block-refs (:ref-blocks block))
                       last-pos' (get-in block [:meta :start-pos])]
-                  (recur block-refs (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
+                  (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
 
                 :else
                 (let [block-body' (conj block-body block)]
-                  (recur block-refs headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
-            [(->> block-refs
-                  (remove nil?)
-                  (distinct))
-             (-> (reverse headings)
-                 safe-blocks)]))]
+                  (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
+            (-> (reverse headings)
+                safe-blocks)))]
     (let [first-block (first blocks)
-          first-block-start-pos (get-in first-block [:block/meta :start-pos])
-          blocks (if (and
-                      (not (string/blank? encoded-content))
-                      (or (empty? blocks)
-                          (> first-block-start-pos 1)))
-                   (cons
-                    (merge
-                     (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                           uuid (d/squuid)]
-                       (->
-                        {:uuid uuid
-                         :content content
-                         :anchor (str uuid)
-                         :level 2
-                         :meta {:start-pos 0
-                                :end-pos (or first-block-start-pos
-                                             (utf8/length encoded-content))}
-                         :body (take-while (fn [block] (not (heading-block? block))) blocks)
-                         :pre-block? true}
-                        (block-keywordize)))
-                     (select-keys first-block [:block/file :block/format :block/page]))
-                    blocks)
-                   blocks)
-          block-refs (mapv
-                      (fn [[_ block-uuid]]
-                        {:block/uuid block-uuid})
-                      block-refs)]
-      [block-refs blocks])))
+          first-block-start-pos (get-in first-block [:block/meta :start-pos])]
+      (if (and
+           (not (string/blank? encoded-content))
+           (or (empty? blocks)
+               (> first-block-start-pos 1)))
+        (cons
+         (merge
+          (let [content (utf8/substring encoded-content 0 first-block-start-pos)
+                uuid (d/squuid)]
+            (->
+             {:uuid uuid
+              :content content
+              :anchor (str uuid)
+              :level 2
+              :meta {:start-pos 0
+                     :end-pos (or first-block-start-pos
+                                  (utf8/length encoded-content))}
+              :body (take-while (fn [block] (not (heading-block? block))) blocks)
+              :pre-block? true}
+             (block-keywordize)))
+          (select-keys first-block [:block/file :block/format :block/page]))
+         blocks)
+        blocks))))
 
 (defn- page-with-journal
   [original-page-name]
@@ -378,7 +369,7 @@
            start-pos (:start-pos meta)
            encoded-content (utf8/encode content)
            content-length (utf8/length encoded-content)
-           [block-refs blocks] (extract-blocks ast content-length encoded-content)
+           blocks (extract-blocks ast content-length encoded-content)
            ref-pages-atom (atom [])
            blocks (doall
                    (map-indexed
@@ -414,8 +405,7 @@
                             (assoc-in [:block/meta :end-pos] (+ (:end-pos meta) start-pos)))))
                     blocks))
            pages (vec (distinct @ref-pages-atom))]
-       {:block-refs block-refs
-        :blocks blocks
+       {:blocks blocks
         :pages pages
         :start-pos start-pos
         :end-pos (+ start-pos content-length)}))))

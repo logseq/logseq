@@ -17,6 +17,29 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
+
+(rum/defc ls-textarea < rum/reactive
+  [{:keys [on-change] :as props}]
+  (let [skip-composition? (or
+                           (state/sub :editor/show-page-search?)
+                           (state/sub :editor/show-block-search?)
+                           (state/sub :editor/show-template-search?))
+        composition? (atom false)
+        set-composition? #(reset! composition? %)
+        on-composition (fn [e]
+                         (if skip-composition?
+                           (on-change e)
+                           (case e.type
+                             "compositionend" (do (set-composition? false) (on-change e))
+                             (set-composition? true))))
+        props (assoc props
+                     :on-change (fn [e] (when-not @composition?
+                                          (on-change e)))
+                     :on-composition-start on-composition
+                     :on-composition-update on-composition
+                     :on-composition-end on-composition)]
+    (textarea props)))
+
 (rum/defc dropdown-content-wrapper [state content class]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2.rounded-md.shadow-lg"))]
@@ -70,7 +93,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                      ;; [:div {:style {:position "absolute" :right "8px"}}
                      ;;  icon]
-]]
+                     ]]
           (rum/with-key
             (menu-link new-options child)
             title)))])
@@ -292,7 +315,7 @@
                 :else
                 nil)
               (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-                (let [ac-inner (gdom/getElement "ac-inner")
+                (let [ac-inner (gdom/getElement "ui__ac-inner")
                       element-top (gobj/get element "offsetTop")
                       scroll-top (- (gobj/get element "offsetTop") 360)]
                   (set! (.-scrollTop ac-inner) scroll-top)))))
@@ -306,7 +329,7 @@
                   (reset! current-idx 0)
                   (swap! current-idx inc)))
               (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-                (let [ac-inner (gdom/getElement "ac-inner")
+                (let [ac-inner (gdom/getElement "ui__ac-inner")
                       element-top (gobj/get element "offsetTop")
                       scroll-top (- (gobj/get element "offsetTop") 360)]
                   (set! (.-scrollTop ac-inner) scroll-top)))))
@@ -320,8 +343,7 @@
                          (> (count matched)
                             @current-idx))
                   (on-chosen (nth matched @current-idx) false)
-                  (and on-enter (on-enter state))))))}
-      nil)))
+                  (and on-enter (on-enter state))))))})))
   [state matched {:keys [on-chosen
                          on-shift-chosen
                          on-enter
@@ -329,24 +351,16 @@
                          item-render
                          class]}]
   (let [current-idx (get state ::current-idx)]
-    [:div.py-1.rounded-md.shadow-xs.bg-base-3 {:class class}
+    [:div#ui__ac {:class class}
      (if (seq matched)
-       [:div#ac-inner
-        {:style {:max-height 400
-                 :overflow "hidden"
-                 :overflow-x "hidden"
-                 :overflow-y "auto"
-                 :position "relative"
-                 "-webkit-overflow-scrolling" "touch"}}
+       [:div#ui__ac-inner
         (for [[idx item] (medley/indexed matched)]
           (rum/with-key
             (menu-link
-             {:id (str "ac-" idx)
-              :style {:padding-top 6
-                      :padding-bottom 6}
-              :class (when (= @current-idx idx)
-                       "chosen")
-              ;; :tab-index -1
+             {:id       (str "ac-" idx)
+              :class    (when (= @current-idx idx)
+                          "chosen")
+                ;; :tab-index -1
               :on-click (fn [e]
                           (util/stop e)
                           (if (and (gobj/get e "shiftKey") on-shift-chosen)
@@ -370,11 +384,16 @@
       :aria-hidden "true"}]]])
 
 (defn tooltip
-  [label children]
-  [:div.Tooltip {:style {:display "inline"}}
-   [:div {:class "Tooltip__label"}
-    label]
-   children])
+  ([label children]
+   (tooltip label children {}))
+  ([label children {:keys [label-style]}]
+   [:div.Tooltip {:style {:display "inline"}}
+    [:div (cond->
+            {:class "Tooltip__label"}
+            label-style
+            (assoc :style label-style))
+     label]
+    children]))
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
@@ -472,8 +491,14 @@
      [:div {:class (if @collapsed?
                      "hidden"
                      "initial")}
-      (if (and (fn? content) (not @collapsed?))
+      (cond
+        (and (fn? content) (not @collapsed?))
         (content)
+
+        (fn? content)
+        nil
+
+        :else
         content)]]))
 
 (defn admonition

@@ -5,6 +5,7 @@
             [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.draw :as draw]
             [frontend.handler.expand :as expand]
@@ -38,7 +39,8 @@
             [frontend.text :as text]
             [frontend.date :as date]
             [frontend.handler.repeated :as repeated]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [lambdaisland.glogi :as log]))
 
 ;; FIXME: should support multiple images concurrently uploading
 (defonce *image-uploading? (atom false))
@@ -382,9 +384,10 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties rebuild-content?]
+    {:keys [indent-left? custom-properties remove-property? rebuild-content?]
      :or {rebuild-content? true
-          custom-properties nil}}]
+          custom-properties nil
+          remove-property? false}}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -412,7 +415,8 @@
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
          value (cond
-                 (some? custom-properties)
+                 (or (seq custom-properties)
+                     remove-property?)
                  (text/re-construct-block-properties block value custom-properties)
 
                  (and (seq (:block/properties block))
@@ -454,10 +458,9 @@
                                       (or (:page/original-name page)
                                           (:page/name page)))
                                     (text/remove-level-spaces value (keyword format)))]
-                   (p/let [_ (fs/create-if-not-exists dir file-path content)]
+                   (p/let [_ (fs/create-if-not-exists repo dir file-path content)
+                           _ (git-handler/git-add repo path)]
                      (db/reset-file! repo path content)
-                     (git-handler/git-add repo path)
-
                      (ui-handler/re-render-root!)
 
                      ;; Continue to edit the last block
@@ -531,6 +534,7 @@
                (concat
                 pages
                 block-retracted-attrs
+                (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
                 blocks
                 retract-refs
                 page-properties
@@ -612,16 +616,18 @@
                                  (block/parse-block (assoc block :block/content new-value) format))
                                parse-result)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
+                             files [[file-path new-content]]
                              transact-fn (fn []
                                            (repo-handler/transact-react-and-alter-file!
                                             repo
                                             (concat
                                              pages
+                                             (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
                                              blocks
                                              after-blocks)
                                             {:key :block/insert
                                              :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                                            [[file-path new-content]])
+                                            files)
                                            (state/set-editor-op! nil))]
 
                          ;; Replace with batch transactions
@@ -639,6 +645,11 @@
                                blocks-container-id (and blocks-container-id
                                                         (util/uuid-string? blocks-container-id)
                                                         (medley/uuid blocks-container-id))]
+
+                           ; WORKAROUND: The block won't refresh itself even if the content is empty.
+                           (when edit-self?
+                             (gobj/set input "value" ""))
+
                            (when ok-handler
                              (ok-handler
                               (if edit-self? (first blocks) (last blocks))))
@@ -690,13 +701,13 @@
             (let [content (util/default-content-with-title format (or
                                                                    (:page/original-name page)
                                                                    (:page/name page)))]
-              (p/let [_ (fs/create-if-not-exists dir file-path content)]
+              (p/let [_ (fs/create-if-not-exists repo dir file-path content)
+                      _ (git-handler/git-add repo path)]
                 (db/reset-file! repo path
                                 (str content
                                      (text/remove-level-spaces value (keyword format))
                                      "\n"
                                      snd-block-text))
-                (git-handler/git-add repo path)
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
@@ -758,7 +769,8 @@
   [state]
   (when (and (not config/publishing?)
              ;; skip this operation if it's inserting
-             (not= :insert (state/get-editor-op)))
+             (not= :insert (state/get-editor-op))
+             (not (state/file-in-writing!)))
     (state/set-editor-op! :insert)
     (let [{:keys [block value format id config]} (get-state state)
           block-id (:block/uuid block)
@@ -954,11 +966,15 @@
 (defn delete-block!
   [state repo e]
   (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
-    (when block-id
-      (when-let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))]
-        (let [page-blocks-count (db/get-page-blocks-count repo page-id)
-              page (db/entity page-id)]
-          (when (> page-blocks-count 1)
+    (when (and block-id
+               (not= :block/delete (state/get-editor-op))
+               (not (state/file-in-writing!)))
+      (state/set-editor-op! :block/delete)
+      (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
+            page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))
+            page (and page-id (db/entity page-id))]
+        (if (> page-blocks-count 1)
+          (do
             (util/stop e)
             ;; delete block, edit previous block
             (let [block (db/pull [:block/uuid block-id])
@@ -978,7 +994,8 @@
                                0)]
                       (edit-block! block pos format id
                                    {:custom-content new-value
-                                    :tail-len tail-len}))))))))))))
+                                    :tail-len tail-len})))))))))
+      (state/set-editor-op! nil))))
 
 (defn delete-blocks!
   [repo block-uuids]
@@ -1030,7 +1047,8 @@
       (let [{:block/keys [content properties]} block]
         (when (get properties key)
           (save-block-if-changed! block content
-                                  {:custom-properties (dissoc properties key)}))))))
+                                  {:custom-properties (dissoc properties key)
+                                   :remove-property? true}))))))
 
 (defn set-block-property!
   [block-id key value]
@@ -1317,17 +1335,50 @@
               nil)
             (state/conj-selection-block! element up?)))))))
 
+(defn save-block-aux!
+  [block value format]
+  (let [value (text/remove-level-spaces value format true)
+        new-value (block/with-levels value format block)
+        properties (with-timetracking-properties block value)]
+    ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
+    ;; maybe we shouldn't save the block/file in "will-unmount" event?
+    (save-block-if-changed! block new-value
+                            {:custom-properties properties})))
+
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
-    (let [value (text/remove-level-spaces value format true)
-          new-value (block/with-levels value format block)
-          properties (with-timetracking-properties block value)]
-      ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-      ;; maybe we shouldn't save the block/file in "will-unmount" event?
-      (save-block-if-changed! block new-value
-                              {:custom-properties properties}))))
+    (save-block-aux! block value format)))
+
+(defn save-current-block-when-idle!
+  []
+  (when-not (state/file-in-writing!)
+    (when-let [repo (state/get-current-repo)]
+      (when (state/input-idle? repo)
+        (state/set-editor-op! :auto-save)
+        (try
+          (let [input-id (state/get-edit-input-id)
+                block (state/get-edit-block)
+                db-block (when-let [block-id (:block/uuid block)]
+                           (db/pull [:block/uuid block-id]))
+                elem (and input-id (gdom/getElement input-id))
+                db-content (:block/content db-block)
+                db-content-without-heading (and db-content
+                                                (util/safe-subs db-content (:block/level db-block)))
+                value (and elem (gobj/get elem "value"))]
+            (when (and block value db-content-without-heading
+                       (or
+                        (not= (string/trim db-content-without-heading)
+                              (string/trim value))))
+              (let [cur-pos (util/get-input-pos elem)]
+                (save-block-aux! db-block value (:block/format db-block))
+               ;; Restore the cursor after saving the block
+                (when (and elem cur-pos)
+                  (util/set-caret-pos! elem cur-pos)))))
+          (catch js/Error error
+            (log/error :save-block-failed error)))
+        (state/set-editor-op! nil)))))
 
 (defn on-up-down
   [state e up?]
@@ -1400,7 +1451,7 @@
                                       file-name)
                          format
                          {:last-pattern (if drop? "" commands/slash)
-                          :restore? false})
+                          :restore? true})
 
         (reset! *image-uploading-process 0))
       (fn [e]
@@ -1422,7 +1473,8 @@
    "*" "*"
    ;; "_" "_"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-   "^" "^"})
+   ;; "^" "^"
+})
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -1596,38 +1648,45 @@
     (when-let [prev-block (util/get-prev-block input)]
       (util/parse-int (d/attr prev-block "level")))))
 
+;; If it's an indent/outdent action followed by an "Enter", only adjust after inserting a block was finished. Maybe we should use a channel to serialize all the events.
 (defn adjust-block-level!
-  [state direction]
-  (state/set-editor-op! :indent-outdent)
-  (let [{:keys [block block-parent-id value config]} (get-state state)
-        start-level (:start-level config)
-        format (:block/format block)
-        block-pattern (config/get-block-pattern format)
-        level (:block/level block)
-        previous-level (or (get-previous-block-level block-parent-id) 1)
-        [add? remove?] (case direction
-                         :left [false true]
-                         :right [true false]
-                         [(<= level previous-level)
-                          (and (> level previous-level)
-                               (> level 2))])
-        final-level (cond
-                      add? (inc level)
-                      remove? (if (> level 2)
-                                (dec level)
-                                level)
-                      :else level)
-        new-value (block/with-levels value format (assoc block :block/level final-level))]
-    (when (and
-           (not (and (= direction :left)
-                     (and
-                      (get config :id)
-                      (util/uuid-string? (get config :id)))
-                     (<= final-level start-level)))
-           (<= (- final-level previous-level) 1))
-      (save-block-if-changed! block new-value
-                              {:indent-left? (= direction :left)})))
-  (state/set-editor-op! nil))
+  ([state direction]
+   (adjust-block-level! state direction 100))
+  ([state direction retry-limit]
+   (when-not (state/file-in-writing!)
+     (if (= :insert (state/get-editor-op))
+       (if (> retry-limit 0)
+         (js/setTimeout #(adjust-block-level! state direction (dec retry-limit)) 20)
+         (log/error :editor/indent-outdent-retry-max-limit {:direction direction}))
+       (do
+         (state/set-editor-op! :indent-outdent)
+         (let [{:keys [block block-parent-id value config]} (get-state state)
+               start-level (:start-level config)
+               format (:block/format block)
+               level (:block/level block)
+               previous-level (or (get-previous-block-level block-parent-id) 1)
+               [add? remove?] (case direction
+                                :left [false true]
+                                :right [true false]
+                                [(<= level previous-level)
+                                 (and (> level previous-level)
+                                      (> level 2))])
+               final-level (cond
+                             add? (inc level)
+                             remove? (if (> level 2)
+                                       (dec level)
+                                       level)
+                             :else level)
+               new-value (block/with-levels value format (assoc block :block/level final-level))]
+           (when (and
+                  (not (and (= direction :left)
+                            (get config :id)
+                            (util/uuid-string? (get config :id))
+                            (<= final-level start-level)))
+                  (<= (- final-level previous-level) 1))
+             (save-block-if-changed! block new-value
+                                     {:indent-left? (= direction :left)})))
+         (state/set-editor-op! nil))))))
 
 (defn adjust-blocks-level!
   [blocks direction])
@@ -1648,67 +1707,68 @@
 
 (defn move-up-down
   [e up?]
-  (when-let [block-id (:block/uuid (state/get-edit-block))]
-    (let [block-parent-id (state/get-editing-block-dom-id)
-          block (db/entity [:block/uuid block-id])
-          meta (:block/meta block)
-          page (:block/page block)
-          block-dom-node (gdom/getElement block-parent-id)
-          prev-block (get-prev-block-non-collapsed block-dom-node)
-          next-block (get-next-block-non-collapsed block-dom-node)
-          repo (state/get-current-repo)
-          move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
-          move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
-      (when-let [sibling-block (cond
-                                 move-upwards-to-parent?
-                                 prev-block
-                                 move-down-to-higher-level?
-                                 next-block
-                                 :else
-                                 (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
-                                   (f block-dom-node)))]
-        (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-          (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
-            (let [sibling-meta (:block/meta sibling-block)
-                  hc1 (db/get-block-and-children-no-cache repo (:block/uuid block))
-                  hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
-                        [sibling-block]
-                        (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
-              ;; Same page and next to the other
-              (when (and
-                     (= (:db/id (:block/page block))
-                        (:db/id (:block/page sibling-block)))
-                     (or
-                      (and up? (= (:end-pos (:block/meta (last hc2))) (:start-pos (:block/meta (first hc1)))))
-                      (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
-                (let [hc1-content (block-and-children-content hc1)
-                      hc2-content (block-and-children-content hc2)
-                      file (db/get-block-file (:block/uuid block))
-                      file-path (:file/path file)
-                      old-file-content (db/get-file file-path)
-                      [start-pos end-pos new-content blocks] (if up?
-                                                               [(:start-pos sibling-meta)
-                                                                (get-in (last hc1) [:block/meta :end-pos])
-                                                                (str hc1-content hc2-content)
-                                                                (concat hc1 hc2)]
-                                                               [(:start-pos meta)
-                                                                (get-in (last hc2) [:block/meta :end-pos])
-                                                                (str hc2-content hc1-content)
-                                                                (concat hc2 hc1)])]
-                  (when (and start-pos end-pos)
-                    (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
-                          modified-time (modified-time-tx page file)
-                          blocks-meta (rebuild-blocks-meta start-pos blocks)]
-                      (profile
-                       (str "Move block " (if up? "up: " "down: "))
-                       (repo-handler/transact-react-and-alter-file!
-                        repo
-                        (concat
-                         blocks-meta
-                         modified-time)
-                        {:key :block/change
-                         :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                        [[file-path new-file-content]])))))))))))))
+  (when-not (state/file-in-writing!)
+    (when-let [block-id (:block/uuid (state/get-edit-block))]
+      (let [block-parent-id (state/get-editing-block-dom-id)
+            block (db/entity [:block/uuid block-id])
+            meta (:block/meta block)
+            page (:block/page block)
+            block-dom-node (gdom/getElement block-parent-id)
+            prev-block (get-prev-block-non-collapsed block-dom-node)
+            next-block (get-next-block-non-collapsed block-dom-node)
+            repo (state/get-current-repo)
+            move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
+            move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
+        (when-let [sibling-block (cond
+                                   move-upwards-to-parent?
+                                   prev-block
+                                   move-down-to-higher-level?
+                                   next-block
+                                   :else
+                                   (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
+                                     (f block-dom-node)))]
+          (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+            (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
+              (let [sibling-meta (:block/meta sibling-block)
+                    hc1 (db/get-block-and-children-no-cache repo (:block/uuid block))
+                    hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
+                          [sibling-block]
+                          (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
+               ;; Same page and next to the other
+                (when (and
+                       (= (:db/id (:block/page block))
+                          (:db/id (:block/page sibling-block)))
+                       (or
+                        (and up? (= (:end-pos (:block/meta (last hc2))) (:start-pos (:block/meta (first hc1)))))
+                        (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
+                  (let [hc1-content (block-and-children-content hc1)
+                        hc2-content (block-and-children-content hc2)
+                        file (db/get-block-file (:block/uuid block))
+                        file-path (:file/path file)
+                        old-file-content (db/get-file file-path)
+                        [start-pos end-pos new-content blocks] (if up?
+                                                                 [(:start-pos sibling-meta)
+                                                                  (get-in (last hc1) [:block/meta :end-pos])
+                                                                  (str hc1-content hc2-content)
+                                                                  (concat hc1 hc2)]
+                                                                 [(:start-pos meta)
+                                                                  (get-in (last hc2) [:block/meta :end-pos])
+                                                                  (str hc2-content hc1-content)
+                                                                  (concat hc2 hc1)])]
+                    (when (and start-pos end-pos)
+                      (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
+                            modified-time (modified-time-tx page file)
+                            blocks-meta (rebuild-blocks-meta start-pos blocks)]
+                        (profile
+                         (str "Move block " (if up? "up: " "down: "))
+                         (repo-handler/transact-react-and-alter-file!
+                          repo
+                          (concat
+                           blocks-meta
+                           modified-time)
+                          {:key :block/change
+                           :data (map (fn [block] (assoc block :block/page page)) blocks)}
+                          [[file-path new-file-content]]))))))))))))))
 
 (defn expand!
   []
@@ -1947,3 +2007,14 @@
           (state/set-editor-show-block-search! false)
           (state/set-editor-show-page-search! false)
           (state/set-editor-show-page-search-hashtag! false))))))
+
+(defn periodically-save!
+  []
+  (js/setInterval save-current-block-when-idle! 3000))
+
+(defn get-current-input-value
+  []
+  (let [edit-input-id (state/get-edit-input-id)
+        input (and edit-input-id (gdom/getElement edit-input-id))]
+    (when input
+      (gobj/get input "value"))))

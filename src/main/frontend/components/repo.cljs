@@ -8,11 +8,13 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
+            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.util :as util]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]
             [frontend.version :as version]
             [frontend.components.commit :as commit]
+            [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
             [clojure.string :as string]))
 
@@ -22,153 +24,201 @@
 
 (rum/defc repos < rum/reactive
   []
-  (let [{:keys [repos]} (state/sub :me)
+  (let [repos (->> (state/sub [:me :repos])
+                   (remove #(= (:url %) config/local-repo)))
         repos (util/distinct-by :url repos)]
-    (if (seq repos)
-      [:div#repos
-       [:h1.title "All Repos"]
+    (rum/with-context [[t] i18n/*tongue-context*]
+      (if (seq repos)
+        [:div#repos
+         [:h1.title "All Graphs"]
 
-       [:div.pl-1.content
-        [:div.flex.my-4 {:key "add-button"}
-         (ui/button
-           "Add another repo"
-           :href (rfe/href :repo-add))]
+         [:div.pl-1.content
+          [:div.flex.flex-row.my-4
+           (when (state/logged?)
+             [:div.mr-8
+              (ui/button
+               "Add another git repo"
+               :href (rfe/href :repo-add))])
+           (when (nfs-handler/supported?)
+             [:div.flex.flex-col
+              [:div (ui/button
+                     (t :open-a-directory)
+                     :on-click nfs-handler/ls-dir-files)]
+              [:span.warning.mt-2.text-sm "Warning: this is an experimental feature,"
+               [:br]
+               "please only use it for testing purpose."]])]
+          (for [{:keys [id url] :as repo} repos]
+            (let [local? (config/local-db? url)]
+              [:div.flex.justify-between.mb-1 {:key id}
+               (if local?
+                 [:a
+                  (config/get-local-dir url)]
+                 [:a {:target "_blank"
+                      :href url}
+                  (db/get-repo-path url)])
+               [:div.controls
+                [:a.control {:title (if local?
+                                      "Sync with the local directory"
+                                      "Clone again and re-index the db")
+                             :on-click (fn []
+                                         (if local?
+                                           (nfs-handler/refresh! url
+                                                                 repo-handler/create-today-journal!)
+                                           (repo-handler/rebuild-index! url))
+                                         (js/setTimeout
+                                          (fn []
+                                            (route-handler/redirect! {:to :home}))
+                                          500))}
+                 "Re-index"]
+                [:a.control.ml-4 {:title "Clone again and re-index the db"
+                                  :on-click (fn []
+                                              (export-handler/export-repo-as-json! (:url repo)))}
+                 "Export as JSON"]
+                [:a.text-gray-400.ml-4 {:on-click (fn []
+                                                    (repo-handler/remove-repo! repo))}
+                 "Unlink"]]]))]
 
-        (for [{:keys [id url] :as repo} repos]
-          [:div.flex.justify-between.mb-1 {:key id}
-           [:a {:target "_blank"
-                :href url}
-            (db/get-repo-path url)]
-           [:div.controls
-            [:a.control {:title "Clone again and re-index the db"
-                         :on-click (fn []
-                                     (repo-handler/rebuild-index! repo)
-                                     (js/setTimeout
-                                      (fn []
-                                        (route-handler/redirect! {:to :home}))
-                                      500))}
-             "Re-index"]
-            [:a.control.ml-4 {:title "Clone again and re-index the db"
-                              :on-click (fn []
-                                          (export-handler/export-repo-as-json! (:url repo)))}
-             "Export as JSON"]
-            [:a.text-gray-400.ml-4 {:on-click (fn []
-                                                (repo-handler/remove-repo! repo))}
-             "Unlink"]]])]
-
-       [:a#download-as-json.hidden]]
-      (widgets/add-repo))))
+         [:a#download-as-json.hidden]]
+        (widgets/add-repo)))))
 
 (rum/defc sync-status < rum/reactive
   {:did-mount (fn [state]
                 (js/setTimeout common-handler/check-changed-files-status 1000)
                 state)}
   []
-  (let [repo (state/get-current-repo)]
-    (when-not (= repo config/local-repo)
-      (let [changed-files (state/sub [:repo/changed-files repo])
-            should-push? (seq changed-files)
-            git-status (state/sub [:git/status repo])
-            pushing? (= :pushing git-status)
-            pulling? (= :pulling git-status)
-            push-failed? (= :push-failed git-status)
-            last-pulled-at (db/sub-key-value repo :git/last-pulled-at)]
-        [:div.flex-row.flex.items-center
-         (when pushing?
-           [:span.lds-dual-ring.mt-1])
-         (ui/dropdown
-          (fn [{:keys [toggle-fn]}]
-            [:div.cursor.w-2.h-2.sync-status.mr-2
-             {:class (cond
+  (when-let [repo (state/get-current-repo)]
+    (let [nfs-repo? (config/local-db? repo)]
+      (when-not (= repo config/local-repo)
+        (if (and nfs-repo? (nfs-handler/supported?))
+          (let [syncing? (state/sub :graph/syncing?)]
+            [:div.ml-2.mr-1.opacity-70.hover:opacity-100 {:class (if syncing? "loader" "initial")}
+             [:a
+              {:on-click #(nfs-handler/refresh! repo
+                                                repo-handler/create-today-journal!)
+               :title (str "Sync files with the local directory: " (config/get-local-dir repo))}
+              svg/refresh]])
+          (let [changed-files (state/sub [:repo/changed-files repo])
+                should-push? (seq changed-files)
+                git-status (state/sub [:git/status repo])
+                pushing? (= :pushing git-status)
+                pulling? (= :pulling git-status)
+                push-failed? (= :push-failed git-status)
+                last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
+                ;; db-persisted? (state/sub [:db/persisted? repo])
+                editing? (seq (state/sub :editor/editing?))]
+            [:div.flex-row.flex.items-center
+             (when pushing?
+               [:span.lds-dual-ring.mt-1])
+             (ui/dropdown
+              (fn [{:keys [toggle-fn]}]
+                [:div.cursor.w-2.h-2.sync-status.mr-2
+                 {:class (cond
+                           push-failed?
+                           "bg-red-500"
+                           (or
+                            ;; (not db-persisted?)
+                            editing?
+                            should-push? pushing?)
+                           "bg-orange-400"
+                           :else
+                           "bg-green-600")
+                  :style {:border-radius "50%"
+                          :margin-top 2}
+                  :on-mouse-over
+                  (fn [e]
+                    (toggle-fn)
+                    (js/setTimeout common-handler/check-changed-files-status 0))}])
+              (fn [{:keys [toggle-fn]}]
+                (rum/with-context [[t] i18n/*tongue-context*]
+                  [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
+                   {:on-mouse-leave toggle-fn}
+                   [:div
+                    [:div
+                     (cond
                        push-failed?
-                       "bg-red-500"
-                       (or should-push? pushing?)
-                       "bg-orange-400"
+                       [:p (t :git/push-failed)]
+                       (and should-push? (seq changed-files))
+                       [:div.changes
+                        [:ul.overflow-y-scroll {:style {:max-height 250}}
+                         (for [file changed-files]
+                           [:li {:key (str "sync-" file)}
+                            [:div.flex.flex-row.justify-between.align-items
+                             [:a {:href (rfe/href :file {:path file})}
+                              file]
+                             [:a.ml-4.text-sm.mt-1
+                              {:on-click (fn [e]
+                                           (export-handler/download-file! file))}
+                              [:span (t :download)]]]])]]
                        :else
-                       "bg-green-600")
-              :style {:border-radius "50%"
-                      :margin-top 2}
-              :on-mouse-over
-              (fn [e]
-                (toggle-fn)
-                (js/setTimeout common-handler/check-changed-files-status 0))}])
-          (fn [{:keys [toggle-fn]}]
-            (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-       {:on-mouse-leave toggle-fn}
-       [:div
-        [:div
-         (cond
-           push-failed?
-           [:p (t :git/push-failed)]
-           (and should-push? (seq changed-files))
-           [:div.changes
-            [:ul
-             (for [file changed-files]
-               [:li {:key (str "sync-" file)}
-                [:div.flex.flex-row.justify-between.align-items
-                 [:a {:href (rfe/href :file {:path file})}
-                  file]
-                 [:a.ml-4.text-sm.mt-1
-                  {:on-click (fn [e]
-                               (export-handler/download-file! file))}
-                  [:span (t :download)]]]])]]
-           :else
-           [:p (t :git/local-changes-synced)])]
-        ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
-        [:div.flex.flex-row.justify-between.align-items.mt-2
-         (ui/button (t :git/push)
-           :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-         (if pushing?
-           [:span.lds-dual-ring.mt-1])]]
-       [:hr]
-       [:div
-        (when-not (string/blank? last-pulled-at)
-          [:p {:style {:font-size 12}} (t :git/last-pull)
-           (str ": " last-pulled-at)])
-        [:div.flex.flex-row.justify-between.align-items
-         (ui/button (t :git/pull)
-           :on-click (fn [] (repo-handler/pull-current-repo)))
-         (if pulling?
-           [:span.lds-dual-ring.mt-1])]
-        [:p.pt-2.text-sm.opacity-50
-         (t :git/version) (str " " version/version)]]])))]))))
+                       [:p (t :git/local-changes-synced)])]
+                   ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
+                    [:div.flex.flex-row.justify-between.align-items.mt-2
+                     (ui/button (t :git/push)
+                                :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                     (if pushing?
+                       [:span.lds-dual-ring.mt-1])]]
+                   [:hr]
+                   [:div
+                    (when-not (string/blank? last-pulled-at)
+                      [:p {:style {:font-size 12}} (t :git/last-pull)
+                       (str ": " last-pulled-at)])
+                    [:div.flex.flex-row.justify-between.align-items
+                     (ui/button (t :git/pull)
+                                :on-click (fn [] (repo-handler/pull-current-repo)))
+                     (if pulling?
+                       [:span.lds-dual-ring.mt-1])]
+                    [:a.mt-5.text-sm.opacity-50.block
+                     {:on-click (fn []
+                                  (export-handler/export-repo-as-zip! repo))}
+                     (t :repo/download-zip)]
+                    [:p.pt-2.text-sm.opacity-50
+                     (t :git/version) (str " " version/version)]]])))]))))))
 
 (rum/defc repos-dropdown < rum/reactive
   [head? on-click]
-  (let [current-repo (state/sub :git/current-repo)
-        logged? (state/logged?)
-        local-repo? (= current-repo config/local-repo)
-        get-repo-name (fn [repo]
-                          (if head?
-                            (db/get-repo-path repo)
-                            (util/take-at-most (db/get-repo-name repo) 20)))]
-    (when logged?
-      (if current-repo
-        (let [repos (state/sub [:me :repos])]
-          (if (> (count repos) 1)
-            (ui/dropdown-with-links
-             (fn [{:keys [toggle-fn]}]
-               [:a#repo-switch {:on-click toggle-fn}
-                [:span (get-repo-name current-repo)]
-                [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
-             (mapv
-              (fn [{:keys [id url]}]
-                {:title (get-repo-name url)
-                 :options {:on-click (fn []
-                                       (state/set-current-repo! url)
-                                       (when-not (= :draw (state/get-current-route))
-                                         (route-handler/redirect-to-home!))
-                                       (when on-click
-                                         (on-click url)))}})
-              (remove (fn [repo]
-                        (= current-repo (:url repo)))
-                      repos))
-             {:modal-class (util/hiccup->class
-                            "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
-            (if local-repo?
+  (when-let [current-repo (state/sub :git/current-repo)]
+    (let [logged? (state/logged?)
+          local-repo? (= current-repo config/local-repo)
+          get-repo-name (fn [repo]
+                          (if (config/local-db? repo)
+                            (config/get-local-dir repo)
+                            (if head?
+                              (db/get-repo-path repo)
+                              (util/take-at-most (db/get-repo-name repo) 20))))]
+      (let [repos (->> (state/sub [:me :repos])
+                       (remove (fn [r] (= config/local-repo (:url r)))))]
+        (cond
+          (> (count repos) 1)
+          (ui/dropdown-with-links
+           (fn [{:keys [toggle-fn]}]
+             [:a#repo-switch {:on-click toggle-fn}
               [:span (get-repo-name current-repo)]
+              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+           (mapv
+            (fn [{:keys [id url]}]
+              {:title (get-repo-name url)
+               :options {:on-click (fn []
+                                     (repo-handler/push-if-auto-enabled! (state/get-current-repo))
+
+                                     (state/set-current-repo! url)
+                                     (when-not (= :draw (state/get-current-route))
+                                       (route-handler/redirect-to-home!))
+                                     (when on-click
+                                       (on-click url)))}})
+            (remove (fn [repo]
+                      (= current-repo (:url repo)))
+                    repos))
+           {:modal-class (util/hiccup->class
+                          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
+
+          (and current-repo (not local-repo?))
+          (let [repo-name (get-repo-name current-repo)]
+            (if (config/local-db? current-repo)
+              repo-name
               [:a
                {:href current-repo
                 :target "_blank"}
-               (get-repo-name current-repo)])))))))
+               repo-name]))
+
+          :else
+          nil)))))

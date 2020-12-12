@@ -3,14 +3,15 @@
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.fs :as fs]
             [promesa.core :as p]
+            [lambdaisland.glogi :as log]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.idb :as idb]
             [frontend.git :as git]
             [cljs-bean.core :as bean]
             [frontend.date :as date]
             [frontend.config :as config]
             [frontend.format :as format]
-            [goog.object :as gobj]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file-handler]
@@ -21,8 +22,8 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            ;; [clojure.set :as set]
-))
+            [frontend.helper :as helper]
+            [frontend.spec :as spec]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -30,10 +31,11 @@
 
 (defn show-install-error!
   [repo-url title]
+  (spec/validate :repos/url repo-url)
   (notification/show!
    [:p.content
     title
-    [:span.text-gray-700.mr-2
+    [:span.mr-2
      (util/format
       "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
       repo-url)
@@ -43,117 +45,68 @@
    :error
    false))
 
-(defn get-new-token
-  [repo]
-  (when-let [installation-id (-> (filter
-                                  (fn [r]
-                                    (= (:url r) repo))
-                                  (:repos (state/get-me)))
-                                 (first)
-                                 :installation_id)]
-    (util/post (str config/api "refresh_github_token")
-               {:installation-ids [installation-id]}
-               (fn [result]
-                 (let [token (:token (first result))]
-                   (state/set-github-token! repo token)))
-               (fn [error]
-                 (println "Something wrong!")
-                 (js/console.dir error)))))
-
-(defn request-app-tokens!
-  [ok-handler error-handler]
-  (let [repos (:repos (state/get-me))
-        installation-ids (->> (map :installation_id repos)
-                              (remove nil?)
-                              (distinct))]
-    (when (or (seq repos)
-              (seq installation-ids))
-      (util/post (str config/api "refresh_github_token")
-                 {:installation-ids installation-ids
-                  :repos repos}
-                 (fn [result]
-                   (state/set-github-installation-tokens! result)
-                   (when ok-handler (ok-handler)))
-                 (fn [error]
-                   (println "Something wrong!")
-                   (js/console.dir error)
-                   (when error-handler (error-handler)))))))
-
-(defn journal-file-changed?
-  [repo-url diffs]
-  (contains? (set (map :path diffs))
-             (db/get-current-journal-path)))
-
 (defn create-config-file-if-not-exists
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         app-dir config/app-name
         dir (str repo-dir "/" app-dir)]
-    (p/let [_ (-> (fs/mkdir dir)
-                  (p/catch (fn [_e])))]
+    (p/let [_ (fs/mkdir-if-not-exists dir)]
       (let [default-content config/config-default-content]
-        (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
+        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
                               (db/get-file repo-url path))
-                content (or
-                         (and old-content
-                              (string/replace old-content "heading" "block"))
-                         default-content)]
+                content (or old-content default-content)]
             (db/reset-file! repo-url path content)
             (db/reset-config! repo-url content)
             (when-not (= content old-content)
-              (git-handler/git-add repo-url path))))
-        ;; (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/metadata-file) default-content)]
-        ;;   (let [path (str app-dir "/" config/metadata-file)]
-        ;;     (when-not file-exists?
-        ;;       (db/reset-file! repo-url path "{:tx-data []}")
-        ;;       (git-handler/git-add repo-url path))))
-))))
+              (git-handler/git-add repo-url path))))))))
 
 (defn create-contents-file
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         format (state/get-preferred-format)
-        path (str "pages/contents." (if (= (name format) "markdown")
-                                      "md"
-                                      (name format)))
+        path (str (state/get-pages-directory)
+                  "/contents."
+                  (config/get-file-extension format))
         file-path (str "/" path)
         default-content (util/default-content-with-title format "contents")]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/pages"))
-                  (p/catch (fn [_e])))
-            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-custom-theme
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
         default-content ""]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/app-name))
-                  (p/catch (fn [_e])))
-            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (db/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-dummy-notes-page
   [repo-url content]
+  (spec/validate :repos/url repo-url)
   (let [repo-dir (util/get-repo-dir repo-url)
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
-    (p/let [_ (-> (fs/mkdir (str repo-dir "/" (config/get-pages-directory)))
-                  (p/catch (fn [_e])))
-            _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
+            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
       (db/reset-file! repo-url path content))))
 
 (defn create-today-journal-if-not-exists
   ([repo-url]
    (create-today-journal-if-not-exists repo-url nil))
   ([repo-url content]
+   (spec/validate :repos/url repo-url)
    (let [repo-dir (util/get-repo-dir repo-url)
          format (state/get-preferred-format repo-url)
          title (date/today)
@@ -179,58 +132,82 @@
          empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
      (when (or empty-blocks?
                (not page-exists?))
-       (p/let [_ (-> (fs/mkdir (str repo-dir "/" config/default-journals-directory))
-                     (p/catch (fn [_e])))
-               file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+       (p/let [_ (fs/check-directory-permission! repo-url)
+               _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
+               file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
          (when-not file-exists?
            (db/reset-file! repo-url path content)
            (ui-handler/re-render-root!)
            (git-handler/git-add repo-url path)))))))
 
+(defn create-today-journal!
+  []
+  (state/set-today! (date/today))
+  (when-let [repo (state/get-current-repo)]
+    (when (or (db/cloned? repo)
+              (config/local-db? repo))
+      (let [today-page (string/lower-case (date/today))]
+        (when (empty? (db/get-page-blocks-no-cache repo today-page))
+          (create-today-journal-if-not-exists repo))))))
+
 (defn create-default-files!
   [repo-url]
-  (when-let [name (get-in @state/state [:me :name])]
-    (create-config-file-if-not-exists repo-url)
-    (create-today-journal-if-not-exists repo-url)
-    (create-contents-file repo-url)
-    (create-custom-theme repo-url)))
+  (spec/validate :repos/url repo-url)
+  (create-config-file-if-not-exists repo-url)
+  (create-today-journal-if-not-exists repo-url)
+  (create-contents-file repo-url)
+  (create-custom-theme repo-url))
+
+(defn parse-files-and-load-to-db!
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
+                   :or {re-render? true}}]
+  (state/set-loading-files! false)
+  (state/set-importing-to-db! true)
+  (let [file-paths (map :file/path files)
+        parsed-files (filter
+                      (fn [file]
+                        (let [format (format/get-format (:file/path file))]
+                          (contains? config/mldoc-support-formats format)))
+                      files)
+        blocks-pages (if (seq parsed-files)
+                       (db/extract-all-blocks-pages repo-url parsed-files)
+                       [])]
+    (db/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (let [config-file (str config/app-name "/" config/config-file)]
+      (if (contains? (set file-paths) config-file)
+        (when-let [content (some #(when (= (:file/path %) config-file)
+                                    (:file/content %)) files)]
+          (file-handler/restore-config! repo-url content true))))
+    (when first-clone? (create-default-files! repo-url))
+    (when re-render?
+      (ui-handler/re-render-root! re-render-opts))
+    (state/set-importing-to-db! false)))
 
 (defn load-repo-to-db!
-  [repo-url diffs first-clone?]
-  (let [load-contents (fn [files delete-files delete-blocks re-render?]
+  [repo-url {:keys [first-clone? diffs nfs-files]}]
+  (spec/validate :repos/url repo-url)
+  (let [load-contents (fn [files option]
                         (file-handler/load-files-contents!
                          repo-url
                          files
-                         (fn [contents]
-                           (state/set-state! :repo/loading-files? false)
-                           (state/set-state! :repo/importing-to-db? true)
-                           (let [parsed-files (filter
-                                               (fn [[file _]]
-                                                 (let [format (format/get-format file)]
-                                                   (contains? config/mldoc-support-formats format)))
-                                               contents)
-                                 blocks-pages (if (seq parsed-files)
-                                                (db/extract-all-blocks-pages repo-url parsed-files)
-                                                [])]
-                             (db/reset-contents-and-blocks! repo-url contents blocks-pages delete-files delete-blocks)
-                             (let [config-file (str config/app-name "/" config/config-file)]
-                               (if (contains? (set files) config-file)
-                                 (when-let [content (get contents config-file)]
-                                   (file-handler/restore-config! repo-url content true))))
-                             (when first-clone? (create-default-files! repo-url))
-                             (state/set-state! :repo/importing-to-db? false)
-                             (when re-render?
-                               (ui-handler/re-render-root!))))))]
-    (if first-clone?
+                         (fn [files-contents]
+                           (parse-files-and-load-to-db! repo-url files-contents option))))]
+    (cond
+      (and (not (seq diffs)) (seq nfs-files))
+      (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
+
+      first-clone?
       (->
        (p/let [files (file-handler/load-files repo-url)]
-         (load-contents files nil nil false))
+         (load-contents files {:first-clone? first-clone?}))
        (p/catch (fn [error]
                   (println "loading files failed: ")
                   (js/console.dir error)
                   ;; Empty repo
                   (create-default-files! repo-url)
-                  (state/set-state! :repo/loading-files? false))))
+                  (state/set-loading-files! false))))
+
+      :else
       (when (seq diffs)
         (let [filter-diffs (fn [type] (->> (filter (fn [f] (= type (:type f))) diffs)
                                            (map :path)))
@@ -243,23 +220,28 @@
               delete-pages (if (seq remove-files)
                              (db/delete-pages-by-files remove-files)
                              [])
-              add-or-modify-files (util/remove-nils (concat add-files modify-files))]
-          (load-contents add-or-modify-files (concat delete-files delete-pages) delete-blocks true))))))
-
-(defn persist-repo!
-  [repo]
-  (when-let [files-conn (db/get-files-conn repo)]
-    (db/persist repo @files-conn true))
-  (when-let [db (db/get-conn repo)]
-    (db/persist repo db false)))
+              add-or-modify-files (some->>
+                                   (concat modify-files add-files)
+                                   (util/remove-nils))
+              options {:first-clone? first-clone?
+                       :delete-files (concat delete-files delete-pages)
+                       :delete-blocks delete-blocks
+                       :re-render? true}]
+          (if (seq nfs-files)
+            (parse-files-and-load-to-db! repo-url nfs-files
+                                         (assoc options :re-render-opts {:clear-all-query-state? true}))
+            (load-contents add-or-modify-files options)))))))
 
 (defn load-db-and-journals!
   [repo-url diffs first-clone?]
+  (spec/validate :repos/url repo-url)
   (when (or diffs first-clone?)
-    (load-repo-to-db! repo-url diffs first-clone?)))
+    (load-repo-to-db! repo-url {:first-clone? first-clone?
+                                :diffs diffs})))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]
+  (spec/validate :repos/url repo)
   (let [files (remove nil? files)
         pages (->> (map db/get-file-page (map first files))
                    (remove nil?))]
@@ -270,36 +252,28 @@
     (when (seq pages)
       (let [children-tx (mapcat #(db/rebuild-page-blocks-children repo %) pages)]
         (when (seq children-tx)
-          (db/transact! repo children-tx)))))
-  (when (seq files)
-    (file-handler/alter-files repo files)))
-
-(defn persist-repo-metadata!
-  [repo]
-  (let [files (db/get-files repo)]
+          (db/transact! repo children-tx))))
     (when (seq files)
-      (let [data (db/get-sync-metadata repo)
-            data-str (pr-str data)]
-        (file-handler/alter-file repo
-                                 (str config/app-name "/" config/metadata-file)
-                                 data-str
-                                 {:reset? false})))))
-
-(defn periodically-persist-app-metadata
-  [repo-url]
-  (js/setInterval #(persist-repo-metadata! repo-url)
-                  (* 5 60 1000)))
+      (file-handler/alter-files repo files {}))))
 
 (declare push)
 
+(defn get-diff-result
+  [repo-url]
+  (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
+          local-latest-commit (common-handler/get-ref repo-url)]
+    (git/get-diffs repo-url local-latest-commit remote-latest-commit)))
+
 (defn pull
-  [repo-url token {:keys [fallback? force-pull?]
-                   :or {fallback? false
-                        force-pull? false}}]
+  [repo-url {:keys [force-pull? show-diff? try-times]
+             :or {force-pull? false
+                  show-diff? false
+                  try-times 2}
+             :as opts}]
+  (spec/validate :repos/url repo-url)
   (when (and
          (db/get-conn repo-url true)
-         (db/cloned? repo-url)
-         token)
+         (db/cloned? repo-url))
     (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
             local-latest-commit (common-handler/get-ref repo-url)
             descendent? (git/descendent? repo-url local-latest-commit remote-latest-commit)]
@@ -315,10 +289,16 @@
                      (and
                       (not= status :pushing)
                       (not (state/get-edit-input-id))
-                      (not (state/in-draw-mode?))))
+                      (not (state/in-draw-mode?))
+                      ;; don't pull if git conflicts not resolved yet
+                      (or
+                       show-diff?
+                       (and (not show-diff?)
+                            (empty? @state/diffs)))))
                 (git-handler/set-git-status! repo-url :pulling)
                 (->
-                 (p/let [result (git/fetch repo-url token)]
+                 (p/let [token (helper/get-github-token repo-url)
+                         result (git/fetch repo-url token)]
                    (let [{:keys [fetchHead]} (bean/->clj result)]
                      (-> (git/merge repo-url)
                          (p/then (fn [result]
@@ -340,151 +320,115 @@
                                     (js/console.error error)
                                     (git-handler/set-git-status! repo-url :merge-failed)
                                     (git-handler/set-git-error! repo-url error)
-                                    (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
-                                            local-latest-commit (common-handler/get-ref repo-url)
-                                            result (git/get-local-diffs repo-url local-latest-commit remote-latest-commit)]
+                                    (p/let [result (get-diff-result repo-url)]
                                       (if (seq result)
                                         (do
                                           (notification/show!
                                            [:p.content
                                             "Failed to merge, please "
-                                            [:span.text-gray-700.font-bold
+                                            [:span.font-bold
                                              "resolve any diffs first."]]
                                            :error)
                                           (route-handler/redirect! {:to :diff}))
-                                        (push repo-url {:commit-push? true
-                                                        :force? true
+                                        (push repo-url {:merge-push-no-diff? true
                                                         :commit-message "Merge push without diffed files"}))))))))
-                 (p/catch (fn [error]
-                            (println "Pull error:" (str error))
-                            (js/console.error error)
-                            ;; token might be expired, request new token
+                 (p/catch
+                  (fn [error]
+                    (cond
+                      (string/includes? (str error) "404")
+                      (do (log/error :git/pull-error error)
+                          (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url)))
 
-                            (cond
-                              (and (or (string/includes? (str error) "401")
-                                       (string/includes? (str error) "404"))
-                                   (not fallback?))
-                              (request-app-tokens!
-                               (fn []
-                                 (pull repo-url (state/get-github-token repo-url) {:fallback? true}))
-                               nil)
+                      (string/includes? (str error) "401")
+                      (let [remain-times (dec try-times)]
+                        (if (> remain-times 0)
+                          (let [new-opts (merge opts {:try-times remain-times})]
+                            (pull repo-url new-opts))
+                          (let [error-msg
+                                (util/format "Failed to fetch %s. It may be caused by token expiration or missing." repo-url)]
+                            (log/error :git/pull-error error)
+                            (notification/show! error-msg :error false))))
 
-                              (or (string/includes? (str error) "401")
-                                  (string/includes? (str error) "404"))
-                              (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url))
-
-                              :else
-                              nil))))))))))))
+                      :else
+                      (log/error :git/pull-error error)))))))))))))
 
 (defn push
-  [repo-url {:keys [commit-message fallback? diff-push? commit-push? force?]
-             :or {commit-message "Logseq auto save"
-                  fallback? false
-                  diff-push? false
-                  commit-push? false
-                  force? false}}]
+  [repo-url {:keys [commit-message merge-push-no-diff? custom-commit?]
+             :or {custom-commit false
+                  commit-message "Logseq auto save"
+                  merge-push-no-diff? false}}]
+  (spec/validate :repos/url repo-url)
   (let [status (db/get-key-value repo-url :git/status)]
-    (when (or
-           commit-push?
-           (and
-            (db/cloned? repo-url)
-            (not (state/get-edit-input-id))
-            (not= status :pushing)))
+    (if (and
+         (db/cloned? repo-url)
+         (state/input-idle? repo-url)
+         (or (not= status :pushing)
+             custom-commit?))
       (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
-            (when (or
-                   commit-push?
-                   (seq files)
-                   fallback?
-                   diff-push?)
+            (when (or (seq files) merge-push-no-diff?)
               ;; auto commit if there are any un-committed changes
               (let [commit-message (if (string/blank? commit-message)
                                      "Logseq auto save"
                                      commit-message)]
-                (p/let [commit-oid (git/commit repo-url commit-message)]
-                  (git-handler/set-git-status! repo-url :pushing)
-                  (when-let [token (state/get-github-token repo-url)]
+                (p/let [commit-oid (git/commit repo-url commit-message)
+                        token (helper/get-github-token repo-url)
+                        status (db/get-key-value repo-url :git/status)]
+                  (when (and token (or (not= status :pushing)
+                                       custom-commit?))
+                    (git-handler/set-git-status! repo-url :pushing)
                     (util/p-handle
-                     (git/push repo-url token force?)
+                     (git/push repo-url token merge-push-no-diff?)
                      (fn [result]
                        (git-handler/set-git-status! repo-url nil)
                        (git-handler/set-git-error! repo-url nil)
                        (common-handler/check-changed-files-status repo-url))
                      (fn [error]
-                       (println "Git push error: ")
+                       (log/error :git/push-error error)
                        (js/console.error error)
                        (common-handler/check-changed-files-status repo-url)
-                       (let [permission? (or (string/includes? (str error) "401")
-                                             (string/includes? (str error) "404"))]
-                         (cond
-                           (and permission? (not fallback?))
-                           (request-app-tokens!
-                            (fn []
-                              (git-handler/set-git-status! repo-url :re-push)
-                              (push repo-url
-                                    {:commit-message commit-message
-                                     :fallback? true}))
-                            nil)
-
-                           :else
-                           (do
-                             (git-handler/set-git-status! repo-url :push-failed)
-                             (git-handler/set-git-error! repo-url error)
-                             (cond
-                               permission?
-                               (show-install-error! repo-url (util/format "Failed to push to %s. " repo-url))
-
-                               (state/online?)
-                               (pull repo-url token {:force-pull? true})
-
-                               :else    ; offline
-                               nil)))))))))))
+                       (do
+                         (git-handler/set-git-status! repo-url :push-failed)
+                         (git-handler/set-git-error! repo-url error)
+                         (when (state/online?)
+                           (pull repo-url {:force-pull? true
+                                           :show-diff? true}))))))))))
           (p/catch (fn [error]
-                     (println "Git push error: ")
+                     (log/error :git/get-changed-files-error error)
                      (git-handler/set-git-status! repo-url :push-failed)
                      (git-handler/set-git-error! repo-url error)
                      (js/console.dir error)))))))
 
 (defn push-if-auto-enabled!
   [repo]
-  (when (state/git-auto-push?)
+  (spec/validate :repos/url repo)
+  (when (state/get-git-auto-push? repo)
     (push repo nil)))
 
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [token (state/get-github-token repo)]
-      (pull repo token {:force-pull? true}))))
+    (pull repo {:force-pull? true})))
 
-(defn clone
-  ([repo-url]
-   (clone repo-url false))
-  ([repo-url fallback?]
-   (when-let [token (state/get-github-token repo-url)]
-     (util/p-handle
-      (do
-        (state/set-cloning! true)
-        (git/clone repo-url token))
-      (fn [result]
-        (state/set-git-clone-repo! "")
-        (state/set-current-repo! repo-url)
-        (db/start-db-conn! (:me @state/state) repo-url)
-        (db/mark-repo-as-cloned repo-url))
-      (fn [e]
-        (if (and (not fallback?)
-                 (or (string/includes? (str e) "401")
-                     (string/includes? (str e) "404")))
-          (request-app-tokens!
-           (fn []
-             (clone repo-url true))
-           nil)
-          (do
-            (println "Clone failed, error: ")
-            (js/console.error e)
-            (state/set-cloning! false)
-            (git-handler/set-git-status! repo-url :clone-failed)
-            (git-handler/set-git-error! repo-url e)
-
-            (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))))
+(defn- clone
+  [repo-url]
+  (spec/validate :repos/url repo-url)
+  (p/let [token (helper/get-github-token repo-url)]
+    (when token
+      (util/p-handle
+       (do
+         (state/set-cloning! true)
+         (git/clone repo-url token))
+       (fn [result]
+         (state/set-current-repo! repo-url)
+         (db/start-db-conn! (state/get-me) repo-url)
+         (db/mark-repo-as-cloned! repo-url))
+       (fn [e]
+         (println "Clone failed, error: ")
+         (js/console.error e)
+         (state/set-cloning! false)
+         (git-handler/set-git-status! repo-url :clone-failed)
+         (git-handler/set-git-error! repo-url e)
+         (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))
 
 (defn set-config-content!
   [repo path new-config]
@@ -510,63 +454,65 @@
 
 (defn remove-repo!
   [{:keys [id url] :as repo}]
-  (util/delete (str config/api "repos/" id)
-               (fn []
-                 (db/remove-conn! url)
-                 (db/remove-db! url)
-                 (db/remove-files-db! url)
-                 (fs/rmdir (util/get-repo-dir url))
-                 (state/delete-repo! repo))
-               (fn [error]
-                 (prn "Delete repo failed, error: " error))))
+  (spec/validate :repos/repo repo)
+  (let [delete-db-f (fn []
+                      (db/remove-conn! url)
+                      (db/remove-db! url)
+                      (db/remove-files-db! url)
+                      (fs/rmdir (util/get-repo-dir url))
+                      (state/delete-repo! repo))]
+    (if (config/local-db? url)
+      (p/let [_ (idb/clear-local-db! url)] ; clear file handles
+        (delete-db-f))
+      (util/delete (str config/api "repos/" id)
+                   delete-db-f
+                   (fn [error]
+                     (prn "Delete repo failed, error: " error))))))
+
+(defn start-repo-db-if-not-exists!
+  [repo option]
+  (state/set-current-repo! repo)
+  (db/start-db-conn! nil repo option))
 
 (defn setup-local-repo-if-not-exists!
   []
   (if js/window.pfs
     (let [repo config/local-repo]
-      (p/let [result (-> (fs/mkdir (str "/" repo))
-                         (p/catch (fn [_e] nil)))
-              _ (state/set-current-repo! repo)
-              _ (db/start-db-conn! nil repo)
-              _ (when-not config/publishing?
-                  (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
-                    (create-dummy-notes-page repo dummy-notes)))
-              _ (when-not config/publishing?
-                  (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
-                        tutorial (string/replace-first tutorial "$today" (date/today))]
-                    (create-today-journal-if-not-exists repo tutorial)))
-              _ (create-config-file-if-not-exists repo)
-              _ (create-contents-file repo)
-              _ (create-custom-theme repo)]
-        (state/set-db-restoring! false)))
+      (p/do! (fs/mkdir-if-not-exists (str "/" repo))
+             (state/set-current-repo! repo)
+             (db/start-db-conn! nil repo)
+             (when-not config/publishing?
+               (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                 (create-dummy-notes-page repo dummy-notes)))
+             (when-not config/publishing?
+               (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                     tutorial (string/replace-first tutorial "$today" (date/today))]
+                 (create-today-journal-if-not-exists repo tutorial)))
+             (create-config-file-if-not-exists repo)
+             (create-contents-file repo)
+             (create-custom-theme repo)
+             (state/set-db-restoring! false)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
-(defn periodically-pull
-  [repo-url pull-now?]
-  (when-let [token (state/get-github-token repo-url)]
-    (when pull-now? (pull repo-url token nil))
-    (js/setInterval #(pull repo-url token nil)
-                    (* (config/git-pull-secs) 1000))))
+(defn periodically-pull-current-repo
+  []
+  (js/setInterval
+   (fn []
+     (p/let [repo-url (state/get-current-repo)
+             token (helper/get-github-token repo-url)]
+       (when token
+         (pull repo-url nil))))
+   (* (config/git-pull-secs) 1000)))
 
-(defn periodically-push-tasks
-  [repo-url]
-  (let [token (state/get-github-token repo-url)
-        push (fn []
-               (when (and (not (false? (:git-auto-push (state/get-config repo-url))))
-                          ;; (not config/dev?)
-)
-                 (push repo-url nil)))]
-    (js/setInterval push
-                    (* (config/git-push-secs) 1000))))
-
-(defn periodically-pull-and-push
-  [repo-url {:keys [pull-now?]
-             :or {pull-now? true}}]
-  (periodically-pull repo-url pull-now?)
-  (periodically-push-tasks repo-url))
+(defn periodically-push-current-repo
+  []
+  (js/setInterval #(push-if-auto-enabled! (state/get-current-repo))
+                  (* (config/git-push-secs) 1000)))
 
 (defn create-repo!
   [repo-url branch]
+  (spec/validate :repos/url repo-url)
+  (spec/validate :repos/branch branch)
   (util/post (str config/api "repos")
              {:url repo-url
               :branch branch}
@@ -578,53 +524,54 @@
                (println "Something wrong!")
                (js/console.dir error))))
 
-(defn clone-and-pull
+(defn- clone-and-load-db
   [repo-url]
+  (spec/validate :repos/url repo-url)
   (->
    (p/let [_ (clone repo-url)
-           _ (git-handler/git-set-username-email! repo-url (:me @state/state))]
-     (load-db-and-journals! repo-url nil true)
-     (periodically-pull-and-push repo-url {:pull-now? false})
-     ;; (periodically-persist-app-metadata repo-url)
-)
+           _ (git-handler/git-set-username-email! repo-url (state/get-me))]
+     (load-db-and-journals! repo-url nil true))
    (p/catch (fn [error]
               (js/console.error error)))))
 
 (defn clone-and-pull-repos
   [me]
+  (spec/validate :state/me me)
   (if (and js/window.git js/window.pfs)
-    (doseq [{:keys [id url]} (:repos me)]
-      (let [repo url]
-        (p/let [config-exists? (fs/file-exists?
-                                (util/get-repo-dir url)
-                                ".git/config")]
-          (if (and config-exists?
-                   (db/cloned? repo))
-            (do
-              (git-handler/git-set-username-email! repo me)
-              (periodically-pull-and-push repo {:pull-now? true})
-              ;; (periodically-persist-app-metadata repo)
-)
-            (clone-and-pull repo)))))
+    (do
+      (doseq [{:keys [id url]} (:repos me)]
+        (let [repo url]
+          (p/let [config-exists? (fs/file-exists?
+                                  (util/get-repo-dir url)
+                                  ".git/config")]
+            (if (and config-exists?
+                     (db/cloned? repo))
+              (do
+                (git-handler/git-set-username-email! repo me)
+                (pull repo nil))
+              (do
+                (clone-and-load-db repo))))))
+
+      (periodically-pull-current-repo)
+      (periodically-push-current-repo))
     (js/setTimeout (fn []
                      (clone-and-pull-repos me))
                    500)))
 
 (defn rebuild-index!
-  [{:keys [id url] :as repo}]
-  (db/remove-conn! url)
-  (db/clear-query-state!)
-  (-> (p/let [_ (db/remove-db! url)
-              _ (db/remove-files-db! url)]
-        (fs/rmdir (util/get-repo-dir url)))
-      (p/catch (fn [error]
-                 (prn "Delete repo failed, error: " error)))
-      (p/finally (fn []
-                   (clone-and-pull url)))))
+  [url]
+  (when url
+    (db/remove-conn! url)
+    (db/clear-query-state!)
+    (-> (p/do! (db/remove-db! url)
+               (db/remove-files-db! url)
+               (fs/rmdir (util/get-repo-dir url))
+               (clone-and-load-db url))
+        (p/catch (fn [error]
+                   (prn "Delete repo failed, error: " error))))))
 
 (defn git-commit-and-push!
   [commit-message]
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
-                :fallback? false
-                :commit-push? true})))
+                :custom-commit? true})))

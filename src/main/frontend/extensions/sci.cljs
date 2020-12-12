@@ -11,11 +11,7 @@
 
 (defn call-fn
   [f & args]
-  (apply f args)
-  ;; (-> (apply f (bean/->js args))
-  ;;     (->js)
-  ;;     (bean/->clj))
-  )
+  (apply f args))
 
 (defn eval-result
   [code]
