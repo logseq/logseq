@@ -145,7 +145,9 @@
   (state/set-today! (date/today))
   (when-let [repo (state/get-current-repo)]
     (when (or (db/cloned? repo)
-              (config/local-db? repo))
+              (and (config/local-db? repo)
+                   ;; config file exists
+                   (db/get-file (str config/app-name "/" config/config-file))))
       (let [today-page (string/lower-case (date/today))]
         (when (empty? (db/get-page-blocks-no-cache repo today-page))
           (create-today-journal-if-not-exists repo))))))
@@ -184,7 +186,8 @@
     (state/set-importing-to-db! false)))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files]}]
+  [repo-url {:keys [first-clone? diffs nfs-files]
+             :as opts}]
   (spec/validate :repos/url repo-url)
   (let [load-contents (fn [files option]
                         (file-handler/load-files-contents!
@@ -193,10 +196,10 @@
                          (fn [files-contents]
                            (parse-files-and-load-to-db! repo-url files-contents option))))]
     (cond
-      (and (not (seq diffs)) (seq nfs-files))
+      (and (not (seq diffs)) nfs-files)
       (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
 
-      first-clone?
+      (and first-clone? (not nfs-files))
       (->
        (p/let [files (file-handler/load-files repo-url)]
          (load-contents files {:first-clone? first-clone?}))
