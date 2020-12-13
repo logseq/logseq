@@ -227,8 +227,7 @@
                                                                   (string/lower-case (gobj/get page "name"))))))]
                        (.concat pages (bean/->js pages-to-add)))))))
         (when (seq blocks)
-          (let [blocks-result (profile "pull many"
-                                       (db/pull-many '[:db/id :block/uuid :block/format :block/content] (set (map :e blocks))))
+          (let [blocks-result (db/pull-many '[:db/id :block/uuid :block/format :block/content] (set (map :e blocks)))
                 blocks-to-add-set (->> (filter :added blocks)
                                        (map :e)
                                        (set))
