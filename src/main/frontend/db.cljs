@@ -1,6 +1,7 @@
 (ns frontend.db
   (:require [datascript.core :as d]
             [frontend.date :as date]
+            [frontend.search.db :as search-db]
             [medley.core :as medley]
             [datascript.transit :as dt]
             [frontend.format :as format]
@@ -21,7 +22,8 @@
             [frontend.db-schema :as db-schema]
             [clojure.core.async :as async]
             [lambdaisland.glogi :as log]
-            [frontend.idb :as idb]))
+            [frontend.idb :as idb]
+            [cljs-bean.core :as bean]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -1930,6 +1932,9 @@
     (swap! persistent-jobs assoc repo job)))
 
 ;; only save when user's idle
+
+;; TODO: pass as a parameter
+(defonce *sync-search-indice-f (atom nil))
 (defn- repo-listen-to-tx!
   [repo conn files-db?]
   (d/listen! conn :persistence
@@ -1937,7 +1942,17 @@
                (let [tx-id (get-tx-id tx-report)]
                  (state/set-last-transact-time! repo (util/time-ms))
                  ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
-                 (persist-if-idle! repo)))))
+                 (persist-if-idle! repo))
+
+               ;; rebuild search indices
+               (when-not files-db?
+                 (let [data (:tx-data tx-report)
+                       datoms (filter
+                               (fn [datom]
+                                 (contains? #{:page/name :block/content} (:a datom)))
+                               data)]
+                   (when-let [f @*sync-search-indice-f]
+                     (f datoms)))))))
 
 (defn- listen-and-persist!
   [repo]
@@ -2414,6 +2429,18 @@
      (let [n (count (d/datoms (get-conn) :avet :block/uuid))]
        (reset! blocks-count-cache n)
        n))))
+
+;; block/uuid and block/content
+(defn get-all-block-contents
+  []
+  (->> (d/datoms (get-conn) :avet :block/uuid)
+       (map :v)
+       (map (fn [id]
+              (let [e (entity [:block/uuid id])]
+                {:db/id (:db/id e)
+                 :block/uuid id
+                 :block/content (:block/content e)
+                 :block/format (:block/format e)})))))
 
 (defn get-all-templates
   []
