@@ -47,3 +47,6 @@ dummy.createWritable = function() {};
 dummy.write = function() {};
 dummy.close = function() {};
 dummy.values = function() {};
+// Do we really need those?
+dummy.filter = function() {};
+dummy.concat = function() {};

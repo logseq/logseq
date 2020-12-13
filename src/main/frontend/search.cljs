@@ -48,9 +48,8 @@
                      (remove string/blank?)
                      (map (fn [p] {:name p}))
                      (bean/->js))]
-      (when (seq pages)
-        (swap! indices assoc-in [repo :pages] pages)
-        pages))))
+      (swap! indices assoc-in [repo :pages] pages)
+      pages)))
 
 ;; TODO: persist indices to indexeddb, it'll be better if the future db
 ;; can has the direct fuzzy search support.
@@ -222,7 +221,8 @@
                                          (set))]
             (swap! search-db/indices update-in [repo :pages]
                    (fn [pages]
-                     (let [pages (.filter pages (fn [page]
+                     (let [pages (or pages (array))
+                           pages (.filter pages (fn [page]
                                                   (not (contains? pages-to-remove-set
                                                                   (string/lower-case (gobj/get page "name"))))))]
                        (.concat pages (bean/->js pages-to-add)))))))
@@ -241,6 +241,7 @@
                                           (set))]
             (swap! search-db/indices update-in [repo :blocks]
                    (fn [blocks]
-                     (let [blocks (.filter blocks (fn [block]
+                     (let [blocks (or blocks (array))
+                           blocks (.filter blocks (fn [block]
                                                     (not (contains? blocks-to-remove-set (gobj/get block "id")))))]
                        (.concat blocks (bean/->js blocks-to-add)))))))))))
