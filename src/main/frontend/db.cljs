@@ -1952,7 +1952,8 @@
                                  (contains? #{:page/name :block/content} (:a datom)))
                                data)]
                    (when-let [f @*sync-search-indice-f]
-                     (f datoms)))))))
+                     (profile "rebuild indice"
+                              (f datoms))))))))
 
 (defn- listen-and-persist!
   [repo]

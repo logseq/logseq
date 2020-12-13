@@ -3,7 +3,7 @@
             [frontend.search.db :as search-db :refer [indices]]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.set :as set]
@@ -222,17 +222,13 @@
                                          (set))]
             (swap! search-db/indices update-in [repo :pages]
                    (fn [pages]
-                     (let [pages (set (bean/->clj pages))
-                           pages (if (seq pages-to-remove-set)
-                                   (remove (fn [page]
-                                             (contains? pages-to-remove-set
-                                                        (string/lower-case (:name page))))
-                                           pages)
-                                   pages)
-                           pages (set/union (set pages) pages-to-add)]
-                       (bean/->js pages))))))
+                     (let [pages (.filter pages (fn [page]
+                                                  (not (contains? pages-to-remove-set
+                                                                  (string/lower-case (gobj/get page "name"))))))]
+                       (.concat pages (bean/->js pages-to-add)))))))
         (when (seq blocks)
-          (let [blocks-result (db/pull-many '[:db/id :block/uuid :block/format :block/content] (set (map :e blocks)))
+          (let [blocks-result (profile "pull many"
+                                       (db/pull-many '[:db/id :block/uuid :block/format :block/content] (set (map :e blocks))))
                 blocks-to-add-set (->> (filter :added blocks)
                                        (map :e)
                                        (set))
@@ -246,11 +242,6 @@
                                           (set))]
             (swap! search-db/indices update-in [repo :blocks]
                    (fn [blocks]
-                     (let [blocks (set (bean/->clj blocks))
-                           blocks (if (seq blocks-to-remove-set)
-                                    (remove (fn [block]
-                                              (contains? blocks-to-remove-set (:id block)))
-                                            blocks)
-                                    blocks)
-                           blocks (set/union (set blocks) blocks-to-add)]
-                       (bean/->js blocks))))))))))
+                     (let [blocks (.filter blocks (fn [block]
+                                                    (not (contains? blocks-to-remove-set (gobj/get block "id")))))]
+                       (.concat blocks (bean/->js blocks-to-add)))))))))))
