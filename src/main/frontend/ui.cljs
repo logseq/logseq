@@ -93,7 +93,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                      ;; [:div {:style {:position "absolute" :right "8px"}}
                      ;;  icon]
-                     ]]
+]]
           (rum/with-key
             (menu-link new-options child)
             title)))])
@@ -123,7 +123,7 @@
     (let [[color-class svg]
           (case status
             :success
-            ["text-gray-900"
+            ["text-gray-900 dark:text-gray-300 "
              [:svg.h-6.w-6.text-green-400
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path
@@ -149,7 +149,7 @@
                 :d
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                 :fill-rule "evenodd"}]]])]
-      [:div.inset-0.flex.items-end.justify-center.px-4.py-3.pointer-events-none.sm:px-6.sm:py-3.sm:items-start.sm:justify-end
+      [:div.ui__notifications-content
        {:style {:z-index (if (or (= state "exiting")
                                  (= state "exited"))
                            -1
@@ -186,7 +186,7 @@
   []
   (let [contents (state/sub :notification/contents)]
     (transition-group
-     {:class-name "notifications"}
+     {:class-name "notifications ui__notifications"}
      (doall (map (fn [el]
                    (let [k (first el)
                          v (second el)]
@@ -209,6 +209,9 @@
    text])
 
 ;; scroll
+(defn get-doc-scroll-top []
+  (.-scrollTop js/document.documentElement))
+
 (defn main-node
   []
   (gdom/getElement "main-content"))
@@ -223,6 +226,7 @@
 (defn inject-document-devices-envs!
   []
   (let [cl (.-classList js/document.documentElement)]
+    (if (util/mac?) (.add cl "is-mac"))
     (if (util/ios?) (.add cl "is-ios"))
     (if (util/safari?) (.add cl "is-safari"))))
 
@@ -268,7 +272,7 @@
 ;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
   [on-load on-top-reached]
-  (let [node (main-node)
+  (let [node js/document.documentElement
         full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
@@ -286,7 +290,7 @@
         debounced-on-scroll (util/debounce 500 #(on-scroll
                                                  (:on-load opts) ; bottom reached
                                                  (:on-top-reached opts)))]
-    (mixins/listen state (main-node) :scroll debounced-on-scroll)))
+    (mixins/listen state js/document :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
@@ -353,7 +357,7 @@
   (let [current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
-       [:div#ui__ac-inner
+       [:div#ui__ac-inner.hide-scrollbar
         (for [[idx item] (medley/indexed matched)]
           (rum/with-key
             (menu-link
@@ -389,7 +393,7 @@
   ([label children {:keys [label-style]}]
    [:div.Tooltip {:style {:display "inline"}}
     [:div (cond->
-            {:class "Tooltip__label"}
+           {:class "Tooltip__label"}
             label-style
             (assoc :style label-style))
      label]
@@ -448,10 +452,9 @@
 
 (defn loading
   [content]
-  [:div.flex.flex-row.align-center
-   [:span.lds-dual-ring.mr-2]
-   [:span {:style {:margin-top 2}}
-    content]])
+  [:div.flex.flex-row.items-center
+   [:span.icon.flex.items-center svg/loading]
+   [:span.text.pl-2 content]])
 
 (rum/defcs foldable <
   (rum/local false ::control?)

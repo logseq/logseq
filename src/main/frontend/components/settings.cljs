@@ -153,7 +153,7 @@
              {:for "enable_timetracking"}
              (t :settings-page/enable-timetracking)]
             [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+             [:div.max-w-lg.rounded-md.sm:max-w-xs
               (ui/toggle enable-timetracking?
                          (fn []
                            (let [value (not enable-timetracking?)]
