@@ -93,7 +93,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                      ;; [:div {:style {:position "absolute" :right "8px"}}
                      ;;  icon]
-                     ]]
+]]
           (rum/with-key
             (menu-link new-options child)
             title)))])
@@ -123,7 +123,7 @@
     (let [[color-class svg]
           (case status
             :success
-            ["text-gray-900"
+            ["text-gray-900 dark:text-gray-300 "
              [:svg.h-6.w-6.text-green-400
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path
@@ -149,7 +149,7 @@
                 :d
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                 :fill-rule "evenodd"}]]])]
-      [:div.inset-0.flex.items-end.justify-center.px-4.py-3.pointer-events-none.sm:px-6.sm:py-3.sm:items-start.sm:justify-end
+      [:div.ui__notifications-content
        {:style {:z-index (if (or (= state "exiting")
                                  (= state "exited"))
                            -1
@@ -186,7 +186,7 @@
   []
   (let [contents (state/sub :notification/contents)]
     (transition-group
-     {:class-name "notifications"}
+     {:class-name "notifications ui__notifications"}
      (doall (map (fn [el]
                    (let [k (first el)
                          v (second el)]
@@ -393,7 +393,7 @@
   ([label children {:keys [label-style]}]
    [:div.Tooltip {:style {:display "inline"}}
     [:div (cond->
-            {:class "Tooltip__label"}
+           {:class "Tooltip__label"}
             label-style
             (assoc :style label-style))
      label]

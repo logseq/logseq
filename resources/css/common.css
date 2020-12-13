@@ -537,10 +537,10 @@ input {
 /* } */
 
 .form-select {
-  background-color: transparent;
-  background-color: var(--ls-primary-background-color);
+  background-color: var(--ls-primary-background-color, transparent);
   background-repeat: no-repeat;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor'%3e%3cpath d='M7 7l3-3 3 3m0 6l-3 3-3-3' stroke='%239fa6b2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e");
+  border-width: 1px;
+  border-color: var(--ls-border-color);
 }
 
 .before-block p {
@@ -952,12 +952,6 @@ button.context-menu-option {
   overflow-y: auto;
 }
 
-.notification-area {
-  background-color: #fff;
-  background-color: var(--ls-tertiary-background-color);
-  color: var(--ls-primary-text-color);
-}
-
 .content img {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
@@ -1151,13 +1145,6 @@ a.tag:hover {
 #diffs-body textarea {
   color: #a4b5b6;
   color: var(--ls-primary-text-color);
-}
-
-.notifications {
-  position: absolute;
-  z-index: 99;
-  width: 100%;
-  top: 3.2em;
 }
 
 .bullet-container .bullet-heading {

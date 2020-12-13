@@ -11,3 +11,21 @@
     }
   }
 }
+
+.ui__notifications {
+  position: fixed;
+  z-index: 99;
+  width: 100%;
+  top: 3.2em;
+
+  &-content {
+    @apply inset-0 flex items-end justify-center px-4 py-3
+      pointer-events-none sm:px-6 sm:py-3 sm:items-start
+      sm:justify-end;
+  }
+
+  .notification-area {
+    background-color: var(--ls-tertiary-background-color, #fff);
+    color: var(--ls-primary-text-color);
+  }
+}
