@@ -25,7 +25,7 @@
     (-write writer (str "\"" (.toString sym) "\""))))
 
 ;; doms
-(defonce html-node js/document.documentElement)
+(defn html-node []  js/document.documentElement)
 
 ;; envs
 (defn mac?
@@ -331,7 +331,7 @@
   (when-not (re-find #"^/\d+$" elem-id)
     (when elem-id
       (when-let [elem (gdom/getElement elem-id)]
-        (.scroll html-node
+        (.scroll (html-node)
                  #js {:top (let [top (element-top elem 0)]
                              (if (> top 68)
                                (- top 68)
@@ -340,7 +340,7 @@
 
 (defn scroll-to
   [pos]
-  (.scroll html-node
+  (.scroll (html-node)
            #js {:top      pos
                 :behavior "smooth"}))
 
