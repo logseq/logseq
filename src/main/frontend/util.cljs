@@ -24,7 +24,14 @@
   (-pr-writer [sym writer _]
     (-write writer (str "\"" (.toString sym) "\""))))
 
+;; doms
+(defn html-node []  js/document.documentElement)
+
 ;; envs
+(defn mac?
+  []
+  (string/includes? js/navigator.appVersion "Mac"))
+
 (defn ios?
   []
   (not (nil? (re-find #"iPad|iPhone|iPod" js/navigator.userAgent))))
@@ -324,7 +331,7 @@
   (when-not (re-find #"^/\d+$" elem-id)
     (when elem-id
       (when-let [elem (gdom/getElement elem-id)]
-        (.scroll (gdom/getElement "main-content")
+        (.scroll (html-node)
                  #js {:top (let [top (element-top elem 0)]
                              (if (> top 68)
                                (- top 68)
@@ -333,10 +340,9 @@
 
 (defn scroll-to
   [pos]
-  (when-let [main-content (gdom/getElement "main-content")]
-    (.scroll main-content
-             #js {:top pos
-                  :behavior "smooth"})))
+  (.scroll (html-node)
+           #js {:top      pos
+                :behavior "smooth"}))
 
 (defn scroll-to-top
   []

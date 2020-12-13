@@ -14,15 +14,15 @@
   padding: 0;
 }
 
-.non-block-editor textarea, pre {
+.non-block-editor textarea,
+pre {
   display: block;
   padding: 0.5rem;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, .02);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
   border-radius: 4px;
 }
 
 .non-block-editor textarea {
-  background: #F6F8FA;
+  background: #f6f8fa;
   background: var(--ls-secondary-background-color);
 }
-

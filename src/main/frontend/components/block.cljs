@@ -313,7 +313,7 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.ls-embed-block.bg-base-2
+    [:div.color-level.embed-block.bg-base-2 {:style {:z-index 2}}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
@@ -324,8 +324,9 @@
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
-    [:div.ls-embed-page.bg-base-2
-     [:div.flex.items-center.p-1.embed-header
+    [:div.color-level.embed.embed-page.bg-base-2
+     {:class (if (:sidebar? config) "in-sidebar")}
+     [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:page/name page-name})]
      (when (and
@@ -1100,9 +1101,7 @@
                           (editor-handler/unhighlight-block!))}]
     [:div.flex.relative
      [:div.flex-1.flex-col.relative.block-content
-      (cond-> {:id (str "block-content-" uuid)
-               :style {:cursor "text"
-                       :min-height 24}}
+      (cond-> {:id (str "block-content-" uuid)}
         (not slide?)
         (merge attrs))
 
@@ -1158,8 +1157,7 @@
          (when (and start-time finish-time (> finish-time start-time))
            [:div.text-sm.absolute.time-spent {:style {:top 0
                                                       :right 0
-                                                      :padding-left 2
-                                                      :z-index 4}
+                                                      :padding-left 2}
                                               :title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
             [:span.opacity-70
              (utils/timeConversion (- finish-time start-time))]])))]))
@@ -1624,7 +1622,7 @@
       ;; TODO: speedup
       (if (re-find #"\"Export_Snippet\" \"embed\"" (str l))
         (->elem :div (map-inline config l))
-        (->elem :p (map-inline config l)))
+        (->elem :div.is-paragraph (map-inline config l)))
 
       ["Horizontal_Rule"]
       (when-not (:slide? config)
@@ -1812,7 +1810,7 @@
                                sidebar?
                                0
                                :else
-                               -18)}}
+                               -10)}}
        (let [first-block (first blocks)
              blocks' (if (and (:block/pre-block? first-block)
                               (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
