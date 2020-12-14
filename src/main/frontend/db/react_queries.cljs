@@ -54,19 +54,19 @@
     query-components
     (->> (for [[k components] @query-components
                :let [new-components (remove #(= component %) components)]]
-           (if (empty? new-components) ; no subscribed components
+           (if (empty? new-components)                      ; no subscribed components
              (do (remove-q! k)
                  nil)
              [k new-components]))
-      (keep identity)
-      (into {}))))
+         (keep identity)
+         (into {}))))
 
 (defn clear-query-state-without-refs-and-embeds!
   []
   (let [state @query-state
         state (->> (filter (fn [[[_repo k] v]]
                              (contains? #{:blocks :block/block :custom} k)) state)
-                (into {}))]
+                   (into {}))]
     (reset! query-state state)))
 
 (defn q
@@ -118,10 +118,10 @@
                [?block :block/uuid ?block-uuid]
                [?ref-block :block/ref-blocks ?block]]
              block-uuid)
-        react
-        db-utils/seq-flatten
-        db-utils/sort-blocks
-        db-utils/group-by-page))))
+           react
+           db-utils/seq-flatten
+           db-utils/sort-blocks
+           db-utils/group-by-page))))
 
 (defn get-file
   ([path]
@@ -207,12 +207,12 @@
                    [?block :block/scheduled ?day]
                    [?block :block/deadline ?day])]
                date)
-          react
-          db-utils/seq-flatten
-          db-utils/sort-blocks
-          db-utils/group-by-page
-          (remove (fn [[page _blocks]]
-                    (= journal-title (:page/original-name page)))))))))
+             react
+             db-utils/seq-flatten
+             db-utils/sort-blocks
+             db-utils/group-by-page
+             (remove (fn [[page _blocks]]
+                       (= journal-title (:page/original-name page)))))))))
 
 (defn get-blocks-by-priority
   [repo priority]
@@ -224,10 +224,10 @@
                :where
                [?h :block/priority ?priority]]
              priority)
-        react
-        db-utils/seq-flatten
-        db-utils/sort-blocks
-        db-utils/group-by-page))))
+           react
+           db-utils/seq-flatten
+           db-utils/sort-blocks
+           db-utils/group-by-page))))
 
 (defn get-ref-pages
   [repo page-id pages]
@@ -240,8 +240,8 @@
            [?block :block/ref-pages ?ref-page]
            [?ref-page :page/name ?ref-page-name]]
          pages)
-    react
-    db-utils/seq-flatten))
+       react
+       db-utils/seq-flatten))
 
 (defn get-mentioned-pages
   [repo page-id pages page-name]
@@ -255,8 +255,8 @@
            [?mentioned-page :page/name ?mentioned-page-name]]
          pages
          page-name)
-    react
-    db-utils/seq-flatten))
+       react
+       db-utils/seq-flatten))
 
 (defn get-page-referenced-blocks
   [repo page-id pages]
@@ -267,8 +267,8 @@
            [?block :block/ref-pages ?ref-page]
            [(contains? ?pages ?ref-page)]]
          pages)
-    react
-    db-utils/seq-flatten))
+       react
+       db-utils/seq-flatten))
 
 (defn get-marker-blocks
   [repo-url marker]
@@ -295,4 +295,15 @@
         [?page :page/journal-day ?journal-day]
         [(<= ?journal-day ?today)]]
       ts-in-int)
+    (react)))
+
+(defn get-block-by-pred
+  [repo block-uuid opts]
+  (some-> (q repo [:block/block block-uuid] opts
+            '[:find (pull ?block [*])
+              :in $ ?page ?pred
+              :where
+              [?block :block/page ?page]
+              [?block :block/meta ?meta]
+              [(?pred $ ?meta)]])
     (react)))

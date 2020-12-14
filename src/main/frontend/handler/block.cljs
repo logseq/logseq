@@ -156,33 +156,22 @@
           (map transform-fn)
           (apply util/join-newline)))))
 
-;; TODO: need to extract the query clause into react-query.cljs. @defclass
 (defn get-block-and-children-react
   ([repo block-uuid]
    (get-block-and-children-react repo block-uuid true))
   ([repo block-uuid use-cache?]
    (let [block (db-utils/entity repo [:block/uuid block-uuid])
          page (:db/id (:block/page block))
-         pos (:start-pos (:block/meta block))
          level (:block/level block)
          pred (fn []
                 (let [block (db-utils/entity repo [:block/uuid block-uuid])
                       pos (:start-pos (:block/meta block))]
                   (fn [data meta]
-                    (>= (:start-pos meta) pos))))]
-     (some-> (react-queries/q repo [:block/block block-uuid]
-               {:use-cache? use-cache?
-                :transform-fn #(block-and-children-transform % repo block-uuid level)
-                :inputs-fn (fn []
-                             [page (pred)])}
-               '[:find (pull ?block [*])
-                 :in $ ?page ?pred
-                 :where
-                 [?block :block/page ?page]
-                 [?block :block/meta ?meta]
-                 [(?pred $ ?meta)]])
-       react-queries/react))))
-
+                    (>= (:start-pos meta) pos))))
+         opts {:use-cache? use-cache?
+               :transform-fn #(block-and-children-transform % repo block-uuid level)
+               :inputs-fn (fn [] [page (pred)])}]
+     (react-queries/get-block-by-pred repo block-uuid opts))))
 
 (defn get-block-immediate-children
   [repo block-uuid]
