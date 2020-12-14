@@ -106,7 +106,7 @@
                 last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
                 ;; db-persisted? (state/sub [:db/persisted? repo])
                 editing? (seq (state/sub :editor/editing?))]
-            [:div.flex-row.flex.items-center
+            [:div.flex-row.flex.items-center.cp__repo-indicator
              (when pushing?
                [:span.lds-dual-ring.mt-1])
              (ui/dropdown

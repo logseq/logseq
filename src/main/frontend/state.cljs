@@ -1021,4 +1021,12 @@
   []
   @editor-op)
 
+(defn get-start-of-week
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (get-in @state [:config repo :start-of-week]))
+   (get-in @state [:me :settings :start-of-week])
+   6))
+
 (defonce diffs (atom nil))

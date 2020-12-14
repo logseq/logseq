@@ -4,5 +4,6 @@ module.exports = {
     './src/**/*.cljs',
     './resources/**/*.html',
   ],
-  plugins: [require("@tailwindcss/ui")],
-};
+  plugins: [require('@tailwindcss/ui')],
+  darkMode: 'class',
+}

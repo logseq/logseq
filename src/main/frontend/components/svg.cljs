@@ -72,6 +72,17 @@
    [:path
     {:d
      "M64.177 100.069a7.889 7.889 0 01-5.6-2.316l-55.98-55.98a7.92 7.92 0 010-11.196c3.086-3.085 8.105-3.092 11.196 0l50.382 50.382 50.382-50.382a7.92 7.92 0 0111.195 0c3.086 3.086 3.092 8.104 0 11.196l-55.98 55.98a7.892 7.892 0 01-5.595 2.316z"}]])
+
+(defonce loading
+  [:svg.h-5.w-5.animate-spin
+   {:version "1.1"
+    :view-box "0 0 24 24"
+    :fill "none"
+    :display "inline-block"}
+   [:circle.opacity-25 {:cx 12 :cy 12 :r 10 :stroke "currentColor" :stroke-width 4}]
+   [:path.opacity-75 {:fill "currentColor"
+                      :d "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"}]])
+
 (defn- hero-icon
   ([d]
    (hero-icon d {}))
@@ -108,7 +119,7 @@
 
 (def plus-circle
   [:svg.addButton
-   {:viewbox "0 0 20 20"}
+   {:viewBox "0 0 20 20"}
    [:circle.circle {:fill "#dce0e2", :r "9", :cy "10.5", :cx "10.5"}]
    [:line
     {:stroke-width "1"
@@ -139,24 +150,24 @@
 
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
 (def folder-sm (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" {:height "16" :width "16"}))
-(def pages-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
+(def pages-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
                [:path {:d "M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"}]
                [:path {:d "M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"}]])
-(def repos-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
+(def repos-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
                [:path {:d "M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z"}]
                [:path {:d "M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z"}]
                [:path {:d "M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z"}]])
-(def settings-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "20", :width "20"}
+(def settings-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "20", :width "20"}
                   [:path {:fill-rule "evenodd", :d "M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z", :clip-rule "evenodd"}]])
-(def calendar-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
+(def calendar-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
                   [:path {:fill-rule "evenodd", :d "M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z", :clip-rule "evenodd"}]])
-(def import-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
+(def import-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
                 [:path {:fill-rule "evenodd", :d "M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z", :clip-rule "evenodd"}]])
-(def logout-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "18", :width "18"}
+(def logout-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "18", :width "18"}
                 [:path {:fill-rule "evenodd", :d "M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z", :clip-rule "evenodd"}]])
-(def trash-sm [:svg {:viewbox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
+(def trash-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}
                [:path {:fill-rule "evenodd", :d "M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z", :clip-rule "evenodd"}]])
-(def sort-asc-sm [:svg {:viewbox "0 0 16 16", :fill "currentColor"}
+(def sort-asc-sm [:svg {:viewBox "0 0 16 16", :fill "currentColor"}
                   [:path {:d "M3 3a1 1 0 000 2h11a1 1 0 100-2H3zM3 7a1 1 0 000 2h5a1 1 0 000-2H3zM3 11a1 1 0 100 2h4a1 1 0 100-2H3zM13 16a1 1 0 102 0v-5.586l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 101.414 1.414L13 10.414V16z"}]])
 (defn vertical-dots
   [options]
@@ -169,7 +180,6 @@
      :stroke-linecap "round"
      :stroke-width "2"
      :d "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"}]])
-
 (def save
   [:svg
    {:fill "currentColor", :view-box "0 0 448 512", :height "24", :width "24"}
@@ -411,7 +421,7 @@
      :stroke-linecap "round"}]])
 
 (def page
-  [:svg.h-5.w-4 {:viewbox "0 0 24 24", :fill "none", :xmlns "http://www.w3.org/2000/svg"}
+  [:svg.h-5.w-4 {:viewBox "0 0 24 24", :fill "none", :xmlns "http://www.w3.org/2000/svg"}
    [:path {:d "M2 0.5H6.78272L13.5 7.69708V18C13.5 18.8284 12.8284 19.5 12 19.5H2C1.17157 19.5 0.5 18.8284 0.5 18V2C0.5 1.17157 1.17157 0.5 2 0.5Z", :fill "var(--ls-active-primary-color)"}]
    [:path {:d "M7 5.5V0L14 7.5H9C7.89543 7.5 7 6.60457 7 5.5Z", :fill "var(--ls-active-secondary-color)"}]])
 
