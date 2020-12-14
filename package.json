@@ -4,6 +4,7 @@
     "private": true,
     "devDependencies": {
         "@tailwindcss/ui": "0.7.2",
+        "cross-env": "^7.0.3",
         "cssnano": "^4.1.10",
         "del": "^6.0.0",
         "gulp": "^4.0.2",
