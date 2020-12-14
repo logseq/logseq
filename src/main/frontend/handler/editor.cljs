@@ -1547,17 +1547,11 @@
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
                             (:page/name (db/entity page-id))))]
-    (let [pages (db/get-pages (state/get-current-repo))
-          pages (if editing-page
-                  ;; To prevent self references
-                  (remove (fn [p] (= (string/lower-case p) editing-page)) pages)
-                  pages)]
-      (filter
-       (fn [page]
-         (string/index-of
-          (string/lower-case page)
-          (string/lower-case q)))
-       pages))))
+    (let [pages (search/page-search q 20)]
+      (if editing-page
+        ;; To prevent self references
+        (remove (fn [p] (= (string/lower-case p) editing-page)) pages)
+        pages))))
 
 (defn get-matched-blocks
   [q]
@@ -1567,7 +1561,7 @@
      (fn [h]
        (= (:block/uuid current-block)
           (:block/uuid h)))
-     (search/search q 21))))
+     (search/search q 10))))
 
 (defn get-matched-templates
   [q]
