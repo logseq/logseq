@@ -22,7 +22,7 @@
             [h2 & r2] t2]
         (cond
           (or (empty? t1) (empty? t2))
-          (dec i1)
+          i1
 
           (= h1 h2)
           (recur r1 r2 (inc i1) (inc i2))
@@ -34,4 +34,4 @@
           (recur r1 t2 (inc i1) i2))))
       (catch js/Error e
         (log/error :diff/find-position {:error e})
-        (dec (count markup)))))
+        (count markup))))
