@@ -1,0 +1,17 @@
+.reveal {
+  color: var(--ls-primary-text-color)
+}
+
+.slide .reveal section img {
+  margin: 1rem auto;
+}
+
+.reveal .progress span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background-color: currentColor;
+  transition: transform .8s cubic-bezier(.26, .86, .44, .985);
+  transform-origin: 0 0;
+  transform: scaleX(0);
+}

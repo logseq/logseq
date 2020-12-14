@@ -185,7 +185,7 @@
           (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content
+        [:div.sidebar-item.content.color-level
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
@@ -231,36 +231,28 @@
         dark? (= "dark" theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.flex-col {:style {:height "100%"
-                                            :overflow "hidden"
-                                            :flex (if sidebar-open?
-                                                    "1 0 40%"
-                                                    "0 0 0px")}}
+      [:div#right-sidebar.cp__right-sidebar
+       {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
-         [:div.hide-scrollbar {:style {:flex "1 1 auto"
-                        :padding 12
-                        :height "100%"
-                        :overflow-y "auto"
-                        :overflow-x "hidden"
-                        :box-sizing "content-box"}}
-          [:div.flex.flex-row.mb-2 {:key "right-sidebar-settings"}
-           [:div.mr-4.text-sm
-            [:a.right-sidebar-button {:on-click (fn [e]
+         [:div.cp__right-sidebar-inner
+          [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
+           [:div.ml-4.text-sm
+            [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
                                                   (state/sidebar-add-block! repo "contents" :contents nil))}
              (t :right-side-bar/contents)]]
 
-           [:div.mr-4.text-sm
-            [:a.right-sidebar-button {:on-click (fn [_e]
+           [:div.ml-4.text-sm
+            [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                   (state/sidebar-add-block! repo "recent" :recent nil))}
              (t :right-side-bar/recent)]]
 
            (when config/publishing?
-             [:div.mr-4.text-sm
+             [:div.ml-4.text-sm
               [:a {:href (rfe/href :all-pages)}
                (t :all-pages)]])
 
-           [:div.mr-4.text-sm
-            [:a.right-sidebar-button {:on-click (fn []
+           [:div.ml-4.text-sm
+            [:a.cp__right-sidebar-settings-btn {:on-click (fn []
                                                   (when-let [page (get-current-page)]
                                                     (state/sidebar-add-block!
                                                      repo
@@ -269,16 +261,16 @@
                                                      page)))}
              (t :right-side-bar/page)]]
 
-           [:div.mr-4.text-sm
+           [:div.ml-4.text-sm
             (let [theme (if dark? "white" "dark")]
-              [:a.right-sidebar-button {:title (t :right-side-bar/switch-theme theme)
+              [:a.cp__right-sidebar-settings-btn {:title (t :right-side-bar/switch-theme theme)
                                         :on-click (fn []
                                                     (state/set-theme! theme))}
                (t :right-side-bar/theme (t (keyword theme)))])]
 
            (when-not config/publishing?
-             [:div.mr-4.text-sm
-              [:a.right-sidebar-button {:on-click (fn [_e]
+             [:div.ml-4.text-sm
+              [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                     (state/sidebar-add-block! repo "help" :help nil))}
                (t :right-side-bar/help)]])]
 

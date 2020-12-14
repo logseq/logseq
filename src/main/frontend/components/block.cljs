@@ -45,7 +45,9 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.utils :as h-utils]
-            [frontend.db.declares :as declares]))
+            [frontend.db.declares :as declares]
+            [lambdaisland.glogi :as log]))
+
 
 (defn safe-read-string
   [s]
@@ -317,10 +319,9 @@
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
-  (let [blocks (block-handler/get-block-and-children-react (state/get-current-repo) id)]
-    [:div.embed-block.bg-base-2 {:style {:z-index 2}}
-     [:code "Embed block:"]
-     [:div.px-2
+  (let [blocks (block-handler/get-block-and-children (state/get-current-repo) id)]
+    [:div.color-level.embed-block.bg-base-2 {:style {:z-index 2}}
+     [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :embed? true
                                       :ref? false))]]))
@@ -330,9 +331,10 @@
   (let [page-name (string/lower-case page-name)
         page-original-name (:page/original-name (db-utils/entity [:page/name page-name]))
         current-page (state/get-current-page)]
-    [:div.embed-page.py-2.my-2.px-3.bg-base-2
-     [:p
-      [:code.mr-2 "Embed page:"]
+    [:div.color-level.embed.embed-page.bg-base-2
+     {:class (if (:sidebar? config) "in-sidebar")}
+     [:section.flex.items-center.p-1.embed-header
+      [:div.mr-3 svg/page]
       (page-cp config {:page/name page-name})]
      (when (and
             (not= (string/lower-case (or current-page ""))
@@ -554,7 +556,7 @@
 
             :else
             (->elem
-             :a
+             :a.external-link
              (cond->
               {:href href
                :target "_blank"}
@@ -949,8 +951,7 @@
           (when (and marker
                      (not (string/blank? marker))
                      (not= "nil" marker))
-            {:class (str (string/lower-case marker)
-                         "flex flex-row items-center")})
+            {:class (str (string/lower-case marker))})
           (when bg-color
             {:style {:background-color bg-color
                      :padding-left 6
@@ -1107,9 +1108,7 @@
                           (editor-handler/unhighlight-block!))}]
     [:div.flex.relative
      [:div.flex-1.flex-col.relative.block-content
-      (cond-> {:id (str "block-content-" uuid)
-               :style {:cursor "text"
-                       :min-height 24}}
+      (cond-> {:id (str "block-content-" uuid)}
         (not slide?)
         (merge attrs))
 
@@ -1165,8 +1164,7 @@
          (when (and start-time finish-time (> finish-time start-time))
            [:div.text-sm.absolute.time-spent {:style {:top 0
                                                       :right 0
-                                                      :padding-left 2
-                                                      :z-index 4}
+                                                      :padding-left 2}
                                               :title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
             [:span.opacity-70
              (utils/timeConversion (- finish-time start-time))]])))]))
@@ -1339,7 +1337,7 @@
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.pt-1
+    [:div.ls-block.flex.flex-col.mt-1
      (cond->
       {:id block-id
        :style {:position "relative"}
@@ -1555,7 +1553,13 @@
            title]
           (cond
             (and (seq result) view-f)
-            (let [result (sci/call-fn view-f result)]
+            (let [result (try
+                           (sci/call-fn view-f result)
+                           (catch js/Error error
+                             (log/error :custom-view-failed {:error error
+                                                             :result result})
+                             [:div "Custom view failed: "
+                              (str error)]))]
               (util/hiccup-keywordize result))
 
             (and (seq result)
@@ -1626,7 +1630,7 @@
       ;; TODO: speedup
       (if (re-find #"\"Export_Snippet\" \"embed\"" (str l))
         (->elem :div (map-inline config l))
-        (->elem :p (map-inline config l)))
+        (->elem :div.is-paragraph (map-inline config l)))
 
       ["Horizontal_Rule"]
       (when-not (:slide? config)
@@ -1814,7 +1818,7 @@
                                sidebar?
                                0
                                :else
-                               -18)}}
+                               -10)}}
        (let [first-block (first blocks)
              blocks' (if (and (:block/pre-block? first-block)
                               (block-handler/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
@@ -1848,7 +1852,7 @@
         (let [page (db-utils/entity (:db/id page))]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
-                       (assoc :class "bg-base-2 px-7 py-2 rounded"))
+                       (assoc :class "color-level px-7 py-2 rounded"))
            (ui/foldable
             (page-cp config page)
             (blocks-container blocks config))]))]

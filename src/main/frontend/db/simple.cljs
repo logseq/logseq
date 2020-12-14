@@ -633,3 +633,18 @@
 (defn local-native-fs?
   [repo]
   (= :local-native-fs (get-db-type repo)))
+
+(defn get-file-last-modified-at
+  [repo path]
+  (when (and repo path)
+    (when-let [conn (declares/get-files-conn repo)]
+      (-> (d/entity (d/db conn) [:file/path path])
+          :file/last-modified-at))))
+
+(defn set-file-last-modified-at!
+  [repo path last-modified-at]
+  (when (and repo path last-modified-at)
+    (when-let [conn (declares/get-files-conn repo)]
+      (d/transact! conn
+        [{:file/path path
+          :file/last-modified-at last-modified-at}]))))

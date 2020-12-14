@@ -6,7 +6,6 @@
             [frontend.util :as util]
             [frontend.text :as text]
             [frontend.git :as git]
-
             [frontend.db.simple :as db-simple]))
 
 (defn get-ref
@@ -29,17 +28,20 @@
           (gobj/get js/window "workerThread")
           (gobj/get js/window.workerThread "getChangedFiles"))
      (->
-      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo))]
-        (let [files (bean/->clj files)]
-          (p/let [remote-latest-commit (get-remote-ref repo)
-                  local-latest-commit (get-ref repo)
-                  descendent? (git/descendent? repo local-latest-commit remote-latest-commit)
-                  diffs (git/get-diffs repo local-latest-commit remote-latest-commit)]
-            (let [files (if descendent?
-                          (->> (concat (map :path diffs) files)
-                               distinct)
-                          files)]
-              (state/set-changed-files! repo files)))))
+      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo))
+              files (bean/->clj files)]
+        (->
+         (p/let [remote-latest-commit (get-remote-ref repo)
+                 local-latest-commit (get-ref repo)]
+           (p/let [descendent? (git/descendent? repo local-latest-commit remote-latest-commit)
+                   diffs (git/get-diffs repo local-latest-commit remote-latest-commit)]
+             (let [files (if descendent?
+                           (->> (concat (map :path diffs) files)
+                                distinct)
+                           files)]
+               (state/set-changed-files! repo files))))
+         (p/catch (fn [error]
+                    (log/warn :git/ref-not-found {:error error})))))
       (p/catch (fn [error]
                  (js/console.dir error)))))))
 

@@ -5,7 +5,7 @@
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.state :as state]
-
+            [frontend.idb :as idb]
             [frontend.git :as git]
             [cljs-bean.core :as bean]
             [frontend.date :as date]
@@ -62,7 +62,7 @@
         dir (str repo-dir "/" app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
       (let [default-content config/config-default-content]
-        (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
+        (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
                               (db-react/get-file repo-url path))
@@ -83,7 +83,7 @@
         file-path (str "/" path)
         default-content (util/default-content-with-title format "contents")]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
-            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (h-utils/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
@@ -96,7 +96,7 @@
         file-path (str "/" path)
         default-content ""]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-            file-exists? (fs/create-if-not-exists repo-dir file-path default-content)]
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (h-utils/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
@@ -108,7 +108,7 @@
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
-            _file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
       (h-utils/reset-file! repo-url path content))))
 
 (defn create-today-journal-if-not-exists
@@ -116,8 +116,6 @@
    (create-today-journal-if-not-exists repo-url nil))
   ([repo-url content]
    (spec/validate :repos/url repo-url)
-   (when (config/local-db? repo-url)
-     (fs/check-directory-permission! repo-url))
    (let [repo-dir (util/get-repo-dir repo-url)
          format (state/get-preferred-format repo-url)
          title (date/today)
@@ -143,12 +141,25 @@
          empty-blocks? (empty? (h-utils/get-page-blocks-no-cache repo-url (string/lower-case title)))]
      (when (or empty-blocks?
                (not page-exists?))
-       (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
-               file-exists? (fs/create-if-not-exists repo-dir file-path content)]
+       (p/let [_ (fs/check-directory-permission! repo-url)
+               _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
+               file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
          (when-not file-exists?
            (h-utils/reset-file! repo-url path content)
            (ui-handler/re-render-root!)
            (git-handler/git-add repo-url path)))))))
+
+(defn create-today-journal!
+  []
+  (state/set-today! (date/today))
+  (when-let [repo (state/get-current-repo)]
+    (when (or (db-simple/cloned? repo)
+              (and (config/local-db? repo)
+                   ;; config file exists
+                   (db-react/get-file (str config/app-name "/" config/config-file))))
+      (let [today-page (string/lower-case (date/today))]
+        (when (empty? (h-utils/get-page-blocks-no-cache repo today-page))
+          (create-today-journal-if-not-exists repo))))))
 
 (defn create-default-files!
   [repo-url]
@@ -200,8 +211,9 @@
                                 (update :block/embed-blocks #(set/intersection (set %) block-ids-set)))) blocks)]
           (apply concat [pages block-ids blocks]))))))
 
-(defn- parse-files-and-load-to-db!
-  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts}]
+(defn parse-files-and-load-to-db!
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
+                   :or {re-render? true}}]
   (state/set-loading-files! false)
   (state/set-importing-to-db! true)
   (let [file-paths (map :file/path files)
@@ -233,7 +245,8 @@
         (map string/lower-case pages)))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files]}]
+  [repo-url {:keys [first-clone? diffs nfs-files]
+             :as opts}]
   (spec/validate :repos/url repo-url)
   (let [load-contents (fn [files option]
                         (file-handler/load-files-contents!
@@ -242,10 +255,10 @@
                          (fn [files-contents]
                            (parse-files-and-load-to-db! repo-url files-contents option))))]
     (cond
-      (and (not (seq diffs)) (seq nfs-files))
+      (and (not (seq diffs)) nfs-files)
       (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
 
-      first-clone?
+      (and first-clone? (not nfs-files))
       (->
        (p/let [files (file-handler/load-files repo-url)]
          (load-contents files {:first-clone? first-clone?}))
@@ -353,7 +366,7 @@
         (when (seq children-tx)
           (db-simple/transact! repo children-tx))))
     (when (seq files)
-      (file-handler/alter-files repo files))))
+      (file-handler/alter-files repo files {}))))
 
 (declare push)
 
@@ -579,10 +592,8 @@
                       (fs/rmdir (util/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)
-      (do
-        (delete-db-f)
-        ;; clear handles
-)
+      (p/let [_ (idb/clear-local-db! url)] ; clear file handles
+        (delete-db-f))
       (util/delete (str config/api "repos/" id)
                    delete-db-f
                    (fn [error]
@@ -678,16 +689,16 @@
                    500)))
 
 (defn rebuild-index!
-  [{:keys [id url] :as repo}]
-  (spec/validate :repos/repo repo)
-  (declares/remove-conn! url)
-  (db-react/clear-query-state!)
-  (-> (p/do! (declares/remove-db! url)
-             (declares/remove-files-db! url)
-             (fs/rmdir (util/get-repo-dir url))
-             (clone-and-load-db url))
-      (p/catch (fn [error]
-                 (prn "Delete repo failed, error: " error)))))
+  [url]
+  (when url
+    (declares/remove-conn! url)
+    (db-react/clear-query-state!)
+    (-> (p/do! (declares/remove-db! url)
+               (declares/remove-files-db! url)
+               (fs/rmdir (util/get-repo-dir url))
+               (clone-and-load-db url))
+        (p/catch (fn [error]
+                   (prn "Delete repo failed, error: " error))))))
 
 (defn git-commit-and-push!
   [commit-message]

@@ -32,14 +32,8 @@
 (defn- watch-for-date!
   []
   (js/setInterval (fn []
-                    (state/set-today! (date/today))
-                    (when-let [repo (state/get-current-repo)]
-                      (when (or (db-simple/cloned? repo)
-                                (config/local-db? repo))
-                        (let [today-page (string/lower-case (date/today))]
-                          (when (empty? (h-utils/get-page-blocks-no-cache repo today-page))
-                            (repo-handler/create-today-journal-if-not-exists repo))))))
-                  1000))
+                    (when-not (state/nfs-refreshing?)
+                      (repo-handler/create-today-journal!))) 1000))
 
 (defn store-schema!
   []
@@ -212,4 +206,5 @@
         (state/set-repos! repos)
         (restore-and-setup! me repos logged?)))
     (run-batch-txs!)
+    (file-handler/run-writes-chan!)
     (editor-handler/periodically-save!)))

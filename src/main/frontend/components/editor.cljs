@@ -678,7 +678,7 @@
                              (page-handler/rename-when-alter-title-property! old-page-name path format content value)
                              (file/alter-file (state/get-current-repo) path (string/trim value)
                                               {:re-render-root? true}))))
-                       (when-not (contains? #{:insert :indent-outdent} (state/get-editor-op))
+                       (when-not (contains? #{:insert :indent-outdent :auto-save} (state/get-editor-op))
                          (editor-handler/save-block! (get-state state) value))))
                    state)}
   [state {:keys [on-hide dummy? node format block block-parent-id]
@@ -688,40 +688,40 @@
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
-       {:id id
-        :cacheMeasurements true
-        :default-value (or content "")
-        :minRows (if (state/enable-grammarly?) 2 1)
-        :on-click (fn [_e]
-                    (let [input (gdom/getElement id)
-                          current-pos (:pos (util/get-caret-pos input))]
+      {:id id
+       :cacheMeasurements true
+       :default-value (or content "")
+       :minRows (if (state/enable-grammarly?) 2 1)
+       :on-click (fn [_e]
+                   (let [input (gdom/getElement id)
+                         current-pos (:pos (util/get-caret-pos input))]
+                     (state/set-edit-pos! current-pos)
+                     (editor-handler/close-autocomplete-if-outside input)))
+       :on-change (fn [e]
+                    (let [value (util/evalue e)
+                          current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+                      (state/set-edit-content! id value false)
                       (state/set-edit-pos! current-pos)
-                      (editor-handler/close-autocomplete-if-outside input)))
-        :on-change (fn [e]
-                     (let [value (util/evalue e)
-                           current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                       (state/set-edit-content! id value)
-                       (state/set-edit-pos! current-pos)
-                       (when-let [repo (or (:block/repo block)
-                                           (state/get-current-repo))]
-                         (state/set-editor-last-input-time! repo (util/time-ms))
-                         (h-utils/clear-repo-persistent-job! repo))
-                       (let [input (gdom/getElement id)
-                             native-e (gobj/get e "nativeEvent")
-                             last-input-char (util/nth-safe value (dec current-pos))]
-                         (case last-input-char
-                           "/"
-                           ;; TODO: is it cross-browser compatible?
-                           (when (not= (gobj/get native-e "inputType") "insertFromPaste")
-                             (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
-                               (reset! *slash-caret-pos (util/get-caret-pos input))
-                               (reset! *show-commands true)))
-                           "<"
-                           (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
-                             (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                             (reset! *show-block-commands true))
-                           nil))))
-        :auto-focus true})
+                      (when-let [repo (or (:block/repo block)
+                                          (state/get-current-repo))]
+                        (state/set-editor-last-input-time! repo (util/time-ms))
+                        (h-utils/clear-repo-persistent-job! repo))
+                      (let [input (gdom/getElement id)
+                            native-e (gobj/get e "nativeEvent")
+                            last-input-char (util/nth-safe value (dec current-pos))]
+                        (case last-input-char
+                          "/"
+                          ;; TODO: is it cross-browser compatible?
+                          (when (not= (gobj/get native-e "inputType") "insertFromPaste")
+                            (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
+                              (reset! *slash-caret-pos (util/get-caret-pos input))
+                              (reset! *show-commands true)))
+                          "<"
+                          (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
+                            (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
+                            (reset! *show-block-commands true))
+                          nil))))
+       :auto-focus false})
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp

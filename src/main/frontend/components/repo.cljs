@@ -46,8 +46,8 @@
            (when (nfs-handler/supported?)
              [:div.flex.flex-col
               [:div (ui/button
-                      (t :open-a-directory)
-                      :on-click nfs-handler/ls-dir-files)]
+                     (t :open-a-directory)
+                     :on-click nfs-handler/ls-dir-files)]
               [:span.warning.mt-2.text-sm "Warning: this is an experimental feature,"
                [:br]
                "please only use it for testing purpose."]])]
@@ -66,7 +66,8 @@
                                       "Clone again and re-index the db")
                              :on-click (fn []
                                          (if local?
-                                           (nfs-handler/refresh! url)
+                                           (nfs-handler/refresh! url
+                                                                 repo-handler/create-today-journal!)
                                            (repo-handler/rebuild-index! url))
                                          (js/setTimeout
                                           (fn []
@@ -96,7 +97,8 @@
           (let [syncing? (state/sub :graph/syncing?)]
             [:div.ml-2.mr-1.opacity-70.hover:opacity-100 {:class (if syncing? "loader" "initial")}
              [:a
-              {:on-click #(nfs-handler/refresh! repo)
+              {:on-click #(nfs-handler/refresh! repo
+                                                repo-handler/create-today-journal!)
                :title (str "Sync files with the local directory: " (config/get-local-dir repo))}
               svg/refresh]])
           (let [changed-files (state/sub [:repo/changed-files repo])
@@ -108,7 +110,7 @@
                 last-pulled-at (db-react/sub-key-value repo :git/last-pulled-at)
                 ;; db-persisted? (state/sub [:db/persisted? repo])
                 editing? (seq (state/sub :editor/editing?))]
-            [:div.flex-row.flex.items-center
+            [:div.flex-row.flex.items-center.cp__repo-indicator
              (when pushing?
                [:span.lds-dual-ring.mt-1])
              (ui/dropdown

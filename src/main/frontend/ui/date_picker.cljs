@@ -7,6 +7,7 @@
    [frontend.util          :refer [deref-or-value now->utc]]
    [frontend.mixins :as mixins]
    [frontend.util :as util]
+   [frontend.state :as state]
    [goog.object :as gobj]))
 
 ;; Adapted from re-com date-picker
@@ -211,7 +212,7 @@
            (reset! *internal-model (first (:rum/args state)))
            state)}
   [model {:keys [on-change on-switch disabled? start-of-week class style attr]
-          :or   {start-of-week 6} ;; Default to Sunday
+          :or   {start-of-week (state/get-start-of-week)} ;; Default to Sunday
           :as   args}]
   (let [internal-model (util/react *internal-model)
         display-month (first-day-of-the-month (or internal-model (now->utc)))

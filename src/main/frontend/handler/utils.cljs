@@ -519,6 +519,10 @@
             (db-simple/get-page-format page)])
          pages)))))
 
+(defn get-config
+  [repo-url]
+  (db-react/get-file repo-url (str config/app-name "/" config/config-file)))
+
 (defn reset-config!
   [repo-url content]
   (when-let [content (or content (db-react/get-file repo-url (str config/app-name "/" config/config-file)))]
