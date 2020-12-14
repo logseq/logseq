@@ -6,7 +6,8 @@
             [frontend.util :as util]
             [frontend.text :as text]
             [frontend.git :as git]
-            [frontend.db.simple :as db-simple]))
+            [frontend.db.simple :as db-simple]
+            [lambdaisland.glogi :as log]))
 
 (defn get-ref
   [repo-url]

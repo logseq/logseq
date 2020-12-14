@@ -139,7 +139,7 @@
       (h-utils/set-file-content! repo path content))
     (util/p-handle
      (fs/write-file repo (util/get-repo-dir repo) path content {:old-content original-content
-                                                                :last-modified-at (db/get-file-last-modified-at repo path)})
+                                                                :last-modified-at (db-simple/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))
