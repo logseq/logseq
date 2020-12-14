@@ -27,11 +27,6 @@
 ;; doms
 (defn html-node []  js/document.documentElement)
 
-;; envs
-(defn mac?
-  []
-  (string/includes? js/navigator.appVersion "Mac"))
-
 (defn ios?
   []
   (not (nil? (re-find #"iPad|iPhone|iPod" js/navigator.userAgent))))
