@@ -85,7 +85,8 @@
                                           :path-params {:path data}})
 
                         :block
-                        (let [page (:page/name (:block/page data))
+                        (let [block-uuid (uuid (:block/uuid data))
+                              page (:page/name (:block/page (db/entity [:block/uuid block-uuid])))
                               path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
                           (route/redirect-with-fragment! path))
                         nil))
@@ -100,7 +101,8 @@
                                  {:page page}))
 
                               :block
-                              (let [block (db/entity [:block/uuid (:block/uuid data)])]
+                              (let [block-uuid (uuid (:block/uuid data))
+                                    block (db/entity [:block/uuid block-uuid])]
                                 (state/sidebar-add-block!
                                  (state/get-current-repo)
                                  (:db/id block)

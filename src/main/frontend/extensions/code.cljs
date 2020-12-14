@@ -36,9 +36,7 @@
             ["codemirror/mode/smalltalk/smalltalk"]
             ["codemirror/mode/sql/sql"]
             ["codemirror/mode/swift/swift"]
-            ["codemirror/mode/xml/xml"]
-            ;; ["parinfer-codemirror" :as par-cm]
-))
+            ["codemirror/mode/xml/xml"]))
 
 ;; codemirror
 
