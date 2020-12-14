@@ -188,7 +188,7 @@
 (defn help
   []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div.help.ml-2.mt-1
+    [:div.help.cp__sidebar-help-docs
      [:ul
       [:li
        [:a {:href "https://logseq.com/blog/about"

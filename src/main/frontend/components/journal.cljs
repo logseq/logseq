@@ -106,7 +106,7 @@
   [:div#journals
    (ui/infinite-list
     (for [[journal-name format] latest-journals]
-      [:div.journal.content {:key journal-name}
+      [:div.journal-item.content {:key journal-name}
        (journal-cp [journal-name format])])
     {:on-load (fn []
                 (page-handler/load-more-journals!))})])

@@ -841,8 +841,7 @@
 
 (defn list-checkbox
   [checked?]
-  (ui/checkbox {:style {:margin-right 6
-                        :margin-top -1}
+  (ui/checkbox {:style {:margin-right 6}
                 :checked checked?}))
 
 (defn marker-switch
@@ -1013,7 +1012,7 @@
   [block]
   (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
     (when (seq properties)
-      [:div.blocks__properties.text-sm.opacity-80.my-1.p-2
+      [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
        (for [[k v] properties]
          [:div.my-1
           [:b k]

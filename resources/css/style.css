@@ -6,6 +6,7 @@
 @import "../../static/css/tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
 @import "./codemirror.min.css";
 @import "./common.css";
+@import "./animation.css";
 @import "./datepicker.css";
 @import "./highlight.css";
 @import "./table.css";

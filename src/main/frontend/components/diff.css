@@ -1,22 +1,29 @@
+#diffs-body {
+  textarea {
+    color: var(--ls-primary-text-color, #a4b5b6);
+  }
+}
+
 .cp__diff-file {
-    @apply mb-3;
-    border: 1px solid #ddd;
-    border-radius: 3px;
+  @apply mb-3;
+  border: 1px solid #ddd;
+  border-radius: 3px;
 }
 
 .cp__diff-file-header {
-    background-color: var(--ls-secondary-background-color);
-    padding: 5px 10px;
-    border-bottom: 1px solid #e1e4e8;
-    border-radius: 3px 3px 0 0;
-    display: flex;
-    align-items: center;
+  background-color: var(--ls-secondary-background-color);
+  padding: 5px 10px;
+  border-bottom: 1px solid #e1e4e8;
+  border-radius: 3px 3px 0 0;
+  display: flex;
+  align-items: center;
 }
 
 .cp__diff-file-header-content {
-    @apply truncate
+  @apply truncate
+
 }
 
 .cp__diff-file-header-type {
-    @apply text-sm font-medium ml-2 border rounded px-1;
+  @apply text-sm font-medium ml-2 border rounded px-1;
 }

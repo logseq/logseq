@@ -23,6 +23,8 @@ html:not(.is-mac)[data-theme=dark] {
 }
 
 html[data-theme=dark] {
+  background-color: var(--ls-primary-background-color);
+
   input {
     color: var(--ls-secondary-text-color);
   }
@@ -36,5 +38,33 @@ html[data-theme=dark] {
     background-color: var(--ls-page-checkbox-color, #6093a0);
     border-color: var(--ls-page-checkbox-border-color, #6093a0);
     border: none;
+  }
+}
+
+html[data-theme=light] {
+  .form-checkbox:focus {
+    border-color: var(--ls-page-checkbox-border-color);
+  }
+
+  .cp__header a {
+    color: var(--ls-primary-text-color);
+  }
+
+  a.right-sidebar-button {
+    color: var(--ls-primary-text-color);
+  }
+
+  a.right-sidebar-button:hover {
+    color: var(--ls-link-text-hover-color);
+  }
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

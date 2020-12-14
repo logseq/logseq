@@ -1,0 +1,16 @@
+#search p {
+  margin: 0;
+}
+
+#search-wrapper svg {
+  color: var(--ls-search-icon-color, #9fa6b2);
+}
+
+#search-wrapper:focus-within svg {
+  color: var(--ls-link-text-hover-color, #4b5563);
+}
+
+#search_field {
+  background-color: var(--ls-search-background-color, #fff);
+  color: var(--ls-secondary-text-color, #161e2e);
+}

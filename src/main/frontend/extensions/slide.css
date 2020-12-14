@@ -1,17 +1,27 @@
 .reveal {
-  color: var(--ls-primary-text-color)
-}
+  //color: var(--ls-primary-text-color);
+  color: #f7f7f7;
+  background: var(--ls-slide-background-color);
 
-.slide .reveal section img {
-  margin: 1rem auto;
-}
+  pre.code {
+    background: transparent;
+  }
 
-.reveal .progress span {
-  display: block;
-  height: 100%;
-  width: 100%;
-  background-color: currentColor;
-  transition: transform .8s cubic-bezier(.26, .86, .44, .985);
-  transform-origin: 0 0;
-  transform: scaleX(0);
+  .hljs {
+    background: none;
+  }
+
+  section img {
+    margin: 1rem auto;
+  }
+
+  .progress span {
+    display: block;
+    height: 100%;
+    width: 100%;
+    background-color: currentColor;
+    transition: transform 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985);
+    transform-origin: 0 0;
+    transform: scaleX(0);
+  }
 }

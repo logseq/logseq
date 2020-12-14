@@ -87,7 +87,7 @@
               "-translate-x-full")
      :style {:background-color "#002b36"}}
     (if @open?
-      [:div.absolute.top-0.right-0.-mr-14.p-1
+      [:div.absolute.top-0.right-0.p-1
        [:button#close-left-bar.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
         {:on-click close-fn}
         [:svg.h-6.w-6.text-white
@@ -237,7 +237,7 @@
   (when-not (state/sub :ui/sidebar-open?)
     ;; TODO: remove with-context usage
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.cp__sidebar-help
+      [:div.cp__sidebar-help-btn
        {:title (t :help-shortcut-title)
         :on-click (fn []
                     (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}

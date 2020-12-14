@@ -47,7 +47,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
 ### NOW [#A] A dummy tutorial on \"How to take dummy notes?\"
 ### LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to install logseq app on your GitHub repo and other cool features like graph view.
 
-[:div.videoWrapper.mb-4
+[:div.video-wrapper.mb-4
         [:iframe
          {:allowFullScreen \"allowfullscreen\"
           :allow

@@ -20,12 +20,69 @@
 
   &-content {
     @apply inset-0 flex items-end justify-center px-4 py-3
-      pointer-events-none sm:px-6 sm:py-3 sm:items-start
-      sm:justify-end;
+    pointer-events-none sm:px-6 sm:py-3 sm:items-start
+    sm:justify-end;
   }
 
   .notification-area {
     background-color: var(--ls-tertiary-background-color, #fff);
     color: var(--ls-primary-text-color);
+  }
+}
+
+.dropdown-wrapper {
+  background-color: var(--ls-primary-background-color, #fff);
+  min-width: 12rem;
+}
+
+.dropdown-caret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: middle;
+  content: "";
+  border-top-style: solid;
+  border-top-width: 4px;
+  border-right: 4px solid transparent;
+  border-bottom: 0 solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.form-checkbox {
+  color: var(--ls-page-checkbox-color, #137cbd);
+  background-color: transparent;
+  border-radius: 0;
+  border: 2px solid;
+  border-color: var(--ls-page-checkbox-border-color);
+  appearance: none
+}
+
+.form-checkbox {
+  &:checked {
+    border: none;
+
+    &:focus {
+      box-shadow: none;
+    }
+  }
+
+  &:not(:checked):focus {
+    box-shadow: none;
+  }
+}
+
+.form-select {
+  background-color: var(--ls-primary-background-color, transparent);
+  background-repeat: no-repeat;
+  border-width: 1px;
+  border-color: var(--ls-border-color);
+}
+
+.form-input {
+  border-width: 1px;
+  border-color: var(--ls-border-color);
+
+  &:focus {
+    box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
   }
 }
