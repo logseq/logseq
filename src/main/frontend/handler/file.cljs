@@ -266,8 +266,10 @@
   []
   (let [chan (state/get-file-write-chan)]
     (async/go-loop []
-      (let [args (async/<! chan)]
-        (state/set-file-writing! true)
+      (let [repo (state/get-current-repo)
+            args (async/<! chan)]
+        (when-not (config/local-db? repo)
+          (state/set-file-writing! true))
         (p/let [_ (apply alter-files-handler! args)]
           (state/set-file-writing! false))
         nil)
