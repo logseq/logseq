@@ -1,6 +1,6 @@
 (ns frontend.db.simple
-  "Contains simple datascript queries, including queries, transact etc. Data process should not be located this
-  namespace, it should be in upper layer."
+  "Contains simple datascript operations, including queries, transact etc. Data process should not be located this
+  namespace, it should be in the upper layer."
   (:require [datascript.core :as d]
             [frontend.state :as state]
             [frontend.db.declares :as declares]

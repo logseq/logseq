@@ -1,5 +1,5 @@
 (ns frontend.db.utils
-  "Some utils are required by other ns in frontend.db packages."
+  "Some utils are required by other namespace in frontend.db package."
   (:require [datascript.core :as d]
             [frontend.state :as state]
             [frontend.db.declares :as declares]
