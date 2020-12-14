@@ -330,11 +330,11 @@ h1.title {
 }
 
 a.page-ref {
-  color: var(--ls-link-text-color);
+  color: var(--ls-link-ref-text-color);
 }
 
 a.page-ref:hover {
-  color: var(--ls-link-text-hover-color);
+  color: var(--ls-link-ref-text-hover-color);
 }
 
 .block-ref {
