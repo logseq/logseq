@@ -1,14 +1,68 @@
 (ns frontend.search
-  (:require
-    [frontend.config :as config]
-    [frontend.state :as state]
-    [frontend.util :as util]
-    [cljs-bean.core :as bean]
-    [clojure.string :as string]
-    [frontend.regex :as regex]
-    [frontend.text :as text]
-    [frontend.db.simple :as db-simple]
-    [frontend.db.utils :as db-utils]))
+  (:require [frontend.search.db :as search-db :refer [indices]]
+            [frontend.config :as config]
+            [frontend.state :as state]
+            [frontend.util :as util :refer-macros [profile]]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [clojure.set :as set]
+            [frontend.regex :as regex]
+            [frontend.text :as text]
+            [cljs-bean.core :as bean]
+            [goog.object :as gobj]
+            ["fuzzysort" :as fuzzy]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.simple :as db-simple]))
+
+(def fuzzy-go (gobj/get fuzzy "go"))
+(defonce prepare (gobj/get fuzzy "prepare"))
+(defonce highlight (gobj/get fuzzy "highlight"))
+
+(defn go
+  [q indice opts]
+  (fuzzy-go q indice opts))
+
+(defn block->index
+  [{:block/keys [uuid content format] :as block}]
+  (when (<= (count content) 1000) ; performance
+    (when-let [result (->> (text/remove-level-spaces content format)
+                           (text/remove-properties!)
+                           (prepare))]
+      (gobj/set result "id" (:db/id block))
+      (gobj/set result "uuid" (str uuid))
+      result)))
+
+(defn make-blocks-indice!
+  []
+  (when-let [repo (state/get-current-repo)]
+    (let [blocks (->> (db-simple/get-all-block-contents)
+                      (map block->index)
+                      (remove nil?)
+                      (bean/->js))]
+      (swap! indices assoc-in [repo :blocks] blocks)
+      blocks)))
+
+(defn make-pages-indice!
+  []
+  (when-let [repo (state/get-current-repo)]
+    (let [pages (->> (db-simple/get-pages (state/get-current-repo))
+                     (remove string/blank?)
+                     (map (fn [p] {:name p}))
+                     (bean/->js))]
+      (swap! indices assoc-in [repo :pages] pages)
+      pages)))
+
+;; TODO: persist indices to indexeddb, it'll be better if the future db
+;; can has the direct fuzzy search support.
+(defn rebuild-indices!
+  ([]
+   (rebuild-indices! (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (let [result {:pages (make-pages-indice!)
+                   :blocks (make-blocks-indice!)}]
+       (swap! indices assoc repo result)
+       result))))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
@@ -94,32 +148,48 @@
 (defn search
   "Block search"
   ([q]
-   (search q 20))
+   (search q 10))
   ([q limit]
-   (when-not (string/blank? q)
-     (let [q (escape-str q)
-           q-pattern (re-pattern (str "(?i)" q))]
-       (when-not (string/blank? q)
-         (let [blocks (get-matched-blocks
-                        (fn [content]
-                          (re-find q-pattern content))
-                        ;; (fn [content]
-                        ;;   (> (score q (.toLowerCase content)) 0))
-                        limit)]
-           (map (fn [{:block/keys [content format _properties] :as block}]
-                  (assoc block :block/content
-                         (->> (text/remove-level-spaces content format)
-                              (text/remove-properties!)))) blocks)))))))
+   (when-let [repo (state/get-current-repo)]
+     (when-not (string/blank? q)
+       (let [q (string/lower-case q)
+             q (escape-str q)]
+         (when-not (string/blank? q)
+           (let [indice (or (get-in @indices [repo :blocks])
+                            (make-blocks-indice!))
+                 result (->
+                         (go q indice (clj->js {:limit limit
+                                                :allowTypo false
+                                                :threshold -10000}))
+                         (bean/->clj))]
+             (->>
+              (map
+               (fn [{:keys [target uuid]}]
+                 {:block/uuid uuid
+                  :block/content target})
+               result)
+              (remove nil?)))))))))
 
 (defn page-search
   ([q]
    (page-search q 3))
   ([q limit]
-   (let [q (clean-str q)]
-     (when-not (string/blank? q)
-       (let [pages (db-simple/get-pages (state/get-current-repo))]
-         (when (seq pages)
-           (fuzzy-search pages q :limit limit)))))))
+   (when-let [repo (state/get-current-repo)]
+     (let [q (string/lower-case q)
+           q (clean-str q)]
+       (when-not (string/blank? q)
+         (let [indice (or (get-in @indices [repo :pages])
+                          (make-pages-indice!))
+               result (->> (go q indice (clj->js {:limit limit
+                                                  :key "name"
+                                                  :allowTypo false
+                                                  :threshold -10000}))
+                           (bean/->clj))]
+           (->> (map
+                 (fn [{:keys [obj]}]
+                   (:name obj))
+                 result)
+                (remove nil?))))))))
 
 (defn file-search
   ([q]
@@ -144,3 +214,49 @@
        (when (seq templates)
          (let [result (fuzzy-search (keys templates) q :limit limit)]
            (vec (select-keys templates result))))))))
+
+(defn sync-search-indice!
+  [datoms]
+  (when (seq datoms)
+    (when-let [repo (state/get-current-repo)]
+      (let [datoms (group-by :a datoms)
+            pages (:page/name datoms)
+            blocks (:block/content datoms)]
+        (when (seq pages)
+          (let [pages-result (db-utils/pull-many '[:db/id :page/original-name] (set (map :e pages)))
+                pages-to-add-set (->> (filter :added pages)
+                                      (map :e)
+                                      (set))
+                pages-to-add (->> (filter (fn [page]
+                                            (contains? pages-to-add-set (:db/id page))) pages-result)
+                                  (map (fn [p] {:name (:page/original-name p)}))
+                                  (set))
+                pages-to-remove-set (->> (remove :added pages)
+                                         (map :v)
+                                         (set))]
+            (swap! search-db/indices update-in [repo :pages]
+                   (fn [pages]
+                     (let [pages (or pages (array))
+                           pages (.filter pages (fn [page]
+                                                  (not (contains? pages-to-remove-set
+                                                                  (string/lower-case (gobj/get page "name"))))))]
+                       (.concat pages (bean/->js pages-to-add)))))))
+        (when (seq blocks)
+          (let [blocks-result (db-utils/pull-many '[:db/id :block/uuid :block/format :block/content] (set (map :e blocks)))
+                blocks-to-add-set (->> (filter :added blocks)
+                                       (map :e)
+                                       (set))
+                blocks-to-add (->> (filter (fn [block]
+                                             (contains? blocks-to-add-set (:db/id block)))
+                                           blocks-result)
+                                   (map block->index)
+                                   (set))
+                blocks-to-remove-set (->> (remove :added blocks)
+                                          (map :e)
+                                          (set))]
+            (swap! search-db/indices update-in [repo :blocks]
+                   (fn [blocks]
+                     (let [blocks (or blocks (array))
+                           blocks (.filter blocks (fn [block]
+                                                    (not (contains? blocks-to-remove-set (gobj/get block "id")))))]
+                       (.concat blocks (bean/->js blocks-to-add)))))))))))

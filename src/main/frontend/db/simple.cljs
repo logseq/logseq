@@ -648,3 +648,14 @@
       (d/transact! conn
         [{:file/path path
           :file/last-modified-at last-modified-at}]))))
+
+(defn get-all-block-contents
+  []
+  (->> (d/datoms (declares/get-conn) :avet :block/uuid)
+       (map :v)
+       (map (fn [id]
+              (let [e (db-utils/entity [:block/uuid id])]
+                {:db/id (:db/id e)
+                 :block/uuid id
+                 :block/content (:block/content e)
+                 :block/format (:block/format e)})))))

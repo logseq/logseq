@@ -67,78 +67,80 @@
                  :width 500})}
        (ui/auto-complete
         result
-         {:on-chosen (fn [{:keys [type data]}]
-                       (search-handler/clear-search!)
-                       (leave-focus)
-                       (case type
-                         :new-page
-                         (page-handler/create! search-q)
+        {:on-chosen (fn [{:keys [type data]}]
+                      (search-handler/clear-search!)
+                      (leave-focus)
+                      (case type
+                        :new-page
+                        (page-handler/create! search-q)
 
-                         :page
-                         (route/redirect! {:to :page
-                                           :path-params {:name data}})
+                        :page
+                        (route/redirect! {:to :page
+                                          :path-params {:name data}})
 
-                         :new-file
-                         (file-handler/create! search-q)
+                        :new-file
+                        (file-handler/create! search-q)
 
-                         :file
-                         (route/redirect! {:to :file
-                                           :path-params {:path data}})
+                        :file
+                        (route/redirect! {:to :file
+                                          :path-params {:path data}})
 
-                         :block
-                         (let [page (:page/name (:block/page data))
-                               path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
-                           (route/redirect-with-fragment! path))
-                         nil))
-          :on-shift-chosen (fn [{:keys [type data]}]
-                             (case type
-                               :page
-                               (let [page (db-utils/entity [:page/name (string/lower-case data)])]
-                                 (state/sidebar-add-block!
-                                   (state/get-current-repo)
-                                   (:db/id page)
-                                   :page
-                                   {:page page}))
+                        :block
+                        (let [block-uuid (uuid (:block/uuid data))
+                              page (:page/name (:block/page (db-utils/entity [:block/uuid block-uuid])))
+                              path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
+                          (route/redirect-with-fragment! path))
+                        nil))
+         :on-shift-chosen (fn [{:keys [type data]}]
+                            (case type
+                              :page
+                              (let [page (db-utils/entity [:page/name (string/lower-case data)])]
+                                (state/sidebar-add-block!
+                                 (state/get-current-repo)
+                                 (:db/id page)
+                                 :page
+                                 {:page page}))
 
-                               :block
-                               (let [block (db-utils/entity [:block/uuid (:block/uuid data)])]
-                                 (state/sidebar-add-block!
-                                   (state/get-current-repo)
-                                   (:db/id block)
-                                   :block
-                                   block))
+                              :block
+                              (let [block-uuid (uuid (:block/uuid data))
+                                    block (db-utils/entity [:block/uuid block-uuid])]
+                                (state/sidebar-add-block!
+                                 (state/get-current-repo)
+                                 (:db/id block)
+                                 :block
+                                 block))
 
-                               nil))
-          :item-render (fn [{:keys [type data]}]
-                         (case type
-                           :new-page
-                           [:div.text.font-bold (str (t :new-page) ": ")
-                            [:span.ml-1 (str "\"" search-q "\"")]]
+                              nil))
+         :item-render (fn [{:keys [type data]}]
+                        (case type
+                          :new-page
+                          [:div.text.font-bold (str (t :new-page) ": ")
+                           [:span.ml-1 (str "\"" search-q "\"")]]
 
-                           :new-file
-                           [:div.text.font-bold (str (t :new-file) ": ")
-                            [:span.ml-1 (str "\"" search-q "\"")]]
+                          :new-file
+                          [:div.text.font-bold (str (t :new-file) ": ")
+                           [:span.ml-1 (str "\"" search-q "\"")]]
 
-                           :page
-                           [:div.text-sm.font-medium
-                            [:span.text-xs.rounded.border.mr-2.px-1 {:title "Page"}
-                             "P"]
-                            data]
+                          :page
+                          [:div.text-sm.font-medium
+                           [:span.text-xs.rounded.border.mr-2.px-1 {:title "Page"}
+                            "P"]
+                           data]
 
-                           :file
-                           [:div.text-sm.font-medium
-                            [:span.text-xs.rounded.border.mr-2.px-1 {:title "File"}
-                             "F"]
-                            data]
+                          :file
+                          [:div.text-sm.font-medium
+                           [:span.text-xs.rounded.border.mr-2.px-1 {:title "File"}
+                            "F"]
+                           data]
 
-                           :block
-                           (let [{:block/keys [page content]} data]
-                             (let [page (:page/original-name page)]
-                               [:div.flex-1
-                                [:div.text-sm.font-medium page]
-                                (highlight content search-q)]))
+                          :block
+                          (let [{:block/keys [page content]} data]
+                            (let [page (:page/original-name page)]
+                              [:div.flex-1
+                               [:div.text-sm.font-medium page]
+                               (highlight content search-q)]))
 
-                           nil))})])))
+                          nil))})])))
 
 (rum/defc search < rum/reactive
   (mixins/event-mixin

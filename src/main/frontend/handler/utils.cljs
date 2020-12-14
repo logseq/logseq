@@ -576,6 +576,9 @@
 
 ;; only save when user's idle
 
+;; TODO: pass as a parameter
+(defonce *sync-search-indice-f (atom nil))
+
 (defn- repo-listen-to-tx!
   [repo conn files-db?]
   (d/listen! conn :persistence
@@ -583,7 +586,17 @@
       (let [tx-id (db-utils/get-tx-id tx-report)]
         (state/set-last-transact-time! repo (util/time-ms))
         ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
-        (persist-if-idle! repo)))))
+        (persist-if-idle! repo))
+
+      ;; rebuild search indices
+      (when-not files-db?
+        (let [data (:tx-data tx-report)
+              datoms (filter
+                       (fn [datom]
+                         (contains? #{:page/name :block/content} (:a datom)))
+                       data)]
+          (when-let [f @*sync-search-indice-f]
+            (f datoms)))))))
 
 (defn listen-and-persist!
   [repo]
