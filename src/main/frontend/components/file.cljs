@@ -17,8 +17,8 @@
             [cljs-time.core :as t]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
-            [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]))
 
 (defn- get-path
@@ -33,7 +33,7 @@
      [:h1.title
       (tongue :all-files)]
      (when-let [current-repo (state/sub :git/current-repo)]
-       (let [files (db-queries/get-files current-repo)]
+       (let [files (db-simple/get-files current-repo)]
          [:table.table-auto
           [:thead
            [:tr
@@ -71,7 +71,7 @@
   [state]
   (let [path (get-path state)
         format (format/get-format path)
-        page (db-queries/get-file-page path)
+        page (db-simple/get-file-page path)
         config? (= path (str config/app-name "/" config/config-file))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-" path)}
@@ -101,7 +101,7 @@
          [:img {:src path}]
 
          (and format (contains? config/markup-formats format))
-         (when-let [file-content (react-queries/get-file path)]
+         (when-let [file-content (db-react/get-file path)]
            (let [content (string/trim file-content)]
              (content/content path {:config {:file? true
                                              :file-path path}
@@ -109,7 +109,7 @@
                                     :format format})))
 
          (and format (contains? (config/text-formats) format))
-         (when-let [file-content (react-queries/get-file path)]
+         (when-let [file-content (db-react/get-file path)]
            (let [content (string/trim file-content)
                  mode (util/get-file-ext path)
                  mode (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} mode) "text/x-clojure" mode)]

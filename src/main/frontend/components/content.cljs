@@ -20,7 +20,7 @@
             [frontend.components.editor :as editor]
             [frontend.context.i18n :as i18n]
             [frontend.text :as text]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]))
 

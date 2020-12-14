@@ -1,4 +1,4 @@
-(ns frontend.db.react-queries
+(ns frontend.db.react
   "Contains queries with react feature. Data process should be located in this namespace."
   (:require [frontend.util :as util]
             [frontend.db.declares :as declares]

@@ -10,7 +10,7 @@
             [clojure.string :as string]
             [medley.core :as medley]
             [frontend.text :as text]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]))
 
 (defn redirect!
@@ -101,7 +101,7 @@
 
 (defn- redirect-to-file!
   [page]
-  (when-let [path (-> (db-queries/get-page-file (string/lower-case page))
+  (when-let [path (-> (db-simple/get-page-file (string/lower-case page))
                       :db/id
                       (db-utils/entity)
                       :file/path)]
@@ -124,7 +124,7 @@
 
       :file
       (when-let [path (get-in (state/get-route-match) [:path-params :path])]
-        (when-let [page (db-queries/get-file-page path)]
+        (when-let [page (db-simple/get-file-page path)]
           (redirect! {:to :page
                       :path-params {:name page}})))
 

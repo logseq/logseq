@@ -19,7 +19,7 @@
             [frontend.components.onboarding :as onboarding]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]
             [frontend.handler.utils :as h-utils]
             [frontend.handler.block :as block-handler]))

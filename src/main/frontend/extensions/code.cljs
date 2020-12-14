@@ -38,7 +38,7 @@
             ["codemirror/mode/swift/swift"]
             ["codemirror/mode/xml/xml"]
     ;; ["parinfer-codemirror" :as par-cm]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]))
 
 ;; codemirror
@@ -70,7 +70,7 @@
 
       (:file-path config)
       (let [path (:file-path config)
-            content (db-queries/get-file-no-sub path)
+            content (db-simple/get-file-no-sub path)
             value (some-> (gdom/getElement path)
                           (gobj/get "value"))]
         (when (and

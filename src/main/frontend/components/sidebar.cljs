@@ -28,7 +28,7 @@
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]
             [frontend.handler.utils :as h-utils]))
 

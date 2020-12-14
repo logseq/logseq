@@ -1,13 +1,13 @@
 (ns frontend.tools.html-export
   (:require-macros [hiccups.core :as hiccups :refer [html]])
   (:require
-            [frontend.components.block :as block]
-            [frontend.extensions.slide :as slide]
-            [hiccups.runtime :as hiccupsrt]
-            [clojure.walk :as walk]
-            [clojure.set :as set]
-            [medley.core :as medley]
-            [frontend.db.queries :as db-queries]))
+    [frontend.components.block :as block]
+    [frontend.extensions.slide :as slide]
+    [hiccups.runtime :as hiccupsrt]
+    [clojure.walk :as walk]
+    [clojure.set :as set]
+    [medley.core :as medley]
+    [frontend.db.simple :as db-simple]))
 
 ;; Consider generate a db index so that search can still works
 
@@ -29,7 +29,7 @@
 
 (defn export-page
   [page-name blocks show-notification!]
-  (let [{:keys [slide] :as properties} (db-queries/get-page-properties page-name)
+  (let [{:keys [slide] :as properties} (db-simple/get-page-properties page-name)
         slide? slide
         blocks (if (:block/pre-block? (first blocks))
                  (rest blocks)

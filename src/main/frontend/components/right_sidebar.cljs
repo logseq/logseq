@@ -22,8 +22,8 @@
             [reitit.frontend.easy :as rfe]
             [frontend.db-mixins :as db-mixins]
             [frontend.config :as config]
-            [frontend.db.react-queries :as react-queries]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.react :as db-react]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.utils :as h-utils]))
@@ -59,7 +59,7 @@
 
 (defn recent-pages
   []
-  (let [pages (db-queries/get-key-value :recent/pages)]
+  (let [pages (db-simple/get-key-value :recent/pages)]
     [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
      (if (seq pages)
        (for [page pages]
@@ -179,7 +179,7 @@
   [repo idx db-id block-type block-data t]
   (let [item
         (if (= :page block-type)
-          (let [page (react-queries/query-entity-in-component db-id)]
+          (let [page (db-react/query-entity-in-component db-id)]
             (when (seq page)
               (build-sidebar-item repo idx db-id block-type page t)))
           (build-sidebar-item repo idx db-id block-type block-data t))]

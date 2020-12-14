@@ -10,8 +10,8 @@
             [frontend.utf8 :as utf8]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]))
 
 ;; recursively with children content for tree
@@ -124,7 +124,7 @@
   (when (seq target-blocks)
     (let [file-id (:db/id file)
           target-block-ids (set (map :block/uuid target-blocks))
-          after-blocks (->> (db-queries/get-file-after-blocks repo file-id start-pos)
+          after-blocks (->> (db-simple/get-file-after-blocks repo file-id start-pos)
                             (remove (fn [h] (contains? target-block-ids (:block/uuid h)))))
 
           after-blocks (cond
@@ -244,7 +244,7 @@
       (get-block-end-pos-rec repo (last children))
       (if-let [end-pos (get-in block [:block/meta :end-pos])]
         end-pos
-        (when-let [block (db-queries/get-block-by-uuid repo (:block/uuid block))]
+        (when-let [block (db-simple/get-block-by-uuid repo (:block/uuid block))]
           (get-in block [:block/meta :end-pos]))))))
 
 ;; TODO: still could be different pages, e.g. move a block from one journal to another journal
@@ -252,7 +252,7 @@
   [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
   (if (move-parent-to-child? target-block to-block)
     nil
-    (let [old-file-content (react-queries/get-file (:file/path (db-utils/entity (:db/id (:block/file target-block)))))
+    (let [old-file-content (db-react/get-file (:file/path (db-utils/entity (:db/id (:block/file target-block)))))
           old-file-content (utf8/encode old-file-content)
           subs (fn [start-pos end-pos] (utf8/substring old-file-content start-pos end-pos))
           bottom-content (get-block-content-rec bottom-block)
@@ -347,7 +347,7 @@
   [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
   (let [target-file (db-utils/entity repo (:db/id (:block/file target-block)))
         target-file-path (:file/path target-file)
-        target-file-content (react-queries/get-file repo target-file-path)
+        target-file-content (db-react/get-file repo target-file-path)
         to-file (db-utils/entity repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
         target-block-end-pos (get-block-end-pos-rec repo target-block)
@@ -356,7 +356,7 @@
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)
-        to-file-content (utf8/encode (react-queries/get-file repo to-file-path))
+        to-file-content (utf8/encode (db-react/get-file repo to-file-path))
         new-to-file-content (let [separate-pos (cond nested?
                                                      (get-end-pos to-block)
                                                      top?
@@ -415,7 +415,7 @@
   [target-block-repo to-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
   (let [target-file (db-utils/entity target-block-repo (:db/id (:block/file target-block)))
         target-file-path (:file/path target-file)
-        target-file-content (react-queries/get-file target-block-repo target-file-path)
+        target-file-content (db-react/get-file target-block-repo target-file-path)
         to-file (db-utils/entity to-block-repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
         target-block-end-pos (get-block-end-pos-rec target-block-repo target-block)
@@ -424,7 +424,7 @@
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)
-        to-file-content (utf8/encode (react-queries/get-file to-block-repo to-file-path))
+        to-file-content (utf8/encode (db-react/get-file to-block-repo to-file-path))
         new-to-file-content (let [separate-pos (cond nested?
                                                      (get-end-pos to-block)
                                                      top?

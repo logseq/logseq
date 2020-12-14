@@ -18,8 +18,8 @@
             [frontend.handler.project :as project-handler]
             [lambdaisland.glogi :as log]
             ["ignore" :as Ignore]
-            [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]
             [frontend.handler.utils :as h-utils]))
 
@@ -123,11 +123,11 @@
                            re-render-root? false
                            add-history? true
                            update-status? false}}]
-  (let [original-content (db-queries/get-file-no-sub repo path)]
+  (let [original-content (db-simple/get-file-no-sub repo path)]
     (if reset?
       (do
-        (when-let [page-id (db-queries/get-file-page-id path)]
-          (db-queries/transact! repo
+        (when-let [page-id (db-simple/get-file-page-id path)]
+          (db-simple/transact! repo
                         [[:db/retract page-id :page/alias]
                          [:db/retract page-id :page/tags]]))
         (h-utils/reset-file! repo path content))
@@ -168,7 +168,7 @@
                      reset? false}}]
    (p/let [file->content (let [paths (map first files)]
                            (zipmap paths
-                                   (map (fn [path] (db-queries/get-file-no-sub repo path)) paths)))]
+                                   (map (fn [path] (db-simple/get-file-no-sub repo path)) paths)))]
      (let [files-tx (mapv (fn [[path content]]
                             (let [original-content (get file->content path)]
                               [path original-content content])) files)
@@ -219,13 +219,13 @@
        (when-let [file (db-utils/entity repo [:file/path file])]
          (common-handler/check-changed-files-status)
          (let [file-id (:db/id file)
-               page-id (db-queries/get-file-page-id (:file/path file))
+               page-id (db-simple/get-file-page-id (:file/path file))
                tx-data (map
                         (fn [db-id]
                           [:db.fn/retractEntity db-id])
                         (remove nil? [file-id page-id]))]
            (when (seq tx-data)
-             (db-queries/transact! repo tx-data)))))
+             (db-simple/transact! repo tx-data)))))
      (p/catch (fn [err]
                 (prn "error: " err))))))
 
@@ -233,7 +233,7 @@
   [file]
   (when-let [repo (state/get-current-repo)]
     (let [path (:file/path file)
-          content (react-queries/get-file path)]
+          content (db-react/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
 
 (defn ignore-files

@@ -12,7 +12,7 @@
             [frontend.config :as config]
             [cljs-time.local :as tl]
             [frontend.helper :as helper]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.handler.utils :as h-utils]))
 
 (defn- set-git-status!

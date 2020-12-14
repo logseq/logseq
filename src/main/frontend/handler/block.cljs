@@ -3,12 +3,12 @@
             [cljs.reader :as reader]
             [frontend.state :as state]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.react :as db-react]
             [clojure.set :as set]
             [frontend.extensions.sci :as sci]
             [frontend.handler.utils :as h-utils]
             [frontend.util :as util]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.declares :as declares]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -47,7 +47,7 @@
     (let [inputs (map resolve-input inputs)
           repo (state/get-current-repo)
           k [:custom query']]
-      (apply react-queries/q repo k query-opts query inputs))
+      (apply db-react/q repo k query-opts query inputs))
     (catch js/Error e
       (println "Custom query failed: ")
       (js/console.dir e))))
@@ -74,7 +74,7 @@
   [block theme]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
-      (let [ref-blocks (react-queries/get-block-referenced-blocks block)
+      (let [ref-blocks (db-react/get-block-referenced-blocks block)
             edges (concat
                     (map (fn [[p aliases]]
                            [block p]) ref-blocks))
@@ -83,7 +83,7 @@
                               (set))
             other-blocks-edges (mapcat
                                  (fn [block]
-                                   (let [ref-blocks (-> (map first (react-queries/get-block-referenced-blocks block))
+                                   (let [ref-blocks (-> (map first (db-react/get-block-referenced-blocks block))
                                                         (set)
                                                         (set/intersection other-blocks))]
                                      (concat
@@ -136,7 +136,7 @@
                              block-uuid)
                            (> (:block/level h) level))))
            (db-utils/with-repo repo-url)
-           (db-queries/with-block-refs-count repo-url)))
+           (db-simple/with-block-refs-count repo-url)))
 
 (defn get-block-and-children-no-cache
   [repo block-uuid]
@@ -144,7 +144,7 @@
         page (:db/id (:block/page block))
         pos (:start-pos (:block/meta block))
         level (:block/level block)]
-    (-> (db-queries/get-block-and-children repo page pos)
+    (-> (db-simple/get-block-and-children repo page pos)
         (block-and-children-transform repo block-uuid level))))
 
 (defn get-block-full-content
@@ -171,12 +171,12 @@
          opts {:use-cache? use-cache?
                :transform-fn #(block-and-children-transform % repo block-uuid level)
                :inputs-fn (fn [] [page (pred)])}]
-     (react-queries/get-block-by-pred repo block-uuid opts))))
+     (db-react/get-block-by-pred repo block-uuid opts))))
 
 (defn get-block-immediate-children
   [repo block-uuid]
   (when (declares/get-conn repo)
-    (let [ids (->> (:block/children (db-queries/get-block-by-uuid repo block-uuid))
+    (let [ids (->> (:block/children (db-simple/get-block-by-uuid repo block-uuid))
                    (map :db/id))]
       (when (seq ids)
         (db-utils/pull-many repo '[*] ids)))))
@@ -264,13 +264,13 @@
            d 1]
       (if (> d depth)
         parents
-        (if-let [parent (db-queries/get-block-parent repo block-id)]
+        (if-let [parent (db-simple/get-block-parent repo block-id)]
           (recur (:block/uuid parent) (conj parents parent) (inc d))
           parents)))))
 
 (defn pre-block-with-only-title?
   [repo block-id]
-  (when-let [block (db-queries/get-block-by-uuid repo block-id)]
+  (when-let [block (db-simple/get-block-by-uuid repo block-id)]
     (let [properties (:page/properties (:block/page block))]
       (and (:title properties)
         (= 1 (count properties))
@@ -284,7 +284,7 @@
 (defn template-exists?
   [title]
   (when title
-    (let [templates (keys (db-queries/get-all-templates))]
+    (let [templates (keys (db-simple/get-all-templates))]
       (when (seq templates)
         (let [templates (map string/lower-case templates)]
           (contains? (set templates) (string/lower-case title)))))))

@@ -23,8 +23,8 @@
             [frontend.dicts :as dicts]
             [frontend.helper :as helper]
             [frontend.spec :as spec]
-            [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.declares :as declares]
             [frontend.db.utils :as db-utils]
             [frontend.handler.utils :as h-utils]
@@ -65,7 +65,7 @@
         (p/let [file-exists? (fs/create-if-not-exists repo-dir (str app-dir "/" config/config-file) default-content)]
           (let [path (str app-dir "/" config/config-file)
                 old-content (when file-exists?
-                              (react-queries/get-file repo-url path))
+                              (db-react/get-file repo-url path))
                 content (or old-content default-content)]
             (h-utils/reset-file! repo-url path content)
             (h-utils/reset-config! repo-url content)
@@ -213,7 +213,7 @@
         blocks-pages (if (seq parsed-files)
                        (extract-all-blocks-pages repo-url parsed-files)
                        [])]
-    (db-queries/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (db-simple/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (let [config-file (str config/app-name "/" config/config-file)]
       (if (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
@@ -226,7 +226,7 @@
 
 (defn- delete-pages-by-files
   [files]
-  (let [pages (->> (mapv db-queries/get-file-page files)
+  (let [pages (->> (mapv db-simple/get-file-page files)
                    (remove nil?))]
     (when (seq pages)
       (mapv (fn [page] [:db.fn/retractEntity [:page/name page]])
@@ -264,8 +264,8 @@
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
               delete-files (if (seq remove-files)
-                             (db-queries/delete-files remove-files))
-              delete-blocks (db-queries/delete-blocks repo-url (concat remove-files modify-files))
+                             (db-simple/delete-files remove-files))
+              delete-blocks (db-simple/delete-blocks repo-url (concat remove-files modify-files))
               delete-pages (if (seq remove-files)
                              (delete-pages-by-files remove-files)
                              [])
@@ -342,7 +342,7 @@
   [repo tx transact-option files]
   (spec/validate :repos/url repo)
   (let [files (remove nil? files)
-        pages (->> (map db-queries/get-file-page (map first files))
+        pages (->> (map db-simple/get-file-page (map first files))
                    (remove nil?))]
     (h-utils/transact-react!
       repo
@@ -351,7 +351,7 @@
     (when (seq pages)
       (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
         (when (seq children-tx)
-          (db-queries/transact! repo children-tx))))
+          (db-simple/transact! repo children-tx))))
     (when (seq files)
       (file-handler/alter-files repo files))))
 
@@ -372,7 +372,7 @@
   (spec/validate :repos/url repo-url)
   (when (and
          (declares/get-conn repo-url true)
-         (db-queries/cloned? repo-url))
+         (db-simple/cloned? repo-url))
     (p/let [remote-latest-commit (common-handler/get-remote-ref repo-url)
             local-latest-commit (common-handler/get-ref repo-url)
             descendent? (git/descendent? repo-url local-latest-commit remote-latest-commit)]
@@ -382,7 +382,7 @@
                 force-pull?)
         (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo-url))]
           (when (empty? files)
-            (let [status (db-queries/get-key-value repo-url :git/status)]
+            (let [status (db-simple/get-key-value repo-url :git/status)]
               (when (or
                      force-pull?
                      (and
@@ -457,9 +457,9 @@
                   commit-message "Logseq auto save"
                   merge-push-no-diff? false}}]
   (spec/validate :repos/url repo-url)
-  (let [status (db-queries/get-key-value repo-url :git/status)]
+  (let [status (db-simple/get-key-value repo-url :git/status)]
     (if (and
-         (db-queries/cloned? repo-url)
+         (db-simple/cloned? repo-url)
          (state/input-idle? repo-url)
          (or (not= status :pushing)
              custom-commit?))
@@ -471,7 +471,7 @@
                                      commit-message)]
                 (p/let [commit-oid (git/commit repo-url commit-message)
                         token (helper/get-github-token repo-url)
-                        status (db-queries/get-key-value repo-url :git/status)]
+                        status (db-simple/get-key-value repo-url :git/status)]
                   (when (and token (or (not= status :pushing)
                                        custom-commit?))
                     (git-handler/set-git-status! repo-url :pushing)
@@ -538,7 +538,7 @@
        (fn [result]
          (state/set-current-repo! repo-url)
          (start-db-conn! (state/get-me) repo-url)
-         (db-queries/mark-repo-as-cloned! repo-url))
+         (db-simple/mark-repo-as-cloned! repo-url))
        (fn [e]
          (println "Clone failed, error: ")
          (js/console.error e)
@@ -557,7 +557,7 @@
   [k v]
   (when-let [repo (state/get-current-repo)]
     (let [path (str config/app-name "/" config/config-file)]
-      (when-let [config (db-queries/get-file-no-sub path)]
+      (when-let [config (db-simple/get-file-no-sub path)]
         (let [config (try
                        (reader/read-string config)
                        (catch js/Error e
@@ -664,7 +664,7 @@
                                   (util/get-repo-dir url)
                                   ".git/config")]
             (if (and config-exists?
-                     (db-queries/cloned? repo))
+                     (db-simple/cloned? repo))
               (do
                 (git-handler/git-set-username-email! repo me)
                 (pull repo nil))
@@ -681,7 +681,7 @@
   [{:keys [id url] :as repo}]
   (spec/validate :repos/repo repo)
   (declares/remove-conn! url)
-  (react-queries/clear-query-state!)
+  (db-react/clear-query-state!)
   (-> (p/do! (declares/remove-db! url)
              (declares/remove-files-db! url)
              (fs/rmdir (util/get-repo-dir url))

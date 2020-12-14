@@ -11,8 +11,8 @@
             [frontend.components.editor :as editor]
             [frontend.db-mixins :as db-mixins]
             [clojure.string :as string]
-            [frontend.db.react-queries :as react-queries]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.react :as db-react]
+            [frontend.db.simple :as db-simple]
             [frontend.handler.page :as page-handler]))
 
 (rum/defc references < rum/reactive db-mixins/query
@@ -24,16 +24,16 @@
           journal? (date/valid-journal-title? (string/capitalize page-name))
           ref-blocks (cond
                        priority?
-                       (react-queries/get-blocks-by-priority (state/get-current-repo) page-name)
+                       (db-react/get-blocks-by-priority (state/get-current-repo) page-name)
 
                        marker?
                        (page-handler/get-marker-blocks (state/get-current-repo) page-name)
                        block-id
-                       (react-queries/get-block-referenced-blocks block-id)
+                       (db-react/get-block-referenced-blocks block-id)
                        :else
                        (page-handler/get-page-referenced-blocks page-name))
           scheduled-or-deadlines (if journal?
-                                   (react-queries/get-date-scheduled-or-deadlines (string/capitalize page-name))
+                                   (db-react/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           n-ref (count ref-blocks)]
       (when (or (> n-ref 0)

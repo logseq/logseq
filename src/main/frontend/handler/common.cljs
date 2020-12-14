@@ -7,7 +7,7 @@
             [frontend.text :as text]
             [frontend.git :as git]
 
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.simple :as db-simple]))
 
 (defn get-ref
   [repo-url]
@@ -25,7 +25,7 @@
   ([repo]
    (when (and
           repo
-          (db-queries/cloned? repo)
+          (db-simple/cloned? repo)
           (gobj/get js/window "workerThread")
           (gobj/get js/window.workerThread "getChangedFiles"))
      (->

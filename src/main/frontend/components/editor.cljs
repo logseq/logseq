@@ -29,7 +29,7 @@
             [cljs-drag-n-drop.core :as dnd]
             [frontend.text :as text]
             ["/frontend/utils" :as utils]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.utils :as h-utils]))
@@ -668,13 +668,13 @@
                      (editor-handler/clear-when-saved!)
                      (if file?
                        (let [path (:file-path config)
-                             content (db-queries/get-file-no-sub path)
+                             content (db-simple/get-file-no-sub path)
                              value (some-> (gdom/getElement path)
                                            (gobj/get "value"))]
                          (when (and
                                 (not (string/blank? value))
                                 (not= (string/trim value) (string/trim content)))
-                           (let [old-page-name (db-queries/get-file-page path false)]
+                           (let [old-page-name (db-simple/get-file-page path false)]
                              (page-handler/rename-when-alter-title-property! old-page-name path format content value)
                              (file/alter-file (state/get-current-repo) path (string/trim value)
                                               {:re-render-root? true}))))

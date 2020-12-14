@@ -7,7 +7,7 @@
     [clojure.string :as string]
     [frontend.regex :as regex]
     [frontend.text :as text]
-    [frontend.db.queries :as db-queries]
+    [frontend.db.simple :as db-simple]
     [frontend.db.utils :as db-utils]))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
@@ -82,7 +82,7 @@
   (when-let [repo (state/get-current-repo)]
     (let [pred (fn [db content]
                  (match-fn content))]
-      (->> (db-queries/get-matched-blocks pred)
+      (->> (db-simple/get-matched-blocks pred)
            (take limit)
            db-utils/seq-flatten
            (db-utils/pull-many '[:block/uuid
@@ -117,7 +117,7 @@
   ([q limit]
    (let [q (clean-str q)]
      (when-not (string/blank? q)
-       (let [pages (db-queries/get-pages (state/get-current-repo))]
+       (let [pages (db-simple/get-pages (state/get-current-repo))]
          (when (seq pages)
            (fuzzy-search pages q :limit limit)))))))
 
@@ -128,7 +128,7 @@
    (let [q (clean-str q)]
      (when-not (string/blank? q)
        (let [mldoc-exts (set (map name config/mldoc-support-formats))
-             files (->> (db-queries/get-files (state/get-current-repo))
+             files (->> (db-simple/get-files (state/get-current-repo))
                         (map first)
                         (remove (fn [file]
                                   (mldoc-exts (util/get-file-ext file)))))]
@@ -140,7 +140,7 @@
    (template-search q 10))
   ([q limit]
    (let [q (clean-str q)]
-     (let [templates (db-queries/get-all-templates)]
+     (let [templates (db-simple/get-all-templates)]
        (when (seq templates)
          (let [result (fuzzy-search (keys templates) q :limit limit)]
            (vec (select-keys templates result))))))))

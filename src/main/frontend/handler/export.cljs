@@ -9,8 +9,8 @@
             [frontend.handler.common :as common-handler]
             [frontend.extensions.zip :as zip]
             [promesa.core :as p]
-            [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]
             [frontend.db.declares :as declares]
             [frontend.handler.block :as block-handler]
@@ -31,7 +31,7 @@
 (defn copy-page-as-json!
   [page-name]
   (when-let [repo (state/get-current-repo)]
-    (let [properties (db-queries/get-page-properties page-name)
+    (let [properties (db-simple/get-page-properties page-name)
           blocks (h-utils/get-page-blocks repo page-name)]
       (util/copy-to-clipboard!
        (js/JSON.stringify
@@ -52,7 +52,7 @@
 (defn download-file!
   [file-path]
   (when-let [repo (state/get-current-repo)]
-    (when-let [content (react-queries/get-file repo file-path)]
+    (when-let [content (db-react/get-file repo file-path)]
       (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
                            (clj->js {:type "text/plain;charset=utf-8,"}))]
         (let [anchor (gdom/getElement "download")
@@ -65,8 +65,8 @@
   [repo]
   (when-let [db (declares/get-conn repo)]
     (let [db (if (state/all-pages-public?)
-               (db-queries/clean-export! db)
-               (db-queries/filter-only-public-pages-and-blocks db))
+               (db-simple/clean-export! db)
+               (db-simple/filter-only-public-pages-and-blocks db))
           db-str (db-utils/db->string db)
           state (select-keys @state/state
                              [:ui/theme :ui/cycle-collapse
@@ -85,7 +85,7 @@
 
 (defn export-repo-as-zip!
   [repo]
-  (let [files (db-queries/get-file-contents repo)
+  (let [files (db-simple/get-file-contents repo)
         [owner repo-name] (util/get-git-owner-and-repo repo)
         repo-name (str owner "-" repo-name)]
     (when (seq files)

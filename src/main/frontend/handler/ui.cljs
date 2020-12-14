@@ -6,7 +6,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.db.react-queries :as react-queries]))
+            [frontend.db.react :as db-react]))
 
 ;; sidebars
 (defn close-left-sidebar!
@@ -37,8 +37,8 @@
      :or {clear-all-query-state? false}}]
    (when-let [component (state/get-root-component)]
      (if clear-all-query-state?
-       (react-queries/clear-query-state!)
-       (react-queries/clear-query-state-without-refs-and-embeds!))
+       (db-react/clear-query-state!)
+       (db-react/clear-query-state-without-refs-and-embeds!))
      (rum/request-render component)
      (doseq [component (state/get-custom-query-components)]
        (rum/request-render component)))))
@@ -78,7 +78,7 @@
   []
   (when-let [style (or
                     (state/get-custom-css-link)
-                    (react-queries/get-custom-css)
+                    (db-react/get-custom-css)
                     ;; (state/get-custom-css-link)
 )]
     (util/add-style! style)))

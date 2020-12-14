@@ -1,4 +1,4 @@
-(ns frontend.db.queries
+(ns frontend.db.simple
   "Contains simple datascript queries, including queries, transact etc. Data process should not be located this
   namespace, it should be in upper layer."
   (:require [datascript.core :as d]

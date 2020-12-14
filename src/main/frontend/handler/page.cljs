@@ -22,9 +22,9 @@
             [promesa.core :as p]
             [goog.object :as gobj]
             [frontend.format.mldoc :as mldoc]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.react :as db-react]
             [frontend.db.declares :as declares]
             [clojure.set :as set]
             [frontend.handler.utils :as h-utils]
@@ -88,7 +88,7 @@
   (when-let [content (let [blocks (h-utils/get-page-blocks page)]
                        (and (:block/pre-block? (first blocks))
                          (:block/content (first blocks))))]
-    (let [format (db-queries/get-page-format page)]
+    (let [format (db-simple/get-page-format page)]
       (case format
         :org
         (->> (string/split-lines content)
@@ -106,14 +106,14 @@
 (defn page-add-properties!
   [page-name properties]
   (let [page (db-utils/entity [:page/name page-name])
-        page-format (db-queries/get-page-format page-name)
+        page-format (db-simple/get-page-format page-name)
         properties-content (get-page-properties-content page-name)
         properties-content (if properties-content
                              (string/trim properties-content)
                              (config/properties-wrapper page-format))]
     (let [file (db-utils/entity (:db/id (:page/file page)))
           file-path (:file/path file)
-          file-content (react-queries/get-file file-path)
+          file-content (db-react/get-file file-path)
           after-content (subs file-content (inc (count properties-content)))
           new-properties-content (h-utils/add-properties! page-format properties-content properties)
           full-content (str new-properties-content "\n\n" (string/trim after-content))]
@@ -129,9 +129,9 @@
     (let [page (db-utils/entity [:page/name page-name])
           file (db-utils/entity (:db/id (:page/file page)))
           file-path (:file/path file)
-          file-content (react-queries/get-file file-path)
+          file-content (db-react/get-file file-path)
           after-content (subs file-content (count properties-content))
-          page-format (db-queries/get-page-format page-name)
+          page-format (db-simple/get-page-format page-name)
           new-properties-content (let [lines (string/split-lines properties-content)
                                        prefix (case page-format
                                                 :org (str "#+" (string/upper-case k) ": ")
@@ -197,7 +197,7 @@
     (fn [project]
       (page-add-properties! page-name {"published" true
                                        "slide" true})
-      (let [properties (db-queries/get-page-properties page-name)
+      (let [properties (db-simple/get-page-properties page-name)
             plugins (get-plugins blocks)
             data {:project project
                   :title page-name
@@ -220,7 +220,7 @@
   [page-name project-add-modal]
   (project-handler/exists-or-create!
    (fn [project]
-     (let [properties (db-queries/get-page-properties page-name)
+     (let [properties (db-simple/get-page-properties page-name)
            slide? (let [slide (:slide properties)]
                     (or (true? slide)
                         (= "true" slide)))
@@ -259,7 +259,7 @@
 (defn unpublish-page!
   [page-name]
   (page-add-properties! page-name {"published" false})
-  (let [properties (db-queries/get-page-properties page-name)
+  (let [properties (db-simple/get-page-properties page-name)
         permalink (:permalink properties)
         project (state/get-current-project)]
     (if (and project permalink)
@@ -275,11 +275,11 @@
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (string/lower-case page-name)]
-        (let [file (db-queries/get-page-file page-name)
+        (let [file (db-simple/get-page-file page-name)
               file-path (:file/path file)]
           ;; delete file
           (when file-path
-            (db-queries/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+            (db-simple/transact! [[:db.fn/retractEntity [:file/path file-path]]])
             (when-let [files-conn (declares/get-files-conn repo)]
               (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
 
@@ -288,7 +288,7 @@
                            (fn [block]
                              [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
                            blocks)]
-              (db-queries/transact! tx-data)
+              (db-simple/transact! tx-data)
               ;; remove file
               (->
                (p/let [_ (git/remove-file repo file-path)
@@ -301,7 +301,7 @@
                (p/catch (fn [err]
                           (prn "error: " err))))))
 
-          (db-queries/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+          (db-simple/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
           (ok-handler))))))
 
@@ -323,7 +323,7 @@
      (p/let [_ (fs/rename (str (util/get-repo-dir repo) "/" old-path)
                           (str (util/get-repo-dir repo) "/" new-path))]
        ;; update db
-       (db-queries/transact! repo [{:db/id (:db/id file)
+       (db-simple/transact! repo [{:db/id (:db/id file)
                             :file/path new-path}])
 
        ;; update files db
@@ -360,9 +360,9 @@
                               (page-add-properties! (string/lower-case new-name) {:title new-name}))))
 
             ;; update all files which have references to this page
-            (let [files (db-queries/get-files-that-referenced-page (:db/id page))]
+            (let [files (db-simple/get-files-that-referenced-page (:db/id page))]
               (doseq [file-path files]
-                (let [file-content (react-queries/get-file file-path)
+                (let [file-content (db-react/get-file file-path)
                       ;; FIXME: not safe
                       new-content (string/replace file-content
                                                   (util/format "[[%s]]" old-original-name)
@@ -416,7 +416,7 @@
 (defn load-more-journals!
   []
   (let [current-length (:journals-length @state/state)]
-    (when (< current-length (db-queries/get-journals-length))
+    (when (< current-length (db-simple/get-journals-length))
       (state/update-state! :journals-length inc))))
 
 (defn update-public-attribute!
@@ -454,20 +454,20 @@
 (defn get-page-alias
   [repo page-name]
   (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (db-queries/get-page-alias conn page-name)
+    (some->> (db-simple/get-page-alias conn page-name)
              db-utils/seq-flatten
              distinct)))
 
 (defn get-alias-page
   [repo alias]
   (when-let [conn (and repo (declares/get-conn repo))]
-    (some->> (db-queries/get-alias-page conn alias)
+    (some->> (db-simple/get-alias-page conn alias)
              db-utils/seq-flatten
              distinct)))
 
 (defn page-alias-set
   [repo-url page]
-  (when-let [page-id (db-queries/get-page-id-by-name page)]
+  (when-let [page-id (db-simple/get-page-id-by-name page)]
     (let [aliases (get-page-alias repo-url page)
           aliases (if (seq aliases)
                     (set
@@ -481,18 +481,18 @@
   [repo page]
   (when (declares/get-conn repo)
     (let [pages (page-alias-set repo page)
-          page-id (db-queries/get-page-id-by-name page)
-          ref-pages (->> (react-queries/get-ref-pages repo page-id pages)
-                      react-queries/react
+          page-id (db-simple/get-page-id-by-name page)
+          ref-pages (->> (db-react/get-ref-pages repo page-id pages)
+                      db-react/react
                       db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
 (defn get-pages-that-mentioned-page
   [repo page]
   (when (declares/get-conn repo)
-    (let [page-id (db-queries/get-page-id-by-name page)
+    (let [page-id (db-simple/get-page-id-by-name page)
           pages (page-alias-set repo page)
-          mentioned-pages (react-queries/get-mentioned-pages repo page-id pages page)]
+          mentioned-pages (db-react/get-mentioned-pages repo page-id pages page)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
 (defn normalize-page-name
@@ -566,7 +566,7 @@
 
 (defn add-page-to-recent!
   [repo page]
-  (let [pages (or (db-queries/get-key-value repo :recent/pages)
+  (let [pages (or (db-simple/get-key-value repo :recent/pages)
                 '())
         new-pages (take 12 (distinct (cons page pages)))]
     (h-utils/set-key-value repo :recent/pages new-pages)))
@@ -577,7 +577,7 @@
     (when (declares/get-conn repo)
       (let [page-id (:db/id (db-utils/entity [:page/name page]))
             pages (page-alias-set repo page)]
-        (->> (react-queries/get-page-referenced-blocks repo page-id pages)
+        (->> (db-react/get-page-referenced-blocks repo page-id pages)
              (remove (fn [block]
                        (let [exclude-pages pages]
                          (contains? exclude-pages (:db/id (:block/page block))))))
@@ -591,7 +591,7 @@
       (let [page-id (:db/id (db-utils/entity [:page/name page]))
             pages (page-alias-set repo page)
             pattern (re-pattern (str "(?i)" page))]
-        (->> (db-queries/get-page-unlinked-references conn pattern)
+        (->> (db-simple/get-page-unlinked-references conn pattern)
              (remove (fn [block]
                        (let [ref-pages (set (map :db/id (:block/ref-pages block)))]
                          (or
@@ -606,14 +606,14 @@
   [repo page-name]
   (let [alias-ids (get-page-alias repo page-name)]
     (when (seq alias-ids)
-      (->> (db-queries/get-pages-by-names repo alias-ids)
+      (->> (db-simple/get-pages-by-names repo alias-ids)
            (map :page/name)
            distinct))))
 
 (defn get-marker-blocks
   [repo-url marker]
   (let [marker (string/upper-case marker)]
-    (some->> (react-queries/get-marker-blocks repo-url marker)
+    (some->> (db-react/get-marker-blocks repo-url marker)
              (db-utils/sort-by-pos)
              (db-utils/with-repo repo-url)
              (h-utils/with-block-refs-count repo-url)
@@ -623,16 +623,16 @@
 (defn build-global-graph
   [theme show-journal?]
   (let [dark? (= "dark" theme)
-        current-page (:page/name (db-queries/get-current-page))]
+        current-page (:page/name (db-simple/get-current-page))]
     (when-let [repo (state/get-current-repo)]
-      (let [relation (db-queries/get-pages-relation repo show-journal?)
-            tagged-pages (db-queries/get-all-tagged-pages repo)
+      (let [relation (db-simple/get-pages-relation repo show-journal?)
+            tagged-pages (db-simple/get-all-tagged-pages repo)
             linked-pages (-> (concat
                                relation
                                tagged-pages)
                              flatten
                              set)
-            all-pages (db-queries/get-pages repo)
+            all-pages (db-simple/get-pages repo)
             other-pages (->> (remove linked-pages all-pages)
                              (remove nil?))
             other-pages (if show-journal? other-pages
@@ -659,7 +659,7 @@
 (defn get-pages-with-modified-at
   [repo]
   (let [now-long (tc/to-long (t/now))]
-    (->> (db-queries/get-pages-with-modified repo)
+    (->> (db-simple/get-pages-with-modified repo)
          (seq)
          (sort-by (fn [[page modified-at]]
                     [modified-at page]))

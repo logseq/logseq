@@ -1,6 +1,6 @@
 (ns frontend.handler.utils
-  (:require [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+  (:require [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]
             [frontend.format :as format]
             [frontend.utf8 :as utf8]
@@ -25,12 +25,12 @@
 
 (defn- remove-key
   [repo-url key]
-  (db-queries/retract-by-key repo-url key)
-  (react-queries/set-new-result! [repo-url :kv key] nil))
+  (db-simple/retract-by-key repo-url key)
+  (db-react/set-new-result! [repo-url :kv key] nil))
 
 (defn with-block-refs-count
   [repo blocks]
-  (let [refs (db-queries/get-block-refs-count repo)]
+  (let [refs (db-simple/get-block-refs-count repo)]
     (map (fn [block]
            (assoc block :block/block-refs-count
                         (get refs (:db/id block))))
@@ -38,7 +38,7 @@
 
 (defn delete-file-blocks!
   [repo-url path]
-  (let [blocks (db-queries/get-file-blocks repo-url path)]
+  (let [blocks (db-simple/get-file-blocks repo-url path)]
     (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
 
 (defn extract-page-list
@@ -249,7 +249,7 @@
         (let [pre-block? (:block/pre-block? (first blocks))
               current-priority (get-current-priority)
               current-marker (get-current-marker)
-              current-page-id (:db/id (db-queries/get-current-page))
+              current-page-id (:db/id (db-simple/get-current-page))
               {:block/keys [page]} (first blocks)
               handler-keys (->>
                              (util/concat-without-nil
@@ -300,14 +300,14 @@
                                (filter (fn [v]
                                          (and (= (first v) (state/get-current-repo))
                                            (= (second v) :custom)))
-                                 (keys @react-queries/query-state))
+                                 (keys @db-react/query-state))
                                (map (fn [v]
                                       (vec (drop 1 v)))))
               block-blocks (some->>
                              (filter (fn [v]
                                        (and (= (first v) (state/get-current-repo))
                                          (= (second v) :block/block)))
-                               (keys @react-queries/query-state))
+                               (keys @db-react/query-state))
                              (map (fn [v]
                                     (vec (drop 1 v)))))]
           (->>
@@ -337,7 +337,7 @@
                 handler-keys (get-handler-keys handler-opts)]
             (doseq [handler-key handler-keys]
               (let [handler-key (vec (cons repo-url handler-key))]
-                (when-let [cache (get @react-queries/query-state handler-key)]
+                (when-let [cache (get @db-react/query-state handler-key)]
                   (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
                     (when (or query query-fn)
                       (let [new-result (->
@@ -352,7 +352,7 @@
                                              (apply d/q query db inputs))
 
                                            (keyword? query)
-                                           (db-queries/get-key-value repo-url query)
+                                           (db-simple/get-key-value repo-url query)
 
                                            (seq inputs)
                                            (apply d/q query db inputs)
@@ -360,7 +360,7 @@
                                            :else
                                            (d/q query db))
                                          transform-fn)]
-                        (react-queries/set-new-result! handler-key new-result))))))))))
+                        (db-react/set-new-result! handler-key new-result))))))))))
       (catch js/Error e
         ;; FIXME: check error type and notice user
         (log/error :db/transact! e)))))
@@ -408,7 +408,7 @@
                               :file/last-modified-at t}
                              new?
                              (assoc :file/created-at t)))])]
-      (db-queries/transact! repo-url tx))))
+      (db-simple/transact! repo-url tx))))
 
 (defn page-blocks-transform
   [repo-url result]
@@ -425,8 +425,8 @@
   ([repo-url page {:keys [pull-keys]
                    :or {pull-keys '[*]}}]
    (let [page (string/lower-case page)
-         page-id (or (db-queries/get-page-id-by-name repo-url page)
-                     (db-queries/get-page-id-by-original-name repo-url page))
+         page-id (or (db-simple/get-page-id-by-name repo-url page)
+                     (db-simple/get-page-id-by-original-name repo-url page))
          db (declares/get-conn repo-url)]
      (when page-id
        (let [datoms (d/datoms db :avet :block/page page-id)
@@ -443,12 +443,12 @@
                    :or {use-cache? true
                         pull-keys '[*]}}]
    (let [page (string/lower-case page)
-         page-id (or (db-queries/get-page-id-by-name repo-url page)
-                     (db-queries/get-page-id-by-original-name repo-url page))
+         page-id (or (db-simple/get-page-id-by-name repo-url page)
+                     (db-simple/get-page-id-by-original-name repo-url page))
          db (declares/get-conn repo-url)]
      (when page-id
        (some->
-         (react-queries/q repo-url [:page/blocks page-id]
+         (db-react/q repo-url [:page/blocks page-id]
            {:use-cache? use-cache?
             :transform-fn #(page-blocks-transform repo-url %)
             :query-fn (fn [db]
@@ -456,7 +456,7 @@
                               block-eids (mapv :e datoms)]
                           (db-utils/pull-many repo-url pull-keys block-eids)))}
            nil)
-         react-queries/react)))))
+         db-react/react)))))
 
 (defn add-properties!
   [page-format properties-content properties]
@@ -508,7 +508,7 @@
      (let [date (js/Date.)
            _ (.setDate date (- (.getDate date) (dec n)))
            today (db-utils/date->int (js/Date.))
-           pages (->> (react-queries/get-journals-before-ts repo-url today)
+           pages (->> (db-react/get-journals-before-ts repo-url today)
                       (sort-by last)
                       (reverse)
                       (map first)
@@ -516,12 +516,12 @@
        (mapv
          (fn [page]
            [page
-            (db-queries/get-page-format page)])
+            (db-simple/get-page-format page)])
          pages)))))
 
 (defn reset-config!
   [repo-url content]
-  (when-let [content (or content (react-queries/get-file repo-url (str config/app-name "/" config/config-file)))]
+  (when-let [content (or content (db-react/get-file repo-url (str config/app-name "/" config/config-file)))]
     (let [config (try
                    (reader/read-string content)
                    (catch js/Error e
@@ -623,9 +623,9 @@
   [repo page-name]
   (or
     (let [page-name (string/lower-case page-name)]
-      (when-let [page-id (db-queries/get-page-id-by-name page-name)]
+      (when-let [page-id (db-simple/get-page-id-by-name page-name)]
         (when-let [db (declares/get-conn repo)]
-          (let [block-eids (->> (db-queries/get-all-blocks-by-page-id db page-id)
+          (let [block-eids (->> (db-simple/get-all-blocks-by-page-id db page-id)
                                 (mapv :e))]
             (when (seq block-eids)
               (let [blocks (db-utils/pull-many repo '[:block/meta] block-eids)]

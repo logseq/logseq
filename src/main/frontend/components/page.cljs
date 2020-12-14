@@ -35,8 +35,8 @@
             [cljs.pprint :as pprint]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
-            [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.utils :as h-utils]))
@@ -61,7 +61,7 @@
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
         page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
-                        (let [content (react-queries/get-file repo file-path)]
+                        (let [content (db-react/get-file repo file-path)]
                           {:block/page {:db/id (:db/id page)}
                            :block/file {:db/id (:db/id (:page/file page))}
                            :block/meta
@@ -87,7 +87,7 @@
 (defn contents-page
   [{:page/keys [name original-name file] :as contents}]
   (when-let [repo (state/get-current-repo)]
-    (let [format (db-queries/get-page-format name)
+    (let [format (db-simple/get-page-format name)
           file-path (:file/path file)]
       (page-blocks-cp repo contents file-path name original-name name true false false nil format))))
 
@@ -196,7 +196,7 @@
 
 (defn tagged-pages
   [repo tag]
-  (let [pages (db-queries/get-tag-pages repo tag)]
+  (let [pages (db-simple/get-tag-pages repo tag)]
     (when (seq pages)
       [:div.references.mt-6.flex-1.flex-row
        [:div.content
@@ -230,8 +230,8 @@
         path-page-name page-name
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
-        format (db-queries/get-page-format page-name)
-        journal? (db-queries/journal-page? page-name)
+        format (db-simple/get-page-format page-name)
+        journal? (db-simple/journal-page? page-name)
         block? (util/uuid-string? page-name)
         block-id (and block? (uuid page-name))
         sidebar? (:sidebar? option)]
@@ -258,7 +258,7 @@
                           (db-utils/entity repo))
                      (db-utils/entity repo [:page/name page-name]))
               page (if page page (do
-                                   (db-queries/transact! repo [{:page/name page-name}])
+                                   (db-simple/transact! repo [{:page/name page-name}])
                                    (db-utils/entity repo [:page/name page-name])))
               properties (:page/properties page)
               page-name (:page/name page)

@@ -40,8 +40,8 @@
             [frontend.security :as security]
             [reitit.frontend.easy :as rfe]
             [frontend.commands :as commands]
-            [frontend.db.queries :as db-queries]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.simple :as db-simple]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.utils :as h-utils]
@@ -367,7 +367,7 @@
   [config id]
   (when-not (string/blank? id)
     (let [block (and (util/uuid-string? id)
-                     (react-queries/pull-block (uuid id)))]
+                     (db-react/pull-block (uuid id)))]
       (if block
         [:span
          [:span.text-gray-500 "(("]
@@ -530,7 +530,7 @@
               (image-link config url href label)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
-                           {:page/name (db-queries/get-file-page (string/replace href "file:" ""))}
+                           {:page/name (db-simple/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
                 (if (and page
                          (when-let [ext (util/get-file-ext href)]
@@ -1212,7 +1212,7 @@
    (block-parents repo block-id format true))
   ([repo block-id format show-page?]
    (let [parents (block-handler/get-block-parents repo block-id 3)
-         page (db-queries/get-block-page repo block-id)
+         page (db-simple/get-block-page repo block-id)
          page-name (:page/name page)]
      (when (or (seq parents)
                show-page?
@@ -1529,7 +1529,7 @@
    :will-unmount (fn [state]
                    (when-let [query (last (:rum/args state))]
                      (state/remove-custom-query-component! query)
-                     (react-queries/remove-custom-query! (state/get-current-repo) query))
+                     (db-react/remove-custom-query! (state/get-current-repo) query))
                    state)}
   [state config {:keys [title query inputs view collapsed? children?] :as q}]
   (let [query-atom (:query-atom state)]

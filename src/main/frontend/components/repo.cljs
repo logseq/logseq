@@ -17,7 +17,7 @@
             [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
             [clojure.string :as string]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.react :as db-react]
             [frontend.db.utils :as db-utils]
             [frontend.db.declares :as declares]
             [frontend.handler.utils :as h-utils]))
@@ -105,7 +105,7 @@
                 pushing? (= :pushing git-status)
                 pulling? (= :pulling git-status)
                 push-failed? (= :push-failed git-status)
-                last-pulled-at (react-queries/sub-key-value repo :git/last-pulled-at)
+                last-pulled-at (db-react/sub-key-value repo :git/last-pulled-at)
                 ;; db-persisted? (state/sub [:db/persisted? repo])
                 editing? (seq (state/sub :editor/editing?))]
             [:div.flex-row.flex.items-center

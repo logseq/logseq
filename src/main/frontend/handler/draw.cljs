@@ -13,7 +13,7 @@
             [clojure.string :as string]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.simple :as db-simple]))
 
 ;; state
 (defonce *files (atom nil))
@@ -69,7 +69,7 @@
               (fn [_]
                 (ok-handler file)
                 (let [modified-at (tc/to-long (t/now))]
-                  (db-queries/transact! repo
+                  (db-simple/transact! repo
                                 [{:file/path path
                                   :file/last-modified-at modified-at}
                                  {:page/name file

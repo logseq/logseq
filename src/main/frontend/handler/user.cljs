@@ -8,7 +8,7 @@
             [promesa.core :as p]
             [goog.object :as gobj]
             [frontend.handler.notification :as notification]
-            [frontend.db.queries :as db-queries])
+            [frontend.db.simple :as db-simple])
   (:import [goog.format EmailAddress]))
 
 (defn email? [v]
@@ -21,7 +21,7 @@
     (util/post (str config/api "email")
                {:email email}
                (fn [result]
-                 (db-queries/transact! [{:me/email email}])
+                 (db-simple/transact! [{:me/email email}])
                  (swap! state/state assoc-in [:me :email] email))
                (fn [error]
                  (notification/show! "Email already exists!"
@@ -32,7 +32,7 @@
   (util/post (str config/api "cors_proxy")
              {:cors-proxy cors-proxy}
              (fn [result]
-               (db-queries/transact! [{:me/cors_proxy cors-proxy}])
+               (db-simple/transact! [{:me/cors_proxy cors-proxy}])
                (swap! state/state assoc-in [:me :cors_proxy] cors-proxy))
              (fn [error]
                (notification/show! "Set cors proxy failed." :error)

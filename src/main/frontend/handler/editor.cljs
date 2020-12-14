@@ -41,9 +41,9 @@
             [frontend.handler.repeated :as repeated]
             [clojure.core.async :as async]
             [lambdaisland.glogi :as log]
-            [frontend.db.queries :as db-queries]
+            [frontend.db.simple :as db-simple]
             [frontend.db.utils :as db-utils]
-            [frontend.db.react-queries :as react-queries]
+            [frontend.db.react :as db-react]
             [frontend.handler.utils :as h-utils]
             [frontend.handler.block :as block-handler]
             [frontend.format.mldoc :as mldoc]))
@@ -248,13 +248,13 @@
 (defn rebuild-after-blocks
   [repo file before-end-pos new-end-pos]
   (let [file-id (:db/id file)
-        after-blocks (db-queries/get-file-after-blocks-meta repo file-id before-end-pos)]
+        after-blocks (db-simple/get-file-after-blocks-meta repo file-id before-end-pos)]
     (rebuild-blocks-meta new-end-pos after-blocks)))
 
 (defn rebuild-after-blocks-indent-outdent
   [repo file block before-end-pos new-end-pos indent-left?]
   (let [file-id (:db/id file)
-        after-blocks (db-queries/get-file-after-blocks-meta repo file-id before-end-pos true)
+        after-blocks (db-simple/get-file-after-blocks-meta repo file-id before-end-pos true)
         last-start-pos (atom new-end-pos)
         block-level (:block/level block)
         next-leq-level? (atom false)
@@ -489,7 +489,7 @@
            (let [file (db-utils/entity repo (:db/id file))
                  file-path (:file/path file)
                  format (format/get-format file-path)
-                 file-content (react-queries/get-file repo file-path)
+                 file-content (db-react/get-file repo file-path)
                  value (get-block-new-value block file-content value)
                  value (if rebuild-content?
                          (rebuild-block-content value format)
@@ -652,7 +652,7 @@
 
                          (let [blocks (remove (fn [block]
                                                 (nil? (:block/content block))) blocks)
-                               page-blocks-atom (react-queries/get-page-blocks-cache-atom repo (:db/id page))
+                               page-blocks-atom (db-react/get-page-blocks-cache-atom repo (:db/id page))
                                first-block-id (:block/uuid (first blocks))
                                [before-part after-part] (and page-blocks-atom
                                                              (split-with
@@ -673,7 +673,7 @@
 
                            ;; update block children cache if exists
                            (when blocks-container-id
-                             (let [blocks-atom (react-queries/get-block-blocks-cache-atom repo blocks-container-id)
+                             (let [blocks-atom (db-react/get-block-blocks-cache-atom repo blocks-container-id)
                                    [before-part after-part] (and blocks-atom
                                                                  (split-with
                                                                   #(not= first-block-id (:block/uuid %))
@@ -731,7 +731,7 @@
 
       file
       (let [file-path (:file/path file)
-            file-content (react-queries/get-file repo file-path)]
+            file-content (db-react/get-file repo file-path)]
         (insert-block block file-path file-content))
 
       :else
@@ -959,7 +959,7 @@
           block (db-utils/pull repo '[*] [:block/uuid uuid])]
       (when block
         (let [file-path (:file/path (db-utils/entity repo (:db/id file)))
-              file-content (react-queries/get-file repo file-path)
+              file-content (db-react/get-file repo file-path)
               after-blocks (rebuild-after-blocks repo file (:end-pos meta) (:start-pos meta))
               new-content (utf8/delete! file-content (:start-pos meta) (:end-pos meta))]
           (repo-handler/transact-react-and-alter-file!
@@ -979,7 +979,7 @@
   (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
     (when block-id
       (when-let [page-id (:db/id (:block/page (db-utils/entity [:block/uuid block-id])))]
-        (let [page-blocks-count (db-queries/get-page-blocks-count repo page-id)
+        (let [page-blocks-count (db-simple/get-page-blocks-count repo page-id)
               page (db-utils/entity page-id)]
           (when (> page-blocks-count 1)
             (util/stop e)
@@ -1020,7 +1020,7 @@
             last-block (last blocks)
             file (db-utils/entity repo (:db/id (:block/file first-block)))
             file-path (:file/path file)
-            file-content (react-queries/get-file repo file-path)
+            file-content (db-react/get-file repo file-path)
             start-pos (:start-pos (:block/meta first-block))
             end-pos (:end-pos (:block/meta last-block))
             after-blocks (rebuild-after-blocks repo file end-pos start-pos)
@@ -1174,7 +1174,7 @@
                                      (uuid id)) blocks))
                    (remove nil?))
           up? (state/selection-up?)
-          content (some->> (db-queries/get-blocks-contents repo ids)
+          content (some->> (db-simple/get-blocks-contents repo ids)
                            (map :block/content))
           content (if (false? up?) (reverse content) content)
           content (string/join "" content)]
@@ -1260,7 +1260,7 @@
                     (util/uuid-string? page)
                     (medley/uuid page))
           repo (state/get-current-repo)
-          block-parent (db-queries/get-block-parent repo block-id)]
+          block-parent (db-simple/get-block-parent repo block-id)]
       (if-let [id (:block/uuid block-parent)]
         (route-handler/redirect! {:to :page
                                   :path-params {:name (str id)}})
@@ -1544,7 +1544,7 @@
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
                             (:page/name (db-utils/entity page-id))))]
-    (let [pages (db-queries/get-pages (state/get-current-repo))
+    (let [pages (db-simple/get-pages (state/get-current-repo))
           pages (if editing-page
                   ;; To prevent self references
                   (remove (fn [p] (= (string/lower-case p) editing-page)) pages)
@@ -1723,7 +1723,7 @@
                                  (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
                                    (f block-dom-node)))]
         (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-          (when-let [sibling-block (react-queries/pull-block (medley/uuid sibling-block-id))]
+          (when-let [sibling-block (db-react/pull-block (medley/uuid sibling-block-id))]
             (let [sibling-meta (:block/meta sibling-block)
                   hc1 (block-handler/get-block-and-children-no-cache repo (:block/uuid block))
                   hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
@@ -1738,9 +1738,9 @@
                       (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
                 (let [hc1-content (block-and-children-content hc1)
                       hc2-content (block-and-children-content hc2)
-                      file (db-queries/get-block-file (:block/uuid block))
+                      file (db-simple/get-block-file (:block/uuid block))
                       file-path (:file/path file)
-                      old-file-content (react-queries/get-file file-path)
+                      old-file-content (db-react/get-file file-path)
                       [start-pos end-pos new-content blocks] (if up?
                                                                [(:start-pos sibling-meta)
                                                                 (get-in (last hc1) [:block/meta :end-pos])
@@ -1797,7 +1797,7 @@
         (if (seq blocks)
           (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
                                        (medley/uuid id))) blocks)
-                ids (->> (mapcat #(let [children (vec (db-queries/get-block-children-ids repo %))]
+                ids (->> (mapcat #(let [children (vec (db-simple/get-block-children-ids repo %))]
                                     (cons % children)) ids)
                          (distinct))
                 blocks (db-utils/pull-many '[*] (map (fn [id] [:block/uuid id]) ids))
@@ -1835,7 +1835,7 @@
                 ;;         :after-blocks after-blocks
                 ;;         :last-start-pos @last-start-pos})
                 file-path (:file/path file)
-                file-content (react-queries/get-file file-path)
+                file-content (db-react/get-file file-path)
                 new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
                 modified-time (modified-time-tx page file)]
             (profile
@@ -1858,7 +1858,7 @@
       (if (seq blocks)
         (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
                                      (medley/uuid id))) blocks)
-              ids (->> (mapcat #(let [children (vec (db-queries/get-block-children-ids repo %))]
+              ids (->> (mapcat #(let [children (vec (db-simple/get-block-children-ids repo %))]
                                   (cons % children)) ids)
                        (distinct))
               blocks (db-utils/pull-many '[*] (map (fn [id] [:block/uuid id]) ids))
@@ -1896,7 +1896,7 @@
               page (:block/page block)
               after-blocks (rebuild-after-blocks repo file old-end-pos @last-start-pos)
               file-path (:file/path file)
-              file-content (react-queries/get-file file-path)
+              file-content (db-react/get-file file-path)
               new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
               modified-time (modified-time-tx page file)]
           (profile

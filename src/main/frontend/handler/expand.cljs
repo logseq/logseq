@@ -5,7 +5,7 @@
             [frontend.util :as util]
             [frontend.state :as state]
 
-            [frontend.db.queries :as db-queries]))
+            [frontend.db.simple :as db-simple]))
 
 (defn- hide!
   [element]
@@ -28,7 +28,7 @@
         (let [elements (d/by-class node "ls-block")]
           (doseq [element elements]
             (hide! element))))
-      (db-queries/collapse-block! block))))
+      (db-simple/collapse-block! block))))
 
 (defn expand!
   [block]
@@ -42,7 +42,7 @@
           (doseq [element elements]
             (show! element)))
         (show! e))
-      (db-queries/expand-block! block))))
+      (db-simple/expand-block! block))))
 
 (defn set-bullet-closed!
   [element]

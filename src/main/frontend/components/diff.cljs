@@ -19,7 +19,7 @@
             [frontend.github :as github]
             [frontend.diff :as diff]
             [medley.core :as medley]
-            [frontend.db.react-queries :as react-queries]))
+            [frontend.db.react :as db-react]))
 
 (defonce remote-hash-id (atom nil))
 (defonce diff-state (atom {}))
@@ -71,7 +71,7 @@
      (let [content (get contents path)]
        (if (or (and delete? (nil? content))
                content)
-         (let [local-content (react-queries/get-file path)]
+         (let [local-content (db-react/get-file path)]
            (if (not= content local-content)
              (let [local-content (or local-content "")
                    content (or content "")
