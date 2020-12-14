@@ -618,3 +618,18 @@
          {:source from
           :target to})
     edges))
+
+(defn get-block-page-end-pos
+  [repo page-name]
+  (or
+    (let [page-name (string/lower-case page-name)]
+      (when-let [page-id (db-queries/get-page-id-by-name page-name)]
+        (when-let [db (declares/get-conn repo)]
+          (let [block-eids (->> (db-queries/get-all-blocks-by-page-id db page-id)
+                                (mapv :e))]
+            (when (seq block-eids)
+              (let [blocks (db-utils/pull-many repo '[:block/meta] block-eids)]
+                (-> (last (db-utils/sort-by-pos blocks))
+                    (get-in [:block/meta :end-pos]))))))))
+    ;; TODO: need more thoughts
+    0))

@@ -9,9 +9,7 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.date :as date]
             [frontend.db.utils :as db-utils]
-            [frontend.format :as format]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [frontend.format :as format]))
 
 (defn get-block-by-uuid
   [repo block-uuid]
@@ -558,21 +556,9 @@
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
-;; TODO: need to extract datascript query. @defclass
-
-(defn get-block-page-end-pos
-  [repo page-name]
-  (or
-    (when-let [page-id (:db/id (db-utils/entity repo [:page/name (string/lower-case page-name)]))]
-      (when-let [db (declares/get-conn repo)]
-        (let [block-eids (->> (d/datoms db :avet :block/page page-id)
-                              (mapv :e))]
-          (when (seq block-eids)
-            (let [blocks (db-utils/pull-many repo '[:block/meta] block-eids)]
-              (-> (last (db-utils/sort-by-pos blocks))
-                  (get-in [:block/meta :end-pos])))))))
-    ;; TODO: need more thoughts
-    0))
+(defn get-all-blocks-by-page-id
+  [db page-id]
+  (d/datoms db :avet :block/page page-id))
 
 (defn get-all-templates
   []

@@ -207,7 +207,7 @@
   (if (:block/dummy? block)
     (if-let [page-id (:db/id (:block/page block))]
       (let [page-name (:page/name (db-utils/entity repo page-id))
-            end-pos (db-queries/get-block-page-end-pos repo page-name)]
+            end-pos (h-utils/get-block-page-end-pos repo page-name)]
         (assoc block :block/meta {:start-pos end-pos
                                   :end-pos end-pos}))
       block)
