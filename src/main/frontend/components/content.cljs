@@ -271,24 +271,26 @@
                           (do
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
-                                  client-y (gobj/get e "clientY")]
+                                  client-y (gobj/get e "clientY")
+                                  scroll-y (util/cur-doc-top)]
                               (state/show-custom-context-menu! (block-context-menu-content target (cljs.core/uuid block-id)))
                               (when-let [context-menu (d/by-id "custom-context-menu")]
                                 (d/set-style! context-menu
                                               :left (str client-x "px")
-                                              :top (str client-y "px")))))
+                                              :top (str (+ scroll-y client-y) "px")))))
 
                           (and (state/in-selection-mode?)
                                (seq (state/get-selection-blocks)))
                           (do
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
-                                  client-y (gobj/get e "clientY")]
+                                  client-y (gobj/get e "clientY")
+                                  scroll-y (util/cur-doc-top)]
                               (state/show-custom-context-menu! (custom-context-menu-content))
                               (when-let [context-menu (d/by-id "custom-context-menu")]
                                 (d/set-style! context-menu
                                               :left (str client-x "px")
-                                              :top (str client-y "px")))))
+                                              :top (str (+ scroll-y client-y) "px")))))
 
                           :else
                           nil))))))
