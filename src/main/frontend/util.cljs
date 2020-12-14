@@ -311,7 +311,7 @@
 (def moving-frequency 15)
 
 (defn cur-doc-top []
-  (+ (.. js/document -body -scrollTop) (.. js/document -documentElement -scrollTop)))
+  (.. js/document -documentElement -scrollTop))
 
 (defn element-top [elem top]
   (when elem
