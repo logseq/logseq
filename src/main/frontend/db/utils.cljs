@@ -1,4 +1,5 @@
 (ns frontend.db.utils
+  "Some utils are required by other ns in frontend.db packages."
   (:require [datascript.core :as d]
             [frontend.state :as state]
             [frontend.db.declares :as declares]
@@ -110,5 +111,3 @@
          eid)
        (catch js/Error e
          nil)))))
-
-

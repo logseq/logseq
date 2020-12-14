@@ -1,11 +1,10 @@
 (ns frontend.db.declares
+  "Contains db declares, connections declares and operations."
   (:require [clojure.string :as string]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.idb :as idb]
-            [datascript.core :as d]
-            [frontend.db-schema :as db-schema]))
+            [frontend.idb :as idb]))
 
 (defonce conns (atom {}))
 
