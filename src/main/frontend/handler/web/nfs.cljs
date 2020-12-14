@@ -29,6 +29,7 @@
                                   %) files)]
       (if-let [file (:file/file ignore-file)]
         (p/let [content (.text file)]
+
           (when content
             (let [paths (set (file-handler/ignore-files content (map :file/path files)))]
               (when (seq paths)
@@ -79,14 +80,18 @@
 
 (defn- set-files!
   [handles]
-  (doseq [[path handle] handles]
-    (let [handle-path (str config/local-handle-prefix path)]
-      (fs/add-nfs-file-handle! handle-path handle)))
-  (set-files-aux! handles))
+  (let [handles (map (fn [[path handle]]
+                       (let [handle-path (str config/local-handle-prefix path)]
+                         [handle-path handle]))
+                  handles)]
+    (doseq [[path handle] handles]
+      (fs/add-nfs-file-handle! path handle))
+    (set-files-aux! handles)))
 
 (defn ls-dir-files
   []
   (let [path-handles (atom {})]
+    ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
      (p/let [result (utils/openDirectory #js {:recursive true}
                                          (fn [path handle]
@@ -105,8 +110,15 @@
                  (swap! path-handles (fn [handles]
                                        (->> handles
                                             (filter (fn [[path _handle]]
-                                                      (contains? file-paths
-                                                                 (string/replace-first path (str dir-name "/") ""))))
+                                                      (or
+                                                       (contains? file-paths
+                                                                  (string/replace-first path (str dir-name "/") ""))
+                                                       (let [last-part (last (string/split path "/"))]
+                                                         (contains? #{config/app-name
+                                                                      config/default-draw-directory
+                                                                      config/default-journals-directory
+                                                                      config/default-pages-directory}
+                                                                    last-part)))))
                                             (into {})))))
              _ (set-files! @path-handles)
              markup-files (filter-markup-and-built-in-files files)]
