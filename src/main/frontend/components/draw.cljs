@@ -429,7 +429,7 @@
         (svg/logo false)]
        (files)
        (when loading?
-         [:span.lds-dual-ring.ml-3])]]
+         svg/loading)]]
      (ui/notification)
 
      (when current-repo
@@ -486,8 +486,7 @@
                              "draw-with-no-file"))
                     "draw-with-no-file")]
           (rum/with-key (draw-inner option) key)))
-      [:div.center
-       [:span.lds-dual-ring.ml-3]])))
+      [:div.center svg/loading])))
 
 (rum/defc draw < rum/reactive
   [option]
