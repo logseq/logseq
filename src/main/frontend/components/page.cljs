@@ -427,7 +427,7 @@
             :ref-atom graph-ref}))
          [:div.ls-center.mt-20
           [:p.opacity-70.font-medium "Empty"]])
-       [:div.absolute.top-5.left-5
+       [:div.absolute.top-15.left-5
         [:div.flex.flex-col
          [:a.text-sm.font-medium
           {:on-click (fn [_e]

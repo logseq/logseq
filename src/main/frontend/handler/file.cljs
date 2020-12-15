@@ -133,8 +133,8 @@
       (do
         (when-let [page-id (db-simple/get-file-page-id path)]
           (db-simple/transact! repo
-                        [[:db/retract page-id :page/alias]
-                         [:db/retract page-id :page/tags]]))
+                               [[:db/retract page-id :page/alias]
+                                [:db/retract page-id :page/tags]]))
         (h-utils/reset-file! repo path content))
       (h-utils/set-file-content! repo path content))
     (util/p-handle
@@ -270,12 +270,12 @@
   []
   (let [chan (state/get-file-write-chan)]
     (async/go-loop []
-      (let [repo (state/get-current-repo)
-            args (async/<! chan)]
-        (when-not (config/local-db? repo)
-          (state/set-file-writing! true))
-        (p/let [_ (apply alter-files-handler! args)]
-          (state/set-file-writing! false))
+      (let [args (async/<! chan)]
+        (when-let [repo (state/get-current-repo)]
+          (when-not (config/local-db? repo)
+            (state/set-file-writing! true))
+          (p/let [_ (apply alter-files-handler! args)]
+            (state/set-file-writing! false)))
         nil)
       (recur))
     chan))

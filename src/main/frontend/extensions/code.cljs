@@ -4,7 +4,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [medley.core :as medley]
-
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
@@ -92,23 +91,25 @@
         lisp? (or clojure?
                   (contains? #{"scheme" "racket" "lisp"} mode))
         textarea (gdom/getElement id)
-        editor (when textarea
-                 (from-textarea textarea
-                                #js {:mode mode
-                                     :matchBrackets lisp?
-                                     :autoCloseBrackets true
-                                     :lineNumbers true
-                                     :extraKeys #js {"Esc" (fn [cm]
-                                                             (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
-                                                               (if-let [block-id (:block/uuid config)]
-                                                                 (let [block (db-utils/pull [:block/uuid block-id])
-                                                                       value (.getValue cm)
-                                                                       textarea-value (gobj/get textarea "value")
-                                                                       changed? (not= value textarea-value)]
-                                                                   (if changed?
-                                                                     (save!)
-                                                                     (editor-handler/edit-block! block :max (:block/format block) block-id)))
-                                                                 (save!))))}}))]
+        editor (or
+                @(:editor-atom state)
+                (when textarea
+                  (from-textarea textarea
+                                 #js {:mode mode
+                                      :matchBrackets lisp?
+                                      :autoCloseBrackets true
+                                      :lineNumbers true
+                                      :extraKeys #js {"Esc" (fn [cm]
+                                                              (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
+                                                                (if-let [block-id (:block/uuid config)]
+                                                                  (let [block (db-utils/pull [:block/uuid block-id])
+                                                                        value (.getValue cm)
+                                                                        textarea-value (gobj/get textarea "value")
+                                                                        changed? (not= value textarea-value)]
+                                                                    (if changed?
+                                                                      (save!)
+                                                                      (editor-handler/edit-block! block :max (:block/format block) block-id)))
+                                                                  (save!))))}})))]
     (when editor
       (let [element (.getWrapperElement editor)]
         (.on editor "blur" (fn []
@@ -142,7 +143,9 @@
                      (when editor
                        (.setValue (.getDoc editor) code))))
                  (when-let [pos-meta (:pos-meta state)]
-                   (reset! pos-meta (last (:rum/args state)))))}
+                   (reset! pos-meta (last (:rum/args state))))
+                 (load-and-render! state)
+                 state)}
   [state config id attr code pos_meta]
   [:div.extensions__code
    [:div.extensions__code-lang

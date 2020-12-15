@@ -48,11 +48,12 @@
 ;; excalidraw
 (defn create-draws-directory!
   [repo]
-  (let [repo-dir (util/get-repo-dir repo)]
-    (util/p-handle
-     (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
-     (fn [_result] nil)
-     (fn [_error] nil))))
+  (when repo
+    (let [repo-dir (util/get-repo-dir repo)]
+     (util/p-handle
+      (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
+      (fn [_result] nil)
+      (fn [_error] nil)))))
 
 (defn save-excalidraw!
   [file data ok-handler]

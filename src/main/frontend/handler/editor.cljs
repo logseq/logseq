@@ -151,7 +151,7 @@
    (when-let [node (gdom/getElement (str id))]
      (when-let [cursor-range (state/get-cursor-range)]
        (when-let [range (string/trim cursor-range)]
-         (let [pos (inc (diff/find-position markup range))]
+         (let [pos (diff/find-position markup range)]
            (util/set-caret-pos! node pos)))))))
 
 (defn block-content-join-newlines
