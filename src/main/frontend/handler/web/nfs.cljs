@@ -83,7 +83,7 @@
   (let [handles (map (fn [[path handle]]
                        (let [handle-path (str config/local-handle-prefix path)]
                          [handle-path handle]))
-                  handles)]
+                     handles)]
     (doseq [[path handle] handles]
       (fs/add-nfs-file-handle! path handle))
     (set-files-aux! handles)))

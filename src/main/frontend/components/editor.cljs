@@ -349,10 +349,9 @@
    (when-let [uploading? (util/react editor-handler/*image-uploading?)]
      (let [processing (util/react editor-handler/*image-uploading-process)]
        (transition-cp
-        [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.pl-1.pr-1
-         [:span.lds-dual-ring.mr-2]
-         [:span {:style {:margin-top 2}}
-          (util/format "Uploading %s%" (util/format "%2d" processing))]]
+        [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
+         (ui/loading
+          (util/format "Uploading %s%" (util/format "%2d" processing)))]
         false
         *slash-caret-pos)))])
 
@@ -496,8 +495,13 @@
          (fn [e key-code]
            (let [key (gobj/get e "key")
                  value (gobj/get input "value")
+                 ctrlKey (gobj/get e "ctrlKey")
+                 metaKey (gobj/get e "metaKey")
                  pos (:pos (util/get-caret-pos input))]
              (cond
+               (or ctrlKey metaKey)
+               nil
+
                (or
                 (and (= key "#")
                      (and
@@ -611,12 +615,17 @@
               (editor-handler/close-autocomplete-if-outside input))))))))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
-                      content (get-in @state/state [:editor/content id])]
+                      content (get-in @state/state [:editor/content id])
+                      input (gdom/getElement id)]
                   (when block-parent-id
                     (state/set-editing-block-dom-id! block-parent-id))
-                  (editor-handler/restore-cursor-pos! id content dummy?)
+                  (if (= :indent-outdent (state/get-editor-op))
+                    (when input
+                      (when-let [pos (state/get-edit-pos)]
+                        (util/set-caret-pos! input pos)))
+                    (editor-handler/restore-cursor-pos! id content dummy?))
 
-                  (when-let [input (gdom/getElement id)]
+                  (when input
                     (dnd/subscribe!
                      input
                      :upload-images

@@ -111,8 +111,7 @@
                 ;; db-persisted? (state/sub [:db/persisted? repo])
                 editing? (seq (state/sub :editor/editing?))]
             [:div.flex-row.flex.items-center.cp__repo-indicator
-             (when pushing?
-               [:span.lds-dual-ring.mt-1])
+             (when pushing? svg/loading)
              (ui/dropdown
               (fn [{:keys [toggle-fn]}]
                 [:div.cursor.w-2.h-2.sync-status.mr-2
@@ -143,7 +142,7 @@
                        [:p (t :git/push-failed)]
                        (and should-push? (seq changed-files))
                        [:div.changes
-                        [:ul.overflow-y-scroll {:style {:max-height 250}}
+                        [:ul.overflow-y-auto {:style {:max-height 250}}
                          (for [file changed-files]
                            [:li {:key (str "sync-" file)}
                             [:div.flex.flex-row.justify-between.align-items
@@ -159,8 +158,7 @@
                     [:div.flex.flex-row.justify-between.align-items.mt-2
                      (ui/button (t :git/push)
                                 :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-                     (if pushing?
-                       [:span.lds-dual-ring.mt-1])]]
+                     (if pushing? svg/loading)]]
                    [:hr]
                    [:div
                     (when-not (string/blank? last-pulled-at)
@@ -169,8 +167,7 @@
                     [:div.flex.flex-row.justify-between.align-items
                      (ui/button (t :git/pull)
                                 :on-click (fn [] (repo-handler/pull-current-repo)))
-                     (if pulling?
-                       [:span.lds-dual-ring.mt-1])]
+                     (if pulling? svg/loading)]
                     [:a.mt-5.text-sm.opacity-50.block
                      {:on-click (fn []
                                   (export-handler/export-repo-as-zip! repo))}
