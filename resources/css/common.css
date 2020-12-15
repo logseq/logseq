@@ -393,7 +393,7 @@ svg {
 }
 
 .loader {
-  -webkit-animation: lds-dual-ring 2s infinite linear;
+  -webkit-animation: spin 2s infinite linear;
 }
 
 .canceled,
