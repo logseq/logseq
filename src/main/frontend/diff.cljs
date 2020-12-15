@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             ["diff" :as jsdiff]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [cljs-bean.core :as bean]))
 
 (defn diff
@@ -12,36 +13,25 @@
 ;; (find-position "** hello _w_" "hello w")
 (defn find-position
   [markup text]
-  (cond
-    (<= (count markup) (count text))
-    (dec (count markup))
+  (try
+    (loop [t1 (-> markup string/lower-case seq)
+           t2 (-> text   string/lower-case seq)
+           i1 0
+           i2 0]
+      (let [[h1 & r1] t1
+            [h2 & r2] t2]
+        (cond
+          (or (empty? t1) (empty? t2))
+          i1
 
-    :else
-    (try
-      (let [markup (string/lower-case markup)
-            text (-> (string/replace text #"\s+" "")
-                     (string/lower-case))
-            v1 (vec markup)
-            v2 (vec text)]
-        (loop [v1-chars v1
-               v2-chars v2
-               v1-idx 0
-               v2-idx 0]
-          (cond
-            (empty? v2-chars)
-            (dec v1-idx)
+          (= h1 h2)
+          (recur r1 r2 (inc i1) (inc i2))
 
-            :else
-            (if (= (nth v1 v1-idx)
-                   (nth v2 v2-idx))
-              (recur (rest v1-chars)
-                     (rest v2-chars)
-                     (inc v1-idx)
-                     (inc v2-idx))
-              (recur (rest v1-chars)
-                     v2-chars
-                     (inc v1-idx)
-                     v2-idx)))))
+          (#{\[ \space \]} h2)
+          (recur t1 r2 i1 (inc i2))
+
+          :else
+          (recur r1 t2 (inc i1) i2))))
       (catch js/Error e
-        (prn "diff error: " e)
-        (dec (count markup))))))
+        (log/error :diff/find-position {:error e})
+        (count markup))))
