@@ -2433,14 +2433,15 @@
 ;; block/uuid and block/content
 (defn get-all-block-contents
   []
-  (->> (d/datoms (get-conn) :avet :block/uuid)
-       (map :v)
-       (map (fn [id]
-              (let [e (entity [:block/uuid id])]
-                {:db/id (:db/id e)
-                 :block/uuid id
-                 :block/content (:block/content e)
-                 :block/format (:block/format e)})))))
+  (when-let [conn (get-conn)]
+    (->> (d/datoms conn :avet :block/uuid)
+         (map :v)
+         (map (fn [id]
+                (let [e (entity [:block/uuid id])]
+                  {:db/id (:db/id e)
+                   :block/uuid id
+                   :block/content (:block/content e)
+                   :block/format (:block/format e)}))))))
 
 (defn get-all-templates
   []
