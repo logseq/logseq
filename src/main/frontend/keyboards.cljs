@@ -72,8 +72,7 @@
     "ctrl+h" editor-handler/highlight-format!
     "ctrl+shift+a" editor-handler/select-all-blocks!
     "alt+shift+up" (fn [state e] (editor-handler/move-up-down e true))
-    "alt+shift+down" (fn [state e] (editor-handler/move-up-down e false))
-    "ctrl+c ctrl+s" (fn [state e] (search-handler/rebuild-indices!))}
+    "alt+shift+down" (fn [state e] (editor-handler/move-up-down e false))}
    (medley/map-keys util/->system-modifier)))
 
 (defonce chords
@@ -83,7 +82,11 @@
    "t r" ui-handler/toggle-right-sidebar!
    "t e" state/toggle-new-block-shortcut!
    "s" route-handler/toggle-between-page-and-file!
-   })
+   "ctrl+c ctrl+s" (fn [state e]
+                     (search-handler/rebuild-indices!)
+                     ;; return false to prevent default browser behavior
+                     ;; and stop event from bubbling
+                     false)})
 
 (defonce bind! (gobj/get mousetrap "bind"))
 
