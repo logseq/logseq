@@ -7,8 +7,7 @@ html:not(.is-mac)[data-theme=dark] {
   &::-webkit-scrollbar,
   html::-webkit-scrollbar-track-piece {
     background-color: var(--ls-scrollbar-background-color);
-    border: 4px solid;
-    border-color: var(--ls-scrollbar-background-color);
+    border: 4px solid var(--ls-scrollbar-background-color);
   }
 
   &::-webkit-scrollbar-thumb {
@@ -42,12 +41,16 @@ html[data-theme=dark] {
 }
 
 html[data-theme=light] {
-  .form-checkbox:focus {
-    border-color: var(--ls-page-checkbox-border-color);
+  .form-checkbox {
+    &:focus {
+      border-color: var(--ls-page-checkbox-border-color);
+    }
   }
 
-  .cp__header a {
-    color: var(--ls-primary-text-color);
+  .cp__header {
+    a {
+      color: var(--ls-primary-text-color);
+    }
   }
 
   a.right-sidebar-button {
@@ -59,7 +62,6 @@ html[data-theme=light] {
   }
 }
 
-/* Hide scrollbar for IE, Edge and Firefox */
 .hide-scrollbar {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none !important; /* Firefox */

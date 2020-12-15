@@ -29,6 +29,7 @@
     :after-load frontend.core/start
     :http-root    "public"
     :http-port    3001
+    :watch-path   "static"
     :preloads     [devtools.preload]}}
 
   :test

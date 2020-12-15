@@ -124,7 +124,7 @@ html[data-theme=light] {
   --color-level-5: #bbdaf6;
 }
 
-/* region reset top elements */
+/* region Reset top elements */
 html {
   font-family: var(--ls-font-family), Inter, sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
 
@@ -295,7 +295,7 @@ video {
 
 /* endregion */
 
-/** region utilities **/
+/** region Common utilities **/
 .w10 {
   max-width: 10%;
 }
@@ -376,7 +376,7 @@ video {
 
 /** endregion **/
 
-/** region app utilities **/
+/** region App utilities **/
 .page {
   margin-top: 24px;
 }
@@ -433,7 +433,7 @@ li p:last-child,
 }
 
 .loader {
-  -webkit-animation: lds-dual-ring 2s infinite linear;
+  -webkit-animation: spin 2s infinite linear;
 }
 
 .canceled,
@@ -563,7 +563,7 @@ li p:last-child,
 
 /** endregion **/
 
-/* region override elements */
+/* region FIXME: override elements (?) */
 a.block-control,
 a.block-control:hover {
   text-decoration: none;
@@ -702,7 +702,7 @@ svg.tip {
 
 /* endregion */
 
-/* region code mirror */
+/* region FIXME: CodeMirror override (?) */
 .CodeMirror pre.CodeMirror-line,
 .CodeMirror-scroll,
 .CodeMirror-sizer,

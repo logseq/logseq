@@ -66,11 +66,6 @@
 }
 
 .ls-block,
-.foldable-title {
-  max-width: var(--ls-main-content-max-width);
-}
-
-.ls-block,
 .editor-wrapper {
   margin-right: auto;
   margin-left: auto;

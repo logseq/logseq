@@ -3,7 +3,7 @@
   z-index: 0;
 
   &-lang {
-    @apply absolute top-0 right-0 p-1 text-sm text-gray-500;
+    @apply absolute top-0 right-0 p-1 text-sm;
     z-index: 1;
     background: white;
   }
