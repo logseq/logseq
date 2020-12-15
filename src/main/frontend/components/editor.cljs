@@ -5,6 +5,7 @@
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
             [frontend.components.datetime :as datetime-comp]
             [promesa.core :as p]
@@ -194,7 +195,7 @@
                                        template-parent-level (:block/level block)
                                        pattern (config/get-block-pattern format)
                                        content
-                                       (db/get-block-full-content
+                                       (block-handler/get-block-full-content
                                         (state/get-current-repo)
                                         (:block/uuid block)
                                         (fn [{:block/keys [level content properties] :as block}]

@@ -6,6 +6,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -47,7 +48,7 @@
     (if block?
       (db/get-block-and-children repo block-id)
       (do
-        (db/add-page-to-recent! repo page-original-name)
+        (page-handler/add-page-to-recent! repo page-original-name)
         (db/get-page-blocks repo page-name)))))
 
 (rum/defc page-blocks-cp < rum/reactive
@@ -404,7 +405,7 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         [width height] (rum/react layout)
         dark? (= theme "dark")
-        graph (db/build-global-graph theme (rum/react show-journal?))
+        graph (graph-handler/build-global-graph theme (rum/react show-journal?))
         dot-mode-value? (rum/react dot-mode?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph

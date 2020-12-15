@@ -8,6 +8,7 @@
             [frontend.git :as git]
             [frontend.handler.common :as common-handler]
             [frontend.handler.git :as git-handler]
+            [frontend.handler.extract :as extract-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]
             [cljs-bean.core :as bean]
@@ -19,6 +20,9 @@
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
             [goog.object :as gobj]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
+            [frontend.utf8 :as utf8]
             ["ignore" :as Ignore]))
 
 (defn load-file
@@ -118,6 +122,27 @@
         (p/catch (fn [error]
                    (log/error :load-files-error error))))))
 
+(defn reset-file!
+  [repo-url file content]
+  (let [new? (nil? (db/entity [:file/path file]))]
+    (db/set-file-content! repo-url file content)
+    (let [format (format/get-format file)
+          utf8-content (utf8/encode content)
+          file-content [{:file/path file}]
+          tx (if (contains? config/mldoc-support-formats format)
+               (let [delete-blocks (db/delete-file-blocks! repo-url file)
+                     [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)]
+                 (concat file-content delete-blocks pages block-ids blocks))
+               file-content)
+          tx (concat tx [(let [t (tc/to-long (t/now))]
+                           (cond->
+                               {:file/path file
+                                :file/last-modified-at t}
+                             new?
+                             (assoc :file/created-at t)))])]
+      (db/transact! repo-url tx))))
+
+;; TODO: better name to separate from reset-file!
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? add-history? update-status?]
                       :or {reset? true
@@ -131,7 +156,7 @@
           (db/transact! repo
                         [[:db/retract page-id :page/alias]
                          [:db/retract page-id :page/tags]]))
-        (db/reset-file! repo path content))
+        (reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
      (fs/write-file repo (util/get-repo-dir repo) path content {:old-content original-content
@@ -172,7 +197,7 @@
   (when update-db?
     (doseq [[path content] files]
       (if reset?
-        (db/reset-file! repo path content)
+        (reset-file! repo path content)
         (db/set-file-content! repo path content))))
 
   (when-let [chan (state/get-file-write-chan)]

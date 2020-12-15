@@ -1,6 +1,7 @@
 (ns frontend.handler.dnd
   (:require [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.util :as util :refer-macros [profile]]
@@ -13,8 +14,8 @@
 
 (defn- remove-block-child!
   [target-block parent-block]
-  (let [child-ids (set (db/get-block-ids target-block))]
-    (db/get-block-content-rec
+  (let [child-ids (set (block-handler/get-block-ids target-block))]
+    (block-handler/get-block-content-rec
      parent-block
      (fn [{:block/keys [uuid level content]}]
        (if (contains? child-ids uuid)
@@ -33,7 +34,7 @@
         format (:block/format target-block)
         pattern (config/get-block-pattern format)
         block-changes (atom [])
-        all-content (db/get-block-content-rec
+        all-content (block-handler/get-block-content-rec
                      target-block
                      (fn [{:block/keys [uuid level content]
                            :as block}]
@@ -185,7 +186,7 @@
     (= direction :up)
     (let [offset-block-id (if nested?
                             (:block/uuid to-block)
-                            (last (db/get-block-ids to-block)))
+                            (last (block-handler/get-block-ids to-block)))
           offset-end-pos (get-end-pos
                           (db/entity repo [:block/uuid offset-block-id]))]
       (rebuild-dnd-blocks repo target-file target-child?
@@ -197,7 +198,7 @@
     (= direction :down)
     (let [offset-block-id (if nested?
                             (:block/uuid to-block)
-                            (last (db/get-block-ids to-block)))
+                            (last (block-handler/get-block-ids to-block)))
           target-start-pos (get-start-pos target-block)]
       (rebuild-dnd-blocks repo target-file target-child?
                           target-start-pos
@@ -213,7 +214,7 @@
     (let [old-file-content (db/get-file (:file/path (db/entity (:db/id (:block/file target-block)))))
           old-file-content (utf8/encode old-file-content)
           subs (fn [start-pos end-pos] (utf8/substring old-file-content start-pos end-pos))
-          bottom-content (db/get-block-content-rec bottom-block)
+          bottom-content (block-handler/get-block-content-rec bottom-block)
           top-content (remove-block-child! bottom-block top-block)
           top-area (subs 0 (get-start-pos top-block))
           bottom-area (subs
@@ -221,13 +222,13 @@
                          (and nested? (= direction :down))
                          (get-end-pos bottom-block)
                          target-child?
-                         (db/get-block-end-pos-rec repo top-block)
+                         (block-handler/get-block-end-pos-rec repo top-block)
                          :else
-                         (db/get-block-end-pos-rec repo bottom-block))
+                         (block-handler/get-block-end-pos-rec repo bottom-block))
                        nil)
           between-area (if (= direction :down)
-                         (subs (db/get-block-end-pos-rec repo target-block) (get-start-pos to-block))
-                         (subs (db/get-block-end-pos-rec repo to-block) (get-start-pos target-block)))
+                         (subs (block-handler/get-block-end-pos-rec repo target-block) (get-start-pos to-block))
+                         (subs (block-handler/get-block-end-pos-rec repo to-block) (get-start-pos target-block)))
           up-content (when (= direction :up)
                        (cond
                          nested?
@@ -235,7 +236,7 @@
                                             target-content
                                             (if target-child?
                                               (remove-block-child! target-block (:block/children to-block))
-                                              (db/get-block-content-rec (:block/children top-block))))
+                                              (block-handler/get-block-content-rec (:block/children top-block))))
                          (and top? target-child?)
                          (util/join-newline target-content (remove-block-child! target-block to-block))
 
@@ -308,9 +309,9 @@
         target-file-content (db/get-file repo target-file-path)
         to-file (db/entity repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-block-end-pos (db/get-block-end-pos-rec repo target-block)
+        target-block-end-pos (block-handler/get-block-end-pos-rec repo target-block)
         to-block-start-pos (get-start-pos to-block)
-        to-block-end-pos (db/get-block-end-pos-rec repo to-block)
+        to-block-end-pos (block-handler/get-block-end-pos-rec repo to-block)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)
@@ -348,7 +349,7 @@
                           :else
                           (let [offset-block-id (if nested?
                                                   (:block/uuid to-block)
-                                                  (last (db/get-block-ids to-block)))
+                                                  (last (block-handler/get-block-ids to-block)))
                                 offset-end-pos (get-end-pos
                                                 (db/entity repo [:block/uuid offset-block-id]))]
                             (rebuild-dnd-blocks repo to-file target-child?
@@ -376,9 +377,9 @@
         target-file-content (db/get-file target-block-repo target-file-path)
         to-file (db/entity to-block-repo (:db/id (:block/file to-block)))
         to-file-path (:file/path to-file)
-        target-block-end-pos (db/get-block-end-pos-rec target-block-repo target-block)
+        target-block-end-pos (block-handler/get-block-end-pos-rec target-block-repo target-block)
         to-block-start-pos (get-start-pos to-block)
-        to-block-end-pos (db/get-block-end-pos-rec to-block-repo to-block)
+        to-block-end-pos (block-handler/get-block-end-pos-rec to-block-repo to-block)
         new-target-file-content (utf8/delete! target-file-content
                                               (get-start-pos target-block)
                                               target-block-end-pos)
@@ -396,7 +397,7 @@
                                 (utf8/substring to-file-content separate-pos))))
         target-delete-tx (map (fn [id]
                                 [:db.fn/retractEntity [:block/uuid id]])
-                              (db/get-block-ids target-block))
+                              (block-handler/get-block-ids target-block))
         [target-modified-time to-modified-time]
         (let [modified-at (tc/to-long (t/now))]
           [[[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
@@ -417,7 +418,7 @@
                           :else
                           (let [offset-block-id (if nested?
                                                   (:block/uuid to-block)
-                                                  (last (db/get-block-ids to-block)))
+                                                  (last (block-handler/get-block-ids to-block)))
                                 offset-end-pos (get-end-pos
                                                 (db/entity to-block-repo [:block/uuid offset-block-id]))]
                             (rebuild-dnd-blocks to-block-repo to-file target-child?
