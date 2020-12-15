@@ -607,12 +607,17 @@
               (editor-handler/close-autocomplete-if-outside input))))))))
   {:did-mount (fn [state]
                 (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
-                      content (get-in @state/state [:editor/content id])]
+                      content (get-in @state/state [:editor/content id])
+                      input (gdom/getElement id)]
                   (when block-parent-id
                     (state/set-editing-block-dom-id! block-parent-id))
-                  (editor-handler/restore-cursor-pos! id content dummy?)
+                  (if (= :indent-outdent (state/get-editor-op))
+                    (when input
+                      (when-let [pos (state/get-edit-pos)]
+                        (util/set-caret-pos! input pos)))
+                    (editor-handler/restore-cursor-pos! id content dummy?))
 
-                  (when-let [input (gdom/getElement id)]
+                  (when input
                     (dnd/subscribe!
                      input
                      :upload-images
