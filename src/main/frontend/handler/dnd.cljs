@@ -300,7 +300,7 @@
       ;;             path
       ;;             new-file-content
       ;;             {:re-render-root? true})
-      )))
+)))
 
 (defn- move-block-in-different-files
   [repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]

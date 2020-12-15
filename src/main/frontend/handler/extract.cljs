@@ -168,11 +168,11 @@
   (when (seq files)
     (let [result (->> files
                       (map
-                        (fn [{:file/keys [path content]} contents]
-                          (println "Parsing : " path)
-                          (when content
-                            (let [utf8-content (utf8/encode content)]
-                              (extract-blocks-pages repo-url path content utf8-content)))))
+                       (fn [{:file/keys [path content]} contents]
+                         (println "Parsing : " path)
+                         (when content
+                           (let [utf8-content (utf8/encode content)]
+                             (extract-blocks-pages repo-url path content utf8-content)))))
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)

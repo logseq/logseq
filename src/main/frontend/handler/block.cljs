@@ -66,7 +66,6 @@
           (map transform-fn)
           (apply util/join-newline)))))
 
-
 (defn get-block-end-pos-rec
   [repo block]
   (let [children (:block/children block)]
@@ -93,35 +92,35 @@
   [block]
   (let [repo (:block/repo block)]
     (db/transact! repo
-      [{:block/uuid (:block/uuid block)
-        :block/collapsed? true}])))
+                  [{:block/uuid (:block/uuid block)
+                    :block/collapsed? true}])))
 
 (defn collapse-blocks!
   [block-ids]
   (let [repo (state/get-current-repo)]
     (db/transact! repo
-      (map
-        (fn [id]
-          {:block/uuid id
-           :block/collapsed? true})
-        block-ids))))
+                  (map
+                   (fn [id]
+                     {:block/uuid id
+                      :block/collapsed? true})
+                   block-ids))))
 
 (defn expand-block!
   [block]
   (let [repo (:block/repo block)]
     (db/transact! repo
-      [{:block/uuid (:block/uuid block)
-        :block/collapsed? false}])))
+                  [{:block/uuid (:block/uuid block)
+                    :block/collapsed? false}])))
 
 (defn expand-blocks!
   [block-ids]
   (let [repo (state/get-current-repo)]
     (db/transact! repo
-      (map
-        (fn [id]
-          {:block/uuid id
-           :block/collapsed? false})
-        block-ids))))
+                  (map
+                   (fn [id]
+                     {:block/uuid id
+                      :block/collapsed? false})
+                   block-ids))))
 
 (defn pre-block-with-only-title?
   [repo block-id]

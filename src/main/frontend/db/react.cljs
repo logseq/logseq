@@ -40,8 +40,8 @@
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
         (model/entity (if tag?
-                           [:tag/name page-name]
-                           [:page/name page-name]))))))
+                        [:tag/name page-name]
+                        [:page/name page-name]))))))
 
 (defn get-current-priority
   []
@@ -104,24 +104,24 @@
 
                              ;; refed-pages
                              (apply concat
-                               (for [{:block/keys [ref-pages]} blocks]
-                                 (map (fn [page]
-                                        (when-let [page (model/entity [:page/name (:page/name page)])]
-                                          [:page/refed-blocks (:db/id page)]))
-                                   ref-pages)))
+                                    (for [{:block/keys [ref-pages]} blocks]
+                                      (map (fn [page]
+                                             (when-let [page (model/entity [:page/name (:page/name page)])]
+                                               [:page/refed-blocks (:db/id page)]))
+                                           ref-pages)))
 
                              ;; refed-blocks
                              (apply concat
-                               (for [{:block/keys [ref-blocks]} blocks]
-                                 (map (fn [ref-block]
-                                        [:block/refed-blocks (last ref-block)])
-                                   ref-blocks))))
+                                    (for [{:block/keys [ref-blocks]} blocks]
+                                      (map (fn [ref-block]
+                                             [:block/refed-blocks (last ref-block)])
+                                           ref-blocks))))
                             (distinct))
               refed-pages (map
-                            (fn [[k page-id]]
-                              (if (= k :page/refed-blocks)
-                                [:page/ref-pages page-id]))
-                            handler-keys)
+                           (fn [[k page-id]]
+                             (if (= k :page/refed-blocks)
+                               [:page/ref-pages page-id]))
+                           handler-keys)
               custom-queries (some->>
                               (filter (fn [v]
                                         (and (= (first v) (state/get-current-repo))

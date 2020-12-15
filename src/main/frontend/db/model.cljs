@@ -243,11 +243,11 @@
     (when (conn/get-conn repo)
       (->
        (q repo [:blocks id] {}
-         '[:find (pull ?block [*])
-           :in $ ?id
-           :where
-           [?block :block/uuid ?id]]
-         id)
+          '[:find (pull ?block [*])
+            :in $ ?id
+            :where
+            [?block :block/uuid ?id]]
+          id)
        react
        ffirst))))
 
@@ -275,7 +275,7 @@
          [?page :page/tags ?e]
          [?page :page/original-name ?original-name]
          [?page :page/name ?name]]
-    (conn/get-conn repo)
+       (conn/get-conn repo)
        tag-name))
 
 (defn get-all-tagged-pages
@@ -286,7 +286,7 @@
          [?e :tag/name ?tag]
          [_ :page/name ?tag]
          [?page :page/name ?page-name]]
-    (conn/get-conn repo)))
+       (conn/get-conn repo)))
 
 (defn get-pages
   [repo]
@@ -294,7 +294,7 @@
         '[:find ?page-name
           :where
           [?page :page/original-name ?page-name]]
-         (conn/get-conn repo))
+        (conn/get-conn repo))
        (map first)))
 
 (defn get-pages-with-modified-at
@@ -305,7 +305,7 @@
             :where
             [?page :page/original-name ?page-name]
             [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
-           (conn/get-conn repo))
+          (conn/get-conn repo))
          (seq)
          (sort-by (fn [[page modified-at]]
                     [modified-at page]))
@@ -372,7 +372,7 @@
                [?file :file/path ?path]
                [(?pred $ ?path)]
                [?block :block/file ?file]]
-          (conn/get-conn repo-url) pred)
+             (conn/get-conn repo-url) pred)
         db-utils/seq-flatten)))
 
 (defn get-file-blocks
@@ -382,7 +382,7 @@
              :where
              [?file :file/path ?path]
              [?block :block/file ?file]]
-        (conn/get-conn repo-url) path)
+           (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
 (defn get-file-after-blocks
@@ -396,7 +396,7 @@
                  [?block :block/file ?file-id]
                  [?block :block/meta ?meta]
                  [(?pred $ ?meta)]]
-            (conn/get-conn repo-url) file-id pred)
+               (conn/get-conn repo-url) file-id pred)
           db-utils/seq-flatten
           db-utils/sort-by-pos))))
 
@@ -422,7 +422,7 @@
              :where
              [?file :file/path ?path]
              [?page :page/file ?file]]
-        (conn/get-conn repo-url) path)
+           (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
 (defn set-file-last-modified-at!
@@ -527,10 +527,10 @@
 (defn get-block-refs-count
   [repo]
   (->> (d/q
-         '[:find ?id2 ?id1
-           :where
-           [?id1 :block/ref-blocks ?id2]]
-         (conn/get-conn repo))
+        '[:find ?id2 ?id1
+          :where
+          [?id1 :block/ref-blocks ?id2]]
+        (conn/get-conn repo))
        (map first)
        (frequencies)))
 
@@ -541,7 +541,7 @@
     (map (fn [block]
            (assoc block :block/block-refs-count
                   (get refs (:db/id block))))
-      blocks)))
+         blocks)))
 
 (defn page-blocks-transform
   [repo-url result]
@@ -556,10 +556,10 @@
         pages (pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
-                 (fn [block]
-                   (assoc block :block/page
-                          (get pages-map (:db/id (:block/page block)))))
-                 blocks)]
+                (fn [block]
+                  (assoc block :block/page
+                         (get pages-map (:db/id (:block/page block)))))
+                blocks)]
     (db-utils/sort-by-pos blocks)))
 
 (defn get-marker-blocks
@@ -715,11 +715,11 @@
   (let [priority (string/capitalize priority)]
     (when (conn/get-conn repo)
       (->> (q repo [:priority/blocks priority] {}
-             '[:find (pull ?h [*])
-               :in $ ?priority
-               :where
-               [?h :block/priority ?priority]]
-             priority)
+              '[:find (pull ?h [*])
+                :in $ ?priority
+                :where
+                [?h :block/priority ?priority]]
+              priority)
            react
            db-utils/seq-flatten
            sort-blocks
@@ -833,7 +833,7 @@
            [?block :block/page ?page]
            [?block :block/meta ?meta]
            [(?pred $ ?meta)]]
-          (conn/get-conn repo)
+         (conn/get-conn repo)
          page
          pred)
         (block-and-children-transform repo block-uuid level))))
@@ -939,8 +939,8 @@
            [?page :page/journal? true]
            [?page :page/journal-day ?journal-day]
            [(<= ?journal-day ?today)]]
-      (conn/get-conn (state/get-current-repo))
-      today)))
+         (conn/get-conn (state/get-current-repo))
+         today)))
 
 (defn get-latest-journals
   ([n]
@@ -952,14 +952,14 @@
            today (db-utils/date->int (js/Date.))
            pages (->>
                   (q repo-url [:journals] {:use-cache? false}
-                    '[:find ?page-name ?journal-day
-                      :in $ ?today
-                      :where
-                      [?page :page/name ?page-name]
-                      [?page :page/journal? true]
-                      [?page :page/journal-day ?journal-day]
-                      [(<= ?journal-day ?today)]]
-                    today)
+                     '[:find ?page-name ?journal-day
+                       :in $ ?today
+                       :where
+                       [?page :page/name ?page-name]
+                       [?page :page/journal? true]
+                       [?page :page/journal-day ?journal-day]
+                       [(<= ?journal-day ?today)]]
+                     today)
                   (react)
                   (sort-by last)
                   (reverse)
@@ -1273,21 +1273,21 @@
 (defn get-collapsed-blocks
   []
   (d/q
-    '[:find ?content
-      :where
-      [?h :block/collapsed? true]
-      [?h :block/content ?content]]
-    (conn/get-conn)))
+   '[:find ?content
+     :where
+     [?h :block/collapsed? true]
+     [?h :block/content ?content]]
+   (conn/get-conn)))
 
 (defn get-public-pages
   [db]
   (-> (d/q
-        '[:find ?p
-          :where
-          [?p :page/properties ?d]
-          [(get ?d :public) ?pub]
-          [(= "true" ?pub)]]
-        db)
+       '[:find ?p
+         :where
+         [?p :page/properties ?d]
+         [(get ?d :public) ?pub]
+         [(= "true" ?pub)]]
+       db)
       (db-utils/seq-flatten)))
 
 (defn rebuild-page-blocks-children
@@ -1345,13 +1345,13 @@
   (let [pred (fn [db properties]
                (some? (get properties "template")))]
     (->> (d/q
-           '[:find ?b ?p
-             :in $ ?pred
-             :where
-             [?b :block/properties ?p]
-             [(?pred $ ?p)]]
-           (conn/get-conn)
-           pred)
+          '[:find ?b ?p
+            :in $ ?pred
+            :where
+            [?b :block/properties ?p]
+            [(?pred $ ?p)]]
+          (conn/get-conn)
+          pred)
          (map (fn [[e m]]
                 [(get m "template") e]))
          (into {}))))
