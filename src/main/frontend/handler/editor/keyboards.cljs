@@ -16,7 +16,6 @@
      :on-hide
      (fn [state e event]
        (let [target (.-target e)]
-         (js/console.dir target)
          (if (d/has-class? target "bottom-action") ;; FIXME: not particular case
            (.preventDefault e)
            (let [{:keys [on-hide format value block id repo dummy?]} (editor-handler/get-state state)]
