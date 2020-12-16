@@ -7,6 +7,7 @@
             [frontend.handler.file :as file]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.components.datetime :as datetime-comp]
             [promesa.core :as p]
             [frontend.state :as state]
@@ -631,32 +632,14 @@
 
                   ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
                   ;; which will hide the editor so no way for editing.
-                  (js/setTimeout
-                   (fn []
-                     (mixins/hide-when-esc-or-outside
-                      state
-                      :on-hide
-                      (fn [state e event]
-                        (let [target (.-target e)]
-                          (if (d/has-class? target "bottom-action") ;; FIXME: not particular case
-                            (.preventDefault e)
-                            (let [{:keys [on-hide format value block id repo dummy?]} (get-state state)]
-                              (when on-hide
-                                (on-hide value event))
-                              (when
-                               (or (= event :esc)
-                                   (= event :visibilitychange)
-                                   (and (= event :click)
-                                        (not (editor-handler/in-auto-complete? (gdom/getElement id)))))
-                                (state/clear-edit!))))))
-                      :node (gdom/getElement id)
-                      ;; :visibilitychange? true
-))
-                   100)
+                  (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
                   (when-let [element (gdom/getElement id)]
                     (.focus element)))
                 state)
+   :did-remount (fn [state]
+                  (keyboards-handler/esc-save! state)
+                  state)
    :will-unmount (fn [state]
                    (let [{:keys [id value format block repo dummy? config]} (get-state state)
                          file? (:file? config)]
