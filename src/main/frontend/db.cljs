@@ -13,13 +13,6 @@
             [clojure.core.async :as async]
             [frontend.idb :as idb]))
 
-;; (import-ns
-;;  frontend.db.conn
-;;  frontend.db.utils
-;;  frontend.db.model
-;;  frontend.db.react
-;;  )
-
 (import-vars
  [frontend.db.conn
   ;; TODO: remove later
