@@ -491,8 +491,13 @@
          (fn [e key-code]
            (let [key (gobj/get e "key")
                  value (gobj/get input "value")
+                 ctrlKey (gobj/get e "ctrlKey")
+                 metaKey (gobj/get e "metaKey")
                  pos (:pos (util/get-caret-pos input))]
              (cond
+               (or ctrlKey metaKey)
+               nil
+
                (or
                 (and (= key "#")
                      (and
