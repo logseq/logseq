@@ -1,6 +1,6 @@
 (ns frontend.db.debug
   (:require [medley.core :as medley]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.model :as model]))
 
 ;; shortcut for query a block with string ref
 (defn qb
