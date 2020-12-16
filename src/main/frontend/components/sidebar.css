@@ -74,6 +74,10 @@
   max-width: var(--ls-main-content-max-width);
   min-height: 100vh;
   flex: 1;
+
+  h1.title {
+    padding-right: 15px;
+  }
 }
 
 .cp__sidebar-help {
