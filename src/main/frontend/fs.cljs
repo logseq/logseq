@@ -177,11 +177,11 @@
                     format (-> (util/get-file-ext path)
                                (config/get-file-format))
                     pending-writes (state/get-write-chan-length)]
-              (println {:last-modified-at last-modified-at
-                        :local-last-modified-at local-last-modified-at
-                        :not-changed? not-changed?
-                        :new-created? new-created?
-                        :pending-writes pending-writes})
+              ;; (println {:last-modified-at last-modified-at
+              ;;           :local-last-modified-at local-last-modified-at
+              ;;           :not-changed? not-changed?
+              ;;           :new-created? new-created?
+              ;;           :pending-writes pending-writes})
               (if (and local-content old-content new?
                        (or
                         (> pending-writes 0)
