@@ -12,12 +12,14 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [frontend.format :as format]
+            [frontend.search :as search]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.extract :as extract-handler]
             [frontend.ui :as ui]
             [cljs.reader :as reader]
             [clojure.string :as string]
@@ -58,7 +60,7 @@
                 old-content (when file-exists?
                               (db/get-file repo-url path))
                 content (or old-content default-content)]
-            (db/reset-file! repo-url path content)
+            (file-handler/reset-file! repo-url path content)
             (db/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))))))
@@ -76,7 +78,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (db/reset-file! repo-url path default-content)
+        (file-handler/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-custom-theme
@@ -89,7 +91,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (db/reset-file! repo-url path default-content)
+        (file-handler/reset-file! repo-url path default-content)
         (git-handler/git-add repo-url path)))))
 
 (defn create-dummy-notes-page
@@ -100,7 +102,7 @@
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
-      (db/reset-file! repo-url path content))))
+      (file-handler/reset-file! repo-url path content))))
 
 (defn create-today-journal-if-not-exists
   ([repo-url]
@@ -136,7 +138,7 @@
                _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
          (when-not file-exists?
-           (db/reset-file! repo-url path content)
+           (file-handler/reset-file! repo-url path content)
            (ui-handler/re-render-root!)
            (git-handler/git-add repo-url path)))))))
 
@@ -160,6 +162,14 @@
   (create-contents-file repo-url)
   (create-custom-theme repo-url))
 
+(defn- reset-contents-and-blocks!
+  [repo-url files blocks-pages delete-files delete-blocks]
+  (db/transact-files-db! repo-url files)
+  (let [files (map #(select-keys % [:file/path]) files)
+        all-data (-> (concat delete-files delete-blocks files blocks-pages)
+                     (util/remove-nils))]
+    (db/transact! repo-url all-data)))
+
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
                    :or {re-render? true}}]
@@ -172,9 +182,9 @@
                           (contains? config/mldoc-support-formats format)))
                       files)
         blocks-pages (if (seq parsed-files)
-                       (db/extract-all-blocks-pages repo-url parsed-files)
+                       (extract-handler/extract-all-blocks-pages repo-url parsed-files)
                        [])]
-    (db/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (let [config-file (str config/app-name "/" config/config-file)]
       (if (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
@@ -564,6 +574,7 @@
 (defn rebuild-index!
   [url]
   (when url
+    (search/reset-indice! url)
     (db/remove-conn! url)
     (db/clear-query-state!)
     (-> (p/do! (db/remove-db! url)
@@ -578,3 +589,7 @@
   (when-let [repo (state/get-current-repo)]
     (push repo {:commit-message commit-message
                 :custom-commit? true})))
+
+(defn get-repo-name
+  [url]
+  (last (string/split url #"/")))

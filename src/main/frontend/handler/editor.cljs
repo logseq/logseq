@@ -9,6 +9,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.draw :as draw]
             [frontend.handler.expand :as expand]
+            [frontend.format.mldoc :as mldoc]
             [frontend.format :as format]
             [frontend.format.block :as block]
             [frontend.image :as image]
@@ -397,7 +398,7 @@
          page (db/entity repo (:db/id page))
          [old-properties new-properties] (when pre-block?
                                            [(:page/properties (db/entity (:db/id page)))
-                                            (db/parse-properties value format)])
+                                            (mldoc/parse-properties value format)])
          page-tags (when-let [tags (:tags new-properties)]
                      (util/->tags tags))
          page-alias (when-let [alias (:alias new-properties)]
@@ -460,7 +461,7 @@
                                     (text/remove-level-spaces value (keyword format)))]
                    (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                            _ (git-handler/git-add repo path)]
-                     (db/reset-file! repo path content)
+                     (file-handler/reset-file! repo path content)
                      (ui-handler/re-render-root!)
 
                      ;; Continue to edit the last block
@@ -703,7 +704,7 @@
                                                                    (:page/name page)))]
               (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                       _ (git-handler/git-add repo path)]
-                (db/reset-file! repo path
+                (file-handler/reset-file! repo path
                                 (str content
                                      (text/remove-level-spaces value (keyword format))
                                      "\n"

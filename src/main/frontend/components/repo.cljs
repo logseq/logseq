@@ -181,7 +181,7 @@
                             (config/get-local-dir repo)
                             (if head?
                               (db/get-repo-path repo)
-                              (util/take-at-most (db/get-repo-name repo) 20))))]
+                              (util/take-at-most (repo-handler/get-repo-name repo) 20))))]
       (let [repos (->> (state/sub [:me :repos])
                        (remove (fn [r] (= config/local-repo (:url r)))))]
         (cond

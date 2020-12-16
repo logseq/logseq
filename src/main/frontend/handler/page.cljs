@@ -65,7 +65,7 @@
                (let [content (util/default-content-with-title format title)]
                  (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                          _ (git-handler/git-add repo path)]
-                   (db/reset-file! repo path content)
+                   (file-handler/reset-file! repo path content)
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})
@@ -460,3 +460,10 @@
   [page-name]
   (page-add-properties! page-name {:published false})
   (notification/show! (util/format "Remove Page \"%s\" from Logseq server success" page-name) :success))
+
+(defn add-page-to-recent!
+  [repo page]
+  (let [pages (or (db/get-key-value repo :recent/pages)
+                  '())
+        new-pages (take 12 (distinct (cons page pages)))]
+    (db/set-key-value repo :recent/pages new-pages)))
