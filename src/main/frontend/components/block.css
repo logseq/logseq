@@ -6,6 +6,7 @@
   max-width: 100%;
   overflow: initial;
   cursor: text;
+  word-break: break-all;
 
   img {
     max-width: 100%;
@@ -55,6 +56,28 @@
 
 .blocks-properties {
   background-color: var(--ls-block-properties-background-color, #f0f8ff);
+}
+
+.marker-switch {
+  font-size: 85%;
+  margin-right: 6px;
+  margin-left: 2px;
+  border-radius: 3px;
+  font-weight: 500;
+  display: inline-block;
+  text-align: center;
+  width: 16px;
+  height: 18px;
+  opacity: 0.5;
+  padding: 0 2px 0 2px;
+  border: 1px solid;
+  line-height: 1.3;
+  color: var(--ls-link-text-color, #045591);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ls-link-text-hover-color);
+  }
 }
 
 .ls-block {

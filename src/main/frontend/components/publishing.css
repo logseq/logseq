@@ -1,6 +1,6 @@
 #cp__publishing-pj-ct{
  padding: 10px;
- background-color: #243c42;
+ background-color: var(--ls-quaternary-background-color);
 }
 
 .cp__publishing-pj{
@@ -10,18 +10,19 @@
 
 .cp__publishing-pj-name {
  font-size: 25px;
- color: #bacdd2;
+ color: var(--ls-primary-text-color);
 }
 
 .cp__publishing-edit{
   font-size: 20px;
   margin-left: 40px;
+  opacity: .5;
 }
 
 .cp__publishing-edit:hover{
   font-size: 20px;
   margin-left: 40px;
-  color: grey;
+  opacity: .6;
 }
 
 .cp__publishing_pj_edit {
@@ -35,9 +36,11 @@
 
 #cp__publishing-project-input{
   border-width: thin;
-  padding: 0px 10px;
+  padding: 0 10px;
   display: inline-block;
   margin: 5px;
+  border-radius: var(--ls-border-radius-low);
+  border-color: var(--ls-border-color);
 }
 
 #cp__publishing-pg-ct {
