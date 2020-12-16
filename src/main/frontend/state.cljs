@@ -18,7 +18,6 @@
     :today nil
     :db/batch-txs (async/chan 100)
     :file/writes (async/chan 100)
-    :file/writing? false
     :notification/show? false
     :notification/content nil
     :repo/cloning? false
@@ -833,6 +832,11 @@
   []
   (:file/writes @state))
 
+(defn get-write-chan-length
+  []
+  (let [c (get-file-write-chan)]
+    (count (gobj/get c "buf"))))
+
 (defn add-tx!
   ;; TODO: replace f with data for batch transactions
   [f]
@@ -990,14 +994,6 @@
                                                                            :tx-data tx-data}))))]
       (storage/set-transit! :db/latest-txs new-txs)
       (set-state! :db/latest-txs new-txs))))
-
-(defn set-file-writing!
-  [v]
-  (set-state! :file/writing? v))
-
-(defn file-in-writing!
-  []
-  (:file/writing? @state))
 
 (defn get-repo-latest-txs
   [repo file?]

@@ -1,6 +1,7 @@
 (ns frontend.fs
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
+            [frontend.state :as state]
             [clojure.string :as string]
             [frontend.idb :as idb]
             [frontend.db :as db]
@@ -174,13 +175,18 @@
                     new-created? (nil? last-modified-at)
                     not-changed? (= last-modified-at local-last-modified-at)
                     format (-> (util/get-file-ext path)
-                               (config/get-file-format))]
-              ;; (println {:last-modified-at last-modified-at
-              ;;           :local-last-modified-at local-last-modified-at
-              ;;           :not-changed? not-changed?
-              ;;           :new-created? new-created?})
+                               (config/get-file-format))
+                    pending-writes (state/get-write-chan-length)]
+              (println {:last-modified-at last-modified-at
+                        :local-last-modified-at local-last-modified-at
+                        :not-changed? not-changed?
+                        :new-created? new-created?
+                        :pending-writes pending-writes})
               (if (and local-content old-content new?
-                       (or not-changed? new-created?))
+                       (or
+                        (> pending-writes 0)
+                        not-changed?
+                        new-created?))
                 (do
                   (p/let [_ (utils/verifyPermission file-handle true)
                           _ (utils/writeFile file-handle content)
