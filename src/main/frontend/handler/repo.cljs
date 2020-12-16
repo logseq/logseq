@@ -162,6 +162,14 @@
   (create-contents-file repo-url)
   (create-custom-theme repo-url))
 
+(defn- reset-contents-and-blocks!
+  [repo-url files blocks-pages delete-files delete-blocks]
+  (db/transact-files-db! repo-url files)
+  (let [files (map #(select-keys % [:file/path]) files)
+        all-data (-> (concat delete-files delete-blocks files blocks-pages)
+                     (util/remove-nils))]
+    (db/transact! repo-url all-data)))
+
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
                    :or {re-render? true}}]
@@ -176,7 +184,7 @@
         blocks-pages (if (seq parsed-files)
                        (extract-handler/extract-all-blocks-pages repo-url parsed-files)
                        [])]
-    (extract-handler/reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (let [config-file (str config/app-name "/" config/config-file)]
       (if (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)

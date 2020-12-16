@@ -13,14 +13,6 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]))
 
-(defn reset-contents-and-blocks!
-  [repo-url files blocks-pages delete-files delete-blocks]
-  (db/transact-files-db! repo-url files)
-  (let [files (map #(select-keys % [:file/path]) files)
-        all-data (-> (concat delete-files delete-blocks files blocks-pages)
-                     (util/remove-nils))]
-    (db/transact! repo-url all-data)))
-
 (defn- extract-page-list
   [content]
   (when-not (string/blank? content)
