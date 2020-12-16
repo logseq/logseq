@@ -15,6 +15,8 @@
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/mode/clojure/clojure"]
             ["codemirror/mode/javascript/javascript"]
+            ["codemirror/mode/clike/clike"]
+            ["codemirror/mode/vue/vue"]
             ["codemirror/mode/commonlisp/commonlisp"]
             ["codemirror/mode/coffeescript/coffeescript"]
             ["codemirror/mode/css/css"]
@@ -79,13 +81,28 @@
       :else
       nil)))
 
+(defn- text->cm-mode
+  [text]
+  (when text
+    (let [mode (string/lower-case text)]
+      (case mode
+        "html" "text/html"
+        "c" "text/x-csrc"
+        "c++" "text/x-c++src"
+        "java" "text/x-java"
+        "c#" "text/x-csharp"
+        "csharp" "text/x-csharp"
+        "objective-c" "text/x-objectivec"
+        "scala" "text/x-scala"
+        mode))))
+
 (defn render!
   [state]
   (let [[config id attr code pos_meta] (:rum/args state)
         original-mode (get attr :data-lang)
         mode (or original-mode "javascript")
         clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
-        mode (if clojure? "clojure" mode)
+        mode (if clojure? "clojure" (text->cm-mode mode))
         lisp? (or clojure?
                   (contains? #{"scheme" "racket" "lisp"} mode))
         textarea (gdom/getElement id)
@@ -147,7 +164,7 @@
   [state config id attr code pos_meta]
   [:div.extensions__code
    [:div.extensions__code-lang
-    (let [mode (get attr :data-lang "javascript")]
+    (let [mode (string/lower-case (get attr :data-lang "javascript"))]
       (if (= mode "text/x-clojure")
         "clojure"
         mode))]
