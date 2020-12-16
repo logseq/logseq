@@ -32,7 +32,6 @@
               (repo-handler/create-today-journal!))
             (when-let [repo (state/get-current-repo)]
               (when (and (search-db/empty? repo)
-                         (not (state/file-in-writing!))
                          (state/input-idle? repo))
                 (search/rebuild-indices!))))]
     (f)

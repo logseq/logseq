@@ -19,6 +19,7 @@
             [frontend.handler.project :as project-handler]
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
+            [cljs.core.async.interop :refer-macros [<p!]]
             [goog.object :as gobj]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -292,11 +293,7 @@
   (let [chan (state/get-file-write-chan)]
     (async/go-loop []
       (let [args (async/<! chan)]
-        (when-let [repo (state/get-current-repo)]
-          (when-not (config/local-db? repo)
-            (state/set-file-writing! true))
-          (p/let [_ (apply alter-files-handler! args)]
-            (state/set-file-writing! false)))
-        nil)
+        ;; return a channel
+        (<p! (apply alter-files-handler! args)))
       (recur))
     chan))
