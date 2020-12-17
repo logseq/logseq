@@ -179,6 +179,11 @@
                         (constantly true))]
     (merge attributes {:selectable-fn selectable-fn})))
 
+(defn- in-time-input?
+  []
+  (when-let [elem js/document.activeElement]
+    (= "time" (gobj/get elem "id"))))
+
 (rum/defc date-picker < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -193,11 +198,13 @@
 
         ;; left, previous day
          37 (fn [state e]
-              (swap! *internal-model inc-date -1))
+              (when-not (in-time-input?)
+                (swap! *internal-model inc-date -1)))
 
         ;; right, next day
          39 (fn [state e]
-              (swap! *internal-model inc-date 1))
+              (when-not (in-time-input?)
+                (swap! *internal-model inc-date 1)))
 
         ;; up, one week ago
          38 (fn [state e]
@@ -206,7 +213,7 @@
          40 (fn [state e]
               (swap! *internal-model inc-week 1))}
         {:all-handler (fn [e key-code]
-                        (when (contains? #{13 37 38 39 40} key-code)
+                        (when (contains? #{13 38 40} key-code)
                           (util/stop e)))}))))
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
