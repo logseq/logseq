@@ -50,13 +50,13 @@
   get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
   get-pages get-pages-relation get-pages-that-mentioned-page get-pages-with-modified-at get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
-  reset-config! set-file-last-modified-at! sub-key-value transact-files-db! with-block-refs-count]
+  reset-config! set-file-last-modified-at! transact-files-db! with-block-refs-count]
 
  [frontend.db.react
   get-current-marker get-current-page get-current-priority get-handler-keys set-file-content! set-key-value
   transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
-  query-state query-components query-entity-in-component remove-custom-query! set-new-result!]
+  query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value]
 
  [frontend.db.query-custom
   custom-query custom-query-result-transform])

@@ -34,15 +34,6 @@
          (when-let [conn (conn/get-files-conn repo-url)]
            (d/transact! conn (vec tx-data))))))))
 
-(defn sub-key-value
-  ([key]
-   (sub-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when (conn/get-conn repo-url)
-     (-> (react/q repo-url [:kv key] {} key key)
-         react
-         key))))
-
 (defn pull-block
   [id]
   (let [repo (state/get-current-repo)]
