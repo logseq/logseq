@@ -94,23 +94,14 @@
         (conn/get-conn repo))
        (map first)))
 
-(defn get-pages-with-modified-at
+(defn get-modified-pages
   [repo]
-  (let [now-long (tc/to-long (t/now))]
-    (->> (d/q
-          '[:find ?page-name ?modified-at
-            :where
-            [?page :page/original-name ?page-name]
-            [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
-          (conn/get-conn repo))
-         (seq)
-         (sort-by (fn [[page modified-at]]
-                    [modified-at page]))
-         (reverse)
-         (remove (fn [[page modified-at]]
-                   (or (util/file-page? page)
-                       (and modified-at
-                            (> modified-at now-long))))))))
+  (d/q
+    '[:find ?page-name ?modified-at
+      :where
+      [?page :page/original-name ?page-name]
+      [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
+    (conn/get-conn repo)))
 
 (defn get-page-alias
   [repo page-name]

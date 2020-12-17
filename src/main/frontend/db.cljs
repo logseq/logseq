@@ -48,9 +48,9 @@
   get-latest-journals get-marker-blocks get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-name get-page-properties
   get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
-  get-pages get-pages-relation get-pages-that-mentioned-page get-pages-with-modified-at get-public-pages get-tag-pages
+  get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
-  reset-config! set-file-last-modified-at! transact-files-db! with-block-refs-count]
+  reset-config! set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages]
 
  [frontend.db.react
   get-current-marker get-current-page get-current-priority get-handler-keys set-file-content! set-key-value
