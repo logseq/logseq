@@ -97,7 +97,7 @@ html[data-theme=light] {
   --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
   --ls-tag-text-color: var(--ls-link-text-color);
   --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
-  --ls-slide-background-color: #002b36;
+  --ls-slide-background-color: #fff;
   --ls-block-bullet-border-color: var(--ls-border-color);
   --ls-block-bullet-color: #394b59;
   --ls-block-highlight-color: #c0e6fd;

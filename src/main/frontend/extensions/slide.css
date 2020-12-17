@@ -1,5 +1,18 @@
+html[data-theme=light] {
+  #right-sidebar .reveal {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      color: initial;
+    }
+  }
+}
+
 .reveal {
-  color: #f7f7f7;
+  color: var(--ls-primary-text-color);
   background: var(--ls-slide-background-color);
 
   pre.code {
