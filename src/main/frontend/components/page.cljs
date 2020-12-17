@@ -463,7 +463,7 @@
       [:div.flex-1
        [:h1.title (t :all-pages)]
        (when current-repo
-         (let [pages (db/get-pages-with-modified-at current-repo)]
+         (let [pages (page-handler/get-pages-with-modified-at current-repo)]
            [:table.table-auto
             [:thead
              [:tr

@@ -179,6 +179,11 @@
                         (constantly true))]
     (merge attributes {:selectable-fn selectable-fn})))
 
+(defn- input-or-select?
+  []
+  (when-let [elem js/document.activeElement]
+    (or (util/input? elem) (util/select? elem))))
+
 (rum/defc date-picker < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -187,26 +192,31 @@
         state
         {;; enter, current day
          13 (fn [state e]
-              (when on-change
+              (when (and on-change
+                         (not (input-or-select?)))
                 (when-not deadline-or-schedule?
                   (on-change e @*internal-model))))
 
         ;; left, previous day
          37 (fn [state e]
-              (swap! *internal-model inc-date -1))
+              (when-not (input-or-select?)
+                (swap! *internal-model inc-date -1)))
 
         ;; right, next day
          39 (fn [state e]
-              (swap! *internal-model inc-date 1))
+              (when-not (input-or-select?)
+                (swap! *internal-model inc-date 1)))
 
         ;; up, one week ago
          38 (fn [state e]
-              (swap! *internal-model inc-week -1))
+              (when-not (input-or-select?)
+                (swap! *internal-model inc-week -1)))
         ;; down, next week
          40 (fn [state e]
-              (swap! *internal-model inc-week 1))}
+              (when-not (input-or-select?)
+                (swap! *internal-model inc-week 1)))}
         {:all-handler (fn [e key-code]
-                        (when (contains? #{13 37 38 39 40} key-code)
+                        (when (contains? #{13} key-code)
                           (util/stop e)))}))))
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))

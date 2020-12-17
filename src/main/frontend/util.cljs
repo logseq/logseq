@@ -372,6 +372,11 @@
      #{"INPUT" "TEXTAREA"}
      (gobj/get node "tagName"))))
 
+(defn select?
+  [node]
+  (when node
+    (= "SELECT" (gobj/get node "tagName"))))
+
 (defn details-or-summary?
   [node]
   (when node
