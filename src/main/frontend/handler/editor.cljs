@@ -1128,11 +1128,7 @@
     (doseq [block (state/get-selection-blocks)]
       (dom/remove-class! block "selected")
       (dom/remove-class! block "noselect"))
-    (state/clear-selection!))
-  ;; (when e
-  ;;   (when-not (util/input? (gobj/get e "target"))
-  ;;     (util/clear-selection!)))
-)
+    (state/clear-selection!)))
 
 (defn clear-selection-blocks!
   []
@@ -1332,7 +1328,9 @@
 
               :else
               nil)
-            (state/conj-selection-block! element up?)))))))
+            (do
+              (util/clear-selection!)
+              (state/conj-selection-block! element up?))))))))
 
 (defn save-block-aux!
   [block value format]
