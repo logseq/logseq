@@ -483,11 +483,11 @@
   [repo]
   (let [now-long (tc/to-long (t/now))]
     (->> (db/get-modified-pages repo)
-      (seq)
-      (sort-by (fn [[page modified-at]]
-                 [modified-at page]))
-      (reverse)
-      (remove (fn [[page modified-at]]
-                (or (util/file-page? page)
-                  (and modified-at
-                    (> modified-at now-long))))))))
+         (seq)
+         (sort-by (fn [[page modified-at]]
+                    [modified-at page]))
+         (reverse)
+         (remove (fn [[page modified-at]]
+                   (or (util/file-page? page)
+                     (and modified-at
+                       (> modified-at now-long))))))))
