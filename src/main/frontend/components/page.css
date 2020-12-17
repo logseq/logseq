@@ -17,12 +17,13 @@
     > .it {
       display: flex;
       justify-content: center;
+      padding-top: 5px;
       padding-bottom: 5px;
 
       button {
         width: 90%;
         justify-content: center;
-        padding: 15px;
+        padding: 15px 0;
       }
     }
   }
