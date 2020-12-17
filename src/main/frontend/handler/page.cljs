@@ -376,13 +376,17 @@
         last-empty? (>= 3 (count (:block/content last-block)))
         heading-pattern (config/get-block-pattern (state/get-preferred-format))
         pre-str (str heading-pattern heading-pattern)
-        new-content (if last-empty? (str pre-str " [[" page-name "]]") (str (:block/content last-block) pre-str " [[" page-name "]]"))]
+        new-content (if last-empty?
+                      (str pre-str " [[" page-name "]]")
+                      (str (string/trimr (:block/content last-block))
+                           "\n"
+                           pre-str " [[" page-name "]]"))]
     (editor-handler/insert-new-block-aux!
      last-block
      new-content
      {:create-new-block? false
       :ok-handler
-      (fn [[_first-block last-block _new-block-content]]
+      (fn [_]
         (notification/show! "Added to contents!" :success)
         (editor-handler/clear-when-saved!))
       :with-level? true
@@ -470,7 +474,6 @@
         new-pages (take 12 (distinct (cons page pages)))]
     (db/set-key-value repo :recent/pages new-pages)))
 
-
 (defn template-exists?
   [title]
   (when title
@@ -489,5 +492,5 @@
          (reverse)
          (remove (fn [[page modified-at]]
                    (or (util/file-page? page)
-                     (and modified-at
-                       (> modified-at now-long))))))))
+                       (and modified-at
+                            (> modified-at now-long))))))))

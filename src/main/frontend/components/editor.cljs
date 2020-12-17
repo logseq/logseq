@@ -495,7 +495,7 @@
                  value (gobj/get input "value")
                  ctrlKey (gobj/get e "ctrlKey")
                  metaKey (gobj/get e "metaKey")
-                 pos (:pos (util/get-caret-pos input))]
+                 pos (util/get-input-pos input)]
              (cond
                (or ctrlKey metaKey)
                nil
