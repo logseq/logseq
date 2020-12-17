@@ -1,3 +1,4 @@
+const fs = require('fs')
 const path = require('path')
 const gulp = require('gulp')
 const postcss = require('gulp-postcss')
@@ -35,7 +36,7 @@ const css = {
   },
 
   buildCSS (...params) {
-    return gulp.series(css._buildTailwind, css._optimizeCSSForRelease)(...params)
+    return gulp.series(css._buildTailwind.bind(null, void 0, void 0), css._optimizeCSSForRelease)(...params)
   },
 
   _buildTailwind (entry, output) {
@@ -48,6 +49,8 @@ const css = {
   },
 
   _optimizeCSSForRelease () {
+    // tailwind.core.css placeholder
+    fs.writeFileSync(path.join(outputPath, 'css', 'tailwind.core.css'), '')
     return gulp.src(path.join(outputPath, 'css', 'style.css'))
       .pipe(cleanCSS())
       .pipe(gulp.dest(path.join(outputPath, 'css')))
@@ -70,4 +73,4 @@ const common = {
 
 exports.clean = common.clean
 exports.watch = gulp.parallel(common.keepSyncResourceFile, css.watchCSS)
-exports.build = gulp.series(common.syncResourceFile, css.buildCSS)
+exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)
