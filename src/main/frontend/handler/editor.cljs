@@ -1138,6 +1138,12 @@
       (dom/remove-class! block "noselect"))
     (state/clear-selection-blocks!)))
 
+(defn exit-editing-and-set-selected-blocks!
+  [blocks]
+  (util/clear-selection!)
+  (state/clear-edit!)
+  (state/set-selection-blocks! blocks))
+
 (defn select-all-blocks!
   []
   (when-let [current-input-id (state/get-edit-input-id)]
@@ -1146,7 +1152,7 @@
           blocks (dom/by-class blocks-container "ls-block")]
       (doseq [block blocks]
         (dom/add-class! block "selected noselect"))
-      (state/set-selection-blocks! blocks))))
+      (exit-editing-and-set-selected-blocks! blocks))))
 
 (defn- get-selected-blocks-with-children
   []
@@ -1295,7 +1301,7 @@
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")]
       (doseq [block blocks]
         (dom/add-class! block "selected noselect"))
-      (state/set-selection-blocks! blocks))))
+      (exit-editing-and-set-selected-blocks! blocks))))
 
 (defn on-select-block
   [state e up?]
@@ -1330,6 +1336,7 @@
               nil)
             (do
               (util/clear-selection!)
+              (state/clear-edit!)
               (state/conj-selection-block! element up?))))))))
 
 (defn save-block-aux!
