@@ -1062,14 +1062,6 @@
                 [(get m "template") e]))
          (into {}))))
 
-(defn template-exists?
-  [title]
-  (when title
-    (let [templates (keys (get-all-templates))]
-      (when (seq templates)
-        (let [templates (map string/lower-case templates)]
-          (contains? (set templates) (string/lower-case title)))))))
-
 (defonce blocks-count-cache (atom nil))
 
 (defn blocks-count

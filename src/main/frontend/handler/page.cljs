@@ -467,3 +467,12 @@
                   '())
         new-pages (take 12 (distinct (cons page pages)))]
     (db/set-key-value repo :recent/pages new-pages)))
+
+
+(defn template-exists?
+  [title]
+  (when title
+    (let [templates (keys (db/get-all-templates))]
+      (when (seq templates)
+        (let [templates (map string/lower-case templates)]
+          (contains? (set templates) (string/lower-case title)))))))
