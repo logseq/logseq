@@ -50,7 +50,7 @@
   get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
   get-pages get-pages-relation get-pages-that-mentioned-page get-pages-with-modified-at get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
-  rebuild-page-blocks-children  reset-config! set-file-last-modified-at! sub-key-value template-exists?
+  reset-config! set-file-last-modified-at! sub-key-value template-exists?
   transact-files-db! with-block-refs-count]
 
  [frontend.db.react
