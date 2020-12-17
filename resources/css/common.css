@@ -91,7 +91,7 @@ html[data-theme=light] {
   --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
   --ls-tag-text-color: var(--ls-link-text-color);
   --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
-  --ls-slide-background-color: #002b36;
+  --ls-slide-background-color: #fff;
   --ls-block-bullet-border-color: var(--ls-border-color);
   --ls-block-bullet-color: #394b59;
   --ls-block-highlight-color: #c0e6fd;
@@ -1043,11 +1043,6 @@ a.tooltip-priority::after {
   max-width: calc(var(--ls-main-content-max-width) - 30px);
 }
 
-#intro .content :not(img),
-.foldable-title {
-  max-width: 665px;
-}
-
 .editor-wrapper {
   margin: 0 auto;
 }
@@ -1307,4 +1302,8 @@ a.tag:hover {
 
 .reveal .hljs {
   background: none;
+}
+
+.white-theme #right-sidebar .reveal h1, .white-theme #right-sidebar .reveal h2, .white-theme #right-sidebar .reveal h3, .white-theme #right-sidebar .reveal h4, .white-theme #right-sidebar .reveal h5, .white-theme #right-sidebar .reveal h6 {
+    color: initial;
 }
