@@ -23,17 +23,23 @@
 .editor-inner {
   position: relative;
   display: flex;
+
+  textarea {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+    resize: none;
+  }
 }
 
 .absolute-modal {
+  overflow: auto;
   background: var(--ls-primary-background-color);
-}
 
-.editor-inner textarea {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
+  &.is-overflow-vw-x {
+    transform: translateX(calc(-100% + 1rem));
+  }
 }
 
 .non-block-editor textarea,

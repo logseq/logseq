@@ -4,6 +4,7 @@
   textarea {
     word-break: break-word;
     overflow: hidden;
+    resize: none;
   }
 
   .journal-item {

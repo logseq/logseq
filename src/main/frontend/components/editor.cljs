@@ -309,18 +309,33 @@
               (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
-  [cp set-default-width? {:keys [top left]}]
-  [:div.absolute.rounded-md.shadow-lg.absolute-modal
-   {:style (merge
-            {:top (+ top 24)
-             :max-height 600
-             :z-index 11}
-            (if set-default-width?
-              {:width 400})
-            (if config/mobile?
-              {:left 0}
-              {:left left}))}
-   cp])
+  [cp set-default-width? {:keys [top left rect]}]
+  (let [max-height 500
+        max-width 300
+        offset-top 24
+        vw-height js/window.innerHeight
+        vw-width js/window.innerWidth
+        to-max-height (if (and (seq rect) (> vw-height max-height))
+                        (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
+                          (if (< delta-height max-height)
+                            delta-height
+                            max-height))
+                        max-height)
+        x-overflow? (if (and (seq rect) (> vw-width max-width))
+                      (let [delta-width (- vw-width (+ (:left rect) left))]
+                        (< delta-width (* max-width 0.5))))] ;; FIXME: for translateY layer
+    [:div.absolute.rounded-md.shadow-lg.absolute-modal
+     {:class (if x-overflow? "is-overflow-vw-x" "")
+      :style (merge
+              {:top        (+ top offset-top)
+               :max-height to-max-height
+               :z-index    11}
+              (if set-default-width?
+                {:width max-width})
+              (if config/mobile?
+                {:left 0}
+                {:left left}))}
+     cp]))
 
 (rum/defc transition-cp < rum/reactive
   [cp set-default-width? pos]
