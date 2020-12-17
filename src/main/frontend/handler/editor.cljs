@@ -1792,7 +1792,8 @@
   (fn [state e]
     (when-let [repo (state/get-current-repo)]
       (let [blocks (seq (state/get-selection-blocks))]
-        (if (seq blocks)
+        (cond
+          (seq blocks)
           (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
                                        (medley/uuid id))) blocks)
                 ids (->> (mapcat #(let [children (vec (db/get-block-children-ids repo %))]
@@ -1847,6 +1848,11 @@
               {:key :block/change
                :data (map (fn [block] (assoc block :block/page page)) blocks)}
               [[file-path new-content]])))
+
+          (gdom/getElement "date-time-picker")
+          nil
+
+          :else
           (cycle-collapse! state e))))))
 
 (defn bulk-make-todos
