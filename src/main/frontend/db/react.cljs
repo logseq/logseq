@@ -336,6 +336,15 @@
                      {:key [:kv key]})
     (remove-key! repo-url key)))
 
+(defn sub-key-value
+  ([key]
+   (sub-key-value (state/get-current-repo) key))
+  ([repo-url key]
+   (when (conn/get-conn repo-url)
+     (-> (q repo-url [:kv key] {} key key)
+         react
+         key))))
+
 (defn set-file-content!
   [repo path content]
   (when (and repo path)
