@@ -1254,14 +1254,6 @@
       (state/set-config! repo-url config)
       config)))
 
-(defn with-latest-txs!
-  [db repo file?]
-  (let [txs (state/get-repo-latest-txs repo file?)
-        tx-data (when (seq txs) (map :tx-data txs))]
-    (if (seq tx-data)
-      (d/db-with db tx-data)
-      db)))
-
 (defn get-db-type
   [repo]
   (get-key-value repo :db/type))
