@@ -4,7 +4,7 @@
             [goog.object :as gobj]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.handler.block :as block-handler]))
 
 (defn- hide!
   [element]
@@ -27,7 +27,7 @@
         (let [elements (d/by-class node "ls-block")]
           (doseq [element elements]
             (hide! element))))
-      (db/collapse-block! block))))
+      (block-handler/collapse-block! block))))
 
 (defn expand!
   [block]
@@ -41,7 +41,7 @@
           (doseq [element elements]
             (show! element)))
         (show! e))
-      (db/expand-block! block))))
+      (block-handler/expand-block! block))))
 
 (defn set-bullet-closed!
   [element]

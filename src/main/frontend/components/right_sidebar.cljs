@@ -8,6 +8,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.util :as util]
@@ -42,8 +43,8 @@
   (let [theme (:ui/theme @state/state)
         dark? (= theme "dark")
         graph (if (util/uuid-string? page)
-                (db/build-block-graph (uuid page) theme)
-                (db/build-page-graph page theme))]
+                (graph-handler/build-block-graph (uuid page) theme)
+                (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph

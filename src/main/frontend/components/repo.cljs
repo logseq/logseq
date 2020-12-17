@@ -95,7 +95,8 @@
              [:a
               {:on-click #(nfs-handler/refresh! repo
                                                 repo-handler/create-today-journal!)
-               :title (str "Sync files with the local directory: " (config/get-local-dir repo))}
+               :title (str "Sync files with the local directory: " (config/get-local-dir repo) ".\nVersion: "
+                           version/version)}
               svg/refresh]])
           (let [changed-files (state/sub [:repo/changed-files repo])
                 should-push? (seq changed-files)
@@ -181,7 +182,7 @@
                             (config/get-local-dir repo)
                             (if head?
                               (db/get-repo-path repo)
-                              (util/take-at-most (db/get-repo-name repo) 20))))]
+                              (util/take-at-most (repo-handler/get-repo-name repo) 20))))]
       (let [repos (->> (state/sub [:me :repos])
                        (remove (fn [r] (= config/local-repo (:url r)))))]
         (cond

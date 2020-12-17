@@ -15,6 +15,8 @@
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/mode/clojure/clojure"]
             ["codemirror/mode/javascript/javascript"]
+            ["codemirror/mode/clike/clike"]
+            ["codemirror/mode/vue/vue"]
             ["codemirror/mode/commonlisp/commonlisp"]
             ["codemirror/mode/coffeescript/coffeescript"]
             ["codemirror/mode/css/css"]
@@ -53,9 +55,14 @@
             format (:block/format block)
             ;; Get newest state
             pos-meta (:pos-meta state)
-            {:keys [start_pos end_pos]} @pos-meta
-            value (str "\n" (string/trimr value) "\n")
             content (:block/content block)
+            {:keys [start_pos end_pos]} @pos-meta
+            prev-content (utf8/substring (utf8/encode content)
+                                         0 start_pos)
+            value (str (if (not= "\n" (last prev-content))
+                         "\n")
+                       (string/trimr value)
+                       "\n")
             content' (utf8/insert! content
                                    start_pos
                                    end_pos
@@ -79,52 +86,69 @@
       :else
       nil)))
 
+(defn- text->cm-mode
+  [text]
+  (when text
+    (let [mode (string/lower-case text)]
+      (case mode
+        "html" "text/html"
+        "c" "text/x-csrc"
+        "c++" "text/x-c++src"
+        "java" "text/x-java"
+        "c#" "text/x-csharp"
+        "csharp" "text/x-csharp"
+        "objective-c" "text/x-objectivec"
+        "scala" "text/x-scala"
+        mode))))
+
 (defn render!
   [state]
-  (let [[config id attr code pos_meta] (:rum/args state)
-        original-mode (get attr :data-lang)
-        mode (or original-mode "javascript")
-        clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
-        mode (if clojure? "clojure" mode)
-        lisp? (or clojure?
-                  (contains? #{"scheme" "racket" "lisp"} mode))
-        textarea (gdom/getElement id)
-        editor (or
-                @(:editor-atom state)
-                (when textarea
-                  (from-textarea textarea
-                                 #js {:mode mode
-                                      :matchBrackets lisp?
-                                      :autoCloseBrackets true
-                                      :lineNumbers true
-                                      :extraKeys #js {"Esc" (fn [cm]
-                                                              (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
-                                                                (if-let [block-id (:block/uuid config)]
-                                                                  (let [block (db/pull [:block/uuid block-id])
-                                                                        value (.getValue cm)
-                                                                        textarea-value (gobj/get textarea "value")
-                                                                        changed? (not= value textarea-value)]
-                                                                    (if changed?
-                                                                      (save!)
-                                                                      (editor-handler/edit-block! block :max (:block/format block) block-id)))
-                                                                  (save!))))}})))]
-    (when editor
-      (let [element (.getWrapperElement editor)]
-        (.on editor "blur" (fn []
-                             (save-file-or-block-when-blur-or-esc! editor textarea config state)))
-        (.addEventListener element "click"
-                           (fn [e]
-                             (util/stop e)))
-        (.save editor)
-        (.refresh editor)))
-    editor))
+  (let [editor-atom (:editor-atom state)]
+    (if @editor-atom
+      @editor-atom
+      (let [[config id attr code pos_meta] (:rum/args state)
+           original-mode (get attr :data-lang)
+           mode (or original-mode "javascript")
+           clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
+           mode (if clojure? "clojure" (text->cm-mode mode))
+           lisp? (or clojure?
+                     (contains? #{"scheme" "racket" "lisp"} mode))
+           textarea (gdom/getElement id)
+           editor (or
+                   @(:editor-atom state)
+                   (when textarea
+                     (from-textarea textarea
+                                    #js {:mode mode
+                                         :matchBrackets lisp?
+                                         :autoCloseBrackets true
+                                         :lineNumbers true
+                                         :extraKeys #js {"Esc" (fn [cm]
+                                                                 (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
+                                                                   (if-let [block-id (:block/uuid config)]
+                                                                     (let [block (db/pull [:block/uuid block-id])
+                                                                           value (.getValue cm)
+                                                                           textarea-value (gobj/get textarea "value")
+                                                                           changed? (not= value textarea-value)]
+                                                                       (if changed?
+                                                                         (save!)
+                                                                         (editor-handler/edit-block! block :max (:block/format block) block-id)))
+                                                                     (save!))))}})))]
+       (when editor
+         (let [element (.getWrapperElement editor)]
+           (.on editor "blur" (fn []
+                                (save-file-or-block-when-blur-or-esc! editor textarea config state)))
+           (.addEventListener element "click"
+                              (fn [e]
+                                (util/stop e)))
+           (.save editor)
+           (.refresh editor)))
+       editor))))
 
 (defn- load-and-render!
   [state]
   (let [editor-atom (:editor-atom state)]
-    (js/setTimeout (fn []
-                     (let [editor (render! state)]
-                       (reset! editor-atom editor))) 10)))
+    (let [editor (render! state)]
+      (reset! editor-atom editor))))
 
 (rum/defcs editor < rum/reactive
   {:init (fn [state]
@@ -134,20 +158,13 @@
    :did-mount (fn [state]
                 (load-and-render! state)
                 state)
-   :did-update (fn [state]
-                 (when-let [editor-atom (:editor-atom state)]
-                   (let [editor @editor-atom
-                         code (nth (:rum/args state) 3)]
-                     (when editor
-                       (.setValue (.getDoc editor) code))))
-                 (when-let [pos-meta (:pos-meta state)]
-                   (reset! pos-meta (last (:rum/args state))))
-                 (load-and-render! state)
-                 state)}
+   :did-remount (fn [state]
+                  (load-and-render! state)
+                  state)}
   [state config id attr code pos_meta]
   [:div.extensions__code
    [:div.extensions__code-lang
-    (let [mode (get attr :data-lang "javascript")]
+    (let [mode (string/lower-case (get attr :data-lang "javascript"))]
       (if (= mode "text/x-clojure")
         "clojure"
         mode))]

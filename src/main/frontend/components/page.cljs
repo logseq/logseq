@@ -6,6 +6,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -34,7 +35,8 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.handler.block :as block-handler]))
 
 (defn- get-page-name
   [state]
@@ -47,14 +49,14 @@
     (if block?
       (db/get-block-and-children repo block-id)
       (do
-        (db/add-page-to-recent! repo page-original-name)
+        (page-handler/add-page-to-recent! repo page-original-name)
         (db/get-page-blocks repo page-name)))))
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-        page-blocks (db/with-dummy-block raw-page-blocks format
+        page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
                         (let [content (db/get-file repo file-path)]
                           {:block/page {:db/id (:db/id page)}
@@ -416,7 +418,7 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         [width height] (rum/react layout)
         dark? (= theme "dark")
-        graph (db/build-global-graph theme (rum/react show-journal?))
+        graph (graph-handler/build-global-graph theme (rum/react show-journal?))
         dot-mode-value? (rum/react dot-mode?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph

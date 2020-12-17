@@ -16,6 +16,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.ui :as ui]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repeated :as repeated]
@@ -1801,7 +1802,7 @@
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
-        blocks->vec-tree #(if (or custom-query? ref?) % (db/blocks->vec-tree %))
+        blocks->vec-tree #(if (or custom-query? ref?) % (block-handler/blocks->vec-tree %))
         blocks (blocks->vec-tree blocks)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
@@ -1812,7 +1813,7 @@
                                -10)}}
        (let [first-block (first blocks)
              blocks' (if (and (:block/pre-block? first-block)
-                              (db/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
+                              (block-handler/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
                        (rest blocks)
                        blocks)
              first-id (:block/uuid (first blocks'))]

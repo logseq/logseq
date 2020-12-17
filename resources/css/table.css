@@ -16,7 +16,7 @@ tr {
 th {
     font-size: 14px;
     font-weight: 400;
-    color: #039;
+    color: var(--ls-primary-text-color);
     border-bottom: 2px solid var(--ls-border-color);
     padding: 10px 8px;
 }

@@ -63,6 +63,11 @@
        (swap! indices assoc repo result)
        result))))
 
+(defn reset-indice!
+  [repo]
+  (swap! indices assoc repo {:pages #js []
+                             :blocks #js []}))
+
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
   ;; normalized multiplier 0-1
