@@ -705,10 +705,10 @@
               (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                       _ (git-handler/git-add repo path)]
                 (file-handler/reset-file! repo path
-                                (str content
-                                     (text/remove-level-spaces value (keyword format))
-                                     "\n"
-                                     snd-block-text))
+                                          (str content
+                                               (text/remove-level-spaces value (keyword format))
+                                               "\n"
+                                               snd-block-text))
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
@@ -1353,7 +1353,10 @@
 (defn save-current-block-when-idle!
   []
   (when-let [repo (state/get-current-repo)]
-    (when (state/input-idle? repo)
+    (when (and (state/input-idle? repo)
+               (not (state/get-editor-show-page-search?))
+               (not (state/get-editor-show-page-search-hashtag?))
+               (not (state/get-editor-show-block-search?)))
       (state/set-editor-op! :auto-save)
       (try
         (let [input-id (state/get-edit-input-id)
