@@ -22,7 +22,9 @@
             [frontend.fs :as fs]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (defn- get-directory
   [journal?]
@@ -467,3 +469,25 @@
                   '())
         new-pages (take 12 (distinct (cons page pages)))]
     (db/set-key-value repo :recent/pages new-pages)))
+
+
+(defn template-exists?
+  [title]
+  (when title
+    (let [templates (keys (db/get-all-templates))]
+      (when (seq templates)
+        (let [templates (map string/lower-case templates)]
+          (contains? (set templates) (string/lower-case title)))))))
+
+(defn get-pages-with-modified-at
+  [repo]
+  (let [now-long (tc/to-long (t/now))]
+    (->> (db/get-modified-pages repo)
+         (seq)
+         (sort-by (fn [[page modified-at]]
+                    [modified-at page]))
+         (reverse)
+         (remove (fn [[page modified-at]]
+                   (or (util/file-page? page)
+                     (and modified-at
+                       (> modified-at now-long))))))))

@@ -34,15 +34,6 @@
          (when-let [conn (conn/get-files-conn repo-url)]
            (d/transact! conn (vec tx-data))))))))
 
-(defn sub-key-value
-  ([key]
-   (sub-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when (conn/get-conn repo-url)
-     (-> (react/q repo-url [:kv key] {} key key)
-         react
-         key))))
-
 (defn pull-block
   [id]
   (let [repo (state/get-current-repo)]
@@ -103,23 +94,14 @@
         (conn/get-conn repo))
        (map first)))
 
-(defn get-pages-with-modified-at
+(defn get-modified-pages
   [repo]
-  (let [now-long (tc/to-long (t/now))]
-    (->> (d/q
-          '[:find ?page-name ?modified-at
-            :where
-            [?page :page/original-name ?page-name]
-            [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
-          (conn/get-conn repo))
-         (seq)
-         (sort-by (fn [[page modified-at]]
-                    [modified-at page]))
-         (reverse)
-         (remove (fn [[page modified-at]]
-                   (or (util/file-page? page)
-                       (and modified-at
-                            (> modified-at now-long))))))))
+  (d/q
+    '[:find ?page-name ?modified-at
+      :where
+      [?page :page/original-name ?page-name]
+      [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
+    (conn/get-conn repo)))
 
 (defn get-page-alias
   [repo page-name]
@@ -1046,56 +1028,6 @@
        db)
       (db-utils/seq-flatten)))
 
-(defn rebuild-page-blocks-children
-  "For performance reason, we can update the :block/children value after every operation,
-  but it's hard to make sure that it's correct, also it needs more time to implement it.
-  We can improve it if the performance is really an issue."
-  [repo page]
-  (let [blocks (->>
-                (get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block? :block/meta]})
-                (remove :block/pre-block?)
-                (map #(select-keys % [:db/id :block/uuid :block/level]))
-                (reverse))
-        original-blocks blocks]
-    (loop [blocks blocks
-           tx []
-           children {}
-           last-level 10000]
-      (if (seq blocks)
-        (let [[{:block/keys [uuid level] :as block} & others] blocks
-              [tx children] (cond
-                              (< level last-level)        ; parent
-                              (let [cur-children (get children last-level)
-                                    tx (if (seq cur-children)
-                                         (vec
-                                          (concat
-                                           tx
-                                           (map
-                                            (fn [child]
-                                              [:db/add (:db/id block) :block/children [:block/uuid child]])
-                                            cur-children)))
-                                         tx)
-                                    children (-> children
-                                                 (dissoc last-level)
-                                                 (update level conj uuid))]
-                                [tx children])
-
-                              (> level last-level)        ; child of sibling
-                              (let [children (update children level conj uuid)]
-                                [tx children])
-
-                              :else                       ; sibling
-                              (let [children (update children last-level conj uuid)]
-                                [tx children]))]
-          (recur others tx children level))
-        ;; TODO: add top-level children to the "Page" block (we might remove the Page from db schema)
-        (when (seq tx)
-          (let [delete-tx (map (fn [block]
-                                 [:db/retract (:db/id block) :block/children])
-                               original-blocks)]
-            (->> (concat delete-tx tx)
-                 (remove nil?))))))))
-
 (defn get-all-templates
   []
   (let [pred (fn [db properties]
@@ -1111,14 +1043,6 @@
          (map (fn [[e m]]
                 [(get m "template") e]))
          (into {}))))
-
-(defn template-exists?
-  [title]
-  (when title
-    (let [templates (keys (get-all-templates))]
-      (when (seq templates)
-        (let [templates (map string/lower-case templates)]
-          (contains? (set templates) (string/lower-case title)))))))
 
 (defonce blocks-count-cache (atom nil))
 

@@ -19,7 +19,8 @@
             [frontend.handler.notification :as notification]
             [frontend.components.editor :as editor]
             [frontend.context.i18n :as i18n]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.handler.page :as page-handler]))
 
 (defn- set-format-js-loading!
   [format value]
@@ -89,7 +90,7 @@
                     :on-click (fn []
                                 (let [title (string/trim @input)]
                                   (when (not (string/blank? title))
-                                    (if (db/template-exists? title)
+                                    (if (page-handler/template-exists? title)
                                       (notification/show!
                                        [:p "Template already exists!"]
                                        :error)
