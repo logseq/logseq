@@ -9,7 +9,8 @@
             [cljs.reader :as reader]
             [frontend.extensions.sci :as sci]
             [lambdaisland.glogi :as log]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.db.react :as react]))
 
 (defn- resolve-input
   [input]
@@ -42,7 +43,7 @@
     (let [inputs (map resolve-input inputs)
           repo (state/get-current-repo)
           k [:custom query']]
-      (apply model/q repo k query-opts query inputs))
+      (apply react/q repo k query-opts query inputs))
     (catch js/Error e
       (println "Custom query failed: ")
       (js/console.dir e))))
