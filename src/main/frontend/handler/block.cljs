@@ -3,7 +3,10 @@
             [clojure.walk :as walk]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [frontend.date :as date]
+            [frontend.config :as config]
+            [datascript.core :as d]))
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
@@ -134,3 +137,45 @@
               (every? (fn [[[typ break-lines]] _]
                         (and (= typ "Paragraph")
                              (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
+
+(defn with-dummy-block
+  ([blocks format]
+   (with-dummy-block blocks format {} {}))
+  ([blocks format default-option {:keys [journal? page-name]
+                                  :or {journal? false}}]
+   (let [format (or format (state/get-preferred-format) :markdown)
+         blocks (if (and journal?
+                      (seq blocks)
+                      (when-let [title (second (first (:block/title (first blocks))))]
+                        (date/valid-journal-title? title)))
+                  (rest blocks)
+                  blocks)
+         blocks (vec blocks)]
+     (cond
+       (and (seq blocks)
+         (or (and (> (count blocks) 1)
+               (:block/pre-block? (first blocks)))
+           (and (>= (count blocks) 1)
+             (not (:block/pre-block? (first blocks))))))
+       blocks
+
+       :else
+       (let [last-block (last blocks)
+             end-pos (get-in last-block [:block/meta :end-pos] 0)
+             dummy (merge last-block
+                     (let [uuid (d/squuid)]
+                       {:block/uuid uuid
+                        :block/title ""
+                        :block/content (config/default-empty-block format)
+                        :block/format format
+                        :block/level 2
+                        :block/priority nil
+                        :block/anchor (str uuid)
+                        :block/meta {:start-pos end-pos
+                                     :end-pos end-pos}
+                        :block/body nil
+                        :block/dummy? true
+                        :block/marker nil
+                        :block/pre-block? false})
+                     default-option)]
+         (conj blocks dummy))))))

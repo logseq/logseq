@@ -35,7 +35,8 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.handler.block :as block-handler]))
 
 (defn- get-page-name
   [state]
@@ -55,7 +56,7 @@
   db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-        page-blocks (db/with-dummy-block raw-page-blocks format
+        page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
                         (let [content (db/get-file repo file-path)]
                           {:block/page {:db/id (:db/id page)}

@@ -971,48 +971,6 @@
            (get-page-format page)])
         pages)))))
 
-(defn with-dummy-block
-  ([blocks format]
-   (with-dummy-block blocks format {} {}))
-  ([blocks format default-option {:keys [journal? page-name]
-                                  :or {journal? false}}]
-   (let [format (or format (state/get-preferred-format) :markdown)
-         blocks (if (and journal?
-                         (seq blocks)
-                         (when-let [title (second (first (:block/title (first blocks))))]
-                           (date/valid-journal-title? title)))
-                  (rest blocks)
-                  blocks)
-         blocks (vec blocks)]
-     (cond
-       (and (seq blocks)
-            (or (and (> (count blocks) 1)
-                     (:block/pre-block? (first blocks)))
-                (and (>= (count blocks) 1)
-                     (not (:block/pre-block? (first blocks))))))
-       blocks
-
-       :else
-       (let [last-block (last blocks)
-             end-pos (get-in last-block [:block/meta :end-pos] 0)
-             dummy (merge last-block
-                          (let [uuid (d/squuid)]
-                            {:block/uuid uuid
-                             :block/title ""
-                             :block/content (config/default-empty-block format)
-                             :block/format format
-                             :block/level 2
-                             :block/priority nil
-                             :block/anchor (str uuid)
-                             :block/meta {:start-pos end-pos
-                                          :end-pos end-pos}
-                             :block/body nil
-                             :block/dummy? true
-                             :block/marker nil
-                             :block/pre-block? false})
-                          default-option)]
-         (conj blocks dummy))))))
-
 ;; get pages that this page referenced
 (defn get-page-referenced-pages
   [repo page]
@@ -1253,14 +1211,6 @@
                      {}))]
       (state/set-config! repo-url config)
       config)))
-
-(defn with-latest-txs!
-  [db repo file?]
-  (let [txs (state/get-repo-latest-txs repo file?)
-        tx-data (when (seq txs) (map :tx-data txs))]
-    (if (seq tx-data)
-      (d/db-with db tx-data)
-      db)))
 
 (defn get-db-type
   [repo]
