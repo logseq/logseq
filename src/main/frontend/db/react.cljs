@@ -5,14 +5,14 @@
   solution.
   "
   (:require [frontend.db.conn :as conn]
-            [frontend.db.base :as base]
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.util :as util :refer-macros [profile] :refer [react]]
             [clojure.string :as string]
             [frontend.config :as config]
             [datascript.core :as d]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.db.utils :as db-utils]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -39,7 +39,7 @@
 
 (defn remove-key!
   [repo-url key]
-  (base/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
+  (db-utils/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
   (set-new-result! [repo-url :kv key] nil))
 
 (defn clear-query-state!
@@ -106,7 +106,7 @@
 
 (defn query-entity-in-component
   ([id-or-lookup-ref]
-   (base/entity (state/get-current-repo) id-or-lookup-ref))
+   (db-utils/entity (state/get-current-repo) id-or-lookup-ref))
   ([repo id-or-lookup-ref]
    (let [k [:entity id-or-lookup-ref]
          result-atom (:result (get @query-state k))]
@@ -178,7 +178,7 @@
                (date/journal-name))]
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
-        (base/entity (if tag?
+        (db-utils/entity (if tag?
                         [:tag/name page-name]
                         [:page/name page-name]))))))
 
@@ -245,7 +245,7 @@
                              (apply concat
                                     (for [{:block/keys [ref-pages]} blocks]
                                       (map (fn [page]
-                                             (when-let [page (base/entity [:page/name (:page/name page)])]
+                                             (when-let [page (db-utils/entity [:page/name (:page/name page)])]
                                                [:page/refed-blocks (:db/id page)]))
                                            ref-pages)))
 
@@ -316,7 +316,7 @@
                                             (apply d/q query db inputs))
 
                                           (keyword? query)
-                                          (base/get-key-value repo-url query)
+                                          (db-utils/get-key-value repo-url query)
 
                                           (seq inputs)
                                           (apply d/q query db inputs)

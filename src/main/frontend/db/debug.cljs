@@ -1,12 +1,11 @@
 (ns frontend.db.debug
   (:require [medley.core :as medley]
-            [frontend.db.model :as model]
-            [frontend.db.base :as base]))
+            [frontend.db.utils :as db-utils]))
 
 ;; shortcut for query a block with string ref
 (defn qb
   [string-id]
-  (base/pull [:block/uuid (medley/uuid string-id)]))
+  (db-utils/pull [:block/uuid (medley/uuid string-id)]))
 
 (comment
   (defn debug!
