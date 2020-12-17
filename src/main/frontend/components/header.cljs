@@ -15,7 +15,9 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.handler.project :as project-handler]
-            [frontend.handler.web.nfs :as nfs]))
+            [frontend.handler.web.nfs :as nfs]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white?]}]
@@ -49,73 +51,76 @@
        [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7.ml-2
         {:on-click toggle-fn}
         (if-let [avatar (:avatar me)]
-          [:img.h-7.w-7.rounded-full
-           {:src avatar}]
+          [:img#avatar.h-7.w-7.rounded-full
+           {:src avatar
+            :on-error (fn [this]
+                        (let [elem (gdom/getElement "avatar")]
+                          (gobj/set elem "src" (config/asset-uri "/static/img/broken-avatar.png"))))}]
           [:div.h-7.w-7.rounded-full.bg-base-2.opacity-70.hover:opacity-100 {:style {:padding 1.5}}
            [:a svg/user]])])
      (let [logged? (:name me)]
        (->>
-         [(when current-repo
-            {:title (t :graph)
-             :options {:href (rfe/href :graph)}
-             :icon svg/graph-sm})
+        [(when current-repo
+           {:title (t :graph)
+            :options {:href (rfe/href :graph)}
+            :icon svg/graph-sm})
 
-          (when (or logged? (and (nfs/supported?) current-repo))
-            {:title (t :all-graphs)
-             :options {:href (rfe/href :repos)}
-             :icon svg/repos-sm})
+         (when (or logged? (and (nfs/supported?) current-repo))
+           {:title (t :all-graphs)
+            :options {:href (rfe/href :repos)}
+            :icon svg/repos-sm})
 
-          (when current-repo
-            {:title (t :all-pages)
-             :options {:href (rfe/href :all-pages)}
-             :icon svg/pages-sm})
+         (when current-repo
+           {:title (t :all-pages)
+            :options {:href (rfe/href :all-pages)}
+            :icon svg/pages-sm})
 
-          (when current-repo
-            {:title (t :all-files)
-             :options {:href (rfe/href :all-files)}
-             :icon svg/folder-sm})
+         (when current-repo
+           {:title (t :all-files)
+            :options {:href (rfe/href :all-files)}
+            :icon svg/folder-sm})
 
-          (when (and default-home current-repo)
-            {:title (t :all-journals)
-             :options {:href (rfe/href :all-journals)}
-             :icon svg/calendar-sm})
+         (when (and default-home current-repo)
+           {:title (t :all-journals)
+            :options {:href (rfe/href :all-journals)}
+            :icon svg/calendar-sm})
 
-          (when (project-handler/get-current-project current-repo projects)
-            {:title (t :my-publishing)
-             :options {:href (rfe/href :my-publishing)}})
+         (when (project-handler/get-current-project current-repo projects)
+           {:title (t :my-publishing)
+            :options {:href (rfe/href :my-publishing)}})
 
-          (when-let [project (and current-repo
-                                  (project-handler/get-current-project current-repo projects))]
-            (let [link (str config/website "/" project)]
-              {:title (str (t :go-to) "/" project)
-               :options {:href link
-                         :target "_blank"}
-               :icon svg/external-link}))
+         (when-let [project (and current-repo
+                                 (project-handler/get-current-project current-repo projects))]
+           (let [link (str config/website "/" project)]
+             {:title (str (t :go-to) "/" project)
+              :options {:href link
+                        :target "_blank"}
+              :icon svg/external-link}))
 
-          {:title (t :settings)
-           :options {:href (rfe/href :settings)}
-           :icon svg/settings-sm}
-          
-          (when (and logged? current-repo)
-            {:title (t :export)
-             :options {:on-click (fn []
-                                   (export/export-repo-as-html! current-repo))}
-             :icon nil})
-          (when current-repo
-            {:title (t :import)
-             :options {:href (rfe/href :import)}
-             :icon svg/import-sm})
-          {:title [:div.flex-row.flex.justify-between.items-center
-                   [:span (t :join-community)]]
-           :options {:href "https://discord.gg/KpN4eHY"
-                     :title (t :discord-title)
-                     :target "_blank"}
-           :icon svg/discord}
-          (when logged?
-            {:title (t :sign-out)
-             :options {:on-click user-handler/sign-out!}
-             :icon svg/logout-sm})]
-         (remove nil?)))
+         {:title (t :settings)
+          :options {:href (rfe/href :settings)}
+          :icon svg/settings-sm}
+
+         (when (and logged? current-repo)
+           {:title (t :export)
+            :options {:on-click (fn []
+                                  (export/export-repo-as-html! current-repo))}
+            :icon nil})
+         (when current-repo
+           {:title (t :import)
+            :options {:href (rfe/href :import)}
+            :icon svg/import-sm})
+         {:title [:div.flex-row.flex.justify-between.items-center
+                  [:span (t :join-community)]]
+          :options {:href "https://discord.gg/KpN4eHY"
+                    :title (t :discord-title)
+                    :target "_blank"}
+          :icon svg/discord}
+         (when logged?
+           {:title (t :sign-out)
+            :options {:on-click user-handler/sign-out!}
+            :icon svg/logout-sm})]
+        (remove nil?)))
      {})))
 
 (rum/defc right-menu-button < rum/reactive
