@@ -18,7 +18,8 @@
             [frontend.components.page :as page]
             [frontend.components.onboarding :as onboarding]
             [goog.object :as gobj]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.handler.block :as block-handler]))
 
 (rum/defc blocks-inner < rum/static
   {:did-mount (fn [state]
@@ -56,7 +57,7 @@
   (let [raw-blocks (db/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
-                (db/with-dummy-block raw-blocks format nil {:journal? true})
+                (block-handler/with-dummy-block raw-blocks format nil {:journal? true})
                 (db/with-block-refs-count repo))]
     (blocks-inner blocks page document-mode?)))
 
