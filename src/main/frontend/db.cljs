@@ -24,24 +24,43 @@
   remove-files-db!
   get-conn
   get-files-conn
+  me-tx
   remove-conn!]
 
  [frontend.db.utils
   date->int db->json db->string get-max-tx-id get-tx-id
-  group-by-page me-tx seq-flatten sort-by-pos
-  string->db with-repo]
+  group-by-page seq-flatten sort-by-pos
+  string->db with-repo
+
+  entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  add-properties! block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks delete-file! delete-file-blocks! delete-file-pages! delete-file-tx delete-files delete-pages-by-files filter-only-public-pages-and-blocks get-alias-page get-all-block-contents get-all-tagged-pages get-all-tags get-all-templates get-block-and-children get-block-and-children-no-cache get-block-by-uuid get-block-children get-block-children-ids get-block-content get-block-file get-block-immediate-children get-block-page get-block-page-end-pos get-block-parent get-block-parents get-block-referenced-blocks get-block-refs-count get-blocks-by-priority get-blocks-contents get-collapsed-blocks get-config get-custom-css get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file get-file-after-blocks get-file-after-blocks-meta get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id get-file-pages get-files get-files-blocks get-files-full get-files-that-referenced-page get-journals-length get-latest-journals get-marker-blocks get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-name get-page-properties get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-pages get-pages-relation get-pages-that-mentioned-page get-pages-with-modified-at get-public-pages get-tag-pages journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block rebuild-page-blocks-children  reset-config! set-file-last-modified-at! sub-key-value template-exists? transact-files-db! with-block-refs-count]
+  add-properties! block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks
+  delete-file! delete-file-blocks! delete-file-pages! delete-file-tx delete-files delete-pages-by-files
+  filter-only-public-pages-and-blocks get-alias-page get-all-block-contents get-all-tagged-pages get-all-tags
+  get-all-templates get-block-and-children get-block-and-children-no-cache get-block-by-uuid get-block-children
+  get-block-children-ids get-block-content get-block-file get-block-immediate-children get-block-page
+  get-block-page-end-pos get-block-parent get-block-parents get-block-referenced-blocks get-block-refs-count
+  get-blocks-by-priority get-blocks-contents get-collapsed-blocks get-config get-custom-css
+  get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file get-file-after-blocks get-file-after-blocks-meta
+  get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id
+  get-file-pages get-files get-files-blocks get-files-full get-files-that-referenced-page get-journals-length
+  get-latest-journals get-marker-blocks get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks
+  get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-name get-page-properties
+  get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
+  get-pages get-pages-relation get-pages-that-mentioned-page get-pages-with-modified-at get-public-pages get-tag-pages
+  journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
+  rebuild-page-blocks-children  reset-config! set-file-last-modified-at! sub-key-value template-exists?
+  transact-files-db! with-block-refs-count]
 
  [frontend.db.react
-  get-current-marker get-current-page get-current-priority get-handler-keys set-file-content! set-key-value transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state! clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q query-state query-components query-entity-in-component remove-custom-query! set-new-result!]
+  get-current-marker get-current-page get-current-priority get-handler-keys set-file-content! set-key-value
+  transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
+  clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
+  query-state query-components query-entity-in-component remove-custom-query! set-new-result!]
 
  [frontend.db.query-custom
-  custom-query custom-query-result-transform]
-
-  [frontend.db.base
-   entity pull pull-many transact! get-key-value])
+  custom-query custom-query-result-transform])
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]

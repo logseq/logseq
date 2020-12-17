@@ -6,8 +6,7 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.idb :as idb]
-            [datascript.core :as d]
-            [frontend.db.utils :as db-utils]))
+            [datascript.core :as d]))
 
 (defonce conns (atom {}))
 
@@ -64,6 +63,12 @@
   (swap! conns dissoc (datascript-db repo))
   (swap! conns dissoc (datascript-files-db repo)))
 
+(defn me-tx
+  [db {:keys [name email avatar]}]
+  (util/remove-nils {:me/name name
+                     :me/email email
+                     :me/avatar avatar}))
+
 (defn start!
   ([me repo]
    (start! me repo {}))
@@ -78,6 +83,6 @@
                              db-type
                              (assoc :db/type db-type))])
      (when me
-       (d/transact! db-conn [(db-utils/me-tx (d/db db-conn) me)]))
+       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
 
      (when listen-handler (listen-handler repo)))))
