@@ -49,7 +49,7 @@
     (when (conn/get-conn repo)
       (->
        (react/q repo [:blocks id] {}
-          '[:find (db-utils/pull ?block [*])
+          '[:find (pull ?block [*])
             :in $ ?id
             :where
             [?block :block/uuid ?id]]
@@ -196,7 +196,7 @@
   (when end-pos
     (let [pred (fn [db meta]
                  (>= (:start-pos meta) end-pos))]
-      (-> (d/q '[:find (db-utils/pull ?block [*])
+      (-> (d/q '[:find (pull ?block [*])
                  :in $ ?file-id ?pred
                  :where
                  [?block :block/file ?file-id]
@@ -281,7 +281,7 @@
   (when-let [conn (conn/get-files-conn repo)]
     (->>
      (d/q
-      '[:find (db-utils/pull ?file [*])
+      '[:find (pull ?file [*])
         :where
         [?file :file/path]]
       @conn)
@@ -374,7 +374,7 @@
     (some->>
      (react/q repo-url [:marker/blocks marker]
         {:use-cache? true}
-        '[:find (db-utils/pull ?h [*])
+        '[:find (pull ?h [*])
           :in $ ?marker
           :where
           [?h :block/marker ?m]
@@ -521,7 +521,7 @@
   (let [priority (string/capitalize priority)]
     (when (conn/get-conn repo)
       (->> (react/q repo [:priority/blocks priority] {}
-              '[:find (db-utils/pull ?h [*])
+              '[:find (pull ?h [*])
                 :in $ ?priority
                 :where
                 [?h :block/priority ?priority]]
@@ -615,7 +615,7 @@
                  :transform-fn #(block-and-children-transform % repo block-uuid level)
                  :inputs-fn (fn []
                               [page (pred)])}
-                '[:find (db-utils/pull ?block [*])
+                '[:find (pull ?block [*])
                   :in $ ?page ?pred
                   :where
                   [?block :block/page ?page]
@@ -633,7 +633,7 @@
         pred (fn [data meta]
                (>= (:start-pos meta) pos))]
     (-> (d/q
-         '[:find (db-utils/pull ?block [*])
+         '[:find (pull ?block [*])
            :in $ ?page ?pred
            :where
            [?block :block/page ?page]
@@ -859,7 +859,7 @@
       (let [page-id (:db/id (db-utils/entity [:page/name page]))
             pages (page-alias-set repo page)]
         (->> (react/q repo [:page/refed-blocks page-id] {}
-                '[:find (db-utils/pull ?block [*])
+                '[:find (pull ?block [*])
                   :in $ ?pages
                   :where
                   [?block :block/ref-pages ?ref-page]
@@ -879,7 +879,7 @@
     (when-let [repo (state/get-current-repo)]
       (when-let [conn (conn/get-conn repo)]
         (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
-                '[:find (db-utils/pull ?block [*])
+                '[:find (pull ?block [*])
                   :in $ ?day
                   :where
                   (or
@@ -917,7 +917,7 @@
             pages (page-alias-set repo page)
             pattern (re-pattern (str "(?i)" page))]
         (->> (d/q
-              '[:find (db-utils/pull ?block [*])
+              '[:find (pull ?block [*])
                 :in $ ?pattern
                 :where
                 [?block :block/content ?content]
@@ -940,7 +940,7 @@
   (when-let [repo (state/get-current-repo)]
     (when (conn/get-conn repo)
       (->> (react/q repo [:block/refed-blocks block-uuid] {}
-              '[:find (db-utils/pull ?ref-block [*])
+              '[:find (pull ?ref-block [*])
                 :in $ ?block-uuid
                 :where
                 [?block :block/uuid ?block-uuid]
