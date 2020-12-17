@@ -1329,7 +1329,7 @@
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.mt-1
+    [:div.ls-block.flex.flex-col.pt-1
      (cond->
       {:id block-id
        :style {:position "relative"}
