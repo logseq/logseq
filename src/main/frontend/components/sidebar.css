@@ -88,6 +88,10 @@
     td {
       word-break: break-all;
     }
+
+    th {
+      width: 80%;
+    }
   }
 
   &-btn {
