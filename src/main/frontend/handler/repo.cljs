@@ -139,8 +139,8 @@
                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
          (when-not file-exists?
            (file-handler/reset-file! repo-url path content)
-           (ui-handler/re-render-root!)
-           (git-handler/git-add repo-url path)))))))
+           (ui-handler/re-render-root!))
+         (git-handler/git-add repo-url path))))))
 
 (defn create-today-journal!
   []
