@@ -1,11 +1,11 @@
 (ns frontend.handler.git
   (:require [frontend.util :as util :refer-macros [profile]]
             [promesa.core :as p]
+            [lambdaisland.glogi :as log]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.git :as git]
             [frontend.date :as date]
-            [goog.object :as gobj]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
@@ -42,14 +42,17 @@
 (defn commit-and-force-push!
   [commit-message pushing?]
   (when-let [repo (frontend.state/get-current-repo)]
-    (p/let [remote-oid (common-handler/get-remote-ref repo)
-            commit-oid (git/commit repo commit-message (array remote-oid))
-            result (git/write-ref! repo commit-oid)
-            token (helper/get-github-token repo)
-            push-result (git/push repo token true)]
-      (reset! pushing? false)
-      (notification/clear! nil)
-      (route-handler/redirect! {:to :home}))))
+    (->
+     (p/let [remote-oid (common-handler/get-remote-ref repo)
+             commit-oid (git/commit repo commit-message (array remote-oid))
+             result (git/write-ref! repo commit-oid)
+             token (helper/get-github-token repo)
+             push-result (git/push repo token true)]
+       (reset! pushing? false)
+       (notification/clear! nil)
+       (route-handler/redirect! {:to :home}))
+     (p/catch (fn [error]
+                (log/error :git/commit-and-force-push! error))))))
 
 (defn git-set-username-email!
   [repo-url {:keys [name email]}]
