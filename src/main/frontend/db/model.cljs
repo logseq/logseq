@@ -997,22 +997,6 @@
           repo-url)
      ffirst)))
 
-(defn get-config
-  [repo-url]
-  (get-file repo-url (str config/app-name "/" config/config-file)))
-
-(defn reset-config!
-  [repo-url content]
-  (when-let [content (or content (get-config repo-url))]
-    (let [config (try
-                   (reader/read-string content)
-                   (catch js/Error e
-                     (println "Parsing config file failed: ")
-                     (js/console.dir e)
-                     {}))]
-      (state/set-config! repo-url config)
-      config)))
-
 (defn get-db-type
   [repo]
   (db-utils/get-key-value repo :db/type))
