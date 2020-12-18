@@ -1,28 +1,43 @@
 :root {
-  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color) !important;
-  scrollbar-width: thin !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color);
 }
 
-html:not(.is-mac)[data-theme=dark] {
-  &::-webkit-scrollbar,
-  html::-webkit-scrollbar-track-piece {
-    background-color: var(--ls-scrollbar-background-color);
-    border: 4px solid;
-    border-color: var(--ls-scrollbar-background-color);
-  }
-
-  &::-webkit-scrollbar-thumb {
+html:not(.is-mac) {
+  ::-webkit-scrollbar-thumb {
     background-color: var(--ls-scrollbar-foreground-color);
-    background-clip: padding-box;
-    min-height: 28px;
   }
 
-  &::-webkit-scrollbar-thumb:hover {
+  ::-webkit-scrollbar {
+    background-color: var(--ls-scrollbar-background-color);
+  }
+
+  ::-webkit-scrollbar-thumb:active {
     background-color: var(--ls-scrollbar-thumb-hover-color);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    -webkit-border-radius: 100px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    -webkit-border-radius: 100px;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    -webkit-border-radius: 100px;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 
 html[data-theme=dark] {
+  background-color: var(--ls-primary-background-color);
+
   input {
     color: var(--ls-secondary-text-color);
   }
@@ -36,5 +51,36 @@ html[data-theme=dark] {
     background-color: var(--ls-page-checkbox-color, #6093a0);
     border-color: var(--ls-page-checkbox-border-color, #6093a0);
     border: none;
+  }
+}
+
+html[data-theme=light] {
+  .form-checkbox {
+    &:focus {
+      border-color: var(--ls-page-checkbox-border-color);
+    }
+  }
+
+  .cp__header {
+    a {
+      color: var(--ls-primary-text-color);
+    }
+  }
+
+  a.right-sidebar-button {
+    color: var(--ls-primary-text-color);
+  }
+
+  a.right-sidebar-button:hover {
+    color: var(--ls-link-text-hover-color);
+  }
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

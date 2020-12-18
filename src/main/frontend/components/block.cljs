@@ -842,8 +842,7 @@
 
 (defn list-checkbox
   [checked?]
-  (ui/checkbox {:style {:margin-right 6
-                        :margin-top -1}
+  (ui/checkbox {:style {:margin-right 6}
                 :checked checked?}))
 
 (defn marker-switch
@@ -1014,7 +1013,7 @@
   [block]
   (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
     (when (seq properties)
-      [:div.blocks__properties.text-sm.opacity-80.my-1.p-2
+      [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
        (for [[k v] properties]
          [:div.my-1
           [:b k]
@@ -1330,7 +1329,7 @@
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.mt-1
+    [:div.ls-block.flex.flex-col.pt-1
      (cond->
       {:id block-id
        :style {:position "relative"}

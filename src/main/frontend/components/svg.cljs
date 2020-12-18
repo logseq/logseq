@@ -118,7 +118,7 @@
 (def plus (hero-icon "M12 4v16m8-8H4"))
 
 (def plus-circle
-  [:svg.addButton
+  [:svg.add-button
    {:viewBox "0 0 20 20"}
    [:circle.circle {:fill "#dce0e2", :r "9", :cy "10.5", :cx "10.5"}]
    [:line

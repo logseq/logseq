@@ -2,5 +2,9 @@
   .sync-content {
     max-height: 80vh;
     overflow: auto;
+
+    p {
+      margin: 0.25rem 0;
+    }
   }
 }

@@ -2,7 +2,6 @@
   (:require [tongue.core :as tongue]
             [frontend.config :as config]))
 
-
 ;; TODO
 ;; - [ ] Localizing Number Formats
 ;; - [ ] Localizing Dates
@@ -47,7 +46,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
 ### NOW [#A] A dummy tutorial on \"How to take dummy notes?\"
 ### LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to install logseq app on your GitHub repo and other cool features like graph view.
 
-[:div.videoWrapper.mb-4
+[:div.video-wrapper.mb-4
         [:iframe
          {:allowFullScreen \"allowfullscreen\"
           :allow
@@ -229,9 +228,10 @@ title: How to take dummy notes?
         :page/rename-to "Rename {1}\" to:\""
         :page/priority "Priority {1}\"\""
         :page/re-index "Re-index this page"
-        :page/copy-to-json "Copi the whole page as JSON"
+        :page/copy-to-json "Copy the whole page as JSON"
         :page/rename "Rename page"
-        :page/make-public "Make it public"
+        :page/action-publish "Publish"
+        :page/make-public "Publish it when exporting to an html file"
         :page/make-private "Make it private"
         :page/delete "Delete page (will delete the file too)"
         :page/publish "Publish this page on Logseq"
@@ -702,6 +702,7 @@ title: How to take dummy notes?
            :page/re-index "对此页面重新建立索引"
            :page/copy-to-json "将整页以 JSON 格式复制"
            :page/rename "重命名本页"
+           :page/action-publish "发布"
            :page/make-public "导出 HTML 时发布本页面"
            :page/make-private "导出 HTML 时取消发布本页面"
            :page/delete "删除本页（并删除文件）"

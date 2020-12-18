@@ -1,17 +1,45 @@
-.editor-wrapper {
+#mobile-editor-toolbar {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  left: 0;
+  justify-content: center;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  z-index: 9999;
 
+  transition: top 0.3s;
+
+  > button {
+    padding: 5px;
+  }
+}
+
+.editor-wrapper {
+  margin: 0 auto;
 }
 
 .editor-inner {
   position: relative;
   display: flex;
+
+  textarea {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+    resize: none;
+  }
 }
 
-.editor-inner textarea {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
+.absolute-modal {
+  overflow: auto;
+  background: var(--ls-primary-background-color);
+
+  &.is-overflow-vw-x {
+    transform: translateX(calc(-100% + 1rem));
+  }
 }
 
 .non-block-editor textarea,

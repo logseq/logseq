@@ -1,0 +1,22 @@
+#journals {
+  margin-bottom: 70vh;
+
+  textarea {
+    word-break: break-word;
+    overflow: hidden;
+    resize: none;
+  }
+
+  .journal-item {
+    border-top: 1px solid;
+    border-top-color: var(--ls-border-color, #738694);
+    padding: 48px 0;
+    margin: 24px 0 128px 0;
+
+    &:first-child {
+      border-top: none;
+      padding: 0;
+      min-height: 500px;
+    }
+  }
+}

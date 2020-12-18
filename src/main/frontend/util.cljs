@@ -263,7 +263,9 @@
 (defn get-caret-pos
   [input]
   (try
-    (bean/->clj ((gobj/get caret-pos "position") input))
+    (let [pos ((gobj/get caret-pos "position") input)]
+      (set! pos -rect (.. input (getBoundingClientRect) (toJSON)))
+      (bean/->clj pos))
     (catch js/Error e
       (js/console.error e))))
 

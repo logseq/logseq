@@ -132,9 +132,9 @@
         {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
         [:path
          {:d
-          "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
-          :stroke-width "2",
-          :stroke-linejoin "round",
+          "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+          :stroke-width "2"
+          :stroke-linejoin "round"
           :stroke-linecap "round"}]]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
@@ -285,20 +285,32 @@
                              :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}}
                             {:title (t :page/delete)
                              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}}
-                            {:title (t (if public? :page/make-private :page/make-public))
-                             :options {:on-click #(page-handler/update-public-attribute!
-                                                   page-name
-                                                   (if public? false true))}}
-                            {:title (t :page/publish)
-                             :options {:on-click (fn []
-                                                   (page-handler/publish-page! page-name project/add-project))}}
-                            {:title (t :page/publish-as-slide)
-                             :options {:on-click (fn []
-                                                   (page-handler/publish-page-as-slide! page-name project/add-project))}}
-                            (when published?
-                              {:title (t :page/unpublish)
-                               :options {:on-click (fn []
-                                                     (page-handler/unpublish-page! page-name))}})
+                            {:title   (t :page/action-publish)
+                             :options {:on-click
+                                       (fn []
+                                         (state/set-modal!
+                                          (fn []
+                                            [:div.cp__page-publish-actions
+                                             (mapv (fn [{:keys [title options]}]
+                                                     (when title
+                                                       [:div.it
+                                                        {:on-click #(state/close-modal!)}
+                                                        (apply (partial ui/button title) (flatten (seq options)))]))
+                                                   [{:title   (t :page/publish)
+                                                     :options {:on-click (fn []
+                                                                           (page-handler/publish-page! page-name project/add-project))}}
+                                                    {:title   (t :page/publish-as-slide)
+                                                     :options {:on-click (fn []
+                                                                           (page-handler/publish-page-as-slide! page-name project/add-project))}}
+                                                    (when published?
+                                                      {:title   (t :page/unpublish)
+                                                       :options {:on-click (fn []
+                                                                             (page-handler/unpublish-page! page-name))}})
+                                                    {:title   (t (if public? :page/make-private :page/make-public))
+                                                     :options {:background (if public? "gray" "indigo")
+                                                               :on-click #(page-handler/update-public-attribute!
+                                                                           page-name
+                                                                           (if public? false true))}}])])))}}
                             (when developer-mode?
                               {:title "(Dev) Show page data"
                                :options {:on-click (fn []

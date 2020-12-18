@@ -1,9 +1,15 @@
 .cp__header {
   @apply shadow z-10 h-12 pr-4;
-  position: relative;
+
   display: flex;
   align-items: center;
   flex: 0 0 auto;
+  background-color: var(--ls-primary-background-color, #fff);
+
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
 }
 
 .cp__header-left-menu {

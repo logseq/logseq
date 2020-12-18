@@ -1,0 +1,12 @@
+/* Is this required? */
+.content p a:hover {
+  text-decoration: none;
+  border-bottom: 1px solid;
+  border-bottom-color: var(--ls-link-text-hover-color, black);
+}
+
+.content a.initial-color,
+.content a.initial-color:hover {
+  color: initial;
+  text-decoration: none;
+}

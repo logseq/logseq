@@ -1,3 +1,19 @@
+#app-container {
+  background-color: var(--ls-primary-background-color, #fff);
+  position: relative;
+}
+
+#root {
+  > div {
+    color: var(--ls-primary-text-color, #24292e);
+    font-size: var(--ls-page-text-size);
+  }
+}
+
+#main-content-container {
+  font-size: 1em;
+}
+
 #left-sidebar {
   width: 240px;
   height: 100%;
@@ -20,12 +36,17 @@
   .left-sidebar-inner {
     padding-right: 15px;
   }
+
+  a {
+    color: var(--ls-icon-color);
+  }
 }
 
 .cp__sidebar-layout {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  padding-bottom: 30px;
 }
 
 .cp__sidebar-main-layout {
@@ -54,17 +75,35 @@
   max-width: var(--ls-main-content-max-width);
   min-height: 100vh;
   flex: 1;
+
+  h1.title {
+    padding-right: 15px;
+  }
 }
 
 .cp__sidebar-help {
-  @apply font-bold fixed bottom-4
+  &-docs {
+    @apply ml-2 mt-1;
+
+    td {
+      word-break: break-all;
+    }
+
+    th {
+      width: 80%;
+    }
+  }
+
+  &-btn {
+    @apply font-bold fixed bottom-4
     rounded-full h-8 w-8 flex items-center justify-center font-bold
     opacity-70 hover:opacity-100;
 
-  user-select: none;
-  cursor: help;
-  right: 24px;
-  background-color: var(--ls-secondary-background-color);
+    user-select: none;
+    cursor: help;
+    right: 24px;
+    background-color: var(--ls-secondary-background-color);
+  }
 }
 
 .cp__right-sidebar {

@@ -1,14 +1,17 @@
 .extensions__code {
-    @apply relative;
-    z-index: 0;
-}
+  @apply relative;
+  z-index: 0;
 
-.extensions__code-lang {
-    @apply absolute top-0 right-0 p-1 text-sm text-gray-500;
+  &-lang {
+    @apply absolute top-0 right-0 p-1 text-sm;
     z-index: 1;
     background: white;
-}
+  }
 
-.extensions__code > .CodeMirror {
+  > .CodeMirror {
     z-index: 0;
+    height: auto;
+    margin: 6px 0 0 0;
+    font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+  }
 }

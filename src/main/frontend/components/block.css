@@ -6,13 +6,40 @@
   max-width: 100%;
   overflow: initial;
   cursor: text;
+  word-break: break-all;
 
   img {
     max-width: 100%;
   }
 }
 
+.block-body {
+  blockquote:first-child,
+  pre:first-child {
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+}
+
 .block-children {
+  border-left: 2px solid;
+  border-left-color: var(--ls-guideline-color, #ddd);
+}
+
+.block-ref {
+  color: var(--ls-link-text-color);
+
+  &:hover {
+    color: var(--ls-link-text-hover-color)
+  }
+}
+
+.page-ref {
+  color: var(--ls-link-ref-text-color);
+
+  &:hover {
+    color: var(--ls-link-ref-text-hover-color);
+  }
 }
 
 .embed-page {
@@ -25,6 +52,84 @@
   &.in-sidebar {
     background-color: var(--ls-tertiary-background-color);
   }
+}
+
+.blocks-properties {
+  background-color: var(--ls-block-properties-background-color, #f0f8ff);
+}
+
+.marker-switch {
+  font-size: 85%;
+  margin-right: 6px;
+  margin-left: 2px;
+  border-radius: 3px;
+  font-weight: 500;
+  display: inline-block;
+  text-align: center;
+  width: 16px;
+  height: 18px;
+  opacity: 0.5;
+  padding: 0 2px 0 2px;
+  border: 1px solid;
+  line-height: 1.3;
+  color: var(--ls-link-text-color, #045591);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ls-link-text-hover-color);
+  }
+}
+
+.ls-block {
+  min-height: 24px;
+
+  img {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+}
+
+.ls-block,
+.editor-wrapper {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.ls-block h1 {
+  font-size: 2em;
+  margin: 0.67em 0
+}
+
+.ls-block h2 {
+  font-size: 1.5em;
+  margin: 0.75em 0
+}
+
+.ls-block h3 {
+  font-size: 1.17em;
+  margin: 0.83em 0
+}
+
+.ls-block h4 {
+  margin: 1.12em 0
+}
+
+.ls-block h5 {
+  font-size: 0.83em;
+  margin: 1.5em 0
+}
+
+.ls-block h6 {
+  font-size: 0.75em;
+  margin: 1.67em 0
+}
+
+.ls-block h1,
+.ls-block h2,
+.ls-block h3,
+.ls-block h4,
+.ls-block h5,
+.ls-block h6 {
+  font-weight: 600
 }
 
 .color-level {
@@ -71,61 +176,40 @@
   background-color: var(--color-level-5);
 }
 
-.ls-block {
-  min-height: 24px;
+.bullet-container {
+  display: flex;
+  height: 13px;
+  width: 13px;
+  border-radius: 50%;
+  justify-content: center;
+  align-items: center;
 
-  img {
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  .bullet-heading {
+    background-color: var(--ls-block-bullet-color, #8fbc8f);
+  }
+
+  .bullet {
+    border-radius: 50%;
+    width: 5px;
+    height: 5px;
+    background-color: var(--ls-block-bullet-color, #394b59);
+  }
+
+  &.bullet-closed {
+    background-color: var(--ls-block-bullet-border-color, #ced9e0);
   }
 }
 
-.ls-block,
-.foldable-title {
-  max-width: var(--ls-main-content-max-width);
-}
+.doc-mode {
+  margin-left: -16px;
 
-.ls-block,
-.editor-wrapper {
-  margin-right: auto;
-  margin-left: auto;
-}
+  .block-children {
+    border-left: none;
+  }
 
-.ls-block h1 {
-  font-size: 2em;
-  margin: 0.67em 0
-}
-
-.ls-block h2 {
-  font-size: 1.5em;
-  margin: 0.75em 0
-}
-
-.ls-block h3 {
-  font-size: 1.17em;
-  margin: 0.83em 0
-}
-
-.ls-block h4 {
-  margin: 1.12em 0
-}
-
-.ls-block h5 {
-  font-size: 0.83em;
-  margin: 1.5em 0
-}
-
-.ls-block h6 {
-  font-size: 0.75em;
-  margin: 1.67em 0
-}
-
-.ls-block h1,
-.ls-block h2,
-.ls-block h3,
-.ls-block h4,
-.ls-block h5,
-.ls-block h6 {
-  font-weight: 600
+  .hide-inner-bullet .bullet {
+    display: none;
+  }
 }
 
 /* copied from https://github.com/drdogbot7/tailwindcss-responsive-embed */

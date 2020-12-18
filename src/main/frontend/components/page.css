@@ -1,0 +1,30 @@
+.page-references h2 {
+  color: var(--ls-title-text-color);
+}
+
+.cp__page {
+  &-publish-actions {
+    background-color: var(--ls-primary-background-color);
+    padding: 50px 0;
+    margin: -1.5rem;
+
+    > h1 {
+      font-size: 18px;
+      padding: 15px;
+      text-align: center;
+    }
+
+    > .it {
+      display: flex;
+      justify-content: center;
+      padding-top: 5px;
+      padding-bottom: 5px;
+
+      button {
+        width: 90%;
+        justify-content: center;
+        padding: 15px 0;
+      }
+    }
+  }
+}
