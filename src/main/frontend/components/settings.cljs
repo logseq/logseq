@@ -71,10 +71,23 @@
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
         current-repo (state/get-current-repo)
-        developer-mode? (state/sub [:ui/developer-mode?])]
+        developer-mode? (state/sub [:ui/developer-mode?])
+        theme (state/sub :ui/theme)
+        dark? (= "dark" theme)
+        switch-theme (if dark? "white" "dark")]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#settings
        [:h1.title (t :settings)]
+
+       [:div.mb-1.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5.pl-1
+        [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+         {:for "toggle_theme"}
+         (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:div.max-w-lg.rounded-md.sm:max-w-xs.pt-2
+          (ui/toggle dark?
+                     (fn []
+                       (state/set-theme! switch-theme)))]]]
 
        [:div.mb-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5.pl-1
         [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70

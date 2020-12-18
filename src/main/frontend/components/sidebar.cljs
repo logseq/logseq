@@ -81,11 +81,12 @@
               "opacity-75 pointer-events-auto"
               "opacity-0 pointer-events-none")
      :on-click close-fn}]
-   [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.max-w-xs.w-full.transform.ease-in-out.duration-300
+   [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.w-full.transform.ease-in-out.duration-300
     {:class (if @open?
               "translate-x-0"
               "-translate-x-full")
-     :style {:background-color "#002b36"}}
+     :style {:background-color "#002b36"
+             :max-width "15rem"}}
     (if @open?
       [:div.absolute.top-0.right-0.p-1
        [:button#close-left-bar.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
@@ -106,15 +107,14 @@
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div#main-content.cp__sidebar-main-layout
-     (when-not config/mobile?
-       [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
-        {:style {:flex (if (state/get-left-sidebar-open?)
-                         "0 1 20%"
-                         "0 0 0px")
-                 :border-right (str "1px solid "
-                                    (if white? "#f0f8ff" "#073642"))}}
-        (when (state/sub :ui/left-sidebar-open?)
-          (sidebar-nav route-match nil))])
+     [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
+      {:style {:flex (if (state/get-left-sidebar-open?)
+                       "0 1 20%"
+                       "0 0 0px")
+               :border-right (str "1px solid "
+                                  (if white? "#f0f8ff" "#073642"))}}
+      (when (state/sub :ui/left-sidebar-open?)
+        (sidebar-nav route-match nil))]
      [:div#main-content-container.cp__sidebar-main-content-container
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
@@ -132,8 +132,7 @@
          :else
          [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
           main-content])]]
-     (when-not config/mobile?
-       (right-sidebar/sidebar))]))
+     (right-sidebar/sidebar)]))
 
 (defn get-default-home-if-valid
   []

@@ -224,7 +224,6 @@
         repo (state/sub :git/current-repo)
         match (state/sub :route-match)
         theme (state/sub :ui/theme)
-        dark? (= "dark" theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#right-sidebar.cp__right-sidebar
@@ -255,20 +254,7 @@
                                                      (str "page-graph-" page)
                                                      :page-graph
                                                      page)))}
-             (t :right-side-bar/page)]]
-
-           [:div.ml-4.text-sm
-            (let [theme (if dark? "white" "dark")]
-              [:a.cp__right-sidebar-settings-btn {:title (t :right-side-bar/switch-theme theme)
-                                        :on-click (fn []
-                                                    (state/set-theme! theme))}
-               (t :right-side-bar/theme (t (keyword theme)))])]
-
-           (when-not config/publishing?
-             [:div.ml-4.text-sm
-              [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                    (state/sidebar-add-block! repo "help" :help nil))}
-               (t :right-side-bar/help)]])]
+             (t :right-side-bar/page)]]]
 
           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
             (rum/with-key

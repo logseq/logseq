@@ -116,6 +116,10 @@
                     :title (t :discord-title)
                     :target "_blank"}
           :icon svg/discord}
+         {:title [:div.flex-row.flex.justify-between.items-center
+                  [:span (t :sponsor-us)]]
+          :options {:href "https://opencollective.com/logseq"
+                    :target "_blank"}}
          (when logged?
            {:title (t :sign-out)
             :options {:on-click user-handler/sign-out!}
