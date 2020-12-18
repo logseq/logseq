@@ -10,5 +10,5 @@
 @import "./datepicker.css";
 @import "./highlight.css";
 @import "../../static/css/tailwind.core.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
-@import "./common.css";
 @import "../../static/css/tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
+@import "./common.css";
