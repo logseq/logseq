@@ -320,7 +320,7 @@
         to-max-height (if (and (seq rect) (> vw-height max-height))
                         (let [delta-height (- vw-height (+ (:top rect) top offset-top))]
                           (if (< delta-height max-height)
-                            delta-height
+                            (- (max (* 2 offset-top) delta-height) 16)
                             max-height))
                         max-height)
         x-overflow? (if (and (seq rect) (> vw-width max-width))
