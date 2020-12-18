@@ -24,12 +24,12 @@
         "tailwindcss": "2.0.1"
     },
     "scripts": {
-        "watch": "run-p cljs:watch gulp:build gulp:watch",
-        "release": "run-s cljs:release gulp:build",
-        "watch-app": "run-p cljs:watch-app gulp:watch",
-        "release-app": "run-s cljs:release-app gulp:build",
-        "release-publishing": "run-s cljs:release-publishing gulp:build",
-        "dev-release-app": "run-s cljs:dev-release-app gulp:build",
+        "watch": "run-p gulp:build gulp:watch cljs:watch",
+        "release": "run-s gulp:build cljs:release",
+        "watch-app": "run-p gulp:watch cljs:watch-app",
+        "release-app": "run-s gulp:build cljs:release-app",
+        "release-publishing": "run-s gulp:build cljs:release-publishing",
+        "dev-release-app": "run-s gulp:build cljs:dev-release-app",
         "clean": "gulp clean",
         "test": "run-s cljs:test cljs:run-test",
         "report": "run-s cljs:report",
