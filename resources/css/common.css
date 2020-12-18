@@ -59,9 +59,9 @@ html[data-theme=dark] {
   --ls-page-blockquote-border-color: var(--ls-border-color);
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-page-inline-code-bg-color: #01222a;
-  --ls-scrollbar-foreground-color: #001f27;
-  --ls-scrollbar-background-color: var(--ls-primary-background-color);
-  --ls-scrollbar-thumb-hover-color: #b4b4b466;
+  --ls-scrollbar-foreground-color: rgba(255, 255, 255, 0.1);
+  --ls-scrollbar-background-color: rgba(255, 255, 255, 0.05);
+  --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
   --ls-icon-color: var(--ls-link-text-color);
   --ls-search-icon-color: var(--ls-link-text-color);
@@ -109,9 +109,9 @@ html[data-theme=light] {
   --ls-page-blockquote-border-color: var(--ls-active-primary-color);
   --ls-page-inline-code-bg-color: var(--ls-secondary-background-color);
   --ls-page-inline-code-color: var(--ls-primary-text-color);
-  --ls-scrollbar-foreground-color: var(--ls-primary-text-color);
-  --ls-scrollbar-background-color: var(--ls-primary-background-color);
-  --ls-scrollbar-thumb-hover-color: var(--ls-secondary-text-color);
+  --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
+  --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
+  --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
   --ls-icon-color: #6b7280;
   --ls-search-icon-color: var(--ls-icon-color);
