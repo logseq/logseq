@@ -25,7 +25,8 @@
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [frontend.helper :as helper]
-            [frontend.spec :as spec]))
+            [frontend.spec :as spec]
+            [frontend.handler.utils :as h-utils]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -61,7 +62,7 @@
                               (db/get-file repo-url path))
                 content (or old-content default-content)]
             (file-handler/reset-file! repo-url path content)
-            (db/reset-config! repo-url content)
+            (h-utils/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))))))
 

@@ -41,7 +41,7 @@
   get-all-templates get-block-and-children get-block-and-children-no-cache get-block-by-uuid get-block-children
   get-block-children-ids get-block-content get-block-file get-block-immediate-children get-block-page
   get-block-page-end-pos get-block-parent get-block-parents get-block-referenced-blocks get-block-refs-count
-  get-blocks-by-priority get-blocks-contents get-collapsed-blocks get-config get-custom-css
+  get-blocks-by-priority get-blocks-contents get-collapsed-blocks get-custom-css
   get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file get-file-after-blocks get-file-after-blocks-meta
   get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id
   get-file-pages get-files get-files-blocks get-files-full get-files-that-referenced-page get-journals-length
@@ -50,7 +50,7 @@
   get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
   get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
-  reset-config! set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages]
+  set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages]
 
  [frontend.db.react
   get-current-marker get-current-page get-current-priority get-handler-keys set-file-content! set-key-value
