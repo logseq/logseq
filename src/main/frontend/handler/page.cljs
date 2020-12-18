@@ -294,23 +294,23 @@
   (let [repo (state/get-current-repo)
         old-path (:file/path file)
         new-path (compute-new-file-path old-path new-name)]
+    ;; update db
+    (db/transact! repo [{:db/id (:db/id file)
+                         :file/path new-path}])
+
+    ;; update files db
+    (let [conn (db/get-files-conn repo)]
+      (when-let [file (d/entity (d/db conn) [:file/path old-path])]
+        (d/transact! conn [{:db/id (:db/id file)
+                            :file/path new-path}])))
     (->
      (p/let [_ (fs/rename repo
                           (str (util/get-repo-dir repo) "/" old-path)
-                          (str (util/get-repo-dir repo) "/" new-path))]
-       ;; update db
-       (db/transact! repo [{:db/id (:db/id file)
-                            :file/path new-path}])
-
-       ;; update files db
-       (let [conn (db/get-files-conn repo)]
-         (when-let [file (d/entity (d/db conn) [:file/path old-path])]
-           (d/transact! conn [{:db/id (:db/id file)
-                               :file/path new-path}])))
-
-       (p/let [_ (git/rename repo old-path new-path)]
-         (common-handler/check-changed-files-status)
-         (ok-handler)))
+                          (str (util/get-repo-dir repo) "/" new-path))
+             _ (when-not (config/local-db? repo)
+                 (git/rename repo old-path new-path))]
+       (common-handler/check-changed-files-status)
+       (ok-handler))
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
 

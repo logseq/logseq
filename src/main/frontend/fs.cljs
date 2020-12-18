@@ -181,7 +181,10 @@
               ;;           :local-last-modified-at local-last-modified-at
               ;;           :not-changed? not-changed?
               ;;           :new-created? new-created?
-              ;;           :pending-writes pending-writes})
+              ;;           :pending-writes pending-writes
+              ;;           :local-content local-content
+              ;;           :old-content old-content
+              ;;           :new? new?})
               (if (and local-content old-content new?
                        (or
                         (> pending-writes 0)
@@ -234,10 +237,15 @@
     ;; delete old file
     (p/let [[dir basename] (util/get-dir-and-basename old-path)
             [_ new-basename] (util/get-dir-and-basename new-path)
+            parts (->> (string/split new-path "/")
+                       (remove string/blank?))
+            dir (str "/" (first parts))
+            new-path (->> (rest parts)
+                          (string/join "/"))
             handle (idb/get-item (str "handle" old-path))
             file (.getFile handle)
             content (.text file)
-            _ (write-file repo dir new-basename content)]
+            _ (write-file repo dir new-path content)]
       (unlink old-path nil))
 
     :else
