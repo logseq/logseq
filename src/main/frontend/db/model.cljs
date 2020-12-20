@@ -294,23 +294,25 @@
 
 (defn page-alias-set
   [repo-url page]
-  (->>
-   (d/q '[:find ?e
-          :in $ ?page-name %
-          :where
-          [?page :page/name ?page-name]
-          (alias ?page ?e)]
-        (conn/get-conn repo-url)
-        page
-        '[[(alias ?e2 ?e1)
-           [?e2 :page/alias ?e1]]
-          [(alias ?e2 ?e1)
-           [?e1 :page/alias ?e2]]
-          [(alias ?e3 ?e1)
-           [?e1 :page/alias ?e2]
-           [?e2 :page/alias ?e3]]])
-   db-utils/seq-flatten
-   (set)))
+  (when-let [page-id (:db/id (db-utils/entity repo-url [:page/name page]))]
+    (->>
+     (d/q '[:find ?e
+            :in $ ?page-name %
+            :where
+            [?page :page/name ?page-name]
+            (alias ?page ?e)]
+          (conn/get-conn repo-url)
+          page
+          '[[(alias ?e2 ?e1)
+             [?e2 :page/alias ?e1]]
+            [(alias ?e2 ?e1)
+             [?e1 :page/alias ?e2]]
+            [(alias ?e3 ?e1)
+             [?e1 :page/alias ?e2]
+             [?e2 :page/alias ?e3]]])
+     db-utils/seq-flatten
+     (set))
+    (set/union #{page-id})))
 
 (defn get-page-alias-names
   [repo page-name]
@@ -849,6 +851,7 @@
     (when (conn/get-conn repo)
       (let [page-id (:db/id (db-utils/entity [:page/name page]))
             pages (page-alias-set repo page)]
+        (prn {:pages pages})
         (->> (react/q repo [:page/refed-blocks page-id] {}
                       '[:find (pull ?block [*])
                         :in $ ?pages
