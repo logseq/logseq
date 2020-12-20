@@ -1818,7 +1818,8 @@
                                -10)}}
        (let [first-block (first blocks)
              blocks (if (and (:id config)
-                             (date/valid-journal-title? (string/capitalize (:id config))))
+                             (not (:embed? config))
+                             (some? (date/valid-journal-title? (string/capitalize (:id config)))))
                       (rest blocks)
                       blocks)
              first-id (:block/uuid (first blocks))]
