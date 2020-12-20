@@ -38,7 +38,7 @@
     input))
 
 (defn- custom-query-aux
-  [{:keys [query inputs result-transform] :as query'} query-opts]
+  [{:keys [query inputs] :as query'} query-opts]
   (try
     (let [inputs (map resolve-input inputs)
           repo (state/get-current-repo)
@@ -63,6 +63,10 @@
                        :else
                        nil)]
      (custom-query-aux query' query-opts))))
+
+(defn simple-custom-query
+  [query-string]
+  (custom-query-aux query-string {}))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]

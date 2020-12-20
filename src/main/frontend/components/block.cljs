@@ -654,6 +654,9 @@
                         [title])
                       arguments)]
       (cond
+        (= name "query")
+        [:div "TBD"]
+
         (= name "youtube")
         (let [url (first arguments)]
           (when-let [youtube-id (cond
