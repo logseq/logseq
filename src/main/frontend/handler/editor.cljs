@@ -516,6 +516,10 @@
                                           (map :tag/name page-tags))]
                            (concat pages tag-pages))
                          pages)
+                 pages (remove
+                        (fn [page]
+                          (string/blank? (:page/name page)))
+                        pages)
                  page-tags (when (and pre-block? (seq page-tags))
                              (if (seq page-tags)
                                [[:db/retract page-id :page/tags]
