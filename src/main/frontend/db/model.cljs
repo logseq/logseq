@@ -128,14 +128,6 @@
              db-utils/seq-flatten
              distinct)))
 
-(defn get-page-alias-names
-  [repo page-name]
-  (let [alias-ids (get-page-alias repo page-name)]
-    (when (seq alias-ids)
-      (->> (db-utils/pull-many repo '[:page/name] alias-ids)
-           (map :page/name)
-           distinct))))
-
 (defn get-files
   [repo]
   (when-let [conn (conn/get-conn repo)]
@@ -302,15 +294,32 @@
 
 (defn page-alias-set
   [repo-url page]
-  (when-let [page-id (:db/id (db-utils/entity [:page/name page]))]
-    (let [aliases (get-page-alias repo-url page)
-          aliases (if (seq aliases)
-                    (set
-                     (concat
-                      (mapcat #(get-alias-page repo-url %) aliases)
-                      aliases))
-                    aliases)]
-      (set (conj aliases page-id)))))
+  (->>
+   (d/q '[:find ?e
+          :in $ ?page-name %
+          :where
+          [?page :page/name ?page-name]
+          (alias ?page ?e)
+          (not [?e :page/name ?page-name])]
+     (conn/get-conn repo-url)
+     page
+     '[[(alias ?e2 ?e1)
+        [?e2 :page/alias ?e1]]
+       [(alias ?e2 ?e1)
+        [?e1 :page/alias ?e2]]
+       [(alias ?e3 ?e1)
+        [?e1 :page/alias ?e2]
+        [?e2 :page/alias ?e3]]])
+   db-utils/seq-flatten
+   ))
+
+(defn get-page-alias-names
+  [repo page-name]
+  (let [alias-ids (page-alias-set repo page-name)]
+    (when (seq alias-ids)
+      (->> (db-utils/pull-many repo '[:page/name] alias-ids)
+           (map :page/name)
+           distinct))))
 
 (defn get-block-refs-count
   [repo]
