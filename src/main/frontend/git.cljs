@@ -106,6 +106,31 @@
                                     email
                                     parent))))
 
+(defn add-all
+  "Equivalent to `git add --all`. Returns changed files."
+  [repo-url]
+  (p/let [repo-dir (util/get-repo-dir repo-url)
+          status-matrix (js/window.workerThread.statusMatrixChanged repo-dir)
+          changed-files (for [[file head work-dir _stage] status-matrix
+                              :when (not= head work-dir)]
+                          file)
+          unstaged-files (for [[file _head work-dir stage] status-matrix
+                               :when (not= work-dir stage)]
+                           file)
+          _ (p/all (for [file unstaged-files]
+                     (add repo-url file)))]
+    changed-files))
+
+(defn commit-non-empty
+  "Equivalent to `git add --all` and then `git commit` without `--allow-empty`."
+  ([repo-url message]
+   (commit-non-empty repo-url message nil))
+  ([repo-url message parent]
+   (p/let [changed-files (add-all repo-url)]
+     (if (not-empty changed-files)
+       (commit repo-url message parent)
+       (p/resolved nil)))))
+
 (defn read-commit
   [repo-url oid]
   (js/window.workerThread.readCommit (util/get-repo-dir repo-url)
