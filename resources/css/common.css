@@ -31,6 +31,7 @@ html[data-theme=dark] {
   --ls-secondary-background-color: #023643;
   --ls-tertiary-background-color: #08404f;
   --ls-quaternary-background-color: #094b5a;
+  --ls-table-tr-even-background-color: #03333f;
   --ls-active-primary-color: #8ec2c2;
   --ls-active-secondary-color: #d0e8e8;
   --ls-block-properties-background-color: #02222a;
@@ -81,6 +82,7 @@ html[data-theme=light] {
   --ls-secondary-background-color: #dee9f2;
   --ls-tertiary-background-color: #f0f8ff;
   --ls-quaternary-background-color: #e1f0fe;
+  --ls-table-tr-even-background-color: #f4f5f7;
   --ls-active-primary-color: #045591;
   --ls-active-secondary-color: #003761;
   --ls-block-properties-background-color: var(--ls-tertiary-background-color);
@@ -248,11 +250,6 @@ blockquote {
 input {
   color: var(--ls-primary-text-color);
   background: transparent;
-}
-
-hr {
-  margin: 2rem 0;
-  border-color: var(--ls-border-color, #ccc);
 }
 
 summary {
@@ -713,3 +710,9 @@ svg.tip {
 }
 
 /* endregion */
+
+
+hr {
+    margin: 2rem 0;
+    border-color: var(--ls-border-color, #ccc);
+}

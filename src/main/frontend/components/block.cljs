@@ -41,7 +41,8 @@
             [frontend.security :as security]
             [reitit.frontend.easy :as rfe]
             [frontend.commands :as commands]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.context.i18n :as i18n]))
 
 (defn safe-read-string
   [s]
@@ -994,20 +995,24 @@
 
 (defn- pre-block-cp
   [config content format]
-  (let [ast (mldoc/->edn content (mldoc/default-config format))
-        ast (map first ast)
-        slide? (:slide? config)
-        only-title? (and (= 1 (count ast))
-                         (= "Properties" (ffirst ast))
-                         (let [m (second (first ast))]
-                           (= (keys m) [:title])))
-        block-cp [:div.pre-block.bg-base-2.p-2
-                  (markup-elements-cp (assoc config :block/format format) ast)]]
-    (if slide?
-      [:div [:h1 (:page-name config)]
-       (when-not only-title?
-         block-cp)]
-      block-cp)))
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [ast (mldoc/->edn content (mldoc/default-config format))
+          ast (map first ast)
+          slide? (:slide? config)
+          only-title? (and (= 1 (count ast))
+                           (= "Properties" (ffirst ast))
+                           (let [m (second (first ast))]
+                             (= (keys m) [:title])))
+          block-cp [:div {:class (if only-title?
+                                   (util/hiccup->class "pre-block.opacity-50")
+                                   (util/hiccup->class "pre-block.bg-base-2.p-2.rounded"))}
+                    (if only-title?
+                      [:span (t :page/edit-properties-placeholder)]
+                      (markup-elements-cp (assoc config :block/format format) ast))]]
+      (if slide?
+        [:div [:h1 (:page-name config)]
+         block-cp]
+        block-cp))))
 
 (rum/defc properties-cp
   [block]
@@ -1601,20 +1606,20 @@
        (let [format (:block/format config)]
          (for [[k v] m]
            (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-                      (not (= k :title)))
+)
              [:div.property
-              [:span.font-medium.mr-1 (string/upper-case (str (name k) ": "))]
+              [:span.font-medium.mr-1 (str (name k) ": ")]
               (if (coll? v)
                 (for [item v]
                   (if (or (= k :tags)
                           (= k :alias))
                     (if (string/includes? item "[[")
                       (inline-text format item)
-                      (let [tag (-> item
-                                    (string/replace "[" "")
-                                    (string/replace "]" ""))]
-                        [:a.tag.mr-1 {:href (rfe/href :page {:name tag})}
-                         tag]))
+                      (let [p (-> item
+                                  (string/replace "[" "")
+                                  (string/replace "]" ""))]
+                        [:a.mr-1 {:href (rfe/href :page {:name p})}
+                         p]))
                     (inline-text format item)))
                 (inline-text format v))])))]
 
@@ -1812,12 +1817,12 @@
                                :else
                                -10)}}
        (let [first-block (first blocks)
-             blocks' (if (and (:block/pre-block? first-block)
-                              (block-handler/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
-                       (rest blocks)
-                       blocks)
-             first-id (:block/uuid (first blocks'))]
-         (for [item blocks']
+             blocks (if (and (:id config)
+                             (date/valid-journal-title? (string/capitalize (:id config))))
+                      (rest blocks)
+                      blocks)
+             first-id (:block/uuid (first blocks))]
+         (for [item blocks]
            (let [item (-> (if (:block/dummy? item)
                             item
                             (dissoc item :block/meta)))
