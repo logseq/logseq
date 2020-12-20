@@ -43,7 +43,7 @@
 
 ;; (between -7d +7d)
 (defn- ->date-int [input]
-  (let [input (name input)]
+  (let [input (string/lower-case (name input))]
     (cond
       (= "today" input)
       (db-utils/date->int (t/today))
