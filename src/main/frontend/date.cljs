@@ -32,6 +32,7 @@
      "MM_dd_yyyy"
      "yyyy/MM/dd"
      "yyyy-MM-dd"
+     "yyyy-MM-dd EEEE"
      "yyyy_MM_dd"
      "yyyyMMdd"
      "yyyy年MM月dd日"}
