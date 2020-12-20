@@ -421,7 +421,8 @@ li p:last-child,
 }
 
 .external-link {
-  text-decoration: underline;
+  text-decoration: none;
+  border-bottom: 1px solid;
 }
 
 .noscroll {
