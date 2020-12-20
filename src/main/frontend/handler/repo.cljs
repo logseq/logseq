@@ -139,8 +139,8 @@
                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
          (when-not file-exists?
            (file-handler/reset-file! repo-url path content)
-           (ui-handler/re-render-root!))
-         (git-handler/git-add repo-url path))))))
+           (ui-handler/re-render-root!)
+           (git-handler/git-add repo-url path)))))))
 
 (defn create-today-journal!
   []
@@ -427,7 +427,7 @@
          (state/input-idle? repo-url)
          (or (not= status :pushing)
              custom-commit?))
-      (-> (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir (state/get-current-repo)))]
+      (-> (p/let [files (git/add-all (state/get-current-repo))]
             (when (or (seq files) merge-push-no-diff?)
               ;; auto commit if there are any un-committed changes
               (let [commit-message (if (string/blank? commit-message)

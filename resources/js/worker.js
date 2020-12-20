@@ -282,7 +282,11 @@ if (detect() === 'Worker') {
       })
     },
     statusMatrix: async function (dir) {
-      await git.statusMatrix({ fs, dir });
+      return git.statusMatrix({ fs, dir });
+    },
+    statusMatrixChanged: async function (dir) {
+      return (await git.statusMatrix({ fs, dir }))
+        .filter(([_, head, workDir, stage]) => !(head == 1 && workDir == 1 && stage == 1));
     },
     getChangedFiles: async function (dir) {
       try {
