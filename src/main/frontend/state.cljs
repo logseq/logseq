@@ -588,7 +588,9 @@
                                           (cons [repo db-id block-type block-data])
                                           ; FIXME: No need to call `distinct`?
                                           (distinct))))
-    (open-right-sidebar!)))
+    (open-right-sidebar!)
+    (when-let [elem (gdom/getElement "right-sidebar")]
+      (util/scroll-to elem 0))))
 
 (defn sidebar-remove-block!
   [idx]

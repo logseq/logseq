@@ -336,10 +336,12 @@
                       :behavior "smooth"})))))
 
 (defn scroll-to
-  [pos]
-  (.scroll (html-node)
-           #js {:top      pos
-                :behavior "smooth"}))
+  ([pos]
+   (scroll-to (html-node) pos))
+  ([node pos]
+   (.scroll node
+            #js {:top      pos
+                 :behavior "smooth"})))
 
 (defn scroll-to-top
   []
