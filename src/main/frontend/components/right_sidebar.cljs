@@ -1,5 +1,6 @@
 (ns frontend.components.right-sidebar
   (:require [rum.core :as rum]
+            [frontend.mixins :refer [event-mixin listen]]
             [frontend.ui :as ui]
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
@@ -217,7 +218,27 @@
         theme (:ui/theme @state/state)]
     (get-page match)))
 
+(defn stop-scroll-boundary-propagation-mixin
+  [el]
+  (event-mixin
+   (fn [state]
+     (listen state
+             (if (fn? el) (el state) el)
+             :wheel
+             (fn [^goog.events.MouseWheelEvent e]
+               (let [target (gobj/get e "currentTarget")
+                     delta-y (.. e getBrowserEvent -deltaY)
+                     client-height (.-clientHeight target)
+                     scroll-height (.-scrollHeight target)
+                     scroll-top (.-scrollTop target)
+                     top-boundary? (= scroll-top 0)
+                     bottom-boundary? (= (+ client-height scroll-top) scroll-height)]
+                 (when (or (and top-boundary? (< delta-y 0))
+                           (and bottom-boundary? (> delta-y 0)))
+                   (.preventDefault e))))))))
+
 (rum/defcs sidebar < rum/reactive
+  (stop-scroll-boundary-propagation-mixin #(js/document.querySelector "#right-sidebar"))
   [state]
   (let [blocks (state/sub :sidebar/blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
@@ -230,15 +251,15 @@
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner
-          [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
+          [:div.cp__right-sidebar-settings {:key "right-sidebar-settings"}
            [:div.ml-4.text-sm
             [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
-                                                  (state/sidebar-add-block! repo "contents" :contents nil))}
+                                                            (state/sidebar-add-block! repo "contents" :contents nil))}
              (t :right-side-bar/contents)]]
 
            [:div.ml-4.text-sm
             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                  (state/sidebar-add-block! repo "recent" :recent nil))}
+                                                            (state/sidebar-add-block! repo "recent" :recent nil))}
              (t :right-side-bar/recent)]]
 
            (when config/publishing?
@@ -248,12 +269,12 @@
 
            [:div.ml-4.text-sm
             [:a.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                  (when-let [page (get-current-page)]
-                                                    (state/sidebar-add-block!
-                                                     repo
-                                                     (str "page-graph-" page)
-                                                     :page-graph
-                                                     page)))}
+                                                            (when-let [page (get-current-page)]
+                                                              (state/sidebar-add-block!
+                                                               repo
+                                                               (str "page-graph-" page)
+                                                               :page-graph
+                                                               page)))}
              (t :right-side-bar/page)]]]
 
           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]

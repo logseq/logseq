@@ -15,7 +15,10 @@
   "Register an event `handler` for events of `type` on `target`."
   [state target type handler & [opts]]
   (when-let [^EventHandler event-handler (::event-handler state)]
-    (.listen event-handler target (name type) handler (clj->js opts))))
+    (.listen event-handler target
+             (let [types (if-not (sequential? type) [type] type)]
+               (clj->js (map #(name %) types)))
+             handler (clj->js opts))))
 
 (def event-handler-mixin
   "The event handler mixin."
