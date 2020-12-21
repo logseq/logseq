@@ -88,7 +88,8 @@
   (contains? mldoc-support-formats (keyword format)))
 
 (def mobile?
-  (re-find #"Mobi" js/navigator.userAgent))
+  (when-not util/node-test?
+    (re-find #"Mobi" js/navigator.userAgent)))
 
 ;; TODO: protocol design for future formats support
 

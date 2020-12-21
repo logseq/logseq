@@ -34,7 +34,8 @@
 
   :test
   {:target :node-test
-   :output-to "static/tests.js"}
+   :output-to "static/tests.js"
+   :closure-defines {frontend.util/NODETEST true}}
 
   :publishing
   {:target :browser

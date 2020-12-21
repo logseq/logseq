@@ -19,6 +19,9 @@
             [clojure.pprint :refer [pprint]]
             [goog.userAgent]))
 
+(goog-define NODETEST false)
+(defonce node-test? NODETEST)
+
 (extend-protocol IPrintWithWriter
   js/Symbol
   (-pr-writer [sym writer _]

@@ -3,7 +3,14 @@
             [frontend.util :as util]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
-            [cljs.core.match :refer-macros [match]]))
+            [cljs.core.match :refer-macros [match]]
+            [lambdaisland.glogi :as log]
+            [goog.object :as gobj]
+            ["mldoc" :as mldoc :refer [Mldoc]]))
+
+(defonce parseJson (gobj/get Mldoc "parseJson"))
+(defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
+(defonce parseHtml (gobj/get Mldoc "parseHtml"))
 
 (defn default-config
   [format]
@@ -15,18 +22,13 @@
               :keep_line_break true}
              :format format)))))
 
-(defn loaded? []
-  js/window.Mldoc)
-
 (defn parse-json
   [content config]
-  (when (loaded?)
-    (.parseJson js/window.Mldoc content (or config default-config))))
+  (parseJson content (or config default-config)))
 
 (defn inline-parse-json
   [text config]
-  (when (loaded?)
-    (.parseInlineJson js/window.Mldoc text (or config default-config))))
+  (parseInlineJson text (or config default-config)))
 
 ;; E.g "Foo Bar \"Bar Baz\""
 (defn- sep-by-quote-or-space-or-comma
@@ -157,7 +159,8 @@
           (parse-json config)
           (util/json->clj)
           (collect-page-properties)))
-    (catch js/Error _e
+    (catch js/Error e
+      (log/error :edn/convert-failed e)
       [])))
 
 (defn inline->edn
@@ -176,9 +179,9 @@
   (toEdn [this content config]
     (->edn content config))
   (toHtml [this content config]
-    (.parseHtml js/window.Mldoc content config))
+    (parseHtml content config))
   (loaded? [this]
-    (some? (loaded?)))
+    true)
   (lazyLoad [this ok-handler]
     true))
 
