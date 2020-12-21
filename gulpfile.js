@@ -13,8 +13,10 @@ const resourcesPath = path.join(__dirname, 'resources')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 
+const tailwindCoreEntry = path.join(__dirname, 'tailwind.css')
+const tailwindBuildEntry = path.join(sourcePath, '**/*.css')
 const tailwind = {
-  paths: [path.join(__dirname, 'tailwind.css'), path.join(sourcePath, '**/*.css')],
+  paths: [tailwindCoreEntry, tailwindBuildEntry],
   outputDir: path.join(outputPath, 'css'),
   outputName: 'tailwind.build.css',
 }
@@ -36,7 +38,10 @@ const css = {
   },
 
   buildCSS (...params) {
-    return gulp.series(css._buildTailwind.bind(null, void 0, void 0), css._optimizeCSSForRelease)(...params)
+    return gulp.series(
+      css._buildTailwind.bind(null, tailwindCoreEntry, 'tailwind.core.css'),
+      css._buildTailwind.bind(null, tailwindBuildEntry, 'tailwind.build.css'),
+      css._optimizeCSSForRelease)(...params)
   },
 
   _buildTailwind (entry, output) {
@@ -49,8 +54,6 @@ const css = {
   },
 
   _optimizeCSSForRelease () {
-    // tailwind.core.css placeholder
-    fs.writeFileSync(path.join(outputPath, 'css', 'tailwind.core.css'), '')
     return gulp.src(path.join(outputPath, 'css', 'style.css'))
       .pipe(cleanCSS())
       .pipe(gulp.dest(path.join(outputPath, 'css')))

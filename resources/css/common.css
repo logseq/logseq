@@ -244,7 +244,7 @@ blockquote {
   background-color: var(--ls-page-blockquote-bg-color, #f7f7f7);
   margin: 1rem 0;
   color: var(--ls-page-blockquote-color, #24292e);
-  font-size: 1.25rem;
+  font-size: 1rem;
 }
 
 input {
