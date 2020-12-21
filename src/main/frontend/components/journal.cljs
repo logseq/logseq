@@ -78,7 +78,7 @@
       [:a.initial-color.title
        {:href (str "/page/" encoded-page-name)
         :on-click (fn [e]
-                    (util/stop e)
+                    (.preventDefault e)
                     (when (gobj/get e "shiftKey")
                       (when-let [page (db/pull [:page/name (string/lower-case title)])]
                         (state/sidebar-add-block!

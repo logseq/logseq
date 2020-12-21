@@ -8,7 +8,8 @@
    [frontend.mixins :as mixins]
    [frontend.util :as util]
    [frontend.state :as state]
-   [goog.object :as gobj]))
+   [goog.object :as gobj]
+   [clojure.string :as string]))
 
 ;; Adapted from re-com date-picker
 
@@ -179,10 +180,14 @@
                         (constantly true))]
     (merge attributes {:selectable-fn selectable-fn})))
 
+;; TODO: find a better way
 (defn- input-or-select?
   []
   (when-let [elem js/document.activeElement]
-    (or (util/input? elem) (util/select? elem))))
+    (or (and (util/input? elem)
+             (when-let [id (gobj/get elem "id")]
+               (not (string/starts-with? id "edit-block-"))))
+        (util/select? elem))))
 
 (rum/defc date-picker < rum/reactive
   (mixins/event-mixin

@@ -256,7 +256,7 @@
       [:a.page-ref
        {:href href
         :on-click (fn [e]
-                    (util/stop e)
+                    (.preventDefault e)
                     (when (gobj/get e "shiftKey")
                       (when-let [page-entity (db/entity [:page/name page])]
                         (state/sidebar-add-block!
@@ -290,8 +290,7 @@
      (if (string/ends-with? s ".excalidraw")
        [:a.page-ref
         {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
-         :on-click (fn [e]
-                     (util/stop e))}
+         :on-click (fn [e] (util/stop e))}
         [:span
          (svg/excalidraw-logo)
          (string/capitalize (draw/get-file-title s))]]
@@ -370,7 +369,7 @@
          [:span.text-gray-500 "(("]
          [:a {:href (rfe/href :page {:name id})
               :on-click (fn [e]
-                          (util/stop e)
+                          (.preventDefault e)
                           (when (gobj/get e "shiftKey")
                             (state/sidebar-add-block!
                              (state/get-current-repo)
@@ -422,7 +421,7 @@
     (if (and s (util/tag-valid? s))
       [:a.tag.mr-1 {:href (rfe/href :page {:name s})
                     :on-click (fn [e]
-                                (util/stop e)
+                                (.preventDefault e)
                                 (let [repo (state/get-current-repo)
                                       page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
                                   (when (gobj/get e "shiftKey")
@@ -759,7 +758,7 @@
      [:a (if (not dummy?)
            {:href (rfe/href :page {:name uuid})
             :on-click (fn [e]
-                        (util/stop e)
+                        (.preventDefault e)
                         (when (gobj/get e "shiftKey")
                           (state/sidebar-add-block!
                            (state/get-current-repo)
