@@ -217,6 +217,25 @@
               (f)))
           state)}))))
 
+(defn stop-scroll-boundary-propagation-mixin
+  [el]
+  (event-mixin
+   (fn [state]
+     (listen state
+             (if (fn? el) (el state) el)
+             :wheel
+             (fn [^goog.events.MouseWheelEvent e]
+               (let [target (gobj/get e "currentTarget")
+                     delta-y (.. e getBrowserEvent -deltaY)
+                     client-height (.-clientHeight target)
+                     scroll-height (.-scrollHeight target)
+                     scroll-top (.-scrollTop target)
+                     top-boundary? (= scroll-top 0)
+                     bottom-boundary? (= (+ client-height scroll-top) scroll-height)]
+                 (when (or (and top-boundary? (< delta-y 0))
+                           (and bottom-boundary? (> delta-y 0)))
+                   (.preventDefault e))))))))
+
 ;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
 
 

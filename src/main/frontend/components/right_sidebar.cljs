@@ -1,6 +1,6 @@
 (ns frontend.components.right-sidebar
   (:require [rum.core :as rum]
-            [frontend.mixins :refer [event-mixin listen]]
+            [frontend.mixins :refer [stop-scroll-boundary-propagation-mixin]]
             [frontend.ui :as ui]
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
@@ -217,25 +217,6 @@
   (let [match (:route-match @state/state)
         theme (:ui/theme @state/state)]
     (get-page match)))
-
-(defn stop-scroll-boundary-propagation-mixin
-  [el]
-  (event-mixin
-   (fn [state]
-     (listen state
-             (if (fn? el) (el state) el)
-             :wheel
-             (fn [^goog.events.MouseWheelEvent e]
-               (let [target (gobj/get e "currentTarget")
-                     delta-y (.. e getBrowserEvent -deltaY)
-                     client-height (.-clientHeight target)
-                     scroll-height (.-scrollHeight target)
-                     scroll-top (.-scrollTop target)
-                     top-boundary? (= scroll-top 0)
-                     bottom-boundary? (= (+ client-height scroll-top) scroll-height)]
-                 (when (or (and top-boundary? (< delta-y 0))
-                           (and bottom-boundary? (> delta-y 0)))
-                   (.preventDefault e))))))))
 
 (rum/defcs sidebar < rum/reactive
   (stop-scroll-boundary-propagation-mixin #(js/document.querySelector "#right-sidebar"))
