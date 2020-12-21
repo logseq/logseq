@@ -366,7 +366,7 @@
                           "chosen")
                 ;; :tab-index -1
               :on-click (fn [e]
-                          (util/stop e)
+                          (.preventDefault e)
                           (if (and (gobj/get e "shiftKey") on-shift-chosen)
                             (on-shift-chosen item)
                             (on-chosen item)))}

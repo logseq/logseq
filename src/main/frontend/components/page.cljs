@@ -342,7 +342,7 @@
             (when (and (not sidebar?)
                        (not block?))
               [:a {:on-click (fn [e]
-                               (util/stop e)
+                               (.preventDefault e)
                                (when (gobj/get e "shiftKey")
                                  (when-let [page (db/pull repo '[*] [:page/name page-name])]
                                    (state/sidebar-add-block!
@@ -474,7 +474,7 @@
                (let [encoded-page (util/encode-str page)]
                  [:tr {:key encoded-page}
                   [:td [:a {:on-click (fn [e]
-                                        (util/stop e)
+                                        (.preventDefault e)
                                         (let [repo (state/get-current-repo)
                                               page (db/pull repo '[*] [:page/name (string/lower-case page)])]
                                           (when (gobj/get e "shiftKey")
