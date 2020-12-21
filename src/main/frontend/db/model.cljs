@@ -851,7 +851,6 @@
     (when (conn/get-conn repo)
       (let [page-id (:db/id (db-utils/entity [:page/name page]))
             pages (page-alias-set repo page)]
-        (prn {:pages pages})
         (->> (react/q repo [:page/refed-blocks page-id] {}
                       '[:find (pull ?block [*])
                         :in $ ?pages
