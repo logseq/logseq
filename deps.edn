@@ -10,8 +10,8 @@
                                :sha "7c2822565d9a114c7d8604c335af89de4640e2e5"}
   ;; datascript                  {:mvn/version "1.0.1"}
   datascript-transit/datascript-transit
-                              {:mvn/version "0.3.0"
-                               :exclusions [datascript]}
+  {:mvn/version "0.3.0"
+   :exclusions [datascript]}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley/medley               {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
@@ -20,7 +20,7 @@
   org.clojure/core.match      {:mvn/version "1.0.0"}
   com.andrewmcveigh/cljs-time {:mvn/version "0.5.2"}
   cljs-drag-n-drop/cljs-drag-n-drop
-                              {:mvn/version "0.1.0"}
+  {:mvn/version "0.1.0"}
   borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
   hickory/hickory             {:mvn/version "0.7.1"}
   hiccups/hiccups             {:mvn/version "0.3.0"}
@@ -30,7 +30,7 @@
   expound/expound             {:mvn/version "0.8.6"}
   lambdaisland/glogi          {:mvn/version "1.0.74"}}
 
- :aliases {:cljs {:extra-paths ["src/dev-cljs/"]
+ :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}
                                 thheller/shadow-cljs        {:mvn/version "2.8.81"}
                                 binaryage/devtools          {:mvn/version "0.9.10"}
