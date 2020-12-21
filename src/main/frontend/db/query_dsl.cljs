@@ -65,87 +65,110 @@
         (db-utils/date->int (t/plus (t/today) (tf duration)))))))
 
 (defn build-query
-  [e]
-  ;; TODO: replace with multi-methods for extensibility.
-  (let [fe (first e)]
-    (cond
-      (nil? e)
-      nil
+  ([e]
+   (build-query e 0))
+  ([e level]
+   ;; TODO: replace with multi-methods for extensibility.
+   (let [fe (first e)]
+     (cond
+       (nil? e)
+       nil
 
-      (contains? #{'and 'or 'not} fe)
-      (let [clauses (->> (map build-query (rest e))
-                         remove-nil?
-                         (apply concat))]
-        (when (seq clauses)
-          (cons fe clauses)))
+       (contains? #{'and 'or} fe)
+       (let [clauses (->> (map #(build-query % (inc level)) (rest e))
+                          remove-nil?
+                          (apply concat))]
+         (when (seq clauses)
+           (let [result (cons fe clauses)]
+             (if (zero? level)
+               result
+               [result]))))
 
-      (and (= 'between fe)
-           (= 3 (count e)))
-      (let [start (->date-int (nth e 1))
-            end (->date-int (nth e 2))
-            [start end] (sort [start end])]
-        [['?b :block/page '?p]
-         ['?p :page/journal? true]
-         ['?p :page/journal-day '?d]
-         [(list '>= '?d start)]
-         [(list '<= '?d end)]])
+       (= 'not fe)                       ; or
+       (let [clauses (->> (map build-query (rest e))
+                          remove-nil?
+                          (apply concat))]
+         (when (seq clauses)
+           (map #(list 'not %) clauses)))
 
-      (and (= 'property fe)
-           (= 3 (count e)))
-      [['?b :block/properties '?p]
-       [(list 'get '?p (name (nth e 1))) '?v]
-       [(list '= '?v (name (nth e 2)))]]
+       (and (= 'between fe)
+            (= 3 (count e)))
+       (let [start (->date-int (nth e 1))
+             end (->date-int (nth e 2))
+             [start end] (sort [start end])]
+         [['?b :block/page '?p]
+          ['?p :page/journal? true]
+          ['?p :page/journal-day '?d]
+          [(list '>= '?d start)]
+          [(list '<= '?d end)]])
 
-      (and (= 'todo fe))
-      (let [markers (if (coll? (first (rest e)))
-                      (first (rest e))
-                      (rest e))]
-        (when (seq markers)
-          (let [markers (set (map name markers))]
-            [['?b :block/marker '?marker]
-             [(list 'contains? markers '?marker)]])))
+       (and (= 'property fe)
+            (= 3 (count e)))
+       [['?b :block/properties '?p]
+        [(list 'get '?p (name (nth e 1))) '?v]
+        [(list '= '?v (name (nth e 2)))]]
 
-      (and (= 'priority fe))
-      (let [priorities (if (coll? (first (rest e)))
-                         (first (rest e))
-                         (rest e))]
-        (when (seq priorities)
-          (let [priorities (set (map (comp string/upper-case name) priorities))]
-            [['?b :block/priority '?priority]
-             [(list 'contains? priorities '?priority)]])))
+       (and (= 'todo fe))
+       (let [markers (if (coll? (first (rest e)))
+                       (first (rest e))
+                       (rest e))]
+         (when (seq markers)
+           (let [markers (set (map name markers))]
+             [['?b :block/marker '?marker]
+              [(list 'contains? markers '?marker)]])))
 
-      (and (vector? e)
-           (vector? (first e))
-           (symbol? (ffirst e)))          ; page reference
-      (let [page-name (->>
-                       (first e)
-                       (map name)
-                       (string/join " ")
-                       (string/lower-case))]
-        (when-not (string/blank? page-name)
-          [['?b :block/ref-pages [:page/name page-name]]]))
+       (and (= 'priority fe))
+       (let [priorities (if (coll? (first (rest e)))
+                          (first (rest e))
+                          (rest e))]
+         (when (seq priorities)
+           (let [priorities (set (map (comp string/upper-case name) priorities))]
+             [['?b :block/priority '?priority]
+              [(list 'contains? priorities '?priority)]])))
 
-      :else
-      nil)))
+       (and
+        (string? e)
+        (string/starts-with? e "[[")
+        (string/ends-with? e "]]")) ; page reference
+       (let [page-name (->>
+                        (subs e 2 (- (count e) 2))
+                        (string/lower-case))]
+         (when (and (not (string/blank? page-name))
+                    (some? (db-utils/entity [:page/name page-name])))
+           [['?b :block/ref-pages [:page/name page-name]]]))
+
+       :else
+       nil))))
+
+(def link-re #"\[\[(.*?)\]\]")
 
 (defn parse
   [s]
-  (try
-    (let [result (some->
-                  s
-                  (reader/read-string)
-                  (build-query))]
-      (when (seq result)
-        (case (keyword (first result))
-          :and
-          (rest result)
+  (when (and (string? s)
+             (not (string/blank? s)))
+    (try
+      (let [s (string/replace s link-re "\"[[$1]]\"")
+            result (some->
+                    s
+                    (reader/read-string)
+                    (build-query))]
+        (when (seq result)
+          (let [key (if (coll? (first result))
+                      (keyword (ffirst result))
+                      (keyword (first result)))]
+            (case key
+              :and
+              (rest result)
 
-          (list :or :not)
-          [['?b :block/uuid] result]
+              :not
+              (cons ['?b :block/uuid] result)
 
-          result)))
-    (catch js/Error e
-      (log/error :query-dsl/parse-error e))))
+              :or
+              [['?b :block/uuid] result]
+
+              result))))
+      (catch js/Error e
+        (log/error :query-dsl/parse-error e)))))
 
 (comment
   (require '[frontend.db :as db])
@@ -158,7 +181,6 @@
    (query-wrapper (parse "(or [[foo]] [[bar]])"))
    (db/get-conn))
 
-  ;; FIXME: not working
   (d/q
    (query-wrapper (parse "(not [[foo]])"))
    (db/get-conn))
@@ -181,4 +203,9 @@
 
   (d/q
    (query-wrapper (parse "(and [[some page]] (priority A))"))
+   (db/get-conn))
+
+  ;; nested query
+  (d/q
+   (query-wrapper (parse "(and [[baz]] (or [[foo]] [[bar]]))"))
    (db/get-conn)))
