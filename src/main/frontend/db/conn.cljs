@@ -86,3 +86,7 @@
        (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
 
      (when listen-handler (listen-handler repo)))))
+
+(defn destroy-all!
+  []
+  (reset! conns {}))
