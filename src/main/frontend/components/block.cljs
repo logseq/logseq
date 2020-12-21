@@ -289,8 +289,10 @@
        [:span.text-gray-500 "[["])
      (if (string/ends-with? s ".excalidraw")
        [:a.page-ref
-        {:href (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})
-         :on-click (fn [e] (util/stop e))}
+        {:on-click (fn [e]
+                     (util/stop e)
+                     (set! (.-href js/window.location)
+                           (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})))}
         [:span
          (svg/excalidraw-logo)
          (string/capitalize (draw/get-file-title s))]]
