@@ -1817,9 +1817,8 @@
                                :else
                                -10)}}
        (let [first-block (first blocks)
-             blocks (if (and (:id config)
-                             (not (:embed? config))
-                             (some? (date/valid-journal-title? (string/capitalize (:id config)))))
+             blocks (if (and (:block/pre-block? first-block)
+                             (block-handler/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
                       (rest blocks)
                       blocks)
              first-id (:block/uuid (first blocks))]
