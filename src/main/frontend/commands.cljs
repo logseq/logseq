@@ -100,6 +100,7 @@
                   [:editor/show-date-picker]]]
      ["Scheduled" [[:editor/clear-current-slash]
                    [:editor/show-date-picker]]]
+     ["Query" [[:editor/input "{{{query }}}" {:backward-pos 3}]]]
      ["Draw" [[:editor/input "/draw "]
               [:editor/show-input [{:command :draw
                                     :id :title
