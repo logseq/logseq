@@ -258,10 +258,10 @@
   We can improve it if the performance is really an issue."
   [repo page]
   (let [blocks (->>
-                 (db/get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block? :block/meta]})
-                 (remove :block/pre-block?)
-                 (map #(select-keys % [:db/id :block/uuid :block/level]))
-                 (reverse))
+                (db/get-page-blocks-no-cache repo page {:pull-keys '[:db/id :block/uuid :block/level :block/pre-block? :block/meta]})
+                (remove :block/pre-block?)
+                (map #(select-keys % [:db/id :block/uuid :block/level]))
+                (reverse))
         original-blocks blocks]
     (loop [blocks blocks
            tx []
@@ -274,12 +274,12 @@
                               (let [cur-children (get children last-level)
                                     tx (if (seq cur-children)
                                          (vec
-                                           (concat
-                                             tx
-                                             (map
-                                               (fn [child]
-                                                 [:db/add (:db/id block) :block/children [:block/uuid child]])
-                                               cur-children)))
+                                          (concat
+                                           tx
+                                           (map
+                                            (fn [child]
+                                              [:db/add (:db/id block) :block/children [:block/uuid child]])
+                                            cur-children)))
                                          tx)
                                     children (-> children
                                                  (dissoc last-level)
@@ -298,9 +298,9 @@
         (when (seq tx)
           (let [delete-tx (map (fn [block]
                                  [:db/retract (:db/id block) :block/children])
-                            original-blocks)]
+                               original-blocks)]
             (->> (concat delete-tx tx)
-              (remove nil?))))))))
+                 (remove nil?))))))))
 
 (defn transact-react-and-alter-file!
   [repo tx transact-option files]
