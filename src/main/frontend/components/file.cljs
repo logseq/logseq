@@ -15,8 +15,10 @@
             [frontend.date :as date]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [frontend.ui :as ui]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.components.svg :as svg]))
 
 (defn- get-path
   [state]
@@ -88,6 +90,11 @@
                                                    :page
                                                    {:page page}))))}
            page]])
+
+       [:p.text-sm.ml-1.mb-4
+        (svg/warning {:style {:width "1em"
+                              :display "inline-block"}})
+        [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]]
 
        (when (and config? (state/logged?))
          [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
