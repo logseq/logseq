@@ -311,8 +311,8 @@
              [?e1 :page/alias ?e2]
              [?e2 :page/alias ?e3]]])
      db-utils/seq-flatten
-     (set))
-    (set/union #{page-id})))
+     (set)
+     (set/union #{page-id}))))
 
 (defn get-page-alias-names
   [repo page-name]
@@ -846,25 +846,27 @@
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
 (defn get-page-referenced-blocks
-  [page]
-  (when-let [repo (state/get-current-repo)]
-    (when (conn/get-conn repo)
-      (let [page-id (:db/id (db-utils/entity [:page/name page]))
-            pages (page-alias-set repo page)]
-        (->> (react/q repo [:page/refed-blocks page-id] {}
-                      '[:find (pull ?block [*])
-                        :in $ ?pages
-                        :where
-                        [?block :block/ref-pages ?ref-page]
-                        [(contains? ?pages ?ref-page)]]
-                      pages)
-             react
-             db-utils/seq-flatten
-             (remove (fn [block]
-                       (let [exclude-pages pages]
-                         (contains? exclude-pages (:db/id (:block/page block))))))
-             sort-blocks
-             db-utils/group-by-page)))))
+  ([page]
+   (get-page-referenced-blocks (state/get-current-repo) page))
+  ([repo page]
+   (when repo
+     (when (conn/get-conn repo)
+       (let [page-id (:db/id (db-utils/entity [:page/name page]))
+             pages (page-alias-set repo page)]
+         (->> (react/q repo [:page/refed-blocks page-id] {}
+                       '[:find (pull ?block [*])
+                         :in $ ?pages
+                         :where
+                         [?block :block/ref-pages ?ref-page]
+                         [(contains? ?pages ?ref-page)]]
+                       pages)
+              react
+              db-utils/seq-flatten
+              (remove (fn [block]
+                        (let [exclude-pages pages]
+                          (contains? exclude-pages (:db/id (:block/page block))))))
+              sort-blocks
+              db-utils/group-by-page))))))
 
 (defn get-date-scheduled-or-deadlines
   [journal-title]
