@@ -116,17 +116,26 @@
              db-utils/seq-flatten
              distinct)))
 
-(defn get-alias-page
+(defn get-alias-source-page
   [repo alias]
   (when-let [conn (and repo (conn/get-conn repo))]
-    (some->> (d/q '[:find ?page
-                    :in $ ?alias
-                    :where
-                    [?page :page/alias ?alias]]
-                  conn
-                  alias)
-             db-utils/seq-flatten
-             distinct)))
+    (let [pages (->>
+                 (d/q '[:find (pull ?p [*])
+                        :in $ ?alias
+                        :where
+                        [?p :page/alias ?a]
+                        [?a :page/name ?alias]]
+                      conn
+                      alias)
+                 (db-utils/seq-flatten))]
+      (when (seq pages)
+        (some (fn [page]
+                (let [aliases (->> (get-in page [:page/properties :alias])
+                                   (map string/lower-case)
+                                   set)]
+                  (when (contains? aliases alias)
+                    page)))
+              pages)))))
 
 (defn get-files
   [repo]

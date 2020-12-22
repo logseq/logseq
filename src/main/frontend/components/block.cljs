@@ -7,6 +7,7 @@
             [rum.core :as rum]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [dommy.core :as d]
             [datascript.core :as dc]
             [goog.dom :as gdom]
@@ -242,27 +243,31 @@
 (defn page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:page/name page)]
-    (let [original-page-name (get page :page/original-name page-name)
+    (let [source-page (model/get-alias-source-page (state/get-current-repo)
+                                                   page-name)
+          original-page-name (get page :page/original-name page-name)
           original-page-name (if (date/valid-journal-title? original-page-name)
                                (string/capitalize original-page-name)
                                original-page-name)
           page (string/lower-case page-name)
+          source-page-name (or (when source-page (:page/name source-page))
+                               page)
           href (if html-export?
                  (util/encode-str page)
-                 (rfe/href :page {:name page}))]
+                 (rfe/href :page {:name source-page-name}))]
       [:a.page-ref
        {:href href
         :on-click (fn [e]
                     (util/stop e)
                     (if (gobj/get e "shiftKey")
-                      (when-let [page-entity (db/entity [:page/name page])]
+                      (when-let [page-entity (db/entity [:page/name source-page-name])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
                          {:page page-entity}))
                       (route-handler/redirect! {:to :page
-                                                :path-params {:name page}}))
+                                                :path-params {:name source-page-name}}))
                     (when (and contents-page?
                                (state/get-left-sidebar-open?))
                       (ui-handler/close-left-sidebar!)))}
