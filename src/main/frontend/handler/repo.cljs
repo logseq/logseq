@@ -24,9 +24,7 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            [frontend.helper :as helper]
-            [frontend.spec :as spec]
-            [frontend.handler.utils :as h-utils]))
+            [frontend.spec :as spec]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -361,7 +359,7 @@
                             (empty? @state/diffs)))))
                 (git-handler/set-git-status! repo-url :pulling)
                 (->
-                 (p/let [token (helper/get-github-token repo-url)
+                 (p/let [token (common-handler/get-github-token repo-url)
                          result (git/fetch repo-url token)]
                    (let [{:keys [fetchHead]} (bean/->clj result)]
                      (-> (git/merge repo-url)
@@ -435,7 +433,7 @@
                                      "Logseq auto save"
                                      commit-message)]
                 (p/let [commit-oid (git/commit repo-url commit-message)
-                        token (helper/get-github-token repo-url)
+                        token (common-handler/get-github-token repo-url)
                         status (db/get-key-value repo-url :git/status)]
                   (when (and token (or (not= status :pushing)
                                        custom-commit?))
@@ -476,7 +474,7 @@
 (defn- clone
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (p/let [token (helper/get-github-token repo-url)]
+  (p/let [token (common-handler/get-github-token repo-url)]
     (when token
       (util/p-handle
        (do
@@ -563,7 +561,7 @@
   (js/setInterval
    (fn []
      (p/let [repo-url (state/get-current-repo)
-             token (helper/get-github-token repo-url)]
+             token (common-handler/get-github-token repo-url)]
        (when token
          (pull repo-url nil))))
    (* (config/git-pull-secs) 1000)))

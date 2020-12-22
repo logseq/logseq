@@ -11,9 +11,7 @@
             [frontend.db :as db]
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
-            [frontend.db :as db]
             [frontend.git :as git]
-            [frontend.helper :as helper]
             [goog.object :as gobj]
             [promesa.core :as p]
             [frontend.github :as github]
@@ -151,7 +149,7 @@
        (p/let [remote-latest-commit (common-handler/get-remote-ref repo)
                local-latest-commit (common-handler/get-ref repo)
                result (git/get-diffs repo local-latest-commit remote-latest-commit)
-               token (helper/get-github-token repo)]
+               token (common-handler/get-github-token repo)]
          (reset! state/diffs result)
          (reset! remote-hash-id remote-latest-commit)
          (doseq [{:keys [type path]} result]
