@@ -177,6 +177,11 @@
   (not (false? (:feature/enable-timetracking?
                 (get (sub-config) (get-current-repo))))))
 
+(defn show-brackets?
+  []
+  (:ui/show-brackets?
+   (get (sub-config) (get-current-repo))))
+
 (defn get-default-home
   []
   (:default-home (get-config)))

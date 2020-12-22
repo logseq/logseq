@@ -4,6 +4,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.util :as util]
@@ -75,6 +76,14 @@
     "alt+shift+down" (fn [state e] (editor-handler/move-up-down e false))}
    (medley/map-keys util/->system-modifier)))
 
+(defn chord-aux
+  [f]
+  (fn [_state _e]
+    (f)
+    ;; return false to prevent default browser behavior
+    ;; and stop event from bubbling
+    false))
+
 (defonce chords
   {;; Toggle
    "t d" state/toggle-document-mode!
@@ -82,11 +91,8 @@
    "t r" ui-handler/toggle-right-sidebar!
    "t e" state/toggle-new-block-shortcut!
    "s" route-handler/toggle-between-page-and-file!
-   "ctrl+c ctrl+s" (fn [state e]
-                     (search-handler/rebuild-indices!)
-                     ;; return false to prevent default browser behavior
-                     ;; and stop event from bubbling
-                     false)})
+   "ctrl+c ctrl+s" (chord-aux search-handler/rebuild-indices!)
+   "ctrl+c ctrl+b" (chord-aux config-handler/toggle-ui-show-brackets!)})
 
 (defonce bind! (gobj/get mousetrap "bind"))
 
