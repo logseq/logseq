@@ -416,7 +416,7 @@
 
 (rum/defc nested-link < rum/reactive
   [config html-export? link]
-  (let [show-brackets? (state/sub :ui/show-brackets?)
+  (let [show-brackets? (state/show-brackets?)
         {:keys [content children]} link]
     [:span.page-reference.nested
      (when (and show-brackets?
