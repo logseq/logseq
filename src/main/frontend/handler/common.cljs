@@ -7,7 +7,8 @@
             [frontend.text :as text]
             [frontend.git :as git]
             [frontend.db :as db]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [cljs.reader :as reader]))
 
 (defn get-ref
   [repo-url]
@@ -64,3 +65,19 @@
                 :remote-oid remote-oid
                 :diffs diffs})))
   )
+
+(defn get-config
+  [repo-url]
+  (db/get-file repo-url (str config/app-name "/" config/config-file)))
+
+(defn reset-config!
+  [repo-url content]
+  (when-let [content (or content (get-config repo-url))]
+    (let [config (try
+                   (reader/read-string content)
+                   (catch js/Error e
+                     (println "Parsing config file failed: ")
+                     (js/console.dir e)
+                     {}))]
+      (state/set-config! repo-url config)
+      config)))

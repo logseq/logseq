@@ -62,7 +62,7 @@
                               (db/get-file repo-url path))
                 content (or old-content default-content)]
             (file-handler/reset-file! repo-url path content)
-            (h-utils/reset-config! repo-url content)
+            (common-handler/reset-config! repo-url content)
             (when-not (= content old-content)
               (git-handler/git-add repo-url path))))))))
 
