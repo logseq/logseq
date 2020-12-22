@@ -157,7 +157,8 @@
                                                (util/format "[[%s]]" journal)
                                                format
                                                nil)
-               (state/set-editor-show-date-picker! false))
+               (state/set-editor-show-date-picker! false)
+               (reset! commands/*current-command nil))
              (swap! *timestamp assoc :date date)))})
        (when deadline-or-schedule?
          (time-repeater))])))
