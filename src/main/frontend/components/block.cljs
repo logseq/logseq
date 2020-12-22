@@ -81,10 +81,6 @@
   [col]
   (remove nil? col))
 
-(defn anchor-link
-  [s]
-  (.anchorLink js/window.Mldoc s))
-
 (defn vec-cat
   [& args]
   (->> (apply concat args)
@@ -514,11 +510,11 @@
           (image-link config url s label)
 
           (= \# (first s))
-          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
+          (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
           (and (= \* (first s))
                (not= \* (last s)))
-          (->elem :a {:href (str "#" (anchor-link (subs s 1)))} (map-inline config label))
+          (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
 
           (re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s}

@@ -11,6 +11,7 @@
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
 (defonce parseHtml (gobj/get Mldoc "parseHtml"))
+(defonce anchorLink (gobj/get Mldoc "anchorLink"))
 
 (defn default-config
   [format]
