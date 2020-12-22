@@ -12,10 +12,8 @@
   datascript-transit/datascript-transit
   {:mvn/version "0.3.0"
    :exclusions [datascript]}
-  lread/rewrite-cljc          {:git/url "https://github.com/lread/rewrite-cljc-playground"
-                               :sha "ba1e4255cd1c1fd09dbe2e90556bfa66d5459234"}
-  borkdude/rewrite-edn        {:git/url "https://github.com/tiensonqin/rewrite-edn"
-                               :sha "b54f2f7528412979795167b342af6b03ba1a1cde"}
+  borkdude/rewrite-edn        {:git/url "https://github.com/borkdude/rewrite-edn"
+                               :sha "edd87dc7f045f28d7afcbfc44bc0f0a2683dde62"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley/medley               {:mvn/version "1.2.0"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
