@@ -35,6 +35,7 @@ html[data-theme=dark] {
   --ls-active-primary-color: #8ec2c2;
   --ls-active-secondary-color: #d0e8e8;
   --ls-block-properties-background-color: #02222a;
+  --ls-block-ref-link-text-color: #1a6376;
   --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #0e5263;
   --ls-guideline-color: #0b4a5a;
@@ -42,7 +43,7 @@ html[data-theme=dark] {
   --ls-primary-text-color: #a4b5b6;
   --ls-secondary-text-color: #dfdfdf;
   --ls-title-text-color: #93a1a1;
-  --ls-link-text-color: #8abbbb;
+  --ls-link-text-color: rgb(138, 187, 187);
   --ls-link-text-hover-color: var(--ls-active-secondary-color);
   --ls-link-ref-text-color: var(--ls-link-text-color);
   --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
@@ -83,9 +84,10 @@ html[data-theme=light] {
   --ls-tertiary-background-color: #f0f8ff;
   --ls-quaternary-background-color: #e1f0fe;
   --ls-table-tr-even-background-color: #f4f5f7;
-  --ls-active-primary-color: #045591;
+  --ls-active-primary-color: rgb(4, 85, 145);
   --ls-active-secondary-color: #003761;
   --ls-block-properties-background-color: var(--ls-tertiary-background-color);
+  --ls-block-ref-link-text-color: #D8E1E8;
   --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #ccc;
   --ls-guideline-color: var(--ls-border-color);
