@@ -66,7 +66,7 @@ jobs:
             ${{ runner.os }}-yarn-
       - name: Fetch yarn deps
         if: steps.yarn-cache.outputs.cache-hit != 'true'
-        run: yarn install --frozen-lockfile
+        run: yarn cache clean && yarn install --frozen-lockfile
 
       - name: Run Clojure test
         run: |
