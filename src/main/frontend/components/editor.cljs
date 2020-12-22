@@ -495,7 +495,7 @@
               (let [input-id (state/get-edit-input-id)
                     input (and input-id (gdom/getElement id))
                     pos (and input (:pos (util/get-caret-pos input)))]
-                (when-not (state/get-editor-show-input)
+                (when (not @commands/*current-command)
                   (util/stop e)
                   (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
                                     :left
@@ -596,19 +596,8 @@
                 (let [matched-commands (editor-handler/get-matched-commands input)]
                   (if (seq matched-commands)
                     (do
-                      (cond
-                        (= key-code 9)      ;tab
-                        (when @*show-commands
-                          (util/stop e)
-                          (editor-handler/insert-command! input-id
-                                                          (last (first matched-commands))
-                                                          format
-                                                          nil))
-
-                        :else
-                        (do
-                          (reset! *show-commands true)
-                          (reset! *matched-commands matched-commands))))
+                      (reset! *show-commands true)
+                      (reset! *matched-commands matched-commands))
                     (reset! *show-commands false))))
               (when (and @*show-block-commands (not= key-code 188))     ; not <
                 (let [matched-block-commands (editor-handler/get-matched-block-commands input)]

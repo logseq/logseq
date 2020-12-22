@@ -9,7 +9,8 @@
             [cljs-time.core :as t]
             [frontend.ui :as ui]
             [frontend.commands :as commands]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.mixins :as mixins]))
 
 (defonce default-timestamp-value {:date nil
                                   :time ""
