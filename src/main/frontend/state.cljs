@@ -177,10 +177,11 @@
   (not (false? (:feature/enable-timetracking?
                 (get (sub-config) (get-current-repo))))))
 
+;; Enable by default
 (defn show-brackets?
   []
-  (:ui/show-brackets?
-   (get (sub-config) (get-current-repo))))
+  (not (false? (:ui/show-brackets?
+                (get (sub-config) (get-current-repo))))))
 
 (defn get-default-home
   []
@@ -365,7 +366,7 @@
   [range]
   (set-state! :cursor-range range))
 
-; FIXME: unused function
+                                        ; FIXME: unused function
 (defn get-cloning?
   []
   (:repo/cloning? @state))
@@ -591,7 +592,7 @@
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (second %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
-                                          ; FIXME: No need to call `distinct`?
+                                        ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
     (when-let [elem (gdom/getElement "right-sidebar")]
