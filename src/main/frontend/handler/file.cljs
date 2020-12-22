@@ -24,8 +24,7 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.utf8 :as utf8]
-            ["ignore" :as Ignore]
-            [frontend.handler.utils :as h-utils]))
+            ["ignore" :as Ignore]))
 
 (defn load-file
   [repo-url path]

@@ -21,9 +21,9 @@
             [frontend.handler.web.nfs :as nfs]
             [frontend.ui :as ui]
             [goog.object :as gobj]
-            [frontend.helper :as helper]
             [frontend.idb :as idb]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.handler.common :as common-handler]))
 
 (defn- watch-for-date!
   []
@@ -111,7 +111,7 @@
                             (page-handler/init-commands!)
                             (if (seq (:repos me))
                               ;; FIXME: handle error
-                              (helper/request-app-tokens!
+                              (common-handler/request-app-tokens!
                                (fn []
                                  (repo-handler/clone-and-pull-repos me))
                                (fn []

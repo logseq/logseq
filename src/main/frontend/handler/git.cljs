@@ -10,8 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
             [frontend.config :as config]
-            [cljs-time.local :as tl]
-            [frontend.helper :as helper]))
+            [cljs-time.local :as tl]))
 
 (defn- set-git-status!
   [repo-url value]
@@ -46,7 +45,7 @@
      (p/let [remote-oid (common-handler/get-remote-ref repo)
              commit-oid (git/commit repo commit-message (array remote-oid))
              result (git/write-ref! repo commit-oid)
-             token (helper/get-github-token repo)
+             token (common-handler/get-github-token repo)
              push-result (git/push repo token true)]
        (reset! pushing? false)
        (notification/clear! nil)
