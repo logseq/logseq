@@ -495,7 +495,9 @@
               (let [input-id (state/get-edit-input-id)
                     input (and input-id (gdom/getElement id))
                     pos (and input (:pos (util/get-caret-pos input)))]
-                (when (not @commands/*current-command)
+                (when (and (not (state/get-editor-show-input))
+                           (not (state/get-editor-show-date-picker?))
+                           (not (state/get-editor-show-template-search?)))
                   (util/stop e)
                   (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
                                     :left
