@@ -123,8 +123,8 @@
                  (d/q '[:find (pull ?p [*])
                         :in $ ?alias
                         :where
-                        [?p :page/alias ?a]
-                        [?a :page/name ?alias]]
+                        [?a :page/name ?alias]
+                        [?p :page/alias ?a]]
                       conn
                       alias)
                  (db-utils/seq-flatten))]
