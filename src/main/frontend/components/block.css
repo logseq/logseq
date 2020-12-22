@@ -28,6 +28,10 @@
 
 .block-ref {
   color: var(--ls-link-text-color);
+  padding-bottom: 2px;
+  border-bottom: 0.5px solid;
+  border-bottom-color: var(--ls-secondary-background-color);
+  cursor: alias;
 
   &:hover {
     color: var(--ls-link-text-hover-color)

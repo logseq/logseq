@@ -374,21 +374,20 @@
                      (db/pull-block (uuid id)))]
       (if block
         [:span
-         [:span.text-gray-500 "(("]
-         [:a {:href (rfe/href :page {:name id})
-              :on-click (fn [e]
-                          (.preventDefault e)
-                          (when (gobj/get e "shiftKey")
-                            (state/sidebar-add-block!
-                             (state/get-current-repo)
-                             (:db/id block)
-                             :block-ref
-                             {:block block})))}
+         [:a
+          {:href (rfe/href :page {:name id})
+           :on-click (fn [e]
+                       (.preventDefault e)
+                       (when (gobj/get e "shiftKey")
+                         (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id block)
+                          :block-ref
+                          {:block block})))}
 
           (->elem
            :span.block-ref
-           (map-inline config (:block/title block)))]
-         [:span.text-gray-500 "))"]]
+           (map-inline config (:block/title block)))]]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
