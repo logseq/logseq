@@ -17,6 +17,7 @@
             [frontend.ui :as ui]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repeated :as repeated]
@@ -256,14 +257,16 @@
       [:a.page-ref
        {:href href
         :on-click (fn [e]
-                    (.preventDefault e)
-                    (when (gobj/get e "shiftKey")
+                    (util/stop e)
+                    (if (gobj/get e "shiftKey")
                       (when-let [page-entity (db/entity [:page/name page])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
-                         {:page page-entity})))
+                         {:page page-entity}))
+                      (route-handler/redirect! {:to :page
+                                                :path-params {:name page}}))
                     (when (and contents-page?
                                (state/get-left-sidebar-open?))
                       (ui-handler/close-left-sidebar!)))}
@@ -375,15 +378,16 @@
       (if block
         [:span
          [:a
-          {:href (rfe/href :page {:name id})
-           :on-click (fn [e]
-                       (.preventDefault e)
-                       (when (gobj/get e "shiftKey")
+          {:on-click (fn [e]
+                       (util/stop e)
+                       (if (gobj/get e "shiftKey")
                          (state/sidebar-add-block!
                           (state/get-current-repo)
                           (:db/id block)
                           :block-ref
-                          {:block block})))}
+                          {:block block})
+                         (route-handler/redirect! {:to :page
+                                                   :path-params {:name id}})))}
 
           (->elem
            :span.block-ref

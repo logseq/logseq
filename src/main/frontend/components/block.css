@@ -30,7 +30,7 @@
   color: var(--ls-link-text-color);
   padding-bottom: 2px;
   border-bottom: 0.5px solid;
-  border-bottom-color: var(--ls-secondary-background-color);
+  border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
 
   &:hover {
