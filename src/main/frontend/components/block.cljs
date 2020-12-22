@@ -281,11 +281,15 @@
            label
            original-page-name))])))
 
-(defn page-reference
+(rum/defc page-reference < rum/reactive
   [html-export? s config label]
-  (let [contents-page? (= "contents" (string/lower-case (str (:id config))))]
+  (let [show-brackets? (state/show-brackets?)
+        nested-link? (:nested-link? config)
+        contents-page? (= "contents" (string/lower-case (str (:id config))))]
     [:span.page-reference
-     (when (and (not html-export?) (not contents-page?))
+     (when (and (or show-brackets? nested-link?)
+                (not html-export?)
+                (not contents-page?))
        [:span.text-gray-500 "[["])
      (if (string/ends-with? s ".excalidraw")
        [:a.page-ref
@@ -299,7 +303,9 @@
        (page-cp (assoc config
                        :label (mldoc/plain->text label)
                        :contents-page? contents-page?) {:page/name s}))
-     (when (and (not html-export?) (not contents-page?))
+     (when (and (or show-brackets? nested-link?)
+                (not html-export?)
+                (not contents-page?))
        [:span.text-gray-500 "]]"])]))
 
 (defn- latex-environment-content
@@ -408,6 +414,24 @@
     [:span.warning {:title (str "Unsupported macro name: " name)}
      (macro->text name arguments)]))
 
+(rum/defc nested-link < rum/reactive
+  [config html-export? link]
+  (let [show-brackets? (state/sub :ui/show-brackets?)
+        {:keys [content children]} link]
+    [:span.page-reference.nested
+     (when (and show-brackets?
+                (not html-export?)
+                (not (= (:id config) "contents")))
+       [:span.text-gray-500 "[["])
+     (let [page-name (subs content 2 (- (count content) 2))]
+       (page-cp (assoc config
+                       :children children
+                       :nested-link? true) {:page/name page-name}))
+     (when (and show-brackets?
+                (not html-export?)
+                (not (= (:id config) "contents")))
+       [:span.text-gray-500 "]]"])]))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -474,16 +498,7 @@
     (block-reference config id)
 
     ["Nested_link" link]
-    (let [{:keys [content children]} link]
-      [:span.page-reference
-       (when (and (not html-export?)
-                  (not (= (:id config) "contents")))
-         [:span.text-gray-500 "[["])
-       (let [page-name (subs content 2 (- (count content) 2))]
-         (page-cp (assoc config :children children) {:page/name page-name}))
-       (when (and (not html-export?)
-                  (not (= (:id config) "contents")))
-         [:span.text-gray-500 "]]"])])
+    (nested-link config html-export? link)
 
     ["Link" link]
     (let [{:keys [url label title]} link

@@ -5,6 +5,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -67,6 +68,7 @@
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
+        show-brackets? (state/show-brackets?)
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
@@ -88,6 +90,15 @@
           (ui/toggle dark?
                      (fn []
                        (state/set-theme! switch-theme)))]]]
+
+       [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5.pl-1
+        [:label.block.text-sm.font-medium.leading-5.opacity-70
+         {:for "show_brackets"}
+         (t :settings-page/show-brackets)]
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:div.max-w-lg.rounded-md.sm:max-w-xs
+          (ui/toggle show-brackets?
+                     config-handler/toggle-ui-show-brackets!)]]]
 
        [:div.mb-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5.pl-1
         [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
