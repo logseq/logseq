@@ -1448,6 +1448,13 @@
                                      true)]
       (commands/restore-state restore-slash-caret-pos?))))
 
+(defn- get-image-link
+  [format url file-name]
+  (case (keyword format)
+    :markdown (util/format "![%s](%s)" file-name url)
+    :org (util/format "[[%s][%s]]" url file-name)
+    nil))
+
 (defn upload-image
   [id files format uploading? drop?]
   (image/upload
@@ -1458,9 +1465,7 @@
       uploading?
       (fn [signed-url]
         (insert-command! id
-                         (util/format "[[%s][%s]]"
-                                      signed-url
-                                      file-name)
+                         (get-image-link format signed-url file-name)
                          format
                          {:last-pattern (if drop? "" commands/slash)
                           :restore? true})
@@ -1927,6 +1932,15 @@
             [[file-path new-content]])))
         (cycle-collapse! state e)))))
 
+(defn- get-link
+  [format link label]
+  (let [link (or link "")
+        label (or label "")]
+    (case (keyword format)
+      :markdown (util/format "[%s](%s)" label link)
+      :org (util/format "[[%s][%s]]" link label)
+      nil)))
+
 (defn handle-command-input
   [command id format m pos]
   (case command
@@ -1936,9 +1950,7 @@
                (string/blank? label))
         nil
         (insert-command! id
-                         (util/format "[[%s][%s]]"
-                                      (or link "")
-                                      (or label ""))
+                         (get-link format link label)
                          format
                          {:last-pattern (str commands/slash "link")})))
     :draw
