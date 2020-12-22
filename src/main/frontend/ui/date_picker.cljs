@@ -221,7 +221,8 @@
               (when-not (input-or-select?)
                 (swap! *internal-model inc-week 1)))}
         {:all-handler (fn [e key-code]
-                        (when (contains? #{13} key-code)
+                        (when (and (contains? #{13 37 39 38 40} key-code)
+                                   (not deadline-or-schedule?))
                           (util/stop e)))}))))
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
