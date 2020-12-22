@@ -181,13 +181,25 @@
     (merge attributes {:selectable-fn selectable-fn})))
 
 ;; TODO: find a better way
+(defn- non-edit-input?
+  []
+  (when-let [elem js/document.activeElement]
+    (and (util/input? elem)
+         (when-let [id (gobj/get elem "id")]
+           (not (string/starts-with? id "edit-block-"))))))
+
 (defn- input-or-select?
   []
   (when-let [elem js/document.activeElement]
-    (or (and (util/input? elem)
-             (when-let [id (gobj/get elem "id")]
-               (not (string/starts-with? id "edit-block-"))))
+    (or (non-edit-input?)
         (util/select? elem))))
+
+(defn- edit-input?
+  []
+  (when-let [elem js/document.activeElement]
+    (and (util/input? elem)
+         (when-let [id (gobj/get elem "id")]
+           (string/starts-with? id "edit-block-")))))
 
 (rum/defc date-picker < rum/reactive
   (mixins/event-mixin
@@ -202,27 +214,27 @@
                 (when-not deadline-or-schedule?
                   (on-change e @*internal-model))))
 
-        ;; left, previous day
+         ;; left, previous day
          37 (fn [state e]
               (when-not (input-or-select?)
                 (swap! *internal-model inc-date -1)))
 
-        ;; right, next day
+         ;; right, next day
          39 (fn [state e]
               (when-not (input-or-select?)
                 (swap! *internal-model inc-date 1)))
 
-        ;; up, one week ago
+         ;; up, one week ago
          38 (fn [state e]
               (when-not (input-or-select?)
                 (swap! *internal-model inc-week -1)))
-        ;; down, next week
+         ;; down, next week
          40 (fn [state e]
               (when-not (input-or-select?)
                 (swap! *internal-model inc-week 1)))}
         {:all-handler (fn [e key-code]
                         (when (and (contains? #{13 37 39 38 40} key-code)
-                                   (not deadline-or-schedule?))
+                                   (edit-input?))
                           (util/stop e)))}))))
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
