@@ -1584,6 +1584,25 @@
                       {:style {:margin-top "0.25rem"
                                :margin-left "0.25rem"}})
 
+            ;; page list
+            (and (seq result)
+                 (:page/name (first result)))
+            [:ol
+             (for [{:page/keys [name original-name] :as page-entity} result]
+               [:li
+                [:a {:href (rfe/href :page {:name name})
+                     :on-click (fn [e]
+                                 (util/stop e)
+                                 (if (gobj/get e "shiftKey")
+                                   (state/sidebar-add-block!
+                                    (state/get-current-repo)
+                                    (:db/id page-entity)
+                                    :page
+                                    {:page page-entity})
+                                   (route-handler/redirect! {:to :page
+                                                             :path-params {:name name}})))}
+                 (or original-name name)]])]
+
             (seq result)                     ;TODO: table
             (let [result (->>
                           (for [record result]
