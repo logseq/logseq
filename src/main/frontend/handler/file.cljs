@@ -80,10 +80,10 @@
    (restore-config! repo-url nil project-changed-check?))
   ([repo-url config-content project-changed-check?]
    (let [config-content (if config-content config-content
-                            (h-utils/get-config repo-url))]
+                            (common-handler/get-config repo-url))]
      (when config-content
        (let [old-project (:project (state/get-config))
-             new-config (h-utils/reset-config! repo-url config-content)]
+             new-config (common-handler/reset-config! repo-url config-content)]
          (when (and (not (config/local-db? repo-url))
                     project-changed-check?)
            (let [new-project (:project new-config)
