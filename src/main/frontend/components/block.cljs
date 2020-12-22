@@ -1043,7 +1043,7 @@
           only-title? (and (= 1 (count ast))
                            (= "Properties" (ffirst ast))
                            (let [m (second (first ast))]
-                             (= (keys m) [:title])))
+                             (every? #(util/in? % [:title :filter]) (keys m))))
           block-cp [:div {:class (if only-title?
                                    (util/hiccup->class "pre-block.opacity-50")
                                    (util/hiccup->class "pre-block.bg-base-2.p-2.rounded"))}
