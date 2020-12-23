@@ -66,9 +66,11 @@
   (let [file-key (datascript-files-db repo)
         non-file-key (datascript-db repo)
         file-db (d/db (get-files-conn repo))
-        non-file-db (d/db (get-conn repo false))]
-    (p/let [_ (idb/set-item! file-key (db->string file-db))
-            _ (idb/set-item! non-file-key (db->string non-file-db))]
+        non-file-db (d/db (get-conn repo false))
+        file-db-str (db->string file-db)
+        non-file-db-str (db->string non-file-db)]
+    (p/let [_ (idb/set-batch! [{:key file-key :value file-db-str}
+                               {:key non-file-key :value non-file-db-str}])]
       (state/set-last-persist-transact-id! repo true (get-max-tx-id file-db))
       (state/set-last-persist-transact-id! repo false (get-max-tx-id non-file-db)))))
 
