@@ -109,7 +109,7 @@ html[data-theme=light] {
   --ls-page-checkbox-color: var(--ls-active-primary-color);
   --ls-page-checkbox-border-color: #8c8c8c;
   --ls-page-blockquote-color: var(--ls-primary-text-color);
-  --ls-page-blockquote-bg-color: transparent;
+  --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
   --ls-page-blockquote-border-color: var(--ls-active-primary-color);
   --ls-page-inline-code-bg-color: var(--ls-secondary-background-color);
   --ls-page-inline-code-color: var(--ls-primary-text-color);
