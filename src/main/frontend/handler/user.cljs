@@ -60,11 +60,12 @@
                  (fn [_e])))))
 
 (defn sign-out!
-  [e]
-  (->
-   (idb/clear-local-storage-and-idb!)
-   (p/catch (fn [e]
-              (println "sign out error: ")
-              (js/console.dir e)))
-   (p/finally (fn []
-                (set! (.-href js/window.location) "/logout")))))
+  [_e]
+  (when (js/confirm "Your local notes will be completely removed after signing out. Continue?")
+    (->
+      (idb/clear-local-storage-and-idb!)
+      (p/catch (fn [e]
+                (println "sign out error: ")
+                (js/console.dir e)))
+      (p/finally (fn []
+                  (set! (.-href js/window.location) "/logout"))))))
