@@ -15,10 +15,7 @@
   "Register an event `handler` for events of `type` on `target`."
   [state target type handler & [opts]]
   (when-let [^EventHandler event-handler (::event-handler state)]
-    (.listen event-handler target
-             (let [types (if-not (sequential? type) [type] type)]
-               (clj->js (map #(name %) types)))
-             handler (clj->js opts))))
+    (.listen event-handler target (name type) handler (clj->js opts))))
 
 (def event-handler-mixin
   "The event handler mixin."
@@ -121,19 +118,23 @@
 
 (defn event-mixin
   ([attach-listeners]
-   (event-mixin attach-listeners identity))
-  ([attach-listeners init-callback]
+   (event-mixin attach-listeners nil))
+  ([attach-listeners {:keys [init-callback skip-did-remount?]
+                      :or {init-callback identity
+                           skip-did-remount? true}}]
    (merge
     event-handler-mixin
-    {:init (fn [state props]
-             (init-callback state))
-     :did-mount (fn [state]
-                  (attach-listeners state)
-                  state)
-     :did-remount (fn [old-state new-state]
-                    (detach old-state)
-                    (attach-listeners new-state)
-                    new-state)})))
+    (cond->
+     {:init (fn [state props]
+              (init-callback state))
+      :did-mount (fn [state]
+                   (attach-listeners state)
+                   state)}
+      skip-did-remount?
+      (assoc :did-remount (fn [old-state new-state]
+                            (detach old-state)
+                            (attach-listeners new-state)
+                            new-state))))))
 
 (defn modal
   [k]
@@ -145,20 +146,21 @@
         :on-hide (fn []
                    (when (and open? @open?)
                      (reset! open? false))))))
-   (fn [state]
-     (let [open? (atom false)
-           component (:rum/react-component state)]
-       (add-watch open? ::open
-                  (fn [_ _ _ _]
-                    (rum/request-render component)))
-       (assoc state
-              :open? open?
-              :close-fn (fn []
-                          (reset! open? false))
-              :open-fn (fn []
-                         (reset! open? true))
-              :toggle-fn (fn []
-                           (swap! open? not)))))))
+   {:init-callback
+    (fn [state]
+      (let [open? (atom false)
+            component (:rum/react-component state)]
+        (add-watch open? ::open
+                   (fn [_ _ _ _]
+                     (rum/request-render component)))
+        (assoc state
+               :open? open?
+               :close-fn (fn []
+                           (reset! open? false))
+               :open-fn (fn []
+                          (reset! open? true))
+               :toggle-fn (fn []
+                            (swap! open? not)))))}))
 
 (defn will-mount-effect
   [handler]
@@ -217,27 +219,25 @@
               (f)))
           state)}))))
 
-(defn stop-scroll-boundary-propagation-mixin
-  [el]
-  (event-mixin
-   (fn [state]
-     (listen state
-             (if (fn? el) (el state) el)
-             :wheel
-             (fn [^goog.events.MouseWheelEvent e]
-               (let [target (gobj/get e "currentTarget")
-                     delta-y (.. e getBrowserEvent -deltaY)
-                     client-height (.-clientHeight target)
-                     scroll-height (.-scrollHeight target)
-                     scroll-top (.-scrollTop target)
-                     top-boundary? (= scroll-top 0)
-                     bottom-boundary? (= (+ client-height scroll-top) scroll-height)]
-                 (when (or (and top-boundary? (< delta-y 0))
-                           (and bottom-boundary? (> delta-y 0)))
-                   (.preventDefault e))))))))
-
 ;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
 
+(defn prevent-bubble-scroll
+  [dom-id]
+  (event-mixin
+   (fn [state]
+     (let [cursor-in? (::cursor-in? state)]
+       (when-let [elem (dom/getElement dom-id)]
+         (listen state js/window
+                 :wheel (fn [e]
+                          (when (and cursor-in? @cursor-in?)
+                            (.stopPropagation e)))
+                 {:passive false})
+         (listen state elem :mouseenter (fn []
+                                          (reset! cursor-in? true)))
+         (listen state elem :mouseleave #(reset! cursor-in? false)))))
+   {:init-callback (fn [state]
+                     (assoc state ::cursor-in? (atom false)))
+    :skip-did-remount? false}))
 
 (defn perf-measure-mixin
   [desc]

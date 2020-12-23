@@ -1,6 +1,6 @@
 (ns frontend.components.right-sidebar
   (:require [rum.core :as rum]
-            [frontend.mixins :refer [stop-scroll-boundary-propagation-mixin]]
+            [frontend.mixins :as mixins]
             [frontend.ui :as ui]
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
@@ -19,6 +19,7 @@
             [frontend.extensions.slide :as slide]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
+            [goog.dom :as gdom]
             [frontend.graph :as graph]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
@@ -219,7 +220,7 @@
     (get-page match)))
 
 (rum/defcs sidebar < rum/reactive
-  (stop-scroll-boundary-propagation-mixin #(js/document.querySelector "#right-sidebar"))
+  (mixins/prevent-bubble-scroll "right-sidebar")
   [state]
   (let [blocks (state/sub :sidebar/blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
