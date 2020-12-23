@@ -21,7 +21,6 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.extract :as extract-handler]
             [frontend.ui :as ui]
-            [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [frontend.spec :as spec]))
@@ -493,26 +492,9 @@
          (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))
 
 (defn set-config-content!
-  [repo path new-config]
-  (let [new-content (util/pp-str new-config)]
-    (file-handler/alter-file repo path new-content {:reset? false
-                                                    :re-render-root? false})))
-
-(defn set-config!
-  [k v]
-  (when-let [repo (state/get-current-repo)]
-    (let [path (str config/app-name "/" config/config-file)]
-      (when-let [config (db/get-file-no-sub path)]
-        (let [config (try
-                       (reader/read-string config)
-                       (catch js/Error e
-                         (println "Parsing config file failed: ")
-                         (js/console.dir e)
-                         {}))
-              ks (if (vector? k) k [k])
-              new-config (assoc-in config ks v)]
-          (state/set-config! repo new-config)
-          (set-config-content! repo path new-config))))))
+  [repo path new-content]
+  (file-handler/alter-file repo path new-content {:reset? false
+                                                  :re-render-root? false}))
 
 (defn remove-repo!
   [{:keys [id url] :as repo}]

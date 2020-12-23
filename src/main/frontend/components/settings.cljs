@@ -183,7 +183,7 @@
               (ui/toggle enable-timetracking?
                          (fn []
                            (let [value (not enable-timetracking?)]
-                             (repo-handler/set-config! :feature/enable-timetracking? value))))]]]
+                             (config-handler/set-config! :feature/enable-timetracking? value))))]]]
 
            [:hr]
 
