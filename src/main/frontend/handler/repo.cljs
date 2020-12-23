@@ -590,10 +590,10 @@
                                   ".git/config")]
             (if (and config-exists?
                      (db/cloned? repo))
-              (do
+              (p/do!
                 (git-handler/git-set-username-email! repo me)
                 (pull repo nil))
-              (do
+              (p/do!
                 (clone-and-load-db repo))))))
 
       (periodically-pull-current-repo)

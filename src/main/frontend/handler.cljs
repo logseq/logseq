@@ -109,7 +109,7 @@
                             (nfs/ask-permission-if-local?)
 
                             (page-handler/init-commands!)
-                            (if (seq (:repos me))
+                            (when (seq (:repos me))
                               ;; FIXME: handle error
                               (common-handler/request-app-tokens!
                                (fn []
