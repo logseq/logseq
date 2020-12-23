@@ -16,6 +16,7 @@ dummy.fullpath = function() {};
 dummy.getRangeAt = function() {};
 dummy.getElementsByClassName = function() {};
 dummy.containsNode = function() {};
+dummy.contains = function() {};
 dummy.select = function() {};
 dummy.setAttribute = function() {};
 dummy.font = function() {};

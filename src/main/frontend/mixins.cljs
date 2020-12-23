@@ -232,7 +232,8 @@
                  :wheel (fn [e]
                           (when (and cursor-in? @cursor-in?)
                             (let [current-target (gobj/get e "currentTarget")]
-                              (when-not (= current-target elem)
+                              (when (and (not= current-target elem)
+                                         (not (.contains elem current-target)))
                                 (.preventDefault e)))))
                  {:passive false})
          (listen state elem :mouseenter (fn []
