@@ -129,12 +129,13 @@
               (init-callback state))
       :did-mount (fn [state]
                    (attach-listeners state)
-                   state)}
+                   state)
+      :did-remount (fn [old-state new-state]
+                     (detach old-state)
+                     (attach-listeners new-state)
+                     new-state)}
       skip-did-remount?
-      (assoc :did-remount (fn [old-state new-state]
-                            (detach old-state)
-                            (attach-listeners new-state)
-                            new-state))))))
+      (dissoc :did-remount)))))
 
 (defn modal
   [k]
@@ -227,17 +228,19 @@
    (fn [state]
      (let [cursor-in? (::cursor-in? state)]
        (when-let [elem (dom/getElement dom-id)]
-         (listen state js/window
+         (listen state elem
                  :wheel (fn [e]
                           (when (and cursor-in? @cursor-in?)
-                            (.stopPropagation e)))
+                            (let [current-target (gobj/get e "currentTarget")]
+                              (when-not (= current-target elem)
+                                (.preventDefault e)))))
                  {:passive false})
          (listen state elem :mouseenter (fn []
                                           (reset! cursor-in? true)))
          (listen state elem :mouseleave #(reset! cursor-in? false)))))
    {:init-callback (fn [state]
                      (assoc state ::cursor-in? (atom false)))
-    :skip-did-remount? false}))
+    :skip-did-remount? true}))
 
 (defn perf-measure-mixin
   [desc]
