@@ -861,19 +861,35 @@
    (when repo
      (when (conn/get-conn repo)
        (let [page-id (:db/id (db-utils/entity [:page/name page]))
-             pages (page-alias-set repo page)]
-         (->> (react/q repo [:page/refed-blocks page-id] {}
-                       '[:find (pull ?block [*])
-                         :in $ ?pages
-                         :where
-                         [?block :block/ref-pages ?ref-page]
-                         [(contains? ?pages ?ref-page)]]
-                       pages)
+             pages (page-alias-set repo page)
+             aliases (set/difference pages #{page-id})
+             query-result (if (seq aliases)
+                            (let [rules '[[(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
+                                           [?block :block/page ?alias]
+                                           [(contains? ?aliases ?alias)]]
+                                          [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
+                                           [?block :block/ref-pages ?ref-page]
+                                           [(contains? ?pages ?ref-page)]]]]
+                              (react/q repo [:page/refed-blocks page-id] {}
+                                       '[:find (pull ?block [*])
+                                         :in $ % ?pages ?aliases
+                                         :where
+                                         (find-blocks ?block ?ref-page ?pages ?alias ?aliases)]
+                                       rules
+                                       pages
+                                       aliases))
+                            (react/q repo [:page/refed-blocks page-id] {}
+                                     '[:find (pull ?block [*])
+                                       :in $ ?pages
+                                       :where
+                                       [?block :block/ref-pages ?ref-page]
+                                       [(contains? ?pages ?ref-page)]]
+                                     pages))]
+         (->> query-result
               react
               db-utils/seq-flatten
               (remove (fn [block]
-                        (let [exclude-pages pages]
-                          (contains? exclude-pages (:db/id (:block/page block))))))
+                        (= page-id (:db/id (:block/page block)))))
               sort-blocks
               db-utils/group-by-page))))))
 
