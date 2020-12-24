@@ -7,7 +7,8 @@
             [frontend.storage :as storage]
             [promesa.core :as p]
             [goog.object :as gobj]
-            [frontend.handler.notification :as notification])
+            [frontend.handler.notification :as notification]
+            [frontend.handler.config :as config-handler])
   (:import [goog.format EmailAddress]))
 
 (defn email? [v]
@@ -40,13 +41,15 @@
 (defn set-preferred-format!
   [format]
   (when format
+    (config-handler/set-config! :preferred_format format)
     (state/set-preferred-format! format)
     (when (:name (:me @state/state))
-      (util/post (str config/api "set_preferred_format")
-                 {:preferred_format (name format)}
-                 (fn [_result]
-                   (notification/show! "Format set successfully!" :success))
-                 (fn [_e])))))
+      (when (state/logged?)
+        (util/post (str config/api "set_preferred_format")
+                   {:preferred_format (name format)}
+                   (fn [_result]
+                     (notification/show! "Format set successfully!" :success))
+                   (fn [_e]))))))
 
 (defn set-preferred-workflow!
   [workflow]
@@ -63,9 +66,9 @@
   [_e]
   (when (js/confirm "Your local notes will be completely removed after signing out. Continue?")
     (->
-      (idb/clear-local-storage-and-idb!)
-      (p/catch (fn [e]
+     (idb/clear-local-storage-and-idb!)
+     (p/catch (fn [e]
                 (println "sign out error: ")
                 (js/console.dir e)))
-      (p/finally (fn []
+     (p/finally (fn []
                   (set! (.-href js/window.location) "/logout"))))))

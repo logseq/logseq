@@ -380,22 +380,43 @@
                      "ls-block"
                      "edit-block"))))
 
+(defn- with-time-properties
+  [block properties]
+  (if (state/enable-block-time?)
+    (let [time (util/time-ms)
+          props (into {} (:block/properties block))]
+      (merge properties
+             (if-let [created-at (get props "created_at")]
+               {"created_at" created-at
+                "last_modified_at" time}
+               {"created_at" time
+                "last_modified_at" time})))
+    properties))
+
+(defn- block-text-with-time
+  [block format value]
+  (let [value (text/remove-level-spaces value (keyword format))
+        properties (with-time-properties block {})]
+    (text/re-construct-block-properties value properties)))
+
 (defn save-block-if-changed!
   ([block value]
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties remove-property? rebuild-content?]
+    {:keys [indent-left? custom-properties remove-properties rebuild-content?]
      :or {rebuild-content? true
           custom-properties nil
-          remove-property? false}}]
+          remove-properties nil}}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (assoc (with-block-meta repo block)
-                      :block/properties (:block/properties e))
+                      ;; (into {} ...) to fix the old data
+                      :block/properties (into {} (:block/properties e)))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
+         ;; page properties
          [old-properties new-properties] (when pre-block?
                                            [(:page/properties (db/entity (:db/id page)))
                                             (mldoc/parse-properties value format)])
@@ -415,17 +436,14 @@
          new-properties (if permalink-changed?
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
-         value (cond
-                 (or (seq custom-properties)
-                     remove-property?)
-                 (text/re-construct-block-properties block value custom-properties)
-
-                 (and (seq (:block/properties block))
-                      (text/properties-hidden? (:block/properties block)))
-                 (text/re-construct-block-properties block value (:block/properties block))
-
-                 :else
-                 value)]
+         text-properties (text/extract-properties value)
+         properties (->> custom-properties
+                         (with-time-properties block)
+                         (merge text-properties))
+         properties (if (and (seq properties) (seq remove-properties))
+                      (medley/remove-keys (fn [k] (contains? (set remove-properties) k)) properties)
+                      properties)
+         value (text/re-construct-block-properties value properties)]
      (cond
        (not= (string/trim content) (string/trim value)) ; block content changed
        (let [file (db/entity repo (:db/id file))]
@@ -455,10 +473,11 @@
                    (util/format "File %s already exists!" file-path)]
                   :error)
                  ;; create the file
-                 (let [content (str (util/default-content-with-title format
+                 (let [value (block-text-with-time nil format value)
+                       content (str (util/default-content-with-title format
                                       (or (:page/original-name page)
                                           (:page/name page)))
-                                    (text/remove-level-spaces value (keyword format)))]
+                                    value)]
                    (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                            _ (git-handler/git-add repo path)]
                      (file-handler/reset-file! repo path content)
@@ -607,7 +626,9 @@
                        (let [value (if create-new-block?
                                      (str fst-block-text "\n" snd-block-text)
                                      value)
-                             value (text/re-construct-block-properties block value properties)
+                             text-properties (text/extract-properties fst-block-text)
+                             properties (with-time-properties block text-properties)
+                             value (text/re-construct-block-properties value properties)
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
                              parse-result (block/parse-block (assoc block :block/content value) format)
@@ -708,11 +729,12 @@
                                                                    (:page/name page)))]
               (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                       _ (git-handler/git-add repo path)]
-                (file-handler/reset-file! repo path
-                                          (str content
-                                               (text/remove-level-spaces value (keyword format))
-                                               "\n"
-                                               snd-block-text))
+                (let [value (block-text-with-time nil format value)]
+                  (file-handler/reset-file! repo path
+                                            (str content
+                                                 value
+                                                 "\n"
+                                                 snd-block-text)))
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
@@ -761,14 +783,13 @@
 (defn- with-timetracking-properties
   [block value]
   (let [new-marker (first (re-find format/bare-marker-pattern (or value "")))
-        new-marker (if new-marker (string/lower-case (string/trim new-marker)))
-        properties (into {} (:block/properties block))]
+        new-marker (if new-marker (string/lower-case (string/trim new-marker)))]
     (if (and
          new-marker
          (not= new-marker (string/lower-case (or (:block/marker block) "")))
          (state/enable-timetracking?))
-      (assoc properties new-marker (util/time-ms))
-      properties)))
+      {new-marker (util/time-ms)}
+      {})))
 
 (defn insert-new-block!
   [state]
@@ -844,13 +865,10 @@
 
 (defn- with-marker-time
   [block marker]
-  (let [properties (:block/properties block)
-        properties (into {} properties)]
-    (if (state/enable-timetracking?)
-      (assoc properties
-             (string/lower-case marker)
-             (util/time-ms))
-      properties)))
+  (if (state/enable-timetracking?)
+    (let [marker (string/lower-case marker)]
+      {marker (util/time-ms)})
+    {}))
 
 (defn check
   [{:block/keys [uuid marker content meta file dummy? repeated?] :as block}]
@@ -1050,8 +1068,7 @@
       (let [{:block/keys [content properties]} block]
         (when (get properties key)
           (save-block-if-changed! block content
-                                  {:custom-properties (dissoc properties key)
-                                   :remove-property? true}))))))
+                                  {:remove-properties [key]}))))))
 
 (defn set-block-property!
   [block-id key value]
@@ -1067,13 +1084,9 @@
             nil
 
             :else
-            (let [properties (:block/properties block)
-                  properties' (if (seq properties)
-                                (assoc properties key value)
-                                {key value})]
-              (save-block-if-changed! block content
-                                      {:custom-properties properties'
-                                       :rebuild-content? false}))))))))
+            (save-block-if-changed! block content
+                                    {:custom-properties {key value}
+                                     :rebuild-content? false})))))))
 
 (defn set-block-timestamp!
   [block-id key value]

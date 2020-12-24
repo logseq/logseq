@@ -33,7 +33,8 @@
 
 (def hidden-properties
   (set/union
-   #{"id" "custom_id" "heading" "background_color"}
+   #{"id" "custom_id" "heading" "background_color"
+     "created_at" "last_modified_at"}
    config/markers))
 
 (defn properties-hidden?
@@ -112,23 +113,24 @@
     (when (and start end)
       (subs text start (+ end 5)))))
 
+(defn extract-properties
+  [text]
+  (when-let [properties-text (get-properties-text text)]
+    (->> (string/split-lines properties-text)
+         (map (fn [line]
+                (when (= ":" (first line))
+                  (let [[k v] (util/split-first ":" (subs line 1))]
+                    (when (and k v)
+                      (let [k (string/trim (string/lower-case k))
+                            v (string/trim (string/lower-case v))]
+                        (when-not (contains? #{"properties" "end"} k)
+                          [k v])))))))
+         (into {}))))
+
 (defn re-construct-block-properties
-  [block content properties]
-  (let [content' (-> (remove-level-spaces content (:block/format block))
-                     (string/trim)
-                     (string/lower-case))
-        properties-text (get-properties-text content)]
-    (if (or
-         (and
-          properties-text
-          (string/starts-with? content' (string/lower-case properties-text)))
-         (and (contains-properties? content)
-              ;; not changed
-              (= (seq (:block/properties (db/entity [:block/uuid (:block/uuid block)])))
-                 (seq properties))))
-      content
-      (-> (remove-properties! content)
-          (rejoin-properties properties)))))
+  [content properties]
+  (-> (remove-properties! content)
+      (rejoin-properties properties)))
 
 (defn insert-property
   [content key value]
