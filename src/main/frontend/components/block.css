@@ -87,7 +87,7 @@
 .ls-block {
   min-height: 24px;
   padding: 2px 0;
-  margin-top: 1px;
+  border-bottom: 1px solid var(--ls-primary-background-color);
 
   img {
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
