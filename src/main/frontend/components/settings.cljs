@@ -68,6 +68,7 @@
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
+        enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
@@ -128,101 +129,112 @@
           [:a {:href (str "/file/" (util/url-encode (str config/app-name "/" config/config-file)))}
            (t :settings-page/edit-config-edn)])
 
-        (when logged? [:hr])
+        [:hr]
 
-        (when logged?
-          [:div.mt-6.sm:mt-5
-           [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-             {:for "preferred_format"}
-             (t :settings-page/preferred-file-format)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-              [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
-               {:on-change (fn [e]
-                             (let [format (-> (util/evalue e)
+        [:div.mt-6.sm:mt-5
+         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "preferred_format"}
+           (t :settings-page/preferred-file-format)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
+             {:on-change (fn [e]
+                           (let [format (-> (util/evalue e)
+                                            (string/lower-case)
+                                            keyword)]
+                             (user-handler/set-preferred-format! format)))}
+             (for [format [:org :markdown]]
+               [:option (cond->
+                         {:key (name format)}
+                          (= format preferred-format)
+                          (assoc :selected "selected"))
+                (string/capitalize (name format))])]]]]
+         [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "preferred_workflow"}
+           (t :settings-page/preferred-workflow)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
+             {:on-change (fn [e]
+                           (let [workflow (-> (util/evalue e)
                                               (string/lower-case)
-                                              keyword)]
-                               (user-handler/set-preferred-format! format)))}
-               (for [format [:org :markdown]]
-                 [:option (cond->
-                           {:key (name format)}
-                            (= format preferred-format)
-                            (assoc :selected "selected"))
-                  (string/capitalize (name format))])]]]]
-           [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-             {:for "preferred_workflow"}
-             (t :settings-page/preferred-workflow)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-              [:select.mt-1.form-select.block.w-full.pl-3.pr-10.py-2.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
-               {:on-change (fn [e]
-                             (let [workflow (-> (util/evalue e)
-                                                (string/lower-case)
-                                                keyword)
-                                   workflow (if (= workflow :now/later)
-                                              :now
-                                              :todo)]
-                               (user-handler/set-preferred-workflow! workflow)))}
-               (for [workflow [:now :todo]]
-                 [:option (cond->
-                           {:key (name workflow)}
-                            (= workflow preferred-workflow)
-                            (assoc :selected "selected"))
-                  (if (= workflow :now)
-                    "NOW/LATER"
-                    "TODO/DOING")])]]]]
+                                              keyword)
+                                 workflow (if (= workflow :now/later)
+                                            :now
+                                            :todo)]
+                             (user-handler/set-preferred-workflow! workflow)))}
+             (for [workflow [:now :todo]]
+               [:option (cond->
+                         {:key (name workflow)}
+                          (= workflow preferred-workflow)
+                          (assoc :selected "selected"))
+                (if (= workflow :now)
+                  "NOW/LATER"
+                  "TODO/DOING")])]]]]
 
-           [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.opacity-70
-             {:for "enable_timetracking"}
-             (t :settings-page/enable-timetracking)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.sm:max-w-xs
-              (ui/toggle enable-timetracking?
-                         (fn []
-                           (let [value (not enable-timetracking?)]
-                             (config-handler/set-config! :feature/enable-timetracking? value))))]]]
+         [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.opacity-70
+           {:for "enable_timetracking"}
+           (t :settings-page/enable-timetracking)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.sm:max-w-xs
+            (ui/toggle enable-timetracking?
+                       (fn []
+                         (let [value (not enable-timetracking?)]
+                           (config-handler/set-config! :feature/enable-timetracking? value))))]]]
 
-           [:hr]
+         [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.opacity-70
+           {:for "enable_block_time"}
+           (t :settings-page/enable-block-time)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.sm:max-w-xs
+            (ui/toggle enable-block-time?
+                       (fn []
+                         (let [value (not enable-block-time?)]
+                           (config-handler/set-config! :feature/enable-block-time? value))))]]]
 
-           (ui/admonition
-            :important
-            [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-             [:a {:href "https://github.com/isomorphic-git/cors-proxy"
-                  :target "_blank"}
-              "https://github.com/isomorphic-git/cors-proxy"]])
+         [:hr]
 
-           [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-             {:for "cors"}
-             (t :settings-page/custom-cors-proxy-server)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-              [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
-               {:default-value cors-proxy
-                :on-blur (fn [event]
-                           (when-let [server (util/evalue event)]
-                             (user-handler/set-cors! server)
-                             (notification/show! "Custom CORS proxy updated successfully!" :success)))
-                :on-key-press (fn [event]
-                                (let [k (gobj/get event "key")]
-                                  (if (= "Enter" k)
-                                    (when-let [server (util/evalue event)]
-                                      (user-handler/set-cors! server)
-                                      (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+         (when logged?
+           [:div
+            (ui/admonition
+             :important
+             [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
+              [:a {:href "https://github.com/isomorphic-git/cors-proxy"
+                   :target "_blank"}
+               "https://github.com/isomorphic-git/cors-proxy"]])
+            [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+             [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+              {:for "cors"}
+              (t :settings-page/custom-cors-proxy-server)]
+             [:div.mt-1.sm:mt-0.sm:col-span-2
+              [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+               [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
+                {:default-value cors-proxy
+                 :on-blur (fn [event]
+                            (when-let [server (util/evalue event)]
+                              (user-handler/set-cors! server)
+                              (notification/show! "Custom CORS proxy updated successfully!" :success)))
+                 :on-key-press (fn [event]
+                                 (let [k (gobj/get event "key")]
+                                   (if (= "Enter" k)
+                                     (when-let [server (util/evalue event)]
+                                       (user-handler/set-cors! server)
+                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
 
-           [:hr]
+            [:hr]])
 
-           [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-             {:for "developer_mode"}
-             (t :settings-page/developer-mode)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-              (ui/button (if developer-mode? (t :settings-page/disable-developer-mode) (t :settings-page/enable-developer-mode))
-                         :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
+         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "developer_mode"}
+           (t :settings-page/developer-mode)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            (ui/button (if developer-mode? (t :settings-page/disable-developer-mode) (t :settings-page/enable-developer-mode))
+                       :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
 
-           [:br]
-           (t :settings-page/developer-mode-desc)])]])))
+         [:br]
+         (t :settings-page/developer-mode-desc)]]])))

@@ -87,23 +87,11 @@
 
                               :else
                               (state/set-db-restoring! false))
-                            (if (schema-changed?)
-                              (do
-                                (notification/show!
-                                 [:p "Database schema changed, your notes will be exported as zip files, your repos will be re-indexed then."]
-                                 :warning
-                                 false)
-                                (let [export-repos (for [repo repos]
-                                                     (when-let [url (:url repo)]
-                                                       (println "Export repo: " url)
-                                                       (export-handler/export-repo-as-zip! url)))]
-                                  (-> (p/all export-repos)
-                                      (p/then (fn []
-                                                (store-schema!)
-                                                (js/setTimeout clear-stores-and-refresh! 5000)))
-                                      (p/catch (fn [error]
-                                                 (log/error :export/zip {:error error
-                                                                         :repos repos}))))))
+                            (if false   ; FIXME: incompatible changes
+                              (notification/show!
+                               [:p "Database schema changed, please export your notes as a zip file, and re-index your repos."]
+                               :warning
+                               false)
                               (store-schema!))
 
                             (nfs/ask-permission-if-local?)

@@ -1040,10 +1040,11 @@
     (when (seq properties)
       [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
        (for [[k v] properties]
+         ^{:key (str (:block/uuid block) "-" k)}
          [:div.my-1
           [:b k]
           [:span.mr-1 ":"]
-          (inline-text (:block/format block) v)])])))
+          (inline-text (:block/format block) (str v))])])))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)
