@@ -154,9 +154,10 @@
                          (bean/->clj))]
              (->>
               (map
-               (fn [{:keys [target uuid]}]
+               (fn [{:keys [target uuid indexes]}]
                  {:block/uuid uuid
-                  :block/content target})
+                  :block/content target
+                  :block/indexes indexes}) ; For result highlight
                result)
               (remove nil?)))))))))
 
