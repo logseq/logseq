@@ -159,7 +159,17 @@
           {:href "/login/github"
            :on-click (fn []
                        (storage/remove :git/current-repo))}
-          (t :login-github)])
+          (t :login-github)]
+
+         )
+
+       (when (and (not logged?)
+               (not config/publishing?))
+         [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100
+          {:href "/login/google"
+           :on-click (fn []
+                       (storage/remove :git/current-repo))}
+          (t :login-google)])
 
        (repo/sync-status)
 

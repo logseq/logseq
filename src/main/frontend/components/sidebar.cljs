@@ -28,7 +28,8 @@
             [goog.object :as gobj]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.handler.web.nfs :as nfs-handler]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -143,6 +144,7 @@
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
+
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -161,8 +163,10 @@
                        (state/sidebar-add-block! current-repo db-id block-type nil))))
                  (reset! sidebar-inited? true))))
            state)}
-  []
-  (let [today (state/sub :today)
+  [args]
+  (let [query (get-in args [:parameters :query])
+        login-source (:login_source query)
+        today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
         default-home (get-default-home-if-valid)
         importing-to-db? (state/sub :repo/importing-to-db?)
@@ -205,7 +209,16 @@
          (journal/journals latest-journals)
 
          (and logged? (empty? (:repos me)))
-         (widgets/add-repo)
+         (case login-source
+           "google"
+           (if-not (nfs-handler/supported?)
+             [:div (t :help/select-nfs-browser)]
+             [:div (t :help/open-top-right-open-button)])
+
+           "github"
+           (widgets/add-repo)
+
+           (widgets/add-repo))
 
          ;; FIXME: why will this happen?
          :else
