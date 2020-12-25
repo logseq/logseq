@@ -1538,9 +1538,10 @@
 
 (defn built-in-custom-query?
   [title]
-  (let [queries (state/sub [:config repo :default-queries :journals])]
-    (when (seq queries)
-      (boolean (some #(= % title) (map :title queries))))))
+  (let [repo (state/get-current-repo)]
+    (let [queries (state/sub [:config repo :default-queries :journals])]
+      (when (seq queries)
+        (boolean (some #(= % title) (map :title queries)))))))
 
 (rum/defcs custom-query < rum/reactive
   {:will-mount (fn [state]
