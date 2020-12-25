@@ -382,7 +382,8 @@
 
 (defn- with-time-properties
   [block properties]
-  (if (state/enable-block-time?)
+  (if (and (state/enable-block-time?)
+           (not (:block/pre-block? block)))
     (let [time (util/time-ms)
           props (into {} (:block/properties block))]
       (merge properties

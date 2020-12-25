@@ -93,6 +93,12 @@
         (recur (rest ast)))
       nil)))
 
+(defn- split-page-refs-without-brackets
+  [s]
+  (->> s
+       (sep-by-quote-or-space-or-comma)
+       (map remove-page-ref-brackets)))
+
 (defn collect-page-properties
   [ast]
   (if (seq ast)
@@ -126,15 +132,11 @@
                          (:roam_key properties)
                          (assoc :key (:roam_key properties))
                          (:alias properties)
-                         (update :alias
-                                 (fn [s]
-                                   (->> s
-                                        (sep-by-quote-or-space-or-comma)
-                                        (map remove-page-ref-brackets))))
+                         (update :alias split-page-refs-without-brackets)
                          (:tags properties)
-                         (update :tags sep-by-quote-or-space-or-comma)
+                         (update :tags split-page-refs-without-brackets)
                          (:roam_tags properties)
-                         (update :roam_tags sep-by-quote-or-space-or-comma))
+                         (update :roam_tags split-page-refs-without-brackets))
                        properties)
           definition-tags (get-tags-from-definition ast)
           properties (if definition-tags

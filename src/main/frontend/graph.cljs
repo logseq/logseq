@@ -54,20 +54,6 @@
                (.toString 16)
                (.padStart 6 "0"))))
 
-(defn- text-mode
-  [node ctx global-scale dark?]
-  (let [label (gobj/get node "id")
-        x (gobj/get node "x")
-        y (gobj/get node "y")
-        color (gobj/get node "color")
-        font-size (/ 14 global-scale)
-        text-width (gobj/get (.measureText ctx label) "width")]
-    (set! (.-font ctx) (str font-size "px Inter"))
-    (set! (.-filltextAlign ctx) "center")
-    (set! (.-textBaseLine ctx) "middle")
-    (set! (.-fillStyle ctx) color)
-    (.fillText ctx label (- x (/ text-width 2)) y)))
-
 (defn- dot-mode
   [node ctx global-scale dark?]
   (let [label (gobj/get node "id")
@@ -148,12 +134,13 @@
                    (let [link {:source (gobj/get link "source")
                                :target (gobj/get link "target")}]
                      (if (contains? @highlight-links link) 5 1)))
-      :linkDirectionalParticles 4
-      :linkDirectionalParticleWidth (fn [link] (let [link {:source (-> (gobj/get link "source")
-                                                                       (gobj/get "id"))
-                                                           :target (-> (gobj/get link "target")
-                                                                       (gobj/get "id"))}]
-                                                 (if (contains? @highlight-links link) 4 0)))
+      :linkDirectionalParticles 2
+      :linkDirectionalParticleWidth (fn [link]
+                                      (let [link {:source (-> (gobj/get link "source")
+                                                              (gobj/get "id"))
+                                                  :target (-> (gobj/get link "target")
+                                                              (gobj/get "id"))}]
+                                        (if (contains? @highlight-links link) 2 0)))
       :onNodeHover on-node-hover
       :onLinkHover on-link-hover
       :nodeLabel "id"
@@ -188,7 +175,5 @@
         (case @graph-mode
           :dot-text
           (dot-text-mode node ctx global-scale dark?)
-          :dot
-          (dot-mode node ctx global-scale dark?)
-          (text-mode node ctx global-scale dark?)))}
+          (dot-mode node ctx global-scale dark?)))}
      option)))

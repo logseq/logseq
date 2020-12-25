@@ -20,8 +20,9 @@
 ;; property (block)
 ;; todo (block)
 ;; priority (block)
-;; page_tag (page, TBD)
-;; page_property (page, TBD)
+;; page-property (page)
+;; page-tags (page)
+;; all-page-tags
 ;; project (block, TBD)
 
 ;; Sort by (field, asc/desc):
@@ -34,9 +35,12 @@
 (defonce remove-nil? (partial remove nil?))
 
 (defn query-wrapper
-  [where]
-  (let [q '[:find (pull ?b [*])
-            :where]
+  [where blocks?]
+  (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
+            '[:find (pull ?b [*])
+              :where]
+            '[:find (pull ?p [*])
+              :where])
         result (if (coll? (first where))
                  (apply conj q where)
                  (conj q where))]
@@ -67,17 +71,32 @@
         (db-utils/date->int (t/plus (t/today) (tf duration)))))))
 
 (defn build-query
-  ([e sort-by]
-   (build-query e sort-by 0))
-  ([e sort-by level]
+  ([e env]
+   (build-query e env 0))
+  ([e {:keys [sort-by blocks?] :as env} level]
    ;; TODO: replace with multi-methods for extensibility.
-   (let [fe (first e)]
+   (let [fe (first e)
+         page-ref? (and
+                    (string? e)
+                    (string/starts-with? e "[[")
+                    (string/ends-with? e "]]"))]
+     (when (or page-ref?
+               (contains? #{'between 'property 'todo 'priority 'sort-by} fe))
+       (reset! blocks? true))
      (cond
        (nil? e)
        nil
 
+       page-ref?
+       (let [page-name (->>
+                        (subs e 2 (- (count e) 2))
+                        (string/lower-case))]
+         (when (and (not (string/blank? page-name))
+                    (some? (db-utils/entity [:page/name page-name])))
+           [['?b :block/ref-pages [:page/name page-name]]]))
+
        (contains? #{'and 'or} fe)
-       (let [clauses (->> (map #(build-query % sort-by (inc level)) (rest e))
+       (let [clauses (->> (map #(build-query % env (inc level)) (rest e))
                           remove-nil?
                           (apply concat))]
          (when (seq clauses)
@@ -87,7 +106,7 @@
                [result]))))
 
        (= 'not fe)
-       (let [clauses (->> (map #(build-query % sort-by) (rest e))
+       (let [clauses (->> (map #(build-query % env) (rest e))
                           remove-nil?
                           (apply concat))]
          (when (seq clauses)
@@ -128,17 +147,6 @@
              [['?b :block/priority '?priority]
               [(list 'contains? priorities '?priority)]])))
 
-       (and
-        (string? e)
-        (string/starts-with? e "[[")
-        (string/ends-with? e "]]")) ; page reference
-       (let [page-name (->>
-                        (subs e 2 (- (count e) 2))
-                        (string/lower-case))]
-         (when (and (not (string/blank? page-name))
-                    (some? (db-utils/entity [:page/name page-name])))
-           [['?b :block/ref-pages [:page/name page-name]]]))
-
        (= 'sort-by fe)
        (let [[k order] (rest e)
              order (if (and order (contains? #{:asc :desc}
@@ -157,6 +165,26 @@
                                                   (if :desc >= <=)))))
              nil)))
 
+       (= 'page-property fe)
+       (let [[k v] (rest e)]
+         [['?p :page/properties '?prop]
+          [(list 'get '?prop (keyword (nth e 1))) '?v]
+          [(list '= '?v (name (nth e 2)))]])
+
+       (= 'page-tags fe)
+       (let [tags (if (coll? (first (rest e)))
+                    (first (rest e))
+                    (rest e))]
+         (when (seq tags)
+           (let [tags (set (map (comp string/lower-case name) tags))]
+             [['?p :page/tags '?t]
+              ['?t :tag/name '?tag]
+              [(list 'contains? tags '?tag)]])))
+
+       (= 'all-page-tags fe)
+       [['?t :tag/name '?tag]
+        ['?p :page/name '?tag]]
+
        :else
        nil))))
 
@@ -171,7 +199,9 @@
                          (reader/read-string))
 
             sort-by (atom nil)
-            result (when form (build-query form sort-by))
+            blocks? (atom nil)
+            result (when form (build-query form {:sort-by sort-by
+                                                 :blocks? blocks?}))
             result (when (seq result)
                      (let [key (if (coll? (first result))
                                  (keyword (ffirst result))
@@ -188,21 +218,24 @@
 
                          result)))]
         {:query result
-         :sort-by @sort-by})
+         :sort-by @sort-by
+         :blocks? (boolean @blocks?)})
       (catch js/Error e
         (log/error :query-dsl/parse-error e)))))
 
 (defn query
   [query-string]
   (when query-string
-    (let [{:keys [query sort-by]} (parse query-string)]
+    (let [{:keys [query sort-by blocks?]} (parse query-string)]
       (when query
-        (let [query (query-wrapper query)]
+        (let [query (query-wrapper query blocks?)]
           (query-custom/react-query {:query query}
                                     (if sort-by
                                       {:transform-fn sort-by})))))))
 
 (comment
+  ;; {{query (and (page-property foo bar) [[hello]])}}
+
   (query "(and [[foo]] [[bar]])")
 
   (query "(or [[foo]] [[bar]])")
@@ -222,4 +255,6 @@
   ;; nested query
   (query "(and [[baz]] (or [[foo]] [[bar]]))")
 
-  (query "(and [[some page]] (sort-by created-at))"))
+  (query "(and [[some page]] (sort-by created-at))")
+
+  (query "(and (page-property foo bar) [[hello]])"))
