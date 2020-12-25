@@ -21,21 +21,26 @@
                  edges)))
 
 (defn- build-nodes
-  [dark? current-page edges nodes]
-  (mapv (fn [p]
-          (let [current-page? (= p current-page)
-                color (case [dark? current-page?]
-                        [false false] "#222222"
-                        [false true]  "#045591"
-                        [true false]  "#8abbbb"
-                        [true true]   "#ffffff")] ; FIXME: Put it into CSS
-            {:id p
-             :name p
-             :val (get-connections p edges)
-             :autoColorBy "group"
-             :group (js/Math.ceil (* (js/Math.random) 12))
-             :color color}))
-        (set (flatten nodes))))
+  [dark? current-page edges tags nodes]
+  (let [pages (->> (set (flatten nodes))
+                   (remove nil?))]
+    (mapv (fn [p]
+            (let [current-page? (= p current-page)
+                  color (case [dark? current-page?] ; FIXME: Put it into CSS
+                          [false false] "#222222"
+                          [false true]  "#045591"
+                          [true false]  "#8abbbb"
+                          [true true]   "#ffffff")
+                  color (if (contains? tags (string/lower-case p))
+                          (if dark? "orange" "green")
+                          color)]
+              {:id p
+               :name p
+               :val (get-connections p edges)
+               :autoColorBy "group"
+               :group (js/Math.ceil (* (js/Math.random) 12))
+               :color color}))
+          pages)))
 
 (defn- normalize-page-name
   [{:keys [nodes links] :as g}]
@@ -62,6 +67,7 @@
     (when-let [repo (state/get-current-repo)]
       (let [relation (db/get-pages-relation repo show-journal?)
             tagged-pages (db/get-all-tagged-pages repo)
+            tags (set (map second tagged-pages))
             linked-pages (-> (concat
                               relation
                               tagged-pages)
@@ -86,7 +92,7 @@
                                 (fn [[_ to]]
                                   (nil? to))
                                 nodes))
-            nodes (build-nodes dark? current-page edges nodes)]
+            nodes (build-nodes dark? current-page edges tags nodes)]
         (normalize-page-name
          {:nodes nodes
           :links edges})))))
@@ -138,7 +144,7 @@
                         tags)
                        (remove nil?)
                        (distinct)
-                       (build-nodes dark? page edges))]
+                       (build-nodes dark? page edges (set tags)))]
         (normalize-page-name
          {:nodes nodes
           :links edges})))))
@@ -172,6 +178,7 @@
                         (map first ref-blocks))
                        (remove nil?)
                        (distinct)
-                       (build-nodes dark? block edges))]
+                       ;; FIXME: get block tags
+                       (build-nodes dark? block edges #{}))]
         {:nodes nodes
          :links edges}))))

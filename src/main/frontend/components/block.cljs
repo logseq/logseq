@@ -660,7 +660,7 @@
         (= name "query")
         [:div.dsl-query
          (custom-query (assoc config :dsl-query? true)
-                       {:title [:code (str "Query: " (first arguments))]
+                       {:title [:code.p-1 (str "Query: " (first arguments))]
                         :query (first arguments)})]
 
         (= name "youtube")
@@ -1628,9 +1628,9 @@
             ;; page list
             (and (seq result)
                  (:page/name (first result)))
-            [:ol
+            [:ul#query-pages.mt-1
              (for [{:page/keys [name original-name] :as page-entity} result]
-               [:li
+               [:li.mt-1
                 [:a {:href (rfe/href :page {:name name})
                      :on-click (fn [e]
                                  (util/stop e)
