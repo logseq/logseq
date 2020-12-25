@@ -177,7 +177,7 @@
           (ui/menu-link
            {:key "Copy block ref"
             :on-click (fn [_e]
-                        (editor-handler/copy-block-ref! block-id))}
+                        (editor-handler/copy-block-ref! block-id #(str "((" % "))")))}
            "Copy block ref")
 
           (block-template block-id)

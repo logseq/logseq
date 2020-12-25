@@ -1120,11 +1120,12 @@
             (save-block-if-changed! block new-content)))))))
 
 (defn copy-block-ref!
-  [block-id]
-  (let [block (db/entity [:block/uuid block-id])]
-    (when-not (:block/pre-block? block)
-      (set-block-property! block-id "id" (str block-id))))
-  (util/copy-to-clipboard! (str block-id)))
+  ([block-id] (copy-block-ref! block-id #(str %)))
+  ([block-id tap-clipboard]
+   (let [block (db/entity [:block/uuid block-id])]
+     (when-not (:block/pre-block? block)
+       (set-block-property! block-id "id" (str block-id))))
+   (util/copy-to-clipboard! (tap-clipboard block-id))))
 
 (defn clear-selection!
   [_e]
