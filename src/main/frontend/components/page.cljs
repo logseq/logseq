@@ -370,7 +370,8 @@
                 [:div.text-sm.ml-1.mb-4.flex-1.inline-flex
                  {:key "page-file"}
                  [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
-                 [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4}
+                 [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
+                                                       :word-break "break-word"}
                                                :href (str "/file/" (util/url-encode file-path))}
                   file-path]
 
