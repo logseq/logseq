@@ -47,7 +47,7 @@
 
 (rum/defc custom-context-menu-content
   []
-  [:div#custom-context-menu.w-48.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 4}}
+  [:div#custom-context-menu
    [:div.py-1.rounded-md.bg-base-3.shadow-xs
     (ui/menu-link
      {:key "cut"
@@ -111,7 +111,7 @@
       (let [properties (:block/properties block)
             heading (get properties "heading")
             heading? (= heading "true")]
-        [:div#custom-context-menu.w-64.rounded-md.shadow-lg.transition.ease-out.duration-100.transform.opacity-100.scale-100.enter-done.absolute {:style {:z-index 4}}
+        [:div#custom-context-menu
          [:div.py-1.rounded-md.bg-base-3.shadow-xs
           [:div.flex-row.flex.justify-between.py-4.pl-2
            [:div.flex-row.flex.justify-between
@@ -177,7 +177,7 @@
           (ui/menu-link
            {:key "Copy block ref"
             :on-click (fn [_e]
-                        (editor-handler/copy-block-ref! block-id))}
+                        (editor-handler/copy-block-ref! block-id #(str "((" % "))")))}
            "Copy block ref")
 
           (block-template block-id)
