@@ -402,6 +402,13 @@
     (let [inline-list (mldoc/inline->edn v (mldoc/default-config format))]
       [:div.inline.mr-1 (map-inline {} inline-list)])))
 
+(defn selection-range-in-block? []
+  (and (= "Range" (. (js/window.getSelection) -type))
+       (-> (js/window.getSelection)
+           (.-anchorNode)
+           (.-parentNode)
+           (.closest ".block-content"))))
+
 (defn- render-macro
   [config name arguments macro-content format]
   (if macro-content
@@ -1082,48 +1089,49 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
-        attrs {:blockid (str uuid)
+        attrs {:blockid       (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
                ;; It seems that `util/caret-range` can't get the correct range
-               :on-click (fn [e]
-                           (let [target (gobj/get e "target")]
-                             (when-not (or (util/link? target)
-                                           (util/input? target)
-                                           (util/details-or-summary? target)
-                                           (and (util/sup? target)
-                                                (d/has-class? target "fn")))
-                               (editor-handler/clear-selection! nil)
-                               (editor-handler/unhighlight-block!)
-                               (let [cursor-range (util/caret-range (gdom/getElement block-id))
-                                     properties-hidden? (text/properties-hidden? properties)
-                                     content (text/remove-level-spaces content format)
-                                     content (if properties-hidden? (text/remove-properties! content) content)]
-                                 (state/set-editing!
-                                  edit-input-id
-                                  content
-                                  block
-                                  cursor-range))
-                               (util/stop e))))
-               :on-drag-over (fn [event]
-                               (util/stop event)
-                               (when-not (dnd-same-block? uuid)
-                                 (show-dnd-separator (str uuid "-nested"))))
+               :on-click      (fn [e]
+                                (when-not (selection-range-in-block?)
+                                  (let [target (gobj/get e "target")]
+                                    (when-not (or (util/link? target)
+                                                  (util/input? target)
+                                                  (util/details-or-summary? target)
+                                                  (and (util/sup? target)
+                                                       (d/has-class? target "fn")))
+                                      (editor-handler/clear-selection! nil)
+                                      (editor-handler/unhighlight-block!)
+                                      (let [cursor-range (util/caret-range (gdom/getElement block-id))
+                                            properties-hidden? (text/properties-hidden? properties)
+                                            content (text/remove-level-spaces content format)
+                                            content (if properties-hidden? (text/remove-properties! content) content)]
+                                        (state/set-editing!
+                                         edit-input-id
+                                         content
+                                         block
+                                         cursor-range))
+                                      (util/stop e)))))
+               :on-drag-over  (fn [event]
+                                (util/stop event)
+                                (when-not (dnd-same-block? uuid)
+                                  (show-dnd-separator (str uuid "-nested"))))
                :on-drag-leave (fn [event]
                                 (hide-dnd-separator (str uuid))
                                 (hide-dnd-separator (str uuid "-nested"))
                                 (hide-dnd-separator (str uuid "-top")))
-               :on-drop (fn [event]
-                          (util/stop event)
-                          (when-not (dnd-same-block? uuid)
-                            (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
-                              (dnd/move-block @*dragging-block
-                                              block
-                                              from-dom-id
-                                              false
-                                              true)))
-                          (reset! *dragging? false)
-                          (reset! *dragging-block nil)
-                          (editor-handler/unhighlight-block!))}]
+               :on-drop       (fn [event]
+                                (util/stop event)
+                                (when-not (dnd-same-block? uuid)
+                                  (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
+                                    (dnd/move-block @*dragging-block
+                                                    block
+                                                    from-dom-id
+                                                    false
+                                                    true)))
+                                (reset! *dragging? false)
+                                (reset! *dragging-block nil)
+                                (editor-handler/unhighlight-block!))}]
     [:div.flex.relative
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)}
