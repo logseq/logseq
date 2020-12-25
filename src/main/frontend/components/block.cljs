@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.db.model :as model]
+            [frontend.db.query-dsl :as query-dsl]
             [dommy.core :as d]
             [datascript.core :as dc]
             [goog.dom :as gdom]
@@ -436,6 +437,8 @@
                 (not (= (:id config) "contents")))
        [:span.text-gray-500 "]]"])]))
 
+(declare custom-query)
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -648,7 +651,10 @@
                       arguments)]
       (cond
         (= name "query")
-        [:div "TBD"]
+        [:div.dsl-query
+         (custom-query (assoc config :dsl-query? true)
+                       {:title [:code (str "Query: " (first arguments))]
+                        :query (first arguments)})]
 
         (= name "youtube")
         (let [url (first arguments)]
@@ -1536,30 +1542,42 @@
   (contains? #{"🔨 NOW" "📅 NEXT"}
              title))
 
+(defn- trigger-custom-query!
+  [state]
+  (let [[config query] (:rum/args state)
+        query-atom (if (:dsl-query? config)
+                     (query-dsl/query (:query query))
+                     (db/custom-query query))]
+    (assoc state :query-atom query-atom)))
+
 (rum/defcs custom-query < rum/reactive
-  {:will-mount (fn [state]
-                 (let [[config query] (:rum/args state)
-                       query-atom (db/custom-query query)]
-                   (assoc state :query-atom query-atom)))
+  {:will-mount trigger-custom-query!
    :did-mount (fn [state]
                 (when-let [query (last (:rum/args state))]
                   (state/add-custom-query-component! query (:rum/react-component state)))
                 state)
+   :did-remount (fn [_old_state state]
+                  (trigger-custom-query! state))
    :will-unmount (fn [state]
                    (when-let [query (last (:rum/args state))]
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
   [state config {:keys [title query inputs view collapsed? children?] :as q}]
-  (let [query-atom (:query-atom state)]
+  (let [dsl-query? (:dsl-query? config)
+        query-atom (:query-atom state)]
     (let [current-block-uuid (or (:block/uuid (:block config))
                                  (:block/uuid config))
           ;; exclude the current one, otherwise it'll loop forever
           remove-blocks (if current-block-uuid [current-block-uuid] nil)
           query-result (and query-atom (rum/react query-atom))
+
+          result (if (and query-result dsl-query?)
+                   query-result
+                   (db/custom-query-result-transform query-result remove-blocks q))
           result (if query-result
                    (db/custom-query-result-transform query-result remove-blocks q))
-          view-f (sci/eval-string (pr-str view))
+          view-f (and view (sci/eval-string (pr-str view)))
           only-blocks? (:block/uuid (first result))
           blocks-grouped-by-page? (and (seq result)
                                        (coll? (first result))
@@ -1586,6 +1604,7 @@
             (and (seq result)
                  (or only-blocks? blocks-grouped-by-page?))
             (->hiccup result (cond-> (assoc config
+                                            ;; :editor-box editor/box
                                             :custom-query? true
                                             :group-by-page? blocks-grouped-by-page?)
                                children?

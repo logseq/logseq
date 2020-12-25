@@ -5,8 +5,10 @@
             [lambdaisland.glogi :as log]
             [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.db.query-custom :as query-custom]
             [cljs-time.core :as t]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [medley.core :as medley]))
 
 ;; Query fields:
 
@@ -18,16 +20,16 @@
 ;; property (block)
 ;; todo (block)
 ;; priority (block)
-;; page-property (page, TBD)
+;; page_tag (page, TBD)
+;; page_property (page, TBD)
 ;; project (block, TBD)
 
 ;; Sort by (field, asc/desc):
 
-;; block-title
-;; page-title
-;; created-at
-;; updated-at
+;; created_at
+;; last_modified_at
 
+;; (sort-by last_modified_at asc)
 
 (defonce remove-nil? (partial remove nil?))
 
@@ -65,9 +67,9 @@
         (db-utils/date->int (t/plus (t/today) (tf duration)))))))
 
 (defn build-query
-  ([e]
-   (build-query e 0))
-  ([e level]
+  ([e sort-by]
+   (build-query e sort-by 0))
+  ([e sort-by level]
    ;; TODO: replace with multi-methods for extensibility.
    (let [fe (first e)]
      (cond
@@ -75,7 +77,7 @@
        nil
 
        (contains? #{'and 'or} fe)
-       (let [clauses (->> (map #(build-query % (inc level)) (rest e))
+       (let [clauses (->> (map #(build-query % sort-by (inc level)) (rest e))
                           remove-nil?
                           (apply concat))]
          (when (seq clauses)
@@ -84,8 +86,8 @@
                result
                [result]))))
 
-       (= 'not fe)                       ; or
-       (let [clauses (->> (map build-query (rest e))
+       (= 'not fe)
+       (let [clauses (->> (map #(build-query % sort-by) (rest e))
                           remove-nil?
                           (apply concat))]
          (when (seq clauses)
@@ -108,16 +110,16 @@
         [(list 'get '?p (name (nth e 1))) '?v]
         [(list '= '?v (name (nth e 2)))]]
 
-       (and (= 'todo fe))
+       (= 'todo fe)
        (let [markers (if (coll? (first (rest e)))
                        (first (rest e))
                        (rest e))]
          (when (seq markers)
-           (let [markers (set (map name markers))]
+           (let [markers (set (map (comp string/upper-case name) markers))]
              [['?b :block/marker '?marker]
               [(list 'contains? markers '?marker)]])))
 
-       (and (= 'priority fe))
+       (= 'priority fe)
        (let [priorities (if (coll? (first (rest e)))
                           (first (rest e))
                           (rest e))]
@@ -137,6 +139,24 @@
                     (some? (db-utils/entity [:page/name page-name])))
            [['?b :block/ref-pages [:page/name page-name]]]))
 
+       (= 'sort-by fe)
+       (let [[k order] (rest e)
+             order (if (and order (contains? #{:asc :desc}
+                                             (keyword (string/lower-case (name order)))))
+                     (keyword (string/lower-case (name order)))
+                     :desc)
+             k (-> (string/lower-case (name k))
+                   (string/replace "-" "_"))]
+         (when (contains? #{"created_at" "last_modified_at"} k)
+           (do
+             (reset! sort-by
+                     (fn [result]
+                       (->> result
+                            flatten
+                            (clojure.core/sort-by #(get-in % [:block/properties k])
+                                                  (if :desc >= <=)))))
+             nil)))
+
        :else
        nil))))
 
@@ -147,65 +167,59 @@
   (when (and (string? s)
              (not (string/blank? s)))
     (try
-      (let [s (string/replace s link-re "\"[[$1]]\"")
-            result (some->
-                    s
-                    (reader/read-string)
-                    (build-query))]
-        (when (seq result)
-          (let [key (if (coll? (first result))
-                      (keyword (ffirst result))
-                      (keyword (first result)))]
-            (case key
-              :and
-              (rest result)
+      (let [form (some-> (string/replace s link-re "\"[[$1]]\"")
+                         (reader/read-string))
 
-              :not
-              (cons ['?b :block/uuid] result)
+            sort-by (atom nil)
+            result (when form (build-query form sort-by))
+            result (when (seq result)
+                     (let [key (if (coll? (first result))
+                                 (keyword (ffirst result))
+                                 (keyword (first result)))]
+                       (case key
+                         :and
+                         (rest result)
 
-              :or
-              [['?b :block/uuid] result]
+                         :not
+                         (cons ['?b :block/uuid] result)
 
-              result))))
+                         :or
+                         [['?b :block/uuid] result]
+
+                         result)))]
+        {:query result
+         :sort-by @sort-by})
       (catch js/Error e
         (log/error :query-dsl/parse-error e)))))
 
+(defn query
+  [query-string]
+  (when query-string
+    (let [{:keys [query sort-by]} (parse query-string)]
+      (when query
+        (let [query (query-wrapper query)]
+          (query-custom/react-query {:query query}
+                                    (if sort-by
+                                      {:transform-fn sort-by})))))))
+
 (comment
-  (require '[frontend.db :as db])
+  (query "(and [[foo]] [[bar]])")
 
-  (d/q
-   (query-wrapper (parse "(and [[foo]] [[bar]])"))
-   (db/get-conn))
+  (query "(or [[foo]] [[bar]])")
 
-  (d/q
-   (query-wrapper (parse "(or [[foo]] [[bar]])"))
-   (db/get-conn))
+  (query "(not [[foo]])")
 
-  (d/q
-   (query-wrapper (parse "(not [[foo]])"))
-   (db/get-conn))
+  (query "(between :-7d :+7d)")
 
-  (d/q
-   (query-wrapper (parse "(between :-7d :+7d)"))
-   (db/get-conn))
+  (query "(between :-7d :today)")
 
-  (d/q
-   (query-wrapper (parse "(between :-7d :today)"))
-   (db/get-conn))
+  (query "(and [[some page]] (property foo bar))")
 
-  (d/q
-   (query-wrapper (parse "(and [[some page]] (property foo bar))"))
-   (db/get-conn))
+  (query "(and [[some page]] (todo now later))")
 
-  (d/q
-   (query-wrapper (parse "(and [[some page]] (todo now later))"))
-   (db/get-conn))
-
-  (d/q
-   (query-wrapper (parse "(and [[some page]] (priority A))"))
-   (db/get-conn))
+  (query "(and [[some page]] (priority A))")
 
   ;; nested query
-  (d/q
-   (query-wrapper (parse "(and [[baz]] (or [[foo]] [[bar]]))"))
-   (db/get-conn)))
+  (query "(and [[baz]] (or [[foo]] [[bar]]))")
+
+  (query "(and [[some page]] (sort-by created-at))"))

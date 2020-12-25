@@ -39,7 +39,7 @@
                                            (let [name (case name
                                                         "[[embed]]" "embed"
                                                         name)]
-                                             (util/format "{{{%s %s}}}" name arg))
+                                             (util/format "{{%s %s}}" name arg))
                                            original)))))
 
 (defn load-all-refed-uids!
