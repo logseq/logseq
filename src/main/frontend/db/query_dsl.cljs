@@ -7,8 +7,10 @@
             [frontend.db :as db]
             [frontend.db.query-custom :as query-custom]
             [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
             [frontend.util :as util]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [clojure.walk :as walk]))
 
 ;; Query fields:
 
@@ -16,6 +18,9 @@
 ;; or
 ;; not
 ;; between
+;;   Example: (between -7d +7d)
+;;            (between created-at -1d today)
+;;            (between last-modified-at -1d today)
 ;; [[page-ref]]
 ;; property (block)
 ;; todo (block)
@@ -48,7 +53,7 @@
     result))
 
 ;; (between -7d +7d)
-(defn- ->date-int [input]
+(defn- ->journal-day-int [input]
   (let [input (string/lower-case (name input))]
     (cond
       (= "today" input)
@@ -69,6 +74,33 @@
                  "w" t/weeks
                  t/days)]
         (db-utils/date->int (t/plus (t/today) (tf duration)))))))
+
+(defn- ->timestamp [input]
+  (let [input (string/lower-case (name input))]
+    (cond
+      (= "now" input)
+      (util/time-ms)
+
+      (= "today" input)
+      (tc/to-long (t/today))
+
+      (= "yesterday" input)
+      (tc/to-long (t/yesterday))
+
+      (= "tomorrow" input)
+      (tc/to-long (t/plus (t/today) (t/days 1)))
+
+      :else
+      (let [duration (util/parse-int (subs input 0 (dec (count input))))
+            kind (last input)
+            tf (case kind
+                 "y" t/years
+                 "m" t/months
+                 "w" t/weeks
+                 "h" t/hours
+                 "n" t/minutes          ; min
+                 t/days)]
+        (tc/to-long (t/plus (t/today) (tf duration)))))))
 
 (defn build-query
   ([e env]
@@ -95,33 +127,45 @@
                     (some? (db-utils/entity [:page/name page-name])))
            [['?b :block/ref-pages [:page/name page-name]]]))
 
-       (contains? #{'and 'or} fe)
+       (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map #(build-query % env (inc level)) (rest e))
                           remove-nil?
                           (apply concat))]
          (when (seq clauses)
-           (let [result (cons fe clauses)]
-             (if (zero? level)
-               result
-               [result]))))
-
-       (= 'not fe)
-       (let [clauses (->> (map #(build-query % env) (rest e))
-                          remove-nil?
-                          (apply concat))]
-         (when (seq clauses)
-           (map #(list 'not %) clauses)))
+           (if (= fe 'not)
+             (map #(list 'not %) clauses)
+             (let [result (cons fe clauses)]
+               (if (zero? level)
+                 result
+                 [result])))))
 
        (and (= 'between fe)
             (= 3 (count e)))
-       (let [start (->date-int (nth e 1))
-             end (->date-int (nth e 2))
+       (let [start (->journal-day-int (nth e 1))
+             end (->journal-day-int (nth e 2))
              [start end] (sort [start end])]
          [['?b :block/page '?p]
           ['?p :page/journal? true]
           ['?p :page/journal-day '?d]
           [(list '>= '?d start)]
           [(list '<= '?d end)]])
+
+       ;; (between created_at -1d today)
+       (and (= 'between fe)
+            (= 4 (count e)))
+       (let [k (-> (second e)
+                   (name)
+                   (string/lower-case)
+                   (string/replace "-" "_"))]
+         (when (contains? #{"created_at" "last_modified_at"} k)
+           (let [start (->timestamp (nth e 2))
+                 end (->timestamp (nth e 3))]
+             (when (and start end)
+               (let [[start end] (sort [start end])]
+                 [['?b :block/properties '?p]
+                  [(list 'get '?p k) '?v]
+                  [(list '>= '?v start)]
+                  [(list '< '?v end)]])))))
 
        (and (= 'property fe)
             (= 3 (count e)))
@@ -190,12 +234,30 @@
 
 (def link-re #"\[\[(.*?)\]\]")
 
+(def between-re #"\(between ([^\)]+)\)")
+
+(defn- pre-transform
+  [s]
+  (some-> s
+          (string/replace link-re "\"[[$1]]\"")
+          (string/replace between-re (fn [[_ x]]
+                                       (->> (string/split x #" ")
+                                            (remove string/blank?)
+                                            (map (fn [x]
+                                                   (if (or (contains? #{"+" "-"} (first x))
+                                                           (re-find #"\d" (first x)))
+                                                     (keyword (name x))
+                                                     x)))
+                                            (string/join " ")
+                                            (util/format "(between %s)"))))))
+
 (defn parse
   [s]
   (when (and (string? s)
              (not (string/blank? s)))
     (try
-      (let [form (some-> (string/replace s link-re "\"[[$1]]\"")
+      (let [form (some-> s
+                         (pre-transform)
                          (reader/read-string))
 
             sort-by (atom nil)
@@ -240,11 +302,13 @@
 
   (query "(or [[foo]] [[bar]])")
 
-  (query "(not [[foo]])")
+  (query "(not (or [[foo]] [[bar]]))")
 
-  (query "(between :-7d :+7d)")
+  (query "(between -7d +7d)")
 
-  (query "(between :-7d :today)")
+  (query "(between -7d today)")
+
+  (query "(between created_at yesterday today)")
 
   (query "(and [[some page]] (property foo bar))")
 
