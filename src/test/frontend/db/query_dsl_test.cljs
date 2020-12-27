@@ -354,7 +354,7 @@ parent: child page 2
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
-      "(and (todo now later done) (between [[Dec 26th, 2020]] today))"
+      "(and (todo now later done) (between [[Dec 26th, 2020]] tomorrow))"
       5
 
       ;; between with journal pages
@@ -362,11 +362,11 @@ parent: child page 2
       2
 
       ;; between with created_at
-      "(and (todo now later done) (between created_at [[Dec 26th, 2020]] today))"
+      "(and (todo now later done) (between created_at [[Dec 26th, 2020]] tomorrow))"
       5
 
       ;; between with last_modified_at
-      "(and (todo now later done) (between last_modified_at [[Dec 26th, 2020]] today))"
+      "(and (todo now later done) (between last_modified_at [[Dec 26th, 2020]] tomorrow))"
       5))
 
   (testing "Nested boolean queries"
