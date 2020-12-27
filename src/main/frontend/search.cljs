@@ -229,8 +229,9 @@
                    (fn [pages]
                      (let [pages (or pages (array))
                            pages (.filter pages (fn [page]
-                                                  (not (contains? pages-to-remove-set
-                                                                  (string/lower-case (gobj/get page "name"))))))]
+                                                  (when-let [page-name (gobj/get page "name")]
+                                                    (not (contains? pages-to-remove-set
+                                                                    (string/lower-case page-name))))))]
                        (.concat pages (bean/->js pages-to-add)))))))
         (when (seq blocks)
           (let [blocks-result (db/pull-many '[:db/id :block/uuid :block/format :block/content] (set (map :e blocks)))

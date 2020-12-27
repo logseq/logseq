@@ -1,6 +1,6 @@
 (ns frontend.db.model-test
   (:require [frontend.db.model :as model]
-            [frontend.db.config :refer [wrap-setup! test-db]]
+            [frontend.db.config :refer [test-db] :as config]
             [datascript.core :as d]
             [frontend.db-schema :as schema]
             [frontend.handler.repo :as repo-handler]
@@ -67,5 +67,8 @@
       1 (count a-ref-blocks)
       ["b" "c"] alias-names)))
 
-(use-fixtures :each wrap-setup!)
+(use-fixtures :each
+  {:before config/start-test-db!
+   :after config/destroy-test-db!})
+
 #_(cljs.test/test-ns 'frontend.db.model-test)

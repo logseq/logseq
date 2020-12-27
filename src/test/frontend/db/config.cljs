@@ -3,8 +3,10 @@
 
 (defonce test-db "test-db")
 
-(defn wrap-setup!
-  [f]
-  (conn/start! nil test-db)
-  (f)
+(defn start-test-db!
+  []
+  (conn/start! nil test-db))
+
+(defn destroy-test-db!
+  []
   (conn/destroy-all!))

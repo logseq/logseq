@@ -9,7 +9,7 @@
   [query-string]
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (db/get-conn repo)]
-      (when-let [result (query-dsl/query query-string)]
+      (when-let [result (query-dsl/query repo query-string)]
         @result))))
 
 (defn ^:export datascript_query
