@@ -67,10 +67,10 @@
           result)))))
 
 (defn react-query
-  [{:keys [query inputs] :as query'} query-opts]
+  [repo {:keys [query inputs] :as query'} query-opts]
   (try
     (let [inputs (map resolve-input inputs)
-          repo (state/get-current-repo)
+          repo (or repo (state/get-current-repo))
           k [:custom query']]
       (apply react/q repo k query-opts query inputs))
     (catch js/Error e
@@ -91,4 +91,4 @@
 
                        :else
                        nil)]
-     (react-query query' query-opts))))
+     (react-query (state/get-current-repo) query' query-opts))))

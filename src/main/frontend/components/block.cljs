@@ -1559,7 +1559,7 @@
   [state]
   (let [[config query] (:rum/args state)
         query-atom (if (:dsl-query? config)
-                     (query-dsl/query (:query query))
+                     (query-dsl/query (state/get-current-repo) (:query query))
                      (db/custom-query query))]
     (assoc state :query-atom query-atom)))
 

@@ -8,6 +8,7 @@
             [frontend.config :as config]
             [datascript.core :as d]
             [frontend.date :as date]
+            [frontend.text :as text]
             [medley.core :as medley]))
 
 (defn heading-block?
@@ -150,9 +151,10 @@
                                                            (contains? config/markers k')
                                                            (util/safe-parse-int v'))
                                                     (util/safe-parse-int v')
-                                                    v')]
-                                           [k' v']))))]
-    {:properties (->schema-properties properties)
+                                                    (text/split-page-refs-without-brackets v'))]
+                                           [k' v'])))
+                        (->schema-properties))]
+    {:properties properties
      :start-pos start-pos
      :end-pos end-pos}))
 

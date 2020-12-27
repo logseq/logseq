@@ -2,8 +2,47 @@
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [clojure.string :as string]
-            [clojure.set :as set]
-            [frontend.db :as db]))
+            [clojure.set :as set]))
+
+(defn page-ref?
+  [s]
+  (and
+   (string? s)
+   (string/starts-with? s "[[")
+   (string/ends-with? s "]]")))
+
+(defonce page-ref-re #"\[\[(.*?)\]\]")
+
+(defonce between-re #"\(between ([^\)]+)\)")
+
+(defn page-ref-un-brackets!
+  [s]
+  (when (string? s)
+    (let [s (if (page-ref? s)
+              (subs s 2 (- (count s) 2))
+              s)]
+      (string/lower-case s))))
+
+;; E.g "Foo Bar \"Bar Baz\""
+(defn- sep-by-comma-or-quote
+  [s]
+  (when s
+    (some->>
+     (string/split s #"[\"|\,|，]{1}")
+     (remove string/blank?)
+     (map string/lower-case)
+     (map string/trim))))
+
+(defn split-page-refs-without-brackets
+  [s]
+  (if (and (string? s)
+             (or (re-find #"[\"|\,|，]+" s)
+                 (re-find page-ref-re s)))
+      (->> s
+        (sep-by-comma-or-quote)
+        (map page-ref-un-brackets!)
+        (set))
+      s))
 
 (defn remove-level-spaces
   ([text format]
