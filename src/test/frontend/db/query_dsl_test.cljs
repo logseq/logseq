@@ -112,6 +112,10 @@ parent: child page 2
               (count @result)
               0)}))
 
+(defn count-only
+  [s]
+  (:count (q-count s)))
+
 (defonce empty-result {:query nil :result nil})
 
 (deftest test-parse
@@ -349,68 +353,21 @@ parent: child page 2
        :count 8}))
 
   (testing "Between query"
-    (are [x y] (= (q-count x) y)
-      "(and (todo now later done) (between -7d +7d))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                [?b :block/page ?p]
-                [?p :page/journal? true]
-                [?p :page/journal-day ?d]
-                [(>= ?d 20201221)]
-                [(<= ?d 20210104)])
-       :count 5}
-
-      "(and (todo now later done) (between -7d 7d))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                [?b :block/page ?p]
-                [?p :page/journal? true]
-                [?p :page/journal-day ?d]
-                [(>= ?d 20201221)]
-                [(<= ?d 20210104)])
-       :count 5}
-
-      ;; disorder
-      "(and (todo now later done) (between +7d -7d))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                [?b :block/page ?p]
-                [?p :page/journal? true]
-                [?p :page/journal-day ?d]
-                [(>= ?d 20201221)]
-                [(<= ?d 20210104)])
-       :count 5}
+    (are [x y] (= (count-only x) y)
+      "(and (todo now later done) (between [[Dec 26th, 2020]] today))"
+      5
 
       ;; between with journal pages
       "(and (todo now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                [?b :block/page ?p]
-                [?p :page/journal? true]
-                [?p :page/journal-day ?d]
-                [(>= ?d 20201227)]
-                [(<= ?d 20201228)])
-       :count 2}
+      2
 
       ;; between with created_at
-      "(and (todo now later done) (between created_at +7d -7d))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                [?b :block/properties ?p]
-                [(get ?p "created_at") ?v]
-                [(>= ?v 1608480000000)]
-                [(< ?v 1609689600000)])
-       :count 5}
+      "(and (todo now later done) (between created_at [[Dec 26th, 2020]] today))"
+      5
 
       ;; between with last_modified_at
-      "(and (todo now later done) (between last_modified_at +7d -7d))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                [?b :block/properties ?p]
-                [(get ?p "last_modified_at") ?v]
-                [(>= ?v 1608480000000)]
-                [(< ?v 1609689600000)])
-       :count 5}))
+      "(and (todo now later done) (between last_modified_at [[Dec 26th, 2020]] today))"
+      5))
 
   (testing "Nested boolean queries"
     (are [x y] (= (q-count x) y)
