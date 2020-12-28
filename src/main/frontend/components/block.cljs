@@ -666,14 +666,17 @@
                                   :else
                                   nil)]
             (when-not (string/blank? youtube-id)
-              [:iframe
-               {:allow-full-screen "allowfullscreen"
-                :allow
-                "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                :frame-border "0"
-                :src (str "https://www.youtube.com/embed/" youtube-id)
-                :height "315"
-                :width "560"}])))
+              (let [width (min (- (util/get-width) 96)
+                               560)
+                    height (int (* width (/ 315 560)))]
+                [:iframe
+                 {:allow-full-screen "allowfullscreen"
+                  :allow
+                  "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  :frame-border "0"
+                  :src (str "https://www.youtube.com/embed/" youtube-id)
+                  :height height
+                  :width width}]))))
 
         (= name "embed")
         (let [a (first arguments)]
