@@ -47,24 +47,6 @@
         :alt "screenshot"}]
 
       [:div.flex.flex-col.ls-block.intro-docs
-       [:h2 {} (t :on-boarding/where-are-my-notes-saved)]
-       [:p
-        {}
-        (t :on-boarding/storage)
-        [:a {:href "https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API"
-             :target "_blank"}
-         "IndexedDB"]
-        "."]
-       [:h2 {} (t :on-boarding/how-do-i-use-it)]
-       [:h3 {} (t :on-boarding/use-1)]
-       [:p
-        {}
-        (t :on-boarding/use-1-desc)]
-
-       [:h3 {} (t :on-boarding/use-2)]
-       [:p
-        {}
-        (t :on-boarding/use-2-desc)]
        [:h2 {} (t :on-boarding/features)]
        [:ul
         {}

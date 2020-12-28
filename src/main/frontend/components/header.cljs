@@ -66,7 +66,7 @@
             :icon svg/graph-sm})
 
          (when (or logged? (and (nfs/supported?) current-repo))
-           {:title (t :all-graphs)
+           {:title (t :all-repos)
             :options {:href (rfe/href :repos)}
             :icon svg/repos-sm})
 
@@ -167,17 +167,14 @@
         (repo/repos-dropdown true)]
 
        (when (and (nfs/supported?) (empty? repos))
-         (ui/tooltip
-          "Warning: this is an experimental feature, please only use it for testing purpose."
-          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
-           {:on-click (fn []
-                        (nfs/ls-dir-files))}
-           [:div.flex.flex-row.text-center
-            [:span.inline-block svg/folder-add]
-            (when-not config/mobile?
-              [:span.ml-1 {:style {:margin-top 2}}
-               (t :open)])]]
-          {:label-style {:width 200}}))
+         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
+          {:on-click (fn []
+                       (nfs/ls-dir-files))}
+          [:div.flex.flex-row.text-center
+           [:span.inline-block svg/folder-add]
+           (when-not config/mobile?
+             [:span.ml-1 {:style {:margin-top 2}}
+              (t :open)])]])
 
        (if config/publishing?
          [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}

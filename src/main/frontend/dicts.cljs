@@ -17,34 +17,25 @@ title: $today
 :heading: true
 :END:
 ## Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ sharing and management.
-## This is a 10 minutes tutorial on how to use Logseq. Let's get started!
+## This is a 3 minutes tutorial on how to use Logseq. Let's get started!
 ## Here are some tips might be useful.
 #+BEGIN_TIP
 Click to edit any block.
 Type `Enter` to create a new block.
 Type `Shift+Enter` to create a new line.
 Type `/` to show all the commands.
-Type `[[` to reference or create a new page.
-Type `((` to reference a block on any page.
-Type `Tab` to indent and `Shift+Tab` to unindent block.
-Type `/Draw` for free drawing.
-Click the help button at the bottom right to see more keybindings.
 #+END_TIP
 ## 1. Let's create a page called [[How to take dummy notes?]]. You can click it to go to that page, or you can `Shift+Click` to open it in the right sidebar! Now you should see both _Linked References_ and _Unlinked References_.
 ## 2. Let's reference some blocks on [[How to take dummy notes?]], you can `Shift+Click` any block reference to open it in the right sidebar. Try making
 some changes on the right sidebar, those referenced blocks will be changed too!
 ### ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) : This is a block reference.
 ### ((5f713ea8-8cba-403d-ac00-9964b1ec7190)) : This is another block reference.
-## 3. I don't want to reference the block title, how about embedding the whole block with its children?
-### {{{embed ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) }}}
-## 4. What if I want to embed the whole page? Here you go:
-### {{{embed [[How to take dummy notes?]] }}}
-## 5. Do you support tags?
+## 3. Do you support tags?
 ### Of course, this is a #dummy tag.
-## 6. Do you support tasks like todo/doing/done and priorities?
+## 4. Do you support tasks like todo/doing/done and priorities?
 ### Yes, type `/` and pick your favorite todo keyword or priority (A/B/C).
 ### NOW [#A] A dummy tutorial on \"How to take dummy notes?\"
-### LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to install logseq app on your GitHub repo and other cool features like graph view.
+### LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to use logseq to open your local directory.
 
 [:div.video-wrapper.mb-4
         [:iframe
@@ -52,12 +43,12 @@ some changes on the right sidebar, those referenced blocks will be changed too!
           :allow
           \"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture\"
         :frameBorder \"0\"
-        :src \"https://www.youtube.com/embed/Vw-x7yTTO0s\"
+        :src \"https://www.youtube.com/embed/Afmqowr0qEQ\"
         :height \"367\"
         :width \"653\"}]]
 ### DONE Create a page
 ### CANCELED [#C] Write a page with more than 1000 blocks
-## That's it! Thanks for your time and having fun!
+## That's it! You can create more bullets or open a local directory to import some notes now!
 ##
 "
         :tutorial/dummy-notes "---
@@ -84,7 +75,7 @@ title: How to take dummy notes?
         :on-boarding/outliner "outliner"
         :on-boarding/notebook-for-organizing-and " notebook for organizing and "
         :on-boarding/your-personal-knowledge-base " your personal knowledge base."
-        :on-boarding/notice "Notice that this project is in its early days and under quick development, files might be corrupted."
+        :on-boarding/notice "Notice that this project is in its alpha testing and under quick development, files might be corrupted."
         :on-boarding/features-desc "Use it to organize your todo list, to write your journals, or to record your unique life."
         :on-boarding/privacy "The server will never store or analyze your private notes. Your data are plain text files, we support both Markdown and Emacs Org mode for the time being. Even if the website is down or can't be maintained, your data is always yours."
         :on-boarding/inspired-by " is hugely inspired by "
@@ -95,7 +86,6 @@ title: How to take dummy notes?
         :on-boarding/use-1-desc "Currently, we only support syncing through Github, more options (Self-host git, WebDAV, Google Drive, etc.) will be added soon."
         :on-boarding/use-1-video "Check out this awesome video by "
         :on-boarding/use-2 "2. Use it locally (no need to login)"
-        :on-boarding/use-2-desc "It's only for the testing purpose now, please don't write any serious notes without login."
         :on-boarding/features "Features"
         :on-boarding/features-backlinks "Backlinks between [[Page]]s"
         :on-boarding/features-block-embed "Block embed"
@@ -315,7 +305,6 @@ title: How to take dummy notes?
         :publishing "Publishing"
         :export "Export public pages"
         :all-repos "All repos"
-        :all-graphs "All graphs"
         :all-pages "All pages"
         :all-files "All files"
         :all-journals "All journals"
@@ -571,7 +560,6 @@ title: How to take dummy notes?
            :on-boarding/use-1-desc "目前，我们只支持通过 Github 进行同步，将很快添加更多选项 (Self-host git、WebDAV、Google Drive等)。"
            :on-boarding/use-1-video "看看这个很棒的视频，创作者 "
            :on-boarding/use-2 "2. 在本地使用 (无需登录)"
-           :on-boarding/use-2-desc "暂时这个只为了测试演示，请登录来确保你的数据不会丢失！"
            :on-boarding/features "功能"
            :on-boarding/features-backlinks "[[页面]] 之间的双向链接"
            :on-boarding/features-block-embed "块嵌入"
@@ -790,7 +778,6 @@ title: How to take dummy notes?
            :graph "图谱"
            :publishing "发布"
            :export "导出公开页面"
-           :all-graphs "所有库"
            :all-repos "所有库"
            :all-pages "所有页面"
            :all-files "所有文件"
@@ -837,7 +824,6 @@ title: How to take dummy notes?
              :on-boarding/use-1-desc "目前，我們只支持通過 Github 進行同步，將很快添加更多選項 (Self-host git、WebDAV、Google Drive等)。"
              :on-boarding/use-1-video "看看這個很棒的視頻，創作者 "
              :on-boarding/use-2 "2. 在本地使用 (無需登錄)"
-             :on-boarding/use-2-desc "暫時這個只為了測試演示，請登錄來確保你的數據不會丟失！"
              :on-boarding/features "功能"
              :on-boarding/features-backlinks "[[頁面]] 之間的雙向鏈接"
              :on-boarding/features-block-embed "塊嵌入"
@@ -1089,7 +1075,6 @@ title: How to take dummy notes?
         :on-boarding/use-1-desc "Tans, ondersteun ons sinkronisering met Github, meer opsies (eie bediener git, WebDAV, Google Drive ensovoorts) sal binnekort bygevoeg word. "
         :on-boarding/use-1-video "Gaan loer gerus na hierdie lekker video by "
         :on-boarding/use-2 "2. Gebruik dit plaaslik (geen aantekening benodig)"
-        :on-boarding/use-2-desc "Onthou om jou persoonlike notas nou en dan te rugsteun!"
         :on-boarding/features "Kenmerke"
         :on-boarding/features-backlinks "Terugskakels tussen [[Blaaie]]"
         :on-boarding/features-block-embed "Blok insluiting"
