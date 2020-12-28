@@ -155,21 +155,23 @@
 
        (when (and (not logged?)
                   (not config/publishing?))
-         [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100
-          {:href "/login/github"
-           :on-click (fn []
-                       (storage/remove :git/current-repo))}
-          (t :login-github)]
 
-         )
-
-       (when (and (not logged?)
-               (not config/publishing?))
-         [:a.text-sm.font-medium.login.opacity-70.hover:opacity-100
-          {:href "/login/google"
-           :on-click (fn []
-                       (storage/remove :git/current-repo))}
-          (t :login-google)])
+         (ui/dropdown-with-links
+           (fn [{:keys [toggle-fn]}]
+             [:a {:on-click toggle-fn}
+              [:span.ml-1 "Login"]
+              [:span.ml-1 {:style {:border-top-color "#6b7280"}}]])
+           (let [list [{:title (t :login-github)
+                        :url "/login/github"}
+                       {:title (t :login-google)
+                        :url "/login/google"}]]
+            (mapv
+              (fn [{:keys [title url]}]
+                {:title title
+                 :options
+                 {:on-click
+                  (fn [_] (set! (.-href js/window.location) url))}})
+              list))))
 
        (repo/sync-status)
 
