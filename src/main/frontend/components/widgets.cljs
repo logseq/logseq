@@ -16,7 +16,8 @@
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.components.svg :as svg]
-            [frontend.handler.web.nfs :as nfs]))
+            [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.web.nfs :as nfs-handler]))
 
 (rum/defcs choose-preferred-format
   []
@@ -90,16 +91,18 @@
                        :error
                        false)))))))]]
 
-        [:div.p-8.flex.items-center.justify-center
-         [:div.w-full.mx-auto
-          [:div
-           [:div
-            [:h1.title.mb-1
-             "Please open a local directory : "]]
-           [:a.text-lg.font-medium.opacity-70.hover:opacity-100.ml-3.block
-            {:on-click (fn [] (nfs/ls-dir-files))}
-            [:div.flex.flex-row
-             [:span.inline-block svg/folder-add-large]
-             (when-not config/mobile?
-               [:span.ml-1.inline-block {:style {:margin-top "20px"}}
-                (t :open)])]]]]]))))
+        (if-not (nfs-handler/supported?)
+          [:div (t :help/select-nfs-browser)]
+           [:div.p-8.flex.items-center.justify-center
+            [:div.w-full.mx-auto
+             [:div
+              [:div
+               [:h1.title.mb-1
+                "Please open a local directory : "]]
+              [:a.text-lg.font-medium.opacity-70.hover:opacity-100.ml-3.block
+               {:on-click (fn [] (nfs/ls-dir-files))}
+               [:div.flex.flex-row
+                [:span.inline-block svg/folder-add-large]
+                (when-not config/mobile?
+                  [:span.ml-1.inline-block {:style {:margin-top "20px"}}
+                   (t :open)])]]]]])))))
