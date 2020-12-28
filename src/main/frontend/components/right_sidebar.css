@@ -1,3 +1,12 @@
-.white-theme .cp__right-sidebar-settings a {
+html[data-theme=light] {
+  .cp__right-sidebar-settings a {
     color: var(--ls-primary-text-color);
+  }
+
+  .cp__right-sidebar {
+    .block-content {
+      --ls-page-inline-code-bg-color: var(--ls-quaternary-background-color);
+      --ls-page-blockquote-bg-color: var(--ls-quaternary-background-color);
+    }
+  }
 }
