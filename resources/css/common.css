@@ -142,6 +142,7 @@ body {
   line-height: 1.5;
   background-color: transparent;
   min-height: 100%;
+  overflow-wrap: anywhere;
 }
 
 a svg {
