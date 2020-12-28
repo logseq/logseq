@@ -659,9 +659,10 @@
       (cond
         (= name "query")
         [:div.dsl-query
-         (custom-query (assoc config :dsl-query? true)
-                       {:title [:code.p-1 (str "Query: " (first arguments))]
-                        :query (first arguments)})]
+         (let [query (string/join "," arguments)]
+           (custom-query (assoc config :dsl-query? true)
+                         {:title [:code.p-1 (str "Query: " query)]
+                          :query query}))]
 
         (= name "youtube")
         (let [url (first arguments)]

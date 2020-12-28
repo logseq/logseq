@@ -119,12 +119,12 @@
                  t/days)]
         (tc/to-long (t/plus (t/today) (tf duration)))))))
 
-(defn uniq-symbol
-  [counter prefix]
-  (let [result (symbol (str prefix (when-not (zero? @counter)
-                                     @counter)))]
-    (swap! counter inc)
-    result))
+#_(defn uniq-symbol
+    [counter prefix]
+    (let [result (symbol (str prefix (when-not (zero? @counter)
+                                       @counter)))]
+      (swap! counter inc)
+      result))
 
 (defn build-query
   ([repo e env]
