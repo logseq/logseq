@@ -554,12 +554,11 @@
                   (* (config/git-push-secs) 1000)))
 
 (defn create-repo!
-  [repo-url branch]
+  [repo-url]
   (spec/validate :repos/url repo-url)
-  (spec/validate :repos/branch branch)
   (util/post (str config/api "repos")
              {:url repo-url
-              :branch branch}
+              :branch "main"}
              (fn [result]
                (if (:installation_id result)
                  (set! (.-href js/window.location) config/website)
@@ -591,10 +590,10 @@
             (if (and config-exists?
                      (db/cloned? repo))
               (p/do!
-                (git-handler/git-set-username-email! repo me)
-                (pull repo nil))
+               (git-handler/git-set-username-email! repo me)
+               (pull repo nil))
               (p/do!
-                (clone-and-load-db repo))))))
+               (clone-and-load-db repo))))))
 
       (periodically-pull-current-repo)
       (periodically-push-current-repo))
