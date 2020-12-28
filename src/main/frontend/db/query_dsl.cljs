@@ -304,16 +304,16 @@
   (some-> s
           (string/replace text/page-ref-re "\"[[$1]]\"")
           (string/replace text/between-re (fn [[_ x]]
-                                            (let [cx (string/capitalize x)]
-                                              (->> (string/split x #" ")
-                                                   (remove string/blank?)
-                                                   (map (fn [x]
-                                                          (if (or (contains? #{"+" "-"} (first x))
-                                                                  (re-find #"\d" (first x)))
-                                                            (keyword (name x))
-                                                            x)))
-                                                   (string/join " ")
-                                                   (util/format "(between %s)")))))))
+                                            (->> (string/split x #" ")
+                                                 (remove string/blank?)
+                                                 (map (fn [x]
+                                                        (if (or (contains? #{"+" "-"} (first x))
+                                                                (and (re-find #"\d" (first x))
+                                                                     (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
+                                                          (keyword (name x))
+                                                          x)))
+                                                 (string/join " ")
+                                                 (util/format "(between %s)"))))))
 
 (defn parse
   [repo s]
