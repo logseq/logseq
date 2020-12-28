@@ -3,5 +3,5 @@
             [frontend.components.sidebar :as sidebar]))
 
 (rum/defc home
-  [args]
-  (sidebar/main-content args))
+  []
+  (sidebar/main-content))

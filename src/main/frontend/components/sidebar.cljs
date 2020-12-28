@@ -163,10 +163,8 @@
                        (state/sidebar-add-block! current-repo db-id block-type nil))))
                  (reset! sidebar-inited? true))))
            state)}
-  [args]
-  (let [query (get-in args [:parameters :query])
-        login-source (:login_source query)
-        today (state/sub :today)
+  []
+  (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
         default-home (get-default-home-if-valid)
         importing-to-db? (state/sub :repo/importing-to-db?)
@@ -209,16 +207,7 @@
          (journal/journals latest-journals)
 
          (and logged? (empty? (:repos me)))
-         (case login-source
-           "google"
-           (if-not (nfs-handler/supported?)
-             [:div (t :help/select-nfs-browser)]
-             [:div (t :help/open-top-right-open-button)])
-
-           "github"
-           (widgets/add-repo)
-
-           (widgets/add-repo))
+         (widgets/add-graph)
 
          ;; FIXME: why will this happen?
          :else

@@ -20,7 +20,7 @@
 
 (rum/defc add-repo
   []
-  (widgets/add-repo))
+  (widgets/add-graph))
 
 (rum/defc repos < rum/reactive
   []
@@ -79,7 +79,7 @@
                  "Unlink"]]]))]
 
          [:a#download-as-json.hidden]]
-        (widgets/add-repo)))))
+        (widgets/add-graph)))))
 
 (rum/defc sync-status < rum/reactive
   {:did-mount (fn [state]
