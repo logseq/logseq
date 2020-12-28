@@ -83,6 +83,10 @@ html[data-theme=light] {
   }
 }
 
+* {
+  word-break: break-word;
+}
+
 .hide-scrollbar {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none !important; /* Firefox */
