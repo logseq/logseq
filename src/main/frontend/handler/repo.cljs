@@ -35,6 +35,7 @@
   (notification/show!
    [:p.content
     title
+    " "
     [:span.mr-2
      (util/format
       "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
@@ -375,7 +376,12 @@
                                                  (common-handler/check-changed-files-status repo-url)))
                                        (p/catch (fn [error]
                                                   (git-handler/set-git-status! repo-url :checkout-failed)
-                                                  (git-handler/set-git-error! repo-url error))))))
+                                                  (git-handler/set-git-error! repo-url error)
+                                                  (when force-pull?
+                                                    (notification/show!
+                                                     (str "Failed to checkout: " error)
+                                                     :error
+                                                     false)))))))
                          (p/catch (fn [error]
                                     (println "Git pull error:")
                                     (js/console.error error)
@@ -392,6 +398,7 @@
                                            :error)
                                           (route-handler/redirect! {:to :diff}))
                                         (push repo-url {:merge-push-no-diff? true
+                                                        :custom-commit? force-pull?
                                                         :commit-message "Merge push without diffed files"}))))))))
                  (p/catch
                   (fn [error]
@@ -426,8 +433,11 @@
          (state/input-idle? repo-url)
          (or (not= status :pushing)
              custom-commit?))
-      (-> (p/let [files (git/add-all (state/get-current-repo))]
-            (when (or (seq files) merge-push-no-diff?)
+      (-> (p/let [files (git/add-all (state/get-current-repo))
+                  changed-files? (some? (seq files))
+                  _ (when (and custom-commit? (not changed-files?))
+                      (p/rejected "No need to commit as there are no unchanged files"))]
+            (when (or changed-files? merge-push-no-diff?)
               ;; auto commit if there are any un-committed changes
               (let [commit-message (if (string/blank? commit-message)
                                      "Logseq auto save"
@@ -451,14 +461,18 @@
                        (do
                          (git-handler/set-git-status! repo-url :push-failed)
                          (git-handler/set-git-error! repo-url error)
-                         (when (state/online?)
+                         (if (state/online?)
                            (pull repo-url {:force-pull? true
-                                           :show-diff? true}))))))))))
+                                           :show-diff? true})
+                           (when custom-commit?
+                             (p/rejected error)))))))))))
           (p/catch (fn [error]
                      (log/error :repo/push-error error)
                      (git-handler/set-git-status! repo-url :push-failed)
                      (git-handler/set-git-error! repo-url error)
-                     (js/console.dir error)))))))
+
+                     (when custom-commit?
+                       (p/rejected error))))))))
 
 (defn push-if-auto-enabled!
   [repo]
@@ -469,7 +483,9 @@
 (defn pull-current-repo
   []
   (when-let [repo (state/get-current-repo)]
-    (pull repo {:force-pull? true})))
+    (-> (pull repo {:force-pull? true})
+        (p/catch (fn [error]
+                   (notification/show! error :error false))))))
 
 (defn- clone
   [repo-url]
