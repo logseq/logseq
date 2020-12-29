@@ -4,6 +4,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
+            [frontend.handler.notification :as notification]
+            [promesa.core :as p]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
 
@@ -11,7 +13,9 @@
   []
   (let [value (gobj/get (gdom/getElement "commit-message") "value")]
     (when (and value (>= (count value) 1))
-      (repo-handler/git-commit-and-push! value)
+      (-> (repo-handler/git-commit-and-push! value)
+          (p/catch (fn [error]
+                     (notification/show! error :error false))))
       (state/close-modal!))))
 
 (rum/defcs add-commit-message <
