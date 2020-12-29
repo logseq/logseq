@@ -405,10 +405,11 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties remove-properties rebuild-content?]
+    {:keys [indent-left? custom-properties remove-properties rebuild-content? auto-save?]
      :or {rebuild-content? true
           custom-properties nil
-          remove-properties nil}}]
+          remove-properties nil
+          auto-save? false}}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -444,9 +445,13 @@
          properties (if (and (seq properties) (seq remove-properties))
                       (medley/remove-keys (fn [k] (contains? (set remove-properties) k)) properties)
                       properties)
-         value (text/re-construct-block-properties value properties)]
+         value (text/re-construct-block-properties value properties)
+         content-changed? (if auto-save?
+                            (not= (text/remove-properties! (string/trim content))
+                                  (text/remove-properties! (string/trim value)))
+                            (not= (string/trim content) (string/trim value)))]
      (cond
-       (not= (string/trim content) (string/trim value)) ; block content changed
+       content-changed?
        (let [file (db/entity repo (:db/id file))]
          (cond
            ;; Page was referenced but no related file
@@ -1361,20 +1366,22 @@
               (state/conj-selection-block! element up?))))))))
 
 (defn save-block-aux!
-  [block value format]
+  [block value format opts]
   (let [value (text/remove-level-spaces value format true)
         new-value (block/with-levels value format block)
         properties (with-timetracking-properties block value)]
     ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
     (save-block-if-changed! block new-value
-                            {:custom-properties properties})))
+                            (merge
+                             {:custom-properties properties}
+                             opts))))
 
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
             dummy?)
-    (save-block-aux! block value format)))
+    (save-block-aux! block value format {})))
 
 (defn save-current-block-when-idle!
   []
@@ -1399,7 +1406,8 @@
                       (not= (string/trim db-content-without-heading)
                             (string/trim value))))
             (let [cur-pos (util/get-input-pos elem)]
-              (save-block-aux! db-block value (:block/format db-block))
+              (save-block-aux! db-block value (:block/format db-block)
+                               {:auto-save? true})
               ;; Restore the cursor after saving the block
               (when (and elem cur-pos)
                 (util/set-caret-pos! elem cur-pos)))))

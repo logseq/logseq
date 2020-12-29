@@ -659,7 +659,7 @@
       (cond
         (= name "query")
         [:div.dsl-query
-         (let [query (string/join "," arguments)]
+         (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
                          {:title [:code.p-1 (str "Query: " query)]
                           :query query}))]
