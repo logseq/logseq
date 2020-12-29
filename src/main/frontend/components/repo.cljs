@@ -16,11 +16,17 @@
             [frontend.components.commit :as commit]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [clojure.string :as str]))
 
 (rum/defc add-repo
-  []
-  (widgets/add-graph))
+  [args]
+  (if-let [graph-types (get-in args [:query-params :graph-types])]
+    (let [graph-types-s (->> (str/split graph-types #",")
+                             (mapv keyword))]
+      (when (seq graph-types-s)
+        (widgets/add-graph :graph-types graph-types-s)))
+    (widgets/add-graph)))
 
 (rum/defc repos < rum/reactive
   []
@@ -42,7 +48,7 @@
            (when (state/logged?)
              (ui/button
               "Add another git repo"
-              :href (rfe/href :repo-add)))]
+              :href (rfe/href :repo-add nil {:graph-types "github"})))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}
