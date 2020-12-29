@@ -93,7 +93,7 @@
 
       (blocks-cp repo page format))
 
-     (when intro? (widgets/add-repo))
+     (when intro? (widgets/add-graph))
 
      (page/today-queries repo today? false)
 

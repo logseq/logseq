@@ -148,6 +148,16 @@
      :stroke-linejoin "round"
      :stroke-linecap "round"}]])
 
+(def folder-add-large
+  [:svg
+   {:stroke "currentColor", :view-box "0 0 24 24", :fill "none" :width 64 :height 64 :display "inline-block"}
+   [:path
+    {:d
+     "M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+     :stroke-width "2"
+     :stroke-linejoin "round"
+     :stroke-linecap "round"}]])
+
 (def folder (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"))
 (def folder-sm (hero-icon "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" {:height "16" :width "16"}))
 (def pages-sm [:svg {:viewBox "0 0 20 20", :fill "currentColor", :height "16", :width "16"}

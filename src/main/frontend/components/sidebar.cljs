@@ -28,7 +28,8 @@
             [goog.object :as gobj]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [frontend.handler.web.nfs :as nfs-handler]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -143,6 +144,7 @@
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
+
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-not @sidebar-inited?
@@ -205,7 +207,7 @@
          (journal/journals latest-journals)
 
          (and logged? (empty? (:repos me)))
-         (widgets/add-repo)
+         (widgets/add-graph)
 
          ;; FIXME: why will this happen?
          :else
