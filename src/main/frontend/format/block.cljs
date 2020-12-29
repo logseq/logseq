@@ -8,6 +8,7 @@
             [frontend.config :as config]
             [datascript.core :as d]
             [frontend.date :as date]
+            [frontend.text :as text]
             [medley.core :as medley]))
 
 (defn heading-block?
@@ -134,6 +135,12 @@
    (= "List" (first block))
    (:name (first (second block)))))
 
+(defn- ->schema-properties
+  [properties]
+  (-> properties
+      (update "created_at" util/safe-parse-int)
+      (update "last_modified_at" util/safe-parse-int)))
+
 (defn extract-properties
   [[_ properties] start-pos end-pos]
   (let [properties (->> (into {} properties)
@@ -144,8 +151,9 @@
                                                            (contains? config/markers k')
                                                            (util/safe-parse-int v'))
                                                     (util/safe-parse-int v')
-                                                    v')]
-                                           [k' v']))))]
+                                                    (text/split-page-refs-without-brackets v'))]
+                                           [k' v'])))
+                        (->schema-properties))]
     {:properties properties
      :start-pos start-pos
      :end-pos end-pos}))
@@ -379,7 +387,7 @@
                                    block
                                    {:block/meta meta
                                     :block/marker (get block :block/marker "nil")
-                                    :block/properties (get block :block/properties [])
+                                    :block/properties (get block :block/properties {})
                                     :block/file file
                                     :block/format format
                                     :block/page page

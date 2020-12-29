@@ -142,6 +142,7 @@ body {
   line-height: 1.5;
   background-color: transparent;
   min-height: 100%;
+  word-break: break-word; /* compatible for overflow-wrap: anywhere */
 }
 
 a svg {
@@ -716,6 +717,6 @@ svg.tip {
 
 
 hr {
-    margin: 2rem 0;
-    border-color: var(--ls-border-color, #ccc);
+  margin: 2rem 0;
+  border-color: var(--ls-border-color, #ccc);
 }

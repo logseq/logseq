@@ -13,6 +13,7 @@
             [frontend.search :as search]
             [clojure.string :as string]
             [goog.dom :as gdom]
+            [medley.core :as medley]
             [frontend.context.i18n :as i18n]))
 
 (rum/defc dropdown-content-wrapper [state content]
@@ -23,6 +24,46 @@
              "exiting" "transition ease-in duration-75 transform opacity-100 scale-100"
              "exited" "transition ease-in duration-75 transform opacity-0 scale-95")}
    content])
+
+(defn- partition-between
+  "Split `coll` at positions where `pred?` is true."
+  [pred? coll]
+  (let [switch (reductions not= true (map pred? coll (rest coll)))]
+    (map (partial map first) (partition-by second (map list coll switch)))))
+
+(rum/defc highlight-fuzzy
+  [content indexes]
+  (let [n (count content)
+        max-hightlighted-len 64
+        max-surrounding-len 32
+
+        first-index (first indexes)
+        last-index (nth indexes (dec (count indexes)))
+        last-index (min (+ first-index max-hightlighted-len -1) last-index)
+        last-index* (+ last-index max-surrounding-len)
+        indexes (take-while #(<= % last-index*) indexes)
+        content-begin (max 0 (- first-index max-surrounding-len))
+        content-end   (min n (+ last-index 1 max-surrounding-len)) ; exclusive
+
+        ; finds inconsecutive sections
+        sections (partition-between #(> (- %2 %) 1) indexes)
+        hl-ranges (for [sec sections
+                        :let [begin (first sec)
+                              end (-> sec last inc)]]
+                    [begin end]) ; `end` is exclusive
+        hl-ranges* (concat [[content-begin content-begin]]
+                           hl-ranges
+                           [[content-end content-end]])
+        normal-ranges (for [[[_ begin] [end _]] (partition 2 1 hl-ranges*)] [begin end])
+        normal-hl-pairs (partition-all 2 (medley/interleave-all normal-ranges hl-ranges))]
+    [:p
+     (mapcat
+      (fn [[normal highlighted]]
+        [(when-some [[begin end] normal]
+           [:span (subs content begin end)])
+         (when-some [[begin end] highlighted]
+           [:mark (subs content begin end)])])
+      normal-hl-pairs)]))
 
 (rum/defc highlight
   [content q]
@@ -135,11 +176,11 @@
                            data]
 
                           :block
-                          (let [{:block/keys [page content]} data]
+                          (let [{:block/keys [page content indexes]} data]
                             (let [page (:page/original-name page)]
                               [:div.flex-1
                                [:div.text-sm.font-medium page]
-                               (highlight content search-q)]))
+                               (highlight-fuzzy content indexes)]))
 
                           nil))})])))
 

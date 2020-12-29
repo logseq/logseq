@@ -1,6 +1,13 @@
 :root {
   scrollbar-width: thin;
   scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color);
+
+  --ls-z-index-level-0: 0;
+  --ls-z-index-level-1: 9;
+  --ls-z-index-level-2: 99;
+  --ls-z-index-level-3: 999;
+  --ls-z-index-level-4: 9999;
+  --ls-z-index-level-5: 99999;
 }
 
 html:not(.is-mac) {

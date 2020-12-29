@@ -59,7 +59,8 @@
        (if collapse?
          (svg/arrow-right)
          (svg/arrow-down))]
-      [:span.cp__diff-file-header-content path]
+      [:span.cp__diff-file-header-content {:style {:word-break "break-word"}}
+       path]
       (when resolved?
         [:span.text-green-600
          {:dangerouslySetInnerHTML

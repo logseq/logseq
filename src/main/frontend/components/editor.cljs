@@ -643,7 +643,7 @@
                   (when-let [element (gdom/getElement id)]
                     (.focus element)))
                 state)
-   :did-remount (fn [state]
+   :did-remount (fn [_old-state state]
                   (keyboards-handler/esc-save! state)
                   state)
    :will-unmount (fn [state]

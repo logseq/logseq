@@ -37,33 +37,6 @@
     :else
     input))
 
-(defn- custom-query-aux
-  [{:keys [query inputs result-transform] :as query'} query-opts]
-  (try
-    (let [inputs (map resolve-input inputs)
-          repo (state/get-current-repo)
-          k [:custom query']]
-      (apply react/q repo k query-opts query inputs))
-    (catch js/Error e
-      (println "Custom query failed: ")
-      (js/console.dir e))))
-
-(defn custom-query
-  ([query]
-   (custom-query query {}))
-  ([query query-opts]
-   (when-let [query' (cond
-                       (and (string? query)
-                            (not (string/blank? query)))
-                       (reader/read-string query)
-
-                       (map? query)
-                       query
-
-                       :else
-                       nil)]
-     (custom-query-aux query' query-opts))))
-
 (defn custom-query-result-transform
   [query-result remove-blocks q]
   (let [repo (state/get-current-repo)
@@ -92,3 +65,30 @@
         (if block?
           (db-utils/group-by-page result)
           result)))))
+
+(defn react-query
+  [repo {:keys [query inputs] :as query'} query-opts]
+  (try
+    (let [inputs (map resolve-input inputs)
+          repo (or repo (state/get-current-repo))
+          k [:custom query']]
+      (apply react/q repo k query-opts query inputs))
+    (catch js/Error e
+      (println "Custom query failed: ")
+      (js/console.dir e))))
+
+(defn custom-query
+  ([query]
+   (custom-query query {}))
+  ([query query-opts]
+   (when-let [query' (cond
+                       (and (string? query)
+                            (not (string/blank? query)))
+                       (reader/read-string query)
+
+                       (map? query)
+                       query
+
+                       :else
+                       nil)]
+     (react-query (state/get-current-repo) query' query-opts))))

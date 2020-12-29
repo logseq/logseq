@@ -94,17 +94,5 @@
    :block/deadline-ast {}
    :block/repeated? {}
 
-   ;; TODO: To make this really working, every block needs a persisting `CUSTOM-ID`, which I'd like to avoid for now.
-   ;; Any suggestions?
-   :block/created-at {}
-   :block/last-modified-at {}
-
    ;; For pages
-   :tag/name       {:db/unique :db.unique/identity}
-   ;; ;; Definitions, useful for tags and future anki cards
-   ;; :definition/block {:db/valueType   :db.type/ref}
-   ;; ;; Why not make :definition/key unique?
-   ;; ;; Multiple definitions with the same key in either one page or multiple pages
-   ;; :definition/key {}
-   ;; :definition/value {}
-})
+   :tag/name       {:db/unique :db.unique/identity}})

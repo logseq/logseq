@@ -115,7 +115,7 @@
   height: calc(100vh - 3rem);
   overflow-x: hidden;
   overflow-y: auto;
-  z-index: 9;
+  z-index: var(--ls-z-index-level-1);
   transition: width 0.3s, opacity 0.2s;
   border-radius: var(--ls-border-radius-low) 0 0 0;
 

@@ -2,8 +2,47 @@
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [clojure.string :as string]
-            [clojure.set :as set]
-            [frontend.db :as db]))
+            [clojure.set :as set]))
+
+(defn page-ref?
+  [s]
+  (and
+   (string? s)
+   (string/starts-with? s "[[")
+   (string/ends-with? s "]]")))
+
+(defonce page-ref-re #"\[\[(.*?)\]\]")
+
+(defonce between-re #"\(between ([^\)]+)\)")
+
+(defn page-ref-un-brackets!
+  [s]
+  (when (string? s)
+    (let [s (if (page-ref? s)
+              (subs s 2 (- (count s) 2))
+              s)]
+      (string/lower-case s))))
+
+;; E.g "Foo Bar \"Bar Baz\""
+(defn- sep-by-comma-or-quote
+  [s]
+  (when s
+    (some->>
+     (string/split s #"[\"|\,|，]{1}")
+     (remove string/blank?)
+     (map string/lower-case)
+     (map string/trim))))
+
+(defn split-page-refs-without-brackets
+  [s]
+  (if (and (string? s)
+             (or (re-find #"[\"|\,|，]+" s)
+                 (re-find page-ref-re s)))
+      (->> s
+        (sep-by-comma-or-quote)
+        (map page-ref-un-brackets!)
+        (set))
+      s))
 
 (defn remove-level-spaces
   ([text format]
@@ -33,7 +72,8 @@
 
 (def hidden-properties
   (set/union
-   #{"id" "custom_id" "heading" "background_color"}
+   #{"id" "custom_id" "heading" "background_color"
+     "created_at" "last_modified_at"}
    config/markers))
 
 (defn properties-hidden?
@@ -112,23 +152,24 @@
     (when (and start end)
       (subs text start (+ end 5)))))
 
+(defn extract-properties
+  [text]
+  (when-let [properties-text (get-properties-text text)]
+    (->> (string/split-lines properties-text)
+         (map (fn [line]
+                (when (= ":" (first line))
+                  (let [[k v] (util/split-first ":" (subs line 1))]
+                    (when (and k v)
+                      (let [k (string/trim (string/lower-case k))
+                            v (string/trim (string/lower-case v))]
+                        (when-not (contains? #{"properties" "end"} k)
+                          [k v])))))))
+         (into {}))))
+
 (defn re-construct-block-properties
-  [block content properties]
-  (let [content' (-> (remove-level-spaces content (:block/format block))
-                     (string/trim)
-                     (string/lower-case))
-        properties-text (get-properties-text content)]
-    (if (or
-         (and
-          properties-text
-          (string/starts-with? content' (string/lower-case properties-text)))
-         (and (contains-properties? content)
-              ;; not changed
-              (= (seq (:block/properties (db/entity [:block/uuid (:block/uuid block)])))
-                 (seq properties))))
-      content
-      (-> (remove-properties! content)
-          (rejoin-properties properties)))))
+  [content properties]
+  (-> (remove-properties! content)
+      (rejoin-properties properties)))
 
 (defn insert-property
   [content key value]

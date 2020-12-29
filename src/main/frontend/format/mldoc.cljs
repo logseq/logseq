@@ -6,7 +6,9 @@
             [cljs.core.match :refer-macros [match]]
             [lambdaisland.glogi :as log]
             [goog.object :as gobj]
-            ["mldoc" :as mldoc :refer [Mldoc]]))
+            [frontend.text :as text]
+            ["mldoc" :as mldoc :refer [Mldoc]]
+            [medley.core :as medley]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -30,35 +32,6 @@
 (defn inline-parse-json
   [text config]
   (parseInlineJson text (or config default-config)))
-
-;; E.g "Foo Bar \"Bar Baz\""
-(defn- sep-by-quote-or-space-or-comma
-  [s]
-  (when s
-    (let [comma? (re-find #"[,|，]+" s)]
-      (some->>
-       (string/split s #"[\"|\,|，]{1}")
-       (remove string/blank?)
-       (map (fn [s]
-              (if (and (not comma?)
-                       (or (contains? #{" " "#"} (first s))
-                           (= " " (last s))))
-                ;; space/hashtag separated tags
-                (string/split (string/trim s) #" ")
-                s)))
-       flatten
-       distinct
-       (remove string/blank?)
-       (map string/lower-case)
-       (map string/trim)))))
-
-(defn- remove-page-ref-brackets
-  [s]
-  (if (and (string? s)
-           (string/starts-with? s "[[")
-           (string/ends-with? s "]]"))
-    (subs s 2 (- (count s) 2))
-    s))
 
 ;; Org-roam
 (defn get-tags-from-definition
@@ -101,8 +74,11 @@
           directive? (fn [item] (= "directive" (string/lower-case (first item))))
           properties (->> (take-while directive? ast)
                           (map (fn [[_ k v]]
-                                 [(keyword (string/lower-case k))
-                                  v]))
+                                 (let [k (keyword (string/lower-case k))
+                                       v (if (contains? #{:title :description} k)
+                                           v
+                                           (text/split-page-refs-without-brackets v))]
+                                   [k v])))
                           (into {}))
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
           macros (if (seq macro-properties)
@@ -124,17 +100,7 @@
           properties (if (seq properties)
                        (cond-> properties
                          (:roam_key properties)
-                         (assoc :key (:roam_key properties))
-                         (:alias properties)
-                         (update :alias
-                                 (fn [s]
-                                   (->> s
-                                        (sep-by-quote-or-space-or-comma)
-                                        (map remove-page-ref-brackets))))
-                         (:tags properties)
-                         (update :tags sep-by-quote-or-space-or-comma)
-                         (:roam_tags properties)
-                         (update :roam_tags sep-by-quote-or-space-or-comma))
+                         (assoc :key (:roam_key properties)))
                        properties)
           definition-tags (get-tags-from-definition ast)
           properties (if definition-tags

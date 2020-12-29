@@ -51,7 +51,7 @@
   (let [state @query-state
         state (->> (filter (fn [[[_repo k] v]]
                              (contains? #{:blocks :block/block :custom} k)) state)
-                (into {}))]
+                   (into {}))]
     (reset! query-state state)))
 
 ;; TODO: Add components which subscribed to a specific query
@@ -72,21 +72,21 @@
 (defn add-query-component!
   [key component]
   (swap! query-components update key
-    (fn [components]
-      (distinct (conj components component)))))
+         (fn [components]
+           (distinct (conj components component)))))
 
 (defn remove-query-component!
   [component]
   (reset!
-    query-components
-    (->> (for [[k components] @query-components
-               :let [new-components (remove #(= component %) components)]]
-           (if (empty? new-components) ; no subscribed components
-             (do (remove-q! k)
-                 nil)
-             [k new-components]))
-      (keep identity)
-      (into {}))))
+   query-components
+   (->> (for [[k components] @query-components
+              :let [new-components (remove #(= component %) components)]]
+          (if (empty? new-components) ; no subscribed components
+            (do (remove-q! k)
+                nil)
+            [k new-components]))
+        (keep identity)
+        (into {}))))
 
 (defn get-page-blocks-cache-atom
   [repo page-id]
@@ -160,6 +160,7 @@
 
 ;; TODO: Extract several parts to handlers
 
+
 (defn get-current-page
   []
   (let [match (:route-match @state/state)
@@ -179,8 +180,8 @@
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
         (db-utils/entity (if tag?
-                        [:tag/name page-name]
-                        [:page/name page-name]))))))
+                           [:tag/name page-name]
+                           [:page/name page-name]))))))
 
 (defn get-current-priority
   []

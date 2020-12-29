@@ -49,14 +49,14 @@
 (defn embed-page
   []
   (conj
-   [[:editor/input "{{{embed [[]]}}}" {:last-pattern slash
-                                       :backward-pos 5}]]
+   [[:editor/input "{{embed [[]]}}" {:last-pattern slash
+                                     :backward-pos 4}]]
    [:editor/search-page :embed]))
 
 (defn embed-block
   []
-  [[:editor/input "{{{embed (())}}}" {:last-pattern slash
-                                      :backward-pos 5}]
+  [[:editor/input "{{embed (())}}" {:last-pattern slash
+                                    :backward-pos 4}]
    [:editor/search-block :embed]])
 
 ;; Stop now!!
@@ -100,6 +100,7 @@
                   [:editor/show-date-picker]]]
      ["Scheduled" [[:editor/clear-current-slash]
                    [:editor/show-date-picker]]]
+     ["Query" [[:editor/input "{{query }}" {:backward-pos 2}]]]
      ["Draw" [[:editor/input "/draw "]
               [:editor/show-input [{:command :draw
                                     :id :title
@@ -124,8 +125,8 @@
      ["Image Link" link-steps]
      (when (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
-     ["Embed Youtube Video" [[:editor/input "{{{youtube }}}" {:last-pattern slash
-                                                              :backward-pos 3}]]]
+     ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
+                                                            :backward-pos 2}]]]
      ["Html Inline " (->inline "html")]
 
      ;; TODO:

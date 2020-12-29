@@ -177,6 +177,11 @@
   (not (false? (:feature/enable-timetracking?
                 (get (sub-config) (get-current-repo))))))
 
+(defn enable-block-time?
+  []
+  (true? (:feature/enable-block-time?
+          (get (sub-config) (get-current-repo)))))
+
 ;; Enable by default
 (defn show-brackets?
   []
