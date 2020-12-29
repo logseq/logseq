@@ -254,10 +254,6 @@
   []
   (get-in @state [:me :repos]))
 
-(defn get-login-source
-  []
-  (get-in @state [:me :login_source]))
-
 (defn set-repos!
   [repos]
   (set-state! [:me :repos] repos))
