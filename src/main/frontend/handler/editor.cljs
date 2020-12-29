@@ -1407,10 +1407,7 @@
                             (string/trim value))))
             (let [cur-pos (util/get-input-pos elem)]
               (save-block-aux! db-block value (:block/format db-block)
-                               {:auto-save? true})
-              ;; Restore the cursor after saving the block
-              (when (and elem cur-pos)
-                (util/set-caret-pos! elem cur-pos)))))
+                               {:auto-save? true}))))
         (catch js/Error error
           (log/error :save-block-failed error)))
       (state/set-editor-op! nil))))
