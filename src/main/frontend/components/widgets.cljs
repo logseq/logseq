@@ -36,7 +36,7 @@
   [state]
   (let [repo (get state ::repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.p-8.flex.flex-col
+      [:div.flex.flex-col
        [:div.w-full.mx-auto
         [:div
          [:div
@@ -66,8 +66,8 @@
 (rum/defcs add-local-directory
   []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div.p-8.flex.flex-col
-     [:h1.title "Add Local directory"]
+    [:div.flex.flex-col
+     [:h1.title "Add a graph"]
      (let [nfs-supported? (nfs/supported?)]
        [:div.cp__widgets-open-local-directory
         [:div.select-file-wrap.cursor
@@ -105,6 +105,7 @@
                        nil))
         available-graph (->> (set graph-types)
                              (keep generate-f)
-                             (vec))]
+                             (vec)
+                             (interpose [:b.mt-10.mb-5.opacity-50 "OR"]))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.p-8.flex.flex-col available-graph])))
