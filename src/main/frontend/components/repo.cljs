@@ -30,23 +30,19 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       (if (seq repos)
         [:div#repos
-         [:h1.title "All Graphs"]
+         [:h1.title "All Repos"]
 
          [:div.pl-1.content
           [:div.flex.flex-row.my-4
-           (when (state/logged?)
+           (when (nfs-handler/supported?)
              [:div.mr-8
               (ui/button
-               "Add another git repo"
-               :href (rfe/href :repo-add))])
-           (when (nfs-handler/supported?)
-             [:div.flex.flex-col
-              [:div (ui/button
-                     (t :open-a-directory)
-                     :on-click nfs-handler/ls-dir-files)]
-              [:span.warning.mt-2.text-sm "Warning: this is an experimental feature,"
-               [:br]
-               "please only use it for testing purpose."]])]
+               (t :open-a-directory)
+               :on-click nfs-handler/ls-dir-files)])
+           (when (state/logged?)
+             (ui/button
+              "Add another git repo"
+              :href (rfe/href :repo-add)))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}

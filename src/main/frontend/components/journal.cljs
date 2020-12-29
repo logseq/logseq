@@ -16,6 +16,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.reference :as reference]
             [frontend.components.page :as page]
+            [frontend.components.widgets :as widgets]
             [frontend.components.onboarding :as onboarding]
             [goog.object :as gobj]
             [clojure.string :as string]
@@ -92,12 +93,13 @@
 
       (blocks-cp repo page format))
 
+     (when intro? (widgets/add-graph))
+
      (page/today-queries repo today? false)
 
      (reference/references title false)
 
-     (when intro?
-       (onboarding/intro))]))
+     (when intro? (onboarding/intro))]))
 
 (rum/defc journals <
   {:did-mount (fn [state]

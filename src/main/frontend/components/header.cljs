@@ -157,21 +157,20 @@
                   (not config/publishing?))
 
          (ui/dropdown-with-links
-           (fn [{:keys [toggle-fn]}]
-             [:a {:on-click toggle-fn}
-              [:span.ml-1 "Login"]
-              [:span.ml-1 {:style {:border-top-color "#6b7280"}}]])
-           (let [list [{:title (t :login-github)
-                        :url "/login/github"}
-                       {:title (t :login-google)
-                        :url "/login/google"}]]
+          (fn [{:keys [toggle-fn]}]
+            [:a {:on-click toggle-fn}
+             [:span.ml-1.text-sm (t :login)]])
+          (let [list [{:title (t :login-google)
+                       :url "/login/google"}
+                      {:title (t :login-github)
+                       :url "/login/github"}]]
             (mapv
-              (fn [{:keys [title url]}]
-                {:title title
-                 :options
-                 {:on-click
-                  (fn [_] (set! (.-href js/window.location) url))}})
-              list))))
+             (fn [{:keys [title url]}]
+               {:title title
+                :options
+                {:on-click
+                 (fn [_] (set! (.-href js/window.location) url))}})
+             list))))
 
        (repo/sync-status)
 
@@ -179,17 +178,14 @@
         (repo/repos-dropdown true)]
 
        (when (and (nfs/supported?) (empty? repos))
-         (ui/tooltip
-          "Warning: this is an experimental feature, please only use it for testing purpose."
-          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
-           {:on-click (fn []
-                        (nfs/ls-dir-files))}
-           [:div.flex.flex-row.text-center
-            [:span.inline-block svg/folder-add]
-            (when-not config/mobile?
-              [:span.ml-1 {:style {:margin-top 2}}
-               (t :open)])]]
-          {:label-style {:width 200}}))
+         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
+          {:on-click (fn []
+                       (nfs/ls-dir-files))}
+          [:div.flex.flex-row.text-center
+           [:span.inline-block svg/folder-add]
+           (when-not config/mobile?
+             [:span.ml-1 {:style {:margin-top 2}}
+              (t :open)])]])
 
        (if config/publishing?
          [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}

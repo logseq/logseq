@@ -1,0 +1,10 @@
+.cp__widgets {
+    &-open-local-directory {
+        .select-file-wrap {
+            padding: 50px;
+            border: dashed 2px;
+            border-radius: var(--border-radius-m);
+            justify-content: center;
+        }
+    }
+}
