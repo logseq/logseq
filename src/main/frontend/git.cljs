@@ -110,6 +110,14 @@
   "Equivalent to `git add --all`. Returns changed files."
   [repo-url]
   (p/let [repo-dir (util/get-repo-dir repo-url)
+
+          ; statusMatrix will return `[]` rather than raising an error if the repo directory does
+          ; not exist. So checks whether repo-dir exists before proceeding.
+          _ (-> (js/window.pfs.stat repo-dir)
+                (p/catch #(p/rejected (str "Cannot find repo dir '"
+                                           repo-dir
+                                           "' in fs when `git add --all`"))))
+
           status-matrix (js/window.workerThread.statusMatrixChanged repo-dir)
           changed-files (for [[file head work-dir _stage] status-matrix
                               :when (not= head work-dir)]
