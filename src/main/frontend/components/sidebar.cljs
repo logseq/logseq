@@ -77,7 +77,7 @@
 (rum/defc sidebar-mobile-sidebar < rum/reactive
   [{:keys [open? close-fn route-match]}]
   [:div.md:hidden
-   [:div.fixed.inset-0.z-30.bg-gray-600.opacity-0.pointer-events-none.transition-opacity.ease-linear.duration-300
+   [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
     {:class (if @open?
               "opacity-75 pointer-events-auto"
               "opacity-0 pointer-events-none")
@@ -86,20 +86,19 @@
     {:class (if @open?
               "translate-x-0"
               "-translate-x-full")
-     :style {:background-color "#002b36"
-             :max-width "15rem"}}
+     :style {:max-width "86vw"}}
     (if @open?
       [:div.absolute.top-0.right-0.p-1
-       [:button#close-left-bar.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+       [:button#close-left-bar.close-panel-btn.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
         {:on-click close-fn}
-        [:svg.h-6.w-6.text-white
+        [:svg.h-6.w-6
          {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
          [:path
           {:d "M6 18L18 6M6 6l12 12"
            :stroke-width "2"
            :stroke-linejoin "round"
            :stroke-linecap "round"}]]]])
-    [:div.flex-shrink-0.flex.items-center.px-4.h-16 {:style {:background-color "#002b36"}}
+    [:div.flex-shrink-0.flex.items-center.px-4.h-16.head-wrap
      (repo/repos-dropdown false nil)]
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])

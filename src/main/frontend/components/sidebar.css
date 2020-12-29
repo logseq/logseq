@@ -33,11 +33,21 @@
 }
 
 #left-bar {
+  background-color: var(--ls-primary-background-color);
+
+  > .head-wrap {
+    background-color: var(--ls-search-background-color);
+  }
+
+  .close-panel-btn {
+    color: var(--ls-active-primary-color);
+  }
+
   .left-sidebar-inner {
     padding-right: 15px;
   }
 
-  a {
+  nav > a {
     color: var(--ls-icon-color);
   }
 }
