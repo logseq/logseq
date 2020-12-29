@@ -253,7 +253,7 @@
     (state/set-block-content-and-last-pos! id new-value new-pos)
     (util/move-cursor-to input new-pos)
     (when check-fn
-      (check-fn new-value (dec (count prefix))))))
+      (check-fn new-value (dec (count prefix)) new-pos))))
 
 (defn simple-replace!
   [id value selected
