@@ -554,11 +554,11 @@
                   (* (config/git-push-secs) 1000)))
 
 (defn create-repo!
-  [repo-url]
+  [repo-url branch]
   (spec/validate :repos/url repo-url)
   (util/post (str config/api "repos")
              {:url repo-url
-              :branch "main"}
+              :branch branch}
              (fn [result]
                (if (:installation_id result)
                  (set! (.-href js/window.location) config/website)
