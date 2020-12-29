@@ -407,7 +407,8 @@
                             (pull repo-url new-opts))
                           (let [error-msg
                                 (util/format "Failed to fetch %s. It may be caused by token expiration or missing." repo-url)]
-                            (log/error :git/pull-error error)
+                            (git-handler/set-git-status! repo-url :fetch-failed)
+                            (log/error :repo/pull-error error)
                             (notification/show! error-msg :error false))))
 
                       :else
@@ -454,7 +455,7 @@
                            (pull repo-url {:force-pull? true
                                            :show-diff? true}))))))))))
           (p/catch (fn [error]
-                     (log/error :git/get-changed-files-error error)
+                     (log/error :repo/push-error error)
                      (git-handler/set-git-status! repo-url :push-failed)
                      (git-handler/set-git-error! repo-url error)
                      (js/console.dir error)))))))

@@ -105,6 +105,13 @@
                 git-status (state/sub [:git/status repo])
                 pushing? (= :pushing git-status)
                 pulling? (= :pulling git-status)
+                git-failed? (contains?
+                             #{:push-failed
+                               :clone-failed
+                               :checkout-failed
+                               :fetch-failed
+                               :merge-failed}
+                             git-status)
                 push-failed? (= :push-failed git-status)
                 last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
                 ;; db-persisted? (state/sub [:db/persisted? repo])
@@ -115,7 +122,7 @@
               (fn [{:keys [toggle-fn]}]
                 [:div.cursor.w-2.h-2.sync-status.mr-2
                  {:class (cond
-                           push-failed?
+                           git-failed?
                            "bg-red-500"
                            (or
                             ;; (not db-persisted?)
