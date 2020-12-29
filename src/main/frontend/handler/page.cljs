@@ -253,7 +253,7 @@
         (let [file (db/get-page-file page-name)
               file-path (:file/path file)]
           ;; delete file
-          (when file-path
+          (when-not (string/blank? file-path)
             (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
             (when-let [files-conn (db/get-files-conn repo)]
               (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))

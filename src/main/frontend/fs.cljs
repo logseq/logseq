@@ -108,7 +108,10 @@
                                            :error error})))))
 
     :else
-    (js/window.pfs.unlink path opts)))
+    (p/let [stat (js/window.pfs.stat path)]
+      (if (.-isFile stat)
+        (js/window.pfs.unlink path opts)
+        (p/rejected "Unlinking a directory is not allowed")))))
 
 (defn rmdir
   "Remove the directory recursively."
@@ -232,6 +235,10 @@
 (defn rename
   [repo old-path new-path]
   (cond
+    ; See https://github.com/isomorphic-git/lightning-fs/issues/41
+    (= old-path new-path)
+    (p/resolved nil)
+
     (local-db? old-path)
     ;; create new file
     ;; delete old file
