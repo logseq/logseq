@@ -458,10 +458,8 @@
                       (medley/remove-keys (fn [k] (contains? (set remove-properties) k)) properties)
                       properties)
          value (text/re-construct-block-properties value properties)
-         content-changed? (if auto-save?
-                            (not= (text/remove-properties! (string/trim content))
-                                  (text/remove-properties! (string/trim value)))
-                            (not= (string/trim content) (string/trim value)))]
+         content-changed? (not= (text/remove-timestamp-property! (string/trim content))
+                                (text/remove-timestamp-property! (string/trim value)))]
      (cond
        content-changed?
        (let [file (db/entity repo (:db/id file))]
@@ -2065,4 +2063,3 @@
 (defn periodically-save!
   []
   (js/setInterval save-current-block-when-idle! 3000))
-

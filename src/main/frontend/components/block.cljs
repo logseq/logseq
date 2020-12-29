@@ -1055,7 +1055,7 @@
         block-cp))))
 
 (rum/defc properties-cp
-  [block]
+  [config block]
   (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
     (when (seq properties)
       [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
@@ -1064,7 +1064,12 @@
          [:div.my-1
           [:b k]
           [:span.mr-1 ":"]
-          (inline-text (:block/format block) (str v))])])))
+          (if (coll? v)
+            (let [v (->> (remove string/blank? v)
+                         (filter string?))]
+              (for [v-item v]
+                (page-cp config {:page/name v-item})))
+            (inline-text (:block/format block) (str v)))])])))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)
@@ -1169,7 +1174,7 @@
                  (let [hidden? (text/properties-hidden? properties)]
                    (not hidden?))
                  (not (:slide? config)))
-        (properties-cp block))
+        (properties-cp config block))
 
       (when (and (not pre-block?) (seq body))
         [:div.block-body {:style {:display (if collapsed? "none" "")}}

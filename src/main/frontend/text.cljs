@@ -114,6 +114,14 @@
                                  (and id (util/uuid-string? id)))))))]
     (string/join "\n" lines)))
 
+(defn remove-timestamp-property!
+  [content]
+  (let [lines (->> (string/split-lines content)
+                   (remove #(let [s (string/lower-case (string/trim %))]
+                              (or (string/starts-with? s ":created_at:")
+                                  (string/starts-with? s ":last_modified_at:")))))]
+    (string/join "\n" lines)))
+
 (defn build-properties-str
   [properties]
   (when (seq properties)
