@@ -247,10 +247,20 @@
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
     svg/multi-line-input]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:on-click #(commands/simple-insert! parent-id "[[]]" {:backward-pos 2})}
+    {:on-click #(commands/simple-insert!
+                 parent-id "[[]]"
+                 {:backward-pos 2
+                  :check-fn (fn [_ _ new-pos]
+                              (reset! commands/*slash-caret-pos new-pos)
+                              (commands/handle-step [:editor/search-page]))})}
     "[[]]"]
    [:button.font-extrabold.bottom-action.-mt-1
-    {:on-click #(commands/simple-insert! parent-id "(())" {:backward-pos 2})}
+    {:on-click #(commands/simple-insert!
+                 parent-id "(())"
+                 {:backward-pos 2
+                  :check-fn (fn [_ _ new-pos]
+                              (reset! commands/*slash-caret-pos new-pos)
+                              (commands/handle-step [:editor/search-block]))})}
     "(())"]])
 
 (rum/defcs input < rum/reactive

@@ -161,6 +161,18 @@
      ""
      "\n")))
 
+(defn get-current-input-node
+  []
+  (let [edit-input-id (state/get-edit-input-id)]
+    (and edit-input-id (gdom/getElement edit-input-id))))
+
+(defn get-current-input-value
+  []
+  (let [edit-input-id (state/get-edit-input-id)
+        input (and edit-input-id (gdom/getElement edit-input-id))]
+    (when input
+      (gobj/get input "value"))))
+
 (defn new-file-content
   [{:block/keys [content meta dummy?] :as block} file-content value]
   (let [utf8-content (utf8/encode file-content)
@@ -2049,9 +2061,3 @@
   []
   (js/setInterval save-current-block-when-idle! 3000))
 
-(defn get-current-input-value
-  []
-  (let [edit-input-id (state/get-edit-input-id)
-        input (and edit-input-id (gdom/getElement edit-input-id))]
-    (when input
-      (gobj/get input "value"))))
