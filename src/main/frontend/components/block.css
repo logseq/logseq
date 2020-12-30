@@ -10,6 +10,15 @@
 
   img {
     max-width: 100%;
+
+    /* FIXME: img macros */
+    &.left {
+      float: left;
+    }
+
+    &.right {
+      float: right;
+    }
   }
 }
 
