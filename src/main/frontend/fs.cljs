@@ -109,7 +109,7 @@
 
     :else
     (p/let [stat (js/window.pfs.stat path)]
-      (if (.-isFile stat)
+      (if (= (.-type stat) "file")
         (js/window.pfs.unlink path opts)
         (p/rejected "Unlinking a directory is not allowed")))))
 
