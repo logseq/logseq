@@ -111,8 +111,9 @@
           properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
-          properties (-> properties
-                         (update :alias (fn [alias] (if (string? alias) [alias] alias))))
+          properties (if (:alias properties)
+                       (update properties :alias (fn [alias] (if (string? alias) [alias] alias)))
+                       properties)
           other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
