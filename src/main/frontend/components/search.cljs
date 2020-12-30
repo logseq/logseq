@@ -177,7 +177,8 @@
 
                           :block
                           (let [{:block/keys [page content indexes]} data]
-                            (let [page (:page/original-name page)]
+                            (let [page (or (:page/original-name page)
+                                           (:page/name page))]
                               [:div.flex-1
                                [:div.text-sm.font-medium page]
                                (highlight-fuzzy content indexes)]))

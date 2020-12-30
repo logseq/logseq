@@ -245,7 +245,7 @@
   [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:page/name page)]
     (let [source-page (model/get-alias-source-page (state/get-current-repo)
-                                                   page-name)
+                                                   (string/lower-case page-name))
           original-page-name (get page :page/original-name page-name)
           original-page-name (if (date/valid-journal-title? original-page-name)
                                (string/capitalize original-page-name)
@@ -336,7 +336,6 @@
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
   (let [page-name (string/lower-case page-name)
-        page-original-name (:page/original-name (db/entity [:page/name page-name]))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (if (:sidebar? config) "in-sidebar")}

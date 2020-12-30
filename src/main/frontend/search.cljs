@@ -214,13 +214,14 @@
             pages (:page/name datoms)
             blocks (:block/content datoms)]
         (when (seq pages)
-          (let [pages-result (db/pull-many '[:db/id :page/original-name] (set (map :e pages)))
+          (let [pages-result (db/pull-many '[:db/id :page/name :page/original-name] (set (map :e pages)))
                 pages-to-add-set (->> (filter :added pages)
                                       (map :e)
                                       (set))
                 pages-to-add (->> (filter (fn [page]
                                             (contains? pages-to-add-set (:db/id page))) pages-result)
-                                  (map (fn [p] {:name (:page/original-name p)}))
+                                  (map (fn [p] {:name (or (:page/original-name p)
+                                                          (:page/name p))}))
                                   (set))
                 pages-to-remove-set (->> (remove :added pages)
                                          (map :v)

@@ -88,9 +88,10 @@
 (defn get-pages
   [repo]
   (->> (d/q
-        '[:find ?page-name
+        '[:find ?page-original-name
           :where
-          [?page :page/original-name ?page-name]]
+          [?page :page/name ?page-name]
+          [(get-else $ ?page :page/original-name ?page-name) ?page-original-name]]
         (conn/get-conn repo))
        (map first)))
 
