@@ -64,7 +64,7 @@
                                       "Clone again and re-index the db")
                              :on-click (fn []
                                          (if local?
-                                           (nfs-handler/refresh! url
+                                           (nfs-handler/rebuild-index! url
                                                                  repo-handler/create-today-journal!)
                                            (repo-handler/rebuild-index! url))
                                          (js/setTimeout

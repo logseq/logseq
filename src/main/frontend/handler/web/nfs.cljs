@@ -16,6 +16,7 @@
             [frontend.ui :as ui]
             [frontend.fs :as fs]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.config :as config]
             [lambdaisland.glogi :as log]))
 
@@ -191,83 +192,98 @@
      :deleted deleted}))
 
 (defn- reload-dir!
-  [repo]
-  (when (and repo (config/local-db? repo))
-    (let [old-files (db/get-files-full repo)
-          dir-name (config/get-local-dir repo)
-          handle-path (str config/local-handle-prefix dir-name)
-          path-handles (atom {})]
-      (state/set-graph-syncing? true)
-      (->
-       (p/let [handle (idb/get-item handle-path)]
-         (when handle
-           (p/let [_ (when handle (utils/verifyPermission handle true))
-                   files-result (utils/getFiles handle true
-                                                (fn [path handle]
-                                                  (swap! path-handles assoc path handle)))
-                   new-files (-> (->db-files dir-name files-result)
-                                 remove-ignore-files)
-                   _ (let [file-paths (set (map :file/path new-files))]
-                       (swap! path-handles (fn [handles]
-                                             (->> handles
-                                                  (filter (fn [[path _handle]]
-                                                            (contains? file-paths
-                                                                       (string/replace-first path (str dir-name "/") ""))))
-                                                  (into {})))))
-                   _ (set-files! @path-handles)
-                   get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
-                   {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
-                  ;; Use the same labels as isomorphic-git
-                   rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
-                   _ (when (seq deleted)
-                       (let [deleted (doall
-                                      (-> (map (fn [path] (if (= "/" (first path))
-                                                            path
-                                                            (str "/" path))) deleted)
-                                          (distinct)))]
-                         (p/all (map (fn [path]
-                                       (let [handle-path (str handle-path path)]
-                                         (idb/remove-item! handle-path)
-                                         (fs/remove-nfs-file-handle! handle-path))) deleted))))
-                   added-or-modified (set (concat added modified))
-                   _ (when (seq added-or-modified)
-                       (p/all (map (fn [path]
-                                     (when-let [handle (get @path-handles path)]
-                                       (idb/set-item! (str handle-path path) handle))) added-or-modified)))]
-             (-> (p/all (map (fn [path]
-                               (when-let [file (get-file-f path new-files)]
-                                 (p/let [content (.text (:file/file file))]
-                                   (assoc file :file/content content)))) added-or-modified))
-                 (p/then (fn [result]
-                           (let [files (map #(dissoc % :file/file :file/handle) result)
-                                 non-modified? (fn [file]
-                                                 (let [content (:file/content file)
-                                                       old-content (:file/content (get-file-f (:file/path file) old-files))]
-                                                   (= content old-content)))
-                                 non-modified-files (->> (filter non-modified? files)
-                                                         (map :file/path))
-                                 modified-files (remove non-modified? files)
-                                 modified (set/difference (set modified) (set non-modified-files))
-                                 diffs (concat
-                                        (rename-f "remove" deleted)
-                                        (rename-f "add" added)
-                                        (rename-f "modify" modified))]
-                             (when (or (and (seq diffs) (seq modified-files))
-                                       (seq diffs) ; delete
+  ([repo]
+   (reload-dir! repo false))
+  ([repo re-index?]
+   (when (and repo (config/local-db? repo))
+     (let [old-files (db/get-files-full repo)
+           dir-name (config/get-local-dir repo)
+           handle-path (str config/local-handle-prefix dir-name)
+           path-handles (atom {})]
+       (state/set-graph-syncing? true)
+       (->
+        (p/let [handle (idb/get-item handle-path)]
+          (when handle
+            (p/let [_ (when handle (utils/verifyPermission handle true))
+                    files-result (utils/getFiles handle true
+                                                 (fn [path handle]
+                                                   (swap! path-handles assoc path handle)))
+                    new-files (-> (->db-files dir-name files-result)
+                                  remove-ignore-files)
+                    _ (let [file-paths (set (map :file/path new-files))]
+                        (swap! path-handles (fn [handles]
+                                              (->> handles
+                                                   (filter (fn [[path _handle]]
+                                                             (contains? file-paths
+                                                                        (string/replace-first path (str dir-name "/") ""))))
+                                                   (into {})))))
+                    _ (set-files! @path-handles)
+                    get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
+                    {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
+                    ;; Use the same labels as isomorphic-git
+                    rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
+                    _ (when (seq deleted)
+                        (let [deleted (doall
+                                       (-> (map (fn [path] (if (= "/" (first path))
+                                                             path
+                                                             (str "/" path))) deleted)
+                                           (distinct)))]
+                          (p/all (map (fn [path]
+                                        (let [handle-path (str handle-path path)]
+                                          (idb/remove-item! handle-path)
+                                          (fs/remove-nfs-file-handle! handle-path))) deleted))))
+                    added-or-modified (set (concat added modified))
+                    _ (when (seq added-or-modified)
+                        (p/all (map (fn [path]
+                                      (when-let [handle (get @path-handles path)]
+                                        (idb/set-item! (str handle-path path) handle))) added-or-modified)))]
+              (-> (p/all (map (fn [path]
+                                (when-let [file (get-file-f path new-files)]
+                                  (p/let [content (.text (:file/file file))]
+                                    (assoc file :file/content content)))) added-or-modified))
+                  (p/then (fn [result]
+                            (let [files (map #(dissoc % :file/file :file/handle) result)
+                                  non-modified? (fn [file]
+                                                  (let [content (:file/content file)
+                                                        old-content (:file/content (get-file-f (:file/path file) old-files))]
+                                                    (= content old-content)))
+                                  non-modified-files (->> (filter non-modified? files)
+                                                          (map :file/path))
+                                  [modified-files modified] (if re-index?
+                                                              [files (set modified)]
+                                                              [(remove non-modified? files) (set/difference (set modified) (set non-modified-files))])
+                                  diffs (concat
+                                         (rename-f "remove" deleted)
+                                         (rename-f "add" added)
+                                         (rename-f "modify" modified))]
+                              (when (or (and (seq diffs) (seq modified-files))
+                                        (seq diffs) ; delete
 )
-                               (repo-handler/load-repo-to-db! repo
-                                                              {:diffs diffs
-                                                               :nfs-files modified-files})))))))))
-       (p/catch (fn [error]
-                  (log/error :nfs/load-files-error error)))
-       (p/finally (fn [_]
-                    (state/set-graph-syncing? false)))))))
+                                (prn {:modified-files modified-files})
+                                (repo-handler/load-repo-to-db! repo
+                                                               {:diffs diffs
+                                                                :nfs-files modified-files})))))))))
+        (p/catch (fn [error]
+                   (log/error :nfs/load-files-error error)))
+        (p/finally (fn [_]
+                     (state/set-graph-syncing? false))))))))
 
 (defn refresh!
   [repo ok-handler]
   (when repo
     (state/set-nfs-refreshing! true)
     (p/let [_ (reload-dir! repo)
+            _ (ok-handler)]
+      (state/set-nfs-refreshing! false))))
+
+(defn rebuild-index!
+  [repo ok-handler]
+  (when repo
+    (state/set-nfs-refreshing! true)
+
+    ;; TODO: What about other relationships?
+    (db-model/remove-all-aliases! repo)
+    (p/let [_ (reload-dir! repo true)
             _ (ok-handler)]
       (state/set-nfs-refreshing! false))))
 

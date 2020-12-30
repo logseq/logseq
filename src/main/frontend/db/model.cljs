@@ -1159,3 +1159,16 @@
                    (remove nil?))]
     (when (seq pages)
       (mapv (fn [page] [:db.fn/retractEntity [:page/name page]]) (map string/lower-case pages)))))
+
+(defn remove-all-aliases!
+  [repo]
+  (let [page-ids (->>
+                  (d/q '[:find ?e
+                         :where
+                         [?e :page/alias]]
+                       (conn/get-conn repo))
+                  (apply concat)
+                  (distinct))
+        tx-data (map (fn [page-id] [:db/retract page-id :page/alias]) page-ids)]
+    (when (seq tx-data)
+      (db-utils/transact! repo tx-data))))

@@ -1068,7 +1068,8 @@
             (let [v (->> (remove string/blank? v)
                          (filter string?))]
               (for [v-item v]
-                (page-cp config {:page/name v-item})))
+                [:span.mr-2
+                 (page-cp config {:page/name v-item})]))
             (inline-text (:block/format block) (str v)))])])))
 
 (rum/defcs timestamp-cp < rum/reactive
@@ -1699,7 +1700,7 @@
                       (let [p (-> item
                                   (string/replace "[" "")
                                   (string/replace "]" ""))]
-                        [:a.mr-1 {:href (rfe/href :page {:name p})}
+                        [:a.mr-2 {:href (rfe/href :page {:name p})}
                          p]))
                     (inline-text format item)))
                 (inline-text format v))])))]
