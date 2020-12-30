@@ -437,10 +437,12 @@
          page-tags (when-let [tags (:tags new-properties)]
                      (util/->tags tags))
          page-alias (when-let [alias (:alias new-properties)]
-                      (map
-                       (fn [alias]
-                         {:page/name (string/lower-case alias)})
-                       (remove #{(:page/name page)} alias)))
+                      (let [alias (text/split-page-refs-without-brackets alias)
+                            alias (if (string? alias) [alias] alias)]
+                        (map
+                         (fn [alias]
+                           {:page/name (string/lower-case alias)})
+                          (remove #{(:page/name page)} alias))))
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
