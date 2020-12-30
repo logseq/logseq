@@ -690,6 +690,9 @@
         (= name "embed")
         (let [a (first arguments)]
           (cond
+            (nil? a) ; empty embed
+            nil
+
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
             (let [page-name (-> (string/replace a "[[" "")
