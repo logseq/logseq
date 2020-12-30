@@ -36,13 +36,22 @@
 (defn split-page-refs-without-brackets
   [s]
   (if (and (string? s)
-             (or (re-find #"[\"|\,|，]+" s)
-                 (re-find page-ref-re s)))
-      (->> s
-        (sep-by-comma-or-quote)
-        (map page-ref-un-brackets!)
-        (set))
-      s))
+           (or (re-find #"[\"|\,|，]+" s)
+               (re-find page-ref-re s)))
+    (->> s
+         (sep-by-comma-or-quote)
+         (map page-ref-un-brackets!)
+         (set))
+    s))
+
+(defn extract-level-spaces
+  [text format]
+  (if-not (string/blank? text)
+    (let [pattern (util/format
+                   "^[%s]+\\s+"
+                   (config/get-block-pattern format))]
+      (re-find (re-pattern pattern) text))
+    ""))
 
 (defn remove-level-spaces
   ([text format]
@@ -175,9 +184,14 @@
          (into {}))))
 
 (defn re-construct-block-properties
-  [content properties]
-  (-> (remove-properties! content)
-      (rejoin-properties properties)))
+  [format content properties]
+  (let [format (keyword format)
+        level-spaces (extract-level-spaces content format)
+        result (-> content
+                   (remove-level-spaces format true)
+                   (remove-properties!)
+                   (rejoin-properties properties))]
+    (str level-spaces (string/triml result))))
 
 (defn insert-property
   [content key value]

@@ -410,7 +410,7 @@
   [block format value]
   (let [value (text/remove-level-spaces value (keyword format))
         properties (with-time-properties block {})]
-    (text/re-construct-block-properties value properties)))
+    (text/re-construct-block-properties format value properties)))
 
 (defn save-block-if-changed!
   ([block value]
@@ -421,7 +421,8 @@
      :or {rebuild-content? true
           custom-properties nil
           remove-properties nil
-          auto-save? false}}]
+          auto-save? false}
+     :as opts}]
    (let [value value
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -442,7 +443,7 @@
                         (map
                          (fn [alias]
                            {:page/name (string/lower-case alias)})
-                          (remove #{(:page/name page)} alias))))
+                         (remove #{(:page/name page)} alias))))
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
@@ -459,7 +460,7 @@
          properties (if (and (seq properties) (seq remove-properties))
                       (medley/remove-keys (fn [k] (contains? (set remove-properties) k)) properties)
                       properties)
-         value (text/re-construct-block-properties value properties)
+         value (text/re-construct-block-properties format value properties)
          content-changed? (not= (text/remove-timestamp-property! (string/trim content))
                                 (text/remove-timestamp-property! (string/trim value)))]
      (cond
@@ -525,7 +526,8 @@
                                                             (block/parse-block block format))
                  block-retracted-attrs (when-not pre-block?
                                          (when-let [id (:db/id block)]
-                                           [[:db/retract id :block/priority]
+                                           [[:db/retract id :block/properties]
+                                            [:db/retract id :block/priority]
                                             [:db/retract id :block/deadline]
                                             [:db/retract id :block/deadline-ast]
                                             [:db/retract id :block/scheduled]
@@ -646,7 +648,7 @@
                                      value)
                              text-properties (text/extract-properties fst-block-text)
                              properties (with-time-properties block text-properties)
-                             value (text/re-construct-block-properties value properties)
+                             value (text/re-construct-block-properties format value properties)
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
                              parse-result (block/parse-block (assoc block :block/content value) format)
@@ -690,7 +692,7 @@
                                                         (util/uuid-string? blocks-container-id)
                                                         (medley/uuid blocks-container-id))]
 
-                           ; WORKAROUND: The block won't refresh itself even if the content is empty.
+                                        ; WORKAROUND: The block won't refresh itself even if the content is empty.
                            (when edit-self?
                              (gobj/set input "value" ""))
 
