@@ -10,7 +10,9 @@
             [frontend.extensions.sci :as sci]
             [lambdaisland.glogi :as log]
             [frontend.util :as util]
-            [frontend.db.react :as react]))
+            [frontend.db.react :as react]
+            [frontend.text :as text]
+            [clojure.walk :as walk]))
 
 (defn- resolve-input
   [input]
@@ -33,6 +35,9 @@
     (let [input (name input)
           days (util/parse-int (subs input 0 (dec (count input))))]
       (date->int (t/plus (t/today) (t/days days))))
+
+    (and (string? input) (text/page-ref? input))
+    (text/page-ref-un-brackets! input)
 
     :else
     input))
@@ -66,10 +71,25 @@
           (db-utils/group-by-page result)
           result)))))
 
+(defn- resolve-query
+  [query]
+  (let [page-ref? #(and (string? %) (text/page-ref? %))]
+    (walk/postwalk
+     (fn [f]
+       (if (and (list? f)
+                (= (first f) '=)
+                (= 3 (count f))
+                (some page-ref? (rest f)))
+         (let [[x y] (rest f)
+               [page-ref sym] (if (page-ref? x) [x y] [y x])]
+           (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
+         f)) query)))
+
 (defn react-query
   [repo {:keys [query inputs] :as query'} query-opts]
   (try
-    (let [inputs (map resolve-input inputs)
+    (let [query (resolve-query query)
+          inputs (map resolve-input inputs)
           repo (or repo (state/get-current-repo))
           k [:custom query']]
       (apply react/q repo k query-opts query inputs))
