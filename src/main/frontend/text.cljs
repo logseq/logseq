@@ -141,17 +141,23 @@
 
 (defn rejoin-properties
   ([content properties]
-   (rejoin-properties content properties true))
-  ([content properties remove-blank?]
+   (rejoin-properties content properties {}))
+  ([content properties {:keys [remove-blank? block-with-title?]
+                        :or {remove-blank? true
+                             block-with-title? true}}]
    (let [properties (if (= (get properties "heading") "false")
                       (dissoc properties "heading")
                       properties)
          properties (if remove-blank?
                       (remove (fn [[k _v]] (string/blank? k)) properties)
                       properties)
-         [title body] (util/safe-split-first "\n" content)
+         [title body] (if block-with-title?
+                        (util/safe-split-first "\n" content)
+                        ["" content])
          properties (build-properties-str properties)]
-     (str title "\n" properties body))))
+     (if block-with-title?
+       (str title "\n" properties body)
+       (str properties body)))))
 
 (defn contains-properties?
   [s]
@@ -184,14 +190,16 @@
          (into {}))))
 
 (defn re-construct-block-properties
-  [format content properties]
+  [format content properties block-with-title?]
   (let [format (keyword format)
         level-spaces (extract-level-spaces content format)
         result (-> content
                    (remove-level-spaces format true)
                    (remove-properties!)
-                   (rejoin-properties properties))]
-    (str level-spaces (string/triml result))))
+                   (rejoin-properties properties {:block-with-title? block-with-title?}))]
+    (str level-spaces
+         (when-not block-with-title? "\n")
+         (string/triml result))))
 
 (defn insert-property
   [content key value]

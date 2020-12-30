@@ -324,19 +324,23 @@
      (mapv (fn [ref] [:db/retract eid :block/ref-pages ref]) retracted-pages)
      (mapv (fn [ref] [:db/retract eid :block/ref-blocks ref]) retracted-blocks))))
 
-(defn- rebuild-block-content
-  "We'll create an empty heading if the first parsed ast element is not a paragraph, definition list or some hiccup."
+(defn- block-with-title
   [content format]
   (let [content-without-level-spaces (text/remove-level-spaces content format)
         first-block (-> content-without-level-spaces
                         (format/to-edn format)
                         ffirst)]
-    (if (or (block/heading-block? first-block)
-            (block/paragraph-block? first-block)
-            (block/hiccup-block? first-block)
-            (block/definition-list-block? first-block))
-      content
-      (text/append-newline-after-level-spaces content format))))
+    (or (block/heading-block? first-block)
+        (block/paragraph-block? first-block)
+        (block/hiccup-block? first-block)
+        (block/definition-list-block? first-block))))
+
+(defn- rebuild-block-content
+  "We'll create an empty heading if the first parsed ast element is not a paragraph, definition list or some hiccup."
+  [content format]
+  (if (block-with-title content format)
+    content
+    (text/append-newline-after-level-spaces content format)))
 
 (defn- get-edit-input-id-with-block-id
   [block-id]
@@ -407,10 +411,13 @@
     properties))
 
 (defn- block-text-with-time
-  [block format value]
-  (let [value (text/remove-level-spaces value (keyword format))
-        properties (with-time-properties block {})]
-    (text/re-construct-block-properties format value properties)))
+  ([block format value]
+   (block-text-with-time block format value {}))
+  ([block format value properties]
+   (let [properties (with-time-properties block properties)
+         block-with-title? (boolean (block-with-title value format))]
+     (text/re-construct-block-properties format value properties
+                                         block-with-title?))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -455,12 +462,11 @@
                           new-properties)
          text-properties (text/extract-properties value)
          properties (->> custom-properties
-                         (with-time-properties block)
                          (merge text-properties))
          properties (if (and (seq properties) (seq remove-properties))
                       (medley/remove-keys (fn [k] (contains? (set remove-properties) k)) properties)
                       properties)
-         value (text/re-construct-block-properties format value properties)
+         value (block-text-with-time block format value properties)
          content-changed? (not= (text/remove-timestamp-property! (string/trim content))
                                 (text/remove-timestamp-property! (string/trim value)))]
      (cond
@@ -647,8 +653,7 @@
                                      (str fst-block-text "\n" snd-block-text)
                                      value)
                              text-properties (text/extract-properties fst-block-text)
-                             properties (with-time-properties block text-properties)
-                             value (text/re-construct-block-properties format value properties)
+                             value (block-text-with-time block format value text-properties)
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
                              parse-result (block/parse-block (assoc block :block/content value) format)

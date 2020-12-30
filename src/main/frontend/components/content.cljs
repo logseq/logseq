@@ -62,14 +62,15 @@
       :on-click editor-handler/bulk-make-todos}
      (str "Make " (state/get-preferred-todo) "s"))]])
 
+;; FIXME: Make it configurable
 (def block-background-colors
-  ["rgb(83, 62, 125)"
-   "rgb(73, 125, 70)"
-   "rgb(120, 127, 151)"
-   "rgb(151, 134, 38)"
-   "rgb(73, 118, 123)"
-   "rgb(38, 76, 155)"
-   "rgb(121, 62, 62)"])
+  ["#533e7d"
+   "#497d46"
+   "#787f97"
+   "#978626"
+   "#49767b"
+   "#264c9b"
+   "#793e3e"])
 
 (rum/defcs block-template <
   (rum/local false ::edit?)
@@ -147,7 +148,7 @@
                                     content (:block/content block)
                                     content (cond
                                               empty-properties?
-                                              (text/rejoin-properties content {"" ""} false)
+                                              (text/rejoin-properties content {"" ""} {:remove-blank? false})
                                               all-hidden?
                                               (let [idx (string/index-of content "\n:END:")]
                                                 (str
