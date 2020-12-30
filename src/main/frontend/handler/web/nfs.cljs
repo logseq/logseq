@@ -259,7 +259,6 @@
                               (when (or (and (seq diffs) (seq modified-files))
                                         (seq diffs) ; delete
 )
-                                (prn {:modified-files modified-files})
                                 (repo-handler/load-repo-to-db! repo
                                                                {:diffs diffs
                                                                 :nfs-files modified-files})))))))))
