@@ -18,7 +18,8 @@
                       :output-feature-set :es6
                       :source-map true
                       :externs ["datascript/externs.js"
-                                "externs.js"]}
+                                "externs.js"]
+                      :warnings {:fn-deprecated false}}
    :closure-defines {goog.debug.LOGGING_ENABLED true
                      frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
@@ -55,7 +56,8 @@
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es6
                       :externs ["datascript/externs.js"
-                                "externs.js"]}
+                                "externs.js"]
+                      :warnings {:fn-deprecated false}}
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop
