@@ -239,12 +239,8 @@
            [:div.ml-4.text-sm
             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                             (state/sidebar-add-block! repo "recent" :recent nil))}
-             (t :right-side-bar/recent)]]
 
-           (when config/publishing?
-             [:div.ml-4.text-sm
-              [:a.cp__right-sidebar-settings-btn {:href (rfe/href :all-pages)}
-               (t :all-pages)]])
+             (t :right-side-bar/recent)]]
 
            [:div.ml-4.text-sm
             [:a.cp__right-sidebar-settings-btn {:on-click (fn []
