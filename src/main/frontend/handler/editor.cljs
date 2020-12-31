@@ -44,6 +44,7 @@
             [lambdaisland.glogi :as log]))
 
 ;; FIXME: should support multiple images concurrently uploading
+(defonce *image-pending-file (atom nil))
 (defonce *image-uploading? (atom false))
 (defonce *image-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
@@ -1495,7 +1496,7 @@
     nil))
 
 (defn upload-image
-  [id files format uploading? drop?]
+  [id files format uploading? drop-or-paste?]
   (image/upload
    files
    (fn [file file-name file-type]
@@ -1506,15 +1507,20 @@
         (insert-command! id
                          (get-image-link format signed-url file-name)
                          format
-                         {:last-pattern (if drop? "" commands/slash)
+                         {:last-pattern (if drop-or-paste? "" commands/slash)
                           :restore? true})
 
+        (reset! *image-uploading? false)
         (reset! *image-uploading-process 0))
       (fn [e]
         (let [process (* (/ (gobj/get e "loaded")
                             (gobj/get e "total"))
                          100)]
+          (reset! *image-uploading? false)
           (reset! *image-uploading-process process)))))))
+
+(defn set-image-pending-file [file]
+  (reset! *image-pending-file file))
 
 ;; Editor should track some useful information, like editor modes.
 ;; For example:
@@ -1662,6 +1668,7 @@
   [input]
   (or @*show-commands
       @*show-block-commands
+      @*image-uploading?
       (state/get-editor-show-input)
       (state/get-editor-show-page-search?)
       (state/get-editor-show-block-search?)
