@@ -436,7 +436,7 @@
            (or (not= status :pushing)
                custom-commit?))
       (->
-       (p/let [files (git/add-all (state/get-current-repo))
+       (p/let [files (git/add-all repo-url)
                changed-files? (some? (seq files))
                should-commit? (or changed-files? merge-push-no-diff?)
 
