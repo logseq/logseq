@@ -20,6 +20,7 @@
             [goog.dom :as gdom]
             [clojure.string :as string]
             [clojure.set :as set]
+            [cljs.core.match :refer-macros [match]]
             [frontend.commands :as commands
              :refer [*show-commands
                      *matched-commands
@@ -360,6 +361,15 @@
        (absolute-modal cp set-default-width? pos)))))
 
 (rum/defc image-uploader < rum/reactive
+  {:did-mount    (fn [state]
+                   (let [[id format] (:rum/args state)]
+                     (add-watch editor-handler/*image-pending-file ::pending-image
+                                (fn [_ _ f0 f]
+                                  (reset! *slash-caret-pos (util/get-caret-pos (gdom/getElement id)))
+                                  (editor-handler/upload-image id #js[f] format editor-handler/*image-uploading? true))))
+                   state)
+   :will-unmount (fn [state]
+                   (remove-watch editor-handler/*image-pending-file ::pending-image))}
   [id format]
   [:div.image-uploader
    [:input
@@ -693,40 +703,59 @@
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
-      {:id id
+      {:id                id
        :cacheMeasurements true
-       :default-value (or content "")
-       :minRows (if (state/enable-grammarly?) 2 1)
-       :on-click (fn [_e]
-                   (let [input (gdom/getElement id)
-                         current-pos (:pos (util/get-caret-pos input))]
-                     (state/set-edit-pos! current-pos)
-                     (editor-handler/close-autocomplete-if-outside input)))
-       :on-change (fn [e]
-                    (let [value (util/evalue e)
-                          current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                      (state/set-edit-content! id value false)
-                      (state/set-edit-pos! current-pos)
-                      (when-let [repo (or (:block/repo block)
-                                          (state/get-current-repo))]
-                        (state/set-editor-last-input-time! repo (util/time-ms))
-                        (db/clear-repo-persistent-job! repo))
-                      (let [input (gdom/getElement id)
-                            native-e (gobj/get e "nativeEvent")
-                            last-input-char (util/nth-safe value (dec current-pos))]
-                        (case last-input-char
-                          "/"
-                          ;; TODO: is it cross-browser compatible?
-                          (when (not= (gobj/get native-e "inputType") "insertFromPaste")
-                            (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
-                              (reset! *slash-caret-pos (util/get-caret-pos input))
-                              (reset! *show-commands true)))
-                          "<"
-                          (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
-                            (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                            (reset! *show-block-commands true))
-                          nil))))
-       :auto-focus false})
+       :default-value     (or content "")
+       :minRows           (if (state/enable-grammarly?) 2 1)
+       :on-click          (fn [_e]
+                            (let [input (gdom/getElement id)
+                                  current-pos (:pos (util/get-caret-pos input))]
+                              (state/set-edit-pos! current-pos)
+                              (editor-handler/close-autocomplete-if-outside input)))
+       :on-change         (fn [e]
+                            (let [value (util/evalue e)
+                                  current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+                              (state/set-edit-content! id value false)
+                              (state/set-edit-pos! current-pos)
+                              (when-let [repo (or (:block/repo block)
+                                                  (state/get-current-repo))]
+                                (state/set-editor-last-input-time! repo (util/time-ms))
+                                (db/clear-repo-persistent-job! repo))
+                              (let [input (gdom/getElement id)
+                                    native-e (gobj/get e "nativeEvent")
+                                    last-input-char (util/nth-safe value (dec current-pos))]
+                                (case last-input-char
+                                  "/"
+                                   ;; TODO: is it cross-browser compatible?
+                                  (when (not= (gobj/get native-e "inputType") "insertFromPaste")
+                                    (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
+                                      (reset! *slash-caret-pos (util/get-caret-pos input))
+                                      (reset! *show-commands true)))
+                                  "<"
+                                  (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
+                                    (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
+                                    (reset! *show-block-commands true))
+                                  nil))))
+       :on-paste          (fn [e]
+                            (when-let [handled
+                                       (let [pick-one-allowed-item
+                                             (fn [items]
+                                               (when (and items (.-length items))
+                                                 (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
+                                                       it (gobj/get files 0) ;;; TODO: support multiple files
+                                                       mime (and it (.-type it))]
+                                                   (cond
+                                                     (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:image (. it getAsFile)]))))
+                                             clipboard-data (gobj/get e "clipboardData")
+                                             items (or (.-items clipboard-data)
+                                                       (.-files clipboard-data))
+                                             picked (pick-one-allowed-item items)]
+                                         (when (and picked (get picked 1))
+                                           (match picked
+                                             [:image file] (editor-handler/set-image-pending-file file))
+                                           true))]
+                              (util/stop e)))
+       :auto-focus        false})
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp
