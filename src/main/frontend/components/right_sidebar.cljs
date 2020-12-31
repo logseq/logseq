@@ -250,7 +250,12 @@
                                                                (str "page-graph-" page)
                                                                :page-graph
                                                                page)))}
-             (t :right-side-bar/page)]]]
+             (t :right-side-bar/page)]]
+
+           [:div.ml-4.text-sm
+            [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                            (state/sidebar-add-block! repo "help" :help nil))}
+             (t :right-side-bar/help)]]]
 
           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
             (rum/with-key
