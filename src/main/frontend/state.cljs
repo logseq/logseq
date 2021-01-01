@@ -177,6 +177,11 @@
   (not (false? (:feature/enable-timetracking?
                 (get (sub-config) (get-current-repo))))))
 
+(defn enable-journals?
+  [repo]
+  (not (false? (:feature/enable-journals?
+                (get (sub-config) repo)))))
+
 (defn enable-block-time?
   []
   (true? (:feature/enable-block-time?
@@ -191,6 +196,10 @@
 (defn get-default-home
   []
   (:default-home (get-config)))
+
+(defn sub-default-home-page
+  []
+  (get-in (sub-config) [(get-current-repo) :default-home :page] ""))
 
 (defn custom-home-page?
   []

@@ -494,3 +494,8 @@
                    (or (util/file-page? page)
                        (and modified-at
                             (> modified-at now-long))))))))
+
+(defn page-exists?
+  [page-name]
+  (when page-name
+    (db/entity [:page/name page-name])))
