@@ -6,6 +6,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -62,18 +63,29 @@
 
       [:span.pl-1.opacity-70 "Git commit requires the cors address."]]]))
 
+(defn toggle
+  [label-for name state on-toggle]
+  [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for label-for}
+    name]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md.sm:max-w-xs
+     (ui/toggle state on-toggle)]]])
+
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
         preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
+        current-repo (state/get-current-repo)
+        enable-journals? (state/enable-journals? current-repo)
         enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
         logged? (state/logged?)
-        current-repo (state/get-current-repo)
         developer-mode? (state/sub [:ui/developer-mode?])
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
@@ -174,27 +186,53 @@
                   "NOW/LATER"
                   "TODO/DOING")])]]]]
 
-         [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-          [:label.block.text-sm.font-medium.leading-5.opacity-70
-           {:for "enable_timetracking"}
-           (t :settings-page/enable-timetracking)]
-          [:div.mt-1.sm:mt-0.sm:col-span-2
-           [:div.max-w-lg.rounded-md.sm:max-w-xs
-            (ui/toggle enable-timetracking?
-                       (fn []
-                         (let [value (not enable-timetracking?)]
-                           (config-handler/set-config! :feature/enable-timetracking? value))))]]]
+         (toggle "enable_timetracking"
+                 (t :settings-page/enable-timetracking)
+                 enable-timetracking?
+                 (fn []
+                   (let [value (not enable-timetracking?)]
+                     (config-handler/set-config! :feature/enable-timetracking? value))))
 
-         [:div.mt-6.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-          [:label.block.text-sm.font-medium.leading-5.opacity-70
-           {:for "enable_block_time"}
-           (t :settings-page/enable-block-time)]
-          [:div.mt-1.sm:mt-0.sm:col-span-2
-           [:div.max-w-lg.rounded-md.sm:max-w-xs
-            (ui/toggle enable-block-time?
-                       (fn []
-                         (let [value (not enable-block-time?)]
-                           (config-handler/set-config! :feature/enable-block-time? value))))]]]
+         (toggle "enable_block_time"
+                 (t :settings-page/enable-block-time)
+                 enable-block-time?
+                 (fn []
+                   (let [value (not enable-block-time?)]
+                     (config-handler/set-config! :feature/enable-block-time? value))))
+
+         (toggle "enable_journals"
+                 (t :settings-page/enable-journals)
+                 enable-journals?
+                 (fn []
+                   (let [value (not enable-journals?)]
+                     (config-handler/set-config! :feature/enable-journals? value))))
+
+         (when (not enable-journals?)
+           [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+             [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+              {:for "default page"}
+              (t :settings-page/home-default-page)]
+             [:div.mt-1.sm:mt-0.sm:col-span-2
+              [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+               [:input#home-default-page.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
+                {:default-value (state/sub-default-home-page)
+                 :on-blur (fn [event]
+                            (let [value (util/evalue event)]
+                              (cond
+                                (string/blank? value)
+                                (let [home (get (state/get-config) :default-home {})
+                                      new-home (dissoc home :page)]
+                                  (config-handler/set-config! :default-home new-home)
+                                  (notification/show! "Home default page updated successfully!" :success))
+
+                                (page-handler/page-exists? (string/lower-case value))
+                                (let [home (get (state/get-config) :default-home {})
+                                      new-home (assoc home :page value)]
+                                  (config-handler/set-config! :default-home new-home)
+                                  (notification/show! "Home default page updated successfully!" :success))
+
+                                :else
+                                (notification/show! "Please make sure the page exists!" :warning))))}]]]])
 
          [:hr]
 
