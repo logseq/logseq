@@ -301,8 +301,7 @@
                 [(list 'contains? tags '?tag)]]))))
 
        (= 'all-page-tags fe)
-       [['?page :page/tags '?t]
-        ['?t :page/name '?p]]
+       [['?e :page/tags '?p]]
 
        :else
        nil))))

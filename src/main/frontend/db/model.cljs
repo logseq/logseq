@@ -50,15 +50,16 @@
 
 (defn get-tag-pages
   [repo tag-name]
-  (d/q '[:find ?original-name ?name
-         :in $ ?tag
-         :where
-         [?e :page/name ?tag]
-         [?page :page/tags ?e]
-         [?page :page/original-name ?original-name]
-         [?page :page/name ?name]]
-       (conn/get-conn repo)
-       (string/lower-case tag-name)))
+  (when tag-name
+    (d/q '[:find ?original-name ?name
+           :in $ ?tag
+           :where
+           [?e :page/name ?tag]
+           [?page :page/tags ?e]
+           [?page :page/original-name ?original-name]
+           [?page :page/name ?name]]
+         (conn/get-conn repo)
+         (string/lower-case tag-name))))
 
 (defn get-all-tagged-pages
   [repo]

@@ -251,8 +251,7 @@ parent: child page 2
   (testing "all-page-tags queries"
     (are [x y] (= (q-count x) y)
       "(all-page-tags)"
-      {:query '[[?page :page/tags ?t]
-                [?t :page/name ?p]]
+      {:query '[[?e :page/tags ?p]]
        :count 3}))
 
   (testing "page-tags queries"
