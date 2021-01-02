@@ -165,7 +165,6 @@
   []
   (let [match (:route-match @state/state)
         route-name (get-in match [:data :name])
-        tag? (= route-name :tag)
         page (case route-name
                :page
                (get-in match [:path-params :name])
@@ -173,15 +172,10 @@
                :file
                (get-in match [:path-params :path])
 
-               :tag
-               (get-in match [:path-params :name])
-
                (date/journal-name))]
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
-        (db-utils/entity (if tag?
-                           [:tag/name page-name]
-                           [:page/name page-name]))))))
+        (db-utils/entity [:page/name page-name])))))
 
 (defn get-current-priority
   []

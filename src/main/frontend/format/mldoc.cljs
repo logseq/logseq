@@ -66,6 +66,17 @@
         (recur (rest ast)))
       nil)))
 
+(defn- ->vec
+  [s]
+  (if (string? s) [s] s))
+
+(defn- ->vec-concat
+  [& coll]
+  (->> (map ->vec coll)
+       (remove nil?)
+       (apply concat)
+       (distinct)))
+
 (defn collect-page-properties
   [ast]
   (if (seq ast)
@@ -94,26 +105,22 @@
                    {})
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
                           (into {}))
-          properties (if (:roam_alias properties)
-                       (assoc properties :alias (:roam_alias properties))
-                       properties)
           properties (if (seq properties)
                        (cond-> properties
                          (:roam_key properties)
                          (assoc :key (:roam_key properties)))
                        properties)
           definition-tags (get-tags-from-definition ast)
-          properties (if definition-tags
-                       (update properties :tags (fn [tags]
-                                                  (-> (concat tags definition-tags)
-                                                      distinct)))
-                       properties)
           properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
-          properties (if (:alias properties)
-                       (update properties :alias (fn [alias] (if (string? alias) [alias] alias)))
-                       properties)
+          alias (->vec-concat (:roam_alias properties) (:alias properties))
+          tags (->vec-concat (:roam_tags properties) (:tags properties) definition-tags)
+          properties (assoc properties :tags tags :alias alias)
+          properties (-> properties
+                         (update :roam_alias ->vec)
+                         (update :roam_tags ->vec))
+          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
           other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
@@ -164,6 +171,7 @@
   (let [ast (->> (->edn content
                         (default-config format))
                  (map first))
+        properties (collect-page-properties ast)
         properties (let [properties (and (seq ast)
                                          (= "Properties" (ffirst ast))
                                          (last (first ast)))]

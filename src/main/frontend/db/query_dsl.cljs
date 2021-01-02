@@ -28,6 +28,7 @@
 ;; property (block)
 ;; todo (block)
 ;; priority (block)
+;; page
 ;; page-property (page)
 ;; page-tags (page)
 ;; all-page-tags
@@ -135,14 +136,15 @@
          page-ref? (text/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'priority 'sort-by} fe))
+               (contains? #{'between 'property 'todo 'priority 'sort-by 'page} fe))
        (reset! blocks? true))
      (cond
        (nil? e)
        nil
 
        page-ref?
-       (let [page-name (text/page-ref-un-brackets! e)]
+       (let [page-name (-> (text/page-ref-un-brackets! e)
+                           (string/lower-case))]
          (when (and (not (string/blank? page-name))
                     (some? (db-utils/entity repo [:page/name page-name])))
            [['?b :block/ref-pages [:page/name page-name]]]))
@@ -209,8 +211,8 @@
              (when (and start end)
                (let [[start end] (sort [start end])
                      sym '?v]
-                 [['?b :block/properties '?p]
-                  [(list 'get '?p k) sym]
+                 [['?b :block/properties '?prop]
+                  [(list 'get '?prop k) sym]
                   [(list '>= sym start)]
                   [(list '< sym end)]])))))
 
@@ -219,8 +221,8 @@
        (let [v (some-> (name (nth e 2))
                        (text/page-ref-un-brackets!))
              sym '?v]
-         [['?b :block/properties '?p]
-          [(list 'get '?p (name (nth e 1))) sym]
+         [['?b :block/properties '?prop]
+          [(list 'get '?prop (name (nth e 1))) sym]
           (list
            'or
            [(list '= sym v)]
@@ -228,8 +230,8 @@
 
        (and (= 'property fe)
             (= 2 (count e)))
-       [['?b :block/properties '?p]
-        [(list 'get '?p (name (nth e 1)))]]
+       [['?b :block/properties '?prop]
+        [(list 'get '?prop (name (nth e 1)))]]
 
        (= 'todo fe)
        (let [markers (if (coll? (first (rest e)))
@@ -267,6 +269,10 @@
                                                   comp))))
              nil)))
 
+       (= 'page fe)
+       (let [page-name (string/lower-case (first (rest e)))]
+         [['?b :block/page [:page/name page-name]]])
+
        (= 'page-property fe)
        (let [[k v] (rest e)]
          (if v
@@ -283,18 +289,20 @@
             [(list 'get '?prop (keyword (nth e 1)))]]))
 
        (= 'page-tags fe)
-       (let [tags (if (coll? (first (rest e)))
-                    (first (rest e))
-                    (rest e))]
-         (when (seq tags)
-           (let [tags (set (map (comp text/page-ref-un-brackets! name) tags))]
-             [['?p :page/tags '?t]
-              ['?t :tag/name '?tag]
-              [(list 'contains? tags '?tag)]])))
+       (do
+         (let [tags (if (coll? (first (rest e)))
+                      (first (rest e))
+                      (rest e))
+               tags (map (comp string/lower-case name) tags)]
+           (when (seq tags)
+             (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
+               [['?p :page/tags '?t]
+                ['?t :page/name '?tag]
+                [(list 'contains? tags '?tag)]]))))
 
        (= 'all-page-tags fe)
-       [['?t :tag/name '?tag]
-        ['?p :page/name '?tag]]
+       [['?page :page/tags '?t]
+        ['?t :page/name '?p]]
 
        :else
        nil))))
@@ -315,6 +323,36 @@
                                                  (string/join " ")
                                                  (util/format "(between %s)"))))))
 
+(defn- add-bindings!
+  [q]
+  (let [b? (atom false)
+        p? (atom false)
+        not? (atom false)]
+    (walk/postwalk (fn [f]
+                     (cond
+                       (= 'not f)
+                       (reset! not? true)
+                       (= '?b f)
+                       (reset! b? true)
+                       (= '?p f)
+                       (reset! p? true)
+                       :else
+                       f)) q)
+    (if @not?
+      (cond
+        (and @b? @p?)
+        (concat [['?b :block/uuid] ['?p :page/name] ['?b :block/page '?p]] q)
+
+        @b?
+        (concat [['?b :block/uuid]] q)
+
+        @p?
+        (concat [['?p :page/name]] q)
+
+        :else
+        q)
+      q)))
+
 (defn parse
   [repo s]
   (when (and (string? s)
@@ -332,18 +370,13 @@
               result (when (seq result)
                        (let [key (if (coll? (first result))
                                    (keyword (ffirst result))
-                                   (keyword (first result)))]
-                         (case key
-                           :and
-                           (rest result)
+                                   (keyword (first result)))
+                             result (case key
+                                      :and
+                                      (rest result)
 
-                           :not
-                           (cons ['?b :block/uuid] result)
-
-                           :or
-                           result
-
-                           result)))]
+                                      result)]
+                         (add-bindings! result)))]
           {:query result
            :sort-by @sort-by
            :blocks? (boolean @blocks?)})

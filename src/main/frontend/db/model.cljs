@@ -48,40 +48,24 @@
        react
        ffirst))))
 
-(defn get-all-tags
-  []
-  (let [repo (state/get-current-repo)]
-    (when (conn/get-conn repo)
-      (some->>
-       (react/q repo [:tags] {}
-                '[:find ?name ?h ?p
-                  :where
-                  [?t :tag/name ?name]
-                  (or
-                   [?h :block/tags ?t]
-                   [?p :page/tags ?t])])
-       react
-       (seq)))))
-
 (defn get-tag-pages
   [repo tag-name]
   (d/q '[:find ?original-name ?name
          :in $ ?tag
          :where
-         [?e :tag/name ?tag]
+         [?e :page/name ?tag]
          [?page :page/tags ?e]
          [?page :page/original-name ?original-name]
          [?page :page/name ?name]]
        (conn/get-conn repo)
-       tag-name))
+       (string/lower-case tag-name)))
 
 (defn get-all-tagged-pages
   [repo]
   (d/q '[:find ?page-name ?tag
          :where
          [?page :page/tags ?e]
-         [?e :tag/name ?tag]
-         [_ :page/name ?tag]
+         [?e :page/name ?tag]
          [?page :page/name ?page-name]]
        (conn/get-conn repo)))
 

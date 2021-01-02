@@ -448,14 +448,14 @@
                                            [(:page/properties (db/entity (:db/id page)))
                                             (mldoc/parse-properties value format)])
          page-tags (when-let [tags (:tags new-properties)]
-                     (util/->tags tags))
+                     (mapv (fn [tag] {:page/name (string/lower-case tag)
+                                     :page/original-name tag}) tags))
          page-alias (when-let [alias (:alias new-properties)]
-                      (let [alias (text/split-page-refs-without-brackets alias)
-                            alias (if (string? alias) [alias] alias)]
-                        (map
-                         (fn [alias]
-                           {:page/name (string/lower-case alias)})
-                         (remove #{(:page/name page)} alias))))
+                      (map
+                        (fn [alias]
+                          {:page/original-name alias
+                           :page/name (string/lower-case alias)})
+                        (remove #{(:page/name page)} alias)))
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
@@ -559,12 +559,7 @@
                                        :page/properties new-properties}]
                                      [[:db/retract page-id :page/properties]]))
                  pages (if (seq page-tags)
-                         (let [tag-pages (map
-                                          (fn [page]
-                                            {:page/original-name page
-                                             :page/name page})
-                                          (map :tag/name page-tags))]
-                           (concat pages tag-pages))
+                         (concat pages page-tags)
                          pages)
                  pages (remove
                         (fn [page]

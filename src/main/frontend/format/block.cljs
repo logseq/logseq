@@ -194,8 +194,7 @@
 
 (defn with-page-refs
   [{:keys [title body tags] :as block}]
-  (let [tags (mapv :tag/name (util/->tags (map :tag/name tags)))
-        ref-pages (atom tags)]
+  (let [ref-pages (atom tags)]
     (walk/postwalk
      (fn [form]
        (when-let [page (get-page-reference form)]
@@ -253,12 +252,6 @@
   (map (fn [block]
          (block-keywordize (util/remove-nils block)))
        blocks))
-
-(defn collect-block-tags
-  [{:keys [title body tags] :as block}]
-  (cond-> block
-    (seq tags)
-    (assoc :tags (util/->tags tags))))
 
 (defn extract-blocks
   [blocks last-pos encoded-content]
@@ -319,7 +312,6 @@
                       block (if (seq timestamps)
                               (merge block (timestamps->scheduled-and-deadline timestamps))
                               block)
-                      block (collect-block-tags block)
                       block (with-page-refs block)
                       block (with-block-refs block)
                       block (update-src-pos-meta! block)
@@ -382,8 +374,7 @@
            blocks (doall
                    (map-indexed
                     (fn [idx {:block/keys [ref-pages ref-blocks meta] :as block}]
-                      (let [block (collect-block-tags block)
-                            block (merge
+                      (let [block (merge
                                    block
                                    {:block/meta meta
                                     :block/marker (get block :block/marker "nil")

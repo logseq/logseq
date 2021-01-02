@@ -827,27 +827,6 @@
 (defn pp-str [x]
   (with-out-str (pprint x)))
 
-(defn ->tags
-  [tags]
-  (->> (map (fn [tag]
-              (let [tag (-> (string/trim tag)
-                            (string/lower-case)
-                            (string/replace #"\s+" "-")
-                            (string/replace #"#" "")
-                            (string/replace "[" "")
-                            (string/replace "]" ""))]
-                (if (tag-valid? tag)
-                  {:db/id tag
-                   :tag/name tag})))
-            (remove nil? tags))
-       (remove nil?)
-       vec))
-
-(defn ->page-tags
-  [s]
-  (let [tags (string/split s #",")]
-    (->tags tags)))
-
 (defn hiccup-keywordize
   [hiccup]
   (walk/postwalk
