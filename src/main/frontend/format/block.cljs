@@ -203,8 +203,6 @@
 
 (defn with-page-refs
   [{:keys [title body tags ref-pages] :as block}]
-  (prn {:tags tags
-        :ref-pages ref-pages})
   (let [ref-pages (->> (concat tags ref-pages)
                        (remove string/blank?)
                        (distinct))
