@@ -372,7 +372,8 @@ parent: child page 2
   (testing "Nested boolean queries"
     (are [x y] (= (q-count x) y)
       "(and (todo done) (not [[page 1]]))"
-      {:query '([?b :block/marker ?marker]
+      {:query '([?b :block/uuid]
+                [?b :block/marker ?marker]
                 [(contains? #{"DONE"} ?marker)]
                 (not [?b :block/ref-pages [:page/name "page 1"]]))
        :count 0})
@@ -407,7 +408,8 @@ parent: child page 2
 
     (are [x y] (= (q-count x) y)
       "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"
-      {:query '([?b :block/marker ?marker]
+      {:query '([?b :block/uuid]
+                [?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
                 (or
                  (and [?b :block/ref-pages [:page/name "page 1"]])
