@@ -37,7 +37,8 @@
       (date->int (t/plus (t/today) (t/days days))))
 
     (and (string? input) (text/page-ref? input))
-    (text/page-ref-un-brackets! input)
+    (-> (text/page-ref-un-brackets! input)
+        (string/lower-case))
 
     :else
     input))
@@ -81,7 +82,8 @@
                 (= 3 (count f))
                 (some page-ref? (rest f)))
          (let [[x y] (rest f)
-               [page-ref sym] (if (page-ref? x) [x y] [y x])]
+               [page-ref sym] (if (page-ref? x) [x y] [y x])
+               page-ref (string/lower-case page-ref)]
            (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
          f)) query)))
 

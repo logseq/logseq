@@ -142,8 +142,18 @@
       (update "last_modified_at" util/safe-parse-int)))
 
 (defn extract-properties
-  [[_ properties] start-pos end-pos]
-  (let [properties (->> (into {} properties)
+  [[_ properties] _start-pos _end-pos]
+  (let [properties (into {} properties)
+        page-refs (->>
+                   (map (fn [v]
+                          (when v
+                            (->> (re-seq text/page-ref-re v)
+                                 (map second)
+                                 (map string/lower-case))))
+                        (vals properties))
+                   (apply concat)
+                   (distinct))
+        properties (->> properties
                         (medley/map-kv (fn [k v]
                                          (let [k' (and k (string/trim (string/lower-case k)))
                                                v' (and v (string/trim v))
@@ -155,8 +165,7 @@
                                            [k' v'])))
                         (->schema-properties))]
     {:properties properties
-     :start-pos start-pos
-     :end-pos end-pos}))
+     :page-refs page-refs}))
 
 (defn- paragraph-timestamp-block?
   [block]
@@ -193,8 +202,13 @@
     (apply merge m)))
 
 (defn with-page-refs
-  [{:keys [title body tags] :as block}]
-  (let [ref-pages (atom tags)]
+  [{:keys [title body tags ref-pages] :as block}]
+  (prn {:tags tags
+        :ref-pages ref-pages})
+  (let [ref-pages (->> (concat tags ref-pages)
+                       (remove string/blank?)
+                       (distinct))
+        ref-pages (atom ref-pages)]
     (walk/postwalk
      (fn [form]
        (when-let [page (get-page-reference form)]
@@ -286,6 +300,7 @@
                                  (when (util/uuid-string? custom-id)
                                    (uuid custom-id))))
                              (d/squuid))
+                      ref-pages-in-properties (:page-refs properties)
                       block (second block)
                       level (:level block)
                       [children current-block-children]
@@ -306,6 +321,7 @@
                                        :uuid id
                                        :body (vec (reverse block-body))
                                        :properties (:properties properties)
+                                       :ref-pages ref-pages-in-properties
                                        :children (or current-block-children []))
                                 (assoc-in [:meta :start-pos] start_pos)
                                 (assoc-in [:meta :end-pos] last-pos))
