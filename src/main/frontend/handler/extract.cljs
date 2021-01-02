@@ -54,11 +54,9 @@
                  (map
                   (fn [page]
                     (let [page-file? (= page (string/lower-case file))
-                          other-alias (and (:alias properties)
+                          aliases (and (:alias properties)
                                            (seq (remove #(= page %)
                                                         (:alias properties))))
-                          other-alias (distinct
-                                       (remove nil? other-alias))
                           journal-date-long (if journal?
                                               (date/journal-title->long (string/capitalize page)))
                           page-list (when-let [list-content (:list properties)]
@@ -77,40 +75,32 @@
                         (seq properties)
                         (assoc :page/properties properties)
 
-                        other-alias
+                        aliases
                         (assoc :page/alias
                                (map
                                 (fn [alias]
-                                  (let [alias (string/lower-case alias)
-                                        aliases (->>
-                                                 (distinct
-                                                  (conj
-                                                   (remove #{alias} other-alias)
-                                                   page))
-                                                 (remove nil?))
+                                  (let [page-name (string/lower-case alias)
+                                        aliases (distinct
+                                                 (conj
+                                                  (remove #{alias} aliases)
+                                                  page))
                                         aliases (if (seq aliases)
                                                   (map
                                                    (fn [alias]
                                                      {:page/name alias})
                                                    aliases))]
                                     (if (seq aliases)
-                                      {:page/name alias
+                                      {:page/name page-name
                                        :page/alias aliases}
-                                      {:page/name alias})))
-                                other-alias))
+                                      {:page/name page-name})))
+                                 aliases))
 
-                        (or (:tags properties) (:roam_tags properties))
-                        (assoc :page/tags (let [tags (:tags properties)
-                                                roam-tags (:roam_tags properties)
-                                                tags (if (string? tags)
-                                                       (string/split tags #",")
-                                                       tags)
-                                                tags (->> (concat tags roam-tags)
-                                                          (remove nil?)
-                                                          (distinct))
-                                                tags (util/->tags tags)]
-                                            (swap! ref-tags set/union (set (map :tag/name tags)))
-                                            tags)))))
+                        (:tags properties)
+                        (assoc :page/tags (let [tags (:tags properties)]
+                                            (swap! ref-tags set/union (set tags))
+                                            (map (fn [tag] {:page/name (string/lower-case tag)
+                                                           :page/original-name tag})
+                                              tags))))))
                   (->> (map first pages)
                        (remove nil?))))
           pages (concat
@@ -118,7 +108,7 @@
                  (map
                   (fn [page]
                     {:page/original-name page
-                     :page/name page})
+                     :page/name (string/lower-case page)})
                   @ref-tags)
                  (map
                   (fn [page]

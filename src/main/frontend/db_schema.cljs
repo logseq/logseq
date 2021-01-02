@@ -76,9 +76,6 @@
    :block/marker {}
    :block/priority {}
    :block/level {}
-   :block/tags {:db/valueType   :db.type/ref
-                :db/cardinality :db.cardinality/many
-                :db/isComponent true}
    ;; :start-pos :end-pos
    :block/meta {}
    :block/properties {}
@@ -92,7 +89,4 @@
    :block/scheduled-ast {}
    :block/deadline {}
    :block/deadline-ast {}
-   :block/repeated? {}
-
-   ;; For pages
-   :tag/name       {:db/unique :db.unique/identity}})
+   :block/repeated? {}})

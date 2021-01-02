@@ -949,13 +949,10 @@
     (->elem
      :span
      {:class "block-tags"}
-     (mapv (fn [{:keys [db/id tag/name]}]
-             (if (util/tag-valid? name)
-               [:a.tag.mx-1 {:key (str "tag-" id)
-                             :href (rfe/href :page {:name name})}
-                (str "#" name)]
-               [:span.warning.mx-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
-                (str "#" name)]))
+     (mapv (fn [tag]
+             [:a.tag.mx-1 {:key (str "tag-" tag)
+                           :href (rfe/href :page {:name tag})}
+              (str "#" tag)])
            tags))))
 
 (defn build-block-part
@@ -1068,10 +1065,10 @@
           [:span.mr-1 ":"]
           (if (coll? v)
             (let [v (->> (remove string/blank? v)
-                         (filter string?))]
-              (for [v-item v]
-                [:span.mr-2
-                 (page-cp config {:page/name v-item})]))
+                         (filter string?))
+                  vals (for [v-item v]
+                         (page-cp config {:page/name v-item}))]
+              (interpose [:span ", "] vals))
             (inline-text (:block/format block) (str v)))])])))
 
 (rum/defcs timestamp-cp < rum/reactive
@@ -1688,23 +1685,17 @@
       ["Properties" m]
       [:div.properties
        (let [format (:block/format config)]
-         (for [[k v] m]
+         (for [[k v] (dissoc m :roam_alias :roam_tags)]
            (when (and (not (and (= k :macros) (empty? v))) ; empty macros
 )
              [:div.property
               [:span.font-medium.mr-1 (str (name k) ": ")]
               (if (coll? v)
-                (for [item v]
-                  (if (or (= k :tags)
-                          (= k :alias))
-                    (if (string/includes? item "[[")
-                      (inline-text format item)
-                      (let [p (-> item
-                                  (string/replace "[" "")
-                                  (string/replace "]" ""))]
-                        [:a.mr-2 {:href (rfe/href :page {:name p})}
-                         p]))
-                    (inline-text format item)))
+                (let [vals (for [item v]
+                             (if (coll? v)
+                               (page-cp config {:page/name item})
+                               (inline-text format item)))]
+                  (interpose [:span ", "] vals))
                 (inline-text format v))])))]
 
       ["Paragraph" l]

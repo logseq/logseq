@@ -100,8 +100,9 @@ parent: child page 2
 (defn- q
   [s]
   (db/clear-query-state!)
-  (let [parse-result (parse s)]
-    {:query (:query parse-result)
+  (let [parse-result (parse s)
+        query (:query parse-result)]
+    {:query query
      :result (dsl/query test-db s)}))
 
 (defn q-count
@@ -144,32 +145,32 @@ parent: child page 2
   (testing "Block properties query"
     (are [x y] (= (q-count x) y)
       "(property prop_a val_a)"
-      {:query '[[?b :block/properties ?p]
-                [(get ?p "prop_a") ?v]
+      {:query '[[?b :block/properties ?prop]
+                [(get ?prop "prop_a") ?v]
                 (or
                  [(= ?v "val_a")]
                  [(contains? ?v "val_a")])]
        :count 2}
 
       "(property prop_b val_b)"
-      {:query '[[?b :block/properties ?p]
-                [(get ?p "prop_b") ?v]
+      {:query '[[?b :block/properties ?prop]
+                [(get ?prop "prop_b") ?v]
                 (or
                  [(= ?v "val_b")]
                  [(contains? ?v "val_b")])]
        :count 1}
 
       "(and (property prop_b val_b))"
-      {:query '[[?b :block/properties ?p]
-                [(get ?p "prop_b") ?v]
+      {:query '[[?b :block/properties ?prop]
+                [(get ?prop "prop_b") ?v]
                 (or
                  [(= ?v "val_b")]
                  [(contains? ?v "val_b")])]
        :count 1}
 
       "(and (property prop_c \"page c\"))"
-      {:query '[[?b :block/properties ?p]
-                [(get ?p "prop_c") ?v]
+      {:query '[[?b :block/properties ?prop]
+                [(get ?prop "prop_c") ?v]
                 (or
                  [(= ?v "page c")]
                  [(contains? ?v "page c")])]
@@ -177,19 +178,19 @@ parent: child page 2
 
       ;; TODO: optimize
       "(and (property prop_c \"page c\") (property prop_c \"page b\"))"
-      {:query '([?b :block/properties ?p]
-                [(get ?p "prop_c") ?v]
+      {:query '([?b :block/properties ?prop]
+                [(get ?prop "prop_c") ?v]
                 (or [(= ?v "page c")] [(contains? ?v "page c")])
                 (or [(= ?v "page b")] [(contains? ?v "page b")]))
        :count 1}
 
       "(or (property prop_c \"page c\") (property prop_b val_b))"
       {:query '(or
-                (and [?b :block/properties ?p]
-                     [(get ?p "prop_c") ?v]
+                (and [?b :block/properties ?prop]
+                     [(get ?prop "prop_c") ?v]
                      (or [(= ?v "page c")] [(contains? ?v "page c")]))
-                (and [?b :block/properties ?p]
-                     [(get ?p "prop_b") ?v]
+                (and [?b :block/properties ?prop]
+                     [(get ?prop "prop_b") ?v]
                      (or [(= ?v "val_b")] [(contains? ?v "val_b")])))
        :count 2}))
 
@@ -250,39 +251,39 @@ parent: child page 2
   (testing "all-page-tags queries"
     (are [x y] (= (q-count x) y)
       "(all-page-tags)"
-      {:query '[[?t :tag/name ?tag]
-                [?p :page/name ?tag]]
+      {:query '[[?page :page/tags ?t]
+                [?t :page/name ?p]]
        :count 3}))
 
   (testing "page-tags queries"
     (are [x y] (= (q-count x) y)
       "(page-tags [[page-tag-1]])"
       {:query '[[?p :page/tags ?t]
-                [?t :tag/name ?tag]
+                [?t :page/name ?tag]
                 [(contains? #{"page-tag-1"} ?tag)]]
        :count 1}
 
       "(page-tags page-tag-2)"
       {:query '[[?p :page/tags ?t]
-                [?t :tag/name ?tag]
+                [?t :page/name ?tag]
                 [(contains? #{"page-tag-2"} ?tag)]]
        :count 2}
 
       "(page-tags page-tag-1 page-tag-2)"
       {:query '[[?p :page/tags ?t]
-                [?t :tag/name ?tag]
+                [?t :page/name ?tag]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag)]]
        :count 2}
 
       "(page-tags page-TAG-1 page-tag-2)"
       {:query '[[?p :page/tags ?t]
-                [?t :tag/name ?tag]
+                [?t :page/name ?tag]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag)]]
        :count 2}
 
       "(page-tags [page-tag-1 page-tag-2])"
       {:query '[[?p :page/tags ?t]
-                [?t :tag/name ?tag]
+                [?t :page/name ?tag]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag)]]
        :count 2}))
 
@@ -348,8 +349,7 @@ parent: child page 2
     (are [x y] (= (q-count x) y)
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
-                (not
-                 [?b :block/ref-pages [:page/name "page 1"]]))
+                (not [?b :block/ref-pages [:page/name "page 1"]]))
        :count 8}))
 
   (testing "Between query"

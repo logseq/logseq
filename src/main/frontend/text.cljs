@@ -18,10 +18,9 @@
 (defn page-ref-un-brackets!
   [s]
   (when (string? s)
-    (let [s (if (page-ref? s)
-              (subs s 2 (- (count s) 2))
-              s)]
-      (string/lower-case s))))
+    (if (page-ref? s)
+      (subs s 2 (- (count s) 2))
+      s)))
 
 ;; E.g "Foo Bar \"Bar Baz\""
 (defn- sep-by-comma-or-quote
@@ -30,7 +29,6 @@
     (some->>
      (string/split s #"[\"|\,|，]{1}")
      (remove string/blank?)
-     (map string/lower-case)
      (map string/trim))))
 
 (defn split-page-refs-without-brackets
@@ -184,7 +182,7 @@
                   (let [[k v] (util/split-first ":" (subs line 1))]
                     (when (and k v)
                       (let [k (string/trim (string/lower-case k))
-                            v (string/trim (string/lower-case v))]
+                            v (string/trim v)]
                         (when-not (contains? #{"properties" "end"} k)
                           [k v])))))))
          (into {}))))
