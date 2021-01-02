@@ -327,7 +327,10 @@
 
 (defn- block-with-title
   [content format]
-  (let [content-without-level-spaces (text/remove-level-spaces content format)
+  (let [content-without-level-spaces (-> (text/remove-level-spaces content format))
+        content-without-level-spaces (str (when (= \n (first content-without-level-spaces))
+                                            "\n")
+                                          (string/trim content-without-level-spaces))
         first-block (-> content-without-level-spaces
                         (format/to-edn format)
                         ffirst)]
@@ -400,7 +403,8 @@
 (defn- with-time-properties
   [block properties]
   (if (and (state/enable-block-time?)
-           (not (:block/pre-block? block)))
+           (not (:block/pre-block? block))
+           (not= "Src" (ffirst (:block/body block))))
     (let [time (util/time-ms)
           props (into {} (:block/properties block))]
       (merge properties

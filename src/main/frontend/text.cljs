@@ -70,7 +70,7 @@
   [text format]
   (if-not (string/blank? text)
     (let [pattern (util/format
-                   "^[%s]+\\s?"
+                   "^[%s]+\\s?\n?"
                    (config/get-block-pattern format))
           matched-text (re-find (re-pattern pattern) text)]
       (if matched-text
@@ -145,7 +145,8 @@
   ([content properties {:keys [remove-blank? block-with-title?]
                         :or {remove-blank? true
                              block-with-title? true}}]
-   (let [properties (if (= (get properties "heading") "false")
+   (let [content (string/triml content)
+         properties (if (= (get properties "heading") "false")
                       (dissoc properties "heading")
                       properties)
          properties (if remove-blank?
@@ -197,8 +198,8 @@
                    (remove-level-spaces format true)
                    (remove-properties!)
                    (rejoin-properties properties {:block-with-title? block-with-title?}))]
-    (str level-spaces
-         (when-not block-with-title? "\n")
+    (str (when level-spaces (string/trim-newline level-spaces))
+         (when (not block-with-title?) "\n")
          (string/triml result))))
 
 (defn insert-property
