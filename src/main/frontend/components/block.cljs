@@ -1069,7 +1069,10 @@
                   vals (for [v-item v]
                          (page-cp config {:page/name v-item}))]
               (interpose [:span ", "] vals))
-            (inline-text (:block/format block) (str v)))])])))
+            (let [page-name (string/lower-case (str v))]
+              (if (db/entity [:page/name page-name])
+                (page-cp config {:page/name page-name})
+                (inline-text (:block/format block) (str v)))))])])))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)

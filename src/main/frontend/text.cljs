@@ -36,10 +36,14 @@
   (if (and (string? s)
            (or (re-find #"[\"|\,|，]+" s)
                (re-find page-ref-re s)))
-    (->> s
-         (sep-by-comma-or-quote)
-         (map page-ref-un-brackets!)
-         (set))
+    (let [result (->> s
+                      (sep-by-comma-or-quote)
+                      (map page-ref-un-brackets!)
+                      (distinct))]
+      (if (and (coll? result)
+               (> (count result) 1))
+        (set result)
+        (first result)))
     s))
 
 (defn extract-level-spaces
