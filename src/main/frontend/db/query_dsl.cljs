@@ -13,7 +13,8 @@
             [frontend.util :as util]
             [medley.core :as medley]
             [clojure.walk :as walk]
-            [clojure.core]))
+            [clojure.core]
+            [clojure.set :as set]))
 
 ;; Query fields:
 
@@ -324,28 +325,18 @@
 
 (defn- add-bindings!
   [q]
-  (let [b? (atom false)
-        p? (atom false)
-        not? (atom false)]
-    (walk/postwalk (fn [f]
-                     (cond
-                       (= 'not f)
-                       (reset! not? true)
-                       (= '?b f)
-                       (reset! b? true)
-                       (= '?p f)
-                       (reset! p? true)
-                       :else
-                       f)) q)
-    (if @not?
+  (let [syms ['?b '?p 'not]
+        [b? p? not?] (-> (set/intersection (set syms) (set (flatten q)))
+                         (map syms))]
+    (if not?
       (cond
-        (and @b? @p?)
+        (and b? p?)
         (concat [['?b :block/uuid] ['?p :page/name] ['?b :block/page '?p]] q)
 
-        @b?
+        b?
         (concat [['?b :block/uuid]] q)
 
-        @p?
+        p?
         (concat [['?p :page/name]] q)
 
         :else
