@@ -653,7 +653,9 @@
                                      (str fst-block-text "\n" snd-block-text)
                                      value)
                              text-properties (text/extract-properties fst-block-text)
-                             value (block-text-with-time block format value text-properties)
+                             value (if (zero? pos)
+                                     value
+                                     (block-text-with-time block format value text-properties))
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
                              parse-result (block/parse-block (assoc block :block/content value) format)
