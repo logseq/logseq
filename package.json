@@ -18,7 +18,7 @@
         "postcss-cli": "8.3.0",
         "postcss-nested": "^5.0.1",
         "purgecss": "3.0.0",
-        "shadow-cljs": "2.8.81",
+        "shadow-cljs": "2.11.11",
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "2.0.1"
