@@ -23,7 +23,7 @@
       s)))
 
 ;; E.g "Foo Bar \"Bar Baz\""
-(defn- sep-by-comma-or-quote
+(defn sep-by-comma-or-quote
   [s]
   (when s
     (some->>
@@ -99,8 +99,10 @@
         [title-lines properties-and-body] (split-with (fn [l] (not (string/starts-with? (string/upper-case (string/triml l)) ":PROPERTIES:"))) lines)
         body (drop-while (fn [l]
                            (let [l' (string/lower-case (string/trim l))]
-                             (and (string/starts-with? l' ":")
-                                  (not (string/starts-with? l' ":end:")))))
+                             (or
+                              (and (string/starts-with? l' ":")
+                                   (not (string/starts-with? l' ":end:")))
+                              (string/blank? l))))
                          properties-and-body)
         body (if (and (seq body)
                       (string/starts-with? (string/lower-case (string/triml (first body))) ":end:"))
