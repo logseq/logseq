@@ -91,10 +91,11 @@
                                                    {:page page}))))}
            page]])
 
-       [:p.text-sm.ml-1.mb-4
-        (svg/warning {:style {:width "1em"
-                              :display "inline-block"}})
-        [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]]
+       (when (and page (not (string/starts-with? page "logseq/")))
+         [:p.text-sm.ml-1.mb-4
+          (svg/warning {:style {:width "1em"
+                                :display "inline-block"}})
+          [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]])
 
        (when (and config? (state/logged?))
          [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
