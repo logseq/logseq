@@ -466,8 +466,10 @@
                           (assoc new-properties :old_permalink (:permalink old-properties))
                           new-properties)
          text-properties (text/extract-properties value)
-         properties (->> custom-properties
-                         (merge text-properties))
+         old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
+         properties (merge old-hidden-properties
+                           text-properties
+                           custom-properties)
          properties (if (and (seq properties) (seq remove-properties))
                       (medley/remove-keys (fn [k] (contains? (set remove-properties) k)) properties)
                       properties)

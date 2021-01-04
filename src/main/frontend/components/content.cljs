@@ -131,7 +131,9 @@
           (ui/menu-link
            {:key "Convert heading"
             :on-click (fn [_e]
-                        (editor-handler/set-block-as-a-heading! block-id (not heading?)))}
+                        (if heading?
+                          (editor-handler/remove-block-property! block-id "heading")
+                          (editor-handler/set-block-as-a-heading! block-id true)))}
            (if heading?
              "Convert back to a block"
              "Convert to a heading"))
