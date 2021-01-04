@@ -129,7 +129,9 @@ export var verifyPermission = async function (handle, readWrite) {
 }
 
 export var openDirectory = async function (options = {}, cb) {
-  options.recursive = options.recursive || false;
+  // FIXME: options.recursive will be undefined after the `getFiles` call get resolved
+  // It's caused by bumping shadow-cljs to 2.11.11.
+  options.recursive = true;
   const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
   const _ask = await verifyPermission(handle, true);
   return [handle, getFiles(handle, options.recursive, cb)];
