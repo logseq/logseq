@@ -950,9 +950,11 @@
      :span
      {:class "block-tags"}
      (mapv (fn [tag]
-             [:a.tag.mx-1 {:key (str "tag-" tag)
-                           :href (rfe/href :page {:name tag})}
-              (str "#" tag)])
+             (when-let [page (db/entity (:db/id tag))]
+               (let [tag (:page/name page)]
+                 [:a.tag.mx-1 {:key (str "tag-" (:db/id tag))
+                               :href (rfe/href :page {:name tag})}
+                 (str "#" tag)])))
            tags))))
 
 (defn build-block-part
