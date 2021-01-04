@@ -64,6 +64,13 @@
    ;; referenced pages
    :block/ref-pages {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
+
+   ;; Referenced pages
+   ;; Notice: it's only for org mode, :tag1:tag2:
+   ;; Markdown tags will be only stored in :block/ref-pages
+   :block/tags {:db/valueType   :db.type/ref
+                :db/cardinality :db.cardinality/many}
+
    ;; referenced blocks
    :block/ref-blocks {:db/valueType   :db.type/ref
                       :db/cardinality :db.cardinality/many}

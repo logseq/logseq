@@ -159,8 +159,10 @@
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
               block-ids-set (set block-ids)
+              ;; To prevent "unique constraint" on datascript
+              pages-index (map #(select-keys % [:page/name]) pages)
               blocks (map (fn [b]
                             (-> b
                                 (update :block/ref-blocks #(set/intersection (set %) block-ids-set))
                                 (update :block/embed-blocks #(set/intersection (set %) block-ids-set)))) blocks)]
-          (apply concat [pages block-ids blocks]))))))
+          (apply concat [pages-index pages block-ids blocks]))))))

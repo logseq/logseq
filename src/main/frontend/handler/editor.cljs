@@ -536,6 +536,7 @@
                                                                :end-pos new-end-pos})
                                                             (block/parse-block block format))
                  block-retracted-attrs (when-not pre-block?
+                                         ;; TODO: should we retract the whole block instead?
                                          (when-let [id (:db/id block)]
                                            [[:db/retract id :block/properties]
                                             [:db/retract id :block/priority]
@@ -544,7 +545,6 @@
                                             [:db/retract id :block/scheduled]
                                             [:db/retract id :block/scheduled-ast]
                                             [:db/retract id :block/marker]
-                                            [:db/retract id :block/tags]
                                             [:db/retract id :block/repeated?]]))
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)

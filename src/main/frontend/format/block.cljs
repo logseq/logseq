@@ -201,6 +201,13 @@
                               (assoc :repeated? true))))))]
     (apply merge m)))
 
+(defn block-tags->pages
+  [{:keys [tags] :as block}]
+  (if (seq tags)
+    (assoc block :tags (map (fn [tag]
+                              [:page/name (string/lower-case tag)]) tags))
+    block))
+
 (defn with-page-refs
   [{:keys [title body tags ref-pages] :as block}]
   (let [ref-pages (->> (concat tags ref-pages)
@@ -326,9 +333,11 @@
                       block (if (seq timestamps)
                               (merge block (timestamps->scheduled-and-deadline timestamps))
                               block)
-                      block (with-page-refs block)
-                      block (with-block-refs block)
-                      block (update-src-pos-meta! block)
+                      block (-> block
+                                with-page-refs
+                                with-block-refs
+                                block-tags->pages
+                                update-src-pos-meta!)
                       last-pos' (get-in block [:meta :start-pos])]
                   (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
 
