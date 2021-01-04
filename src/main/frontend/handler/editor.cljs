@@ -1129,31 +1129,19 @@
                           (block/with-levels edit-content format block))
                         content)
             new-line (str (string/upper-case key) ": " value)
-            new-content (cond
-                          ;; update
-                          (or
-                           (and deadline deadline?)
-                           (and scheduled scheduled?))
-                          (let [lines (string/split-lines content)
-                                body (map (fn [line]
-                                            (if (string/starts-with? (string/lower-case line) key)
-                                              new-line
-                                              line))
-                                          (rest lines))]
-                            (->> (cons (first lines) body)
-                                 (string/join "\n")))
-
-                          ;; insert
-                          (or deadline? scheduled?)
-                          (let [[title body] (if (string/includes? content "\n")
-                                               (util/split-first "\n" content)
-                                               [content ""])]
-                            (str title "\n"
-                                 new-line
-                                 "\n" (util/trim-only-newlines body)))
-
-                          :else
-                          content)]
+            new-content (let [lines (string/split-lines content)
+                              new-lines (map (fn [line]
+                                               (if (string/starts-with? (string/lower-case line) key)
+                                                 new-line
+                                                 line))
+                                          lines)
+                              new-lines (if (not= lines new-lines)
+                                          new-lines
+                                          (cons (first new-lines) ;; title
+                                                (cons
+                                                 new-line
+                                                 (rest new-lines))))]
+                          (string/join "\n" new-lines))]
         (when (not= content new-content)
           (if-let [input-id (state/get-edit-input-id)]
             (state/set-edit-content! input-id new-content)
