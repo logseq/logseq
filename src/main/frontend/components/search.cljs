@@ -34,8 +34,8 @@
 (rum/defc highlight-fuzzy
   [content indexes]
   (let [n (count content)
-        max-hightlighted-len 64
-        max-surrounding-len 32
+        max-hightlighted-len 512
+        max-surrounding-len 512
 
         first-index (first indexes)
         last-index (nth indexes (dec (count indexes)))
@@ -176,12 +176,12 @@
                            data]
 
                           :block
-                          (let [{:block/keys [page content indexes]} data]
-                            (let [page (or (:page/original-name page)
-                                           (:page/name page))]
-                              [:div.flex-1
-                               [:div.text-sm.font-medium page]
-                               (highlight-fuzzy content indexes)]))
+                          (let [{:block/keys [page content indexes]} data
+                                page (or (:page/original-name page)
+                                         (:page/name page))]
+                            [:div.flex-1
+                             [:div.text-sm.font-medium (str "-> " page)]
+                             (highlight-fuzzy content indexes)])
 
                           nil))})])))
 

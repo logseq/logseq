@@ -11,7 +11,8 @@
             [frontend.text :as text]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            ["fuzzysort" :as fuzzy]))
+            ["fuzzysort" :as fuzzy]
+            [medley.core :as medley]))
 
 (def fuzzy-go (gobj/get fuzzy "go"))
 (defonce prepare (gobj/get fuzzy "prepare"))
@@ -157,6 +158,7 @@
                (fn [{:keys [target uuid indexes]}]
                  {:block/uuid uuid
                   :block/content target
+                  :block/page (:block/page (db/entity [:block/uuid (medley/uuid (str uuid))]))
                   :block/indexes indexes}) ; For result highlight
                result)
               (remove nil?)))))))))
