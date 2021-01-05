@@ -888,7 +888,10 @@
                          sort-blocks
                          db-utils/group-by-page
                          (map (fn [[k blocks]]
-                                [k (remove-children! blocks)])))]
+                                (let [k (if (contains? aliases (:db/id k))
+                                          (assoc k :page/alias? true)
+                                          k)]
+                                  [k (remove-children! blocks)]))))]
          result)))))
 
 (defn get-date-scheduled-or-deadlines

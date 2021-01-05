@@ -954,7 +954,7 @@
                (let [tag (:page/name page)]
                  [:a.tag.mx-1 {:key (str "tag-" (:db/id tag))
                                :href (rfe/href :page {:name tag})}
-                 (str "#" tag)])))
+                  (str "#" tag)])))
            tags))))
 
 (defn build-block-part
@@ -1922,12 +1922,15 @@
    (if (:group-by-page? config)
      [:div.flex.flex-col
       (for [[page blocks] blocks]
-        (let [page (db/entity (:db/id page))]
+        (let [alias? (:page/alias? page)
+              page (db/entity (:db/id page))]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
                        (assoc :class "color-level px-7 py-2 rounded"))
            (ui/foldable
-            (page-cp config page)
+            [:div
+             (page-cp config page)
+             (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
             (blocks-container blocks config))]))]
      (blocks-container blocks config))])
 
