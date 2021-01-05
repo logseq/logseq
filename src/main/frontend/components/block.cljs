@@ -251,24 +251,26 @@
                                (string/capitalize original-page-name)
                                original-page-name)
           page (string/lower-case page-name)
-          source-page-name (or (when source-page (:page/name source-page))
+          redirect-page-name (if (db/page-empty? (state/get-current-repo) page-name)
+                               (or (when source-page (:page/name source-page))
+                                   page)
                                page)
           href (if html-export?
                  (util/encode-str page)
-                 (rfe/href :page {:name source-page-name}))]
+                 (rfe/href :page {:name redirect-page-name}))]
       [:a.page-ref
        {:href href
         :on-click (fn [e]
                     (util/stop e)
                     (if (gobj/get e "shiftKey")
-                      (when-let [page-entity (db/entity [:page/name source-page-name])]
+                      (when-let [page-entity (db/entity [:page/name redirect-page-name])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
                          {:page page-entity}))
                       (route-handler/redirect! {:to :page
-                                                :path-params {:name source-page-name}}))
+                                                :path-params {:name redirect-page-name}}))
                     (when (and contents-page?
                                (state/get-left-sidebar-open?))
                       (ui-handler/close-left-sidebar!)))}

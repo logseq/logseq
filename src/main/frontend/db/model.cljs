@@ -798,6 +798,10 @@
      (db-utils/seq-flatten)
      (distinct))))
 
+(defn page-empty?
+  [repo page]
+  (nil? (:page/file (db-utils/entity repo [:page/name (string/lower-case page)]))))
+
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (conn/get-conn repo)]
