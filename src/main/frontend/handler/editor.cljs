@@ -614,7 +614,7 @@
        nil))))
 
 (defn insert-new-block-aux!
-  [{:block/keys [uuid content meta file dummy? level repo page format properties collapsed?] :as block}
+  [{:block/keys [uuid content meta file dummy? level repo page format properties collapsed? pre-block?] :as block}
    value
    {:keys [create-new-block? ok-handler with-level? new-level current-page blocks-container-id]}]
   (let [value (or value "")
@@ -654,10 +654,18 @@
                        (let [value (if create-new-block?
                                      (str fst-block-text "\n" snd-block-text)
                                      value)
-                             text-properties (text/extract-properties fst-block-text)
-                             value (if (zero? pos)
-                                     value
-                                     (block-text-with-time block format value text-properties))
+                             snd-block-text (text/remove-id-property snd-block-text)
+                             text-properties (if (zero? pos)
+                                               {}
+                                               (text/extract-properties fst-block-text))
+                             old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
+                             properties (merge old-hidden-properties
+                                               text-properties)
+                             value (if create-new-block?
+                                     (str
+                                      (block-text-with-time block format fst-block-text properties)
+                                      snd-block-text)
+                                     (block-text-with-time block format value properties))
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
                              parse-result (block/parse-block (assoc block :block/content value) format)
@@ -672,10 +680,22 @@
                                parse-result)
                              after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
                              files [[file-path new-content]]
+                             block-retracted-attrs (when-not pre-block?
+                                                     ;; TODO: should we retract the whole block instead?
+                                                     (when-let [id (:db/id block)]
+                                                       [[:db/retract id :block/properties]
+                                                        [:db/retract id :block/priority]
+                                                        [:db/retract id :block/deadline]
+                                                        [:db/retract id :block/deadline-ast]
+                                                        [:db/retract id :block/scheduled]
+                                                        [:db/retract id :block/scheduled-ast]
+                                                        [:db/retract id :block/marker]
+                                                        [:db/retract id :block/repeated?]]))
                              transact-fn (fn []
                                            (repo-handler/transact-react-and-alter-file!
                                             repo
                                             (concat
+                                             block-retracted-attrs
                                              pages
                                              (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
                                              blocks
@@ -812,13 +832,15 @@
 (defn- with-timetracking-properties
   [block value]
   (let [new-marker (first (re-find format/bare-marker-pattern (or value "")))
-        new-marker (if new-marker (string/lower-case (string/trim new-marker)))]
-    (if (and
-         new-marker
-         (not= new-marker (string/lower-case (or (:block/marker block) "")))
-         (state/enable-timetracking?))
-      {new-marker (util/time-ms)}
-      {})))
+        new-marker (if new-marker (string/lower-case (string/trim new-marker)))
+        time-properties (if (and
+                             new-marker
+                             (not= new-marker (string/lower-case (or (:block/marker block) "")))
+                             (state/enable-timetracking?))
+                          {new-marker (util/time-ms)}
+                          {})]
+    (merge (:block/properties block)
+           time-properties)))
 
 (defn insert-new-block!
   [state]
