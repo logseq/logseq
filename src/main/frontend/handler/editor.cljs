@@ -449,13 +449,13 @@
                                             (mldoc/parse-properties value format)])
          page-tags (when-let [tags (:tags new-properties)]
                      (mapv (fn [tag] {:page/name (string/lower-case tag)
-                                     :page/original-name tag}) tags))
+                                      :page/original-name tag}) tags))
          page-alias (when-let [alias (:alias new-properties)]
                       (map
-                        (fn [alias]
-                          {:page/original-name alias
-                           :page/name (string/lower-case alias)})
-                        (remove #{(:page/name page)} alias)))
+                       (fn [alias]
+                         {:page/original-name alias
+                          :page/name (string/lower-case alias)})
+                       (remove #{(:page/name page)} alias)))
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
@@ -663,8 +663,11 @@
                                                text-properties)
                              value (if create-new-block?
                                      (str
-                                      (block-text-with-time block format fst-block-text properties)
-                                      snd-block-text)
+                                      (->
+                                       (block-text-with-time block format fst-block-text properties)
+                                       (string/trimr))
+                                      "\n"
+                                      (string/triml snd-block-text))
                                      (block-text-with-time block format value properties))
                              value (rebuild-block-content value format)
                              [new-content value] (new-file-content block file-content value)
@@ -1158,7 +1161,7 @@
                                                (if (string/starts-with? (string/lower-case line) key)
                                                  new-line
                                                  line))
-                                          lines)
+                                             lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
                                           (cons (first new-lines) ;; title
