@@ -1276,11 +1276,7 @@
 
                         (when (seq parents)
                           (let [parents (for [{:block/keys [uuid content]} parents]
-                                          (let [title (->> (take 24
-                                                                 (-> (string/split content #"\n")
-                                                                     first
-                                                                     (text/remove-level-spaces format)))
-                                                           (apply str))]
+                                          (let [title (string/trim (text/remove-level-spaces content format))]
                                             (when (and (not (string/blank? title))
                                                        (not= (string/lower-case page-name) (string/lower-case title)))
                                               [:a {:href (rfe/href :page {:name uuid})}

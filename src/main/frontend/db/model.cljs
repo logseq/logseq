@@ -840,6 +840,15 @@
                                db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
 
+(defn- remove-children!
+  [blocks]
+  (let [childrens (->> (mapcat :block/children blocks)
+                       (map :db/id)
+                       (set))]
+    (if (seq childrens)
+      (remove (fn [block] (contains? childrens (:db/id block))) blocks)
+      blocks)))
+
 (defn get-page-referenced-blocks
   ([page]
    (get-page-referenced-blocks (state/get-current-repo) page))
@@ -870,14 +879,17 @@
                                        :where
                                        [?block :block/ref-pages ?ref-page]
                                        [(contains? ?pages ?ref-page)]]
-                                     pages))]
-         (->> query-result
-              react
-              db-utils/seq-flatten
-              (remove (fn [block]
-                        (= page-id (:db/id (:block/page block)))))
-              sort-blocks
-              db-utils/group-by-page))))))
+                                     pages))
+             result (->> query-result
+                         react
+                         db-utils/seq-flatten
+                         (remove (fn [block]
+                                   (= page-id (:db/id (:block/page block)))))
+                         sort-blocks
+                         db-utils/group-by-page
+                         (map (fn [[k blocks]]
+                                [k (remove-children! blocks)])))]
+         result)))))
 
 (defn get-date-scheduled-or-deadlines
   [journal-title]
@@ -939,7 +951,9 @@
                                 ref-pages
                                 pages))))))
              sort-blocks
-             db-utils/group-by-page)))))
+             db-utils/group-by-page
+             (map (fn [[k blocks]]
+                    [k (remove-children! blocks)])))))))
 
 (defn get-block-referenced-blocks
   [block-uuid]
