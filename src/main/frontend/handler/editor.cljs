@@ -20,6 +20,7 @@
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [clojure.string :as string]
+            [clojure.set :as set]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [dommy.core :as dom]
@@ -468,11 +469,14 @@
          text-properties (text/extract-properties value)
          old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
          properties (merge old-hidden-properties
-                           text-properties
-                           custom-properties)
-         properties (if (and (seq properties) (seq remove-properties))
-                      (medley/remove-keys (fn [k] (contains? (set remove-properties) k)) properties)
-                      properties)
+                           custom-properties
+                           text-properties)
+         remove-properties (->
+                            (set/difference (set (keys (:block/properties block)))
+                                            (set (keys text-properties))
+                                            text/hidden-properties)
+                            (set/union (set remove-properties)))
+         properties (medley/remove-keys (fn [k] (contains? remove-properties k)) properties)
          value (block-text-with-time block format value properties)
          content-changed? (not= (text/remove-timestamp-property! (string/trim content))
                                 (text/remove-timestamp-property! (string/trim value)))]
