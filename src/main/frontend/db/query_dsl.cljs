@@ -121,12 +121,12 @@
                  t/days)]
         (tc/to-long (t/plus (t/today) (tf duration)))))))
 
-#_(defn uniq-symbol
-    [counter prefix]
-    (let [result (symbol (str prefix (when-not (zero? @counter)
-                                       @counter)))]
-      (swap! counter inc)
-      result))
+(defn uniq-symbol
+  [counter prefix]
+  (let [result (symbol (str prefix (when-not (zero? @counter)
+                                     @counter)))]
+    (swap! counter inc)
+    result))
 
 (defn build-query
   ([repo e env]
@@ -221,7 +221,9 @@
             (= 3 (count e)))
        (let [v (some-> (name (nth e 2))
                        (text/page-ref-un-brackets!))
-             sym '?v]
+             sym (if (= current-filter 'or)
+                   '?v
+                   (uniq-symbol counter "?v"))]
          [['?b :block/properties '?prop]
           [(list 'get '?prop (name (nth e 1))) sym]
           (list
