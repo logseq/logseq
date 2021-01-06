@@ -15,6 +15,7 @@
             [frontend.ui :as ui]
             [frontend.db :as db]
             [frontend.config :as config]
+            [frontend.handler.web.nfs :as nfs]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -364,9 +365,12 @@
   {:did-mount    (fn [state]
                    (let [[id format] (:rum/args state)]
                      (add-watch editor-handler/*image-pending-file ::pending-image
-                                (fn [_ _ f0 f]
+                                (fn [_ _ _ f]
                                   (reset! *slash-caret-pos (util/get-caret-pos (gdom/getElement id)))
-                                  (editor-handler/upload-image id #js[f] format editor-handler/*image-uploading? true))))
+                                  (if (nfs/get-local-repo)
+                                    (nfs/save-assets! [f] (fn [e]
+                                                            (prn "DONE")))
+                                    (editor-handler/upload-image id #js[f] format editor-handler/*image-uploading? true)))))
                    state)
    :will-unmount (fn [state]
                    (remove-watch editor-handler/*image-pending-file ::pending-image))}

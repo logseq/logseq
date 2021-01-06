@@ -131,7 +131,7 @@
   []
   [:a.cp__right-menu-button
    {:on-click state/toggle-sidebar-open?!}
-   (svg/menu)])
+   (svg/menu nil)])
 
 (rum/defc header
   < rum/reactive
@@ -170,12 +170,13 @@
                 :options
                 {:on-click
                  (fn [_] (set! (.-href js/window.location) url))}})
-             list))))
+             list))
+          nil))
 
-       (repo/sync-status)
+       (repo/sync-status current-repo)
 
        [:div.repos.hidden.md:block
-        (repo/repos-dropdown true)]
+        (repo/repos-dropdown true nil)]
 
        (when (and (nfs/supported?) (empty? repos))
          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
