@@ -251,9 +251,15 @@
                                (string/capitalize original-page-name)
                                original-page-name)
           page (string/lower-case page-name)
-          redirect-page-name (if (db/page-empty? (state/get-current-repo) page-name)
+          redirect-page-name (cond
+                               (:page/alias? config)
+                               page
+
+                               (db/page-empty? (state/get-current-repo) page-name)
                                (or (when source-page (:page/name source-page))
                                    page)
+
+                               :else
                                page)
           href (if html-export?
                  (util/encode-str page)
@@ -1696,7 +1702,9 @@
               (if (coll? v)
                 (let [vals (for [item v]
                              (if (coll? v)
-                               (page-cp config {:page/name item})
+                               (let [config (if (= k :alias)
+                                              (assoc config :page/alias? true))]
+                                 (page-cp config {:page/name item}))
                                (inline-text format item)))]
                   (interpose [:span ", "] vals))
                 (inline-text format v))])))]
