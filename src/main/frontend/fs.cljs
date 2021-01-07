@@ -160,16 +160,17 @@
   ([dir path]
    (read-file dir path (clj->js {:encoding "utf8"})))
   ([dir path option]
-   (decrypt secret
-            (cond
-              (local-db? dir)
-              (let [handle-path (str "handle" dir "/" path)]
-                (p/let [handle (idb/get-item handle-path)
-                        local-file (and handle (.getFile handle))]
-                  (and local-file (.text local-file))))
+   (p/let 
+       [encrypted-content (cond
+                            (local-db? dir)
+                            (let [handle-path (str "handle" dir "/" path)]
+                              (p/let [handle (idb/get-item handle-path)
+                                      local-file (and handle (.getFile handle))]
+                                (and local-file (.text local-file))))
 
-              :else
-              (js/window.pfs.readFile (str dir "/" path) option)))))
+                            :else
+                            (js/window.pfs.readFile (str dir "/" path) option))]
+     (decrypt secret encrypted-content))))
 
 (defn nfs-saved-handler
   [repo path file]
