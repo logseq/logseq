@@ -215,7 +215,6 @@
                     reset? false}} file->content]
   (let [write-file-f (fn [[path content]]
                        (let [original-content (get file->content path)]
-                         (prn {:original-content original-content})
                          (-> (p/let [_ (fs/check-directory-permission! repo)]
                                (fs/write-file repo (util/get-repo-dir repo) path content
                                               {:old-content original-content
@@ -242,7 +241,6 @@
                     (when add-history?
                       (let [files-tx (mapv (fn [[path content]]
                                              (let [original-content (get file->content path)]
-                                               (prn "content changed? " (not= original-content content))
                                                [path original-content content])) files)]
                         (history/add-history! repo files-tx))))]
     (-> (p/all (map write-file-f files))

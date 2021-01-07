@@ -430,11 +430,10 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties remove-properties rebuild-content? auto-save?]
+    {:keys [indent-left? custom-properties remove-properties rebuild-content?]
      :or {rebuild-content? true
           custom-properties nil
-          remove-properties nil
-          auto-save? false}
+          remove-properties nil}
      :as opts}]
    (let [repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -1413,7 +1412,8 @@
     (save-block-if-changed! block new-value
                             (merge
                              {:custom-properties properties}
-                             opts))))
+                             opts))
+    (prn "block saved!")))
 
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
@@ -1422,33 +1422,34 @@
     (save-block-aux! block value format {})))
 
 (defn save-current-block-when-idle!
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (and (state/input-idle? repo)
-               (not (state/get-editor-show-page-search?))
-               (not (state/get-editor-show-page-search-hashtag?))
-               (not (state/get-editor-show-block-search?)))
-      (state/set-editor-op! :auto-save)
-      (try
-        (let [input-id (state/get-edit-input-id)
-              block (state/get-edit-block)
-              db-block (when-let [block-id (:block/uuid block)]
-                         (db/pull [:block/uuid block-id]))
-              elem (and input-id (gdom/getElement input-id))
-              db-content (:block/content db-block)
-              db-content-without-heading (and db-content
-                                              (util/safe-subs db-content (:block/level db-block)))
-              value (and elem (gobj/get elem "value"))]
-          (when (and block value db-content-without-heading
-                     (or
-                      (not= (string/trim db-content-without-heading)
-                            (string/trim value))))
-            (let [cur-pos (util/get-input-pos elem)]
-              (save-block-aux! db-block value (:block/format db-block)
-                               {:auto-save? true}))))
-        (catch js/Error error
-          (log/error :save-block-failed error)))
-      (state/set-editor-op! nil))))
+  ([]
+   (save-current-block-when-idle! true))
+  ([check-idle?]
+   (when-let [repo (state/get-current-repo)]
+     (when (and (if check-idle? (state/input-idle? repo) true)
+                (not (state/get-editor-show-page-search?))
+                (not (state/get-editor-show-page-search-hashtag?))
+                (not (state/get-editor-show-block-search?)))
+       (state/set-editor-op! :auto-save)
+       (try
+         (let [input-id (state/get-edit-input-id)
+               block (state/get-edit-block)
+               db-block (when-let [block-id (:block/uuid block)]
+                          (db/pull [:block/uuid block-id]))
+               elem (and input-id (gdom/getElement input-id))
+               db-content (:block/content db-block)
+               db-content-without-heading (and db-content
+                                               (util/safe-subs db-content (:block/level db-block)))
+               value (and elem (gobj/get elem "value"))]
+           (when (and block value db-content-without-heading
+                      (or
+                       (not= (string/trim db-content-without-heading)
+                             (string/trim value))))
+             (let [cur-pos (util/get-input-pos elem)]
+               (save-block-aux! db-block value (:block/format db-block) {}))))
+         (catch js/Error error
+           (log/error :save-block-failed error)))
+       (state/set-editor-op! nil)))))
 
 (defn on-up-down
   [state e up?]
@@ -2096,4 +2097,4 @@
 
 (defn periodically-save!
   []
-  (js/setInterval save-current-block-when-idle! 3000))
+  (js/setInterval save-current-block-when-idle! 1000))
