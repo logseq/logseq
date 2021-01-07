@@ -436,11 +436,9 @@
           remove-properties nil
           auto-save? false}
      :as opts}]
-   (let [value value
-         repo (or repo (state/get-current-repo))
+   (let [repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (assoc (with-block-meta repo block)
-                      ;; (into {} ...) to fix the old data
                       :block/properties (into {} (:block/properties e)))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))

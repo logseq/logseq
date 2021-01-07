@@ -173,3 +173,17 @@ export const triggerInputChange = (node, value = '', name = 'change') => {
     node.dispatchEvent(event)
   }
 }
+
+// Copied from https://github.com/google/diff-match-patch/issues/29#issuecomment-647627182
+export const reversePatch = patch => {
+  return patch.map(patchObj => ({
+    diffs: patchObj.diffs.map(([ op, val ]) => [
+      op * -1, // The money maker
+      val
+    ]),
+    start1: patchObj.start2,
+    start2: patchObj.start1,
+    length1: patchObj.length2,
+    length2: patchObj.length1
+  }));
+};

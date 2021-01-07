@@ -266,16 +266,7 @@
   ([repo path]
    (when (and repo path)
      (when-let [conn (conn/get-files-conn repo)]
-       (->
-        (d/q
-         '[:find ?content
-           :in $ ?path
-           :where
-           [?file :file/path ?path]
-           [?file :file/content ?content]]
-         @conn
-         path)
-        ffirst)))))
+       (:file/content (d/entity (d/db conn) [:file/path path]))))))
 
 (defn get-block-by-uuid
   [uuid]
