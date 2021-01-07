@@ -12,7 +12,8 @@
             ["/frontend/utils" :as utils]
             ["tweetnacl" :as nacl]
             ["tweetnacl-util" :as nacl-util]
-            ["bip39" :as bip39]))
+            ["bip39" :as bip39]
+            ["buffer" :as buffer]))
 
 ;; We need to cache the file handles in the memory so that
 ;; the browser will not keep asking permissions.
@@ -128,7 +129,7 @@
 
 ;; (println (bip39/generateMnemonic 256))
 ;; (defonce secret "IRwamok0gbumjx41O0z83V/nzcqrac5vML6P62zS23c=")
-(defonce secret (bip39/mnemonicToSeedSync "canal this pluck bar elite tape olive toilet cry surprise dish rival wrist tragic click honey solar kangaroo cook cabin replace harvest horse wrong"))
+(defonce secret (.from buffer/Buffer (bip39/mnemonicToEntropy "canal this pluck bar elite tape olive toilet cry surprise dish rival wrist tragic click honey solar kangaroo cook cabin replace harvest horse wrong") "hex"))
 
 (defn new-nonce
   []
