@@ -65,8 +65,8 @@
              (add-nfs-file-handle! handle-path handle)
              (println "Stored handle: " (str root-handle "/" new-dir)))))
        (p/catch (fn [error]
-                  (println "mkdir error: " error ", dir: " dir)
-                  (js/console.error error)))))
+                  (throw error)
+                  (js/console.debug "mkdir error: " error ", dir: " dir)))))
 
     (and dir js/window.pfs)
     (js/window.pfs.mkdir dir)

@@ -289,8 +289,3 @@
 (defn supported?
   []
   (utils/nfsSupported))
-
-(defn save-assets!
-  [files callback]
-  (doseq [f files]
-    (js/console.log f)))

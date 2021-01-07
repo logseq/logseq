@@ -367,10 +367,7 @@
                      (add-watch editor-handler/*image-pending-file ::pending-image
                                 (fn [_ _ _ f]
                                   (reset! *slash-caret-pos (util/get-caret-pos (gdom/getElement id)))
-                                  (if (nfs/get-local-repo)
-                                    (nfs/save-assets! [f] (fn [e]
-                                                            (prn "DONE")))
-                                    (editor-handler/upload-image id #js[f] format editor-handler/*image-uploading? true)))))
+                                  (editor-handler/upload-image id #js[f] format editor-handler/*image-uploading? true))))
                    state)
    :will-unmount (fn [state]
                    (remove-watch editor-handler/*image-pending-file ::pending-image))}
