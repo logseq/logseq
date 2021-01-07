@@ -240,7 +240,7 @@
               (-> (p/all (map (fn [path]
                                 (when-let [file (get-file-f path new-files)]
                                   (p/let [content (.text (:file/file file))]
-                                    (assoc file :file/content content)))) added-or-modified))
+                                    (assoc file :file/content (fs/decrypt fs/secret content))))) added-or-modified))
                   (p/then (fn [result]
                             (let [files (map #(dissoc % :file/file :file/handle) result)
                                   non-modified? (fn [file]
