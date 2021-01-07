@@ -16,8 +16,7 @@
 
 (defonce history-limit 500)
 
-;; TODO: replace with patches to reduce memory usage
-;; tx [[file1-path original new] [file2-path original new]]
+;; tx [[file1-path patches] [file2-path patches]]
 (defn add-history!
   [repo tx]
   (let [tx (->> tx
