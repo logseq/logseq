@@ -9,7 +9,9 @@
             [goog.object :as gobj]
             [clojure.set :as set]
             [lambdaisland.glogi :as log]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            ["tweetnacl" :as nacl]
+            ["tweetnacl-util" :as nacl-util]))
 
 ;; We need to cache the file handles in the memory so that
 ;; the browser will not keep asking permissions.
@@ -123,19 +125,51 @@
     :else
     (js/window.workerThread.rimraf dir)))
 
+(defonce secret "IRwamok0gbumjx41O0z83V/nzcqrac5vML6P62zS23c=")
+
+(defn new-nonce
+  []
+  (nacl/randomBytes nacl/secretbox.nonceLength))
+
+(defn encrypt
+  [key content]
+  (when key
+    (let [key-decoded (nacl-util/decodeBase64 key)
+          nonce (new-nonce)
+          content-decoded (nacl-util/decodeUTF8 content)
+          box (nacl/secretbox content-decoded nonce key-decoded)
+          full-message (new js/Uint8Array (+ nonce.length box.length))]
+      (js/console.log "nonce" (nacl-util/encodeBase64 nonce))
+      (js/console.log "box" (nacl-util/encodeBase64 box))
+      (.set full-message nonce)
+      (.set full-message box nonce.length)
+      (nacl-util/encodeBase64 full-message))))
+
+(defn decrypt
+  [key content-with-nonce]
+  (when key
+    (let [key-decoded (nacl-util/decodeBase64 key)
+          content-with-nonce-decoded (nacl-util/decodeBase64 content-with-nonce)
+          nonce (.slice content-with-nonce-decoded 0 nacl/secretbox.nonceLength)
+          content (.slice content-with-nonce-decoded nacl/secretbox.nonceLength content-with-nonce.length)
+          decrypted (nacl-util/encodeUTF8 (nacl/secretbox.open content nonce key-decoded))]
+      (println "decrypted" decrypted)
+      decrypted)))
+
 (defn read-file
   ([dir path]
    (read-file dir path (clj->js {:encoding "utf8"})))
   ([dir path option]
-   (cond
-     (local-db? dir)
-     (let [handle-path (str "handle" dir "/" path)]
-       (p/let [handle (idb/get-item handle-path)
-               local-file (and handle (.getFile handle))]
-         (and local-file (.text local-file))))
+   (decrypt secret
+            (cond
+              (local-db? dir)
+              (let [handle-path (str "handle" dir "/" path)]
+                (p/let [handle (idb/get-item handle-path)
+                        local-file (and handle (.getFile handle))]
+                  (and local-file (.text local-file))))
 
-     :else
-     (js/window.pfs.readFile (str dir "/" path) option))))
+              :else
+              (js/window.pfs.readFile (str dir "/" path) option)))))
 
 (defn nfs-saved-handler
   [repo path file]
@@ -165,7 +199,8 @@
             handle-path (if (= "/" (last sub-dir-handle-path))
                           (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
                           sub-dir-handle-path)
-            basename-handle-path (str handle-path "/" basename)]
+            basename-handle-path (str handle-path "/" basename)
+            encrypted-content (encrypt secret content)]
         (p/let [file-handle (idb/get-item basename-handle-path)]
           (when file-handle
             (add-nfs-file-handle! basename-handle-path file-handle))
@@ -195,7 +230,7 @@
                         new-created?))
                 (do
                   (p/let [_ (utils/verifyPermission file-handle true)
-                          _ (utils/writeFile file-handle content)
+                          _ (utils/writeFile file-handle encrypted-content)
                           file (.getFile file-handle)]
                     (when file
                       (nfs-saved-handler repo path file))))
@@ -210,7 +245,7 @@
                    (p/let [_ (utils/verifyPermission handle true)
                            file-handle (.getFileHandle ^js handle basename #js {:create true})
                            _ (idb/set-item! basename-handle-path file-handle)
-                           _ (utils/writeFile file-handle content)
+                           _ (utils/writeFile file-handle encrypted-content)
                            file (.getFile file-handle)]
                      (when file
                        (nfs-saved-handler repo path file))))
@@ -220,7 +255,8 @@
                         (js/console.error error)))))))
 
       js/window.pfs
-      (js/window.pfs.writeFile (str dir "/" path) content)
+      (let [encrypted-content (encrypt secret content)]
+        (js/window.pfs.writeFile (str dir "/" path) encrypted-content))
 
       :else
       nil)

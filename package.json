@@ -60,6 +60,8 @@
         "react-dom": "^17.0.1",
         "react-textarea-autosize": "^8.0.1",
         "react-transition-group": "^4.3.0",
+        "tweetnacl": "^1.0.3",
+        "tweetnacl-util": "^0.15.1",
         "yargs-parser": "^20.2.4"
     }
 }

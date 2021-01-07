@@ -124,7 +124,7 @@
              markup-files (filter-markup-and-built-in-files files)]
        (-> (p/all (map (fn [file]
                          (p/let [content (.text (:file/file file))]
-                           (assoc file :file/content content))) markup-files))
+                           (assoc file :file/content (fs/decrypt fs/secret content)))) markup-files))
            (p/then (fn [result]
                      _ (state/set-loading-files! false)
                      (let [files (map #(dissoc % :file/file) result)]
