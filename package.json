@@ -48,6 +48,7 @@
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html"
     },
     "dependencies": {
+        "bip39": "^3.0.3",
         "codemirror": "^5.58.1",
         "diff": "^4.0.2",
         "fuzzysort": "^1.1.4",

@@ -11,7 +11,8 @@
             [lambdaisland.glogi :as log]
             ["/frontend/utils" :as utils]
             ["tweetnacl" :as nacl]
-            ["tweetnacl-util" :as nacl-util]))
+            ["tweetnacl-util" :as nacl-util]
+            ["bip39" :as bip39]))
 
 ;; We need to cache the file handles in the memory so that
 ;; the browser will not keep asking permissions.
@@ -125,7 +126,9 @@
     :else
     (js/window.workerThread.rimraf dir)))
 
-(defonce secret "IRwamok0gbumjx41O0z83V/nzcqrac5vML6P62zS23c=")
+;; (println (bip39/generateMnemonic 256))
+;; (defonce secret "IRwamok0gbumjx41O0z83V/nzcqrac5vML6P62zS23c=")
+(defonce secret (bip39/mnemonicToSeedSync "canal this pluck bar elite tape olive toilet cry surprise dish rival wrist tragic click honey solar kangaroo cook cabin replace harvest horse wrong"))
 
 (defn new-nonce
   []
@@ -134,10 +137,9 @@
 (defn encrypt
   [key content]
   (when key
-    (let [key-decoded (nacl-util/decodeBase64 key)
-          nonce (new-nonce)
+    (let [nonce (new-nonce)
           content-decoded (nacl-util/decodeUTF8 content)
-          box (nacl/secretbox content-decoded nonce key-decoded)
+          box (nacl/secretbox content-decoded nonce key)
           full-message (new js/Uint8Array (+ nonce.length box.length))]
       (js/console.log "nonce" (nacl-util/encodeBase64 nonce))
       (js/console.log "box" (nacl-util/encodeBase64 box))
@@ -148,11 +150,10 @@
 (defn decrypt
   [key content-with-nonce]
   (when key
-    (let [key-decoded (nacl-util/decodeBase64 key)
-          content-with-nonce-decoded (nacl-util/decodeBase64 content-with-nonce)
+    (let [content-with-nonce-decoded (nacl-util/decodeBase64 content-with-nonce)
           nonce (.slice content-with-nonce-decoded 0 nacl/secretbox.nonceLength)
           content (.slice content-with-nonce-decoded nacl/secretbox.nonceLength content-with-nonce.length)
-          decrypted (nacl-util/encodeUTF8 (nacl/secretbox.open content nonce key-decoded))]
+          decrypted (nacl-util/encodeUTF8 (nacl/secretbox.open content nonce key))]
       (println "decrypted" decrypted)
       decrypted)))
 
