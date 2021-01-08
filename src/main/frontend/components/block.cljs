@@ -156,26 +156,27 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
-(rum/defc asset-link < rum/static
-  [href label]
+(rum/defcs asset-link < rum/reactive
+  (rum/local nil ::src)
+  [state href label]
   (let [title (second (first label))
-        [src set-src!] (rum/use-state nil)]
+        src (::src state)
+        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
 
-    (rum/use-effect!
-     (fn []
-       (p/then (editor-handler/make-asset-url href) #(set-src! %))
-       #())
-     [])
+    (when granted?
+      (p/then (editor-handler/make-asset-url href) #(do (prn "asset-url" %) (reset! src %))))
 
-    [:img
-     {:loading "lazy"
-      :src     src
-      :title   title}]))
+    (when @src
+      [:img
+       {:loading "lazy"
+        :src     @src
+        :title   title}])))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [config url href label]
-  (if (util/starts-with? href "../assets")
+  (if (or (util/starts-with? href "/assets")
+          (util/starts-with? href "../assets"))
     (asset-link href label)
     (let [href (if (util/starts-with? href "http")
                  href

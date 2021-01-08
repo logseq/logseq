@@ -6,6 +6,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.util :as util]
+            [frontend.handler.common :as common-handler]
             ["/frontend/utils" :as utils]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
@@ -204,7 +205,7 @@
        (->
         (p/let [handle (idb/get-item handle-path)]
           (when handle
-            (p/let [_ (when handle (utils/verifyPermission handle true))
+            (p/let [_ (when handle (common-handler/verify-permission repo handle true))
                     files-result (utils/getFiles handle true
                                                  (fn [path handle]
                                                    (swap! path-handles assoc path handle)))

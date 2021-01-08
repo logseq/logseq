@@ -1489,7 +1489,7 @@
 
 (defn- get-asset-link
   [url]
-  (str "../" url))
+  (str "/" url))
 
 (defn ensure-assets-dir!
   [repo]
@@ -1523,10 +1523,10 @@
 (def *assets-url-cache (atom {}))
 
 (defn make-asset-url
-  [path]
+  [path]                                                    ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (util/get-repo-dir (state/get-current-repo))
-        path (string/replace path "../" "")
-        handle-path (str "handle" repo-dir "/" path)
+        path (string/replace path "../" "/")
+        handle-path (str "handle" repo-dir path)
         cached-url (get @*assets-url-cache (keyword handle-path))]
     (if cached-url
       (p/resolved cached-url)

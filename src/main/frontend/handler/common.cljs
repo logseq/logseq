@@ -12,7 +12,8 @@
             [frontend.spec :as spec]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            ["/frontend/utils" :as utils]))
 
 (defn get-ref
   [repo-url]
@@ -142,3 +143,12 @@
                      (do (log/error :token/failed-get-token token-m)
                          (reject)))))
                nil))))))))
+
+(defn verify-permission
+  [repo handle read-write?]
+  (let [repo (or repo (state/get-current-repo))]
+    (p/then
+      (utils/verifyPermission handle read-write?)
+      (fn []
+        (state/set-state! [:nfs/user-granted? repo] true)
+        true))))
