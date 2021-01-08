@@ -303,21 +303,23 @@
                  (remove nil?))))))))
 
 (defn transact-react-and-alter-file!
-  [repo tx transact-option files]
-  (spec/validate :repos/url repo)
-  (let [files (remove nil? files)
-        pages (->> (map db/get-file-page (map first files))
-                   (remove nil?))]
-    (db/transact-react!
-     repo
-     tx
-     transact-option)
-    (when (seq pages)
-      (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
-        (when (seq children-tx)
-          (db/transact! repo children-tx))))
-    (when (seq files)
-      (file-handler/alter-files repo files {}))))
+  ([repo tx transact-option files]
+   (transact-react-and-alter-file! repo tx transact-option files {}))
+  ([repo tx transact-option files opts]
+   (spec/validate :repos/url repo)
+   (let [files (remove nil? files)
+         pages (->> (map db/get-file-page (map first files))
+                    (remove nil?))]
+     (db/transact-react!
+      repo
+      tx
+      transact-option)
+     (when (seq pages)
+       (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
+         (when (seq children-tx)
+           (db/transact! repo children-tx))))
+     (when (seq files)
+       (file-handler/alter-files repo files opts)))))
 
 (declare push)
 

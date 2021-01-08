@@ -125,23 +125,25 @@
 
 (defn reset-file!
   [repo-url file content]
-  (let [new? (nil? (db/entity [:file/path file]))]
-    (db/set-file-content! repo-url file content)
-    (let [format (format/get-format file)
-          utf8-content (utf8/encode content)
-          file-content [{:file/path file}]
-          tx (if (contains? config/mldoc-support-formats format)
-               (let [delete-blocks (db/delete-file-blocks! repo-url file)
-                     [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)]
-                 (concat file-content delete-blocks pages block-ids blocks))
-               file-content)
-          tx (concat tx [(let [t (tc/to-long (t/now))]
-                           (cond->
-                            {:file/path file
-                             :file/last-modified-at t}
-                             new?
-                             (assoc :file/created-at t)))])]
-      (db/transact! repo-url tx))))
+  (profile "reset"
+           (let [new? (nil? (db/entity [:file/path file]))]
+             (db/set-file-content! repo-url file content)
+             (let [format (format/get-format file)
+                   utf8-content (utf8/encode content)
+                   file-content [{:file/path file}]
+                   tx (if (contains? config/mldoc-support-formats format)
+                        (let [delete-blocks (db/delete-file-blocks! repo-url file)
+                              [pages block-ids blocks] (profile "extract"
+                                                                (extract-handler/extract-blocks-pages repo-url file content utf8-content))]
+                          (concat file-content delete-blocks pages block-ids blocks))
+                        file-content)
+                   tx (concat tx [(let [t (tc/to-long (t/now))]
+                                    (cond->
+                                     {:file/path file
+                                      :file/last-modified-at t}
+                                      new?
+                                      (assoc :file/created-at t)))])]
+               (profile "transact" (db/transact! repo-url tx))))))
 
 ;; TODO: better name to separate from reset-file!
 (defn alter-file
@@ -188,7 +190,7 @@
                                    :path-params {:path path}}))))))
 
 (defn alter-files
-  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db?]
+  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db? chan chan-callback]
                :or {add-history? true
                     update-status? true
                     reset? false
@@ -206,10 +208,13 @@
           (db/set-file-content! repo path content))))
 
     (when-let [chan (state/get-file-write-chan)]
-      (async/put! chan [repo files opts file->content]))))
+      (let [chan-callback (:chan-callback opts)]
+        (async/put! chan [repo files opts file->content])
+        (when chan-callback
+          (chan-callback))))))
 
 (defn alter-files-handler!
-  [repo files {:keys [add-history? update-status? git-add-cb reset?]
+  [repo files {:keys [add-history? update-status? git-add-cb reset? chan]
                :or {add-history? true
                     update-status? true
                     reset? false}} file->content]
@@ -245,10 +250,13 @@
                         (history/add-history! repo files-tx))))]
     (-> (p/all (map write-file-f files))
         (p/then (fn []
-                  (git-add-f)))
+                  (git-add-f)
+                  (when chan
+                    (async/put! chan true))))
         (p/catch (fn [error]
                    (println "Alter files failed:")
-                   (js/console.error error))))))
+                   (js/console.error error)
+                   (async/put! chan false))))))
 
 (defn remove-file!
   [repo file]

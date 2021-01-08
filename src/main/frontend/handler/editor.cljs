@@ -430,7 +430,7 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties remove-properties rebuild-content?]
+    {:keys [indent-left? custom-properties remove-properties rebuild-content? chan chan-callback]
      :or {rebuild-content? true
           custom-properties nil
           remove-properties nil}
@@ -598,7 +598,9 @@
                {:key :block/change
                 :data (map (fn [block] (assoc block :block/page page)) blocks)}
                (let [new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)]
-                 [[file-path new-content]])))
+                 [[file-path new-content]])
+               (when chan {:chan chan
+                           :chan-callback chan-callback})))
 
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
@@ -1423,8 +1425,9 @@
 
 (defn save-current-block-when-idle!
   ([]
-   (save-current-block-when-idle! true))
-  ([check-idle?]
+   (save-current-block-when-idle! {}))
+  ([{:keys [check-idle? chan chan-callback]
+     :or {check-idle? true}}]
    (when-let [repo (state/get-current-repo)]
      (when (and (if check-idle? (state/input-idle? repo) true)
                 (not (state/get-editor-show-page-search?))
@@ -1446,7 +1449,7 @@
                        (not= (string/trim db-content-without-heading)
                              (string/trim value))))
              (let [cur-pos (util/get-input-pos elem)]
-               (save-block-aux! db-block value (:block/format db-block) {}))))
+               (save-block-aux! db-block value (:block/format db-block) {:chan chan}))))
          (catch js/Error error
            (log/error :save-block-failed error)))
        (state/set-editor-op! nil)))))

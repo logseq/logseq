@@ -43,7 +43,8 @@
    (create! title {}))
   ([title {:keys [redirect?]
            :or {redirect? true}}]
-   (let [repo (state/get-current-repo)
+   (let [title (and title (string/trim title))
+         repo (state/get-current-repo)
          dir (util/get-repo-dir repo)
          journal-page? (date/valid-journal-title? title)
          directory (get-directory journal-page?)]
