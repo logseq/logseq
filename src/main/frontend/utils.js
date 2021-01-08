@@ -128,14 +128,14 @@ export var verifyPermission = async function (handle, readWrite) {
   throw new Error('Permission is not granted')
 }
 
+// NOTE: Need externs to prevent `options.recursive` been munged
+//       When building with release.
 export var openDirectory = async function (options = {}, cb) {
-  // FIXME: options.recursive will be undefined after the `getFiles` call get resolved
-  // It's caused by bumping shadow-cljs to 2.11.11.
-  options.recursive = true
-  const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
-  const _ask = await verifyPermission(handle, true)
-  return [handle, getFiles(handle, options.recursive, cb)]
-}
+  options.recursive = options.recursive || false;
+  const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  const _ask = await verifyPermission(handle, true);
+  return [handle, getFiles(handle, options.recursive, cb)];
+};
 
 export var writeFile = async function (fileHandle, contents) {
   // Create a FileSystemWritableFileStream to write to.

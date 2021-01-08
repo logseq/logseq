@@ -272,24 +272,32 @@
                                (string/capitalize original-page-name)
                                original-page-name)
           page (string/lower-case page-name)
-          source-page-name (or (when source-page (:page/name source-page))
+          redirect-page-name (cond
+                               (:page/alias? config)
+                               page
+
+                               (db/page-empty? (state/get-current-repo) page-name)
+                               (or (when source-page (:page/name source-page))
+                                   page)
+
+                               :else
                                page)
           href (if html-export?
                  (util/encode-str page)
-                 (rfe/href :page {:name source-page-name}))]
+                 (rfe/href :page {:name redirect-page-name}))]
       [:a.page-ref
        {:href href
         :on-click (fn [e]
                     (util/stop e)
                     (if (gobj/get e "shiftKey")
-                      (when-let [page-entity (db/entity [:page/name source-page-name])]
+                      (when-let [page-entity (db/entity [:page/name redirect-page-name])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
                          :page
                          {:page page-entity}))
                       (route-handler/redirect! {:to :page
-                                                :path-params {:name source-page-name}}))
+                                                :path-params {:name redirect-page-name}}))
                     (when (and contents-page?
                                (state/get-left-sidebar-open?))
                       (ui-handler/close-left-sidebar!)))}
@@ -1297,11 +1305,7 @@
 
                         (when (seq parents)
                           (let [parents (for [{:block/keys [uuid content]} parents]
-                                          (let [title (->> (take 24
-                                                                 (-> (string/split content #"\n")
-                                                                     first
-                                                                     (text/remove-level-spaces format)))
-                                                           (apply str))]
+                                          (let [title (string/trim (text/remove-level-spaces content format))]
                                             (when (and (not (string/blank? title))
                                                        (not= (string/lower-case page-name) (string/lower-case title)))
                                               [:a {:href (rfe/href :page {:name uuid})}
@@ -1719,7 +1723,9 @@
               (if (coll? v)
                 (let [vals (for [item v]
                              (if (coll? v)
-                               (page-cp config {:page/name item})
+                               (let [config (if (= k :alias)
+                                              (assoc config :page/alias? true))]
+                                 (page-cp config {:page/name item}))
                                (inline-text format item)))]
                   (interpose [:span ", "] vals))
                 (inline-text format v))])))]
@@ -1947,12 +1953,15 @@
    (if (:group-by-page? config)
      [:div.flex.flex-col
       (for [[page blocks] blocks]
-        (let [page (db/entity (:db/id page))]
+        (let [alias? (:page/alias? page)
+              page (db/entity (:db/id page))]
           [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                        (:ref? config)
                        (assoc :class "color-level px-7 py-2 rounded"))
            (ui/foldable
-            (page-cp config page)
+            [:div
+             (page-cp config page)
+             (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
             (blocks-container blocks config))]))]
      (blocks-container blocks config))])
 

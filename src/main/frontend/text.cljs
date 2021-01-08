@@ -50,7 +50,7 @@
   [text format]
   (if-not (string/blank? text)
     (let [pattern (util/format
-                   "^[%s]+\\s+"
+                   "^[%s]+\\s?"
                    (config/get-block-pattern format))]
       (re-find (re-pattern pattern) text))
     ""))
@@ -199,7 +199,7 @@
   (let [format (keyword format)
         level-spaces (extract-level-spaces content format)
         result (-> content
-                   (remove-level-spaces format true)
+                   (remove-level-spaces format)
                    (remove-properties!)
                    (rejoin-properties properties {:block-with-title? block-with-title?}))]
     (str (when level-spaces (string/trim-newline level-spaces))

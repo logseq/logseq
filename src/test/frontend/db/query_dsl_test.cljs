@@ -181,17 +181,17 @@ parent: child page 2
       {:query '([?b :block/properties ?prop]
                 [(get ?prop "prop_c") ?v]
                 (or [(= ?v "page c")] [(contains? ?v "page c")])
-                (or [(= ?v "page b")] [(contains? ?v "page b")]))
+                [(get ?prop "prop_c") ?v1]
+                (or [(= ?v1 "page b")] [(contains? ?v1 "page b")]))
        :count 1}
 
       "(or (property prop_c \"page c\") (property prop_b val_b))"
-      {:query '(or
-                (and [?b :block/properties ?prop]
-                     [(get ?prop "prop_c") ?v]
-                     (or [(= ?v "page c")] [(contains? ?v "page c")]))
-                (and [?b :block/properties ?prop]
-                     [(get ?prop "prop_b") ?v]
-                     (or [(= ?v "val_b")] [(contains? ?v "val_b")])))
+      {:query '(or (and [?b :block/properties ?prop]
+                        [(get ?prop "prop_c") ?v]
+                        (or [(= ?v "page c")] [(contains? ?v "page c")]))
+                   (and [?b :block/properties ?prop]
+                        [(get ?prop "prop_b") ?v]
+                        (or [(= ?v "val_b")] [(contains? ?v "val_b")])))
        :count 2}))
 
   (testing "TODO queries"

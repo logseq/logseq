@@ -50,3 +50,15 @@ dummy.values = function() {};
 // Do we really need those?
 dummy.filter = function() {};
 dummy.concat = function() {};
+
+/**
+ * @typedef {{
+ *     recursive: (undefined | boolean),
+ * }}
+ */
+var openDirectoryOptions;
+/**
+ * @param {(undefined | openDirectoryOptions)} options
+ * @param {function} cb
+ */
+var openDirectory = function(options, cb) {};
