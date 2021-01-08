@@ -257,6 +257,26 @@
               body)]
     (assoc block :body body)))
 
+(defn extract-filetags
+  [content]
+
+  (def filetags-prefix "#+filetags: ")
+
+  (defn extract-line-filetags
+    [line]
+    (when (string/starts-with? line filetags-prefix)
+      ;; org filetags can't contain whitespace
+      (let [split (string/split (string/trimr line) #"\s+")]
+        (when (= (count split) 2)
+          (let [tagpart (get split 1)
+                tags (string/split tagpart #":")
+                tags (filter not-empty tags)]
+            tags)))))
+
+  (let [content (string/lower-case content)
+        lines (string/split-lines content)]
+    (distinct (mapcat extract-line-filetags lines))))
+
 (defn block-keywordize
   [block]
   (medley/map-keys
@@ -365,6 +385,7 @@
                      :end-pos (or first-block-start-pos
                                   (utf8/length encoded-content))}
               :body (take-while (fn [block] (not (heading-block? block))) blocks)
+              :ref-pages (extract-filetags content)
               :pre-block? true}
              (block-keywordize)))
           (select-keys first-block [:block/file :block/format :block/page]))
