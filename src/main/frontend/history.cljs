@@ -1,6 +1,7 @@
 (ns frontend.history
   (:require [frontend.diff :as diff]
             [frontend.db :as db]
+            [frontend.state :as state]
             [promesa.core :as p]
             ["/frontend/utils" :as utils]))
 
@@ -49,6 +50,7 @@
       (let [idx' (dec idx)
             tx (get-in @history [repo idx'])
             _ (reset! *undoing? true)
+            _ (state/clear-edit!)
             promises (for [[path patches] tx]
                        (let [current-content (db/get-file-no-sub path)
                              original-content (diff/apply-patches! current-content patches)]
@@ -69,6 +71,7 @@
     (when (and (> (count txs) idx) (false? @*redoing?))
       (let [tx (get-in @history [repo idx])
             _ (reset! *redoing? true)
+            _ (state/clear-edit!)
             promises (for [[path patches] tx]
                        (let [current-content (db/get-file-no-sub path)
                              reversed-patches (utils/reversePatch patches)
@@ -78,6 +81,5 @@
                                       :re-render-root? true})))]
         (-> (p/all promises)
             (p/then (fn []
-                      (db/clear-query-state!)
                       (swap! history-idx assoc repo (inc idx))
                       (reset! *redoing? false))))))))

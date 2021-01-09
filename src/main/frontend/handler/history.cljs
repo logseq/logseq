@@ -24,11 +24,13 @@
             save-commited? (atom nil)]
         (editor/save-current-block-when-idle! {:check-idle? false
                                                :chan chan
-                                               :chan-callback #(reset! save-commited? true)})
+                                               :chan-callback (fn []
+                                                                (reset! save-commited? true))})
         (if @save-commited?
           (async/go
             (let [_ (async/<! chan)]
-              (history/undo! repo file/alter-file)))
+              ;; FIXME:
+              (js/setTimeout #(history/undo! repo file/alter-file) 20)))
           (history/undo! repo file/alter-file)))
       (default-undo))))
 

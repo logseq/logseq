@@ -291,7 +291,7 @@
                               (conn/get-files-conn repo-url)
                               (conn/get-conn repo-url false)))]
         (when (and (seq tx-data) (get-conn))
-          (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
+          (let [tx-result (d/transact! (get-conn) (vec tx-data))
                 db (:db-after tx-result)
                 handler-keys (get-handler-keys handler-opts)]
             (doseq [handler-key handler-keys]

@@ -125,25 +125,23 @@
 
 (defn reset-file!
   [repo-url file content]
-  (profile "reset"
-           (let [new? (nil? (db/entity [:file/path file]))]
-             (db/set-file-content! repo-url file content)
-             (let [format (format/get-format file)
-                   utf8-content (utf8/encode content)
-                   file-content [{:file/path file}]
-                   tx (if (contains? config/mldoc-support-formats format)
-                        (let [delete-blocks (db/delete-file-blocks! repo-url file)
-                              [pages block-ids blocks] (profile "extract"
-                                                                (extract-handler/extract-blocks-pages repo-url file content utf8-content))]
-                          (concat file-content delete-blocks pages block-ids blocks))
-                        file-content)
-                   tx (concat tx [(let [t (tc/to-long (t/now))]
-                                    (cond->
-                                     {:file/path file
-                                      :file/last-modified-at t}
-                                      new?
-                                      (assoc :file/created-at t)))])]
-               (profile "transact" (db/transact! repo-url tx))))))
+  (let [new? (nil? (db/entity [:file/path file]))]
+    (db/set-file-content! repo-url file content)
+    (let [format (format/get-format file)
+          utf8-content (utf8/encode content)
+          file-content [{:file/path file}]
+          tx (if (contains? config/mldoc-support-formats format)
+               (let [delete-blocks (db/delete-file-blocks! repo-url file)
+                     [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)]
+                 (concat file-content delete-blocks pages block-ids blocks))
+               file-content)
+          tx (concat tx [(let [t (tc/to-long (t/now))]
+                           (cond->
+                            {:file/path file
+                             :file/last-modified-at t}
+                             new?
+                             (assoc :file/created-at t)))])]
+      (db/transact! repo-url tx))))
 
 ;; TODO: better name to separate from reset-file!
 (defn alter-file
@@ -208,7 +206,8 @@
           (db/set-file-content! repo path content))))
 
     (when-let [chan (state/get-file-write-chan)]
-      (let [chan-callback (:chan-callback opts)]
+      (let [chan-callback
+            (:chan-callback opts)]
         (async/put! chan [repo files opts file->content])
         (when chan-callback
           (chan-callback))))))
@@ -250,6 +249,7 @@
                         (history/add-history! repo files-tx))))]
     (-> (p/all (map write-file-f files))
         (p/then (fn []
+                  (prn "all files written")
                   (git-add-f)
                   (when chan
                     (async/put! chan true))))
