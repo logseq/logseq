@@ -115,11 +115,15 @@
                        (seq macros)
                        (assoc :macros macros))
           alias (->vec-concat (:roam_alias properties) (:alias properties))
-          tags (->vec-concat (:roam_tags properties) (:tags properties) definition-tags)
+          filetags (if-let [org-file-tags (:filetags properties)]
+                     (->> (string/split org-file-tags ":")
+                          (remove string/blank?)))
+          tags (->vec-concat (:roam_tags properties) (:tags properties) definition-tags filetags)
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
                          (update :roam_alias ->vec)
-                         (update :roam_tags ->vec))
+                         (update :roam_tags ->vec)
+                         (update :filetags (constantly filetags)))
           properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
           other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
       (if (seq properties)
