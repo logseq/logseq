@@ -164,7 +164,7 @@
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
 
     (when granted?
-      (p/then (editor-handler/make-asset-url href) #(do (prn "asset-url" %) (reset! src %))))
+      (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
       [:img
