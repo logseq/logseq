@@ -9,7 +9,7 @@
             [frontend.text :as text]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [medley.core :as medley]
-            [cljs.test :refer [deftest are testing]]))
+            [cljs.test :refer [deftest are is testing]]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -87,7 +87,7 @@
           properties (->> (take-while directive? ast)
                           (map (fn [[_ k v]]
                                  (let [k (keyword (string/lower-case k))
-                                       v (if (contains? #{:title :description} k)
+                                       v (if (contains? #{:title :description :roam_tags} k)
                                            v
                                            (text/split-page-refs-without-brackets v))]
                                    [k v])))
@@ -120,8 +120,12 @@
                      (->> (string/split org-file-tags ":")
                           (remove string/blank?)))
           roam-tags (if-let [org-roam-tags (:roam_tags properties)]
-                      (->> (string/split org-roam-tags " ")
-                           (remove string/blank?)))
+                      (let [pat #"\"(.*?)\"" ;; note: lazy, capturing group
+                            quoted (map second (re-seq pat org-roam-tags))
+                            rest   (string/replace org-roam-tags pat "")
+                            rest (->> (string/split rest " ")
+                                      (remove string/blank?))]
+                        (concat quoted rest)))
           tags (->vec-concat roam-tags (:tags properties) definition-tags filetags)
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
@@ -217,4 +221,13 @@ body
           props (parse-properties content "org")]
       (are [x y] (= x y)
         ["roam1" "roam2"] (:roam_tags props)
-        (list "filetag" "roam1" "roam2") (sort (:tags props))))))
+        (list "filetag" "roam1" "roam2") (sort (:tags props)))))
+
+  (testing "quoted roam tags"
+    (let [content "
+#+ROAM_TAGS: \"why would\"  you use \"spaces\" xxx
+body
+"
+          props (parse-properties content "org")]
+      ;; TODO maybe need to sort or something
+      (is (= ["why would" "spaces" "you" "use" "xxx"] (:roam_tags props))))))
