@@ -8,7 +8,8 @@
             [goog.object :as gobj]
             [frontend.text :as text]
             ["mldoc" :as mldoc :refer [Mldoc]]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [cljs.test :refer [deftest are testing]]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -182,3 +183,19 @@
                      (if (and properties (seq properties))
                        properties))]
     (into {} properties)))
+
+
+(deftest test-parse-org-properties
+  []
+  (let [format "org"
+        content "
+#+TITLE:  Some title
+#+FILETAGS:   :tag1:tag_2:@tag:
+#+ROAM_TAGS:  roamtag
+body"
+        props (parse-properties content format)]
+    (are [x y] (= x y)
+      "Some title" (:title props)
+      (list "@tag" "tag1" "tag_2") (sort (:filetags props))
+      ["roamtag"] (:roam_tags props)
+      (list "@tag" "roamtag" "tag1" "tag_2") (sort (:tags props)))))
