@@ -190,7 +190,7 @@
                                    :path-params {:path path}}))))))
 
 (defn alter-files
-  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db? chan chan-callback]
+  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db? chan chan-callback resolved-handler]
                :or {add-history? true
                     update-status? true
                     reset? false
