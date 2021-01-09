@@ -7,8 +7,9 @@
 ;; Undo && Redo that works with files
 
 ;; TODO:
-;; 1. undo-tree
-;; 2. db-only version, store transactions instead of file patches
+;; 1. preserve cursor positions when undo/redo
+;; 2. undo-tree
+;; 3. db-only version, store transactions instead of file patches
 
 ;; repo file -> contents transactions sequence
 (defonce history (atom {}))
@@ -56,6 +57,7 @@
                                       :re-render-root? true})))]
         (-> (p/all promises)
             (p/then (fn []
+                      (db/clear-query-state!)
                       (swap! history-idx assoc repo idx')
                       (reset! *undoing? false))))))))
 
@@ -76,5 +78,6 @@
                                       :re-render-root? true})))]
         (-> (p/all promises)
             (p/then (fn []
+                      (db/clear-query-state!)
                       (swap! history-idx assoc repo (inc idx))
                       (reset! *redoing? false))))))))
