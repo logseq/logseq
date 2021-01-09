@@ -119,11 +119,14 @@
           filetags (if-let [org-file-tags (:filetags properties)]
                      (->> (string/split org-file-tags ":")
                           (remove string/blank?)))
-          tags (->vec-concat (:roam_tags properties) (:tags properties) definition-tags filetags)
+          roam-tags (if-let [org-roam-tags (:roam_tags properties)]
+                      (->> (string/split org-roam-tags " ")
+                           (remove string/blank?)))
+          tags (->vec-concat roam-tags (:tags properties) definition-tags filetags)
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
                          (update :roam_alias ->vec)
-                         (update :roam_tags ->vec)
+                         (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
           properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
           other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
@@ -187,15 +190,31 @@
 
 (deftest test-parse-org-properties
   []
-  (let [format "org"
-        content "
-#+TITLE:  Some title
+  (testing "just title"
+    (let [content "#+TITLE:   some title   "
+          props (parse-properties content "org")]
+      (are [x y] (= x y)
+        ;; TODO: should we trim in parse-properties?
+        "some title" (string/trim (:title props)))))
+
+  (testing "filetags"
+    (let [content "
 #+FILETAGS:   :tag1:tag_2:@tag:
 #+ROAM_TAGS:  roamtag
 body"
-        props (parse-properties content format)]
-    (are [x y] (= x y)
-      "Some title" (:title props)
-      (list "@tag" "tag1" "tag_2") (sort (:filetags props))
-      ["roamtag"] (:roam_tags props)
-      (list "@tag" "roamtag" "tag1" "tag_2") (sort (:tags props)))))
+          props (parse-properties content "org")]
+      (are [x y] (= x y)
+        (list "@tag" "tag1" "tag_2") (sort (:filetags props))
+        ["roamtag"] (:roam_tags props)
+        (list "@tag" "roamtag" "tag1" "tag_2") (sort (:tags props)))))
+
+  (testing "roam tags"
+    (let [content "
+#+FILETAGS: filetag
+#+ROAM_TAGS: roam1 roam2
+body
+"
+          props (parse-properties content "org")]
+      (are [x y] (= x y)
+        ["roam1" "roam2"] (:roam_tags props)
+        (list "filetag" "roam1" "roam2") (sort (:tags props))))))
