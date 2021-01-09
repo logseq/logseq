@@ -454,6 +454,7 @@
                          {:page/original-name alias
                           :page/name (string/lower-case alias)})
                        (remove #{(:page/name page)} alias)))
+
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
@@ -1423,36 +1424,40 @@
             dummy?)
     (save-block-aux! block value format {})))
 
+(defonce *auto-saving? (atom false))
 (defn save-current-block-when-idle!
   ([]
    (save-current-block-when-idle! {}))
   ([{:keys [check-idle? chan chan-callback]
      :or {check-idle? true}}]
-   (when-let [repo (state/get-current-repo)]
-     (when (and (if check-idle? (state/input-idle? repo) true)
-                (not (state/get-editor-show-page-search?))
-                (not (state/get-editor-show-page-search-hashtag?))
-                (not (state/get-editor-show-block-search?)))
-       (state/set-editor-op! :auto-save)
-       (try
-         (let [input-id (state/get-edit-input-id)
-               block (state/get-edit-block)
-               db-block (when-let [block-id (:block/uuid block)]
-                          (db/pull [:block/uuid block-id]))
-               elem (and input-id (gdom/getElement input-id))
-               db-content (:block/content db-block)
-               db-content-without-heading (and db-content
-                                               (util/safe-subs db-content (:block/level db-block)))
-               value (and elem (gobj/get elem "value"))]
-           (when (and block value db-content-without-heading
-                      (or
-                       (not= (string/trim db-content-without-heading)
-                             (string/trim value))))
-             (let [cur-pos (util/get-input-pos elem)]
-               (save-block-aux! db-block value (:block/format db-block) {:chan chan}))))
-         (catch js/Error error
-           (log/error :save-block-failed error)))
-       (state/set-editor-op! nil)))))
+   (when-not @*auto-saving?
+     (reset! *auto-saving? true)
+     (when-let [repo (state/get-current-repo)]
+       (when (and (if check-idle? (state/input-idle? repo) true)
+                  (not (state/get-editor-show-page-search?))
+                  (not (state/get-editor-show-page-search-hashtag?))
+                  (not (state/get-editor-show-block-search?)))
+         (state/set-editor-op! :auto-save)
+         (try
+           (let [input-id (state/get-edit-input-id)
+                 block (state/get-edit-block)
+                 db-block (when-let [block-id (:block/uuid block)]
+                            (db/pull [:block/uuid block-id]))
+                 elem (and input-id (gdom/getElement input-id))
+                 db-content (:block/content db-block)
+                 db-content-without-heading (and db-content
+                                                 (util/safe-subs db-content (:block/level db-block)))
+                 value (and elem (gobj/get elem "value"))]
+             (when (and block value db-content-without-heading
+                        (or
+                         (not= (string/trim db-content-without-heading)
+                               (string/trim value))))
+               (save-block-aux! db-block value (:block/format db-block) {:chan chan
+                                                                         :chan-callback chan-callback})))
+           (catch js/Error error
+             (log/error :save-block-failed error)))
+         (state/set-editor-op! nil)))
+     (reset! *auto-saving? false))))
 
 (defn on-up-down
   [state e up?]
