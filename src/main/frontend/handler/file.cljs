@@ -249,6 +249,7 @@
                         (history/add-history! repo files-tx))))]
     (-> (p/all (map write-file-f files))
         (p/then (fn []
+                  (prn "all files written")
                   (git-add-f)
                   (when chan
                     (async/put! chan true))))
