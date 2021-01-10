@@ -40,6 +40,11 @@
     (and (string/includes? ua "webkit")
          (not (string/includes? ua "chrome")))))
 
+(defn mobile?
+  []
+  (when-not node-test?
+    (re-find #"Mobi" js/navigator.userAgent)))
+
 (defn format
   [fmt & args]
   (apply gstring/format fmt args))
