@@ -1908,13 +1908,13 @@
                       (rest blocks)
                       blocks)
              first-id (:block/uuid (first blocks))]
-         (for [item blocks]
+         (for [[idx item] (medley/indexed blocks)]
            (let [item (-> (if (:block/dummy? item)
                             item
                             (dissoc item :block/meta)))
-                 item (if (= first-id (:block/uuid item))
-                        (assoc item :block/idx 0)
-                        item)
+                 item (assoc item
+                             :block/idx idx
+                             :block/container (:id config))
                  config (assoc config :block/uuid (:block/uuid item))]
              (rum/with-key
                (block-container config item)

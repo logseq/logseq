@@ -143,13 +143,15 @@
                              (assoc :file/created-at t)))])]
       (db/transact! repo-url tx))))
 
-;; TODO: better name to separate from reset-file!
+;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? add-history? update-status?]
                       :or {reset? true
                            re-render-root? false
                            add-history? true
                            update-status? false}}]
+  (prn "alter file:" {:editor/pos (state/get-edit-pos)
+        :editor/block (state/get-edit-block)})
   (let [original-content (db/get-file-no-sub repo path)]
     (if reset?
       (do

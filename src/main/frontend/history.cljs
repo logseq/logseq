@@ -29,7 +29,22 @@
                              patches (diff/get-patches new old diffs)]
                          [file patches]))))]
     (when (seq tx)
-      (let [length (count (get @history repo))
+      ;; FIXME: it's the new edit block instead of the previous one
+      (let [tx (if-let [edit-block (state/get-edit-block)]
+                 (do
+                   {:data tx
+                   ;; other state
+                   :pos (state/get-edit-pos)
+                   ;; TODO: right sidebar, what if multiple buffers later?
+                   ;; :right-sidebar? false
+
+                   ;; block-id will be updated when parsing the content, so it's
+                   ;; not reliably.
+                   ;; :block-id (:block/uuid edit-block)
+                   :block-idx (:block/idx edit-block)
+                   :block-container (:block/container edit-block)})
+                 {:tx/data tx})
+            length (count (get @history repo))
             idx (get @history-idx repo 0)]
         (when (and (>= length history-limit)
                    (>= idx history-limit))
@@ -44,14 +59,16 @@
 (defonce *undoing? (atom false))
 
 (defn undo!
-  [repo alter-file]
+  [repo alter-file restore-cursor]
   (let [idx (get @history-idx repo 0)]
     (when (and (> idx 0) (false? @*undoing?))
       (let [idx' (dec idx)
             tx (get-in @history [repo idx'])
+            {:keys [data]} tx
+            _ (prn {:tx tx})
             _ (reset! *undoing? true)
-            _ (state/clear-edit!)
-            promises (for [[path patches] tx]
+            ;; _ (state/clear-edit!)
+            promises (for [[path patches] data]
                        (let [current-content (db/get-file-no-sub path)
                              original-content (diff/apply-patches! current-content patches)]
                          (alter-file repo path original-content
@@ -61,7 +78,12 @@
             (p/then (fn []
                       (db/clear-query-state!)
                       (swap! history-idx assoc repo idx')
-                      (reset! *undoing? false))))))))
+                      (reset! *undoing? false)
+                      ;; restore cursor
+                      (when (> idx' 0)
+                        (let [prev-tx (get-in @history [repo (dec idx')])]
+                          (prn {:prev-tx prev-tx})
+                          (when restore-cursor (restore-cursor prev-tx)))))))))))
 
 (defonce *redoing? (atom false))
 (defn redo!
@@ -69,7 +91,7 @@
   (let [idx (get @history-idx repo 0)
         txs (get @history repo)]
     (when (and (> (count txs) idx) (false? @*redoing?))
-      (let [tx (get-in @history [repo idx])
+      (let [tx (:data (get-in @history [repo idx]))
             _ (reset! *redoing? true)
             _ (state/clear-edit!)
             promises (for [[path patches] tx]
