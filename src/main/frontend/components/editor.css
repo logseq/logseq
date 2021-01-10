@@ -42,6 +42,14 @@
   }
 }
 
+.is-mobile {
+  .absolute-modal {
+    &.is-overflow-vw-x {
+      transform: translateX(-1%);
+    }
+  }
+}
+
 .non-block-editor textarea,
 pre {
   display: block;
