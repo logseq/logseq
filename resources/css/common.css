@@ -565,15 +565,6 @@ li p:last-child,
 /** endregion **/
 
 /* region FIXME: override elements (?) */
-a.block-control,
-a.block-control:hover {
-  text-decoration: none;
-  cursor: pointer;
-  font-size: 14px;
-  min-width: 10px;
-  color: initial;
-}
-
 h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
