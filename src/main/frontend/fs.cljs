@@ -2,6 +2,7 @@
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.state :as state]
+            [frontend.encrypt :as encrypt]
             [clojure.string :as string]
             [frontend.idb :as idb]
             [frontend.db :as db]
@@ -9,11 +10,7 @@
             [goog.object :as gobj]
             [clojure.set :as set]
             [lambdaisland.glogi :as log]
-            ["/frontend/utils" :as utils]
-            ["tweetnacl" :as nacl]
-            ["tweetnacl-util" :as nacl-util]
-            ["bip39" :as bip39]
-            ["buffer" :as buffer]))
+            ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
 ;; the browser will not keep asking permissions.
@@ -127,52 +124,21 @@
     :else
     (js/window.workerThread.rimraf dir)))
 
-;; (println (bip39/generateMnemonic 256))
-;; (defonce secret "IRwamok0gbumjx41O0z83V/nzcqrac5vML6P62zS23c=")
-(defonce secret (.from buffer/Buffer (bip39/mnemonicToEntropy "canal this pluck bar elite tape olive toilet cry surprise dish rival wrist tragic click honey solar kangaroo cook cabin replace harvest horse wrong") "hex"))
-
-(defn new-nonce
-  []
-  (nacl/randomBytes nacl/secretbox.nonceLength))
-
-(defn encrypt
-  [key content]
-  (when key
-    (let [nonce (new-nonce)
-          content-decoded (nacl-util/decodeUTF8 content)
-          box (nacl/secretbox content-decoded nonce key)
-          full-message (new js/Uint8Array (+ nonce.length box.length))]
-      (js/console.log "nonce" (nacl-util/encodeBase64 nonce))
-      (js/console.log "box" (nacl-util/encodeBase64 box))
-      (.set full-message nonce)
-      (.set full-message box nonce.length)
-      (nacl-util/encodeBase64 full-message))))
-
-(defn decrypt
-  [key content-with-nonce]
-  (when key
-    (let [content-with-nonce-decoded (nacl-util/decodeBase64 content-with-nonce)
-          nonce (.slice content-with-nonce-decoded 0 nacl/secretbox.nonceLength)
-          content (.slice content-with-nonce-decoded nacl/secretbox.nonceLength content-with-nonce.length)
-          decrypted (nacl-util/encodeUTF8 (nacl/secretbox.open content nonce key))]
-      (println "decrypted" decrypted)
-      decrypted)))
-
 (defn read-file
   ([dir path]
    (read-file dir path (clj->js {:encoding "utf8"})))
   ([dir path option]
-   (p/let 
-       [encrypted-content (cond
-                            (local-db? dir)
-                            (let [handle-path (str "handle" dir "/" path)]
-                              (p/let [handle (idb/get-item handle-path)
-                                      local-file (and handle (.getFile handle))]
-                                (and local-file (.text local-file))))
+   (p/let
+    [encrypted-content (cond
+                         (local-db? dir)
+                         (let [handle-path (str "handle" dir "/" path)]
+                           (p/let [handle (idb/get-item handle-path)
+                                   local-file (and handle (.getFile handle))]
+                             (and local-file (.text local-file))))
 
-                            :else
-                            (js/window.pfs.readFile (str dir "/" path) option))]
-     (decrypt secret encrypted-content))))
+                         :else
+                         (js/window.pfs.readFile (str dir "/" path) option))]
+     (encrypt/decrypt encrypted-content))))
 
 (defn nfs-saved-handler
   [repo path file]
@@ -203,7 +169,7 @@
                           (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
                           sub-dir-handle-path)
             basename-handle-path (str handle-path "/" basename)
-            encrypted-content (encrypt secret content)]
+            encrypted-content (encrypt/encrypt content)]
         (p/let [file-handle (idb/get-item basename-handle-path)]
           (when file-handle
             (add-nfs-file-handle! basename-handle-path file-handle))
@@ -258,7 +224,7 @@
                         (js/console.error error)))))))
 
       js/window.pfs
-      (let [encrypted-content (encrypt secret content)]
+      (let [encrypted-content (encrypt/encrypt content)]
         (js/window.pfs.writeFile (str dir "/" path) encrypted-content))
 
       :else
@@ -269,7 +235,7 @@
                                                :error error})
                ;; Disable this temporarily
                ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-)))))
+               )))))
 
 (defn rename
   [repo old-path new-path]

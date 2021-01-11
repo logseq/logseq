@@ -18,6 +18,7 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.config :as config]
+            [frontend.encrypt :as encrypt]
             [lambdaisland.glogi :as log]))
 
 (defn remove-ignore-files
@@ -124,7 +125,7 @@
              markup-files (filter-markup-and-built-in-files files)]
        (-> (p/all (map (fn [file]
                          (p/let [content (.text (:file/file file))]
-                           (assoc file :file/content (fs/decrypt fs/secret content)))) markup-files))
+                           (assoc file :file/content (encrypt/decrypt content)))) markup-files))
            (p/then (fn [result]
                      _ (state/set-loading-files! false)
                      (let [files (map #(dissoc % :file/file) result)]
@@ -240,7 +241,7 @@
               (-> (p/all (map (fn [path]
                                 (when-let [file (get-file-f path new-files)]
                                   (p/let [content (.text (:file/file file))]
-                                    (assoc file :file/content (fs/decrypt fs/secret content))))) added-or-modified))
+                                    (assoc file :file/content (encrypt/decrypt content))))) added-or-modified))
                   (p/then (fn [result]
                             (let [files (map #(dissoc % :file/file :file/handle) result)
                                   non-modified? (fn [file]
@@ -258,7 +259,7 @@
                                          (rename-f "modify" modified))]
                               (when (or (and (seq diffs) (seq modified-files))
                                         (seq diffs) ; delete
-)
+                                        )
                                 (repo-handler/load-repo-to-db! repo
                                                                {:diffs diffs
                                                                 :nfs-files modified-files})))))))))
