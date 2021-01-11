@@ -630,7 +630,14 @@
 (defn set-editing!
   [edit-input-id content block cursor-range]
   (when edit-input-id
-    (let [content (or content "")]
+    (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+          {:keys [idx container]} (util/get-block-idx-inside-container block-element)
+          block (if (and idx container)
+                  (assoc block
+                         :block/idx idx
+                         :block/container (gobj/get container "id"))
+                  block)
+          content (or content "")]
       (swap! state
              (fn [state]
                (-> state

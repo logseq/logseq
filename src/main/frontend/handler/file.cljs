@@ -152,7 +152,8 @@
                            update-status? false}}]
   (prn "alter file:" {:editor/pos (state/get-edit-pos)
         :editor/block (state/get-edit-block)})
-  (let [original-content (db/get-file-no-sub repo path)]
+  (let [edit-block (state/get-edit-block)
+        original-content (db/get-file-no-sub repo path)]
     (if reset?
       (do
         (when-let [page-id (db/get-file-page-id path)]

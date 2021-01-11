@@ -366,8 +366,8 @@
                              (get-edit-input-id-with-block-id id)
                              (str (subs id 0 (- (count id) 36)) block-id))
              block (or
-                    block
                     (db/pull [:block/uuid block-id])
+                    block
                     ;; dummy?
                     {:block/uuid block-id
                      :block/content ""})

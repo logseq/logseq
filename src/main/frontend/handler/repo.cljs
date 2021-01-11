@@ -23,7 +23,9 @@
             [frontend.ui :as ui]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            [frontend.spec :as spec]))
+            [frontend.spec :as spec]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -310,6 +312,16 @@
    (let [files (remove nil? files)
          pages (->> (map db/get-file-page (map first files))
                     (remove nil?))]
+     (let [edit-block (state/get-edit-block)
+           edit-input-id (state/get-edit-input-id)
+           block-element (when edit-input-id (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block")))
+           {:keys [idx container]} (when block-element
+                                     (util/get-block-idx-inside-container block-element))]
+       (when (and idx container)
+         (state/set-state! :editor/last-edit-block {:block edit-block
+                                               :idx idx
+                                                    :container (gobj/get container "id")})))
+
      (db/transact-react!
       repo
       tx
@@ -319,7 +331,8 @@
          (when (seq children-tx)
            (db/transact! repo children-tx))))
      (when (seq files)
-       (file-handler/alter-files repo files opts)))))
+       (file-handler/alter-files repo files opts))
+     )))
 
 (declare push)
 

@@ -1119,7 +1119,7 @@
           (datetime-comp/date-picker nil nil ts)]))]))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid       (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
@@ -1137,7 +1137,8 @@
                                       (let [cursor-range (util/caret-range (gdom/getElement block-id))
                                             properties-hidden? (text/properties-hidden? properties)
                                             content (text/remove-level-spaces content format)
-                                            content (if properties-hidden? (text/remove-properties! content) content)]
+                                            content (if properties-hidden? (text/remove-properties! content) content)
+                                            block (db/pull [:block/uuid (:block/uuid block)])]
                                         (state/set-editing!
                                          edit-input-id
                                          content
@@ -1912,9 +1913,6 @@
            (let [item (-> (if (:block/dummy? item)
                             item
                             (dissoc item :block/meta)))
-                 item (assoc item
-                             :block/idx idx
-                             :block/container (:id config))
                  config (assoc config :block/uuid (:block/uuid item))]
              (rum/with-key
                (block-container config item)

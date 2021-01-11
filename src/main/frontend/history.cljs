@@ -3,7 +3,11 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [promesa.core :as p]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [clojure.string :as string]
+            [frontend.util :as util]))
 
 ;; Undo && Redo that works with files
 
@@ -25,25 +29,27 @@
   (let [tx (->> tx
                 (remove (fn [[_ old new]] (= old new)))
                 (map (fn [[file old new]]
-                       (let [diffs (diff/diffs new old)
-                             patches (diff/get-patches new old diffs)]
-                         [file patches]))))]
+                       (when (and old new)
+                         (let [diffs (diff/diffs new old)
+                              patches (diff/get-patches new old diffs)]
+                           [file patches]))))
+                (remove nil?))]
     (when (seq tx)
       ;; FIXME: it's the new edit block instead of the previous one
-      (let [tx (if-let [edit-block (state/get-edit-block)]
-                 (do
-                   {:data tx
-                   ;; other state
-                   :pos (state/get-edit-pos)
-                   ;; TODO: right sidebar, what if multiple buffers later?
-                   ;; :right-sidebar? false
+      (let [last-edit-block (get @state/state :editor/last-edit-block)
+            tx (if last-edit-block
+                 {:data tx
+                  ;; other state
+                  :pos (state/get-edit-pos)
+                  ;; TODO: right sidebar, what if multiple buffers later?
+                  ;; :right-sidebar? false
 
-                   ;; block-id will be updated when parsing the content, so it's
-                   ;; not reliably.
-                   ;; :block-id (:block/uuid edit-block)
-                   :block-idx (:block/idx edit-block)
-                   :block-container (:block/container edit-block)})
-                 {:tx/data tx})
+                  ;; block-id will be updated when parsing the content, so it's
+                  ;; not reliably.
+                  ;; :block-id (:block/uuid edit-block)
+                  :block-idx (:idx last-edit-block)
+                  :block-container (:container last-edit-block)}
+                 {:data tx})
             length (count (get @history repo))
             idx (get @history-idx repo 0)]
         (when (and (>= length history-limit)
@@ -65,7 +71,6 @@
       (let [idx' (dec idx)
             tx (get-in @history [repo idx'])
             {:keys [data]} tx
-            _ (prn {:tx tx})
             _ (reset! *undoing? true)
             ;; _ (state/clear-edit!)
             promises (for [[path patches] data]
@@ -87,7 +92,7 @@
 
 (defonce *redoing? (atom false))
 (defn redo!
-  [repo alter-file]
+  [repo alter-file restore-cursor]
   (let [idx (get @history-idx repo 0)
         txs (get @history repo)]
     (when (and (> (count txs) idx) (false? @*redoing?))
@@ -104,4 +109,6 @@
         (-> (p/all promises)
             (p/then (fn []
                       (swap! history-idx assoc repo (inc idx))
-                      (reset! *redoing? false))))))))
+                      (reset! *redoing? false)
+                      ;; restore cursor
+                      (when restore-cursor (restore-cursor tx)))))))))
