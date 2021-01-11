@@ -96,10 +96,10 @@
   (let [idx (get @history-idx repo 0)
         txs (get @history repo)]
     (when (and (> (count txs) idx) (false? @*redoing?))
-      (let [tx (:data (get-in @history [repo idx]))
+      (let [tx (get-in @history [repo idx])
             _ (reset! *redoing? true)
-            _ (state/clear-edit!)
-            promises (for [[path patches] tx]
+            ;; _ (state/clear-edit!)
+            promises (for [[path patches] (:data tx)]
                        (let [current-content (db/get-file-no-sub path)
                              reversed-patches (utils/reversePatch patches)
                              content (diff/apply-patches! current-content reversed-patches)]
