@@ -22,6 +22,7 @@
     max-width: 100%;
 
     /* FIXME: img macros */
+
     &.left {
       float: left;
     }
@@ -227,8 +228,10 @@
     height: 6px;
     background-color: var(--ls-block-bullet-color, #394b59);
     transition: transform .2s;
+  }
 
-    &:hover {
+  &:hover {
+    .bullet {
       transform: scale(1.2);
     }
   }
