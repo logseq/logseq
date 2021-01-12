@@ -1,6 +1,16 @@
 .blocks-container {
 }
 
+.block-control,
+.block-control:hover {
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 10px;
+  color: initial;
+  user-select: none;
+}
+
 .block-content {
   min-height: 24px;
   max-width: 100%;
@@ -12,6 +22,7 @@
     max-width: 100%;
 
     /* FIXME: img macros */
+
     &.left {
       float: left;
     }
@@ -201,8 +212,8 @@
 
 .bullet-container {
   display: flex;
-  height: 13px;
-  width: 13px;
+  height: 12px;
+  width: 12px;
   border-radius: 50%;
   justify-content: center;
   align-items: center;
@@ -213,9 +224,16 @@
 
   .bullet {
     border-radius: 50%;
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
     background-color: var(--ls-block-bullet-color, #394b59);
+    transition: transform .2s;
+  }
+
+  &:hover {
+    .bullet {
+      transform: scale(1.2);
+    }
   }
 
   &.bullet-closed {
