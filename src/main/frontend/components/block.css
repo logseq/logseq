@@ -30,6 +30,10 @@
     &.right {
       float: right;
     }
+
+    &.loading-asset {
+      width: 9px;
+    }
   }
 }
 

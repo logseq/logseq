@@ -6,6 +6,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [frontend.util :as util]
+            [frontend.handler.common :as common-handler]
             ["/frontend/utils" :as utils]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
@@ -45,13 +46,13 @@
                  get-attr #(gobj/get file %)
                  path (-> (get-attr "webkitRelativePath")
                           (string/replace-first (str dir-name "/") ""))]
-             {:file/name (get-attr "name")
-              :file/path path
+             {:file/name             (get-attr "name")
+              :file/path             path
               :file/last-modified-at (get-attr "lastModified")
-              :file/size (get-attr "size")
-              :file/type (get-attr "type")
-              :file/file file
-              :file/handle handle})) result)))
+              :file/size             (get-attr "size")
+              :file/type             (get-attr "type")
+              :file/file             file
+              :file/handle           handle})) result)))
 
 (defn- filter-markup-and-built-in-files
   [files]
@@ -63,7 +64,7 @@
 (defn- set-batch!
   [handles]
   (let [handles (map (fn [[path handle]]
-                       {:key path
+                       {:key   path
                         :value handle}) handles)]
     (idb/set-batch! handles)))
 
@@ -131,7 +132,7 @@
                        (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                        (repo-handler/load-repo-to-db! repo
                                                       {:first-clone? true
-                                                       :nfs-files files})
+                                                       :nfs-files    files})
 
                        (state/add-repo! {:url repo :nfs? true}))))
            (p/catch (fn [error]
@@ -187,9 +188,9 @@
         added (set/difference new-file-paths old-file-paths)
         deleted (set/difference old-file-paths new-file-paths)
         modified (set/difference new-file-paths added)]
-    {:added added
+    {:added    added
      :modified modified
-     :deleted deleted}))
+     :deleted  deleted}))
 
 (defn- reload-dir!
   ([repo]
@@ -204,7 +205,7 @@
        (->
         (p/let [handle (idb/get-item handle-path)]
           (when handle
-            (p/let [_ (when handle (utils/verifyPermission handle true))
+            (p/let [_ (when handle (common-handler/verify-permission repo handle true))
                     files-result (utils/getFiles handle true
                                                  (fn [path handle]
                                                    (swap! path-handles assoc path handle)))
@@ -260,7 +261,7 @@
                                         (seq diffs) ; delete
 )
                                 (repo-handler/load-repo-to-db! repo
-                                                               {:diffs diffs
+                                                               {:diffs     diffs
                                                                 :nfs-files modified-files})))))))))
         (p/catch (fn [error]
                    (log/error :nfs/load-files-error error)))

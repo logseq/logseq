@@ -25,6 +25,7 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
+    :nfs/user-granted? {}
     :nfs/loading-files? nil
     :nfs/refreshing? nil
     ;; TODO: how to detect the network reliably?

@@ -1,5 +1,6 @@
 (ns frontend.handler.editor
   (:require [frontend.state :as state]
+            [frontend.db.model :as db-model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.git :as git-handler]
@@ -1515,29 +1516,97 @@
     :org (util/format "[[%s][%s]]" url file-name)
     nil))
 
+(defn- get-asset-link
+  [url]
+  (str "/" url))
+
+(defn ensure-assets-dir!
+  [repo]
+  (let [repo-dir (util/get-repo-dir repo)
+        assets-dir "assets"]
+    (p/then
+     (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
+     (fn [] [repo-dir assets-dir]))))
+
+(defn save-assets!
+  ([{block-id :block/uuid} repo files]
+   (when-let [block-file (db-model/get-block-file block-id)]
+     (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
+       (let [prefix (:file/path block-file)
+             prefix (and prefix (string/replace prefix "/" "_"))
+             prefix (and prefix (subs prefix 0 (string/last-index-of prefix ".")))]
+         (save-assets! repo repo-dir assets-dir files
+                       (fn [index]
+                         (str prefix "_" (.now js/Date) "_" index)))))))
+  ([repo dir path files gen-filename]
+   (p/all
+    (for [[index file] (map-indexed vector files)]
+      (let [ext (.-name file)
+            ext (if ext (subs ext (string/last-index-of ext ".")) "")
+            filename (str (gen-filename index file) ext)
+            filename (str path "/" filename)]
+        ;(js/console.debug "Write asset #" filename file)
+        (p/then (fs/write-file repo dir filename (.stream file))
+                #(p/resolved [filename file])))))))
+
+(def *assets-url-cache (atom {}))
+
+(defn make-asset-url
+  [path]                                                    ;; path start with "/assets" or compatible for "../assets"
+  (let [repo-dir (util/get-repo-dir (state/get-current-repo))
+        path (string/replace path "../" "/")
+        handle-path (str "handle" repo-dir path)
+        cached-url (get @*assets-url-cache (keyword handle-path))]
+    (if cached-url
+      (p/resolved cached-url)
+      (p/let [handle (frontend.idb/get-item handle-path)
+              file (and handle (.getFile handle))]
+        (when file
+          (p/let [url (js/URL.createObjectURL file)]
+            (swap! *assets-url-cache assoc (keyword handle-path) url)
+            url))))))
+
 (defn upload-image
   [id files format uploading? drop-or-paste?]
-  (image/upload
-   files
-   (fn [file file-name file-type]
-     (image-handler/request-presigned-url
-      file file-name file-type
-      uploading?
-      (fn [signed-url]
-        (insert-command! id
-                         (get-image-link format signed-url file-name)
-                         format
-                         {:last-pattern (if drop-or-paste? "" commands/slash)
-                          :restore? true})
+  (let [repo (state/get-current-repo)
+        block (state/get-edit-block)]
+    (if (config/local-db? repo)
+      (-> (save-assets! block repo (js->clj files))
+          (p/then
+           (fn [res]
+             (when-let [[url file] (and (seq res) (first res))]
+               (insert-command!
+                id
+                (get-image-link format (get-asset-link url) (.-name file))
+                format
+                {:last-pattern (if drop-or-paste? "" commands/slash)
+                 :restore?     true}))))
+          (p/finally
+            (fn []
+              (reset! uploading? false)
+              (reset! *image-uploading? false)
+              (reset! *image-uploading-process 0))))
+      (image/upload
+       files
+       (fn [file file-name file-type]
+         (image-handler/request-presigned-url
+          file file-name file-type
+          uploading?
+          (fn [signed-url]
+            (insert-command! id
+                             (get-image-link format signed-url file-name)
+                             format
+                             {:last-pattern (if drop-or-paste? "" commands/slash)
+                              :restore?     true})
 
-        (reset! *image-uploading? false)
-        (reset! *image-uploading-process 0))
-      (fn [e]
-        (let [process (* (/ (gobj/get e "loaded")
-                            (gobj/get e "total"))
-                         100)]
-          (reset! *image-uploading? false)
-          (reset! *image-uploading-process process)))))))
+            (reset! *image-uploading? false)
+            (reset! *image-uploading-process 0))
+          (fn [e]
+            (let [process (* (/ (gobj/get e "loaded")
+                                (gobj/get e "total"))
+                             100)]
+              (reset! *image-uploading? false)
+              (reset! *image-uploading-process process)))))))))
 
 (defn set-image-pending-file [file]
   (reset! *image-pending-file file))

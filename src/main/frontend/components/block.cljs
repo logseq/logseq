@@ -2,6 +2,8 @@
   (:refer-clojure :exclude [range])
   (:require [frontend.config :as config]
             [cljs.core.match :refer-macros [match]]
+            [promesa.core :as p]
+            [frontend.fs :as fs]
             [clojure.string :as string]
             [frontend.util :as util]
             [rum.core :as rum]
@@ -154,17 +156,36 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
+(rum/defcs asset-link < rum/reactive
+  (rum/local nil ::src)
+  [state href label]
+  (let [title (second (first label))
+        src (::src state)
+        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
+
+    (when granted?
+      (p/then (editor-handler/make-asset-url href) #(reset! src %)))
+
+    (when @src
+      [:img
+       {:loading "lazy"
+        :src     @src
+        :title   title}])))
+
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [config url href label]
-  (let [href (if (util/starts-with? href "http")
-               href
-               (get-file-absolute-path config href))]
-    [:img.rounded-sm.shadow-xl
-     {:loading "lazy"
-      ;; :on-error (fn [])
-      :src href
-      :title (second (first label))}]))
+  (if (or (util/starts-with? href "/assets")
+          (util/starts-with? href "../assets"))
+    (asset-link href label)
+    (let [href (if (util/starts-with? href "http")
+                 href
+                 (get-file-absolute-path config href))]
+      [:img.rounded-sm.shadow-xl
+       {:loading "lazy"
+        ;; :on-error (fn [])
+        :src     href
+        :title   (second (first label))}])))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]

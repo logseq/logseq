@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [frontend.idb :as idb]
             [frontend.db :as db]
+            [frontend.handler.common :as common-handler]
             [promesa.core :as p]
             [goog.object :as gobj]
             [clojure.set :as set]
@@ -55,7 +56,7 @@
           root-handle (str "handle/" root)]
       (->
        (p/let [handle (idb/get-item root-handle)
-               _ (when handle (utils/verifyPermission handle true))]
+               _ (when handle (common-handler/verify-permission nil handle true))]
          (when (and handle new-dir
                     (not (string/blank? new-dir)))
            (p/let [handle (.getDirectoryHandle ^js handle new-dir
@@ -65,8 +66,8 @@
              (add-nfs-file-handle! handle-path handle)
              (println "Stored handle: " (str root-handle "/" new-dir)))))
        (p/catch (fn [error]
-                  (println "mkdir error: " error ", dir: " dir)
-                  (js/console.error error)))))
+                  (throw error)
+                  (js/console.debug "mkdir error: " error ", dir: " dir)))))
 
     (and dir js/window.pfs)
     (js/window.pfs.mkdir dir)
@@ -194,7 +195,7 @@
                         not-changed?
                         new-created?))
                 (do
-                  (p/let [_ (utils/verifyPermission file-handle true)
+                  (p/let [_ (common-handler/verify-permission repo file-handle true)
                           _ (utils/writeFile file-handle content)
                           file (.getFile file-handle)]
                     (when file
@@ -207,7 +208,7 @@
              (p/let [handle (idb/get-item handle-path)]
                (if handle
                  (do
-                   (p/let [_ (utils/verifyPermission handle true)
+                   (p/let [_ (common-handler/verify-permission repo handle true)
                            file-handle (.getFileHandle ^js handle basename #js {:create true})
                            _ (idb/set-item! basename-handle-path file-handle)
                            _ (utils/writeFile file-handle content)
@@ -320,4 +321,4 @@
   (when (config/local-db? repo)
     (p/let [handle (idb/get-item (str "handle/" repo))]
       (when handle
-        (utils/verifyPermission handle true)))))
+        (common-handler/verify-permission repo handle true)))))

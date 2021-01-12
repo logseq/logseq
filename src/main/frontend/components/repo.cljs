@@ -87,8 +87,8 @@
   {:did-mount (fn [state]
                 (js/setTimeout common-handler/check-changed-files-status 1000)
                 state)}
-  []
-  (when-let [repo (state/get-current-repo)]
+  [repo]
+  (when repo
     (let [nfs-repo? (config/local-db? repo)]
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
