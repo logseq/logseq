@@ -22,6 +22,7 @@
          (map string/lower-case)
          (distinct))))
 
+;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   [repo-url format ast properties file content utf8-content journal? pages-fn]
   (try
@@ -55,8 +56,8 @@
                   (fn [page]
                     (let [page-file? (= page (string/lower-case file))
                           aliases (and (:alias properties)
-                                           (seq (remove #(= page %)
-                                                        (:alias properties))))
+                                       (seq (remove #(= page %)
+                                                    (:alias properties))))
                           journal-date-long (if journal?
                                               (date/journal-title->long (string/capitalize page)))
                           page-list (when-let [list-content (:list properties)]
@@ -93,14 +94,14 @@
                                       {:page/name page-name
                                        :page/alias aliases}
                                       {:page/name page-name})))
-                                 aliases))
+                                aliases))
 
                         (:tags properties)
                         (assoc :page/tags (let [tags (:tags properties)]
                                             (swap! ref-tags set/union (set tags))
                                             (map (fn [tag] {:page/name (string/lower-case tag)
-                                                           :page/original-name tag})
-                                              tags))))))
+                                                            :page/original-name tag})
+                                                 tags))))))
                   (->> (map first pages)
                        (remove nil?))))
           pages (concat

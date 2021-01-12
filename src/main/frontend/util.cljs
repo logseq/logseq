@@ -625,6 +625,13 @@
     (and node
          (rec-get-blocks-container (gobj/get node "parentNode")))))
 
+(defn rec-get-blocks-content-section
+  [node]
+  (if (and node (d/has-class? node "content"))
+    node
+    (and node
+         (rec-get-blocks-content-section (gobj/get node "parentNode")))))
+
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
 (defn get-selected-nodes
@@ -774,6 +781,17 @@
                   block
                   (recur (inc idx))))
               nil)))))))
+
+(defn get-block-idx-inside-container
+  [block-element]
+  (when block-element
+    (when-let [section (some-> (rec-get-blocks-content-section block-element)
+                          (d/parent))]
+      (let [blocks (d/by-class section "ls-block")
+            idx (when (seq blocks) (.indexOf (array-seq blocks) block-element))]
+        (when (and idx section)
+         {:idx idx
+          :container (gdom/getElement section "id")})))))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))

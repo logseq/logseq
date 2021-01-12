@@ -15,7 +15,7 @@
     {:name :home
      :view home/home}]
 
-   ["/repos"
+   ["/graphs"
     {:name :repos
      :view repo/repos}]
 

@@ -81,6 +81,7 @@
         enable-timetracking? (state/enable-timetracking?)
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
+        enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
         github-token (state/sub [:me :access-token])
@@ -193,12 +194,12 @@
                    (let [value (not enable-timetracking?)]
                      (config-handler/set-config! :feature/enable-timetracking? value))))
 
-         (toggle "enable_block_time"
-                 (t :settings-page/enable-block-time)
-                 enable-block-time?
-                 (fn []
-                   (let [value (not enable-block-time?)]
-                     (config-handler/set-config! :feature/enable-block-time? value))))
+         ;; (toggle "enable_block_time"
+         ;;         (t :settings-page/enable-block-time)
+         ;;         enable-block-time?
+         ;;         (fn []
+         ;;           (let [value (not enable-block-time?)]
+         ;;             (config-handler/set-config! :feature/enable-block-time? value))))
 
          (toggle "enable_journals"
                  (t :settings-page/enable-journals)
@@ -233,6 +234,15 @@
 
                                 :else
                                 (notification/show! "Please make sure the page exists!" :warning))))}]]]])
+
+         (when (string/starts-with? current-repo "https://")
+           (toggle "enable_git_auto_push"
+                  "Enable Git auto push"
+                  enable-git-auto-push?
+                  (fn []
+                    (let [value (not enable-git-auto-push?)]
+                      (config-handler/set-config! :git-auto-push value)))))
+
 
          [:hr]
 

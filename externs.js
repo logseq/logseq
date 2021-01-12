@@ -50,6 +50,9 @@ dummy.values = function() {};
 // Do we really need those?
 dummy.filter = function() {};
 dummy.concat = function() {};
+dummy.diff_main = function() {};
+dummy.patch_make = function() {};
+dummy.patch_apply = function() {};
 
 /**
  * @typedef {{

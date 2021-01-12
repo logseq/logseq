@@ -93,8 +93,9 @@
    "t r" ui-handler/toggle-right-sidebar!
    "t e" state/toggle-new-block-shortcut!
    "s" route-handler/toggle-between-page-and-file!
-   "ctrl+c ctrl+s" (chord-aux search-handler/rebuild-indices!)
-   "ctrl+c ctrl+b" (chord-aux config-handler/toggle-ui-show-brackets!)})
+   "mod+s" (chord-aux editor-handler/save!)
+   "mod+c mod+s" (chord-aux search-handler/rebuild-indices!)
+   "mod+c mod+b" (chord-aux config-handler/toggle-ui-show-brackets!)})
 
 (defonce bind! (gobj/get mousetrap "bind"))
 

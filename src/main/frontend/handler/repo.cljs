@@ -23,7 +23,9 @@
             [frontend.ui :as ui]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            [frontend.spec :as spec]))
+            [frontend.spec :as spec]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -109,38 +111,38 @@
   ([repo-url content]
    (spec/validate :repos/url repo-url)
    (when (state/enable-journals? repo-url)
-       (let [repo-dir (util/get-repo-dir repo-url)
-          format (state/get-preferred-format repo-url)
-          title (date/today)
-          file-name (date/journal-title->default title)
-          default-content (util/default-content-with-title format title false)
-          template (state/get-journal-template)
-          template (if (and template
-                            (not (string/blank? template)))
-                     template)
-          content (cond
-                    content
-                    content
+     (let [repo-dir (util/get-repo-dir repo-url)
+           format (state/get-preferred-format repo-url)
+           title (date/today)
+           file-name (date/journal-title->default title)
+           default-content (util/default-content-with-title format title false)
+           template (state/get-journal-template)
+           template (if (and template
+                             (not (string/blank? template)))
+                      template)
+           content (cond
+                     content
+                     content
 
-                    template
-                    (str default-content template)
+                     template
+                     (str default-content template)
 
-                    :else
-                    (util/default-content-with-title format title true))
-          path (str config/default-journals-directory "/" file-name "."
-                    (config/get-file-extension format))
-          file-path (str "/" path)
-          page-exists? (db/entity repo-url [:page/name (string/lower-case title)])
-          empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
-      (when (or empty-blocks?
-                (not page-exists?))
-        (p/let [_ (fs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
-                file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
-          (when-not file-exists?
-            (file-handler/reset-file! repo-url path content)
-            (ui-handler/re-render-root!)
-            (git-handler/git-add repo-url path))))))))
+                     :else
+                     (util/default-content-with-title format title true))
+           path (str config/default-journals-directory "/" file-name "."
+                     (config/get-file-extension format))
+           file-path (str "/" path)
+           page-exists? (db/entity repo-url [:page/name (string/lower-case title)])
+           empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
+       (when (or empty-blocks?
+                 (not page-exists?))
+         (p/let [_ (fs/check-directory-permission! repo-url)
+                 _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
+                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
+           (when-not file-exists?
+             (file-handler/reset-file! repo-url path content)
+             (ui-handler/re-render-root!)
+             (git-handler/git-add repo-url path))))))))
 
 (defn create-today-journal!
   []
@@ -303,21 +305,34 @@
                  (remove nil?))))))))
 
 (defn transact-react-and-alter-file!
-  [repo tx transact-option files]
-  (spec/validate :repos/url repo)
-  (let [files (remove nil? files)
-        pages (->> (map db/get-file-page (map first files))
-                   (remove nil?))]
-    (db/transact-react!
-     repo
-     tx
-     transact-option)
-    (when (seq pages)
-      (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
-        (when (seq children-tx)
-          (db/transact! repo children-tx))))
-    (when (seq files)
-      (file-handler/alter-files repo files {}))))
+  ([repo tx transact-option files]
+   (transact-react-and-alter-file! repo tx transact-option files {}))
+  ([repo tx transact-option files opts]
+   (spec/validate :repos/url repo)
+   (let [files (remove nil? files)
+         pages (->> (map db/get-file-page (map first files))
+                    (remove nil?))]
+     (let [edit-block (state/get-edit-block)
+           edit-input-id (state/get-edit-input-id)
+           block-element (when edit-input-id (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block")))
+           {:keys [idx container]} (when block-element
+                                     (util/get-block-idx-inside-container block-element))]
+       (when (and idx container)
+         (state/set-state! :editor/last-edit-block {:block edit-block
+                                               :idx idx
+                                                    :container (gobj/get container "id")})))
+
+     (db/transact-react!
+      repo
+      tx
+      transact-option)
+     (when (seq pages)
+       (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
+         (when (seq children-tx)
+           (db/transact! repo children-tx))))
+     (when (seq files)
+       (file-handler/alter-files repo files opts))
+     )))
 
 (declare push)
 
@@ -644,3 +659,7 @@
 (defn get-repo-name
   [url]
   (last (string/split url #"/")))
+
+(defn auto-push!
+  []
+  (git-commit-and-push! "Logseq auto save"))

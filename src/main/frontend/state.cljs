@@ -183,10 +183,19 @@
   (not (false? (:feature/enable-journals?
                 (get (sub-config) repo)))))
 
+(defn enable-git-auto-push?
+  [repo]
+  (not (false? (:git-auto-push
+                (get (sub-config) repo)))))
+
 (defn enable-block-time?
   []
-  (true? (:feature/enable-block-time?
-          (get (sub-config) (get-current-repo)))))
+  ;; (true? (:feature/enable-block-time?
+  ;;         (get (sub-config) (get-current-repo))))
+
+  ;; Disable block timestamps for now, because it doesn't work with undo/redo
+  false
+  )
 
 ;; Enable by default
 (defn show-brackets?
@@ -631,7 +640,14 @@
 (defn set-editing!
   [edit-input-id content block cursor-range]
   (when edit-input-id
-    (let [content (or content "")]
+    (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+          {:keys [idx container]} (util/get-block-idx-inside-container block-element)
+          block (if (and idx container)
+                  (assoc block
+                         :block/idx idx
+                         :block/container (gobj/get container "id"))
+                  block)
+          content (or content "")]
       (swap! state
              (fn [state]
                (-> state
@@ -990,7 +1006,7 @@
     (or
      (when-let [last-time (get-in @state [:editor/last-input-time repo])]
        (let [now (util/time-ms)]
-         (>= (- now last-time) 3000)))
+         (>= (- now last-time) 1000)))
      ;; not in editing mode
      (not (get-edit-input-id)))))
 

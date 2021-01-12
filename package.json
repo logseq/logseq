@@ -49,7 +49,8 @@
     },
     "dependencies": {
         "codemirror": "^5.58.1",
-        "diff": "^4.0.2",
+        "diff": "5.0.0",
+        "diff-match-patch": "^1.0.5",
         "fuzzysort": "^1.1.4",
         "gulp-cached": "^1.1.1",
         "ignore": "^5.1.8",

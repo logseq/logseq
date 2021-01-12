@@ -367,8 +367,8 @@
                              (get-edit-input-id-with-block-id id)
                              (str (subs id 0 (- (count id) 36)) block-id))
              block (or
-                    block
                     (db/pull [:block/uuid block-id])
+                    block
                     ;; dummy?
                     {:block/uuid block-id
                      :block/content ""})
@@ -431,17 +431,14 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties remove-properties rebuild-content? auto-save?]
+    {:keys [indent-left? custom-properties remove-properties rebuild-content? chan chan-callback]
      :or {rebuild-content? true
           custom-properties nil
-          remove-properties nil
-          auto-save? false}
+          remove-properties nil}
      :as opts}]
-   (let [value value
-         repo (or repo (state/get-current-repo))
+   (let [repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          block (assoc (with-block-meta repo block)
-                      ;; (into {} ...) to fix the old data
                       :block/properties (into {} (:block/properties e)))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
@@ -458,6 +455,7 @@
                          {:page/original-name alias
                           :page/name (string/lower-case alias)})
                        (remove #{(:page/name page)} alias)))
+
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
                                     (:permalink new-properties)))
@@ -602,7 +600,9 @@
                {:key :block/change
                 :data (map (fn [block] (assoc block :block/page page)) blocks)}
                (let [new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)]
-                 [[file-path new-content]])))
+                 [[file-path new-content]])
+               (when chan {:chan chan
+                           :chan-callback chan-callback})))
 
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
@@ -1425,33 +1425,36 @@
     (save-block-aux! block value format {})))
 
 (defn save-current-block-when-idle!
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (and (state/input-idle? repo)
-               (not (state/get-editor-show-page-search?))
-               (not (state/get-editor-show-page-search-hashtag?))
-               (not (state/get-editor-show-block-search?)))
-      (state/set-editor-op! :auto-save)
-      (try
-        (let [input-id (state/get-edit-input-id)
-              block (state/get-edit-block)
-              db-block (when-let [block-id (:block/uuid block)]
-                         (db/pull [:block/uuid block-id]))
-              elem (and input-id (gdom/getElement input-id))
-              db-content (:block/content db-block)
-              db-content-without-heading (and db-content
-                                              (util/safe-subs db-content (:block/level db-block)))
-              value (and elem (gobj/get elem "value"))]
-          (when (and block value db-content-without-heading
-                     (or
-                      (not= (string/trim db-content-without-heading)
-                            (string/trim value))))
-            (let [cur-pos (util/get-input-pos elem)]
-              (save-block-aux! db-block value (:block/format db-block)
-                               {:auto-save? true}))))
-        (catch js/Error error
-          (log/error :save-block-failed error)))
-      (state/set-editor-op! nil))))
+  ([]
+   (save-current-block-when-idle! {}))
+  ([{:keys [check-idle? chan chan-callback]
+     :or {check-idle? true}}]
+   (when (nil? (state/get-editor-op))
+     (when-let [repo (state/get-current-repo)]
+       (when (and (if check-idle? (state/input-idle? repo) true)
+                  (not (state/get-editor-show-page-search?))
+                  (not (state/get-editor-show-page-search-hashtag?))
+                  (not (state/get-editor-show-block-search?)))
+         (state/set-editor-op! :auto-save)
+         (try
+           (let [input-id (state/get-edit-input-id)
+                 block (state/get-edit-block)
+                 db-block (when-let [block-id (:block/uuid block)]
+                            (db/pull [:block/uuid block-id]))
+                 elem (and input-id (gdom/getElement input-id))
+                 db-content (:block/content db-block)
+                 db-content-without-heading (and db-content
+                                                 (util/safe-subs db-content (:block/level db-block)))
+                 value (and elem (gobj/get elem "value"))]
+             (when (and block value db-content-without-heading
+                        (or
+                         (not= (string/trim db-content-without-heading)
+                               (string/trim value))))
+               (save-block-aux! db-block value (:block/format db-block) {:chan chan
+                                                                         :chan-callback chan-callback})))
+           (catch js/Error error
+             (log/error :save-block-failed error)))
+         (state/set-editor-op! nil))))))
 
 (defn on-up-down
   [state e up?]
@@ -2167,4 +2170,11 @@
 
 (defn periodically-save!
   []
-  (js/setInterval save-current-block-when-idle! 3000))
+  (js/setInterval save-current-block-when-idle! 500))
+
+(defn save!
+  []
+  (when-let [repo (state/get-current-repo)]
+    (save-current-block-when-idle! {:check-idle? false})
+    (when (string/starts-with? repo "https://") ; git repo
+      (repo-handler/auto-push!))))

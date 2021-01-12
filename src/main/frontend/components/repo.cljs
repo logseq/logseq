@@ -35,8 +35,8 @@
         repos (util/distinct-by :url repos)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (if (seq repos)
-        [:div#repos
-         [:h1.title "All Repos"]
+        [:div#graphs
+         [:h1.title "All Graphs"]
 
          [:div.pl-1.content
           [:div.flex.flex-row.my-4

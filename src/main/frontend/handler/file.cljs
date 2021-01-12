@@ -143,14 +143,15 @@
                              (assoc :file/created-at t)))])]
       (db/transact! repo-url tx))))
 
-;; TODO: better name to separate from reset-file!
+;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
   [repo path content {:keys [reset? re-render-root? add-history? update-status?]
                       :or {reset? true
                            re-render-root? false
                            add-history? true
                            update-status? false}}]
-  (let [original-content (db/get-file-no-sub repo path)]
+  (let [edit-block (state/get-edit-block)
+        original-content (db/get-file-no-sub repo path)]
     (if reset?
       (do
         (when-let [page-id (db/get-file-page-id path)]
@@ -188,68 +189,74 @@
                                    :path-params {:path path}}))))))
 
 (defn alter-files
-  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db?]
+  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db? chan chan-callback resolved-handler]
                :or {add-history? true
                     update-status? true
                     reset? false
                     update-db? true}
                :as opts}]
-  ;; update db
-  (when update-db?
-    (doseq [[path content] files]
-      (if reset?
-        (reset-file! repo path content)
-        (db/set-file-content! repo path content))))
+  ;; old file content
+  (let [file->content (let [paths (map first files)]
+                        (zipmap paths
+                                (map (fn [path] (db/get-file-no-sub repo path)) paths)))]
+    ;; update db
+    (when update-db?
+      (doseq [[path content] files]
+        (if reset?
+          (reset-file! repo path content)
+          (db/set-file-content! repo path content))))
 
-  (when-let [chan (state/get-file-write-chan)]
-    (async/put! chan [repo files opts])))
+    (when-let [chan (state/get-file-write-chan)]
+      (let [chan-callback
+            (:chan-callback opts)]
+        (async/put! chan [repo files opts file->content])
+        (when chan-callback
+          (chan-callback))))))
 
 (defn alter-files-handler!
-  [repo files {:keys [add-history? update-status? git-add-cb reset?]
+  [repo files {:keys [add-history? update-status? git-add-cb reset? chan]
                :or {add-history? true
                     update-status? true
-                    reset? false}}]
-  (p/let [file->content (let [paths (map first files)]
-                          (zipmap paths
-                                  (map (fn [path] (db/get-file-no-sub repo path)) paths)))]
-    (let [write-file-f (fn [[path content]]
-                         (let [original-content (get file->content path)]
-                           (-> (p/let [_ (fs/check-directory-permission! repo)]
-                                 (fs/write-file repo (util/get-repo-dir repo) path content
-                                                {:old-content original-content
-                                                 :last-modified-at (db/get-file-last-modified-at repo path)}))
-                               (p/catch (fn [error]
-                                          (log/error :write-file/failed {:path path
-                                                                         :content content
-                                                                         :error error}))))))
-          git-add-f (fn []
-                      (let [add-helper
-                            (fn []
-                              (map
-                               (fn [[path content]]
-                                 (git-handler/git-add repo path update-status?))
-                               files))]
-                        (-> (p/all (add-helper))
-                            (p/then (fn [_]
-                                      (when git-add-cb
-                                        (git-add-cb))))
-                            (p/catch (fn [error]
-                                       (println "Git add failed:")
-                                       (js/console.error error)))))
-                      (ui-handler/re-render-file!)
-                      (when add-history?
-                        (let [files-tx (mapv (fn [[path content]]
-                                               (let [original-content (get file->content path)]
-                                                 [path original-content content])) files)]
-                          (history/add-history! repo files-tx))))]
-      (-> (p/all (map write-file-f files))
-          (p/then (fn []
-                    (git-add-f)
-                    ;; TODO: save logseq/metadata
-))
-          (p/catch (fn [error]
-                     (println "Alter files failed:")
-                     (js/console.error error)))))))
+                    reset? false}} file->content]
+  (let [write-file-f (fn [[path content]]
+                       (let [original-content (get file->content path)]
+                         (-> (p/let [_ (fs/check-directory-permission! repo)]
+                               (fs/write-file repo (util/get-repo-dir repo) path content
+                                              {:old-content original-content
+                                               :last-modified-at (db/get-file-last-modified-at repo path)}))
+                             (p/catch (fn [error]
+                                        (log/error :write-file/failed {:path path
+                                                                       :content content
+                                                                       :error error}))))))
+        git-add-f (fn []
+                    (let [add-helper
+                          (fn []
+                            (map
+                             (fn [[path content]]
+                               (git-handler/git-add repo path update-status?))
+                             files))]
+                      (-> (p/all (add-helper))
+                          (p/then (fn [_]
+                                    (when git-add-cb
+                                      (git-add-cb))))
+                          (p/catch (fn [error]
+                                     (println "Git add failed:")
+                                     (js/console.error error)))))
+                    (ui-handler/re-render-file!)
+                    (when add-history?
+                      (let [files-tx (mapv (fn [[path content]]
+                                             (let [original-content (get file->content path)]
+                                               [path original-content content])) files)]
+                        (history/add-history! repo files-tx))))]
+    (-> (p/all (map write-file-f files))
+        (p/then (fn []
+                  (git-add-f)
+                  (when chan
+                    (async/put! chan true))))
+        (p/catch (fn [error]
+                   (println "Alter files failed:")
+                   (js/console.error error)
+                   (async/put! chan false))))))
 
 (defn remove-file!
   [repo file]
