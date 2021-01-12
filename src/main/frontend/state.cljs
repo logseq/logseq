@@ -141,10 +141,6 @@
   []
   (:git/current-repo @state))
 
-(defn get-current-block
-  []
-  (:editor/block @state))
-
 (defn get-config
   ([]
    (get-config (get-current-repo)))

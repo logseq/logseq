@@ -1562,21 +1562,14 @@
       (p/let [handle (frontend.idb/get-item handle-path)
               file (and handle (.getFile handle))]
         (when file
-          (p/let [url (js/URL.createObjectURL file)
-                  ;url (p/create
-                  ;     (fn [resolve! reject!]
-                  ;       (let [reader (js/FileReader.)]
-                  ;         (. reader readAsDataURL file)
-                  ;         (set! (. reader -onload) #(resolve! (.-result reader)))
-                  ;         (set! (. reader -onerror) #(reject! %)))))
-]
+          (p/let [url (js/URL.createObjectURL file)]
             (swap! *assets-url-cache assoc (keyword handle-path) url)
             url))))))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
-        block (state/get-current-block)]
+        block (state/get-edit-block)]
     (if (config/local-db? repo)
       (-> (save-assets! block repo (js->clj files))
           (p/then
