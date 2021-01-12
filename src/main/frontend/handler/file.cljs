@@ -150,8 +150,6 @@
                            re-render-root? false
                            add-history? true
                            update-status? false}}]
-  (prn "alter file:" {:editor/pos (state/get-edit-pos)
-        :editor/block (state/get-edit-block)})
   (let [edit-block (state/get-edit-block)
         original-content (db/get-file-no-sub repo path)]
     (if reset?

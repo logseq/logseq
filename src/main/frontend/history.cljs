@@ -87,7 +87,6 @@
                       ;; restore cursor
                       (when (> idx' 0)
                         (let [prev-tx (get-in @history [repo (dec idx')])]
-                          (prn {:prev-tx prev-tx})
                           (when restore-cursor (restore-cursor prev-tx)))))))))))
 
 (defonce *redoing? (atom false))
@@ -108,6 +107,7 @@
                                       :re-render-root? true})))]
         (-> (p/all promises)
             (p/then (fn []
+                      (db/clear-query-state!)
                       (swap! history-idx assoc repo (inc idx))
                       (reset! *redoing? false)
                       ;; restore cursor

@@ -4,6 +4,7 @@
             [frontend.history :as history]
             [frontend.handler.file :as file]
             [frontend.handler.editor :as editor]
+            [frontend.handler.ui :as ui-handler]
             [promesa.core :as p]
             [clojure.core.async :as async]
             [goog.dom :as gdom]
@@ -22,6 +23,7 @@
 
 (defn restore-cursor!
   [{:keys [block-container block-idx pos] :as state}]
+  (ui-handler/re-render-root!)
   ;; get the element
   (when (and block-container block-idx pos)
     (when-let [container (gdom/getElement block-container)]
