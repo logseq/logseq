@@ -32,10 +32,10 @@
                        (when (and old new)
                          (let [diffs (diff/diffs new old)
                               patches (diff/get-patches new old diffs)]
-                           [file patches]))))
+                           [file patches {:old old
+                                          :new new}]))))
                 (remove nil?))]
     (when (seq tx)
-      ;; FIXME: it's the new edit block instead of the previous one
       (let [last-edit-block (get @state/state :editor/last-edit-block)
             tx (if last-edit-block
                  {:data tx
@@ -59,6 +59,8 @@
         (let [idx (get @history-idx repo 0)
               idx' (inc idx)
               txs (vec (take idx' (get @history repo)))]
+          ;; TODO: auto-save the block and undo at the same time
+          ;; Should we use core.async channel to force serialization?
           (swap! history assoc repo (conj txs tx))
           (swap! history-idx assoc repo idx'))))))
 
@@ -72,7 +74,6 @@
             tx (get-in @history [repo idx'])
             {:keys [data]} tx
             _ (reset! *undoing? true)
-            ;; _ (state/clear-edit!)
             promises (for [[path patches] data]
                        (let [current-content (db/get-file-no-sub path)
                              original-content (diff/apply-patches! current-content patches)]
@@ -97,7 +98,6 @@
     (when (and (> (count txs) idx) (false? @*redoing?))
       (let [tx (get-in @history [repo idx])
             _ (reset! *redoing? true)
-            ;; _ (state/clear-edit!)
             promises (for [[path patches] (:data tx)]
                        (let [current-content (db/get-file-no-sub path)
                              reversed-patches (utils/reversePatch patches)

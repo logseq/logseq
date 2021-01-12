@@ -1415,8 +1415,7 @@
     (save-block-if-changed! block new-value
                             (merge
                              {:custom-properties properties}
-                             opts))
-    (prn "block saved!")))
+                             opts))))
 
 (defn save-block!
   [{:keys [format block id repo dummy?] :as state} value]
@@ -1424,14 +1423,12 @@
             dummy?)
     (save-block-aux! block value format {})))
 
-(defonce *auto-saving? (atom false))
 (defn save-current-block-when-idle!
   ([]
    (save-current-block-when-idle! {}))
   ([{:keys [check-idle? chan chan-callback]
      :or {check-idle? true}}]
-   (when-not @*auto-saving?
-     (reset! *auto-saving? true)
+   (when (nil? (state/get-editor-op))
      (when-let [repo (state/get-current-repo)]
        (when (and (if check-idle? (state/input-idle? repo) true)
                   (not (state/get-editor-show-page-search?))
@@ -1456,8 +1453,7 @@
                                                                          :chan-callback chan-callback})))
            (catch js/Error error
              (log/error :save-block-failed error)))
-         (state/set-editor-op! nil)))
-     (reset! *auto-saving? false))))
+         (state/set-editor-op! nil))))))
 
 (defn on-up-down
   [state e up?]
