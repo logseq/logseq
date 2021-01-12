@@ -296,6 +296,7 @@ title: How to take dummy notes?
         :yes "Yes"
         :submit "Submit"
         :cancel "Cancel"
+        :close "Close"
         :re-index "Re-index"
         :export-json "Export as JSON"
         :unlink "unlink"

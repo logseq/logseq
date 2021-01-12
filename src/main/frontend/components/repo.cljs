@@ -15,6 +15,7 @@
             [frontend.version :as version]
             [frontend.components.commit :as commit]
             [frontend.components.svg :as svg]
+            [frontend.components.encryption :as encryption]
             [frontend.context.i18n :as i18n]
             [clojure.string :as string]
             [clojure.string :as str]))
@@ -59,18 +60,22 @@
                       :href url}
                   (db/get-repo-path url)])
                [:div.controls
-                [:a.control {:title (if local?
-                                      "Sync with the local directory"
-                                      "Clone again and re-index the db")
+                [:a.control {:title "Show encryption information about this graph"
                              :on-click (fn []
-                                         (if local?
-                                           (nfs-handler/rebuild-index! url
-                                                                 repo-handler/create-today-journal!)
-                                           (repo-handler/rebuild-index! url))
-                                         (js/setTimeout
-                                          (fn []
-                                            (route-handler/redirect! {:to :home}))
-                                          500))}
+                                         (state/set-modal! (encryption/encryptioin-dialog url)))}
+                 "🔐"]
+                [:a.control.ml-4 {:title (if local?
+                                           "Sync with the local directory"
+                                           "Clone again and re-index the db")
+                                  :on-click (fn []
+                                              (if local?
+                                                (nfs-handler/rebuild-index! url
+                                                                            repo-handler/create-today-journal!)
+                                                (repo-handler/rebuild-index! url))
+                                              (js/setTimeout
+                                               (fn []
+                                                 (route-handler/redirect! {:to :home}))
+                                               500))}
                  "Re-index"]
                 [:a.control.ml-4 {:title "Clone again and re-index the db"
                                   :on-click (fn []
