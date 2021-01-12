@@ -379,6 +379,7 @@
     (util/format "{{{%s %s}}}" name (string/join ", " arguments))
     (util/format "{{{%s}}}" name)))
 
+(declare block-content)
 (defn block-reference
   [config id]
   (rum/with-context [[t] i18n/*tongue-context*]
@@ -399,11 +400,14 @@
                            (route-handler/redirect! {:to          :page
                                                      :path-params {:name id}})))}
 
-            (let [title (:block/title block)
-                  title-blank? (empty? title)]
-              (->elem
-               (keyword (str "span.block-ref" (if title-blank? ".is-empty")))
-               (if title-blank? (t :untitled-block-ref) (map-inline config title))))]]
+            (let [title (:block/title block)]
+              (if (empty? title)
+                ;; display the content
+                [:div.block-ref
+                 (block-content config block nil (:block/uuid block) (:slide? config))]
+                (->elem
+                 :span.block-ref
+                 (map-inline config title))))]]
           [:span.warning.mr-1 {:title "Block ref invalid"}
            (util/format "((%s))" id)])))))
 
