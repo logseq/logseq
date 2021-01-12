@@ -194,12 +194,12 @@
                    (let [value (not enable-timetracking?)]
                      (config-handler/set-config! :feature/enable-timetracking? value))))
 
-         (toggle "enable_block_time"
-                 (t :settings-page/enable-block-time)
-                 enable-block-time?
-                 (fn []
-                   (let [value (not enable-block-time?)]
-                     (config-handler/set-config! :feature/enable-block-time? value))))
+         ;; (toggle "enable_block_time"
+         ;;         (t :settings-page/enable-block-time)
+         ;;         enable-block-time?
+         ;;         (fn []
+         ;;           (let [value (not enable-block-time?)]
+         ;;             (config-handler/set-config! :feature/enable-block-time? value))))
 
          (toggle "enable_journals"
                  (t :settings-page/enable-journals)

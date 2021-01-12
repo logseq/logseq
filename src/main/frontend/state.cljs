@@ -189,8 +189,12 @@
 
 (defn enable-block-time?
   []
-  (true? (:feature/enable-block-time?
-          (get (sub-config) (get-current-repo)))))
+  ;; (true? (:feature/enable-block-time?
+  ;;         (get (sub-config) (get-current-repo))))
+
+  ;; Disable block timestamps for now, because it doesn't work with undo/redo
+  false
+  )
 
 ;; Enable by default
 (defn show-brackets?
