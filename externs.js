@@ -51,3 +51,15 @@ dummy.values = function() {};
 dummy.filter = function() {};
 dummy.concat = function() {};
 dummy.diff_main = function() {};
+
+/**
+ * @typedef {{
+ *     recursive: (undefined | boolean),
+ * }}
+ */
+var openDirectoryOptions;
+/**
+ * @param {(undefined | openDirectoryOptions)} options
+ * @param {function} cb
+ */
+var openDirectory = function(options, cb) {};
