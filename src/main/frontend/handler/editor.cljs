@@ -2101,4 +2101,11 @@
 
 (defn periodically-save!
   []
-  (js/setInterval save-current-block-when-idle! 1000))
+  (js/setInterval save-current-block-when-idle! 500))
+
+(defn save!
+  []
+  (when-let [repo (state/get-current-repo)]
+    (save-current-block-when-idle! {:check-idle? false})
+    (when (string/starts-with? repo "https://") ; git repo
+      (repo-handler/auto-push!))))

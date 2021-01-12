@@ -182,6 +182,11 @@
   (not (false? (:feature/enable-journals?
                 (get (sub-config) repo)))))
 
+(defn enable-git-auto-push?
+  [repo]
+  (not (false? (:git-auto-push
+                (get (sub-config) repo)))))
+
 (defn enable-block-time?
   []
   (true? (:feature/enable-block-time?

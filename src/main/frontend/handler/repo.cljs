@@ -659,3 +659,7 @@
 (defn get-repo-name
   [url]
   (last (string/split url #"/")))
+
+(defn auto-push!
+  []
+  (git-commit-and-push! "Logseq auto save"))
