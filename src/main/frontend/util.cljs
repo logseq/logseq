@@ -40,6 +40,11 @@
     (and (string/includes? ua "webkit")
          (not (string/includes? ua "chrome")))))
 
+(defn mobile?
+  []
+  (when-not node-test?
+    (re-find #"Mobi" js/navigator.userAgent)))
+
 (defn format
   [fmt & args]
   (apply gstring/format fmt args))
@@ -877,7 +882,9 @@
 (defn ->system-modifier
   [keyboard-shortcut]
   (if mac?
-    (string/replace keyboard-shortcut "ctrl" "meta")
+    (-> keyboard-shortcut
+        (string/replace "ctrl" "meta")
+        (string/replace "alt" "meta"))
     keyboard-shortcut))
 
 (defn default-content-with-title
