@@ -1,16 +1,6 @@
 .blocks-container {
 }
 
-.block-control,
-.block-control:hover {
-  text-decoration: none;
-  cursor: pointer;
-  font-size: 14px;
-  min-width: 10px;
-  color: initial;
-  user-select: none;
-}
-
 .block-content {
   min-height: 24px;
   max-width: 100%;
@@ -33,6 +23,14 @@
   }
 }
 
+.open-block-ref-link {
+  @apply py-0 px-1 rounded opacity-50 hover:opacity-100;
+  font-size: 12px;
+  line-height: 1em;
+  position: relative;
+  right: -4px;
+}
+
 .block-body {
   blockquote:first-child,
   pre:first-child {
@@ -46,12 +44,26 @@
   border-left-color: var(--ls-guideline-color, #ddd);
 }
 
+.block-control,
+.block-control:hover {
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 10px;
+  color: initial;
+  user-select: none;
+}
+
 .block-ref {
   color: var(--ls-link-text-color);
   padding-bottom: 2px;
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
+
+  &-wrap {
+    display: inline-block;
+  }
 
   &:hover {
     color: var(--ls-link-text-hover-color)

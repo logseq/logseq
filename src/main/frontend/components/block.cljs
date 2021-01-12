@@ -381,28 +381,31 @@
 
 (defn block-reference
   [config id]
-  (when-not (string/blank? id)
-    (let [block (and (util/uuid-string? id)
-                     (db/pull-block (uuid id)))]
-      (if block
-        [:span
-         [:a
-          {:on-click (fn [e]
-                       (util/stop e)
-                       (if (gobj/get e "shiftKey")
-                         (state/sidebar-add-block!
-                          (state/get-current-repo)
-                          (:db/id block)
-                          :block-ref
-                          {:block block})
-                         (route-handler/redirect! {:to :page
-                                                   :path-params {:name id}})))}
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (when-not (string/blank? id)
+      (let [block (and (util/uuid-string? id)
+                       (db/pull-block (uuid id)))]
+        (if block
+          [:span
+           [:div.block-ref-wrap
+            {:on-click (fn [e]
+                         (util/stop e)
+                         (if (gobj/get e "shiftKey")
+                           (state/sidebar-add-block!
+                            (state/get-current-repo)
+                            (:db/id block)
+                            :block-ref
+                            {:block block})
+                           (route-handler/redirect! {:to          :page
+                                                     :path-params {:name id}})))}
 
-          (->elem
-           :span.block-ref
-           (map-inline config (:block/title block)))]]
-        [:span.warning.mr-1 {:title "Block ref invalid"}
-         (util/format "((%s))" id)]))))
+            (let [title (:block/title block)
+                  title-blank? (empty? title)]
+              (->elem
+               (keyword (str "span.block-ref" (if title-blank? ".is-empty")))
+               (if title-blank? (t :untitled-block-ref) (map-inline config title))))]]
+          [:span.warning.mr-1 {:title "Block ref invalid"}
+           (util/format "((%s))" id)])))))
 
 (defn inline-text
   [format v]
@@ -1199,7 +1202,7 @@
                  (str uuid "-" idx)))))])]
      (when (and block-refs-count (> block-refs-count 0))
        [:div
-        [:a.block.py-0.px-2.rounded.bg-base-2.opacity-50.hover:opacity-100
+        [:a.open-block-ref-link.bg-base-2
          {:title "Open block references"
           :style {:margin-top -1}
           :on-click (fn []
