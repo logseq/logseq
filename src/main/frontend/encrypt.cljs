@@ -3,36 +3,44 @@
             [frontend.db.utils :as db-utils]
             [frontend.db :as db]
             [frontend.state :as state]
+            [clojure.string :as str]
             ["bip39" :as bip39]
             ["buffer" :as buffer]
             ["@kanru/rage-wasm" :as rage]))
 
-(defonce secret-phrase "canal this pluck bar elite tape olive toilet cry surprise dish rival wrist tragic click honey solar kangaroo cook cabin replace harvest horse wrong")
+(defonce age-pem-header-line "-----BEGIN AGE ENCRYPTED FILE-----")
+(defonce age-version-line "age-encryption.org/v1")
+
+(defn content-encrypted?
+  [content]
+  (or (str/starts-with? content age-pem-header-line)
+      (str/starts-with? content age-version-line)))
 
 (defn encrypted-db?
   []
   (db-utils/get-key-value :db/encrypted?))
 
-(defn save-mnemonic
+(defn get-mnemonic
+  []
+  (db-utils/get-key-value :db/secret-phrase))
+
+(defn- save-mnemonic
   [repo mnemonic]
   (db/set-key-value repo :db/secret-phrase mnemonic)
   (db/set-key-value repo :db/encrypted? true))
 
-(defn generate-mnemonic
+(defn- generate-mnemonic
   []
   (bip39/generateMnemonic 256))
 
 (defn generate-mnemonic-and-save
   []
-  (let [repo (state/get-current-repo)
-        mnemonic (generate-mnemonic)]
-    (save-mnemonic repo mnemonic)))
+  (when-not (get-mnemonic)
+    (let [repo (state/get-current-repo)
+          mnemonic (generate-mnemonic)]
+      (save-mnemonic repo mnemonic))))
 
-(defn get-mnemonic
-  []
-  (db-utils/get-key-value :db/secret-phrase))
-
-(defn derive-key-from-mnemonic
+(defn- derive-key-from-mnemonic
   [mnemonic]
   (let [entropy (-> (bip39/mnemonicToEntropy mnemonic)
                     (buffer/Buffer.from "hex"))
