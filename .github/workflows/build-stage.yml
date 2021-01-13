@@ -2,33 +2,56 @@
 
 name: Build-Stage
 
-# Controls when the action will run. 
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
 #  push:
 #    branches: [master, stage]
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    branch-name:
+      description: 'branch-name'
+      required: true
+      default: 'warning'
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    env:
+      asset-path: /static/js/
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Setup Java JDK
+        uses: actions/setup-java@v1.4.3
+        with:
+          java-version: 1.8
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Set up Node
+        uses: actions/setup-node@v1
+        with:
+            node-version: '12'
+
+      - name: Install clojure
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          curl -O https://download.clojure.org/install/linux-install-1.10.1.763.sh
+          chmod +x linux-install-1.10.1.763.sh
+          sudo ./linux-install-1.10.1.763.sh
+
+      - name: Fetch yarn deps
+        run: yarn cache clean && yarn install --frozen-lockfile
+
+      - name: Build Released-Web
+        run: yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "/${GITHUB_REF##*/}${{ env.asset-path }}"}'
+
+      - uses: jakejarvis/s3-sync-action@master
+        with:
+            #args: --acl public-read --follow-symlinks --delete
+            args: --acl public-read --follow-symlinks
+        env:
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'us-west-1'   # optional: defaults to us-east-1
+          SOURCE_DIR: 'static'      # optional: defaults to entire repository
+          DEST_DIR: ${GITHUB_REF##*/}/static
+
