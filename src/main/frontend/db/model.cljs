@@ -269,8 +269,8 @@
        (:file/content (d/entity (d/db conn) [:file/path path]))))))
 
 (defn get-block-by-uuid
-  [uuid]
-  (db-utils/entity [:block/uuid uuid]))
+  [id]
+  (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
 
 (defn get-page-format
   [page-name]

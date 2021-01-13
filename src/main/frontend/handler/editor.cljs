@@ -1419,10 +1419,14 @@
                              opts))))
 
 (defn save-block!
-  [{:keys [format block id repo dummy?] :as state} value]
-  (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
-            dummy?)
-    (save-block-aux! block value format {})))
+  ([repo uuid content]
+   (let [block (db-model/get-block-by-uuid uuid)
+         format (:block/format block)]
+     (save-block! {:block block :repo repo :format format} content)))
+  ([{:keys [format block repo dummy?] :as state} value]
+   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
+             dummy?)
+     (save-block-aux! block value format {}))))
 
 (defn save-current-block-when-idle!
   ([]
