@@ -25,6 +25,51 @@
       width: 9px;
     }
   }
+
+  .asset-container {
+    display: inline-block;
+    position: relative;
+    margin-top: .5rem;
+    margin-bottom: .5rem;
+
+    .ctl {
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: 5px;
+      display: none;
+
+      > a {
+        padding: 3px;
+        border-radius: 4px;
+        opacity: .4;
+        user-select: none;
+
+        &.delete {
+          svg {
+            color: red;
+
+            opacity: .6;
+            font-weight: normal;
+          }
+        }
+
+        &:hover {
+          opacity: .8;
+        }
+
+        &:active {
+          opacity: 1;
+        }
+      }
+    }
+
+    &:hover {
+      .ctl {
+        display: flex;
+      }
+    }
+  }
 }
 
 .open-block-ref-link {

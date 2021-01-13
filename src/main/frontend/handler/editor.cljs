@@ -1,6 +1,7 @@
 (ns frontend.handler.editor
   (:require [frontend.state :as state]
             [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.git :as git-handler]
@@ -1419,8 +1420,10 @@
                              opts))))
 
 (defn save-block!
-  ([repo uuid content]
-   (let [block (db-model/get-block-by-uuid uuid)
+  ([repo block-or-uuid content]
+   (let [block (if (or (uuid? block-or-uuid)
+                       (string? block-or-uuid))
+                 (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)
          format (:block/format block)]
      (save-block! {:block block :repo repo :format format} content)))
   ([{:keys [format block repo dummy?] :as state} value]
@@ -1556,7 +1559,7 @@
         (p/then (fs/write-file repo dir filename (.stream file))
                 #(p/resolved [filename file])))))))
 
-(def *assets-url-cache (atom {}))
+(defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
   [path]                                                    ;; path start with "/assets" or compatible for "../assets"
@@ -1572,6 +1575,23 @@
           (p/let [url (js/URL.createObjectURL file)]
             (swap! *assets-url-cache assoc (keyword handle-path) url)
             url))))))
+
+(defn- replace-asset-link-with-href
+  [format content href replacement]
+  (let [right-part-holder "&§&"]
+    (and content
+         (-> content                                        ;; FIXME: match strategy
+             (.replace (str "](" href ")") right-part-holder)
+             (.replace (js/RegExp. (str "!\\[[^\\]]*" right-part-holder)) replacement)))))
+
+(defn delete-asset-of-block!
+  [{:keys [repo href block-id force-local] :as opts}]
+  (let [block (db-model/query-block-by-uuid block-id)
+        _ (or block (throw (str block-id " not exists")))
+        format (:block/format block)
+        text (:block/content block)
+        content (replace-asset-link-with-href format text href "")]
+    (save-block! repo block content)))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]

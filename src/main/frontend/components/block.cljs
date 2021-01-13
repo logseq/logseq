@@ -156,6 +156,41 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
+(rum/defc asset-container
+  [text child]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [get-block-id #(and % (.getAttribute (.closest % "[blockid]") "blockid"))
+          repo (state/get-current-repo)
+          local-repo? (config/local-db? repo)
+          ctl-handlers {:delete
+                        (fn [e]
+                          (let [target (.-target e)
+                                block-id (get-block-id target)
+                                confirm-fn (ui/make-confirm-modal
+                                            {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                             :sub-title     :asset/physical-delete
+                                             :sub-checkbox? local-repo?
+                                             :on-confirm    (fn [e {:keys [close-fn sub-selected]}]
+                                                              (close-fn)
+                                                              (editor-handler/delete-asset-of-block!
+                                                               {:block-id block-id
+                                                                :force-local (and sub-selected (get sub-selected 0))
+                                                                :repo repo
+                                                                :href text}))})]
+                            (state/set-modal! confirm-fn)
+                            (util/stop e)))}]
+      [:div.asset-container
+       {:on-click (fn [e]
+                    (let [target (.-target e)]
+                      (some (fn [k]
+                              (let [selector (str "." (symbol k))
+                                    el (.closest target selector)]
+                                (when el
+                                  (apply (k ctl-handlers) [e])
+                                  true))) [:delete])))}
+       [[:span.ctl [:a.delete {:title "delete"} svg/trash-sm]]
+        child]])))
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
   [state href label]
@@ -167,10 +202,11 @@
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      [:img
-       {:loading "lazy"
-        :src     @src
-        :title   title}])))
+      (asset-container href
+                       [:img
+                        {:loading "lazy"
+                         :src     @src
+                         :title   title}]))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
@@ -181,11 +217,12 @@
     (let [href (if (util/starts-with? href "http")
                  href
                  (get-file-absolute-path config href))]
-      [:img.rounded-sm.shadow-xl
-       {:loading "lazy"
-        ;; :on-error (fn [])
-        :src     href
-        :title   (second (first label))}])))
+      (asset-container href
+                       [:img.rounded-sm.shadow-xl
+                        {:loading "lazy"
+          ;; :on-error (fn [])
+                         :src     href
+                         :title   (second (first label))}]))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]

@@ -272,6 +272,10 @@
   [id]
   (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
 
+(defn query-block-by-uuid
+  [id]
+  (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
+
 (defn get-page-format
   [page-name]
   (when-let [file (:page/file (db-utils/entity [:page/name page-name]))]
