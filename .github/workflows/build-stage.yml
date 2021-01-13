@@ -1,12 +1,12 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Build-Stage
 
 # Controls when the action will run. 
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
-  push:
-    branches: [ master, stage]
+#  push:
+#    branches: [master, stage]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
