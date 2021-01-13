@@ -7,16 +7,12 @@ on:
 #    branches: [master, stage]
 
   workflow_dispatch:
-    branch-name:
-      description: 'branch-name'
-      required: true
-      default: 'warning'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      asset-path: /static/js/
+      asset-path: ${GITHUB_REF##*/}/static/js/
 
     steps:
       - uses: actions/checkout@v2
@@ -41,7 +37,7 @@ jobs:
         run: yarn cache clean && yarn install --frozen-lockfile
 
       - name: Build Released-Web
-        run: yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "/${GITHUB_REF##*/}${{ env.asset-path }}"}'
+        run: yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}"}'
 
       - uses: jakejarvis/s3-sync-action@master
         with:
