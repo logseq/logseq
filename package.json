@@ -59,6 +59,7 @@
         "mousetrap": "^1.6.5",
         "react": "^17.0.1",
         "react-dom": "^17.0.1",
+        "react-resize-context": "^3.0.0",
         "react-textarea-autosize": "^8.0.1",
         "react-transition-group": "^4.3.0",
         "yargs-parser": "^20.2.4"

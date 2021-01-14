@@ -3,6 +3,7 @@
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
+            ["react-resize-context" :as Resize]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
@@ -17,6 +18,8 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
+(def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
+(def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 
 (rum/defc ls-textarea < rum/reactive
   [{:keys [on-change] :as props}]
