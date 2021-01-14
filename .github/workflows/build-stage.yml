@@ -1,0 +1,53 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Build-Stage
+
+on:
+#  push:
+#    branches: [master, stage]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      asset-path: ${GITHUB_REF##*/}/static/js/
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v1.4.3
+        with:
+          java-version: 1.8
+
+      - name: Set up Node
+        uses: actions/setup-node@v1
+        with:
+            node-version: '12'
+
+      - name: Install clojure
+        run: |
+          curl -O https://download.clojure.org/install/linux-install-1.10.1.763.sh
+          chmod +x linux-install-1.10.1.763.sh
+          sudo ./linux-install-1.10.1.763.sh
+
+      - name: Fetch yarn deps
+        run: yarn cache clean && yarn install --frozen-lockfile
+
+      - name: Build Released-Web
+        run: yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}"}'
+
+      - uses: jakejarvis/s3-sync-action@master
+        with:
+            #args: --acl public-read --follow-symlinks --delete
+            args: --acl public-read --follow-symlinks
+        env:
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'us-west-1'   # optional: defaults to us-east-1
+          SOURCE_DIR: 'static'      # optional: defaults to entire repository
+          DEST_DIR: ${GITHUB_REF##*/}/static
+
