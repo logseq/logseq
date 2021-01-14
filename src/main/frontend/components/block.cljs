@@ -157,12 +157,12 @@
             (string/join "/" (reverse parts))))))))
 
 (rum/defc asset-container
-  [text child]
+  [src title child]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [get-block-id #(and % (.getAttribute (.closest % "[blockid]") "blockid"))
           repo (state/get-current-repo)
           local-repo? (config/local-db? repo)
-          sub-feat? (and local-repo? (config/local-asset? text))]
+          sub-feat? (and local-repo? (config/local-asset? src))]
       [:div.asset-container
        [[:span.ctl
          [:a.delete
@@ -181,7 +181,8 @@
                                                   {:block-id    block-id
                                                    :force-local (and sub-selected (get sub-selected 0))
                                                    :repo        repo
-                                                   :href        text}))})]
+                                                   :href        src
+                                                   :title       title}))})]
                (state/set-modal! confirm-fn)
                (util/stop e)))} svg/trash-sm]]
         child]])))
@@ -197,7 +198,7 @@
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      (asset-container href
+      (asset-container href title
                        [:img
                         {:loading "lazy"
                          :src     @src
@@ -208,15 +209,16 @@
 (defn image-link [config url href label]
   (if (config/local-asset? href)
     (asset-link href label)
-    (let [href (if (util/starts-with? href "http")
+    (let [title (second (first label))
+          href (if (util/starts-with? href "http")
                  href
                  (get-file-absolute-path config href))]
-      (asset-container href
+      (asset-container href title
                        [:img.rounded-sm.shadow-xl
                         {:loading "lazy"
           ;; :on-error (fn [])
                          :src     href
-                         :title   (second (first label))}]))))
+                         :title   title}]))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]

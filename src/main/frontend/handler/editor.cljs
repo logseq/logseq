@@ -1578,26 +1578,23 @@
             url))))))
 
 (defn- replace-asset-link-with-href
-  [format content href replacement]
-  (let [part-holder "&§&"]
-    (and content
-         (case format
-           :markdown
-           (-> content   ;; FIXME: match strategy
-               (.replace (str "](" href ")") part-holder)
-               (.replace (js/RegExp. (str "!\\[[^\\]]*" part-holder)) replacement))
-           :org
-           (-> content
-               (.replace (str "[[" href "][") part-holder)
-               (.replace (js/RegExp. (str part-holder "(.*?)]]")) replacement))))))
+  [format content href title replacement]
+  (and content
+       (case format
+         :markdown
+         (-> content
+             (string/replace (str "![" title "](" href ")") replacement))
+         :org
+         (-> content
+             (string/replace (str "[[" href "][" title "]]") replacement)))))
 
 (defn delete-asset-of-block!
-  [{:keys [repo href block-id force-local] :as opts}]
+  [{:keys [repo href title block-id force-local] :as opts}]
   (let [block (db-model/query-block-by-uuid block-id)
         _ (or block (throw (str block-id " not exists")))
         format (:block/format block)
         text (:block/content block)
-        content (replace-asset-link-with-href format text href "")]
+        content (replace-asset-link-with-href format text href title "")]
     (save-block! repo block content)
     (when force-local
       ;; FIXME: should be relative to current block page path
