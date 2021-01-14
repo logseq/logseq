@@ -711,3 +711,8 @@ hr {
   margin: 2rem 0;
   border-color: var(--ls-border-color, #ccc);
 }
+
+.resize {
+    resize: both;
+    overflow: hidden;
+}

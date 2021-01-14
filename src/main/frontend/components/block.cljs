@@ -159,43 +159,59 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
+(rum/defcs resizable-image <
+  (rum/local nil ::size)
+  [state config title src metadata full_text]
+  (let [size (get state ::size)]
+    (ui/resize-provider
+     (ui/resize-consumer
+      (cond->
+       {:className "resize"
+        :onSizeChanged #(reset! size %)
+        :onMouseUp (fn []
+                     (when @size
+                       (when-let [block-id (:block/uuid config)]
+                         (let [size (bean/->clj @size)]
+                           (editor-handler/resize-image! block-id metadata full_text size)))))
+        :onClick (fn [e]
+                   (util/stop e))}
+        (:width metadata)
+        (assoc :style {:width (:width metadata)}))
+      [:img.rounded-sm.shadow-xl
+       (merge
+        {:loading "lazy"
+         :src     src
+         :title   title}
+        metadata)]))))
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
-  [state href label metadata]
-  (let [title (second (first label))
-        src (::src state)
+  [state config title href label metadata full_text]
+  (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
 
     (when granted?
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      [:img
-       (merge
-        {:loading "lazy"
-         :src     @src
-         :title   title}
-        metadata)])))
+      (resizable-image config title @src metadata full_text))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
+
+
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
-                   (safe-read-string metadata false))]
+                   (safe-read-string metadata false))
+        title (second (first label))]
     (if (or (util/starts-with? href "/assets")
             (util/starts-with? href "../assets"))
-      (asset-link href label metadata)
+      (asset-link config title href label metadata full_text)
       (let [href (if (util/starts-with? href "http")
                    href
                    (get-file-absolute-path config href))]
-        [:img.rounded-sm.shadow-xl
-         (merge
-          {:loading "lazy"
-          ;; :on-error (fn [])
-           :src     href
-           :title   (second (first label))}
-          metadata)]))))
+        (resizable-image config title href metadata full_text)))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
