@@ -182,7 +182,7 @@
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
-                   (safe-read-string metadata))]
+                   (safe-read-string metadata false))]
     (if (or (util/starts-with? href "/assets")
             (util/starts-with? href "../assets"))
       (asset-link href label metadata)
