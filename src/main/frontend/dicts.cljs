@@ -624,7 +624,7 @@ title: How to take dummy notes?
            :help/select-nfs-browser "请选择支持nfs的浏览来使用logseq本地文件夹功能, 如最新的Chrome浏览器."
            :text/image "图片"
            :asset/confirm-delete "确定要删除{1}吗?"
-           :asset/physical-delete "同时删除本地文件"
+           :asset/physical-delete "同时删除本地文件（目前不可撤销）"
            :undo "撤销"
            :redo "重做"
            :help/zoom-in "聚焦"
