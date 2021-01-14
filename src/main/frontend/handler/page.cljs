@@ -14,6 +14,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.commands :as commands]
             [frontend.date :as date]
@@ -171,6 +172,7 @@
   ([page-name blocks project-add-modal]
    (project-handler/exists-or-create!
     (fn [project]
+      (config-handler/set-config! [:project :name] project)
       (page-add-properties! page-name {"published" true
                                        "slide" true})
       (let [properties (db/get-page-properties page-name)
@@ -202,26 +204,29 @@
                         (= "true" slide)))
            blocks (db/get-page-blocks page-name)
            plugins (get-plugins blocks)]
-       (if slide?
-         (publish-page-as-slide! page-name blocks project-add-modal)
-         (do
-           (page-add-properties! page-name {"published" true})
-           (let [data {:project project
-                       :title page-name
-                       :permalink (:permalink properties)
-                       :html (html-export/export-page page-name blocks notification/show!)
-                       :tags (:tags properties)
-                       :settings (merge properties plugins)
-                       :repo (state/get-current-repo)}]
-             (util/post (str config/api "pages")
-                        data
-                        (published-success-handler page-name)
-                        published-failed-handler))))))
+       (p/let [_ (config-handler/set-config! [:project :name] project)]
+         (if slide?
+           (publish-page-as-slide! page-name blocks project-add-modal)
+           (do
+             (page-add-properties! page-name {"published" true})
+             (let [data {:project project
+                         :title page-name
+                         :permalink (:permalink properties)
+                         :html (html-export/export-page page-name blocks notification/show!)
+                         :tags (:tags properties)
+                         :settings (merge properties plugins)
+                         :repo (state/get-current-repo)}]
+               (util/post (str config/api "pages")
+                          data
+                          (published-success-handler page-name)
+                          published-failed-handler))))
+         (state/close-modal!))))
    project-add-modal))
 
 (defn unpublished-success-handler
   [page-name]
   (fn [result]
+    (state/close-modal!)
     (notification/show!
      "Un-publish successfully!"
      :success)))

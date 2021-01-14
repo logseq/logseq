@@ -295,21 +295,24 @@
                                                      (when title
                                                        [:div.it
                                                         (apply (partial ui/button title) (flatten (seq options)))]))
-                                                   [{:title   (t :page/publish)
-                                                     :options {:on-click (fn []
-                                                                           (page-handler/publish-page! page-name project/add-project))}}
-                                                    {:title   (t :page/publish-as-slide)
-                                                     :options {:on-click (fn []
-                                                                           (page-handler/publish-page-as-slide! page-name project/add-project))}}
-                                                    (when published?
+                                                   [(if published?
                                                       {:title   (t :page/unpublish)
                                                        :options {:on-click (fn []
-                                                                             (page-handler/unpublish-page! page-name))}})
+                                                                             (page-handler/unpublish-page! page-name))}}
+                                                      {:title   (t :page/publish)
+                                                       :options {:on-click (fn []
+                                                                             (page-handler/publish-page! page-name project/add-project))}})
+                                                    (when-not published?
+                                                      {:title   (t :page/publish-as-slide)
+                                                      :options {:on-click (fn []
+                                                                            (page-handler/publish-page-as-slide! page-name project/add-project))}})
                                                     {:title   (t (if public? :page/make-private :page/make-public))
                                                      :options {:background (if public? "gray" "indigo")
-                                                               :on-click #(page-handler/update-public-attribute!
-                                                                           page-name
-                                                                           (if public? false true))}}])])))}}
+                                                               :on-click (fn []
+                                                                           (page-handler/update-public-attribute!
+                                                                            page-name
+                                                                            (if public? false true))
+                                                                           (state/close-modal!))}}])])))}}
                             (when developer-mode?
                               {:title "(Dev) Show page data"
                                :options {:on-click (fn []
