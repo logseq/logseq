@@ -294,6 +294,7 @@ title: How to take dummy notes?
         :more-options "More options"
         :to "to"
         :yes "Yes"
+        :no "No"
         :submit "Submit"
         :cancel "Cancel"
         :close "Close"

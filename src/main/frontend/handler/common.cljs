@@ -78,8 +78,6 @@
 (defn reset-config!
   [repo-url content]
   (when-let [content (or content (get-config repo-url))]
-    ;; When to generate new mnemonic?
-    (e/generate-mnemonic-and-save)
     (let [config (try
                    (reader/read-string content)
                    (catch js/Error e
