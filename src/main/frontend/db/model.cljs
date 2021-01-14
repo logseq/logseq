@@ -525,8 +525,15 @@
              (string/join "\n"))
 
         :markdown
-        (str (subs content 0 (string/last-index-of content "---\n\n"))
-             "---\n\n")
+        (let [[m leading-spaces first-dashes] (re-find #"(\s*)(---\n)" content)]
+          (if m
+            (let [begin (count leading-spaces)
+                  begin-inner (+ begin (count first-dashes))
+                  second-dashes "\n---\n"
+                  end-inner (string/index-of content second-dashes begin-inner)
+                  end (if end-inner (+ end-inner (count second-dashes)) begin)]
+              (subs content begin end))
+            ""))
 
         content))))
 
