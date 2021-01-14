@@ -162,34 +162,28 @@
     (let [get-block-id #(and % (.getAttribute (.closest % "[blockid]") "blockid"))
           repo (state/get-current-repo)
           local-repo? (config/local-db? repo)
-          sub-feat? (and local-repo? (config/local-asset? text))
-          ctl-handlers {:delete
-                        (fn [e]
-                          (let [target (.-target e)
-                                block-id (get-block-id target)
-                                confirm-fn (ui/make-confirm-modal
-                                            {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                             :sub-title     (if sub-feat? :asset/physical-delete "")
-                                             :sub-checkbox? sub-feat?
-                                             :on-confirm    (fn [e {:keys [close-fn sub-selected]}]
-                                                              (close-fn)
-                                                              (editor-handler/delete-asset-of-block!
-                                                               {:block-id    block-id
-                                                                :force-local (and sub-selected (get sub-selected 0))
-                                                                :repo        repo
-                                                                :href        text}))})]
-                            (state/set-modal! confirm-fn)
-                            (util/stop e)))}]
+          sub-feat? (and local-repo? (config/local-asset? text))]
       [:div.asset-container
-       {:on-click (fn [e]
-                    (let [target (.-target e)]
-                      (some (fn [k]
-                              (let [selector (str "." (symbol k))
-                                    el (.closest target selector)]
-                                (when el
-                                  (apply (k ctl-handlers) [e])
-                                  true))) [:delete])))}
-       [[:span.ctl [:a.delete {:title "delete"} svg/trash-sm]]
+       [[:span.ctl
+         [:a.delete
+          {:title "delete"
+           :on-click
+           (fn [e]
+             (let [target (.-target e)
+                   block-id (get-block-id target)
+                   confirm-fn (ui/make-confirm-modal
+                               {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                :sub-title     (if sub-feat? :asset/physical-delete "")
+                                :sub-checkbox? sub-feat?
+                                :on-confirm    (fn [e {:keys [close-fn sub-selected]}]
+                                                 (close-fn)
+                                                 (editor-handler/delete-asset-of-block!
+                                                  {:block-id    block-id
+                                                   :force-local (and sub-selected (get sub-selected 0))
+                                                   :repo        repo
+                                                   :href        text}))})]
+               (state/set-modal! confirm-fn)
+               (util/stop e)))} svg/trash-sm]]
         child]])))
 
 (rum/defcs asset-link < rum/reactive
