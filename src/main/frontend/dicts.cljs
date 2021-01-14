@@ -268,7 +268,7 @@ title: How to take dummy notes?
         :draw/back-to-logseq "Back to logseq"
         :text/image "Image"
         :asset/confirm-delete "Are you sure you want to delete this {1}?"
-        :asset/physical-delete "force remove physical file"
+        :asset/physical-delete "force remove physical file(can't be restored)"
         :content/copy "Copy"
         :content/cut "Cut"
         :content/make-todos "Make {1}s"

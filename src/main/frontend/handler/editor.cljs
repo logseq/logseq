@@ -1,5 +1,6 @@
 (ns frontend.handler.editor
   (:require [frontend.state :as state]
+            [lambdaisland.glogi :as log]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.handler.common :as common-handler]
@@ -1578,11 +1579,17 @@
 
 (defn- replace-asset-link-with-href
   [format content href replacement]
-  (let [right-part-holder "&§&"]
+  (let [part-holder "&§&"]
     (and content
-         (-> content                                        ;; FIXME: match strategy
-             (.replace (str "](" href ")") right-part-holder)
-             (.replace (js/RegExp. (str "!\\[[^\\]]*" right-part-holder)) replacement)))))
+         (case format
+           :markdown
+           (-> content   ;; FIXME: match strategy
+               (.replace (str "](" href ")") part-holder)
+               (.replace (js/RegExp. (str "!\\[[^\\]]*" part-holder)) replacement))
+           :org
+           (-> content
+               (.replace (str "[[" href "][") part-holder)
+               (.replace (js/RegExp. (str part-holder "(.*?)]]")) replacement))))))
 
 (defn delete-asset-of-block!
   [{:keys [repo href block-id force-local] :as opts}]
@@ -1591,7 +1598,10 @@
         format (:block/format block)
         text (:block/content block)
         content (replace-asset-link-with-href format text href "")]
-    (save-block! repo block content)))
+    (save-block! repo block content)
+    (when force-local
+      ;; FIXME: should be relative to current block page path
+      (fs/unlink (str (util/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]

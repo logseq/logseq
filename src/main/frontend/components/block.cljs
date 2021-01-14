@@ -162,21 +162,22 @@
     (let [get-block-id #(and % (.getAttribute (.closest % "[blockid]") "blockid"))
           repo (state/get-current-repo)
           local-repo? (config/local-db? repo)
+          sub-feat? (and local-repo? (config/local-asset? text))
           ctl-handlers {:delete
                         (fn [e]
                           (let [target (.-target e)
                                 block-id (get-block-id target)
                                 confirm-fn (ui/make-confirm-modal
                                             {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                             :sub-title     :asset/physical-delete
-                                             :sub-checkbox? local-repo?
+                                             :sub-title     (if sub-feat? :asset/physical-delete "")
+                                             :sub-checkbox? sub-feat?
                                              :on-confirm    (fn [e {:keys [close-fn sub-selected]}]
                                                               (close-fn)
                                                               (editor-handler/delete-asset-of-block!
-                                                               {:block-id block-id
+                                                               {:block-id    block-id
                                                                 :force-local (and sub-selected (get sub-selected 0))
-                                                                :repo repo
-                                                                :href text}))})]
+                                                                :repo        repo
+                                                                :href        text}))})]
                             (state/set-modal! confirm-fn)
                             (util/stop e)))}]
       [:div.asset-container
@@ -211,8 +212,7 @@
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [config url href label]
-  (if (or (util/starts-with? href "/assets")
-          (util/starts-with? href "../assets"))
+  (if (config/local-asset? href)
     (asset-link href label)
     (let [href (if (util/starts-with? href "http")
                  href
