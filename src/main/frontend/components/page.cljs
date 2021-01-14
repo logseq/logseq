@@ -294,7 +294,6 @@
                                              (mapv (fn [{:keys [title options]}]
                                                      (when title
                                                        [:div.it
-                                                        {:on-click #(state/close-modal!)}
                                                         (apply (partial ui/button title) (flatten (seq options)))]))
                                                    [{:title   (t :page/publish)
                                                      :options {:on-click (fn []
