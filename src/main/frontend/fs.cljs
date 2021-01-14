@@ -2,10 +2,10 @@
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.encrypt :as encrypt]
             [clojure.string :as string]
             [frontend.idb :as idb]
             [frontend.db :as db]
+            [frontend.encrypt :as e]
             [promesa.core :as p]
             [goog.object :as gobj]
             [clojure.set :as set]
@@ -128,17 +128,17 @@
   ([dir path]
    (read-file dir path (clj->js {:encoding "utf8"})))
   ([dir path option]
-   (p/let
-    [encrypted-content (cond
-                         (local-db? dir)
-                         (let [handle-path (str "handle" dir "/" path)]
-                           (p/let [handle (idb/get-item handle-path)
-                                   local-file (and handle (.getFile handle))]
-                             (and local-file (.text local-file))))
+   (p/chain
+    (cond
+      (local-db? dir)
+      (let [handle-path (str "handle" dir "/" path)]
+        (p/let [handle (idb/get-item handle-path)
+                local-file (and handle (.getFile handle))]
+          (and local-file (.text local-file))))
 
-                         :else
-                         (js/window.pfs.readFile (str dir "/" path) option))]
-     (encrypt/decrypt encrypted-content))))
+      :else
+      (js/window.pfs.readFile (str dir "/" path) option))
+    e/decrypt)))
 
 (defn nfs-saved-handler
   [repo path file]
@@ -153,37 +153,37 @@
   ([repo dir path content]
    (write-file repo dir path content nil))
   ([repo dir path content {:keys [old-content last-modified-at]}]
-   (->
-    (cond
-      (local-db? dir)
-      (let [parts (string/split path "/")
-            basename (last parts)
-            sub-dir (->> (butlast parts)
-                         (remove string/blank?)
-                         (string/join "/"))
-            sub-dir-handle-path (str "handle/"
-                                     (subs dir 1)
-                                     (if sub-dir
-                                       (str "/" sub-dir)))
-            handle-path (if (= "/" (last sub-dir-handle-path))
-                          (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
-                          sub-dir-handle-path)
-            basename-handle-path (str handle-path "/" basename)
-            encrypted-content (encrypt/encrypt content)]
-        (p/let [file-handle (idb/get-item basename-handle-path)]
-          (when file-handle
-            (add-nfs-file-handle! basename-handle-path file-handle))
-          (if file-handle
-            (p/let [local-file (.getFile file-handle)
-                    local-content (.text local-file)
-                    local-last-modified-at (gobj/get local-file "lastModified")
-                    current-time (util/time-ms)
-                    new? (> current-time local-last-modified-at)
-                    new-created? (nil? last-modified-at)
-                    not-changed? (= last-modified-at local-last-modified-at)
-                    format (-> (util/get-file-ext path)
-                               (config/get-file-format))
-                    pending-writes (state/get-write-chan-length)]
+   (let [content (e/encrypt repo content)]
+     (->
+      (cond
+        (local-db? dir)
+        (let [parts (string/split path "/")
+              basename (last parts)
+              sub-dir (->> (butlast parts)
+                           (remove string/blank?)
+                           (string/join "/"))
+              sub-dir-handle-path (str "handle/"
+                                       (subs dir 1)
+                                       (if sub-dir
+                                         (str "/" sub-dir)))
+              handle-path (if (= "/" (last sub-dir-handle-path))
+                            (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
+                            sub-dir-handle-path)
+              basename-handle-path (str handle-path "/" basename)]
+          (p/let [file-handle (idb/get-item basename-handle-path)]
+            (when file-handle
+              (add-nfs-file-handle! basename-handle-path file-handle))
+            (if file-handle
+              (p/let [local-file (.getFile file-handle)
+                      local-content (.text local-file)
+                      local-last-modified-at (gobj/get local-file "lastModified")
+                      current-time (util/time-ms)
+                      new? (> current-time local-last-modified-at)
+                      new-created? (nil? last-modified-at)
+                      not-changed? (= last-modified-at local-last-modified-at)
+                      format (-> (util/get-file-ext path)
+                                 (config/get-file-format))
+                      pending-writes (state/get-write-chan-length)]
               ;; (println {:last-modified-at last-modified-at
               ;;           :local-last-modified-at local-last-modified-at
               ;;           :not-changed? not-changed?
@@ -192,50 +192,49 @@
               ;;           :local-content local-content
               ;;           :old-content old-content
               ;;           :new? new?})
-              (if (and local-content old-content new?
-                       (or
-                        (> pending-writes 0)
-                        not-changed?
-                        new-created?))
-                (do
-                  (p/let [_ (utils/verifyPermission file-handle true)
-                          _ (utils/writeFile file-handle encrypted-content)
-                          file (.getFile file-handle)]
-                    (when file
-                      (nfs-saved-handler repo path file))))
-                (do
-                  (js/alert (str "The file has been modified in your local disk! File path: " path
-                                 ", save your changes and click the refresh button to reload it.")))))
+                (if (and local-content old-content new?
+                         (or
+                          (> pending-writes 0)
+                          not-changed?
+                          new-created?))
+                  (do
+                    (p/let [_ (utils/verifyPermission file-handle true)
+                            _ (utils/writeFile file-handle content)
+                            file (.getFile file-handle)]
+                      (when file
+                        (nfs-saved-handler repo path file))))
+                  (do
+                    (js/alert (str "The file has been modified in your local disk! File path: " path
+                                   ", save your changes and click the refresh button to reload it.")))))
             ;; create file handle
-            (->
-             (p/let [handle (idb/get-item handle-path)]
-               (if handle
-                 (do
-                   (p/let [_ (utils/verifyPermission handle true)
-                           file-handle (.getFileHandle ^js handle basename #js {:create true})
-                           _ (idb/set-item! basename-handle-path file-handle)
-                           _ (utils/writeFile file-handle encrypted-content)
-                           file (.getFile file-handle)]
-                     (when file
-                       (nfs-saved-handler repo path file))))
-                 (println "Error: directory handle not exists: " handle-path)))
-             (p/catch (fn [error]
-                        (println "Write local file failed: " {:path path})
-                        (js/console.error error)))))))
+              (->
+               (p/let [handle (idb/get-item handle-path)]
+                 (if handle
+                   (do
+                     (p/let [_ (utils/verifyPermission handle true)
+                             file-handle (.getFileHandle ^js handle basename #js {:create true})
+                             _ (idb/set-item! basename-handle-path file-handle)
+                             _ (utils/writeFile file-handle content)
+                             file (.getFile file-handle)]
+                       (when file
+                         (nfs-saved-handler repo path file))))
+                   (println "Error: directory handle not exists: " handle-path)))
+               (p/catch (fn [error]
+                          (println "Write local file failed: " {:path path})
+                          (js/console.error error)))))))
 
-      js/window.pfs
-      (let [encrypted-content (encrypt/encrypt content)]
-        (js/window.pfs.writeFile (str dir "/" path) encrypted-content))
+        js/window.pfs
+        (js/window.pfs.writeFile (str dir "/" path) content)
 
-      :else
-      nil)
-    (p/catch (fn [error]
-               (log/error :file/write-failed? {:dir dir
-                                               :path path
-                                               :error error})
+        :else
+        nil)
+      (p/catch (fn [error]
+                 (log/error :file/write-failed? {:dir dir
+                                                 :path path
+                                                 :error error})
                ;; Disable this temporarily
                ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-               )))))
+                 ))))))
 
 (defn rename
   [repo old-path new-path]

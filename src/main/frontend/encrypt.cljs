@@ -17,28 +17,27 @@
       (str/starts-with? content age-version-line)))
 
 (defn encrypted-db?
-  []
-  (db-utils/get-key-value :db/encrypted?))
+  [repo-url]
+  (db-utils/get-key-value repo-url :db/encrypted?))
 
 (defn get-mnemonic
-  []
-  (db-utils/get-key-value :db/secret-phrase))
+  [repo-url]
+  (db-utils/get-key-value repo-url :db/secret-phrase))
 
 (defn- save-mnemonic
-  [repo mnemonic]
-  (db/set-key-value repo :db/secret-phrase mnemonic)
-  (db/set-key-value repo :db/encrypted? true))
+  [repo-url mnemonic]
+  (db/set-key-value repo-url :db/secret-phrase mnemonic)
+  (db/set-key-value repo-url :db/encrypted? true))
 
 (defn- generate-mnemonic
   []
   (bip39/generateMnemonic 256))
 
 (defn generate-mnemonic-and-save
-  []
-  (when-not (get-mnemonic)
-    (let [repo (state/get-current-repo)
-          mnemonic (generate-mnemonic)]
-      (save-mnemonic repo mnemonic))))
+  [repo-url]
+  (when-not (get-mnemonic repo-url)
+    (let [mnemonic (generate-mnemonic)]
+      (save-mnemonic repo-url mnemonic))))
 
 (defn- derive-key-from-mnemonic
   [mnemonic]
@@ -48,31 +47,36 @@
     keys))
 
 (defn get-public-key
-  []
-  (second (derive-key-from-mnemonic (get-mnemonic))))
+  [repo-url]
+  (second (derive-key-from-mnemonic (get-mnemonic repo-url))))
 
 (defn get-secret-key
-  []
-  (first (derive-key-from-mnemonic (get-mnemonic))))
+  [repo-url]
+  (first (derive-key-from-mnemonic (get-mnemonic repo-url))))
 
 (defn encrypt
-  [content]
-  (cond
-    (encrypted-db?)
-    (let [content (utf8/encode content)
-          public-key (get-public-key)
-          encrypted (rage/encrypt_with_x25519 public-key content true)]
-      (utf8/decode encrypted))
-    :else
-    content))
+  ([content]
+   (encrypt (state/get-current-repo) content))
+  ([repo-url content]
+   (cond
+     (encrypted-db? repo-url)
+     (let [content (utf8/encode content)
+           public-key (get-public-key repo-url)
+           encrypted (rage/encrypt_with_x25519 public-key content true)]
+       (utf8/decode encrypted))
+     :else
+     content)))
 
 (defn decrypt
-  [content]
-  (cond
-    (encrypted-db?)
-    (let [content (utf8/encode content)
-          secret-key (get-secret-key)
-          decrypted (rage/decrypt_with_x25519 secret-key content)]
-      (utf8/decode decrypted))
-    :else
-    content))
+  ([content]
+   (decrypt (state/get-current-repo) content))
+  ([repo-url content]
+   (cond
+     (and (encrypted-db? repo-url)
+          (content-encrypted? content))
+     (let [content (utf8/encode content)
+           secret-key (get-secret-key repo-url)
+           decrypted (rage/decrypt_with_x25519 secret-key content)]
+       (utf8/decode decrypted))
+     :else
+     content)))
