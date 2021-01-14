@@ -3,7 +3,8 @@
             [frontend.handler.repo :as repo-handler]
             [borkdude.rewrite-edn :as rewrite]
             [frontend.config :as config]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [clojure.string :as string]))
 
 (defn set-config!
   [k v]
@@ -25,3 +26,8 @@
 (defn toggle-ui-show-brackets! []
   (let [show-brackets? (state/show-brackets?)]
     (set-config! :ui/show-brackets? (not show-brackets?))))
+
+(defn set-project!
+  [project]
+  (when-not (string/blank? project)
+    (set-config! [:project :name] project)))

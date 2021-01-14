@@ -40,6 +40,7 @@
                              update-in [:me :projects]
                              (fn [projects]
                                (util/distinct-by :name (conj projects (:result result)))))
+                      ;; update config
                       (ok-handler project)))
                   (fn [error]
                     (js/console.dir error)
@@ -55,10 +56,11 @@
       (state/set-modal! modal-content))))
 
 (defn add-project!
-  [project]
+  [project ok-handler]
   (when (state/logged?)
     (create-project! project
-                     (fn []
+                     (fn [project]
+                       (when ok-handler (ok-handler project))
                        (notification/show! (util/format "Project \"%s\" was created successfully." project) :success)
                        (state/close-modal!)))))
 
@@ -83,7 +85,7 @@
          (when (and settings
                     (not (string/blank? (:name settings)))
                     (>= (count (string/trim (:name settings))) 2))
-           (add-project! (:name settings))))))))
+           (add-project! (:name settings) nil)))))))
 
 (defn update-project
   [project-name data]

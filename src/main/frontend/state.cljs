@@ -820,11 +820,9 @@
 
 (defn get-current-project
   []
-  (when-let [repo (get-current-repo)]
-    (let [projects (:projects (get-me))
-          project (:name (first (filter (fn [p] (= (:repo p) repo)) projects)))]
-      (when-not (string/blank? project)
-        project))))
+  (when-let [project (get-in (get-config) [:project :name])]
+    (when-not (string/blank? project)
+      project)))
 
 (defn update-current-project
   [& kv]
