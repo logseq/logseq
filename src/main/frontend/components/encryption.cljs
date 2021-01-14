@@ -11,7 +11,9 @@
   (rum/local false ::reveal-secret-phrase?)
   [state repo-url close-fn]
   (let [reveal-secret-phrase? (get state ::reveal-secret-phrase?)
-        secret-phrase (db-utils/get-key-value repo-url :db/secret-phrase)]
+        secret-phrase (e/get-mnemonic repo-url)
+        public-key (e/get-public-key repo-url)
+        private-key (e/get-secret-key repo-url)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div
        [:div.sm:flex.sm:items-start
@@ -20,13 +22,19 @@
           "This graph is encrypted"]]]
 
        [:div.mt-1
-        [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+        [:div.max-w-2xl.rounded-md.shadow-sm.sm:max-w-xl
          [:div.cursor-pointer.block.w-full.rounded-sm.p-2.text-gray-900
           {:on-click (fn []
                        (when (not @reveal-secret-phrase?)
                          (reset! reveal-secret-phrase? true)))}
           (if @reveal-secret-phrase?
-            secret-phrase
+            [:div
+             [:div.font-medium.text-gray-900 "Secret Phrase:"]
+             [:div secret-phrase]
+             [:div.font-medium.text-gray-900 "Public Key:"]
+             [:div public-key]
+             [:div.font-medium.text-gray-900 "Private Key:"]
+             [:div private-key]]
             "click to view the secret phrase")]]]
 
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
