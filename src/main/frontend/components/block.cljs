@@ -159,30 +159,66 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
+(defonce *resizing-image? (atom false))
 (rum/defcs resizable-image <
   (rum/local nil ::size)
-  [state config title src metadata full_text]
-  (let [size (get state ::size)]
-    (ui/resize-provider
-     (ui/resize-consumer
-      (cond->
-       {:className "resize"
-        :onSizeChanged #(reset! size %)
-        :onMouseUp (fn []
-                     (when @size
-                       (when-let [block-id (:block/uuid config)]
-                         (let [size (bean/->clj @size)]
-                           (editor-handler/resize-image! block-id metadata full_text size)))))
-        :onClick (fn [e]
-                   (util/stop e))}
-        (:width metadata)
-        (assoc :style {:width (:width metadata)}))
-      [:img.rounded-sm.shadow-xl
-       (merge
-        {:loading "lazy"
-         :src     src
-         :title   title}
-        metadata)]))))
+  {:will-unmount (fn [state]
+                   (reset! *resizing-image? false)
+                   state)}
+  [state config title src metadata full_text local?]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [size (get state ::size)]
+      (ui/resize-provider
+       (ui/resize-consumer
+        (cond->
+         {:className "resize"
+          :onSizeChanged (fn [value]
+                           (when (and (not @*resizing-image?)
+                                      (some? @size)
+                                      (not= value @size))
+                             (reset! *resizing-image? true))
+                           (reset! size value))
+          :onMouseUp (fn []
+                       (when @size
+                         (when-let [block-id (:block/uuid config)]
+                           (let [size (bean/->clj @size)]
+                             (editor-handler/resize-image! block-id metadata full_text size))))
+                       (when @*resizing-image?
+                         ;; TODO: need a better way to prevent the clicking to edit current block
+                         (js/setTimeout #(reset! *resizing-image? false) 200)))
+          :onClick (fn [e]
+                     (when @*resizing-image? (util/stop e)))}
+          (:width metadata)
+          (assoc :style {:width (:width metadata)}))
+        [:div.asset-container
+         [:img.rounded-sm.shadow-xl.relative
+          (merge
+           {:loading "lazy"
+            :src     src
+            :title   title}
+           metadata)]
+         [:span.ctl
+          [:a.delete
+           {:title "Delete this image"
+            :on-click
+            (fn [e]
+              (when-let [block-id (:block/uuid config)]
+                (let [confirm-fn (ui/make-confirm-modal
+                                  {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                   :sub-title     (if local? :asset/physical-delete "")
+                                   :sub-checkbox? local?
+                                   :on-confirm    (fn [e {:keys [close-fn sub-selected]}]
+                                                    (close-fn)
+                                                    (editor-handler/delete-asset-of-block!
+                                                     {:block-id    block-id
+                                                      :local?      local?
+                                                      :repo        (state/get-current-repo)
+                                                      :href        src
+                                                      :title       title
+                                                      :full-text   full_text}))})]
+                  (state/set-modal! confirm-fn)
+                  (util/stop e))))}
+           svg/trash-sm]]])))))
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -194,7 +230,7 @@
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      (resizable-image config title @src metadata full_text))))
+      (resizable-image config title @src metadata full_text true))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
@@ -205,13 +241,12 @@
                    nil
                    (safe-read-string metadata false))
         title (second (first label))]
-    (if (or (util/starts-with? href "/assets")
-            (util/starts-with? href "../assets"))
+    (if (config/local-asset? href)
       (asset-link config title href label metadata full_text)
       (let [href (if (util/starts-with? href "http")
                    href
                    (get-file-absolute-path config href))]
-        (resizable-image config title href metadata full_text)))))
+        (resizable-image config title href metadata full_text false)))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
@@ -1412,7 +1447,8 @@
                           (reset! *dragging-block nil)
                           (editor-handler/unhighlight-block!))
                :on-mouse-move (fn [e]
-                                (when (non-dragging? e)
+                                (when (and (non-dragging? e)
+                                           (not *resizing-image?))
                                   (state/into-selection-mode!)))
                :on-mouse-down (fn [e]
                                 (when (and
