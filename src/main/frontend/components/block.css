@@ -45,18 +45,19 @@
         border-radius: 4px;
         opacity: .4;
         user-select: none;
+        background: var(--ls-primary-background-color);
 
         &.delete {
           svg {
-            color: red;
+            color: #FFF;
 
-            opacity: .6;
+            opacity: .5;
             font-weight: normal;
           }
         }
 
         &:hover {
-          opacity: .8;
+          opacity: 1;
         }
 
         &:active {

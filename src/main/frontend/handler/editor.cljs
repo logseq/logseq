@@ -1577,28 +1577,15 @@
             (swap! *assets-url-cache assoc (keyword handle-path) url)
             url))))))
 
-(defn- replace-asset-link-with-href
-  [format content href title replacement]
-  (and content
-       (case format
-         :markdown
-         (-> content
-             (string/replace (str "![" title "](" href ")") replacement))
-         :org
-         (-> content
-             (string/replace (str "[[" href "][" title "]]") replacement)))))
-
 (defn delete-asset-of-block!
-  [{:keys [repo href title full-text block-id force-local] :as opts}]
+  [{:keys [repo href title full-text block-id local?] :as opts}]
   (let [block (db-model/query-block-by-uuid block-id)
         _ (or block (throw (str block-id " not exists")))
         format (:block/format block)
         text (:block/content block)
-        content (if full-text
-                  (string/replace text full-text "")
-                  (replace-asset-link-with-href format text href title ""))]
+        content (string/replace text full-text "")]
     (save-block! repo block content)
-    (when force-local
+    (when local?
       ;; FIXME: should be relative to current block page path
       (fs/unlink (str (util/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
 
