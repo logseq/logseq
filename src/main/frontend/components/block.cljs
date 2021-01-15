@@ -160,7 +160,7 @@
             (string/join "/" (reverse parts))))))))
 
 (rum/defc asset-container
-  [src title child]
+  [src title full-text child]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [get-block-id #(and % (.getAttribute (.closest % "[blockid]") "blockid"))
           repo (state/get-current-repo)
@@ -185,7 +185,8 @@
                                                    :force-local (and sub-selected (get sub-selected 0))
                                                    :repo        repo
                                                    :href        src
-                                                   :title       title}))})]
+                                                   :title       title
+                                                   :full-text   full-text}))})]
                (state/set-modal! confirm-fn)
                (util/stop e)))} svg/trash-sm]]
         child]])))
@@ -225,7 +226,9 @@
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      (resizable-image config title @src metadata full_text))))
+      (asset-container
+       href title full_text
+       (resizable-image config title @src metadata full_text)))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
@@ -236,8 +239,7 @@
                    nil
                    (safe-read-string metadata false))
         title (second (first label))]
-    (if (or (util/starts-with? href "/assets")
-            (util/starts-with? href "../assets"))
+    (if (config/local-asset? href)
       (asset-link config title href label metadata full_text)
       (let [href (if (util/starts-with? href "http")
                    href

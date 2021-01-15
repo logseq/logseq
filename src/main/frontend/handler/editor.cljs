@@ -1589,12 +1589,14 @@
              (string/replace (str "[[" href "][" title "]]") replacement)))))
 
 (defn delete-asset-of-block!
-  [{:keys [repo href title block-id force-local] :as opts}]
+  [{:keys [repo href title full-text block-id force-local] :as opts}]
   (let [block (db-model/query-block-by-uuid block-id)
         _ (or block (throw (str block-id " not exists")))
         format (:block/format block)
         text (:block/content block)
-        content (replace-asset-link-with-href format text href title "")]
+        content (if full-text
+                  (string/replace text full-text "")
+                  (replace-asset-link-with-href format text href title ""))]
     (save-block! repo block content)
     (when force-local
       ;; FIXME: should be relative to current block page path

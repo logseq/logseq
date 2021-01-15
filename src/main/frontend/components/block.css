@@ -37,6 +37,7 @@
       top: 0;
       right: 0;
       padding: 5px;
+      z-index: 1;
       display: none;
 
       > a {
