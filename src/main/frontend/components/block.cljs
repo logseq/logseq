@@ -50,14 +50,17 @@
             [frontend.context.i18n :as i18n]))
 
 (defn safe-read-string
-  [s]
-  (try
-    (reader/read-string s)
-    (catch js/Error e
-      (println "read-string error:")
-      (js/console.error e)
-      [:div.warning {:title "read-string failed"}
-       s])))
+  ([s]
+   (safe-read-string s true))
+  ([s warn?]
+   (try
+     (reader/read-string s)
+     (catch js/Error e
+       (println "read-string error:")
+       (js/console.error e)
+       (when warn?
+         [:div.warning {:title "read-string failed"}
+          s])))))
 
 ;; local state
 (defonce *block-children
@@ -187,38 +190,59 @@
                (util/stop e)))} svg/trash-sm]]
         child]])))
 
+(rum/defcs resizable-image <
+  (rum/local nil ::size)
+  [state config title src metadata full_text]
+  (let [size (get state ::size)]
+    (ui/resize-provider
+     (ui/resize-consumer
+      (cond->
+       {:className "resize"
+        :onSizeChanged #(reset! size %)
+        :onMouseUp (fn []
+                     (when @size
+                       (when-let [block-id (:block/uuid config)]
+                         (let [size (bean/->clj @size)]
+                           (editor-handler/resize-image! block-id metadata full_text size)))))
+        :onClick (fn [e]
+                   (util/stop e))}
+        (:width metadata)
+        (assoc :style {:width (:width metadata)}))
+      [:img.rounded-sm.shadow-xl
+       (merge
+        {:loading "lazy"
+         :src     src
+         :title   title}
+        metadata)]))))
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
-  [state href label]
-  (let [title (second (first label))
-        src (::src state)
+  [state config title href label metadata full_text]
+  (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
 
     (when granted?
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      (asset-container href title
-                       [:img
-                        {:loading "lazy"
-                         :src     @src
-                         :title   title}]))))
+      (resizable-image config title @src metadata full_text))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
-(defn image-link [config url href label]
-  (if (config/local-asset? href)
-    (asset-link href label)
-    (let [title (second (first label))
-          href (if (util/starts-with? href "http")
-                 href
-                 (get-file-absolute-path config href))]
-      (asset-container href title
-                       [:img.rounded-sm.shadow-xl
-                        {:loading "lazy"
-          ;; :on-error (fn [])
-                         :src     href
-                         :title   title}]))))
+
+
+(defn image-link [config url href label metadata full_text]
+  (let [metadata (if (string/blank? metadata)
+                   nil
+                   (safe-read-string metadata false))
+        title (second (first label))]
+    (if (or (util/starts-with? href "/assets")
+            (util/starts-with? href "../assets"))
+      (asset-link config title href label metadata full_text)
+      (let [href (if (util/starts-with? href "http")
+                   href
+                   (get-file-absolute-path config href))]
+        (resizable-image config title href metadata full_text)))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
@@ -583,14 +607,14 @@
     (nested-link config html-export? link)
 
     ["Link" link]
-    (let [{:keys [url label title]} link
+    (let [{:keys [url label title metadata full_text]} link
           img-formats (set (map name (config/img-formats)))]
       (match url
         ["Search" s]
         (cond
           ;; image
           (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) s)) img-formats)
-          (image-link config url s label)
+          (image-link config url s label metadata full_text)
 
           (= \# (first s))
           (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
@@ -622,7 +646,7 @@
 
             (= protocol "file")
             (if (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
-              (image-link config url href label)
+              (image-link config url href label metadata full_text)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
                            {:page/name (db/get-file-page (string/replace href "file:" ""))}
@@ -645,7 +669,7 @@
 
             ;; image
             (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
-            (image-link config url href label)
+            (image-link config url href label metadata full_text)
 
             :else
             (->elem

@@ -2209,3 +2209,13 @@
     (save-current-block-when-idle! {:check-idle? false})
     (when (string/starts-with? repo "https://") ; git repo
       (repo-handler/auto-push!))))
+
+(defn resize-image!
+  [block-id metadata full_text size]
+  (let [new-meta (merge metadata size)
+        image-part (first (string/split full_text #"\{"))
+        new-full-text (str image-part (pr-str new-meta))
+        block (db/pull [:block/uuid block-id])
+        value (:block/content block)
+        new-value (string/replace value full_text new-full-text)]
+    (save-block-aux! block new-value (:block/format block) {})))
