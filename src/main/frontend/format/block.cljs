@@ -360,7 +360,7 @@
              {:uuid uuid
               :content content
               :anchor (str uuid)
-              :level 2
+              :level 0
               :meta {:start-pos 0
                      :end-pos (or first-block-start-pos
                                   (utf8/length encoded-content))}

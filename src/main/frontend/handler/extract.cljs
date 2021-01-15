@@ -36,7 +36,11 @@
                    (fn [[page blocks]]
                      (if page
                        (map (fn [block]
-                              (let [block-ref-pages (seq (:block/ref-pages block))]
+                              (let [block-ref-pages (seq (:block/ref-pages block))
+                                    is-root (= 0 (:block/level block))
+                                    block-ref-pages (if is-root
+                                                      (vec (:tags properties))
+                                                      block-ref-pages)]
                                 (when block-ref-pages
                                   (swap! ref-pages set/union (set block-ref-pages)))
                                 (-> block
