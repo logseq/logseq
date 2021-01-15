@@ -30,15 +30,3 @@
 
 ;; Example 2:
 ;; <div style="padding: 20px; opacity: 0;height: 20px;" onmouseout="alert('Gotcha!')"></div>
-
-;; Copy from hiccup
-;; (defn escape-html
-;;   "Change special characters into HTML character entities."
-;;   [text]
-;;   (-> text
-;;       (string/replace "&"  "&amp;")
-;;       (string/replace "<"  "&lt;")
-;;       (string/replace ">"  "&gt;")
-;;       (string/replace "\"" "&quot;")
-;;       (string/replace "'" "&apos;")
-;;       (string/replace #"(?i)javascript:" "")))

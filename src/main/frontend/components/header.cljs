@@ -178,7 +178,8 @@
        [:div.repos.hidden.md:block
         (repo/repos-dropdown true nil)]
 
-       (when (and (nfs/supported?) (empty? repos))
+       (when (and (nfs/supported?) (empty? repos)
+                  (not config/publishing?))
          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
           {:on-click (fn []
                        (nfs/ls-dir-files))}

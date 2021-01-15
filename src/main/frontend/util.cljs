@@ -17,7 +17,8 @@
             [cljs-time.format :as format]
             [frontend.regex :as regex]
             [clojure.pprint :refer [pprint]]
-            [goog.userAgent]))
+            [goog.userAgent]
+            [goog.string :as gstring]))
 
 (goog-define NODETEST false)
 (defonce node-test? NODETEST)
@@ -786,12 +787,12 @@
   [block-element]
   (when block-element
     (when-let [section (some-> (rec-get-blocks-content-section block-element)
-                          (d/parent))]
+                               (d/parent))]
       (let [blocks (d/by-class section "ls-block")
             idx (when (seq blocks) (.indexOf (array-seq blocks) block-element))]
         (when (and idx section)
-         {:idx idx
-          :container (gdom/getElement section "id")})))))
+          {:idx idx
+           :container (gdom/getElement section "id")})))))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))
@@ -990,6 +991,26 @@
           parts-2
           [another-file-name])
          (string/join "/"))))
+
+;; Copy from hiccup
+(defn escape-html
+  "Change special characters into HTML character entities."
+  [text]
+  (-> text
+      (string/replace "&"  "&amp;")
+      (string/replace "<"  "&lt;")
+      (string/replace ">"  "&gt;")
+      (string/replace "\"" "&quot;")
+      (string/replace "'" "&apos;")))
+
+(defn unescape-html
+  [text]
+  (-> text
+      (string/replace "&amp;" "&")
+      (string/replace "&lt;" "<")
+      (string/replace "&gt;" ">")
+      (string/replace "&quot;" "\"")
+      (string/replace "&apos;" "'")))
 
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
