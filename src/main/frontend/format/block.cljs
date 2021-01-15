@@ -365,6 +365,10 @@
                      :end-pos (or first-block-start-pos
                                   (utf8/length encoded-content))}
               :body (take-while (fn [block] (not (heading-block? block))) blocks)
+              :children (set (mapcat (fn [block]
+                                       (when (= 1 (:block/level block))
+                                         [[:block/uuid (:block/uuid block)]]))
+                                     blocks))
               :pre-block? true}
              (block-keywordize)))
           (select-keys first-block [:block/file :block/format :block/page]))
