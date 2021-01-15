@@ -1448,7 +1448,7 @@
                           (editor-handler/unhighlight-block!))
                :on-mouse-move (fn [e]
                                 (when (and (non-dragging? e)
-                                           (not *resizing-image?))
+                                           (not @*resizing-image?))
                                   (state/into-selection-mode!)))
                :on-mouse-down (fn [e]
                                 (when (and
