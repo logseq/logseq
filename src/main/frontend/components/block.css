@@ -49,7 +49,7 @@
 
         &.delete {
           svg {
-            color: #FFF;
+            color: var(--ls-primary-text-color);
 
             opacity: .5;
             font-weight: normal;
