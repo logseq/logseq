@@ -1,6 +1,6 @@
 (ns frontend.components.widgets
   (:require [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.handler.user :as user-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.notification :as notification]

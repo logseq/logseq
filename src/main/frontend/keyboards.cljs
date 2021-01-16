@@ -7,7 +7,7 @@
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.search :as search]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [medley.core :as medley]
             ["mousetrap" :as mousetrap]
             [goog.object :as gobj]))

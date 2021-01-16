@@ -1,6 +1,6 @@
 (ns frontend.handler.notification
   (:require [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.jsutil :as util]))
 
 (defn clear!
   [uid]

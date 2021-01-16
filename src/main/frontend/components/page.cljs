@@ -1,6 +1,6 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]

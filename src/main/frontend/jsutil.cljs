@@ -1,4 +1,4 @@
-(ns frontend.util
+(ns frontend.jsutil
   (:require [goog.object :as gobj]
             [goog.dom :as gdom]
             [promesa.core :as p]

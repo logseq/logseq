@@ -10,7 +10,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [dommy.core :as d]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [medley.core :as medley]))
 
 (defn- default-undo

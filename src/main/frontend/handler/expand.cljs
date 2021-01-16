@@ -2,7 +2,7 @@
   (:require [dommy.core :as d]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.state :as state]
             [frontend.handler.block :as block-handler]))
 

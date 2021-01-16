@@ -1,6 +1,6 @@
 (ns frontend.extensions.code
   (:require [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [medley.core :as medley]

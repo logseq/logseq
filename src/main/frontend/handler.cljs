@@ -2,7 +2,7 @@
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.storage :as storage]
             [clojure.string :as string]

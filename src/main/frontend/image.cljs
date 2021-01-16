@@ -1,7 +1,7 @@
 (ns frontend.image
   (:require [goog.object :as gobj]
             ["/frontend/exif" :as exif]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.date :as date]
             [clojure.string :as string]))
 
@@ -87,7 +87,7 @@
                    (string/join "_"))
           file-name (str ymd "_" (gobj/get file "name"))]
       (when (= 0 (.indexOf file-type "image/"))
-        (file-handler file file-name file-type)
+        (file-handler file file-name file-type)))))
         ;; (let [img (js/Image.)]
         ;;   (set! (.-onload img)
         ;;         (fn []
@@ -102,4 +102,4 @@
         ;;                            max-height)))
         ;;   (set! (.-src img)
         ;;         (create-object-url file)))
-        ))))
+

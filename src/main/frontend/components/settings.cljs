@@ -8,7 +8,7 @@
             [frontend.handler.config :as config-handler]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.config :as config]
             [frontend.dicts :as dicts]
             [clojure.string :as string]

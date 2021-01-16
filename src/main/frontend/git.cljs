@@ -1,7 +1,7 @@
 (ns frontend.git
   (:refer-clojure :exclude [clone merge])
   (:require [promesa.core :as p]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.state :as state]

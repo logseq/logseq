@@ -5,7 +5,7 @@
             [frontend.db.model]
             [frontend.db.react]
             [frontend.db.query-custom]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [datascript.core :as d]
             [frontend.state :as state]
             [promesa.core :as p]
@@ -89,9 +89,9 @@
                (if (and (state/input-idle? repo)
                         (state/db-idle? repo))
                  (do
-                   (persist! repo)
+                   (persist! repo))
                    ;; (state/set-db-persisted! repo true)
-)
+
                  (persist-if-idle! repo)))
              3000)]
     (swap! persistent-jobs assoc repo job)))

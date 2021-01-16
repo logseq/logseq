@@ -7,7 +7,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.jsutil :as util]))
 
 ;; Undo && Redo that works with files
 

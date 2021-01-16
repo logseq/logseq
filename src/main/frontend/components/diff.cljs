@@ -1,6 +1,6 @@
 (ns frontend.components.diff
   (:require [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.config :as config]
             [frontend.handler.git :as git-handler]
             [frontend.handler.file :as file]

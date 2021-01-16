@@ -22,7 +22,7 @@
             [goog.dom.classes :as gdom-classes]
             [clojure.string :as string]
             [clojure.set :as set]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.config :as config]
             [dommy.core :as dom]
             [frontend.utf8 :as utf8]

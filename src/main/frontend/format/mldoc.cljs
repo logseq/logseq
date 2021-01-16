@@ -1,6 +1,6 @@
 (ns frontend.format.mldoc
   (:require [frontend.format.protocol :as protocol]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer-macros [match]]

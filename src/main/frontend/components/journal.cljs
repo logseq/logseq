@@ -1,6 +1,6 @@
 (ns frontend.components.journal
   (:require [rum.core :as rum]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]

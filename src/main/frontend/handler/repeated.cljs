@@ -4,7 +4,7 @@
             [cljs-time.format :as tf]
             [frontend.date :as date]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.jsutil :as util]))
 
 (def custom-formatter (tf/formatter "yyyy-MM-dd EEE"))
 

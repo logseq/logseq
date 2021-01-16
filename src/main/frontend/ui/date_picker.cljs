@@ -4,9 +4,9 @@
    [cljs-time.core       :refer [now today minus plus months days weeks year month day day-of-week first-day-of-the-month before? after?]]
    [cljs-time.predicates :refer [sunday?]]
    [cljs-time.format     :refer [parse unparse formatters formatter]]
-   [frontend.util          :refer [deref-or-value now->utc]]
+   [frontend.jsutil          :refer [deref-or-value now->utc]]
    [frontend.mixins :as mixins]
-   [frontend.util :as util]
+   [frontend.jsutil :as util]
    [frontend.state :as state]
    [goog.object :as gobj]
    [clojure.string :as string]))

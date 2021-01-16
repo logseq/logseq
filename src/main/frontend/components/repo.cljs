@@ -9,7 +9,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]
             [frontend.version :as version]

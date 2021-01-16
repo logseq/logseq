@@ -15,7 +15,7 @@
             [frontend.components.header :as header]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.storage :as storage]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.state :as state]
             [frontend.handler.user :as user-handler]
             [frontend.handler.editor :as editor-handler]

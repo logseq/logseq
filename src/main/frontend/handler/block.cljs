@@ -1,5 +1,5 @@
 (ns frontend.handler.block
-  (:require [frontend.util :as util]
+  (:require [frontend.jsutil :as util]
             [clojure.walk :as walk]
             [frontend.db :as db]
             [frontend.state :as state]

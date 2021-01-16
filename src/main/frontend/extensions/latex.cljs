@@ -3,7 +3,7 @@
             [frontend.loader :as loader]
             [frontend.ui :as ui]
             [frontend.config :as config]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [goog.dom :as gdom]))
 
 ;; TODO: extracted to a rum mixin

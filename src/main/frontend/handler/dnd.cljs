@@ -4,7 +4,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.db :as db]
             [clojure.walk :as walk]
             [clojure.string :as string]

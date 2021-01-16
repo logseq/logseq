@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [goog.object :as gobj]
             [frontend.rum :as r]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.mixins :as mixins]
             [frontend.storage :as storage]
             [frontend.components.svg :as svg]
@@ -135,9 +135,9 @@
         (reset! *saving-title nil)
         (notification/show!
          "Please specify a title first!"
-         :error)
+         :error))
         ;; TODO: focus the title input
-)
+
 
       (= title @*saving-title)
       nil

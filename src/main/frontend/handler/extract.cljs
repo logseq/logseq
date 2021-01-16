@@ -1,6 +1,6 @@
 (ns frontend.handler.extract
   "Extract helper."
-  (:require [frontend.util :as util]
+  (:require [frontend.jsutil :as util]
             [frontend.db :as db]
             [lambdaisland.glogi :as log]
             [clojure.set :as set]

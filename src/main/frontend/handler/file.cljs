@@ -1,6 +1,6 @@
 (ns frontend.handler.file
   (:refer-clojure :exclude [load-file])
-  (:require [frontend.util :as util :refer-macros [profile]]
+  (:require [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.fs :as fs]
             [promesa.core :as p]
             [frontend.state :as state]

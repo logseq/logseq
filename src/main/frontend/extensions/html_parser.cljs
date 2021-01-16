@@ -3,7 +3,7 @@
             [hickory.core :as hickory]
             [cljs.core.match :refer-macros [match]]
             [frontend.config :as config]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [clojure.string :as string]
             [clojure.walk :as walk]))
 

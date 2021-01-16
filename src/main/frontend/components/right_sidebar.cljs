@@ -11,7 +11,7 @@
             [frontend.handler.graph :as graph-handler]
             [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.date :as date]
             [medley.core :as medley]
             [clojure.string :as string]

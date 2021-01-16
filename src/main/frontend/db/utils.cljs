@@ -4,7 +4,7 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [datascript.transit :as dt]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.config :as config]))

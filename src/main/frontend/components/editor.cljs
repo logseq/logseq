@@ -3,7 +3,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.handler.file :as file]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]

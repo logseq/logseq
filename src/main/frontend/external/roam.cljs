@@ -4,7 +4,7 @@
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.jsutil :as util]))
 
 (defonce all-refed-uids (atom #{}))
 (defonce uid->uuid (atom {}))

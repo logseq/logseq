@@ -5,7 +5,7 @@
             [rum.core :as rum]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [frontend.util :as util :refer-macros [profile]]))
+            [frontend.jsutil :as util :refer-macros [profile]]))
 
 ;; sidebars
 (defn close-left-sidebar!
@@ -77,7 +77,7 @@
   []
   (when-let [style (or
                     (state/get-custom-css-link)
-                    (db/get-custom-css)
+                    (db/get-custom-css))]
                     ;; (state/get-custom-css-link)
-)]
+
     (util/add-style! style)))

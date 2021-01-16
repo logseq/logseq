@@ -16,7 +16,7 @@
             [cljs.reader :as reader]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [frontend.util :as util :refer [react] :refer-macros [profile]]
+            [frontend.jsutil :as util :refer [react] :refer-macros [profile]]
             [frontend.db-schema :as db-schema]))
 
 ;; TODO: extract to specific models and move data transform logic to the

@@ -1,6 +1,6 @@
 (ns frontend.handler.editor.keyboards
   (:require [frontend.state :as state]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.handler.editor :as editor-handler]
             [dommy.core :as d]
             [goog.dom :as gdom]

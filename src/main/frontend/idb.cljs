@@ -4,7 +4,7 @@
             [promesa.core :as p]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.storage :as storage]
             ["/frontend/idbkv" :as idb-keyval :refer [Store]]))
 

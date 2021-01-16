@@ -5,7 +5,7 @@
             [medley.core :as medley]
             [goog.object :as gobj]
             [goog.dom :as gdom]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.handler.common :as common-handler]
             ["/frontend/utils" :as utils]
             [frontend.handler.repo :as repo-handler]
@@ -258,8 +258,8 @@
                                          (rename-f "add" added)
                                          (rename-f "modify" modified))]
                               (when (or (and (seq diffs) (seq modified-files))
-                                        (seq diffs) ; delete
-)
+                                        (seq diffs)) ; delete
+
                                 (repo-handler/load-repo-to-db! repo
                                                                {:diffs     diffs
                                                                 :nfs-files modified-files})))))))))

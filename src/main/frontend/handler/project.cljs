@@ -1,6 +1,6 @@
 (ns frontend.handler.project
   (:require [frontend.state :as state]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]

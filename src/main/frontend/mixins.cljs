@@ -3,7 +3,7 @@
             [goog.dom :as dom]
             [goog.object :as gobj]
             [frontend.keyboard :as keyboard]
-            [frontend.util :refer-macros [profile]])
+            [frontend.jsutil :refer-macros [profile]])
   (:import [goog.events EventHandler]))
 
 (defn detach

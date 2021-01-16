@@ -3,7 +3,7 @@
             [frontend.state :as state]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.text :as text]
             [frontend.git :as git]
             [frontend.db :as db]
@@ -68,8 +68,8 @@
             diffs (git/get-diffs repo local-oid remote-oid)]
       (println {:local-oid local-oid
                 :remote-oid remote-oid
-                :diffs diffs})))
-  )
+                :diffs diffs}))))
+
 
 (defn get-config
   [repo-url]

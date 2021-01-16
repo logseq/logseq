@@ -1,6 +1,6 @@
 (ns frontend.components.search
   (:require [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
             [frontend.handler.file :as file-handler]

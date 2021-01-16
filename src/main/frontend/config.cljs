@@ -2,7 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.jsutil :as util]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)

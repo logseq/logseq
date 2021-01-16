@@ -1,7 +1,7 @@
 (ns frontend.handler.export
   (:require [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [goog.dom :as gdom]

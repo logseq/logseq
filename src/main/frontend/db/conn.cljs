@@ -2,7 +2,7 @@
   "Contains db connections."
   (:require [clojure.string :as string]
             [frontend.db-schema :as db-schema]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.idb :as idb]

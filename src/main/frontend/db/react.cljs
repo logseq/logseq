@@ -7,7 +7,7 @@
   (:require [frontend.db.conn :as conn]
             [frontend.state :as state]
             [frontend.date :as date]
-            [frontend.util :as util :refer-macros [profile] :refer [react]]
+            [frontend.jsutil :as util :refer-macros [profile] :refer [react]]
             [clojure.string :as string]
             [frontend.config :as config]
             [datascript.core :as d]

@@ -1,5 +1,5 @@
 (ns frontend.fs
-  (:require [frontend.util :as util :refer-macros [profile]]
+  (:require [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -228,10 +228,10 @@
     (p/catch (fn [error]
                (log/error :file/write-failed? {:dir dir
                                                :path path
-                                               :error error})
+                                               :error error}))))))
                ;; Disable this temporarily
                ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-)))))
+
 
 (defn rename
   [repo old-path new-path]

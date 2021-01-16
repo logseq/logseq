@@ -3,7 +3,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [reitit.frontend.easy :as rfe]
             [frontend.db-mixins :as db-mixins]
             [frontend.config :as config]
@@ -114,8 +114,8 @@
                                  title]]
                          [:span [:a {:href (util/format "%s/%s/%s" config/website current-project title)
                                      :target "_blank"}
-                                 svg/external-link]]]
-                    ]
+                                 svg/external-link]]]]
+
                    [:td [:span.text-gray-500.text-sm
                          [:a {:on-click
                               (fn [e]

@@ -10,7 +10,7 @@
             [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.core]

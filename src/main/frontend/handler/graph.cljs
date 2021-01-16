@@ -1,7 +1,7 @@
 (ns frontend.handler.graph
   (:require [frontend.db :as db]
             [clojure.string :as string]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.date :as date]
             [frontend.state :as state]
             [clojure.set :as set]))

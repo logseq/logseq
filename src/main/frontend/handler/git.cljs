@@ -1,5 +1,5 @@
 (ns frontend.handler.git
-  (:require [frontend.util :as util :refer-macros [profile]]
+  (:require [frontend.jsutil :as util :refer-macros [profile]]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.state :as state]

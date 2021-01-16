@@ -1,5 +1,5 @@
 (ns frontend.github
-  (:require [frontend.util :as util]
+  (:require [frontend.jsutil :as util]
             [cljs-bean.core :as bean]
             [goog.crypt.base64 :as b64]))
 

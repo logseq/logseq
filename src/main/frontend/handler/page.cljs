@@ -3,7 +3,7 @@
             [frontend.db :as db]
             [datascript.core :as d]
             [frontend.state :as state]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]

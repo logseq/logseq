@@ -1,7 +1,7 @@
 (ns frontend.state
   (:require [frontend.storage :as storage]
             [rum.core :as rum]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.jsutil :as util :refer-macros [profile]]
             [clojure.string :as string]
             [medley.core :as medley]
             [goog.object :as gobj]
@@ -194,8 +194,8 @@
   ;;         (get (sub-config) (get-current-repo))))
 
   ;; Disable block timestamps for now, because it doesn't work with undo/redo
-  false
-  )
+  false)
+
 
 ;; Enable by default
 (defn show-brackets?
@@ -348,7 +348,7 @@
        (when-let [input (gdom/getElement input-id)]
          (util/set-change-value input value)))
      (update-state! :editor/content (fn [m]
-                                      (assoc m input-id value)))
+                                      (assoc m input-id value))))))
      ;; followers
      ;; (when-let [s (util/extract-uuid input-id)]
      ;;   (let [input (gdom/getElement input-id)
@@ -357,7 +357,7 @@
      ;;                        (remove #(= leader-parent %)))]
      ;;     (prn "followers: " (count followers))
      ;;     ))
-)))
+
 
 (defn get-edit-input-id
   []

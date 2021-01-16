@@ -1,5 +1,5 @@
 (ns frontend.commands
-  (:require [frontend.util :as util]
+  (:require [frontend.jsutil :as util]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.search :as search]
@@ -127,11 +127,11 @@
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
      ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]
-     ["Html Inline " (->inline "html")]
+     ["Html Inline " (->inline "html")]]
 
      ;; TODO:
      ;; ["Upload a file" nil]
-]
+
     ;; Allow user to modify or extend, should specify how to extend.
     (state/get-commands))
    (remove nil?)

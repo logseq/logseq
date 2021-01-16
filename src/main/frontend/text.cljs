@@ -1,6 +1,6 @@
 (ns frontend.text
   (:require [frontend.config :as config]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [clojure.string :as string]
             [clojure.set :as set]))
 

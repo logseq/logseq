@@ -1,6 +1,6 @@
 (ns frontend.components.file
   (:require [rum.core :as rum]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.handler.project :as project]
             [frontend.handler.export :as export-handler]
             [frontend.config :as config]

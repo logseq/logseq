@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [get set remove])
   (:require [cljs.reader :as reader]
             [datascript.transit :as dt]
-            [frontend.util :as util]))
+            [frontend.jsutil :as util]))
 
 ;; TODO: refactor: separate side effects
 (defn get

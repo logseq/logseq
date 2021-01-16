@@ -9,7 +9,7 @@
             [cljs.reader :as reader]
             [frontend.extensions.sci :as sci]
             [lambdaisland.glogi :as log]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.db.react :as react]
             [frontend.text :as text]
             [clojure.walk :as walk]))

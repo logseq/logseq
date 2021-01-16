@@ -4,7 +4,7 @@
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
             [frontend.context.i18n :as i18n]
-            [frontend.util :as util]))
+            [frontend.jsutil :as util]))
 
 (rum/defc intro
   []
@@ -292,7 +292,7 @@
         (highlight/highlight
          "help-highlight"
          {:data-lang "clojure"}
-         "(println \"Hello world!\")")]]
+         "(println \"Hello world!\")"
          [:tr [:td "[label](https://www.example.com)"]
           [:td.text-right
            [:a {:href "https://www.example.com"}
@@ -303,7 +303,7 @@
                           :width 64
                           :height 64}
                   :src "https://asset.logseq.com/static/img/logo.png"
-                  :alt "image"}]]]]]]
+                  :alt "image"}]]])]]]]]
 
       [:li
        (t :help/org-mode-syntax)

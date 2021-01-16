@@ -3,7 +3,7 @@
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
-            [frontend.util :as util]
+            [frontend.jsutil :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
             [frontend.state :as state]
