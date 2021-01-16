@@ -268,6 +268,7 @@
   (util/starts-with? path default-draw-directory))
 
 (defonce local-repo "local")
+(defonce local-assets-dir "assets")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def metadata-file "metadata.edn")
@@ -288,6 +289,11 @@
 (defn local-db?
   [s]
   (string/starts-with? s local-db-prefix))
+
+(defn local-asset?
+  [s]
+  (or (string/starts-with? s (str "/" local-assets-dir))
+      (string/starts-with? s (str "../" local-assets-dir))))
 
 (defn get-local-dir
   [s]
