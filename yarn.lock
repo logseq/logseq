@@ -3628,10 +3628,10 @@ mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@^0.3.3:
-  version "0.3.3"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.3.3.tgz#e02b97d82f0907432d8db10e958d7f02a9a806ff"
-  integrity sha512-NdksPLmtW8fe6fG/54Wy7WCaDWEpGrxgi6jsAci/CdnuTvWZKwmSYajoTVBBzyN9RmvY+6Sib3mbxorfxEvhSQ==
+mldoc@^0.3.7:
+  version "0.3.7"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.3.7.tgz#08f0ff51ab223d47279beadf89d70fbb238164ff"
+  integrity sha512-vnZqOrCE/JnDyy14zTxHE0KfSpRS/nu4+EuySpomHhWQYiBJ30dv0QhAvNW3XoX/kz8O0bVopFOAPPCCEb1MOQ==
   dependencies:
     yargs "^12.0.2"
 
