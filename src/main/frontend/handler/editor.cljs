@@ -606,6 +606,14 @@
                (when chan {:chan chan
                            :chan-callback chan-callback})))
 
+             ;; fix editing template with multiple headings
+             (when (> (count blocks) 1)
+               (let [new-value (-> (text/remove-level-spaces (:block/content (first blocks)) (:block/format (first blocks)))
+                                  (string/trim-newline))
+                    edit-input-id (state/get-edit-input-id)]
+                (when edit-input-id
+                  (state/set-edit-content! edit-input-id new-value))))
+
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
 
