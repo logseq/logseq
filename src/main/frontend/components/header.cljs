@@ -101,7 +101,7 @@
           :options {:href (rfe/href :settings)}
           :icon svg/settings-sm}
 
-         (when (and logged? current-repo)
+         (when current-repo
            {:title (t :export)
             :options {:on-click (fn []
                                   (export/export-repo-as-html! current-repo))}
