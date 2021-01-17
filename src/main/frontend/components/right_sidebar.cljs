@@ -137,7 +137,10 @@
 
     :page
     (let [page-name (:page/name block-data)]
-      [[:a {:href (rfe/href :page {:name (util/url-encode page-name)})}
+      [[:a {:href (rfe/href :page {:name (util/url-encode page-name)})
+            :on-click (fn [e]
+                        (when (gobj/get e "shiftKey")
+                          (.preventDefault e)))}
         (util/capitalize-all page-name)]
        [:div.ml-2
         (page-cp repo page-name)]])
