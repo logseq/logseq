@@ -93,6 +93,15 @@
 .block-children {
   border-left: 2px solid;
   border-left-color: var(--ls-guideline-color, #ddd);
+
+  padding-top: 2px;
+  padding-bottom: 3px;
+
+  > .ls-block {
+    &:last-child {
+      margin-bottom: -5px;
+    }
+  }
 }
 
 .block-control,
