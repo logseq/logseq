@@ -52,7 +52,6 @@
            [:div#root]
            [:script (str "window.logseq_db=" transit-db)]
            [:script (str "window.logseq_state=" (js/JSON.stringify app-state))]
-           [:script {:src "/static/js/mldoc.min.js"}]
            [:script {:type "text/javascript"}
             "// Single Page Apps for GitHub Pages
       // https://github.com/rafgraph/spa-github-pages
