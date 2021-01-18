@@ -1070,7 +1070,7 @@
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 (defmacro profile [k & body]
-  #?(:cljs
+  #?(:clj
       `(if goog.DEBUG
          (let [k# ~k]
            (.time js/console k#)
