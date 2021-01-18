@@ -85,8 +85,10 @@ Open <http://localhost:3001>.
 ### 4. Build a release
 
 ``` bash
-yarn release
+ENV=prod yarn release 
 ```
+
+ENV: we can release a version for `staging` or `prod`. Logseq will read the environment variable from `resources/config.edn`
 
 ## Alternative: Docker based development environment
 
