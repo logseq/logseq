@@ -3,10 +3,7 @@
  :nrepl        {:port 8701}
 
  :builds
- {:electron {:target :node-script
-             :output-to "./static/electron.js"
-             :main electron.core/main}
-  :app
+ {:app
   {:target :browser
    :module-loader true
    :modules {:main {:init-fn frontend.core/init}
@@ -35,6 +32,10 @@
     :http-port    3001
     :watch-path   "static"
     :preloads     [devtools.preload]}}
+
+  :electron {:target :node-script
+             :output-to "static/electron.js"
+             :main electron.core/main}
 
   :test
   {:target :node-test
