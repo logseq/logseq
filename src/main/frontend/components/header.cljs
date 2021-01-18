@@ -161,9 +161,9 @@
             [:a {:on-click toggle-fn}
              [:span.ml-1.text-sm (t :login)]])
           (let [list [{:title (t :login-google)
-                       :url "/login/google"}
+                       :url (str config/website "/login/google")}
                       {:title (t :login-github)
-                       :url "/login/github"}]]
+                       :url (str config/website "/login/github")}]]
             (mapv
              (fn [{:keys [title url]}]
                {:title title
