@@ -3,7 +3,10 @@
  :nrepl        {:port 8701}
 
  :builds
- {:app
+ {:electron {:target :node-script
+             :output-to "./static/electron.js"
+             :main electron.core/main}
+  :app
   {:target :browser
    :module-loader true
    :modules {:main {:init-fn frontend.core/init}
