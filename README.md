@@ -116,3 +116,7 @@ cd logseq
 yarn
 yarn watch
 ```
+
+## Thanks
+
+[![JetBrains](docs/assets/jetbrains.svg)](https://www.jetbrains.com/?from=logseq)
