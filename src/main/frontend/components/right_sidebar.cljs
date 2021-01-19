@@ -145,12 +145,15 @@
           (block-cp repo idx block-data)]]))
 
     :page
-    (let [page-name (:page/name block-data)]
-      [[:a {:href (rfe/href :page {:name (util/url-encode page-name)})
+    (let [page-name (:page/name block-data)
+          page (db/pull [:page/name (string/lower-case page-name)])
+          page-name (or (:page/original-name page)
+                        (:page/name page))]
+      [[:a {:href (rfe/href :page {:name page-name})
             :on-click (fn [e]
                         (when (gobj/get e "shiftKey")
                           (.preventDefault e)))}
-        (util/capitalize-all page-name)]
+        page-name]
        [:div.ml-2
         (page-cp repo page-name)]])
 
