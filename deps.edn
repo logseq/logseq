@@ -40,7 +40,8 @@
                   :main-opts ["-m" "shadow.cljs.devtools.cli"]}
            :test
            {:extra-paths ["src/test/"]
-            :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.764"}
+            :extra-deps  {cheshire/cheshire {:mvn/version "5.10.0"}
+                          org.clojure/clojurescript {:mvn/version "1.10.764"}
                           org.clojure/test.check {:mvn/version "RELEASE"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
            :runner

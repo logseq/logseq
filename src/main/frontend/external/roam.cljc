@@ -1,6 +1,7 @@
 (ns frontend.external.roam
-  (:require [frontend.external.protocol :as protocol]
-            [cljs-bean.core :as bean]
+  (:require #?(:cljs [cljs-bean.core :as bean]
+               :clj [cheshire.core :as json])
+            [frontend.external.protocol :as protocol]
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.string :as string]
@@ -122,8 +123,9 @@
 (defrecord Roam []
   protocol/External
   (toMarkdownFiles [this content _config]
-    (let [data (bean/->clj (js/JSON.parse content))]
-      (->files data))))
+    #?(:cljs (let [data (bean/->clj (js/JSON.parse content))]
+               (->files data))
+       :clj (-> content json/parse-string ->files))))
 
 (comment
   (defonce test-roam-json (frontend.db/get-file "same.json"))
