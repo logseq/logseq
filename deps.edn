@@ -38,14 +38,14 @@
                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
                                 cider/cider-nrepl           {:mvn/version "0.25.5"}}
                   :main-opts ["-m" "shadow.cljs.devtools.cli"]}
-           :test-cljs
+           :test
            {:extra-paths ["src/test/"]
             :extra-deps  {
                           org.clojure/clojurescript {:mvn/version "1.10.764"}
                           org.clojure/test.check {:mvn/version "RELEASE"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
            :test-clj
-           {;:extra-paths ["src/test/"]
+           {:extra-paths ["src/test/"]
             :extra-deps
             {cheshire/cheshire {:mvn/version "5.10.0"}
              com.cognitect/test-runner
