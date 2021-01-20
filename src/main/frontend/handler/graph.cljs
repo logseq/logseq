@@ -51,7 +51,7 @@
                        (map string/lower-case))
         names (db/pull-many '[:page/name :page/original-name] (mapv (fn [page] [:page/name page]) all-pages))
         names (zipmap (map :page/name names)
-                      (map (fn [x] (get x :page/original-name (util/capitalize-all (:page/name x)))) names))
+                      (map (fn [x] (get x :page/original-name (:page/name x))) names))
         nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
         links (mapv (fn [{:keys [source target]}]
                       {:source (get names source)
