@@ -50,6 +50,12 @@
       (when-not node-test?
         (re-find #"Mobi" js/navigator.userAgent))))
 
+#?(:cljs
+   (defn electron?
+     []
+     (let [ua (string/lower-case js/navigator.userAgent)]
+       (string/includes? ua " electron"))))
+
 (defn format
   [fmt & args]
   #?(:cljs (apply gstring/format fmt args)

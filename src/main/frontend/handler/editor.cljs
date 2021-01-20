@@ -609,10 +609,10 @@
              ;; fix editing template with multiple headings
              (when (> (count blocks) 1)
                (let [new-value (-> (text/remove-level-spaces (:block/content (first blocks)) (:block/format (first blocks)))
-                                  (string/trim-newline))
-                    edit-input-id (state/get-edit-input-id)]
-                (when edit-input-id
-                  (state/set-edit-content! edit-input-id new-value))))
+                                   (string/trim-newline))
+                     edit-input-id (state/get-edit-input-id)]
+                 (when edit-input-id
+                   (state/set-edit-content! edit-input-id new-value))))
 
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
@@ -1565,7 +1565,7 @@
             filename (str (gen-filename index file) ext)
             filename (str path "/" filename)]
         ;(js/console.debug "Write asset #" filename file)
-        (p/then (fs/write-file repo dir filename (.stream file))
+        (p/then (fs/write-file! repo dir filename (.stream file) nil)
                 #(p/resolved [filename file])))))))
 
 (defonce *assets-url-cache (atom {}))
@@ -1595,7 +1595,7 @@
     (save-block! repo block content)
     (when local?
       ;; FIXME: should be relative to current block page path
-      (fs/unlink (str (util/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
+      (fs/unlink! (str (util/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]

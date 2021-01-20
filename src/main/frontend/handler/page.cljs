@@ -50,7 +50,7 @@
          journal-page? (date/valid-journal-title? title)
          directory (get-directory journal-page?)]
      (when dir
-       (p/let [_ (-> (fs/mkdir (str dir "/" directory))
+       (p/let [_ (-> (fs/mkdir! (str dir "/" directory))
                      (p/catch (fn [_e])))]
          (let [format (name (state/get-preferred-format))
                page (string/lower-case title)
@@ -273,10 +273,10 @@
               ;; remove file
               (->
                (p/let [_ (git/remove-file repo file-path)
-                       _ (fs/unlink (str (util/get-repo-dir repo)
-                                         "/"
-                                         file-path)
-                                    nil)]
+                       _ (fs/unlink! (str (util/get-repo-dir repo)
+                                          "/"
+                                          file-path)
+                                     nil)]
                  (common-handler/check-changed-files-status)
                  (repo-handler/push-if-auto-enabled! repo))
                (p/catch (fn [err]
@@ -310,9 +310,9 @@
         (d/transact! conn [{:db/id (:db/id file)
                             :file/path new-path}])))
     (->
-     (p/let [_ (fs/rename repo
-                          (str (util/get-repo-dir repo) "/" old-path)
-                          (str (util/get-repo-dir repo) "/" new-path))
+     (p/let [_ (fs/rename! repo
+                           (str (util/get-repo-dir repo) "/" old-path)
+                           (str (util/get-repo-dir repo) "/" new-path))
              _ (when-not (config/local-db? repo)
                  (git/rename repo old-path new-path))]
        (common-handler/check-changed-files-status)

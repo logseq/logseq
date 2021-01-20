@@ -49,10 +49,10 @@
   [repo]
   (when repo
     (let [repo-dir (util/get-repo-dir repo)]
-     (util/p-handle
-      (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
-      (fn [_result] nil)
-      (fn [_error] nil)))))
+      (util/p-handle
+       (fs/mkdir! (str repo-dir (str "/" config/default-draw-directory)))
+       (fn [_result] nil)
+       (fn [_error] nil)))))
 
 (defn save-excalidraw!
   [file data ok-handler]
@@ -63,7 +63,7 @@
         (->
          (p/do!
           (create-draws-directory! repo)
-          (fs/write-file repo repo-dir path data)
+          (fs/write-file! repo repo-dir path data nil)
           (git-handler/git-add repo path)
           (ok-handler file)
           (let [modified-at (tc/to-long (t/now))]

@@ -57,7 +57,6 @@
         "codemirror": "^5.58.1",
         "diff": "5.0.0",
         "diff-match-patch": "^1.0.5",
-        "electron-better-ipc": "^1.1.1",
         "fs": "^0.0.1-security",
         "fuzzysort": "^1.1.4",
         "gulp-cached": "^1.1.1",

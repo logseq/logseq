@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [load-file])
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.fs :as fs]
+            [frontend.fs.nfs :as nfs]
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.db :as db]
@@ -161,8 +162,8 @@
         (reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file repo (util/get-repo-dir repo) path content {:old-content original-content
-                                                                :last-modified-at (db/get-file-last-modified-at repo path)})
+     (fs/write-file! repo (util/get-repo-dir repo) path content {:old-content original-content
+                                                                 :last-modified-at (db/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))
@@ -220,10 +221,10 @@
                     reset? false}} file->content]
   (let [write-file-f (fn [[path content]]
                        (let [original-content (get file->content path)]
-                         (-> (p/let [_ (fs/check-directory-permission! repo)]
-                               (fs/write-file repo (util/get-repo-dir repo) path content
-                                              {:old-content original-content
-                                               :last-modified-at (db/get-file-last-modified-at repo path)}))
+                         (-> (p/let [_ (nfs/check-directory-permission! repo)]
+                               (fs/write-file! repo (util/get-repo-dir repo) path content
+                                               {:old-content original-content
+                                                :last-modified-at (db/get-file-last-modified-at repo path)}))
                              (p/catch (fn [error]
                                         (log/error :write-file/failed {:path path
                                                                        :content content
@@ -263,10 +264,11 @@
   (when-not (string/blank? file)
     (->
      (p/let [_ (git/remove-file repo file)
-             result (fs/unlink (str (util/get-repo-dir repo)
-                                    "/"
-                                    file)
-                               nil)]
+             result (fs/unlink! (str
+                                 (util/get-repo-dir repo)
+                                 "/"
+                                 file)
+                                nil)]
        (when-let [file (db/entity repo [:file/path file])]
          (common-handler/check-changed-files-status)
          (let [file-id (:db/id file)
