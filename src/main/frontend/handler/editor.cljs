@@ -1959,6 +1959,19 @@
     (state/set-collapsed-state! (:block/uuid current-block)
                                 true)))
 
+(defn insert-new-line-above! []
+  (let [new-content (str "\n" (state/get-edit-content))
+        edit-id (state/get-edit-input-id)
+        input (gdom/getElement edit-id)]
+    (state/set-edit-content! edit-id new-content)
+    (if (not (nil? input)) (util/move-cursor-to input 0))))
+
+(defn insert-new-line-below! []
+  (let [new-value (str (state/get-edit-content) "\n")
+        edit-id (state/get-edit-input-id)]
+    (state/set-edit-content! edit-id new-value)
+))
+
 (defn cycle-collapse!
   [_state e]
   (when (and

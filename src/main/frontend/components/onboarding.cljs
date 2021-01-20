@@ -245,6 +245,8 @@
          [:tr [:td (t :collapse)] [:td (util/->platform-shortcut "Ctrl-Up")]]
          [:tr [:td (t :select-block-above)] [:td "Shift-Up"]]
          [:tr [:td (t :select-block-below)] [:td "Shift-Down"]]
+         [:tr [:td (t :insert-line-above)] [:td "Ctrl-Shift+Up"]]
+         [:tr [:td (t :insert-line-below)] [:td "Ctrl-+Shift+Enter"]]
          [:tr [:td (t :select-all-blocks)] [:td (util/->platform-shortcut "Ctrl-Shift-a")]]]]
        [:table
         [:thead
