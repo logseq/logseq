@@ -15,7 +15,8 @@ Use it to organize your todo list, to write your journals, or to record your uni
 
 ## Why Logseq?
 
-[Logseq](https://logseq.com) is a freedom-respecting (and open-source too) platform for knowledge sharing and management. It focuses on privacy, longevity, and user control.
+[Logseq](https://logseq.com) is a platform for knowledge sharing and management. It focuses on privacy, longevity, and user control.
+Notice: the backend code will not be open-sourced for security reasons and other potential risks. 
 
 The server will never store or analyze your private notes. Your data are plain text files and we currently support both Markdown and Emacs Org mode (more to be added soon).
 
