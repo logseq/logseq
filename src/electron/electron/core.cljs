@@ -81,3 +81,9 @@
                                    (.hide win))))
            (.on app "before-quit" #(reset! *quitting? true))
            (.on app "activate" #(if @*win (.show win)))))))
+
+(defn start []
+  (js/console.log "Main - start"))
+
+(defn stop []
+  (js/console.log "Main - stop"))
