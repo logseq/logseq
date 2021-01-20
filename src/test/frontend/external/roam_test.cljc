@@ -1,7 +1,7 @@
 (ns frontend.external.roam-test
   (:require #?(:clj  [clojure.test :refer :all]
                :cljs [cljs.test :refer [is deftest]])
-            ;[frontend.external.roam :as roam]
+            [frontend.external.roam :as roam]
             [frontend.external :refer [to-markdown-files]]))
 
 (def minimal-json "
@@ -23,11 +23,15 @@
   \"edit-email\": \"adam@example.com\"}]
 ")
 
-(deftest roam-import-test
-  (let [got (to-markdown-files :roam minimal-json {})
-        md (first got)]
-    (is (= 1 (count got)))
-    (is (= "Export JSON" (:title md)))
-    (is (:created-at md))
-    (is (:last-modified-at md))
-    (is (= "---\ntitle: Export JSON\n---\n\n## Hello, world!\n" (:text md)))))
+(deftest json->edn-test
+  (is (= [1 {:foo 42, :bar "baz"} 3] (roam/json->edn "[1, {\"foo\": 42, \"bar\": \"baz\"}, 3]"))))
+
+(comment
+  (deftest roam-import-test
+    (let [got (to-markdown-files :roam minimal-json {})
+          md (first got)]
+      (is (= 1 (count got)))
+      (is (= "Export JSON" (:title md)))
+      (is (:created-at md))
+      (is (:last-modified-at md))
+      (is (= "---\ntitle: Export JSON\n---\n\n## Hello, world!\n" (:text md))))))

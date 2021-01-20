@@ -120,12 +120,15 @@
                    (apply str))))
      files)))
 
+(defn json->edn
+  [raw-string]
+  #?(:cljs (-> raw-string js/JSON.parse bean/->clj)
+     :clj (-> raw-string json/parse-string clojure.walk/keywordize-keys)))
+
 (defrecord Roam []
   protocol/External
   (toMarkdownFiles [this content _config]
-    #?(:cljs (let [data (bean/->clj (js/JSON.parse content))]
-               (->files data))
-       :clj (-> content json/parse-string ->files))))
+    (->files content)))
 
 (comment
   (defonce test-roam-json (frontend.db/get-file "same.json"))
