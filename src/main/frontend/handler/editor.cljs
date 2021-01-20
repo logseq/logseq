@@ -1,6 +1,8 @@
 (ns frontend.handler.editor
   (:require [frontend.state :as state]
+            [lambdaisland.glogi :as log]
             [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.git :as git-handler]
@@ -603,6 +605,14 @@
                  [[file-path new-content]])
                (when chan {:chan chan
                            :chan-callback chan-callback})))
+
+             ;; fix editing template with multiple headings
+             (when (> (count blocks) 1)
+               (let [new-value (-> (text/remove-level-spaces (:block/content (first blocks)) (:block/format (first blocks)))
+                                  (string/trim-newline))
+                    edit-input-id (state/get-edit-input-id)]
+                (when edit-input-id
+                  (state/set-edit-content! edit-input-id new-value))))
 
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
@@ -1419,10 +1429,16 @@
                              opts))))
 
 (defn save-block!
-  [{:keys [format block id repo dummy?] :as state} value]
-  (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
-            dummy?)
-    (save-block-aux! block value format {})))
+  ([repo block-or-uuid content]
+   (let [block (if (or (uuid? block-or-uuid)
+                       (string? block-or-uuid))
+                 (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)
+         format (:block/format block)]
+     (save-block! {:block block :repo repo :format format} content)))
+  ([{:keys [format block repo dummy?] :as state} value]
+   (when (or (:db/id (db/entity repo [:block/uuid (:block/uuid block)]))
+             dummy?)
+     (save-block-aux! block value format {}))))
 
 (defn save-current-block-when-idle!
   ([]
@@ -1552,7 +1568,7 @@
         (p/then (fs/write-file repo dir filename (.stream file))
                 #(p/resolved [filename file])))))))
 
-(def *assets-url-cache (atom {}))
+(defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
   [path]                                                    ;; path start with "/assets" or compatible for "../assets"
@@ -1568,6 +1584,18 @@
           (p/let [url (js/URL.createObjectURL file)]
             (swap! *assets-url-cache assoc (keyword handle-path) url)
             url))))))
+
+(defn delete-asset-of-block!
+  [{:keys [repo href title full-text block-id local?] :as opts}]
+  (let [block (db-model/query-block-by-uuid block-id)
+        _ (or block (throw (str block-id " not exists")))
+        format (:block/format block)
+        text (:block/content block)
+        content (string/replace text full-text "")]
+    (save-block! repo block content)
+    (when local?
+      ;; FIXME: should be relative to current block page path
+      (fs/unlink (str (util/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]
@@ -2178,3 +2206,13 @@
     (save-current-block-when-idle! {:check-idle? false})
     (when (string/starts-with? repo "https://") ; git repo
       (repo-handler/auto-push!))))
+
+(defn resize-image!
+  [block-id metadata full_text size]
+  (let [new-meta (merge metadata size)
+        image-part (first (string/split full_text #"\{"))
+        new-full-text (str image-part (pr-str new-meta))
+        block (db/pull [:block/uuid block-id])
+        value (:block/content block)
+        new-value (string/replace value full_text new-full-text)]
+    (save-block-aux! block new-value (:block/format block) {})))

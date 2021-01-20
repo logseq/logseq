@@ -60,7 +60,10 @@
               (str (subs content 0 48) "...")
               content))
           "Page no longer exists!!")
-        (util/capitalize-all (util/url-decode name))))
+        (let [page (util/url-decode name)
+              page (db/pull [:page/name (string/lower-case page)])]
+          (or (:page/original-name page)
+              (:page/name page)))))
     :tag
     (str "#" (util/url-decode (:name path-params)))
     :diff

@@ -15,7 +15,8 @@ Use it to organize your todo list, to write your journals, or to record your uni
 
 ## Why Logseq?
 
-[Logseq](https://logseq.com) is a freedom-respecting (and open-source too) platform for knowledge sharing and management. It focuses on privacy, longevity, and user control.
+[Logseq](https://logseq.com) is a platform for knowledge sharing and management. It focuses on privacy, longevity, and user control.
+Notice: the backend code will not be open-sourced for security reasons and other potential risks. 
 
 The server will never store or analyze your private notes. Your data are plain text files and we currently support both Markdown and Emacs Org mode (more to be added soon).
 
@@ -68,7 +69,7 @@ The following is for developers and designers who want to build and run Logseq l
 ### 1. Requirements
 
 - [Node.js](https://nodejs.org/en/download/) & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
-- [Java & Clojure](https://clojure.org/guides/getting_started)
+- [Java & Clojure](https://clojure.org/guides/getting_started). (If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.)
 
 ### 2. Compile to JavaScript
 
@@ -116,3 +117,7 @@ cd logseq
 yarn
 yarn watch
 ```
+
+## Thanks
+
+[![JetBrains](docs/assets/jetbrains.svg)](https://www.jetbrains.com/?from=logseq)

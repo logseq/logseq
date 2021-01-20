@@ -40,9 +40,12 @@
                       (sep-by-comma-or-quote)
                       (map page-ref-un-brackets!)
                       (distinct))]
-      (if (and (coll? result)
-               (> (count result) 1))
-        (set result)
+      (if (or (coll? result)
+              (and (string? result)
+                   (string/starts-with? result "#")))
+        (let [result (if coll? result [result])
+              result (map (fn [s] (string/replace s #"^#+" "")) result)]
+          (set result))
         (first result)))
     s))
 

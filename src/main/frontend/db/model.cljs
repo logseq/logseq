@@ -269,8 +269,12 @@
        (:file/content (d/entity (d/db conn) [:file/path path]))))))
 
 (defn get-block-by-uuid
-  [uuid]
-  (db-utils/entity [:block/uuid uuid]))
+  [id]
+  (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
+
+(defn query-block-by-uuid
+  [id]
+  (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 
 (defn get-page-format
   [page-name]
@@ -711,6 +715,13 @@
             (if (= (state/page-name-order) "file")
               (or file-name first-block-name)
               (or first-block-name file-name)))))))
+
+(defn get-page-original-name
+  [page-name]
+  (when page-name
+    (let [page (db-utils/pull [:page/name (string/lower-case page-name)])]
+      (or (:page/original-name page)
+          (:page/name page)))))
 
 (defn get-block-content
   [utf8-content block]
