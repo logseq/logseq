@@ -1,5 +1,6 @@
 (ns electron.core
   (:require [electron.init :refer [init-channel]]
+            [electron.handler :as handler]
             ["fs" :as fs]
             ["path" :as path]
             ["electron" :refer [BrowserWindow app] :as electron]
