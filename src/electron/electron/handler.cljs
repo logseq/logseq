@@ -9,14 +9,6 @@
 (defmethod handle :mkdir [[_ dir]]
   (fs/mkdirSync dir))
 
-(defn- ls-dir [dir]
-  (->> (tree-seq
-        (fn [f] (.isDirectory (.statSync fs f) ()))
-        (fn [d] (map #(.join path d %) (.readdirSync fs d)))
-        dir)
-       (apply concat)
-       (doall)))
-
 (defmethod handle :readdir [[_ dir]]
   (->> (tree-seq
         (fn [f] (.isDirectory (fs/statSync f) ()))
