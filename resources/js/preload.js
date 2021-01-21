@@ -15,5 +15,9 @@ contextBridge.exposeInMainWorld('api', {
     const channel = 'updates-callback'
     ipcRenderer.removeAllListeners(channel)
     ipcRenderer.on(channel, cb)
+  },
+
+  installUpdatesAndQuitApp () {
+    ipcRenderer.invoke('install-updates', true)
   }
 })
