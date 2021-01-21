@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [clone])
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.fs :as fs]
+            [frontend.fs.nfs :as nfs]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.state :as state]
@@ -136,7 +137,7 @@
            empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
        (when (or empty-blocks?
                  (not page-exists?))
-         (p/let [_ (fs/check-directory-permission! repo-url)
+         (p/let [_ (nfs/check-directory-permission! repo-url)
                  _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
                  file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
            (when-not file-exists?
@@ -319,7 +320,7 @@
                                      (util/get-block-idx-inside-container block-element))]
        (when (and idx container)
          (state/set-state! :editor/last-edit-block {:block edit-block
-                                               :idx idx
+                                                    :idx idx
                                                     :container (gobj/get container "id")})))
 
      (db/transact-react!
@@ -331,8 +332,7 @@
          (when (seq children-tx)
            (db/transact! repo children-tx))))
      (when (seq files)
-       (file-handler/alter-files repo files opts))
-     )))
+       (file-handler/alter-files repo files opts)))))
 
 (declare push)
 
@@ -539,7 +539,7 @@
                       (db/remove-conn! url)
                       (db/remove-db! url)
                       (db/remove-files-db! url)
-                      (fs/rmdir (util/get-repo-dir url))
+                      (fs/rmdir! (util/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
@@ -645,7 +645,7 @@
     (db/clear-query-state!)
     (-> (p/do! (db/remove-db! url)
                (db/remove-files-db! url)
-               (fs/rmdir (util/get-repo-dir url))
+               (fs/rmdir! (util/get-repo-dir url))
                (clone-and-load-db url))
         (p/catch (fn [error]
                    (prn "Delete repo failed, error: " error))))))

@@ -35,8 +35,7 @@
                      path)]
           (util/p-handle
            (fs/read-file (util/get-repo-dir (state/get-current-repo))
-                           path
-                           {})
+                         path)
            (fn [blob]
              (let [blob (js/Blob. (array blob) (clj->js {:type "image"}))
                    img-url (image/create-object-url blob)]

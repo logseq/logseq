@@ -35,7 +35,10 @@
 
   :electron {:target :node-script
              :output-to "static/electron.js"
-             :main electron.core/main}
+             :main electron.core/main
+             :devtools
+             {:before-load electron.core/stop
+              :after-load electron.core/start}}
 
   :test
   {:target :node-test

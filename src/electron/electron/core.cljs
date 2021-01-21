@@ -1,5 +1,5 @@
 (ns electron.core
-  (:require [electron.init :refer [init-channel]]
+  (:require [electron.handler :as handler]
             ["fs" :as fs]
             ["path" :as path]
             ["electron" :refer [BrowserWindow app] :as electron]
@@ -24,8 +24,10 @@
   (let [win-opts {:width  980
                   :height 700
                   :webPreferences
-                  {:nodeIntegration true            ;; FIXME
-}}
+                  {:nodeIntegration false
+                   :nodeIntegrationInWorker false
+                   :contextIsolation true
+                   :preload (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
     (.loadURL win url)
@@ -72,7 +74,7 @@
            (setup-updater! nil)
 
            ;; init stuffs
-           (init-channel win)
+           (handler/set-ipc-handler! win)
 
            ;; main window events
            (.on win "close" #(if (or @*quitting? win32?)
@@ -81,3 +83,9 @@
                                    (.hide win))))
            (.on app "before-quit" #(reset! *quitting? true))
            (.on app "activate" #(if @*win (.show win)))))))
+
+(defn start []
+  (js/console.log "Main - start"))
+
+(defn stop []
+  (js/console.log "Main - stop"))

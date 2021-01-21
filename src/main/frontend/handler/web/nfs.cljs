@@ -16,6 +16,7 @@
             [clojure.set :as set]
             [frontend.ui :as ui]
             [frontend.fs :as fs]
+            [frontend.fs.nfs :as nfs]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.config :as config]
@@ -86,7 +87,7 @@
                          [handle-path handle]))
                      handles)]
     (doseq [[path handle] handles]
-      (fs/add-nfs-file-handle! path handle))
+      (nfs/add-nfs-file-handle! path handle))
     (set-files-aux! handles)))
 
 (defn ls-dir-files
@@ -103,7 +104,7 @@
              repo (str config/local-db-prefix dir-name)
              root-handle-path (str config/local-handle-prefix dir-name)
              _ (idb/set-item! root-handle-path root-handle)
-             _ (fs/add-nfs-file-handle! root-handle-path root-handle)
+             _ (nfs/add-nfs-file-handle! root-handle-path root-handle)
              result (nth result 1)
              files (-> (->db-files dir-name result)
                        remove-ignore-files)
@@ -164,7 +165,7 @@
      (ui/button
       "Grant"
       :on-click (fn []
-                  (fs/check-directory-permission! repo)
+                  (nfs/check-directory-permission! repo)
                   (close-fn)))]))
 
 (defn ask-permission-if-local? []
@@ -205,7 +206,7 @@
        (->
         (p/let [handle (idb/get-item handle-path)]
           (when handle
-            (p/let [_ (when handle (common-handler/verify-permission repo handle true))
+            (p/let [_ (when handle (nfs/verify-permission repo handle true))
                     files-result (utils/getFiles handle true
                                                  (fn [path handle]
                                                    (swap! path-handles assoc path handle)))
@@ -232,7 +233,7 @@
                           (p/all (map (fn [path]
                                         (let [handle-path (str handle-path path)]
                                           (idb/remove-item! handle-path)
-                                          (fs/remove-nfs-file-handle! handle-path))) deleted))))
+                                          (nfs/remove-nfs-file-handle! handle-path))) deleted))))
                     added-or-modified (set (concat added modified))
                     _ (when (seq added-or-modified)
                         (p/all (map (fn [path]
