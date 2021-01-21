@@ -1,6 +1,7 @@
 {:paths ["src/main"]
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
+  cheshire/cheshire {:mvn/version "5.10.0"}
   rum/rum                     {:mvn/version "0.12.3"}
   ;; rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   ;; persistent-sorted-set       {:mvn/version "0.1.2"}
@@ -44,11 +45,14 @@
                           org.clojure/clojurescript {:mvn/version "1.10.764"}
                           org.clojure/test.check {:mvn/version "RELEASE"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
+
            :test-clj
            {:extra-paths ["src/test/"]
             :extra-deps
-            {cheshire/cheshire {:mvn/version "5.10.0"}
+            {
              com.cognitect/test-runner
              {:git/url "https://github.com/cognitect-labs/test-runner",
               :sha "76568540e7f40268ad2b646110f237a60295fa3c"}},
             :main-opts ["-m" "cognitect.test-runner" "-d" "src/test"]}}}
+
+
