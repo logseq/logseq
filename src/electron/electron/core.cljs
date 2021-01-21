@@ -1,9 +1,9 @@
 (ns electron.core
   (:require [electron.handler :as handler]
+            [electron.updater :refer [init-updater]]
             ["fs" :as fs]
             ["path" :as path]
-            ["electron" :refer [BrowserWindow app] :as electron]
-            ["electron-updater" :refer [autoUpdater]]))
+            ["electron" :refer [BrowserWindow app] :as electron]))
 
 (defonce mac? (= (.-platform js/process) "darwin"))
 (defonce win32? (= (.-platform js/process) "win32"))
@@ -15,6 +15,10 @@
 (def ROOT_PATH (path/join js/__dirname ".."))
 (def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "dev.html" "index.html"))))
 
+(def ^:dynamic *setup-fn* nil)
+(def ^:dynamic *teardown-fn* nil)
+(def ^:dynamic *teardown-updater* nil)
+
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
 
@@ -24,42 +28,24 @@
   (let [win-opts {:width  980
                   :height 700
                   :webPreferences
-                  {:nodeIntegration false
+                  {:nodeIntegration         false
                    :nodeIntegrationInWorker false
-                   :contextIsolation true
-                   :preload (path/join js/__dirname "js/preload.js")}}
+                   :contextIsolation        true
+                   :preload                 (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))
 
-(defn setup-updater! [notify-update-status]
-  ;; updater logging
-  (set! (.. autoUpdater -logger) log)
-  (set! (.. autoUpdater -logger -transports -file -level) "info")
-
+(defn setup-updater! [^js win]
   (.. log (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
-  (let [init-updater (js/require "update-electron-app")]
-    (init-updater #js {:repo           "logseq/logseq"
-                       :updateInterval "1 hour"
-                       :logger         log}))
-  ;;; updater hooks
-  ;(doto autoUpdater
-  ;  (.on "checking-for-update" #(notify-update-status "checking for updating..."))
-  ;  (.on "update-not-available" #(notify-update-status "update not available"))
-  ;  (.on "error" #(notify-update-status %))
-  ;  (.on "download-progress"
-  ;       #(let [progress-clj (js->clj %)
-  ;              {:keys [percent transferred total]} progress-clj
-  ;              msg (str "Progress Downloaded " percent "%"
-  ;                       " (" transferred "/" total ")")]
-  ;          (notify-update-status msg)))
-  ;  (.on "update-downloaded" #(do (notify-update-status "update downloaded")
-  ;                                (.. autoUpdater quitAndInstall)))
-  ;  (.checkForUpdatesAndNotify))
-)
+  ;; manual updater
+  (set! *teardown-updater*
+        (init-updater {:repo   "logseq/logseq"
+                       :logger log
+                       :win    win})))
 
 (defn main
   []
@@ -70,11 +56,20 @@
                *win (atom win)
                *quitting? (atom false)]
 
-           ;; auto updater
-           (setup-updater! nil)
+           (set! *setup-fn*
+                 (fn []
+                   ;; updater
+                   (setup-updater! win)
 
-           ;; init stuffs
-           (handler/set-ipc-handler! win)
+                   ;; handler
+                   (handler/set-ipc-handler! win)
+
+                   ;; teardown
+                   #(do
+                      (when *teardown-updater* (*teardown-updater*)))))
+
+           ;; setup effects
+           (*setup-fn*)
 
            ;; main window events
            (.on win "close" #(if (or @*quitting? win32?)
@@ -85,7 +80,9 @@
            (.on app "activate" #(if @*win (.show win)))))))
 
 (defn start []
-  (js/console.log "Main - start"))
+  (js/console.log "Main - start")
+  (when *setup-fn* (*setup-fn*)))
 
 (defn stop []
-  (js/console.log "Main - stop"))
+  (js/console.log "Main - stop")
+  (when *teardown-fn* (*teardown-fn*)))
