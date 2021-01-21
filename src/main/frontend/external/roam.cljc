@@ -128,7 +128,7 @@
 (defrecord Roam []
   protocol/External
   (toMarkdownFiles [this content _config]
-    (->files content)))
+    (-> content json->edn ->files)))
 
 (comment
   (defonce test-roam-json (frontend.db/get-file "same.json"))

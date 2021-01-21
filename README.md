@@ -89,6 +89,20 @@ Open <http://localhost:3001>.
 yarn release
 ```
 
+### 5. Run tests
+
+Run ClojureScript tests
+```bash
+yarn
+yarn cljs:test
+node static/tests.js
+```
+
+Run Clojure tests. (Note: `.cljc` files may be tested both by ClojureScript, and Clojure.)
+```bash
+clj -Mtest-clj
+```
+
 ## Alternative: Docker based development environment
 
 ### 1. Fetch sources
