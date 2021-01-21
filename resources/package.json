@@ -16,8 +16,9 @@
   "dependencies": {
     "electron-log": "^4.3.1",
     "electron-squirrel-startup": "^1.0.0",
-    "electron-updater": "^4.3.5",
-    "update-electron-app": "^2.0.1"
+    "update-electron-app": "^2.0.1",
+    "node-fetch": "^2.6.1",
+    "open": "^7.3.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.54",
