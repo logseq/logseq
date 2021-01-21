@@ -1,16 +1,10 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.updater :refer [init-updater]]
+            [electron.utils :refer [mac? win32? prod? dev? log]]
             ["fs" :as fs]
             ["path" :as path]
             ["electron" :refer [BrowserWindow app] :as electron]))
-
-(defonce mac? (= (.-platform js/process) "darwin"))
-(defonce win32? (= (.-platform js/process) "win32"))
-
-(defonce prod? (= js/process.env.NODE_ENV "production"))
-(defonce dev? (not prod?))
-(defonce log (js/require "electron-log"))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
 (def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "dev.html" "index.html"))))
