@@ -720,13 +720,13 @@
 
 (defn setup-electron-updater!
   []
-  (when util/electron?
+  (when (util/electron?)
     (js/window.apis.setUpdatesCallback
      (fn [_ args]
        (let [data (bean/->clj args)
              pending? (not= (:type data) "completed")]
          (set-state! :electron/updater-pending? pending?)
-         (when-not pending? (set-state! :electron/updater data))
+         (when pending? (set-state! :electron/updater data))
          nil)))))
 
 (defn set-file-component!
