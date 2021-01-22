@@ -299,6 +299,10 @@
   [s]
   (string/replace s local-db-prefix ""))
 
+(defn get-local-repo
+  [dir]
+  (str local-db-prefix dir))
+
 (defn get-repo-dir
   [repo-url]
   (if (util/electron?)

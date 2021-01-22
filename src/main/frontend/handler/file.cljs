@@ -306,3 +306,14 @@
         (<p! (apply alter-files-handler! args)))
       (recur))
     chan))
+
+(defn watch-for-local-dirs!
+  []
+  (when (util/electron?)
+    (let [repos (->> (state/get-repos)
+                     (filter (fn [repo]
+                               (config/local-db? (:url repo)))))
+         directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
+      (doseq [dir directories]
+        (prn "watch for dir changes: " dir)
+        (fs/watch-dir! dir)))))

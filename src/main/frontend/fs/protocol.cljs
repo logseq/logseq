@@ -10,4 +10,5 @@
   (rename! [this repo old-path new-path])
   (stat [this dir path])
   (open-dir [this ok-handler])
-  (get-files [this path-or-handle ok-handler]))
+  (get-files [this path-or-handle ok-handler])
+  (watch-dir! [this dir]))

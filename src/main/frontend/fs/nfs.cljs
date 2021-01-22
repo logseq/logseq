@@ -198,4 +198,8 @@
     (utils/openDirectory #js {:recursive true}
                          ok-handler))
   (get-files [this path-or-handle ok-handler]
-    (utils/getFiles path-or-handle true ok-handler)))
+    (utils/getFiles path-or-handle true ok-handler))
+
+  ;; TODO:
+  (watch-dir! [this dir]
+    nil))

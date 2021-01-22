@@ -105,6 +105,10 @@
           [(:path dir) paths])
         result))))
 
+(defn watch-dir!
+  [dir]
+  (protocol/watch-dir! node-record dir))
+
 (defn mkdir-if-not-exists
   [dir]
   (when dir

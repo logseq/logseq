@@ -44,4 +44,6 @@
   (open-dir [this ok-handler]
     (ipc/ipc "openDir" {}))
   (get-files [this path-or-handle ok-handler]
-    (ipc/ipc "getFiles" path-or-handle)))
+    (ipc/ipc "getFiles" path-or-handle))
+  (watch-dir! [this dir]
+    (ipc/ipc "addDirWatcher" dir)))

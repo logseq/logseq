@@ -3,8 +3,10 @@
             [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["path" :as path]
+            ["chokidar" :as watcher]
             [promesa.core :as p]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [clojure.string :as string]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -63,6 +65,54 @@
 
 (defmethod handle :getFiles [window [_ path]]
   (get-files path))
+
+(defn- get-file-ext
+  [file]
+  (last (string/split file #"\.")))
+
+(defonce file-watcher-chan "file-watcher")
+(defn send-file-watcher! [win type payload]
+  (prn "file watch: " {:type type
+                       :payload payload})
+  (.. win -webContents
+      (send file-watcher-chan
+            (bean/->js {:type type :payload payload}))))
+
+(defn watch-dir!
+  [win dir]
+  (let [watcher (.watch watcher dir
+                        (clj->js
+                         {:ignored #"^\."
+                          :persistent true
+                          :awaitWriteFinish true}))]
+    (.on watcher "add"
+         (fn [path]
+           (send-file-watcher! win "add"
+                               {:dir dir
+                                :path path
+                                :content (read-file path)
+                                :stat (fs/statSync path)})))
+    (.on watcher "change"
+         (fn [path]
+           (send-file-watcher! win "change"
+                               {:dir dir
+                                :path path
+                                :content (read-file path)
+                                :stat (fs/statSync path)})))
+    (.on watcher "unlink"
+         (fn [path]
+           (send-file-watcher! win "unlink"
+                               {:dir dir
+                                :path path})))
+    (.on watcher "error"
+         (fn [path]
+           (println "Watch error happend: "
+                    {:path path})))
+    true))
+
+(defmethod handle :addDirWatcher [window [_ dir]]
+  (when dir
+    (watch-dir! window dir)))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

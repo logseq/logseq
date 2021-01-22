@@ -54,6 +54,7 @@
         "cljs:build-electron": "clojure -A:cljs compile app electron"
     },
     "dependencies": {
+        "chokidar": "^3.5.1",
         "codemirror": "^5.58.1",
         "diff": "5.0.0",
         "diff-match-patch": "^1.0.5",

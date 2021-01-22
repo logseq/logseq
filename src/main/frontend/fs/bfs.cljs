@@ -35,4 +35,6 @@
   (open-dir [this ok-handler]
     nil)
   (get-files [this path-or-handle ok-handler]
+    nil)
+  (watch-dir! [this dir]
     nil))

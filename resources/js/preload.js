@@ -5,6 +5,11 @@ contextBridge.exposeInMainWorld('apis', {
     return await ipcRenderer.invoke('main', arg)
   },
 
+  on: (channel, callback) => {
+    const newCallback = (_, data) => callback(data);
+    ipcRenderer.on(channel, newCallback);
+  },
+
   checkForUpdates: async (...args) => {
     await ipcRenderer.invoke('check-for-updates', ...args)
   },
