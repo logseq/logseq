@@ -894,7 +894,9 @@
   (when tag-name
     (and
      (not (re-find #"#" tag-name))
-     (re-find regex/valid-tag-pattern tag-name))))
+     (re-find regex/valid-tag-pattern tag-name)
+     ;; only digits is unlikely to be an actual tag... gives false positices on github issues etc
+     (not (re-find #"^[0-9]+$" tag-name)))))
 
 (defn encode-str
   [s]
