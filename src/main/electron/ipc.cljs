@@ -5,4 +5,5 @@
 ;; TODO: handle errors
 (defn ipc
   [& args]
-  (js/window.apis.doAction (bean/->js args)))
+  (p/let [result (js/window.apis.doAction (bean/->js args))]
+    result))

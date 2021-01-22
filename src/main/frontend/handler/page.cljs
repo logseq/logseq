@@ -46,7 +46,7 @@
            :or {redirect? true}}]
    (let [title (and title (string/trim title))
          repo (state/get-current-repo)
-         dir (util/get-repo-dir repo)
+         dir (config/get-repo-dir repo)
          journal-page? (date/valid-journal-title? title)
          directory (get-directory journal-page?)]
      (when dir
@@ -273,7 +273,7 @@
               ;; remove file
               (->
                (p/let [_ (git/remove-file repo file-path)
-                       _ (fs/unlink! (str (util/get-repo-dir repo)
+                       _ (fs/unlink! (str (config/get-repo-dir repo)
                                           "/"
                                           file-path)
                                      nil)]
@@ -311,8 +311,8 @@
                             :file/path new-path}])))
     (->
      (p/let [_ (fs/rename! repo
-                           (str (util/get-repo-dir repo) "/" old-path)
-                           (str (util/get-repo-dir repo) "/" new-path))
+                           (str (config/get-repo-dir repo) "/" old-path)
+                           (str (config/get-repo-dir repo) "/" new-path))
              _ (when-not (config/local-db? repo)
                  (git/rename repo old-path new-path))]
        (common-handler/check-changed-files-status)

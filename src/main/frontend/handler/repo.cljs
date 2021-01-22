@@ -52,7 +52,7 @@
 (defn create-config-file-if-not-exists
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (let [repo-dir (util/get-repo-dir repo-url)
+  (let [repo-dir (config/get-repo-dir repo-url)
         app-dir config/app-name
         dir (str repo-dir "/" app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
@@ -70,7 +70,7 @@
 (defn create-contents-file
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (let [repo-dir (util/get-repo-dir repo-url)
+  (let [repo-dir (config/get-repo-dir repo-url)
         format (state/get-preferred-format)
         path (str (state/get-pages-directory)
                   "/contents."
@@ -86,7 +86,7 @@
 (defn create-custom-theme
   [repo-url]
   (spec/validate :repos/url repo-url)
-  (let [repo-dir (util/get-repo-dir repo-url)
+  (let [repo-dir (config/get-repo-dir repo-url)
         path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
         default-content ""]
@@ -99,7 +99,7 @@
 (defn create-dummy-notes-page
   [repo-url content]
   (spec/validate :repos/url repo-url)
-  (let [repo-dir (util/get-repo-dir repo-url)
+  (let [repo-dir (config/get-repo-dir repo-url)
         path (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")
         file-path (str "/" path)]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-pages-directory)))
@@ -112,7 +112,7 @@
   ([repo-url content]
    (spec/validate :repos/url repo-url)
    (when (state/enable-journals? repo-url)
-     (let [repo-dir (util/get-repo-dir repo-url)
+     (let [repo-dir (config/get-repo-dir repo-url)
            format (state/get-preferred-format repo-url)
            title (date/today)
            file-name (date/journal-title->default title)
@@ -359,7 +359,7 @@
                 (nil? local-latest-commit)
                 (not descendent?)
                 force-pull?)
-        (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo-url))]
+        (p/let [files (js/window.workerThread.getChangedFiles (config/get-repo-dir repo-url))]
           (when (empty? files)
             (let [status (db/get-key-value repo-url :git/status)]
               (when (or
@@ -539,7 +539,7 @@
                       (db/remove-conn! url)
                       (db/remove-db! url)
                       (db/remove-files-db! url)
-                      (fs/rmdir! (util/get-repo-dir url))
+                      (fs/rmdir! (config/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
@@ -621,7 +621,7 @@
       (doseq [{:keys [id url]} (:repos me)]
         (let [repo url]
           (p/let [config-exists? (fs/file-exists?
-                                  (util/get-repo-dir url)
+                                  (config/get-repo-dir url)
                                   ".git/config")]
             (if (and config-exists?
                      (db/cloned? repo))
@@ -645,7 +645,7 @@
     (db/clear-query-state!)
     (-> (p/do! (db/remove-db! url)
                (db/remove-files-db! url)
-               (fs/rmdir! (util/get-repo-dir url))
+               (fs/rmdir! (config/get-repo-dir url))
                (clone-and-load-db url))
         (p/catch (fn [error]
                    (prn "Delete repo failed, error: " error))))))

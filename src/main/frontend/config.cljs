@@ -298,3 +298,11 @@
 (defn get-local-dir
   [s]
   (string/replace s local-db-prefix ""))
+
+(defn get-repo-dir
+  [repo-url]
+  (if (util/electron?)
+    (get-local-dir repo-url)
+    (str "/"
+        (->> (take-last 2 (string/split repo-url #"/"))
+             (string/join "_")))))

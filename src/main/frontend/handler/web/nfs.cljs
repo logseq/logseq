@@ -40,20 +40,28 @@
       (p/resolved files))))
 
 (defn- ->db-files
-  [dir-name result]
-  (let [result (flatten (bean/->clj result))]
-    (map (fn [file]
-           (let [handle (gobj/get file "handle")
-                 get-attr #(gobj/get file %)
-                 path (-> (get-attr "webkitRelativePath")
-                          (string/replace-first (str dir-name "/") ""))]
-             {:file/name             (get-attr "name")
-              :file/path             path
-              :file/last-modified-at (get-attr "lastModified")
-              :file/size             (get-attr "size")
-              :file/type             (get-attr "type")
-              :file/file             file
-              :file/handle           handle})) result)))
+  [electron? dir-name result]
+  (if electron?
+    (map (fn [{:keys [path stat content]}]
+           (let [{:keys [mtime size]} stat]
+             {:file/path             path
+              :file/last-modified-at mtime
+              :file/size             size
+              :file/content content}))
+      result)
+    (let [result (flatten (bean/->clj result))]
+      (map (fn [file]
+            (let [handle (gobj/get file "handle")
+                  get-attr #(gobj/get file %)
+                  path (-> (get-attr "webkitRelativePath")
+                           (string/replace-first (str dir-name "/") ""))]
+              {:file/name             (get-attr "name")
+               :file/path             path
+               :file/last-modified-at (get-attr "lastModified")
+               :file/size             (get-attr "size")
+               :file/type             (get-attr "type")
+               :file/file             file
+               :file/handle           handle})) result))))
 
 (defn- filter-markup-and-built-in-files
   [files]
@@ -92,40 +100,49 @@
 
 (defn ls-dir-files
   []
-  (let [path-handles (atom {})]
+  (let [path-handles (atom {})
+        electron? (util/electron?)
+        nfs? (not electron?)]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
-     (p/let [result (utils/openDirectory #js {:recursive true}
-                                         (fn [path handle]
-                                           (swap! path-handles assoc path handle)))
+     (p/let [result (fs/open-dir (fn [path handle]
+                                   (when nfs?
+                                     (swap! path-handles assoc path handle))))
              _ (state/set-loading-files! true)
-             root-handle (nth result 0)
-             dir-name (gobj/get root-handle "name")
+             root-handle (first result)
+             dir-name (if nfs?
+                        (gobj/get root-handle "name")
+                        root-handle)
              repo (str config/local-db-prefix dir-name)
              root-handle-path (str config/local-handle-prefix dir-name)
-             _ (idb/set-item! root-handle-path root-handle)
-             _ (nfs/add-nfs-file-handle! root-handle-path root-handle)
+             _ (when nfs?
+                 (idb/set-item! root-handle-path root-handle)
+                 (nfs/add-nfs-file-handle! root-handle-path root-handle))
              result (nth result 1)
-             files (-> (->db-files dir-name result)
+             files (-> (->db-files electron? dir-name result)
                        remove-ignore-files)
-             _ (let [file-paths (set (map :file/path files))]
-                 (swap! path-handles (fn [handles]
-                                       (->> handles
-                                            (filter (fn [[path _handle]]
-                                                      (or
-                                                       (contains? file-paths
-                                                                  (string/replace-first path (str dir-name "/") ""))
-                                                       (let [last-part (last (string/split path "/"))]
-                                                         (contains? #{config/app-name
-                                                                      config/default-draw-directory
-                                                                      config/default-journals-directory
-                                                                      config/default-pages-directory}
-                                                                    last-part)))))
-                                            (into {})))))
-             _ (set-files! @path-handles)
+             _ (when nfs?
+                 (let [file-paths (set (map :file/path files))]
+                  (swap! path-handles (fn [handles]
+                                        (->> handles
+                                             (filter (fn [[path _handle]]
+                                                       (or
+                                                        (contains? file-paths
+                                                                   (string/replace-first path (str dir-name "/") ""))
+                                                        (let [last-part (last (string/split path "/"))]
+                                                          (contains? #{config/app-name
+                                                                       config/default-draw-directory
+                                                                       config/default-journals-directory
+                                                                       config/default-pages-directory}
+                                                                     last-part)))))
+                                             (into {})))))
+
+                 (set-files! @path-handles))
              markup-files (filter-markup-and-built-in-files files)]
        (-> (p/all (map (fn [file]
-                         (p/let [content (.text (:file/file file))]
+                         (p/let [content (if nfs?
+                                           (.text (:file/file file))
+                                           (:file/content file))]
                            (assoc file :file/content content))) markup-files))
            (p/then (fn [result]
                      _ (state/set-loading-files! false)
@@ -142,13 +159,6 @@
                 (when (not= "AbortError" (gobj/get error "name"))
                   (log/error :nfs/open-dir-error error)))))))
 
-(defn open-file-picker
-  "Shows a file picker that lets a user select a single existing file, returning a handle for the selected file. "
-  ([]
-   (open-file-picker {}))
-  ([option]
-   (.showOpenFilePicker js/window (bean/->js option))))
-
 (defn get-local-repo
   []
   (when-let [repo (state/get-current-repo)]
@@ -157,16 +167,17 @@
 
 (defn ask-permission
   [repo]
-  (fn [close-fn]
-    [:div
-     [:p.text-gray-700
-      "Grant native filesystem permission for directory: "
-      [:b (config/get-local-dir repo)]]
-     (ui/button
-      "Grant"
-      :on-click (fn []
-                  (nfs/check-directory-permission! repo)
-                  (close-fn)))]))
+  (when-not (util/electron?)
+    (fn [close-fn]
+      [:div
+       [:p.text-gray-700
+        "Grant native filesystem permission for directory: "
+        [:b (config/get-local-dir repo)]]
+       (ui/button
+         "Grant"
+         :on-click (fn []
+                     (nfs/check-directory-permission! repo)
+                     (close-fn)))])))
 
 (defn ask-permission-if-local? []
   (when-let [repo (get-local-repo)]
@@ -201,7 +212,8 @@
      (let [old-files (db/get-files-full repo)
            dir-name (config/get-local-dir repo)
            handle-path (str config/local-handle-prefix dir-name)
-           path-handles (atom {})]
+           path-handles (atom {})
+           electron? (util/electron?)]
        (state/set-graph-syncing? true)
        (->
         (p/let [handle (idb/get-item handle-path)]
@@ -210,7 +222,7 @@
                     files-result (utils/getFiles handle true
                                                  (fn [path handle]
                                                    (swap! path-handles assoc path handle)))
-                    new-files (-> (->db-files dir-name files-result)
+                    new-files (-> (->db-files electron? dir-name files-result)
                                   remove-ignore-files)
                     _ (let [file-paths (set (map :file/path new-files))]
                         (swap! path-handles (fn [handles]
@@ -290,4 +302,4 @@
 
 (defn supported?
   []
-  (utils/nfsSupported))
+  (or (utils/nfsSupported) (util/electron?)))

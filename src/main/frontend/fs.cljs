@@ -7,7 +7,8 @@
             [frontend.fs.protocol :as protocol]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.bfs :as bfs]
-            [frontend.fs.node :as node]))
+            [frontend.fs.node :as node]
+            [cljs-bean.core :as bean]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -20,15 +21,17 @@
 
 (defn get-fs
   [dir]
-  (cond
-    (util/electron?)
-    node-record
+  (let [bfs-local? (or (string/starts-with? dir "/local")
+                       (string/starts-with? dir "local"))]
+    (cond
+      (and (util/electron?) (not bfs-local?))
+      node-record
 
-    (local-db? dir)
-    nfs-record
+      (local-db? dir)
+      nfs-record
 
-    :else
-    bfs-record))
+      :else
+      bfs-record)))
 
 (defn mkdir!
   [dir]
@@ -84,6 +87,15 @@
                       "")]
     (protocol/stat (get-fs dir) dir path)))
 
+(defn open-dir
+  [ok-handler]
+  (let [record (if (util/electron?) node-record nfs-record)]
+    (p/let [result (protocol/open-dir record ok-handler)]
+      (if (util/electron?)
+        (let [[dir & paths] (bean/->clj result)]
+          [(:path dir) paths])
+        result))))
+
 (defn mkdir-if-not-exists
   [dir]
   (when dir
@@ -101,7 +113,7 @@
                 path
                 (str "/" path))]
      (->
-      (p/let [_ (stat dir path)]
+      (p/let [stat (stat dir path)]
         true)
       (p/catch
        (fn [_error]

@@ -502,7 +502,7 @@
                              (util/page-name-sanity))) "."
                        (if (= format "markdown") "md" format))
                  file-path (str "/" path)
-                 dir (util/get-repo-dir repo)]
+                 dir (config/get-repo-dir repo)]
              (p/let [exists? (fs/file-exists? dir file-path)]
                (if exists?
                  (notification/show!
@@ -781,7 +781,7 @@
                   "."
                   (if (= format "markdown") "md" format))
             file-path (str "/" path)
-            dir (util/get-repo-dir repo)]
+            dir (config/get-repo-dir repo)]
         (p/let [exists? (fs/file-exists? dir file-path)]
           (if exists?
             (do (notification/show!
@@ -1541,7 +1541,7 @@
 
 (defn ensure-assets-dir!
   [repo]
-  (let [repo-dir (util/get-repo-dir repo)
+  (let [repo-dir (config/get-repo-dir repo)
         assets-dir "assets"]
     (p/then
      (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
@@ -1572,7 +1572,7 @@
 
 (defn make-asset-url
   [path]                                                    ;; path start with "/assets" or compatible for "../assets"
-  (let [repo-dir (util/get-repo-dir (state/get-current-repo))
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         path (string/replace path "../" "/")
         handle-path (str "handle" repo-dir path)
         cached-url (get @*assets-url-cache (keyword handle-path))]
@@ -1595,7 +1595,7 @@
     (save-block! repo block content)
     (when local?
       ;; FIXME: should be relative to current block page path
-      (fs/unlink! (str (util/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
+      (fs/unlink! (str (config/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]

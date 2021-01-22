@@ -7,8 +7,10 @@
 (defrecord Bfs []
   protocol/Fs
   (mkdir! [this dir]
-    (when js/window.pfs
-      (js/window.pfs.mkdir dir)))
+    (when (and js/window.pfs (not (util/electron?)))
+      (->
+       (js/window.pfs.mkdir dir)
+       (p/catch (fn [error] (println "Mkdir error: " error))))))
   (readdir [this dir]
     (when js/window.pfs
       (js/window.pfs.readdir dir)))
@@ -24,8 +26,11 @@
     (let [option (clj->js {:encoding "utf8"})]
       (js/window.pfs.readFile (str dir "/" path) option)))
   (write-file! [this repo dir path content opts]
-    (js/window.pfs.writeFile (str dir "/" path) content))
+    (when-not (util/electron?)
+      (js/window.pfs.writeFile (str dir "/" path) content)))
   (rename! [this repo old-path new-path]
     (js/window.pfs.rename old-path new-path))
   (stat [this dir path]
-    (js/window.pfs.stat (str dir path))))
+    (js/window.pfs.stat (str dir path)))
+  (open-dir [this ok-handler]
+    nil))

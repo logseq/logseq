@@ -30,7 +30,7 @@
 (defn load-file
   [repo-url path]
   (->
-   (p/let [content (fs/read-file (util/get-repo-dir repo-url) path)]
+   (p/let [content (fs/read-file (config/get-repo-dir repo-url) path)]
      content)
    (p/catch
     (fn [e]
@@ -162,7 +162,7 @@
         (reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file! repo (util/get-repo-dir repo) path content {:old-content original-content
+     (fs/write-file! repo (config/get-repo-dir repo) path content {:old-content original-content
                                                                  :last-modified-at (db/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
@@ -222,7 +222,7 @@
   (let [write-file-f (fn [[path content]]
                        (let [original-content (get file->content path)]
                          (-> (p/let [_ (nfs/check-directory-permission! repo)]
-                               (fs/write-file! repo (util/get-repo-dir repo) path content
+                               (fs/write-file! repo (config/get-repo-dir repo) path content
                                                {:old-content original-content
                                                 :last-modified-at (db/get-file-last-modified-at repo path)}))
                              (p/catch (fn [error]
@@ -265,7 +265,7 @@
     (->
      (p/let [_ (git/remove-file repo file)
              result (fs/unlink! (str
-                                 (util/get-repo-dir repo)
+                                 (config/get-repo-dir repo)
                                  "/"
                                  file)
                                 nil)]

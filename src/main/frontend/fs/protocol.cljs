@@ -8,4 +8,5 @@
   (read-file [this dir path])
   (write-file! [this repo dir path content opts])
   (rename! [this repo old-path new-path])
-  (stat [this dir path]))
+  (stat [this dir path])
+  (open-dir [this ok-handler]))

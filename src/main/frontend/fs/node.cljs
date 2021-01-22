@@ -3,7 +3,22 @@
             [frontend.util :as util]
             [clojure.string :as string]
             [promesa.core :as p]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [cljs-bean.core :as bean]))
+
+(defn concat-path
+  [dir path]
+  (cond
+    (nil? path)
+    dir
+
+    (string/starts-with? path dir)
+    path
+
+    :else
+    (str (string/replace dir #"/$" "")
+         (when path
+           (str "/" (string/replace path #"^/" ""))))))
 
 (defrecord Node []
   protocol/Fs
@@ -16,10 +31,15 @@
   (rmdir! [this dir]
     nil)
   (read-file [this dir path]
-    (ipc/ipc "readFile" (str dir "/" path)))
+    (let [path (concat-path dir path)]
+      (ipc/ipc "readFile" path)))
   (write-file! [this repo dir path content _opts]
-    (ipc/ipc "writeFile" (str dir "/" path) content))
+    (let [path (concat-path dir path)]
+      (ipc/ipc "writeFile" path content)))
   (rename! [this repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
   (stat [this dir path]
-    (ipc/ipc "stat" (str dir path))))
+    (let [path (concat-path dir path)]
+      (ipc/ipc "stat" path)))
+  (open-dir [this ok-handler]
+    (ipc/ipc "openDir" {})))

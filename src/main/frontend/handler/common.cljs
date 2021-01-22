@@ -35,7 +35,7 @@
           (gobj/get js/window "workerThread")
           (gobj/get js/window.workerThread "getChangedFiles"))
      (->
-      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo))
+      (p/let [files (js/window.workerThread.getChangedFiles (config/get-repo-dir repo))
               files (bean/->clj files)]
         (->
          (p/let [remote-latest-commit (get-remote-ref repo)

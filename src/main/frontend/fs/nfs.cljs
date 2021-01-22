@@ -193,4 +193,7 @@
           {:file/last-modified-at (get-attr "lastModified")
            :file/size (get-attr "size")
            :file/type (get-attr "type")}))
-      (p/rejected "File not exists"))))
+      (p/rejected "File not exists")))
+  (open-dir [this ok-handler]
+    (utils/openDirectory #js {:recursive true}
+                         ok-handler)))

@@ -448,7 +448,7 @@
 
 (defn journal?
   [path]
-  (starts-with? path "journals/"))
+  (string/includes? path "journals/"))
 
 (defn drop-first-line
   [s]
@@ -781,12 +781,6 @@
 (defn time-ms
   []
   #?(:cljs (tc/to-long (cljs-time.core/now))))
-
-(defn get-repo-dir
-  [repo-url]
-  (str "/"
-       (->> (take-last 2 (string/split repo-url #"/"))
-            (string/join "_"))))
 
 (defn d
   [k f]
