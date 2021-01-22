@@ -1983,9 +1983,6 @@
       :current-page (state/get-current-page)})))
 
 (defn insert-new-block-below! []
-  (let [edit-id (state/get-edit-input-id)
-        input (gdom/getElement edit-id)]
-    (if (not (nil? input)) (util/move-cursor-to-end input)))
   (let [config (state/get-config)
         last-block (state/get-edit-block)
         format (:block/format last-block)
