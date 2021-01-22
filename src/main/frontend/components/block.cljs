@@ -762,15 +762,9 @@
 
         (= name "youtube")
         (let [url (first arguments)]
-          (when-let [youtube-id (cond
-                                  (string/starts-with? url "https://youtu.be/")
-                                  (string/replace url "https://youtu.be/" "")
-
-                                  (string? url)
-                                  url
-
-                                  :else
-                                  nil)]
+          ;; javascript regex "^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)(?<id>[\w\-]+)(\S+)?$"
+          (def YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$")
+          (when-let [youtube-id (nth (re-find YouTube-regex url) 5)]
             (when-not (string/blank? youtube-id)
               (let [width (min (- (util/get-width) 96)
                                560)
