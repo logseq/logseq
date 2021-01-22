@@ -9,4 +9,5 @@
   (write-file! [this repo dir path content opts])
   (rename! [this repo old-path new-path])
   (stat [this dir path])
-  (open-dir [this ok-handler]))
+  (open-dir [this ok-handler])
+  (get-files [this path-or-handle ok-handler]))

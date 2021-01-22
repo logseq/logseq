@@ -196,4 +196,6 @@
       (p/rejected "File not exists")))
   (open-dir [this ok-handler]
     (utils/openDirectory #js {:recursive true}
-                         ok-handler)))
+                         ok-handler))
+  (get-files [this path-or-handle ok-handler]
+    (utils/getFiles path-or-handle true ok-handler)))

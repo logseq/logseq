@@ -41,12 +41,9 @@
 (defmethod handle :stat [_window [_ path]]
   (fs/statSync path))
 
-;; TODO: Is it going to be slow if it's a huge directory
-(defmethod handle :openDir [window _messages]
-  (let [result (.showOpenDialogSync dialog (bean/->js
-                                            {:properties ["openDirectory"]}))
-        path (first result)
-        result (->> (map
+(defn- get-files
+  [path]
+  (let [result (->> (map
                       (fn [path]
                         (let [stat (fs/statSync path)]
                           (when-not (.isDirectory stat)
@@ -56,6 +53,16 @@
                       (readdir path))
                     (remove nil?))]
     (vec (cons {:path path} result))))
+
+;; TODO: Is it going to be slow if it's a huge directory
+(defmethod handle :openDir [window _messages]
+  (let [result (.showOpenDialogSync dialog (bean/->js
+                                            {:properties ["openDirectory"]}))
+        path (first result)]
+    (get-files path)))
+
+(defmethod handle :getFiles [window [_ path]]
+  (get-files path))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

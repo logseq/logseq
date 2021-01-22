@@ -33,4 +33,6 @@
   (stat [this dir path]
     (js/window.pfs.stat (str dir path)))
   (open-dir [this ok-handler]
+    nil)
+  (get-files [this path-or-handle ok-handler]
     nil))

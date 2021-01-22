@@ -42,4 +42,6 @@
     (let [path (concat-path dir path)]
       (ipc/ipc "stat" path)))
   (open-dir [this ok-handler]
-    (ipc/ipc "openDir" {})))
+    (ipc/ipc "openDir" {}))
+  (get-files [this path-or-handle ok-handler]
+    (ipc/ipc "getFiles" path-or-handle)))

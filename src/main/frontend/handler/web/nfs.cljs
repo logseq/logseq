@@ -98,6 +98,7 @@
       (nfs/add-nfs-file-handle! path handle))
     (set-files-aux! handles)))
 
+;; TODO: extract code for `ls-dir-files` and `reload-dir!`
 (defn ls-dir-files
   []
   (let [path-handles (atom {})
@@ -213,30 +214,34 @@
            dir-name (config/get-local-dir repo)
            handle-path (str config/local-handle-prefix dir-name)
            path-handles (atom {})
-           electron? (util/electron?)]
+           electron? (util/electron?)
+           nfs? (not electron?)]
        (state/set-graph-syncing? true)
        (->
         (p/let [handle (idb/get-item handle-path)]
-          (when handle
+          (when (or handle electron?)   ; electron doesn't store the file handle
             (p/let [_ (when handle (nfs/verify-permission repo handle true))
-                    files-result (utils/getFiles handle true
-                                                 (fn [path handle]
-                                                   (swap! path-handles assoc path handle)))
-                    new-files (-> (->db-files electron? dir-name files-result)
+                    files-result (fs/get-files (if nfs? handle
+                                                   (config/get-local-dir repo))
+                                               (fn [path handle]
+                                                 (when nfs?
+                                                   (swap! path-handles assoc path handle))))
+                    new-files (-> (->db-files electron? dir-name (second files-result))
                                   remove-ignore-files)
-                    _ (let [file-paths (set (map :file/path new-files))]
-                        (swap! path-handles (fn [handles]
-                                              (->> handles
-                                                   (filter (fn [[path _handle]]
-                                                             (contains? file-paths
-                                                                        (string/replace-first path (str dir-name "/") ""))))
-                                                   (into {})))))
-                    _ (set-files! @path-handles)
+                    _ (when nfs?
+                        (let [file-paths (set (map :file/path new-files))]
+                         (swap! path-handles (fn [handles]
+                                               (->> handles
+                                                    (filter (fn [[path _handle]]
+                                                              (contains? file-paths
+                                                                         (string/replace-first path (str dir-name "/") ""))))
+                                                    (into {})))))
+                        (set-files! @path-handles))
                     get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
                     {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
                     ;; Use the same labels as isomorphic-git
                     rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
-                    _ (when (seq deleted)
+                    _ (when (and nfs? (seq deleted))
                         (let [deleted (doall
                                        (-> (map (fn [path] (if (= "/" (first path))
                                                              path
@@ -247,13 +252,15 @@
                                           (idb/remove-item! handle-path)
                                           (nfs/remove-nfs-file-handle! handle-path))) deleted))))
                     added-or-modified (set (concat added modified))
-                    _ (when (seq added-or-modified)
+                    _ (when (and nfs? (seq added-or-modified))
                         (p/all (map (fn [path]
                                       (when-let [handle (get @path-handles path)]
                                         (idb/set-item! (str handle-path path) handle))) added-or-modified)))]
               (-> (p/all (map (fn [path]
                                 (when-let [file (get-file-f path new-files)]
-                                  (p/let [content (.text (:file/file file))]
+                                  (p/let [content (if nfs?
+                                                    (.text (:file/file file))
+                                                    (:file/content file))]
                                     (assoc file :file/content content)))) added-or-modified))
                   (p/then (fn [result]
                             (let [files (map #(dissoc % :file/file :file/handle) result)

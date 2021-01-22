@@ -96,6 +96,15 @@
           [(:path dir) paths])
         result))))
 
+(defn get-files
+  [path-or-handle ok-handler]
+  (let [record (if (util/electron?) node-record nfs-record)]
+    (p/let [result (protocol/get-files record path-or-handle ok-handler)]
+      (if (util/electron?)
+        (let [[dir & paths] (bean/->clj result)]
+          [(:path dir) paths])
+        result))))
+
 (defn mkdir-if-not-exists
   [dir]
   (when dir
