@@ -1,6 +1,7 @@
 (ns frontend.components.settings
   (:require [rum.core :as rum]
             [frontend.ui :as ui]
+            [frontend.components.svg :as svg]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.handler.ui :as ui-handler]
@@ -76,10 +77,38 @@
 
 (rum/defcs app-updater < rum/reactive
   [state]
-  (let [update-pending? (state/sub :electron/updater-pending?)]
+  (let [update-pending? (state/sub :electron/updater-pending?)
+        {:keys [type payload]} (state/sub :electron/updater)]
     [:div.cp__settings-app-updater
      [:button.ui__button_base.is-logseq.check-update
-      (if update-pending? "Checking ..." "Check for updates")]]))
+      {:disabled update-pending?
+       :on-click #(js/window.apis.checkForUpdates false)}
+      (if update-pending? "Checking ..." "Check for updates")]
+     (when-not (or update-pending?
+                   (string/blank? type))
+       [:div.update-state
+        (case type
+          "update-not-available"
+          [:p "😀 Your app is up-to-date!"]
+
+          "update-available"
+          (let [{:keys [name url]} payload]
+            [:p (str "Found new release ")
+             [:a.link
+              {:on-click
+               (fn [e]
+                 (js/window.apis.openExternal url)
+                 (util/stop e))}
+              svg/external-link name " 🎉"]])
+
+          "error"
+          [:p "⚠️ Oops, Something Went Wrong!" [:br] " Please check out the "
+           [:a.link
+            {:on-click
+             (fn [e]
+               (js/window.apis.openExternal "https://github.com/logseq/logseq/releases")
+               (util/stop e))}
+            svg/external-link " release channel"]])])]))
 
 (rum/defcs settings < rum/reactive
   []
@@ -145,7 +174,7 @@
               (:label language)])]]]]
 
        [:div.pl-1
-        ;; config.edn
+                        ;; config.edn
         (when current-repo
           [:a {:href (str "/file/" (util/url-encode (str config/app-name "/" config/config-file)))}
            (t :settings-page/edit-config-edn)])
@@ -202,12 +231,12 @@
                    (let [value (not enable-timetracking?)]
                      (config-handler/set-config! :feature/enable-timetracking? value))))
 
-         ;; (toggle "enable_block_time"
-         ;;         (t :settings-page/enable-block-time)
-         ;;         enable-block-time?
-         ;;         (fn []
-         ;;           (let [value (not enable-block-time?)]
-         ;;             (config-handler/set-config! :feature/enable-block-time? value))))
+                         ;; (toggle "enable_block_time"
+                         ;;         (t :settings-page/enable-block-time)
+                         ;;         enable-block-time?
+                         ;;         (fn []
+                         ;;           (let [value (not enable-block-time?)]
+                         ;;             (config-handler/set-config! :feature/enable-block-time? value))))
 
          (toggle "enable_journals"
                  (t :settings-page/enable-journals)
@@ -225,23 +254,23 @@
              [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
               [:input#home-default-page.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
                {:default-value (state/sub-default-home-page)
-                :on-blur (fn [event]
-                           (let [value (util/evalue event)]
-                             (cond
-                               (string/blank? value)
-                               (let [home (get (state/get-config) :default-home {})
-                                     new-home (dissoc home :page)]
-                                 (config-handler/set-config! :default-home new-home)
-                                 (notification/show! "Home default page updated successfully!" :success))
+                :on-blur       (fn [event]
+                                 (let [value (util/evalue event)]
+                                   (cond
+                                     (string/blank? value)
+                                     (let [home (get (state/get-config) :default-home {})
+                                           new-home (dissoc home :page)]
+                                       (config-handler/set-config! :default-home new-home)
+                                       (notification/show! "Home default page updated successfully!" :success))
 
-                               (page-handler/page-exists? (string/lower-case value))
-                               (let [home (get (state/get-config) :default-home {})
-                                     new-home (assoc home :page value)]
-                                 (config-handler/set-config! :default-home new-home)
-                                 (notification/show! "Home default page updated successfully!" :success))
+                                     (page-handler/page-exists? (string/lower-case value))
+                                     (let [home (get (state/get-config) :default-home {})
+                                           new-home (assoc home :page value)]
+                                       (config-handler/set-config! :default-home new-home)
+                                       (notification/show! "Home default page updated successfully!" :success))
 
-                               :else
-                               (notification/show! "Please make sure the page exists!" :warning))))}]]]])
+                                     :else
+                                     (notification/show! "Please make sure the page exists!" :warning))))}]]]])
 
          (when (string/starts-with? current-repo "https://")
            (toggle "enable_git_auto_push"
@@ -256,7 +285,7 @@
             (ui/admonition
              :important
              [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-              [:a {:href "https://github.com/isomorphic-git/cors-proxy"
+              [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
                    :target "_blank"}
                "https://github.com/isomorphic-git/cors-proxy"]])
             [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
@@ -267,16 +296,16 @@
               [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
                [:input#pat.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
                 {:default-value cors-proxy
-                 :on-blur (fn [event]
-                            (when-let [server (util/evalue event)]
-                              (user-handler/set-cors! server)
-                              (notification/show! "Custom CORS proxy updated successfully!" :success)))
-                 :on-key-press (fn [event]
-                                 (let [k (gobj/get event "key")]
-                                   (if (= "Enter" k)
-                                     (when-let [server (util/evalue event)]
-                                       (user-handler/set-cors! server)
-                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+                 :on-blur       (fn [event]
+                                  (when-let [server (util/evalue event)]
+                                    (user-handler/set-cors! server)
+                                    (notification/show! "Custom CORS proxy updated successfully!" :success)))
+                 :on-key-press  (fn [event]
+                                  (let [k (gobj/get event "key")]
+                                    (if (= "Enter" k)
+                                      (when-let [server (util/evalue event)]
+                                        (user-handler/set-cors! server)
+                                        (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
 
             [:hr]])
 
@@ -285,7 +314,7 @@
            (t :settings-page/current-version)]
           [:div.mt-1.sm:mt-0.sm:col-span-2
            [:p version]
-           (if util/electron? (app-updater))]]
+           (if (util/electron?) (app-updater))]]
 
          [:hr]
 

@@ -2,11 +2,43 @@
   &-app-updater {
     min-height: 20px;
     position: relative;
+    margin-bottom: -10px;
 
     button.check-update {
       position: absolute;
       right: 0;
       top: -45px;
+
+      &:disabled {
+        cursor: progress;
+      }
+    }
+
+    .update-state {
+      padding: 15px;
+      background-color: var(--ls-secondary-background-color);
+      border-radius: 4px;
+
+      > p {
+        margin: 0;
+      }
+
+      .link {
+        font-size: 16px;
+        line-height: 1em;
+        letter-spacing: 1px;
+
+        svg {
+          display: inline-block;
+          position: relative;
+          top: -1px;
+          margin-right: 2px;
+        }
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
     }
   }
 }
