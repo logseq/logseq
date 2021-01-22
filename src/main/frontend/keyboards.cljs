@@ -35,8 +35,8 @@
 ;; Open link in Sidebar Ctrl-shift-o
 ;; Select Block Above Shift-Up
 ;; Select Block Below Shift-Down
-;; Insert Line Above Ctrl-Shift-Up
-;; Insert Line Below Ctrl-Shift-Enter
+;; Insert New Block Above Ctrl-Shift-Up
+;; Insert New Block Below Ctrl-Shift-Enter
 ;; Select All Blocks Ctrl-Shift-a
 
 ;; General
@@ -78,8 +78,9 @@
     "ctrl+shift+a" editor-handler/select-all-blocks!
     "alt+shift+up" (fn [state e] (editor-handler/move-up-down e true))
     "alt+shift+down" (fn [state e] (editor-handler/move-up-down e false))
-    "shift+ctrl+up" editor-handler/insert-new-line-above!
-    "shift+ctrl+enter" editor-handler/insert-new-line-below!}
+    "shift+ctrl+up" editor-handler/insert-new-block-above!
+    "shift+ctrl+enter" editor-handler/insert-new-block-below!
+    }
    (medley/map-keys util/->system-modifier)))
 
 (defn chord-aux

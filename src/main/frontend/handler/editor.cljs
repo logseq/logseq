@@ -1959,18 +1959,45 @@
     (state/set-collapsed-state! (:block/uuid current-block)
                                 true)))
 
-(defn insert-new-line-above! []
-  (let [new-content (str "\n" (state/get-edit-content))
-        edit-id (state/get-edit-input-id)
-        input (gdom/getElement edit-id)]
-    (state/set-edit-content! edit-id new-content)
-    (if (not (nil? input)) (util/move-cursor-to input 0))))
+(defn insert-new-block-above! []
+  (let [config (state/get-config)
+        block-parent-id (state/get-editing-block-dom-id)
+        last-block (gdom/getElement block-parent-id)
+        prev-block (get-prev-block-non-collapsed last-block)
+        sibling-block-id (d/attr prev-block "blockid")
+        block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])
+        pos (state/get-edit-pos)
+        foramt (:block/format block)
+        id (string/replace (gobj/get last-block "id") "ls-block" "edit-block")]
+    (edit-block! block pos foramt id))
 
-(defn insert-new-line-below! []
-  (let [new-value (str (state/get-edit-content) "\n")
-        edit-id (state/get-edit-input-id)]
-    (state/set-edit-content! edit-id new-value)
-))
+  (let  [config (state/get-config)
+         block (state/get-edit-block)]
+    (insert-new-block-aux!
+     block (:block/content block)
+     {:create-new-block? true
+      :ok-handler (fn [] (clear-when-saved!))
+      :with-level? false
+      :new-level (:block/level block)
+      :blocks-container-id (:id config)
+      :current-page (state/get-current-page)})))
+
+(defn insert-new-block-below! []
+  (let [edit-id (state/get-edit-input-id)
+        input (gdom/getElement edit-id)]
+    (if (not (nil? input)) (util/move-cursor-to-end input)))
+  (let [config (state/get-config)
+        last-block (state/get-edit-block)
+        format (:block/format last-block)
+        id (:id config)]
+    (insert-new-block-aux!
+     last-block (:block/content last-block)
+     {:create-new-block? true
+      :ok-handler (fn [] (clear-when-saved!))
+      :with-level? false
+      :new-level (:block/level last-block)
+      :blocks-container-id (:id config)
+      :current-page (state/get-current-page)})))
 
 (defn cycle-collapse!
   [_state e]
