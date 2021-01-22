@@ -1,6 +1,6 @@
-const { ipcRenderer, contextBridge } = require('electron')
+const { ipcRenderer, contextBridge, shell } = require('electron')
 
-contextBridge.exposeInMainWorld('api', {
+contextBridge.exposeInMainWorld('apis', {
   doAction: async (arg) => {
     return await ipcRenderer.invoke('main', arg)
   },
@@ -19,5 +19,9 @@ contextBridge.exposeInMainWorld('api', {
 
   installUpdatesAndQuitApp () {
     ipcRenderer.invoke('install-updates', true)
+  },
+
+  async openExternal (url, options) {
+    await shell.openExternal(url, options)
   }
 })

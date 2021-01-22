@@ -1,0 +1,12 @@
+.cp__settings {
+  &-app-updater {
+    min-height: 20px;
+    position: relative;
+
+    button.check-update {
+      position: absolute;
+      right: 0;
+      top: -45px;
+    }
+  }
+}

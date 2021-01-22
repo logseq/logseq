@@ -8,6 +8,7 @@
             [frontend.handler.config :as config-handler]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
+            [frontend.version :refer [version]]
             [frontend.util :as util]
             [frontend.config :as config]
             [frontend.dicts :as dicts]
@@ -72,6 +73,13 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md.sm:max-w-xs
      (ui/toggle state on-toggle)]]])
+
+(rum/defcs app-updater < rum/reactive
+  [state]
+  (let [update-pending? (state/sub :electron/updater-pending?)]
+    [:div.cp__settings-app-updater
+     [:button.ui__button_base.is-logseq.check-update
+      (if update-pending? "Checking ..." "Check for updates")]]))
 
 (rum/defcs settings < rum/reactive
   []
@@ -210,41 +218,38 @@
 
          (when (not enable-journals?)
            [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-             [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-              {:for "default page"}
-              (t :settings-page/home-default-page)]
-             [:div.mt-1.sm:mt-0.sm:col-span-2
-              [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-               [:input#home-default-page.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
-                {:default-value (state/sub-default-home-page)
-                 :on-blur (fn [event]
-                            (let [value (util/evalue event)]
-                              (cond
-                                (string/blank? value)
-                                (let [home (get (state/get-config) :default-home {})
-                                      new-home (dissoc home :page)]
-                                  (config-handler/set-config! :default-home new-home)
-                                  (notification/show! "Home default page updated successfully!" :success))
+            [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+             {:for "default page"}
+             (t :settings-page/home-default-page)]
+            [:div.mt-1.sm:mt-0.sm:col-span-2
+             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+              [:input#home-default-page.form-input.block.w-full.transition.duration-150.ease-in-out.sm:text-sm.sm:leading-5
+               {:default-value (state/sub-default-home-page)
+                :on-blur (fn [event]
+                           (let [value (util/evalue event)]
+                             (cond
+                               (string/blank? value)
+                               (let [home (get (state/get-config) :default-home {})
+                                     new-home (dissoc home :page)]
+                                 (config-handler/set-config! :default-home new-home)
+                                 (notification/show! "Home default page updated successfully!" :success))
 
-                                (page-handler/page-exists? (string/lower-case value))
-                                (let [home (get (state/get-config) :default-home {})
-                                      new-home (assoc home :page value)]
-                                  (config-handler/set-config! :default-home new-home)
-                                  (notification/show! "Home default page updated successfully!" :success))
+                               (page-handler/page-exists? (string/lower-case value))
+                               (let [home (get (state/get-config) :default-home {})
+                                     new-home (assoc home :page value)]
+                                 (config-handler/set-config! :default-home new-home)
+                                 (notification/show! "Home default page updated successfully!" :success))
 
-                                :else
-                                (notification/show! "Please make sure the page exists!" :warning))))}]]]])
+                               :else
+                               (notification/show! "Please make sure the page exists!" :warning))))}]]]])
 
          (when (string/starts-with? current-repo "https://")
            (toggle "enable_git_auto_push"
-                  "Enable Git auto push"
-                  enable-git-auto-push?
-                  (fn []
-                    (let [value (not enable-git-auto-push?)]
-                      (config-handler/set-config! :git-auto-push value)))))
-
-
-         [:hr]
+                   "Enable Git auto push"
+                   enable-git-auto-push?
+                   (fn []
+                     (let [value (not enable-git-auto-push?)]
+                       (config-handler/set-config! :git-auto-push value))))) [:hr]
 
          (when logged?
            [:div
@@ -274,6 +279,15 @@
                                        (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
 
             [:hr]])
+
+         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           (t :settings-page/current-version)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:p version]
+           (if util/electron? (app-updater))]]
+
+         [:hr]
 
          [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
           [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70

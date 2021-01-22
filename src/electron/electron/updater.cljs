@@ -7,9 +7,9 @@
             ["os" :as os]
             ["fs" :as fs]
             ["path" :as path]
-            ["electron" :refer [ipcMain app]]
-            ["open" :as open]))
+            ["electron" :refer [ipcMain app]]))
 
+(def open (js/require "open"))
 (def fetch (js/require "node-fetch"))
 (def *update-ready-to-install (atom nil))
 (def *update-pending (atom nil))
@@ -24,8 +24,9 @@
 
 (defn get-latest-artifact-info
   [repo]
-  (let [;endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.7"
-        endpoint (str "https://update.electronjs.org/" repo "/" (if mac? "darwin" "win32") "-x64/" version)]
+  (let [endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.7"
+        ;endpoint (str "https://update.electronjs.org/" repo "/" (if mac? "darwin" "win32") "-x64/" version)
+        ]
     (p/catch
      (p/let [res (fetch endpoint)
              status (.-status res)
@@ -39,7 +40,8 @@
        (throw e)))))
 
 (defn check-for-updates
-  [{:keys [repo ^js logger ^js win]}]
+  [{:keys           [repo ^js logger ^js win]
+    [auto-download] :args}]
   (let [debug (partial (.-warn logger) "[updater]")
         emit (fn [type payload]
                (.. win -webContents
@@ -53,6 +55,7 @@
              url (if-not artifact (emit "update-not-available" nil) (:url artifact))
              _ (if url (emit "update-available" (bean/->js artifact)) (throw (js/Error. "download url not exists")))
                ;; start download FIXME: user's preference about auto download
+             _ (when-not auto-download (throw nil))
              ^js dl-res (fetch url)
              _ (if-not (.-ok dl-res) (throw (js/Error. "download resource not available")))
              dest-info (p/create
@@ -88,8 +91,11 @@
              (resolve nil))
            (p/catch
             (fn [e]
-              (emit "error" e)
-              (reject e)))
+              (if e
+                (do
+                  (emit "error" e)
+                  (reject e))
+                (resolve nil))))
            (p/finally
              (fn []
                (emit "completed" nil))))))))
