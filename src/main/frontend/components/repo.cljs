@@ -199,7 +199,11 @@
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
              [:a#repo-switch {:on-click toggle-fn}
-              [:span (get-repo-name current-repo)]
+              (let [repo-name (get-repo-name current-repo)
+                    repo-name (if (util/electron?)
+                                (last (string/split repo-name #"/"))
+                                repo-name)]
+                [:span repo-name])
               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
            (mapv
             (fn [{:keys [id url]}]
@@ -221,7 +225,9 @@
           (and current-repo (not local-repo?))
           (let [repo-name (get-repo-name current-repo)]
             (if (config/local-db? current-repo)
-              repo-name
+              (if (util/electron?)
+                (last (string/split repo-name #"/"))
+                repo-name)
               [:a
                {:href current-repo
                 :target "_blank"}
