@@ -762,7 +762,7 @@
 
         (= name "youtube")
         (let [url (first arguments)]
-          (let YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"
+          (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
             (when-let [youtube-id (cond
                                     (== 11 (count url)) url
                                     :else
