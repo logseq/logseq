@@ -65,7 +65,7 @@
                              :on-click (fn []
                                          (if local?
                                            (nfs-handler/rebuild-index! url
-                                                                 repo-handler/create-today-journal!)
+                                                                       repo-handler/create-today-journal!)
                                            (repo-handler/rebuild-index! url))
                                          (js/setTimeout
                                           (fn []
@@ -97,7 +97,7 @@
              [:a
               {:on-click #(nfs-handler/refresh! repo
                                                 repo-handler/create-today-journal!)
-               :title (str "Sync files with the local directory: " (config/get-local-dir repo) ".\nVersion: "
+               :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}
               svg/refresh]])
           (let [changed-files (state/sub [:repo/changed-files repo])

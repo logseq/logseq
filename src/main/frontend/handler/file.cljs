@@ -27,6 +27,8 @@
             [frontend.utf8 :as utf8]
             ["ignore" :as Ignore]))
 
+;; TODO: extract all git ops using a channel
+
 (defn load-file
   [repo-url path]
   (->
@@ -163,7 +165,7 @@
       (db/set-file-content! repo path content))
     (util/p-handle
      (fs/write-file! repo (config/get-repo-dir repo) path content {:old-content original-content
-                                                                 :last-modified-at (db/get-file-last-modified-at repo path)})
+                                                                   :last-modified-at (db/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (str config/app-name "/" config/config-file))
@@ -264,11 +266,7 @@
   (when-not (string/blank? file)
     (->
      (p/let [_ (git/remove-file repo file)
-             result (fs/unlink! (str
-                                 (config/get-repo-dir repo)
-                                 "/"
-                                 file)
-                                nil)]
+             result (fs/unlink! (config/get-repo-path repo file) nil)]
        (when-let [file (db/entity repo [:file/path file])]
          (common-handler/check-changed-files-status)
          (let [file-id (:db/id file)
@@ -313,7 +311,7 @@
     (let [repos (->> (state/get-repos)
                      (filter (fn [repo]
                                (config/local-db? (:url repo)))))
-         directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
+          directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
       (doseq [dir directories]
-        (prn "watch for dir changes: " dir)
+        (prn "Watch for dir changes: " dir)
         (fs/watch-dir! dir)))))

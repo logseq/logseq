@@ -3,31 +3,41 @@
             [lambdaisland.glogi :as log]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.notification :as notification]
             [frontend.config :as config]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.db :as db]))
 
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
   (when dir
-    (let [repo (config/get-local-repo dir)]
-      (prn "handle file notifier: "
-           {:repo repo
-            :type type
-            :payload payload})
-     ;; (cond
-     ;;   (contains? #{"add" "change"} type)
-     ;;   ;; TODO: check content and mtime
-     ;;   (file-handler/alter-file repo path content {})
+    (let [repo (config/get-local-repo dir)
+          {:keys [mtime]} stat]
+      (cond
+        (= "add" type)
+        (when (not= content (db/get-file path))
+          (file-handler/alter-file repo path content {:re-render-root? true}))
 
-     ;;   (= "unlink" type)
-     ;;   ;; TODO: Remove page and blocks too
-     ;;   ;; what if it's a mistaken, should we put it to .trash to have a way to restore it back?
-     ;;   (file-handler/remove-file! repo path)
+        (and (= "change" type)
+             (not= content (db/get-file path))
+             (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
+               (> mtime last-modified-at)))
+        (file-handler/alter-file repo path content {:re-render-root? true})
 
-     ;;   :else
-     ;;   (log/error :fs/watcher-no-handler {:type type
-     ;;                                      :payload payload}))
-     )))
+        (= "unlink" type)
+        (when-let [page-name (db/get-file-page path)]
+          (page-handler/delete!
+           page-name
+           (fn []
+             (notification/show! (str "Page " page-name " was deleted on disk.")
+                                 :success))))
+
+        (contains? #{"add" "change" "unlink"} type)
+        nil
+
+        :else
+        (log/error :fs/watcher-no-handler {:type type
+                                           :payload payload})))))
 
 (defn run-dirs-watcher!
   []

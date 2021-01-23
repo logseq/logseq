@@ -46,13 +46,13 @@
 (defn- get-files
   [path]
   (let [result (->> (map
-                      (fn [path]
-                        (let [stat (fs/statSync path)]
-                          (when-not (.isDirectory stat)
-                            {:path path
-                             :content (read-file path)
-                             :stat stat})))
-                      (readdir path))
+                     (fn [path]
+                       (let [stat (fs/statSync path)]
+                         (when-not (.isDirectory stat)
+                           {:path path
+                            :content (read-file path)
+                            :stat stat})))
+                     (readdir path))
                     (remove nil?))]
     (vec (cons {:path path} result))))
 
@@ -72,8 +72,6 @@
 
 (defonce file-watcher-chan "file-watcher")
 (defn send-file-watcher! [win type payload]
-  (prn "file watch: " {:type type
-                       :payload payload})
   (.. win -webContents
       (send file-watcher-chan
             (bean/->js {:type type :payload payload}))))
@@ -83,6 +81,7 @@
   (let [watcher (.watch watcher dir
                         (clj->js
                          {:ignored #"^\."
+                          :ignoreInitial true
                           :persistent true
                           :awaitWriteFinish true}))]
     (.on watcher "add"

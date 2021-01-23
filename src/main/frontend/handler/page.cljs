@@ -65,14 +65,20 @@
                 [:p.content
                  (util/format "File %s already exists!" file-path)]
                 :error)
-               ;; create the file
+               ;; Create the file
                (let [content (util/default-content-with-title format title)]
-                 (p/let [_ (fs/create-if-not-exists repo dir file-path content)
+                 ;; Write to the db first, then write to the filesystem,
+                 ;; otherwise, the main electron ipc will notify that there's
+                 ;; a new file created.
+                 ;; Question: what if the fs write failed?
+                 (p/let [_ (file-handler/reset-file! repo path content)
+                         _ (fs/create-if-not-exists repo dir file-path content)
                          _ (git-handler/git-add repo path)]
-                   (file-handler/reset-file! repo path content)
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})
+
+                     ;; Edit the first block
                      (let [blocks (db/get-page-blocks page)
                            last-block (last blocks)]
                        (when last-block
@@ -273,10 +279,7 @@
               ;; remove file
               (->
                (p/let [_ (git/remove-file repo file-path)
-                       _ (fs/unlink! (str (config/get-repo-dir repo)
-                                          "/"
-                                          file-path)
-                                     nil)]
+                       _ (fs/unlink! (config/get-repo-path repo file-path) nil)]
                  (common-handler/check-changed-files-status)
                  (repo-handler/push-if-auto-enabled! repo))
                (p/catch (fn [err]

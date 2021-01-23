@@ -1595,7 +1595,7 @@
     (save-block! repo block content)
     (when local?
       ;; FIXME: should be relative to current block page path
-      (fs/unlink! (str (config/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
+      (fs/unlink! (config/get-repo-path repo (string/replace href #"^../" "/")) nil))))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]

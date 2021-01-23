@@ -305,8 +305,14 @@
 
 (defn get-repo-dir
   [repo-url]
-  (if (util/electron?)
+  (if (and (util/electron?) (local-db? repo-url))
     (get-local-dir repo-url)
     (str "/"
-        (->> (take-last 2 (string/split repo-url #"/"))
-             (string/join "_")))))
+         (->> (take-last 2 (string/split repo-url #"/"))
+              (string/join "_")))))
+
+(defn get-repo-path
+  [repo-url path]
+  (if (and (util/electron?) (local-db? repo-url))
+    path
+    (str (get-repo-dir repo-url) "/" path)))
