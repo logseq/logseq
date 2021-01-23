@@ -25,6 +25,7 @@
     "http://localhost:3000/api/v1/"
     (str website "/api/v1/")))
 
+;; change if you want to use your own domain instead of default asset.logseq.com
 (def asset-domain (util/format "https://asset.%s.com"
                                app-name))
 
