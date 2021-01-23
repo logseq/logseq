@@ -313,5 +313,4 @@
                                (config/local-db? (:url repo)))))
           directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
       (doseq [dir directories]
-        (prn "Watch for dir changes: " dir)
         (fs/watch-dir! dir)))))

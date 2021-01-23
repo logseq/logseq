@@ -153,7 +153,9 @@
                                                       {:first-clone? true
                                                        :nfs-files    files})
 
-                       (state/add-repo! {:url repo :nfs? true}))))
+                       (state/add-repo! {:url repo :nfs? true})
+                       (when (util/electron?)
+                         (fs/watch-dir! dir-name)))))
            (p/catch (fn [error]
                       (log/error :nfs/load-files-error error)))))
      (p/catch (fn [error]
