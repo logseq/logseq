@@ -128,7 +128,12 @@
 
 (defn reset-file!
   [repo-url file content]
-  (let [new? (nil? (db/entity [:file/path file]))]
+  (let [file (if (and (util/electron?)
+                      (config/local-db? repo-url)
+                      (not= "/" (first file)))
+               (str (config/get-repo-dir repo-url) "/" file)
+               file)
+        new? (nil? (db/entity [:file/path file]))]
     (db/set-file-content! repo-url file content)
     (let [format (format/get-format file)
           utf8-content (utf8/encode content)

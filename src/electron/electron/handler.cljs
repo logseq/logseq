@@ -80,8 +80,8 @@
   [win dir]
   (let [watcher (.watch watcher dir
                         (clj->js
-                         {:ignored #"^\."
-                          :ignoreInitial true
+                         {:ignored #"^\." ; FIXME read .gitignore and other ignore paths
+                          ;; :ignoreInitial true
                           :persistent true
                           :awaitWriteFinish true}))]
     (.on watcher "add"

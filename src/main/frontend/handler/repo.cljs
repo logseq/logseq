@@ -139,11 +139,12 @@
                  (not page-exists?))
          (p/let [_ (nfs/check-directory-permission! repo-url)
                  _ (fs/mkdir-if-not-exists (str repo-dir "/" config/default-journals-directory))
-                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
+                 file-exists? (fs/file-exists? repo-dir file-path)]
            (when-not file-exists?
              (file-handler/reset-file! repo-url path content)
-             (ui-handler/re-render-root!)
-             (git-handler/git-add repo-url path))))))))
+             (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+               (ui-handler/re-render-root!)
+               (git-handler/git-add repo-url path)))))))))
 
 (defn create-today-journal!
   []
@@ -152,7 +153,11 @@
     (when (or (db/cloned? repo)
               (and (config/local-db? repo)
                    ;; config file exists
-                   (db/get-file (str config/app-name "/" config/config-file))))
+                   (let [path (str config/app-name "/" config/config-file)
+                         path (if (and (util/electron?) (config/local-db? repo))
+                                (str (config/get-repo-dir repo) "/" path)
+                                path)]
+                     (db/get-file path))))
       (let [today-page (string/lower-case (date/today))]
         (when (empty? (db/get-page-blocks-no-cache repo today-page))
           (create-today-journal-if-not-exists repo))))))

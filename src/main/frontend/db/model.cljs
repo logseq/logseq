@@ -696,7 +696,7 @@
   [file ast]
   ;; headline
   (let [ast (map first ast)]
-    (if (util/starts-with? file "pages/contents.")
+    (if (string/includes? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter block/heading-block? ast)))
             property-name (when (and (= "Properties" (ffirst ast))
