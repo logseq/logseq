@@ -209,6 +209,9 @@
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub :sidebar/blocks)
+        blocks (if (empty? blocks)
+                 [[(state/get-current-repo) "contents" :contents nil]]
+                 blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)
         match (state/sub :route-match)
