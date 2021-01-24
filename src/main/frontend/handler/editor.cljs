@@ -1552,21 +1552,30 @@
    (when-let [block-file (db-model/get-block-file block-id)]
      (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
        (let [prefix (:file/path block-file)
-             prefix (and prefix (string/replace prefix "/" "_"))
+             prefix (and prefix (string/replace
+                                 (if (util/electron?)
+                                   (string/replace prefix (str repo-dir "/") "")
+                                   prefix) "/" "_"))
              prefix (and prefix (subs prefix 0 (string/last-index-of prefix ".")))]
          (save-assets! repo repo-dir assets-dir files
                        (fn [index]
                          (str prefix "_" (.now js/Date) "_" index)))))))
   ([repo dir path files gen-filename]
    (p/all
-    (for [[index file] (map-indexed vector files)]
+    (for [[index ^js file] (map-indexed vector files)]
       (let [ext (.-name file)
             ext (if ext (subs ext (string/last-index-of ext ".")) "")
             filename (str (gen-filename index file) ext)
             filename (str path "/" filename)]
-        ;(js/console.debug "Write asset #" filename file)
-        (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                #(p/resolved [filename file])))))))
+        (js/console.debug "Write asset #" dir filename file)
+        (if (util/electron?)
+          (let [from (.-path file)]
+            (if (string/blank? from)
+              (throw (js/Error. "TODO: can not resolved From file path"))
+              (p/then (js/window.apis.copyFileToAssets dir filename from)
+                      #(p/resolved [filename file]))))
+          (p/then (fs/write-file! repo dir filename (.stream file) nil)
+                  #(p/resolved [filename file]))))))))
 
 (defonce *assets-url-cache (atom {}))
 

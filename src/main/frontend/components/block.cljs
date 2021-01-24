@@ -226,7 +226,7 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
 
-    (when granted?
+    (when (or granted? (util/electron?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
