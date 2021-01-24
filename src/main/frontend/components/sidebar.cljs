@@ -320,7 +320,8 @@
           :close-fn    close-fn
           :route-match route-match})
         [:div.#app-container.cp__sidebar-layout
-         {:class (if sidebar-open? "is-right-sidebar-open")}
+         {:class (if sidebar-open? "is-right-sidebar-open")
+          :style {:padding-bottom (if global-graph-pages? 0 30)}}
          (header/header {:open-fn        open-fn
                          :white?         white?
                          :current-repo   current-repo
