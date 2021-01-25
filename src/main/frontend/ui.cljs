@@ -231,6 +231,8 @@
   []
   (let [cl (.-classList js/document.documentElement)]
     (if util/mac? (.add cl "is-mac"))
+    (if util/win32? (.add cl "is-win32"))
+    (if (util/electron?) (.add cl "is-electron"))
     (if (util/ios?) (.add cl "is-ios"))
     (if (util/mobile?) (.add cl "is-mobile"))
     (if (util/safari?) (.add cl "is-safari"))))

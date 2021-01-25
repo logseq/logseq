@@ -117,11 +117,13 @@
   (println "Error: no ipc handler for: " (bean/->js args)))
 
 (defn set-ipc-handler! [window]
-  (.handle ipcMain "main"
-           (fn [event args-js]
-             (try
-               (let [message (bean/->clj args-js)]
-                 (bean/->js (handle window message)))
-               (catch js/Error e
-                 (println "IPC error: " e)
-                 e)))))
+  (let [main-channel "main"]
+    (.handle ipcMain main-channel
+             (fn [event args-js]
+               (try
+                 (let [message (bean/->clj args-js)]
+                   (bean/->js (handle window message)))
+                 (catch js/Error e
+                   (println "IPC error: " e)
+                   e))))
+    #(.removeHandler ipcMain main-channel)))

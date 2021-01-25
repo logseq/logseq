@@ -22,7 +22,7 @@
 (rum/defc logo < rum/reactive
   [{:keys [white?]}]
   [:a.cp__header-logo
-   {:href "/"
+   {:href     (rfe/href :home)
     :on-click (fn []
                 (util/scroll-to-top)
                 (state/set-journals-length! 1))}

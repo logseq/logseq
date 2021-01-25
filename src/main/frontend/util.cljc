@@ -954,6 +954,9 @@
 (defonce mac? #?(:cljs goog.userAgent/MAC
                  :clj nil))
 
+(defonce win32? #?(:cljs goog.userAgent/WINDOWS
+                 :clj nil))
+
 (defn ->system-modifier
   [keyboard-shortcut]
   (if mac?

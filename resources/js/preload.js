@@ -1,6 +1,6 @@
 const fs = require('fs')
 const path = require('path')
-const { ipcRenderer, contextBridge, shell, clipboard } = require('electron')
+const { ipcRenderer, contextBridge, shell, clipboard, BrowserWindow } = require('electron')
 
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
@@ -84,5 +84,19 @@ contextBridge.exposeInMainWorld('apis', {
 
       return clipboard.read('public.file-url').replace('file://', '')
     }
+  },
+
+  toggleMaxOrMinActiveWindow (isToggleMin = false) {
+    ipcRenderer.invoke('toggle-max-or-min-active-win', isToggleMin)
+  },
+
+  /**
+   * internal
+   * @param type
+   * @param args
+   * @private
+   */
+  async _callApplication (type, ...args) {
+    return await ipcRenderer.invoke('call-application', type, ...args)
   }
 })

@@ -117,6 +117,6 @@
     (.handle ipcMain check-channel check-listener)
     (.handle ipcMain install-channel install-listener)
     #(do
-       (.removeHandler ipcMain install-listener)
+       (.removeHandler ipcMain install-channel)
        (.removeHandler ipcMain check-channel)
        (reset! *update-pending nil))))

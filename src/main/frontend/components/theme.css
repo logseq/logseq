@@ -91,3 +91,77 @@ html[data-theme=light] {
     display: none;
   }
 }
+
+html.is-electron {
+  --frame-top-height: 24px;
+
+  .theme-inner {
+    padding-top: var(--frame-top-height);
+  }
+
+  .cp__header {
+    height: 2rem;
+    top: var(--frame-top-height);
+  }
+
+  .cp__right-sidebar {
+    top: 4rem;
+  }
+
+  &.is-mac {
+    .ls-window-frame-title-bar {
+      padding-left: 70px;
+    }
+  }
+
+  .ls-window-frame-title-bar {
+    background-color: var(--ls-primary-background-color);
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 9;
+    height: var(--frame-top-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+    -webkit-app-region: drag;
+
+    & > .l, & > .r {
+      display: flex;
+    }
+
+    & > .c {
+      font-size: .7rem;
+    }
+
+    a.it {
+      padding: 0 2px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+
+      &:hover {
+        background-color: var(--ls-secondary-background-color);
+      }
+
+      &:active {
+        background-color: var(--ls-primary-background-color);
+      }
+
+      svg {
+        transform: scale(.6);
+        color: var(--ls-primary-text-color);
+        cursor: pointer;
+      }
+
+      &.maximize {
+        svg {
+          transform: scale(.5) translateY(2px) translateX(1px);
+          opacity: .7;
+        }
+      }
+    }
+  }
+}
+
+
