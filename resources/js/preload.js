@@ -1,6 +1,9 @@
 const fs = require('fs')
 const path = require('path')
-const { ipcRenderer, contextBridge, shell } = require('electron')
+const { ipcRenderer, contextBridge, shell, clipboard } = require('electron')
+
+const IS_MAC = process.platform === 'darwin'
+const IS_WIN32 = process.platform === 'win32'
 
 contextBridge.exposeInMainWorld('apis', {
   doAction: async (arg) => {
@@ -32,8 +35,16 @@ contextBridge.exposeInMainWorld('apis', {
     await shell.openExternal(url, options)
   },
 
+  /**
+   * When from is empty. The resource maybe from
+   * client paste or screenshoot.
+   * @param repoPathRoot
+   * @param to
+   * @param from?
+   * @returns {Promise<void>}
+   */
   async copyFileToAssets (repoPathRoot, to, from) {
-    if (fs.statSync(from).isDirectory()) {
+    if (from && fs.statSync(from).isDirectory()) {
       throw new Error('not support copy directory')
     }
 
@@ -45,6 +56,33 @@ contextBridge.exposeInMainWorld('apis', {
     }
 
     await fs.promises.mkdir(assetsRoot, { recursive: true })
-    await fs.promises.copyFile(from, dest)
+
+    from = !from && getFilePathFromClipboard()
+
+    if (from) {
+      // console.debug('copy file: ', from, dest)
+      return await fs.promises.copyFile(from, dest)
+    }
+
+    // support image
+    const nImg = clipboard.readImage()
+
+    if (nImg && !nImg.isEmpty()) {
+      const rawExt = path.extname(dest)
+      return await fs.promises.writeFile(
+        dest.replace(rawExt, '.png'),
+        nImg.toPNG()
+      )
+    }
+
+    // fns
+    function getFilePathFromClipboard () {
+      if (IS_WIN32) {
+        const rawFilePath = clipboard.read('FileNameW')
+        return rawFilePath.replace(new RegExp(String.fromCharCode(0), 'g'), '')
+      }
+
+      return clipboard.read('public.file-url').replace('file://', '')
+    }
   }
 })

@@ -1570,10 +1570,8 @@
         (js/console.debug "Write asset #" dir filename file)
         (if (util/electron?)
           (let [from (.-path file)]
-            (if (string/blank? from)
-              (throw (js/Error. "TODO: can not resolved From file path"))
-              (p/then (js/window.apis.copyFileToAssets dir filename from)
-                      #(p/resolved [filename file]))))
+            (p/then (js/window.apis.copyFileToAssets dir filename from)
+                    #(p/resolved [filename file])))
           (p/then (fs/write-file! repo dir filename (.stream file) nil)
                   #(p/resolved [filename file]))))))))
 
@@ -1582,17 +1580,19 @@
 (defn make-asset-url
   [path]                                                    ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-        path (string/replace path "../" "/")
-        handle-path (str "handle" repo-dir path)
-        cached-url (get @*assets-url-cache (keyword handle-path))]
-    (if cached-url
-      (p/resolved cached-url)
-      (p/let [handle (frontend.idb/get-item handle-path)
-              file (and handle (.getFile handle))]
-        (when file
-          (p/let [url (js/URL.createObjectURL file)]
-            (swap! *assets-url-cache assoc (keyword handle-path) url)
-            url))))))
+        path (string/replace path "../" "/")]
+    (if (util/electron?)
+      (str "assets://" repo-dir path)
+      (let [handle-path (str "handle" repo-dir path)
+            cached-url (get @*assets-url-cache (keyword handle-path))]
+        (if cached-url
+          (p/resolved cached-url)
+          (p/let [handle (frontend.idb/get-item handle-path)
+                  file (and handle (.getFile handle))]
+            (when file
+              (p/let [url (js/URL.createObjectURL file)]
+                (swap! *assets-url-cache assoc (keyword handle-path) url)
+                url))))))))
 
 (defn delete-asset-of-block!
   [{:keys [repo href title full-text block-id local?] :as opts}]
@@ -1604,7 +1604,10 @@
     (save-block! repo block content)
     (when local?
       ;; FIXME: should be relative to current block page path
-      (fs/unlink! (config/get-repo-path repo (string/replace href #"^../" "/")) nil))))
+      (fs/unlink! (config/get-repo-path
+                   repo (-> href
+                            (string/replace #"^../" "/")
+                            (string/replace #"^assets://" ""))) nil))))
 
 (defn upload-image
   [id files format uploading? drop-or-paste?]
@@ -1617,7 +1620,7 @@
              (when-let [[url file] (and (seq res) (first res))]
                (insert-command!
                 id
-                (get-image-link format (get-asset-link url) (.-name file))
+                (get-image-link format (get-asset-link url) (if file (.-name file) "image"))
                 format
                 {:last-pattern (if drop-or-paste? "" commands/slash)
                  :restore?     true}))))

@@ -2,9 +2,10 @@
   (:require [electron.handler :as handler]
             [electron.updater :refer [init-updater]]
             [electron.utils :refer [mac? win32? prod? dev? log]]
+            [clojure.string :as string]
             ["fs" :as fs]
             ["path" :as path]
-            ["electron" :refer [BrowserWindow app] :as electron]))
+            ["electron" :refer [BrowserWindow app protocol] :as electron]))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
 (def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "dev.html" "index.html"))))
@@ -12,6 +13,7 @@
 (def ^:dynamic *setup-fn* nil)
 (def ^:dynamic *teardown-fn* nil)
 (def ^:dynamic *teardown-updater* nil)
+(def ^:dynamic *teardown-interceptor* nil)
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
@@ -41,6 +43,15 @@
                        :logger log
                        :win    win})))
 
+(defn setup-interceptor! []
+  (.registerFileProtocol
+   protocol "assets"
+   (fn [^js request callback]
+     (let [url (.-url request)
+           path (string/replace url "assets://" "")]
+       (callback #js {:path path}))))
+  (set! *teardown-interceptor* #(.unregisterProtocol protocol "assets")))
+
 (defn main
   []
   (.on app "window-all-closed" #(when-not mac? (.quit app)))
@@ -54,13 +65,15 @@
                  (fn []
                    ;; updater
                    (setup-updater! win)
+                   (setup-interceptor!)
 
                    ;; handler
                    (handler/set-ipc-handler! win)
 
                    ;; teardown
                    #(do
-                      (when *teardown-updater* (*teardown-updater*)))))
+                      (when *teardown-updater* (*teardown-updater*))
+                      (when *teardown-interceptor* (*teardown-interceptor*)))))
 
            ;; setup effects
            (*setup-fn*)

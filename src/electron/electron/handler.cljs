@@ -71,7 +71,7 @@
   (last (string/split file #"\.")))
 
 (defonce file-watcher-chan "file-watcher")
-(defn send-file-watcher! [win type payload]
+(defn send-file-watcher! [^js win type payload]
   (.. win -webContents
       (send file-watcher-chan
             (bean/->js {:type type :payload payload}))))
@@ -80,7 +80,7 @@
   [win dir]
   (let [watcher (.watch watcher dir
                         (clj->js
-                         {:ignored #"^\." ; FIXME read .gitignore and other ignore paths
+                         {:ignored #"(^\.|/assets/)" ; FIXME read .gitignore and other ignore paths
                           ;; :ignoreInitial true
                           :persistent true
                           :awaitWriteFinish true}))]
