@@ -8,7 +8,7 @@
             ["electron" :refer [BrowserWindow app protocol ipcMain] :as electron]))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
-(def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "electron.html" "index.html"))))
+(def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "dev.html" "index.html"))))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
