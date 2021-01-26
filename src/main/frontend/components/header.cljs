@@ -151,6 +151,7 @@
                    (remove #(= (:url %) config/local-repo)))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
+       {:on-double-click #(when (util/electron?) (js/window.apis.toggleMaxOrMinActiveWindow))}
        (left-menu-button {:on-click (fn []
                                       (open-fn)
                                       (state/set-left-sidebar-open! true))})

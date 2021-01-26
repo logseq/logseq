@@ -95,13 +95,12 @@ html[data-theme=light] {
 html.is-electron {
   --frame-top-height: 24px;
 
-  .theme-inner {
-    padding-top: var(--frame-top-height);
-  }
+  .theme-inner {}
 
   .cp__header {
     height: 2rem;
-    top: var(--frame-top-height);
+    padding-top: var(--frame-top-height);
+    top: 0;
   }
 
   .cp__right-sidebar {
@@ -109,9 +108,28 @@ html.is-electron {
   }
 
   &.is-mac {
-    .ls-window-frame-title-bar {
-      padding-left: 70px;
+    .cp__header {
+      padding-top: calc(var(--frame-top-height) + 12px);
+
+      &-logo {
+        height: var(--frame-top-height);
+      }
+
+      &:before {
+        content: " ";
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 8;
+        -webkit-app-region: drag;
+        width: 100%;
+        height: var(--frame-top-height);
+      }
     }
+  }
+
+  #search {
+    -webkit-app-region: drag;
   }
 
   .ls-window-frame-title-bar {

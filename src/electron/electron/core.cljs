@@ -21,7 +21,7 @@
   []
   (let [win-opts {:width         980
                   :height        700
-                  :frame         false
+                  :frame         win32?
                   :titleBarStyle (if mac? "hidden" nil)
                   :webPreferences
                   {:nodeIntegration         false
