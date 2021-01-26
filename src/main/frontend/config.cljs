@@ -31,8 +31,10 @@
 
 (defn asset-uri
   [path]
-  (if dev? path
-      (str asset-domain path)))
+  (if (util/file-protocol?)
+    (string/replace path "/static/" "./")
+    (if dev? path
+        (str asset-domain path))))
 
 (goog-define GITHUB_APP_NAME "logseq-test")
 

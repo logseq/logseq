@@ -2,7 +2,7 @@ const path = require('path')
 
 module.exports = {
   packagerConfig: {
-    icon: './icons/logseq.icns'
+    icon: './icons/logseq_big_sur.icns'
   },
 
   makers: [
@@ -17,7 +17,7 @@ module.exports = {
       config: {
         background: './img/dmg-bg.png',
         format: 'ULFO',
-        icon: './icons/logseq.icns',
+        icon: './icons/logseq_big_sur.icns',
         name: 'Logseq'
       }
     },

@@ -56,6 +56,11 @@
      (let [ua (string/lower-case js/navigator.userAgent)]
        (string/includes? ua " electron"))))
 
+#?(:cljs
+   (defn file-protocol?
+     []
+     (string/starts-with? js/window.location.href "file://")))
+
 (defn format
   [fmt & args]
   #?(:cljs (apply gstring/format fmt args)
