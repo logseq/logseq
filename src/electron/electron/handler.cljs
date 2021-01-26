@@ -1,5 +1,5 @@
 (ns electron.handler
-  (:require ["electron" :refer [ipcMain dialog]]
+  (:require ["electron" :refer [ipcMain dialog app]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["path" :as path]
@@ -107,6 +107,9 @@
          (fn [path]
            (println "Watch error happend: "
                     {:path path})))
+
+    (.on app "quit" #(.close watcher))
+
     true))
 
 (defmethod handle :addDirWatcher [window [_ dir]]
