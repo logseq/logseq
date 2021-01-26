@@ -13,6 +13,7 @@
       #?(:cljs [goog.string :as gstring])
       #?(:cljs [goog.string.format])
       #?(:cljs [goog.userAgent])
+      #?(:cljs [rum.core])
       [clojure.string :as string]
       [clojure.pprint :refer [pprint]]
       [clojure.walk :as walk]
