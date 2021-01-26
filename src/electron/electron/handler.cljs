@@ -80,7 +80,7 @@
   [win dir]
   (let [watcher (.watch watcher dir
                         (clj->js
-                         {:ignored #"(^\.|/assets/)" ; FIXME read .gitignore and other ignore paths
+                         {:ignored #"^\.|/assets/" ; FIXME read .gitignore and other ignore paths
                           ;; :ignoreInitial true
                           :persistent true
                           :awaitWriteFinish true}))]
@@ -124,6 +124,8 @@
                  (let [message (bean/->clj args-js)]
                    (bean/->js (handle window message)))
                  (catch js/Error e
-                   (println "IPC error: " e)
+                   (println "IPC error: " {:event event
+                                           :args args-js}
+                            e)
                    e))))
     #(.removeHandler ipcMain main-channel)))
