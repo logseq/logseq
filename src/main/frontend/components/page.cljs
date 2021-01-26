@@ -434,7 +434,7 @@
            {:width (if (and (> width 1280) sidebar-open?)
                      (- width 24 600)
                      (- width 24))
-            :height (- height 120)
+            :height height
             :ref (fn [v] (reset! graph-ref v))
             :ref-atom graph-ref}))
          [:div.ls-center.mt-20
