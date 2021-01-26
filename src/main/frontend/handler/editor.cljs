@@ -1567,7 +1567,7 @@
             ext (if ext (subs ext (string/last-index-of ext ".")) "")
             filename (str (gen-filename index file) ext)
             filename (str path "/" filename)]
-        (js/console.debug "Write asset #" dir filename file)
+        ;(js/console.debug "Write asset #" dir filename file)
         (if (util/electron?)
           (let [from (.-path file)]
             (p/then (js/window.apis.copyFileToAssets dir filename from)

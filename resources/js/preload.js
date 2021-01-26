@@ -57,7 +57,7 @@ contextBridge.exposeInMainWorld('apis', {
 
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
-    from = !from && getFilePathFromClipboard()
+    from = from || getFilePathFromClipboard()
 
     if (from) {
       // console.debug('copy file: ', from, dest)
@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('apis', {
     }
 
     // support image
+    // console.debug('read image: ', from, dest)
     const nImg = clipboard.readImage()
 
     if (nImg && !nImg.isEmpty()) {
