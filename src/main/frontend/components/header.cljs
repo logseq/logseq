@@ -31,6 +31,29 @@
      [:img.cp__header-logo-img {:src logo}]
      (svg/logo (not white?)))])
 
+(rum/defc login
+  [logged?]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (when (and (not logged?)
+               (not config/publishing?))
+
+      (ui/dropdown-with-links
+       (fn [{:keys [toggle-fn]}]
+         [:a {:on-click toggle-fn}
+          [:span.ml-1.text-sm (t :login)]])
+       (let [list [{:title (t :login-google)
+                    :url (str config/website "/login/google")}
+                   {:title (t :login-github)
+                    :url (str config/website "/login/github")}]]
+         (mapv
+          (fn [{:keys [title url]}]
+            {:title title
+             :options
+             {:on-click
+              (fn [_] (set! (.-href js/window.location) url))}})
+          list))
+       nil))))
+
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
   [:button#left-menu.cp__header-left-menu
@@ -45,93 +68,80 @@
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
-  (let [projects (state/sub [:me :projects])]
+  (let [projects (state/sub [:me :projects])
+        logged? (state/logged?)]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
-       [:button.max-w-xs.flex.items-center.text-sm.rounded-full.focus:outline-none.focus:shadow-outline.h-7.w-7.ml-2
+       [:a.cp__right-menu-button
         {:on-click toggle-fn}
-        (if-let [avatar (:avatar me)]
-          [:img#avatar.h-7.w-7.rounded-full
-           {:src avatar
-            :on-error (fn [this]
-                        (let [elem (gdom/getElement "avatar")]
-                          (gobj/set elem "src" (config/asset-uri "/static/img/broken-avatar.png"))))}]
-          [:div.h-7.w-7.rounded-full.bg-base-2.opacity-70.hover:opacity-100 {:style {:padding 1.5}}
-           [:a svg/user]])])
-     (let [logged? (:name me)]
-       (->>
-        [(when current-repo
-           {:title (t :graph)
-            :options {:href (rfe/href :graph)}
-            :icon svg/graph-sm})
+        (svg/horizontal-dots nil)])
+     (->>
+      [{:title (t :help/toggle-right-sidebar)
+        :options {:on-click state/toggle-sidebar-open?!}}
 
-         (when (or logged? (and (nfs/supported?) current-repo))
-           {:title (t :all-graphs)
-            :options {:href (rfe/href :repos)}
-            :icon svg/repos-sm})
+       (when current-repo
+         {:title (t :graph)
+          :options {:href (rfe/href :graph)}
+          :icon svg/graph-sm})
 
-         (when current-repo
-           {:title (t :all-pages)
-            :options {:href (rfe/href :all-pages)}
-            :icon svg/pages-sm})
+       (when (or logged? (and (nfs/supported?) current-repo))
+         {:title (t :all-graphs)
+          :options {:href (rfe/href :repos)}
+          :icon svg/repos-sm})
 
-         (when current-repo
-           {:title (t :all-files)
-            :options {:href (rfe/href :all-files)}
-            :icon svg/folder-sm})
+       (when current-repo
+         {:title (t :all-pages)
+          :options {:href (rfe/href :all-pages)}
+          :icon svg/pages-sm})
 
-         (when (and default-home current-repo)
-           {:title (t :all-journals)
-            :options {:href (rfe/href :all-journals)}
-            :icon svg/calendar-sm})
+       (when current-repo
+         {:title (t :all-files)
+          :options {:href (rfe/href :all-files)}
+          :icon svg/folder-sm})
 
-         (when (project-handler/get-current-project current-repo projects)
-           {:title (t :my-publishing)
-            :options {:href (rfe/href :my-publishing)}})
+       (when (and default-home current-repo)
+         {:title (t :all-journals)
+          :options {:href (rfe/href :all-journals)}
+          :icon svg/calendar-sm})
 
-         (when-let [project (and current-repo
-                                 (project-handler/get-current-project current-repo projects))]
-           (let [link (str config/website "/" project)]
-             {:title (str (t :go-to) "/" project)
-              :options {:href link
-                        :target "_blank"}
-              :icon svg/external-link}))
+       (when (project-handler/get-current-project current-repo projects)
+         {:title (t :my-publishing)
+          :options {:href (rfe/href :my-publishing)}})
 
-         {:title (t :settings)
-          :options {:href (rfe/href :settings)}
-          :icon svg/settings-sm}
+       (when-let [project (and current-repo
+                               (project-handler/get-current-project current-repo projects))]
+         (let [link (str config/website "/" project)]
+           {:title (str (t :go-to) "/" project)
+            :options {:href link
+                      :target "_blank"}
+            :icon svg/external-link}))
 
-         (when current-repo
-           {:title (t :export)
-            :options {:on-click (fn []
-                                  (export/export-repo-as-html! current-repo))}
-            :icon nil})
-         (when current-repo
-           {:title (t :import)
-            :options {:href (rfe/href :import)}
-            :icon svg/import-sm})
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :join-community)]]
-          :options {:href "https://discord.gg/KpN4eHY"
-                    :title (t :discord-title)
-                    :target "_blank"}
-          :icon svg/discord}
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :sponsor-us)]]
-          :options {:href "https://opencollective.com/logseq"
-                    :target "_blank"}}
-         (when logged?
-           {:title (t :sign-out)
-            :options {:on-click user-handler/sign-out!}
-            :icon svg/logout-sm})]
-        (remove nil?)))
-     {})))
+       {:title (t :settings)
+        :options {:href (rfe/href :settings)}
+        :icon svg/settings-sm}
 
-(rum/defc right-menu-button < rum/reactive
-  []
-  [:a.cp__right-menu-button
-   {:on-click state/toggle-sidebar-open?!}
-   (svg/menu nil)])
+       (when current-repo
+         {:title (t :export)
+          :options {:on-click (fn []
+                                (export/export-repo-as-html! current-repo))}
+          :icon nil})
+       (when current-repo
+         {:title (t :import)
+          :options {:href (rfe/href :import)}
+          :icon svg/import-sm})
+       {:title [:div.flex-row.flex.justify-between.items-center
+                [:span (t :join-community)]]
+        :options {:href "https://discord.gg/KpN4eHY"
+                  :title (t :discord-title)
+                  :target "_blank"}
+        :icon svg/discord}
+       (when logged?
+         {:title (t :sign-out)
+          :options {:on-click user-handler/sign-out!}
+          :icon svg/logout-sm})]
+      (remove nil?))
+     {:links-footer (when (and (util/electron?) (not logged?))
+                      [:div.px-2.py-2 (login logged?)])})))
 
 (rum/defc header
   < rum/reactive
@@ -147,31 +157,24 @@
 
        (logo {:white? white?})
 
+       (when (util/electron?)
+         [:a.mr-1.opacity-50.hover:opacity-100
+          {:style {:margin-left -10}
+           :title "Go Back" :on-click #(js/window.history.back)} (svg/arrow-left)])
+
+       (when (util/electron?)
+         [:a.opacity-50.hover:opacity-100
+          {:style {:margin-right 15}
+           :title "Go Forward" :on-click #(js/window.history.forward)} (svg/arrow-right)])
+
        (if current-repo
          (search/search)
          [:div.flex-1])
 
        (new-block-mode)
 
-       (when (and (not logged?)
-                  (not config/publishing?))
-
-         (ui/dropdown-with-links
-          (fn [{:keys [toggle-fn]}]
-            [:a {:on-click toggle-fn}
-             [:span.ml-1.text-sm (t :login)]])
-          (let [list [{:title (t :login-google)
-                       :url (str config/website "/login/google")}
-                      {:title (t :login-github)
-                       :url (str config/website "/login/github")}]]
-            (mapv
-             (fn [{:keys [title url]}]
-               {:title title
-                :options
-                {:on-click
-                 (fn [_] (set! (.-href js/window.location) url))}})
-             list))
-          nil))
+       (when-not (util/electron?)
+         (login logged?))
 
        (repo/sync-status current-repo)
 
@@ -199,6 +202,4 @@
                          :default-home default-home}))
 
        [:a#download-as-html.hidden]
-       [:a#download-as-zip.hidden]
-
-       (right-menu-button)])))
+       [:a#download-as-zip.hidden]])))

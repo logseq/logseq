@@ -15,7 +15,7 @@
     {:d "M5 11L0 6l1.5-1.5L5 8.25 8.5 4.5 10 6l-5 5z"
      :fill-rule "evenodd"}]])
 
-(rum/defc arrow-right
+(rum/defc arrow-right-2
   []
   [:svg
    {:aria-hidden "true"
@@ -28,6 +28,26 @@
    [:path
     {:d "M7.5 8l-5 5L1 11.5 4.75 8 1 4.5 2.5 3l5 5z"
      :fill-rule "evenodd"}]])
+
+(rum/defc arrow-left
+  []
+  [:svg.w-6.h-6
+   {:viewbox "0 0 24 24", :stroke "currentColor", :fill "none"}
+   [:path
+    {:d "M15 19l-7-7 7-7",
+     :stroke-width "2",
+     :stroke-linejoin "round",
+     :stroke-linecap "round"}]])
+
+(rum/defc arrow-right
+  []
+  [:svg.w-6.h-6
+   {:viewbox "0 0 24 24", :stroke "currentColor", :fill "none"}
+   [:path
+    {:d "M9 5l7 7-7 7",
+     :stroke-width "2",
+     :stroke-linejoin "round",
+     :stroke-linecap "round"}]])
 
 (rum/defc big-arrow-right
   []
@@ -198,6 +218,9 @@
 (defn vertical-dots
   [options]
   (hero-icon "M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" options))
+(defn horizontal-dots
+  [options]
+  (hero-icon "M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" options))
 (def external-link
   [:svg {:fill "none", :view-box "0 0 24 24", :height "21", :width "21"
          :stroke "currentColor"}
@@ -457,3 +480,6 @@
 
 (def online
   (hero-icon "M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"))
+
+(def collapse-right
+  (hero-icon "M4 6h16M4 12h16m-7 6h7"))

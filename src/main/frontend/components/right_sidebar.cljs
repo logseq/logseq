@@ -219,32 +219,35 @@
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner
-          [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
-                                                            (state/sidebar-add-block! repo "contents" :contents nil))}
-             (t :right-side-bar/contents)]]
+          [:div.flex.flex-row.justify-between.align-items
+           [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
+                                                             (state/sidebar-add-block! repo "contents" :contents nil))}
+              (t :right-side-bar/contents)]]
 
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                            (state/sidebar-add-block! repo "recent" :recent nil))}
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                             (state/sidebar-add-block! repo "recent" :recent nil))}
 
-             (t :right-side-bar/recent)]]
+              (t :right-side-bar/recent)]]
 
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                            (when-let [page (get-current-page)]
-                                                              (state/sidebar-add-block!
-                                                               repo
-                                                               (str "page-graph-" page)
-                                                               :page-graph
-                                                               page)))}
-             (t :right-side-bar/page)]]
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn []
+                                                             (when-let [page (get-current-page)]
+                                                               (state/sidebar-add-block!
+                                                                repo
+                                                                (str "page-graph-" page)
+                                                                :page-graph
+                                                                page)))}
+              (t :right-side-bar/page)]]
 
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                            (state/sidebar-add-block! repo "help" :help nil))}
-             (t :right-side-bar/help)]]]
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                             (state/sidebar-add-block! repo "help" :help nil))}
+              (t :right-side-bar/help)]]]
+           [:a.opacity-50.hover:opacity-100 {:on-click state/toggle-sidebar-open?!}
+            (svg/big-arrow-right)]]
 
           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
             (rum/with-key

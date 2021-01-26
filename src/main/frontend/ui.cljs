@@ -79,7 +79,7 @@
    child])
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [modal-class links-header z-index] :as opts}]
+  [content-fn links {:keys [modal-class links-header links-footer z-index] :as opts}]
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
@@ -100,7 +100,8 @@
 ]]
           (rum/with-key
             (menu-link new-options child)
-            title)))])
+            title)))
+      (when links-footer links-footer)])
    opts))
 
 (defn button
