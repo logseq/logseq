@@ -8,7 +8,8 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.bfs :as bfs]
             [frontend.fs.node :as node]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.state :as state]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -22,9 +23,12 @@
 (defn get-fs
   [dir]
   (let [bfs-local? (or (string/starts-with? dir "/local")
-                       (string/starts-with? dir "local"))]
+                       (string/starts-with? dir "local"))
+        current-repo (state/get-current-repo)
+        git-repo? (and current-repo
+                       (string/starts-with? current-repo "https://"))]
     (cond
-      (and (util/electron?) (not bfs-local?))
+      (and (util/electron?) (not bfs-local?) (not git-repo?))
       node-record
 
       (local-db? dir)

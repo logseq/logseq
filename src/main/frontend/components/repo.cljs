@@ -45,7 +45,7 @@
               (ui/button
                (t :open-a-directory)
                :on-click nfs-handler/ls-dir-files)])
-           (when (state/logged?)
+           (when (and (state/logged?) (not (util/electron?)))
              (ui/button
               "Add another git repo"
               :href (rfe/href :repo-add nil {:graph-types "github"})))]

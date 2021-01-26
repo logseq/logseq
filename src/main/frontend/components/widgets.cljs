@@ -59,24 +59,24 @@
                           (reset! branch (util/evalue e)))}]]]]
 
         (ui/button
-          (t :git/add-repo-prompt-confirm)
-          :on-click
-          (fn []
-            (let [branch (string/trim @branch)]
-              (if (string/blank? branch)
-                (notification/show!
-                 [:p.text-gray-700.dark:text-gray-300 "Please input a branch, make sure it's matched with your setting on Github."]
-                 :error
-                 false)
-                (let [repo (util/lowercase-first @repo)]
-                  (if (util/starts-with? repo "https://github.com/")
-                    (let [repo (string/replace repo ".git" "")]
-                      (repo-handler/create-repo! repo branch))
+         (t :git/add-repo-prompt-confirm)
+         :on-click
+         (fn []
+           (let [branch (string/trim @branch)]
+             (if (string/blank? branch)
+               (notification/show!
+                [:p.text-gray-700.dark:text-gray-300 "Please input a branch, make sure it's matched with your setting on Github."]
+                :error
+                false)
+               (let [repo (util/lowercase-first @repo)]
+                 (if (util/starts-with? repo "https://github.com/")
+                   (let [repo (string/replace repo ".git" "")]
+                     (repo-handler/create-repo! repo branch))
 
-                    (notification/show!
-                     [:p.text-gray-700.dark:text-gray-300 "Please input a valid repo url, e.g. https://github.com/username/repo"]
-                     :error
-                     false)))))))]])))
+                   (notification/show!
+                    [:p.text-gray-700.dark:text-gray-300 "Please input a valid repo url, e.g. https://github.com/username/repo"]
+                    :error
+                    false)))))))]])))
 
 (rum/defcs add-local-directory
   []
@@ -109,9 +109,9 @@
         generate-f (fn [x]
                      (case x
                        :github
-                       (when github-authed?
+                       (when (and github-authed? (not (util/electron?)))
                          (rum/with-key (add-github-repo)
-                                       "add-github-repo"))
+                           "add-github-repo"))
 
                        :local
                        (rum/with-key (add-local-directory)
