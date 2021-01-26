@@ -13,9 +13,11 @@
    ; TODO: center region should display current page title or important background notifications
    [:span.c (str "Logseq - " version)]
    [:div.r
-    [:a.it {:title "Minimize Window" :on-click #(js/window.apis.toggleMaxOrMinActiveWindow true)} svg/minus]
-    [:a.it.maximize {:title "Maximize Window" :on-click #(js/window.apis.toggleMaxOrMinActiveWindow)} svg/rectangle]
-    [:a.it {:title "Close Window" :on-click #(js/window.apis._callApplication "quit")} svg/close]]])
+    (when util/win32?
+      [:div.inner
+       [:a.it {:title "Minimize Window" :on-click #(js/window.apis.toggleMaxOrMinActiveWindow true)} svg/minus]
+       [:a.it.maximize {:title "Maximize Window" :on-click #(js/window.apis.toggleMaxOrMinActiveWindow)} svg/rectangle]
+       [:a.it {:title "Close Window" :on-click #(js/window.apis._callApplication "quit")} svg/close]])]])
 
 (rum/defc container
   [{:keys [theme on-click] :as props} child]

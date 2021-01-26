@@ -1,5 +1,5 @@
 (ns electron.updater
-  (:require [electron.utils :refer [mac? win32? prod?]]
+  (:require [electron.utils :refer [mac? win32? prod? open fetch]]
             [frontend.version :refer [version]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -9,8 +9,6 @@
             ["path" :as path]
             ["electron" :refer [ipcMain app]]))
 
-(def open (js/require "open"))
-(def fetch (js/require "node-fetch"))
 (def *update-ready-to-install (atom nil))
 (def *update-pending (atom nil))
 
@@ -24,9 +22,8 @@
 
 (defn get-latest-artifact-info
   [repo]
-  (let [endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.4"
-        ;endpoint (str "https://update.electronjs.org/" repo "/" (if mac? "darwin" "win32") "-x64/" version)
-        ]
+  (let [;endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.4"
+        endpoint (str "https://update.electronjs.org/" repo "/" (if mac? "darwin" "win32") "-x64/" version)]
     (p/catch
      (p/let [res (fetch endpoint)
              status (.-status res)

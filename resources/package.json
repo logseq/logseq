@@ -18,7 +18,8 @@
     "electron-squirrel-startup": "^1.0.0",
     "update-electron-app": "^2.0.1",
     "node-fetch": "^2.6.1",
-    "open": "^7.3.1"
+    "open": "^7.3.1",
+    "chokidar": "^3.5.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.54",

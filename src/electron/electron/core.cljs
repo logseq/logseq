@@ -1,14 +1,14 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [mac? win32? prod? dev? log]]
+            [electron.utils :refer [mac? win32? prod? dev? log open]]
             [clojure.string :as string]
             ["fs" :as fs]
             ["path" :as path]
             ["electron" :refer [BrowserWindow app protocol ipcMain] :as electron]))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
-(def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "dev.html" "index.html"))))
+(def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "electron-dev.html" "electron.html"))))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
@@ -69,7 +69,11 @@
                  (try
                    (js-invoke app type args)
                    (catch js/Error e
-                          (js/console.error e))))))
+                     (js/console.error e))))))
+    (.. win -webContents (on "new-window"
+                             (fn [e url]
+                               (open url)
+                               (.preventDefault e))))
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain call-app-channel))))
 

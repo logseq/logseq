@@ -898,13 +898,13 @@
      [:a (if (not dummy?)
            {:href (rfe/href :page {:name uuid})
             :on-click (fn [e]
-                        (.preventDefault e)
                         (when (gobj/get e "shiftKey")
                           (state/sidebar-add-block!
                            (state/get-current-repo)
                            (:db/id block)
                            :block
-                           block)))})
+                           block)
+                          (util/stop e)))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true

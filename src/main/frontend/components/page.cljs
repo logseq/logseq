@@ -304,8 +304,8 @@
                                                                              (page-handler/publish-page! page-name project/add-project))}})
                                                     (when-not published?
                                                       {:title   (t :page/publish-as-slide)
-                                                      :options {:on-click (fn []
-                                                                            (page-handler/publish-page-as-slide! page-name project/add-project))}})
+                                                       :options {:on-click (fn []
+                                                                             (page-handler/publish-page-as-slide! page-name project/add-project))}})
                                                     {:title   (t (if public? :page/make-private :page/make-public))
                                                      :options {:background (if public? "gray" "indigo")
                                                                :on-click (fn []
@@ -373,8 +373,8 @@
                  {:key "page-file"}
                  [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
                  [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
-                                                       :word-break "break-word"}
-                                               :href (str "/file/" (util/url-encode file-path))}
+                                                       :word-break    "break-word"}
+                                               :href  (rfe/href :file {:path (util/url-encode file-path)})}
                   file-path]
 
                  (when (and (not config/mobile?)
@@ -387,7 +387,7 @@
                    [:div.text-sm.ml-1.mb-4 {:key "page-file"}
                     [:span.opacity-50 "Alias: "]
                     (for [item alias]
-                      [:a.ml-1.mr-1 {:href (str "/page/" (util/encode-str item))}
+                      [:a.ml-1.mr-1 {:href (rfe/href :page {:name (util/encode-str item)})}
                        item])])))
 
              (when (and block? (not sidebar?))
@@ -477,7 +477,6 @@
                (let [encoded-page (util/encode-str page)]
                  [:tr {:key encoded-page}
                   [:td [:a {:on-click (fn [e]
-                                        (.preventDefault e)
                                         (let [repo (state/get-current-repo)
                                               page (db/pull repo '[*] [:page/name (string/lower-case page)])]
                                           (when (gobj/get e "shiftKey")

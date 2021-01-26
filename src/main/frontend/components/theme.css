@@ -127,8 +127,14 @@ html.is-electron {
     user-select: none;
     -webkit-app-region: drag;
 
-    & > .l, & > .r {
+    & > .l {
       display: flex;
+    }
+
+    & > .r {
+      & > .inner {
+        display: flex;
+      }
     }
 
     & > .c {
