@@ -46,7 +46,9 @@
     "[[nested [[foo]]]]" #{"nested [[foo]]"}
     "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}
     "#tag," #{"tag"}
-    "#tag1,#tag2" #{"tag1" "tag2"}))
+    "#tag" #{"tag"}
+    "#tag1,#tag2" #{"tag1" "tag2"}
+    "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
 
 (defn extract-level-spaces
   []
