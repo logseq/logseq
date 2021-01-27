@@ -132,11 +132,17 @@
   [repo-url file content]
   (let [electron-local-repo? (and (util/electron?)
                                   (config/local-db? repo-url))
+        ;; FIXME: store relative path in db
         file (cond
-               (and electron-local-repo? (util/win32?))
+               (and electron-local-repo?
+                    util/win32?
+                    (utils/win32 file))
                file
 
-               electron-local-repo?
+               (and electron-local-repo? util/win32?)
+               (str (config/get-repo-dir repo-url) "/" file)
+
+               (and electron-local-repo? (not= "/" (first file)))
                (str (config/get-repo-dir repo-url) "/" file)
 
                :else
