@@ -15,7 +15,8 @@
             [frontend.dicts :as dicts]
             [clojure.string :as string]
             [goog.object :as gobj]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [reitit.frontend.easy :as rfe]))
 
 (rum/defcs set-email < (rum/local "" ::email)
   [state]
@@ -176,7 +177,7 @@
        [:div.pl-1
                         ;; config.edn
         (when current-repo
-          [:a {:href (str "/file/" (util/url-encode (str config/app-name "/" config/config-file)))}
+          [:a {:href (rfe/href :file {:path (config/get-config-path)})}
            (t :settings-page/edit-config-edn)])
 
         [:hr]

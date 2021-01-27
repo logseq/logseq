@@ -25,13 +25,13 @@
 (defn remove-ignore-files
   [files]
   (let [files (remove (fn [f]
-                        (string/starts-with? (:file/path f) ".git/"))
+                        (or (string/starts-with? (:file/path f) ".git/")
+                            (string/includes? (:file/path f) ".git/")))
                       files)]
     (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
                                   %) files)]
       (if-let [file (:file/file ignore-file)]
         (p/let [content (.text file)]
-
           (when content
             (let [paths (set (file-handler/ignore-files content (map :file/path files)))]
               (when (seq paths)
@@ -48,20 +48,20 @@
               :file/last-modified-at mtime
               :file/size             size
               :file/content content}))
-      result)
+         result)
     (let [result (flatten (bean/->clj result))]
       (map (fn [file]
-            (let [handle (gobj/get file "handle")
-                  get-attr #(gobj/get file %)
-                  path (-> (get-attr "webkitRelativePath")
-                           (string/replace-first (str dir-name "/") ""))]
-              {:file/name             (get-attr "name")
-               :file/path             path
-               :file/last-modified-at (get-attr "lastModified")
-               :file/size             (get-attr "size")
-               :file/type             (get-attr "type")
-               :file/file             file
-               :file/handle           handle})) result))))
+             (let [handle (gobj/get file "handle")
+                   get-attr #(gobj/get file %)
+                   path (-> (get-attr "webkitRelativePath")
+                            (string/replace-first (str dir-name "/") ""))]
+               {:file/name             (get-attr "name")
+                :file/path             path
+                :file/last-modified-at (get-attr "lastModified")
+                :file/size             (get-attr "size")
+                :file/type             (get-attr "type")
+                :file/file             file
+                :file/handle           handle})) result))))
 
 (defn- filter-markup-and-built-in-files
   [files]
@@ -124,19 +124,19 @@
                        remove-ignore-files)
              _ (when nfs?
                  (let [file-paths (set (map :file/path files))]
-                  (swap! path-handles (fn [handles]
-                                        (->> handles
-                                             (filter (fn [[path _handle]]
-                                                       (or
-                                                        (contains? file-paths
-                                                                   (string/replace-first path (str dir-name "/") ""))
-                                                        (let [last-part (last (string/split path "/"))]
-                                                          (contains? #{config/app-name
-                                                                       config/default-draw-directory
-                                                                       config/default-journals-directory
-                                                                       config/default-pages-directory}
-                                                                     last-part)))))
-                                             (into {})))))
+                   (swap! path-handles (fn [handles]
+                                         (->> handles
+                                              (filter (fn [[path _handle]]
+                                                        (or
+                                                         (contains? file-paths
+                                                                    (string/replace-first path (str dir-name "/") ""))
+                                                         (let [last-part (last (string/split path "/"))]
+                                                           (contains? #{config/app-name
+                                                                        config/default-draw-directory
+                                                                        config/default-journals-directory
+                                                                        config/default-pages-directory}
+                                                                      last-part)))))
+                                              (into {})))))
 
                  (set-files! @path-handles))
              markup-files (filter-markup-and-built-in-files files)]
@@ -177,10 +177,10 @@
         "Grant native filesystem permission for directory: "
         [:b (config/get-local-dir repo)]]
        (ui/button
-         "Grant"
-         :on-click (fn []
-                     (nfs/check-directory-permission! repo)
-                     (close-fn)))])))
+        "Grant"
+        :on-click (fn []
+                    (nfs/check-directory-permission! repo)
+                    (close-fn)))])))
 
 (defn ask-permission-if-local? []
   (when-let [repo (get-local-repo)]
@@ -276,16 +276,16 @@
                                                (fn [path handle]
                                                  (when nfs?
                                                    (swap! path-handles assoc path handle))))
-                    new-files (-> (->db-files electron? dir-name (second files-result))
+                    new-files (-> (->db-files electron? dir-name files-result)
                                   remove-ignore-files)
                     _ (when nfs?
                         (let [file-paths (set (map :file/path new-files))]
-                         (swap! path-handles (fn [handles]
-                                               (->> handles
-                                                    (filter (fn [[path _handle]]
-                                                              (contains? file-paths
-                                                                         (string/replace-first path (str dir-name "/") ""))))
-                                                    (into {})))))
+                          (swap! path-handles (fn [handles]
+                                                (->> handles
+                                                     (filter (fn [[path _handle]]
+                                                               (contains? file-paths
+                                                                          (string/replace-first path (str dir-name "/") ""))))
+                                                     (into {})))))
                         (set-files! @path-handles))]
               (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
         (p/catch (fn [error]

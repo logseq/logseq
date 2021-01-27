@@ -202,7 +202,7 @@
          [:ul.mt-2
           (for [[original-name name] pages]
             [:li {:key (str "tagged-page-" name)}
-             [:a {:href (str "/page/" (util/encode-str name))}
+             [:a {:href (rfe/href :page {:name name})}
               original-name]])])]])))
 
 (defonce last-route (atom :home))

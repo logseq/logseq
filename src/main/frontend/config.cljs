@@ -319,3 +319,24 @@
   (if (and (util/electron?) (local-db? repo-url))
     path
     (str (get-repo-dir repo-url) "/" path)))
+
+(defn get-file-path
+  [repo-url relative-path]
+  (if (and (util/electron?) (local-db? repo-url))
+    (str (get-repo-dir repo-url) "/" relative-path)
+    relative-path))
+
+(defn get-config-path
+  ([]
+   (get-config-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" config-file)))))
+
+(defn get-custom-css-path
+  ([]
+   (get-custom-css-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo
+                    (str app-name "/" custom-css-file)))))

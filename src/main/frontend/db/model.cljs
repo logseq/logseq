@@ -258,7 +258,8 @@
 
 (defn get-custom-css
   []
-  (get-file "logseq/custom.css"))
+  (when-let [repo (state/get-current-repo)]
+    (get-file (config/get-file-path repo "logseq/custom.css"))))
 
 (defn get-file-no-sub
   ([path]

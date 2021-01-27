@@ -72,7 +72,7 @@
 
 (defn get-config
   [repo-url]
-  (db/get-file repo-url (str config/app-name "/" config/config-file)))
+  (db/get-file repo-url (config/get-config-path)))
 
 (defn reset-config!
   [repo-url content]

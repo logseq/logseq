@@ -80,7 +80,9 @@
   [win dir]
   (let [watcher (.watch watcher dir
                         (clj->js
-                         {:ignored #"^\.|/assets/" ; FIXME read .gitignore and other ignore paths
+                         {:ignored (fn [path]
+                                     (some #(string/starts-with? path (str dir "/" %))
+                                           ["." "assets" "node_modules"]))
                           ;; :ignoreInitial true
                           :persistent true
                           :awaitWriteFinish true}))]

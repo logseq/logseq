@@ -105,8 +105,8 @@
   (let [record (if (util/electron?) node-record nfs-record)]
     (p/let [result (protocol/get-files record path-or-handle ok-handler)]
       (if (util/electron?)
-        (let [[dir & paths] (bean/->clj result)]
-          [(:path dir) paths])
+        (let [result (bean/->clj result)]
+          (rest result))
         result))))
 
 (defn watch-dir!

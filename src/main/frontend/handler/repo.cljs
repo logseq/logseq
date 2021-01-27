@@ -87,7 +87,7 @@
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
-        path (str config/app-name "/" config/custom-css-file)
+        path (config/get-custom-css-path)
         file-path (str "/" path)
         default-content ""]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
@@ -153,7 +153,7 @@
     (when (or (db/cloned? repo)
               (and (config/local-db? repo)
                    ;; config file exists
-                   (let [path (str config/app-name "/" config/config-file)
+                   (let [path (config/get-config-path)
                          path (if (and (util/electron?) (config/local-db? repo))
                                 (str (config/get-repo-dir repo) "/" path)
                                 path)]
@@ -193,7 +193,7 @@
                        (extract-handler/extract-all-blocks-pages repo-url parsed-files)
                        [])]
     (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
-    (let [config-file (str config/app-name "/" config/config-file)]
+    (let [config-file (config/get-config-path)]
       (if (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
                                     (:file/content %)) files)]

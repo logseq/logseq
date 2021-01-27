@@ -71,7 +71,7 @@
   (let [path (get-path state)
         format (format/get-format path)
         page (db/get-file-page path)
-        config? (= path (str config/app-name "/" config/config-file))]
+        config? (= path (config/get-config-path))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-" path)}
        [:h1.title

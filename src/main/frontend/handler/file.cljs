@@ -99,7 +99,8 @@
   (state/set-loading-files! true)
   (p/let [files (git/list-files repo-url)
           files (bean/->clj files)
-          config-content (load-file repo-url (str config/app-name "/" config/config-file))
+          config-content (load-file repo-url
+                                    (config/get-config-path repo-url))
           files (if config-content
                   (let [config (restore-config! repo-url config-content true)]
                     (if-let [patterns (seq (:hidden config))]
@@ -173,9 +174,9 @@
                                                                    :last-modified-at (db/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
-       (when (= path (str config/app-name "/" config/config-file))
+       (when (= path (config/get-config-path repo))
          (restore-config! repo true))
-       (when (= path (str config/app-name "/" config/custom-css-file))
+       (when (= path (config/get-custom-css-path repo))
          (ui-handler/add-style-if-exists!))
        (when re-render-root? (ui-handler/re-render-root!))
        (when add-history?
