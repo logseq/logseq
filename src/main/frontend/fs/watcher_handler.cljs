@@ -27,7 +27,11 @@
                      ;; 4. old content will overwrites the new content in step 2
                      (not (and db-content
                                (string/starts-with? db-content content))))
-           (file-handler/alter-file repo path content {:re-render-root? true})))
+            (file-handler/alter-file repo path content {:re-render-root? true})))
+
+        (and (= "change" type)
+             (nil? (db/get-file path)))
+        (println "Can't get file in the db: " path)
 
         (and (= "change" type)
              (not= content (db/get-file path))
