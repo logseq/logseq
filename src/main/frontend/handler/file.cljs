@@ -140,7 +140,7 @@
                file
 
                (and electron-local-repo? util/win32?)
-               (str (config/get-repo-dir repo-url) "/" file)
+               (str (config/get-repo-dir repo-url) "\\" file)
 
                (and electron-local-repo? (not= "/" (first file)))
                (str (config/get-repo-dir repo-url) "/" file)
