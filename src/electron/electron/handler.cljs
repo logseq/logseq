@@ -107,7 +107,7 @@
                                 :path path})))
     (.on watcher "error"
          (fn [path]
-           (println "Watch error happend: "
+           (println "Watch error happened: "
                     {:path path})))
 
     (.on app "quit" #(.close watcher))
