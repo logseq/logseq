@@ -10,7 +10,7 @@
   --ls-z-index-level-5: 99999;
 }
 
-html:not(.is-mac) {
+html {
   ::-webkit-scrollbar-thumb {
     background-color: var(--ls-scrollbar-foreground-color);
   }
@@ -26,7 +26,6 @@ html:not(.is-mac) {
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
-    -webkit-border-radius: 100px;
   }
 
   ::-webkit-scrollbar-thumb {
