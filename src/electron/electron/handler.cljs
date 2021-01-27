@@ -6,7 +6,8 @@
             ["chokidar" :as watcher]
             [promesa.core :as p]
             [goog.object :as gobj]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [electron.utils :as utils]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -43,18 +44,25 @@
 (defmethod handle :stat [_window [_ path]]
   (fs/statSync path))
 
+(defn- fix-win-path!
+  [path]
+  (when path
+    (if util/win32?
+      (string/replace path "\\" "/")
+      path)))
+
 (defn- get-files
   [path]
   (let [result (->> (map
                      (fn [path]
                        (let [stat (fs/statSync path)]
                          (when-not (.isDirectory stat)
-                           {:path path
+                           {:path (fix-win-path! path)
                             :content (read-file path)
                             :stat stat})))
                      (readdir path))
                     (remove nil?))]
-    (vec (cons {:path path} result))))
+    (vec (cons {:path (fix-win-path! path)} result))))
 
 ;; TODO: Is it going to be slow if it's a huge directory
 (defmethod handle :openDir [window _messages]
@@ -89,22 +97,22 @@
     (.on watcher "add"
          (fn [path]
            (send-file-watcher! win "add"
-                               {:dir dir
-                                :path path
+                               {:dir (fix-win-path! dir)
+                                :path (fix-win-path! path)
                                 :content (read-file path)
                                 :stat (fs/statSync path)})))
     (.on watcher "change"
          (fn [path]
            (send-file-watcher! win "change"
-                               {:dir dir
-                                :path path
+                               {:dir (fix-win-path! dir)
+                                :path (fix-win-path! path)
                                 :content (read-file path)
                                 :stat (fs/statSync path)})))
     (.on watcher "unlink"
          (fn [path]
            (send-file-watcher! win "unlink"
-                               {:dir dir
-                                :path path})))
+                               {:dir (fix-win-path! dir)
+                                :path (fix-win-path! path)})))
     (.on watcher "error"
          (fn [path]
            (println "Watch error happened: "
