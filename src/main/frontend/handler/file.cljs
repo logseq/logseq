@@ -25,7 +25,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.utf8 :as utf8]
-            ["ignore" :as Ignore]))
+            ["ignore" :as Ignore]
+            ["/frontend/utils" :as utils]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -129,10 +130,16 @@
 
 (defn reset-file!
   [repo-url file content]
-  (let [file (if (and (util/electron?)
-                      (config/local-db? repo-url)
-                      (not= "/" (first file)))
+  (let [electron-local-repo? (and (util/electron?)
+                                  (config/local-db? repo-url))
+        file (cond
+               (and electron-local-repo? (util/win32?))
+               file
+
+               electron-local-repo?
                (str (config/get-repo-dir repo-url) "/" file)
+
+               :else
                file)
         new? (nil? (db/entity [:file/path file]))]
     (db/set-file-content! repo-url file content)
