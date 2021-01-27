@@ -35,6 +35,14 @@ contextBridge.exposeInMainWorld('apis', {
     await shell.openExternal(url, options)
   },
 
+  async openPath (path) {
+    await shell.openPath(path)
+  },
+
+  showItemInFolder (fullpath) {
+    shell.showItemInFolder(fullpath)
+  },
+
   /**
    * When from is empty. The resource maybe from
    * client paste or screenshoot.

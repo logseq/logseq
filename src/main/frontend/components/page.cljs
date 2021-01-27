@@ -283,6 +283,11 @@
                              :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}}
                             {:title (t :page/rename)
                              :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}}
+                            (when (and file-path (util/electron?))
+                              [{:title   (t :page/open-in-finder)
+                                :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
+                               {:title (t :page/open-with-default-app)
+                                :options {:on-click #(js/window.apis.openPath file-path)}}])
                             {:title (t :page/delete)
                              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}}
                             {:title   (t :page/action-publish)
@@ -326,6 +331,7 @@
                                                                     :on-click #(.writeText js/navigator.clipboard page-data))]
                                                         :success
                                                         false)))}})]
+                           (flatten)
                            (remove nil?))]
                 (when (seq links)
                   (ui/dropdown-with-links
