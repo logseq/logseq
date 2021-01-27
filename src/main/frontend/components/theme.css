@@ -103,10 +103,6 @@ html.is-electron {
     top: 0;
   }
 
-  .cp__right-sidebar {
-    top: 4rem;
-  }
-
   &.is-mac {
     .cp__header {
       height: calc(2.2rem + var(--frame-top-height));
@@ -126,6 +122,10 @@ html.is-electron {
         width: 100%;
         height: var(--frame-top-height);
       }
+    }
+
+    .cp__right-sidebar {
+      top: 4rem;
     }
   }
 
