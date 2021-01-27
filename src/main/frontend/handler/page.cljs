@@ -312,10 +312,15 @@
       (when-let [file (d/entity (d/db conn) [:file/path old-path])]
         (d/transact! conn [{:db/id (:db/id file)
                             :file/path new-path}])))
+
     (->
      (p/let [_ (fs/rename! repo
-                           (str (config/get-repo-dir repo) "/" old-path)
-                           (str (config/get-repo-dir repo) "/" new-path))
+                           (if (util/electron?)
+                             old-path
+                             (str (config/get-repo-dir repo) "/" old-path))
+                           (if (util/electron?)
+                             new-path
+                             (str (config/get-repo-dir repo) "/" new-path)))
              _ (when-not (config/local-db? repo)
                  (git/rename repo old-path new-path))]
        (common-handler/check-changed-files-status)

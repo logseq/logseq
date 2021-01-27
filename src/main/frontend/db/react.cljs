@@ -344,8 +344,7 @@
   [repo path content]
   (when (and repo path)
     (let [tx-data {:file/path path
-                   :file/content content
-                   :file/last-modified-at (util/time-ms)}
+                   :file/content content}
           tx-data (if (config/local-db? repo)
                     (dissoc tx-data :file/last-modified-at)
                     tx-data)]
@@ -353,4 +352,7 @@
        repo
        [tx-data]
        {:key [:file/content path]
-        :files-db? true}))))
+        :files-db? true}))
+    (d/transact! (conn/get-conn repo false)
+                 [{:file/path path
+                   :file/last-modified-at (util/time-ms)}])))

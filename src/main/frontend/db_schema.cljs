@@ -5,7 +5,6 @@
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
    :file/content {}
-   :file/last-modified-at {}
    :file/size {}
    :file/handle {}})
 

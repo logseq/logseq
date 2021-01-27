@@ -384,6 +384,7 @@
                   file-path]
 
                  (when (and (not config/mobile?)
+                            (not (util/electron?))
                             (not journal?))
                    (presentation repo page))])]
 

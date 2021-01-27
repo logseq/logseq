@@ -222,7 +222,7 @@
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner
-          [:div.flex.flex-row.justify-between.align-items
+          [:div.flex.flex-row.justify-between.items-center
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
@@ -249,7 +249,7 @@
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                              (state/sidebar-add-block! repo "help" :help nil))}
               (t :right-side-bar/help)]]]
-           [:a.opacity-50.hover:opacity-100 {:on-click state/toggle-sidebar-open?!}
+           [:a.close-arrow.opacity-50.hover:opacity-100 {:on-click state/toggle-sidebar-open?!}
             (svg/big-arrow-right)]]
 
           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]

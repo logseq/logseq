@@ -203,7 +203,7 @@
 (defn set-file-last-modified-at!
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
-    (when-let [conn (conn/get-files-conn repo)]
+    (when-let [conn (conn/get-conn repo false)]
       (d/transact! conn
                    [{:file/path path
                      :file/last-modified-at last-modified-at}]))))
@@ -211,7 +211,7 @@
 (defn get-file-last-modified-at
   [repo path]
   (when (and repo path)
-    (when-let [conn (conn/get-files-conn repo)]
+    (when-let [conn (conn/get-conn repo false)]
       (-> (d/entity (d/db conn) [:file/path path])
           :file/last-modified-at))))
 

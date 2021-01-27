@@ -13,6 +13,10 @@
 
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
+  ;; (prn {:type type
+  ;;       :payload payload
+  ;;       :db-content (db/get-file path)
+  ;;       :timestamp (db/get-file-last-modified-at (state/get-current-repo) path)})
   (when dir
     (let [repo (config/get-local-repo dir)
           {:keys [mtime]} stat]

@@ -138,12 +138,14 @@
 
   &-inner {
     padding: 15px;
+    padding-top: 0;
   }
 
   &-settings {
     @apply flex flex-row mb-2;
     margin: -15px;
     margin-bottom: 0;
+    margin-top: 0;
     overflow: auto;
 
     &-btn {
@@ -151,6 +153,10 @@
       padding: 10px 5px;
       white-space: nowrap;
     }
+  }
+
+  .close-arrow svg {
+      transform: scale(0.8);
   }
 
   &.is-open {

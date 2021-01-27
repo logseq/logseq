@@ -159,12 +159,12 @@
        (logo {:white? white?})
 
        (when (util/electron?)
-         [:a.mr-1.opacity-50.hover:opacity-100
+         [:a.mr-1.opacity-50.hover:opacity-100.it
           {:style {:margin-left -10}
            :title "Go Back" :on-click #(js/window.history.back)} (svg/arrow-left)])
 
        (when (util/electron?)
-         [:a.opacity-50.hover:opacity-100
+         [:a.opacity-50.hover:opacity-100.it
           {:style {:margin-right 15}
            :title "Go Forward" :on-click #(js/window.history.forward)} (svg/arrow-right)])
 
