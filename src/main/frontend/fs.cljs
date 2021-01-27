@@ -115,12 +115,14 @@
 
 (defn mkdir-if-not-exists
   [dir]
-  (when dir
-    (util/p-handle
-     (stat dir nil)
-     (fn [_stat])
-     (fn [error]
-       (mkdir! dir)))))
+  (->
+   (when dir
+     (util/p-handle
+      (stat dir nil)
+      (fn [_stat])
+      (fn [error]
+        (mkdir! dir))))
+   (p/catch (fn [_error] nil))))
 
 (defn create-if-not-exists
   ([repo dir path]
