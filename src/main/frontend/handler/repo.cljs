@@ -87,7 +87,7 @@
   [repo-url]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
-        path (config/get-custom-css-path)
+        path (str config/app-name "/" config/custom-css-file)
         file-path (str "/" path)
         default-content ""]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
