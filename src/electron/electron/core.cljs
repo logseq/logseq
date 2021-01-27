@@ -21,7 +21,7 @@
   []
   (let [win-opts {:width         980
                   :height        700
-                  :frame         win32?
+                  :frame         (not mac?)
                   :titleBarStyle (if mac? "hidden" nil)
                   :webPreferences
                   {:nodeIntegration         false
@@ -30,6 +30,7 @@
                    :preload                 (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
+    (when-not mac? (.removeMenu win))
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))
@@ -103,7 +104,7 @@
            (@*setup-fn)
 
            ;; main window events
-           (.on win "close" #(if (or @*quitting? win32?)
+           (.on win "close" #(if (or @*quitting? (not mac?))
                                (reset! *win nil)
                                (do (.preventDefault ^js/Event %)
                                    (.hide win))))

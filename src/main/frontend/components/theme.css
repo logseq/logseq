@@ -99,8 +99,7 @@ html.is-electron {
   }
 
   .cp__header {
-    height: 2rem;
-    padding-top: var(--frame-top-height);
+    height: 2.6rem;
     background-color: var(--ls-primary-background-color);
     top: 0;
   }
@@ -133,6 +132,10 @@ html.is-electron {
 
   #search {
     -webkit-app-region: drag;
+
+    #search-wrapper {
+      -webkit-app-region: no-drag;
+    }
   }
 
   .ls-window-frame-title-bar {
