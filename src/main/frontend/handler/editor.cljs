@@ -1610,7 +1610,8 @@
              (when-let [[url file] (and (seq res) (first res))]
                (insert-command!
                 id
-                (get-image-link format (get-asset-link url) (if file (.-name file) "image"))
+                (get-image-link format (get-asset-link url)
+                                (if file (.-name file) (if (util/ext-of-image? url) "image" "asset")))
                 format
                 {:last-pattern (if drop-or-paste? "" commands/slash)
                  :restore?     true}))))

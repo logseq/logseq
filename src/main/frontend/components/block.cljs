@@ -376,6 +376,12 @@
            label
            original-page-name))])))
 
+(rum/defc asset-reference
+  [title path]
+  (let [repo-path (config/get-repo-dir (state/get-current-repo))
+        full-path (str repo-path (string/replace path "../" "/"))]
+    [:a.asset-ref {:target "_blank" :href full-path} (or title path)]))
+
 (rum/defc page-reference < rum/reactive
   [html-export? s config label]
   (let [show-brackets? (state/show-brackets?)
@@ -622,6 +628,7 @@
 
           (= \# (first s))
           (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
+
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
           (and (= \* (first s))
                (not= \* (last s)))
@@ -630,6 +637,9 @@
           (re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s}
                   (map-inline config label))
+
+          (and (util/electron?) (config/local-asset? s))
+          (asset-reference (second (first label)) s)
 
           :else
           (page-reference html-export? s config label))

@@ -27,6 +27,7 @@
                   {:nodeIntegration         false
                    :nodeIntegrationInWorker false
                    :contextIsolation        true
+                   :spellcheck              true
                    :preload                 (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
@@ -73,6 +74,7 @@
                      (js/console.error e))))))
     (.. win -webContents (on "new-window"
                              (fn [e url]
+                               (.. log (info "new-window" url))
                                (open url)
                                (.preventDefault e))))
     #(do (.removeHandler ipcMain toggle-win-channel)

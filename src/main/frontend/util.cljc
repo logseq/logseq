@@ -155,6 +155,10 @@
             col)
        (into {})))
 
+(defn ext-of-image? [s]
+  (some #(string/ends-with? s %)
+        [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp"]))
+
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
   [class]

@@ -89,6 +89,24 @@ exports.electron = () => {
   })
 }
 
+exports.electronMaker = () => {
+  cp.execSync('yarn release', {
+    stdio: 'inherit'
+  })
+
+  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
+    cp.execSync('yarn', {
+      cwd: outputPath,
+      stdio: 'inherit'
+    })
+  }
+
+  cp.execSync('yarn electron:make', {
+    cwd: outputPath,
+    stdio: 'inherit'
+  })
+}
+
 exports.clean = common.clean
 exports.watch = gulp.parallel(common.keepSyncResourceFile, css.watchCSS)
 exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)
