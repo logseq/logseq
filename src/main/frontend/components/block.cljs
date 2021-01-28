@@ -188,7 +188,7 @@
                          (js/setTimeout #(reset! *resizing-image? false) 200)))
           :onClick (fn [e]
                      (when @*resizing-image? (util/stop e)))}
-          (:width metadata)
+          (and (:width metadata) (not (util/mobile?)))
           (assoc :style {:width (:width metadata)}))
         [:div.asset-container
          [:img.rounded-sm.shadow-xl.relative
