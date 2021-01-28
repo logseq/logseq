@@ -89,10 +89,22 @@ exports.electron = () => {
   })
 }
 
-exports.electronMaker = () => {
-  cp.execSync('yarn release', {
+exports.electronMaker = async () => {
+  cp.execSync('yarn cljs:electron-release', {
     stdio: 'inherit'
   })
+
+  const pkgPath = path.join(outputPath, 'package.json')
+  const pkg = require(pkgPath)
+  const version = fs.readFileSync(path.join(__dirname, 'src/main/frontend/version.cljs'))
+    .toString().match(/[0-9.]{3,}/)[0]
+
+  if (!version) {
+    throw new Error('release version error in src/**/*/version.cljs')
+  }
+
+  pkg.version = version
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
 
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
     cp.execSync('yarn', {

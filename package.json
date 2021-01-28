@@ -33,7 +33,7 @@
         "release-publishing": "run-s gulp:build cljs:release-publishing",
         "dev-release-app": "run-s gulp:build cljs:dev-release-app",
         "dev-electron-app": "gulp electron",
-        "release-electron": "run-p cljs:electron-release && cd ./static && yarn electron:make",
+        "release-electron": "gulp build && gulp electronMaker",
         "debug-electron": "cd static/ && yarn electron:debug",
         "clean": "gulp clean",
         "test": "run-s cljs:test cljs:run-test",
