@@ -1518,10 +1518,10 @@
                                      true)]
       (commands/restore-state restore-slash-caret-pos?))))
 
-(defn- get-image-link
-  [format url file-name]
+(defn- get-asset-file-link
+  [format url file-name image?]
   (case (keyword format)
-    :markdown (util/format "![%s](%s)" file-name url)
+    :markdown (util/format (str (when image? "!") "[%s](%s)") file-name url)
     :org (util/format "[[%s][%s]]" url file-name)
     nil))
 
@@ -1599,7 +1599,7 @@
                             (string/replace #"^../" "/")
                             (string/replace #"^assets://" ""))) nil))))
 
-(defn upload-image
+(defn upload-asset
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
@@ -1608,13 +1608,15 @@
           (p/then
            (fn [res]
              (when-let [[url file] (and (seq res) (first res))]
-               (insert-command!
-                id
-                (get-image-link format (get-asset-link url)
-                                (if file (.-name file) (if (util/ext-of-image? url) "image" "asset")))
-                format
-                {:last-pattern (if drop-or-paste? "" commands/slash)
-                 :restore?     true}))))
+               (let [image? (util/ext-of-image? url)]
+                 (insert-command!
+                  id
+                  (get-asset-file-link format (get-asset-link url)
+                                       (if file (.-name file) (if image? "image" "asset"))
+                                       image?)
+                  format
+                  {:last-pattern (if drop-or-paste? "" commands/slash)
+                   :restore?     true})))))
           (p/finally
             (fn []
               (reset! uploading? false)
@@ -1628,7 +1630,7 @@
            uploading?
            (fn [signed-url]
             (insert-command! id
-                             (get-image-link format signed-url file-name)
+                             (get-asset-file-link format signed-url file-name true)
                              format
                              {:last-pattern (if drop-or-paste? "" commands/slash)
                               :restore?     true})

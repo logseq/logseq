@@ -367,7 +367,7 @@
                      (add-watch editor-handler/*asset-pending-file ::pending-asset
                                 (fn [_ _ _ f]
                                   (reset! *slash-caret-pos (util/get-caret-pos (gdom/getElement id)))
-                                  (editor-handler/upload-image id #js[f] format editor-handler/*asset-uploading? true))))
+                                  (editor-handler/upload-asset id #js[f] format editor-handler/*asset-uploading? true))))
                    state)
    :will-unmount (fn [state]
                    (remove-watch editor-handler/*asset-pending-file ::pending-asset))}
@@ -378,7 +378,7 @@
      :type      "file"
      :on-change (fn [e]
                   (let [files (.-files (.-target e))]
-                    (editor-handler/upload-image id files format editor-handler/*asset-uploading? false)))
+                    (editor-handler/upload-asset id files format editor-handler/*asset-uploading? false)))
      :hidden    true}]
    (when-let [uploading? (util/react editor-handler/*asset-uploading?)]
      (let [processing (util/react editor-handler/*asset-uploading-process)]
@@ -655,7 +655,7 @@
                         input
                         :upload-images
                         {:drop (fn [e files]
-                                 (editor-handler/upload-image id files format editor-handler/*asset-uploading? true))}))
+                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))}))
 
                                     ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
                                     ;; which will hide the editor so no way for editing.
