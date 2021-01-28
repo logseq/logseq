@@ -104,39 +104,24 @@
    :db/ident {:db/unique :db.unique/identity}
 
    ;; user
-   :me/name {:db/valueType :db.type/string
-             :db/cardinality :db.cardinality/one}
-   :me/email {:db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one}
-   :me/avatar {:db/valueType :db.type/string
-               :db/cardinality :db.cardinality/one}
+   :me/name {}
+   :me/email {}
+   :me/avatar {}
 
    ;; block
-   :block/uuid {:db/unique :db.unique/identity}
-   :block/parent-id {:db/valueType :db.type/ref
-                     :db/cardinality :db.cardinality/one
-                     :db/index true}
-   :block/left-id {:db/valueType :db.type/ref
-                   :db/cardinality :db.cardinality/one
-                   :db/index true}
-   :block/type {:db/valueType :db.type/keyword
-                :db/cardinality :db.cardinality/one}
-   :block/title {:db/valueType :db.type/string
-                 :db/cardinality :db.cardinality/one}
-   :block/content {:db/valueType :db.type/string
-                   :db/cardinality :db.cardinality/one}
+   :block/id {:db/unique :db.unique/identity}
+   :block/parent-id {:db/index true}
+   :block/left-id {}
+   :block/type {}
+   :block/title {}
+   :block/content {}
    :block/properties {}
-   :block/ref-blocks {:db/valueType :db.type/ref
-                      :db/cardinality :db.cardinality/many}
-   :block/embed-blocks {:db/valueType :db.type/ref
-                        :db/cardinality :db.cardinality/many}
-   :block/created-at {:db/valueType :db.type/bigint
-                      :db/cardinality :db.cardinality/one}
-   :block/updated-at {:db/valueType :db.type/bigint
-                      :db/cardinality :db.cardinality/one}
-   :block/alias {:db/valueType :db.type/ref
-                 :db/cardinality :db.cardinality/many}
-   :block/tags {:db/valueType :db.type/ref
-                :db/cardinality :db.cardinality/many}
-   :block/journal? {:db/valueType :db.type/bool
-                    :db/cardinality :db.cardinality/one}})
+   :block/ref-blocks {:db/cardinality :db.cardinality/many}
+   :block/embed-blocks {:db/cardinality :db.cardinality/many}
+   :block/created-at {}
+   :block/updated-at {}
+   :block/alias {:db/cardinality :db.cardinality/many}
+   :block/tags {:db/cardinality :db.cardinality/many}
+   :block/journal? {}})
+
+;; :db/valueType :db.type/ref 引用的是datascript 内部的自增ID, 不能是我们设定的{:db/unique :db.unique/identity}的字段，也就是我们ID生成器生成的r
