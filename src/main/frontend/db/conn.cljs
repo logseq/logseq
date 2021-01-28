@@ -73,6 +73,10 @@
   []
   (d/create-conn db-schema/outline-schema))
 
+(defn get-outliner-conn
+  []
+  nil)
+
 (defn start!
   ([me repo]
    (start! me repo {}))
