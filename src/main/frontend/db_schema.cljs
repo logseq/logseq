@@ -123,5 +123,3 @@
    :block/alias {:db/cardinality :db.cardinality/many}
    :block/tags {:db/cardinality :db.cardinality/many}
    :block/journal? {}})
-
-;; :db/valueType :db.type/ref 引用的是datascript 内部的自增ID, 不能是我们设定的{:db/unique :db.unique/identity}的字段，也就是我们ID生成器生成的r
