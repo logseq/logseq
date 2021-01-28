@@ -33,7 +33,7 @@
   expound/expound             {:mvn/version "0.8.6"}
   lambdaisland/glogi          {:mvn/version "1.0.74"}}
 
- :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/"]
+ :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.764"}
                                 binaryage/devtools          {:mvn/version "1.0.2"}
                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}

@@ -50,6 +50,17 @@
       (when-not node-test?
         (re-find #"Mobi" js/navigator.userAgent))))
 
+#?(:cljs
+   (defn electron?
+     []
+     (let [ua (string/lower-case js/navigator.userAgent)]
+       (string/includes? ua " electron"))))
+
+#?(:cljs
+   (defn file-protocol?
+     []
+     (string/starts-with? js/window.location.href "file://")))
+
 (defn format
   [fmt & args]
   #?(:cljs (apply gstring/format fmt args)
@@ -143,6 +154,10 @@
   (->> (map (fn [entry] [(get entry k) entry])
             col)
        (into {})))
+
+(defn ext-of-image? [s]
+  (some #(string/ends-with? s %)
+        [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp"]))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
@@ -442,7 +457,7 @@
 
 (defn journal?
   [path]
-  (starts-with? path "journals/"))
+  (string/includes? path "journals/"))
 
 (defn drop-first-line
   [s]
@@ -776,12 +791,6 @@
   []
   #?(:cljs (tc/to-long (cljs-time.core/now))))
 
-(defn get-repo-dir
-  [repo-url]
-  (str "/"
-       (->> (take-last 2 (string/split repo-url #"/"))
-            (string/join "_"))))
-
 (defn d
   [k f]
   (let [result (atom nil)]
@@ -952,6 +961,9 @@
                       (js/window.indexedDB.deleteDatabase test-db)))))))
 
 (defonce mac? #?(:cljs goog.userAgent/MAC
+                 :clj nil))
+
+(defonce win32? #?(:cljs goog.userAgent/WINDOWS
                  :clj nil))
 
 (defn ->system-modifier

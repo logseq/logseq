@@ -277,22 +277,13 @@
                              bottom-area))
           after-blocks (->> (compute-after-blocks-in-same-file repo target-block to-block direction top? nested? target-child? target-file original-top-block-start-pos block-changes)
                             (remove nil?))
-          path (:file/path (db/entity repo (:db/id (:block/file to-block))))
-          modified-time (let [modified-at (tc/to-long (t/now))]
-                          (->
-                           [[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
-                            [:db/add (:db/id (:block/page to-block)) :page/last-modified-at modified-at]
-                            [:db/add (:db/id (:block/file target-block)) :file/last-modified-at modified-at]
-                            [:db/add (:db/id (:block/file to-block)) :file/last-modified-at modified-at]]
-                           distinct
-                           vec))]
+          path (:file/path (db/entity repo (:db/id (:block/file to-block))))]
       (profile
        "Move block in the same file: "
        (repo-handler/transact-react-and-alter-file!
         repo
         (concat
-         after-blocks
-         modified-time)
+         after-blocks)
         {:key :block/change
          :data block-changes}
         [[path new-file-content]]))
@@ -327,14 +318,6 @@
                                 (utf8/substring to-file-content 0 separate-pos)
                                 target-content
                                 (utf8/substring to-file-content separate-pos))))
-        modified-time (let [modified-at (tc/to-long (t/now))]
-                        (->
-                         [[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
-                          [:db/add (:db/id (:block/page to-block)) :page/last-modified-at modified-at]
-                          [:db/add (:db/id (:block/file target-block)) :file/last-modified-at modified-at]
-                          [:db/add (:db/id (:block/file to-block)) :file/last-modified-at modified-at]]
-                         distinct
-                         vec))
         target-after-blocks (rebuild-dnd-blocks repo target-file target-child?
                                                 (get-start-pos target-block)
                                                 block-changes nil {:delete? true})
@@ -363,91 +346,11 @@
       repo
       (concat
        target-after-blocks
-       to-after-blocks
-       modified-time)
+       to-after-blocks)
       {:key :block/change
        :data (conj block-changes target-block)}
       [[target-file-path new-target-file-content]
        [to-file-path new-to-file-content]]))))
-
-(defn- move-block-in-different-repos
-  [target-block-repo to-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes]
-  (let [target-file (db/entity target-block-repo (:db/id (:block/file target-block)))
-        target-file-path (:file/path target-file)
-        target-file-content (db/get-file target-block-repo target-file-path)
-        to-file (db/entity to-block-repo (:db/id (:block/file to-block)))
-        to-file-path (:file/path to-file)
-        target-block-end-pos (block-handler/get-block-end-pos-rec target-block-repo target-block)
-        to-block-start-pos (get-start-pos to-block)
-        to-block-end-pos (block-handler/get-block-end-pos-rec to-block-repo to-block)
-        new-target-file-content (utf8/delete! target-file-content
-                                              (get-start-pos target-block)
-                                              target-block-end-pos)
-        to-file-content (utf8/encode (db/get-file to-block-repo to-file-path))
-        new-to-file-content (let [separate-pos (cond nested?
-                                                     (get-end-pos to-block)
-                                                     top?
-                                                     to-block-start-pos
-                                                     :else
-                                                     to-block-end-pos)]
-                              (string/trim
-                               (util/join-newline
-                                (utf8/substring to-file-content 0 separate-pos)
-                                target-content
-                                (utf8/substring to-file-content separate-pos))))
-        target-delete-tx (map (fn [id]
-                                [:db.fn/retractEntity [:block/uuid id]])
-                              (block-handler/get-block-ids target-block))
-        [target-modified-time to-modified-time]
-        (let [modified-at (tc/to-long (t/now))]
-          [[[:db/add (:db/id (:block/page target-block)) :page/last-modified-at modified-at]
-            [:db/add (:db/id (:block/file target-block)) :file/last-modified-at modified-at]]
-           [[:db/add (:db/id (:block/page to-block)) :page/last-modified-at modified-at]
-            [:db/add (:db/id (:block/file to-block)) :file/last-modified-at modified-at]]])
-        target-after-blocks (rebuild-dnd-blocks target-block-repo target-file target-child?
-                                                (get-start-pos target-block)
-                                                block-changes nil {:delete? true})
-        to-after-blocks (cond
-                          top?
-                          (rebuild-dnd-blocks to-block-repo to-file target-child?
-                                              (get-start-pos to-block)
-                                              block-changes
-                                              nil
-                                              {:same-file? false})
-
-                          :else
-                          (let [offset-block-id (if nested?
-                                                  (:block/uuid to-block)
-                                                  (last (block-handler/get-block-ids to-block)))
-                                offset-end-pos (get-end-pos
-                                                (db/entity to-block-repo [:block/uuid offset-block-id]))]
-                            (rebuild-dnd-blocks to-block-repo to-file target-child?
-                                                offset-end-pos
-                                                block-changes
-                                                nil
-                                                {:same-file? false})))]
-    (profile
-     "[Target file] Move block between different files: "
-     (repo-handler/transact-react-and-alter-file!
-      target-block-repo
-      (concat
-       target-delete-tx
-       target-after-blocks
-       target-modified-time)
-      {:key :block/change
-       :data [(dissoc target-block :block/children)]}
-      [[target-file-path new-target-file-content]]))
-
-    (profile
-     "[Destination file] Move block between different files: "
-     (repo-handler/transact-react-and-alter-file!
-      to-block-repo
-      (concat
-       to-after-blocks
-       to-modified-time)
-      {:key :block/change
-       :data [block-changes]}
-      [[to-file-path new-to-file-content]]))))
 
 (defn move-block
   "There can be at least 3 possible situations:
@@ -510,7 +413,7 @@
 
           ;; different repos
           :else
-          (move-block-in-different-repos target-block-repo to-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes))
+          nil)
 
         (when (state/get-git-auto-push?)
           (doseq [repo (->> #{target-block-repo to-block-repo}

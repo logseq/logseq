@@ -43,6 +43,27 @@
   }
 }
 
+.ui__button_base {
+  @apply inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4
+  font-medium rounded-md text-white
+  bg-gray-500 hover:bg-gray-700 active:bg-gray-700
+  focus:border-gray-700 focus:shadow-outline-gray
+  focus:outline-none transition
+  ease-in-out duration-150 mt-1;
+
+  &.is-logseq {
+    @apply focus:border-gray-500;
+
+    color: var(--ls-primary-text-color);
+    background: var(--ls-secondary-background-color);
+  }
+
+  &.is-primary {
+    @apply bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-700
+    focus:border-indigo-700 focus:shadow-outline-indigo;
+  }
+}
+
 .dropdown-wrapper {
   background-color: var(--ls-primary-background-color, #fff);
   min-width: 12rem;

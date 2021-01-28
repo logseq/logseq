@@ -33,6 +33,13 @@
     :watch-path   "static"
     :preloads     [devtools.preload]}}
 
+  :electron {:target :node-script
+             :output-to "static/electron.js"
+             :main electron.core/main
+             :devtools
+             {:before-load electron.core/stop
+              :after-load electron.core/start}}
+
   :test
   {:target :node-test
    :output-to "static/tests.js"

@@ -226,7 +226,7 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
 
-    (when granted?
+    (when (or granted? (util/electron?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
@@ -375,6 +375,12 @@
                   (not (string/blank? label))) ; alias
            label
            original-page-name))])))
+
+(rum/defc asset-reference
+  [title path]
+  (let [repo-path (config/get-repo-dir (state/get-current-repo))
+        full-path (str repo-path (string/replace path "../" "/"))]
+    [:a.asset-ref {:target "_blank" :href full-path} (or title path)]))
 
 (rum/defc page-reference < rum/reactive
   [html-export? s config label]
@@ -622,6 +628,7 @@
 
           (= \# (first s))
           (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
+
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
           (and (= \* (first s))
                (not= \* (last s)))
@@ -630,6 +637,9 @@
           (re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s}
                   (map-inline config label))
+
+          (and (util/electron?) (config/local-asset? s))
+          (asset-reference (second (first label)) s)
 
           :else
           (page-reference html-export? s config label))
@@ -894,13 +904,13 @@
      [:a (if (not dummy?)
            {:href (rfe/href :page {:name uuid})
             :on-click (fn [e]
-                        (.preventDefault e)
                         (when (gobj/get e "shiftKey")
                           (state/sidebar-add-block!
                            (state/get-current-repo)
                            (:db/id block)
                            :block
-                           block)))})
+                           block)
+                          (util/stop e)))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true

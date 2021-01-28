@@ -70,9 +70,7 @@
                          :page/journal? journal?
                          :page/journal-day (if journal?
                                              (date/journal-title->int (string/capitalize page))
-                                             0)
-                         :page/created-at journal-date-long
-                         :page/last-modified-at journal-date-long})
+                                             0)})
                         (seq properties)
                         (assoc :page/properties properties)
 
@@ -129,7 +127,7 @@
   [repo-url file content utf8-content]
   (if (string/blank? content)
     []
-    (let [journal? (util/starts-with? file "journals/")
+    (let [journal? (util/journal? file)
           format (format/get-format file)
           ast (mldoc/->edn content
                            (mldoc/default-config format))

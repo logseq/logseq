@@ -48,16 +48,10 @@
             [lambdaisland.glogi :as log]))
 
 ;; FIXME: should support multiple images concurrently uploading
-(defonce *image-pending-file (atom nil))
-(defonce *image-uploading? (atom false))
-(defonce *image-uploading-process (atom 0))
+(defonce *asset-pending-file (atom nil))
+(defonce *asset-uploading? (atom false))
+(defonce *asset-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
-
-(defn modified-time-tx
-  [page file]
-  (let [modified-at (tc/to-long (t/now))]
-    [[:db/add (:db/id page) :page/last-modified-at modified-at]
-     [:db/add (:db/id file) :file/last-modified-at modified-at]]))
 
 (defn- get-selection-and-format
   []
@@ -502,7 +496,7 @@
                              (util/page-name-sanity))) "."
                        (if (= format "markdown") "md" format))
                  file-path (str "/" path)
-                 dir (util/get-repo-dir repo)]
+                 dir (config/get-repo-dir repo)]
              (p/let [exists? (fs/file-exists? dir file-path)]
                (if exists?
                  (notification/show!
@@ -556,9 +550,6 @@
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
                  page-id (:db/id page)
-                 modified-time (let [modified-at (tc/to-long (t/now))]
-                                 [[:db/add page-id :page/last-modified-at modified-at]
-                                  [:db/add (:db/id file) :file/last-modified-at modified-at]])
                  page-properties (when pre-block?
                                    (if (seq new-properties)
                                      [[:db/retract page-id :page/properties]
@@ -597,8 +588,7 @@
                 page-properties
                 page-tags
                 page-alias
-                after-blocks
-                modified-time)
+                after-blocks)
                {:key :block/change
                 :data (map (fn [block] (assoc block :block/page page)) blocks)}
                (let [new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)]
@@ -781,7 +771,7 @@
                   "."
                   (if (= format "markdown") "md" format))
             file-path (str "/" path)
-            dir (util/get-repo-dir repo)]
+            dir (config/get-repo-dir repo)]
         (p/let [exists? (fs/file-exists? dir file-path)]
           (if exists?
             (do (notification/show!
@@ -1528,10 +1518,10 @@
                                      true)]
       (commands/restore-state restore-slash-caret-pos?))))
 
-(defn- get-image-link
-  [format url file-name]
+(defn- get-asset-file-link
+  [format url file-name image?]
   (case (keyword format)
-    :markdown (util/format "![%s](%s)" file-name url)
+    :markdown (util/format (str (when image? "!") "[%s](%s)") file-name url)
     :org (util/format "[[%s][%s]]" url file-name)
     nil))
 
@@ -1541,7 +1531,7 @@
 
 (defn ensure-assets-dir!
   [repo]
-  (let [repo-dir (util/get-repo-dir repo)
+  (let [repo-dir (config/get-repo-dir repo)
         assets-dir "assets"]
     (p/then
      (fs/mkdir-if-not-exists (str repo-dir "/" assets-dir))
@@ -1552,38 +1542,47 @@
    (when-let [block-file (db-model/get-block-file block-id)]
      (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
        (let [prefix (:file/path block-file)
-             prefix (and prefix (string/replace prefix "/" "_"))
+             prefix (and prefix (string/replace
+                                 (if (util/electron?)
+                                   (string/replace prefix (str repo-dir "/") "")
+                                   prefix) "/" "_"))
              prefix (and prefix (subs prefix 0 (string/last-index-of prefix ".")))]
          (save-assets! repo repo-dir assets-dir files
                        (fn [index]
                          (str prefix "_" (.now js/Date) "_" index)))))))
   ([repo dir path files gen-filename]
    (p/all
-    (for [[index file] (map-indexed vector files)]
+    (for [[index ^js file] (map-indexed vector files)]
       (let [ext (.-name file)
             ext (if ext (subs ext (string/last-index-of ext ".")) "")
             filename (str (gen-filename index file) ext)
             filename (str path "/" filename)]
-        ;(js/console.debug "Write asset #" filename file)
-        (p/then (fs/write-file repo dir filename (.stream file))
-                #(p/resolved [filename file])))))))
+        ;(js/console.debug "Write asset #" dir filename file)
+        (if (util/electron?)
+          (let [from (.-path file)]
+            (p/then (js/window.apis.copyFileToAssets dir filename from)
+                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file)])))
+          (p/then (fs/write-file! repo dir filename (.stream file) nil)
+                  #(p/resolved [filename file]))))))))
 
 (defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
   [path]                                                    ;; path start with "/assets" or compatible for "../assets"
-  (let [repo-dir (util/get-repo-dir (state/get-current-repo))
-        path (string/replace path "../" "/")
-        handle-path (str "handle" repo-dir path)
-        cached-url (get @*assets-url-cache (keyword handle-path))]
-    (if cached-url
-      (p/resolved cached-url)
-      (p/let [handle (frontend.idb/get-item handle-path)
-              file (and handle (.getFile handle))]
-        (when file
-          (p/let [url (js/URL.createObjectURL file)]
-            (swap! *assets-url-cache assoc (keyword handle-path) url)
-            url))))))
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+        path (string/replace path "../" "/")]
+    (if (util/electron?)
+      (str "assets://" repo-dir path)
+      (let [handle-path (str "handle" repo-dir path)
+            cached-url (get @*assets-url-cache (keyword handle-path))]
+        (if cached-url
+          (p/resolved cached-url)
+          (p/let [handle (frontend.idb/get-item handle-path)
+                  file (and handle (.getFile handle))]
+            (when file
+              (p/let [url (js/URL.createObjectURL file)]
+                (swap! *assets-url-cache assoc (keyword handle-path) url)
+                url))))))))
 
 (defn delete-asset-of-block!
   [{:keys [repo href title full-text block-id local?] :as opts}]
@@ -1595,10 +1594,13 @@
     (save-block! repo block content)
     (when local?
       ;; FIXME: should be relative to current block page path
-      (fs/unlink (str (util/get-repo-dir repo) (string/replace href #"^../" "/")) nil))))
+      (fs/unlink! (config/get-repo-path
+                   repo (-> href
+                            (string/replace #"^../" "/")
+                            (string/replace #"^assets://" ""))) nil))))
 
-(defn upload-image
-  [id files format uploading? drop-or-paste?]
+(defn upload-asset
+  [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)]
     (if (config/local-db? repo)
@@ -1606,41 +1608,44 @@
           (p/then
            (fn [res]
              (when-let [[url file] (and (seq res) (first res))]
-               (insert-command!
-                id
-                (get-image-link format (get-asset-link url) (.-name file))
-                format
-                {:last-pattern (if drop-or-paste? "" commands/slash)
-                 :restore?     true}))))
+               (let [image? (util/ext-of-image? url)]
+                 (insert-command!
+                  id
+                  (get-asset-file-link format (get-asset-link url)
+                                       (if file (.-name file) (if image? "image" "asset"))
+                                       image?)
+                  format
+                  {:last-pattern (if drop-or-paste? "" commands/slash)
+                   :restore?     true})))))
           (p/finally
             (fn []
               (reset! uploading? false)
-              (reset! *image-uploading? false)
-              (reset! *image-uploading-process 0))))
+              (reset! *asset-uploading? false)
+              (reset! *asset-uploading-process 0))))
       (image/upload
-       files
-       (fn [file file-name file-type]
+        files
+        (fn [file file-name file-type]
          (image-handler/request-presigned-url
-          file file-name file-type
-          uploading?
-          (fn [signed-url]
+           file file-name file-type
+           uploading?
+           (fn [signed-url]
             (insert-command! id
-                             (get-image-link format signed-url file-name)
+                             (get-asset-file-link format signed-url file-name true)
                              format
                              {:last-pattern (if drop-or-paste? "" commands/slash)
                               :restore?     true})
 
-            (reset! *image-uploading? false)
-            (reset! *image-uploading-process 0))
-          (fn [e]
+            (reset! *asset-uploading? false)
+            (reset! *asset-uploading-process 0))
+           (fn [e]
             (let [process (* (/ (gobj/get e "loaded")
                                 (gobj/get e "total"))
                              100)]
-              (reset! *image-uploading? false)
-              (reset! *image-uploading-process process)))))))))
+              (reset! *asset-uploading? false)
+              (reset! *asset-uploading-process process)))))))))
 
-(defn set-image-pending-file [file]
-  (reset! *image-pending-file file))
+(defn set-asset-pending-file [file]
+  (reset! *asset-pending-file file))
 
 ;; Editor should track some useful information, like editor modes.
 ;; For example:
@@ -1792,7 +1797,7 @@
   [input]
   (or @*show-commands
       @*show-block-commands
-      @*image-uploading?
+      @*asset-uploading?
       (state/get-editor-show-input)
       (state/get-editor-show-page-search?)
       (state/get-editor-show-block-search?)
@@ -1936,15 +1941,12 @@
                                                                 (concat hc2 hc1)])]
                   (when (and start-pos end-pos)
                     (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
-                          modified-time (modified-time-tx page file)
                           blocks-meta (rebuild-blocks-meta start-pos blocks)]
                       (profile
                        (str "Move block " (if up? "up: " "down: "))
                        (repo-handler/transact-react-and-alter-file!
                         repo
-                        (concat
-                         blocks-meta
-                         modified-time)
+                        blocks-meta
                         {:key :block/change
                          :data (map (fn [block] (assoc block :block/page page)) blocks)}
                         [[file-path new-file-content]])))))))))))))
@@ -2021,16 +2023,14 @@
                 ;;         :last-start-pos @last-start-pos})
                 file-path (:file/path file)
                 file-content (db/get-file file-path)
-                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
-                modified-time (modified-time-tx page file)]
+                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))]
             (profile
              "Indent/outdent: "
              (repo-handler/transact-react-and-alter-file!
               repo
               (concat
                blocks
-               after-blocks
-               modified-time)
+               after-blocks)
               {:key :block/change
                :data (map (fn [block] (assoc block :block/page page)) blocks)}
               [[file-path new-content]])))
@@ -2087,16 +2087,14 @@
               after-blocks (rebuild-after-blocks repo file old-end-pos @last-start-pos)
               file-path (:file/path file)
               file-content (db/get-file file-path)
-              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
-              modified-time (modified-time-tx page file)]
+              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))]
           (profile
            "Indent/outdent: "
            (repo-handler/transact-react-and-alter-file!
             repo
             (concat
              blocks
-             after-blocks
-             modified-time)
+             after-blocks)
             {:key :block/change
              :data (map (fn [block] (assoc block :block/page page)) blocks)}
             [[file-path new-content]])))

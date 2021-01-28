@@ -31,8 +31,10 @@
 
 (defn asset-uri
   [path]
-  (if dev? path
-      (str asset-domain path)))
+  (if (util/file-protocol?)
+    (string/replace path "/static/" "./")
+    (if dev? path
+        (str asset-domain path))))
 
 (goog-define GITHUB_APP_NAME "logseq-test")
 
@@ -299,3 +301,42 @@
 (defn get-local-dir
   [s]
   (string/replace s local-db-prefix ""))
+
+(defn get-local-repo
+  [dir]
+  (str local-db-prefix dir))
+
+(defn get-repo-dir
+  [repo-url]
+  (if (and (util/electron?) (local-db? repo-url))
+    (get-local-dir repo-url)
+    (str "/"
+         (->> (take-last 2 (string/split repo-url #"/"))
+              (string/join "_")))))
+
+(defn get-repo-path
+  [repo-url path]
+  (if (and (util/electron?) (local-db? repo-url))
+    path
+    (str (get-repo-dir repo-url) "/" path)))
+
+(defn get-file-path
+  [repo-url relative-path]
+  (if (and (util/electron?) (local-db? repo-url))
+    (str (get-repo-dir repo-url) "/" relative-path)
+    relative-path))
+
+(defn get-config-path
+  ([]
+   (get-config-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" config-file)))))
+
+(defn get-custom-css-path
+  ([]
+   (get-custom-css-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo
+                    (str app-name "/" custom-css-file)))))

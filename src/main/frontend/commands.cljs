@@ -3,6 +3,7 @@
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.search :as search]
+            [frontend.config :as config]
             [clojure.string :as string]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -123,7 +124,12 @@
                   [:editor/search-template]]]
      ;; same as link
      ["Image Link" link-steps]
-     (when (state/logged?)
+     (cond
+       (and (util/electron?) (config/local-db? (state/get-current-repo)))
+
+       ["Upload an asset" [[:editor/click-hidden-file-input :id]]]
+
+       (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
      ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]

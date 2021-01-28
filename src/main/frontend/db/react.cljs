@@ -339,18 +339,3 @@
      (-> (q repo-url [:kv key] {} key key)
          react
          key))))
-
-(defn set-file-content!
-  [repo path content]
-  (when (and repo path)
-    (let [tx-data {:file/path path
-                   :file/content content
-                   :file/last-modified-at (util/time-ms)}
-          tx-data (if (config/local-db? repo)
-                    (dissoc tx-data :file/last-modified-at)
-                    tx-data)]
-      (transact-react!
-       repo
-       [tx-data]
-       {:key [:file/content path]
-        :files-db? true}))))

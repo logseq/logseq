@@ -203,7 +203,7 @@
 (defn set-file-last-modified-at!
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
-    (when-let [conn (conn/get-files-conn repo)]
+    (when-let [conn (conn/get-conn repo false)]
       (d/transact! conn
                    [{:file/path path
                      :file/last-modified-at last-modified-at}]))))
@@ -211,7 +211,7 @@
 (defn get-file-last-modified-at
   [repo path]
   (when (and repo path)
-    (when-let [conn (conn/get-files-conn repo)]
+    (when-let [conn (conn/get-conn repo false)]
       (-> (d/entity (d/db conn) [:file/path path])
           :file/last-modified-at))))
 
@@ -258,7 +258,8 @@
 
 (defn get-custom-css
   []
-  (get-file "logseq/custom.css"))
+  (when-let [repo (state/get-current-repo)]
+    (get-file (config/get-file-path repo "logseq/custom.css"))))
 
 (defn get-file-no-sub
   ([path]
@@ -342,7 +343,7 @@
 (defn sort-blocks
   [blocks]
   (let [pages-ids (map (comp :db/id :block/page) blocks)
-        pages (db-utils/pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
+        pages (db-utils/pull-many '[:db/id :page/name :page/original-name] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]
@@ -696,7 +697,7 @@
   [file ast]
   ;; headline
   (let [ast (map first ast)]
-    (if (util/starts-with? file "pages/contents.")
+    (if (string/includes? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter block/heading-block? ast)))
             property-name (when (and (= "Properties" (ffirst ast))
@@ -1188,3 +1189,17 @@
         tx-data (map (fn [page-id] [:db/retract page-id :page/alias]) page-ids)]
     (when (seq tx-data)
       (db-utils/transact! repo tx-data))))
+
+(defn set-file-content!
+  [repo path content]
+  (when (and repo path)
+    (let [tx-data {:file/path path
+                   :file/content content}
+          tx-data (if (config/local-db? repo)
+                    (dissoc tx-data :file/last-modified-at)
+                    tx-data)]
+      (react/transact-react!
+       repo
+       [tx-data]
+       {:key [:file/content path]
+        :files-db? true}))))

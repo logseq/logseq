@@ -15,7 +15,7 @@
     {:d "M5 11L0 6l1.5-1.5L5 8.25 8.5 4.5 10 6l-5 5z"
      :fill-rule "evenodd"}]])
 
-(rum/defc arrow-right
+(rum/defc arrow-right-2
   []
   [:svg
    {:aria-hidden "true"
@@ -28,6 +28,26 @@
    [:path
     {:d "M7.5 8l-5 5L1 11.5 4.75 8 1 4.5 2.5 3l5 5z"
      :fill-rule "evenodd"}]])
+
+(rum/defc arrow-left
+  []
+  [:svg.w-6.h-6
+   {:viewbox "0 0 24 24", :stroke "currentColor", :fill "none"}
+   [:path
+    {:d "M15 19l-7-7 7-7",
+     :stroke-width "2",
+     :stroke-linejoin "round",
+     :stroke-linecap "round"}]])
+
+(rum/defc arrow-right
+  []
+  [:svg.w-6.h-6
+   {:viewbox "0 0 24 24", :stroke "currentColor", :fill "none"}
+   [:path
+    {:d "M9 5l7 7-7 7",
+     :stroke-width "2",
+     :stroke-linejoin "round",
+     :stroke-linecap "round"}]])
 
 (rum/defc big-arrow-right
   []
@@ -82,6 +102,22 @@
    [:circle.opacity-25 {:cx 12 :cy 12 :r 10 :stroke "currentColor" :stroke-width 4}]
    [:path.opacity-75 {:fill "currentColor"
                       :d "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"}]])
+
+(defonce minus
+  [:svg.w-6.h-6
+   {:viewbox "0 0 24 24", :stroke "currentColor", :fill "none"}
+   [:path
+    {:d               "M20 12H4"
+     :stroke-width    "2"
+     :stroke-linejoin "round"
+     :stroke-linecap  "round"}]])
+
+(defonce rectangle
+  [:svg.w-6.h-6
+   {:viewbox "0 0 24 24", :stroke "currentColor", :fill "none"}
+   [:path
+    {:d               "M3.16580358,18.5038125 L20.5529464,18.5038125 C22.6525178,18.5038125 23.7072321,17.4593839 23.7072321,15.3902411 L23.7072321,3.12495537 C23.7072321,1.0558125 22.6525178,0.0113839219 20.5529464,0.0113839219 L3.16580358,0.0113839219 C1.07651787,0.0118125 0.0115178672,1.04638392 0.0115178672,3.12495537 L0.0115178672,15.3906696 C0.0115178672,17.4696696 1.07651787,18.5042411 3.16580358,18.5042411 L3.16580358,18.5038125 Z M3.19580358,16.8868125 C2.19123216,16.8868125 1.62894642,16.3545268 1.62894642,15.3096696 L1.62894642,3.20638392 C1.62894642,2.16152679 2.19123213,1.62924108 3.19580358,1.62924108 L20.5229464,1.62924108 C21.5172321,1.62924108 22.0898036,2.16152679 22.0898036,3.20638392 L22.0898036,15.3092411 C22.0898036,16.3540982 21.5172322,16.8863839 20.5229464,16.8863839 L3.19580358,16.8868125 Z"
+     :stroke-width    "2"}]])
 
 (defn- hero-icon
   ([d]
@@ -182,6 +218,9 @@
 (defn vertical-dots
   [options]
   (hero-icon "M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" options))
+(defn horizontal-dots
+  [options]
+  (hero-icon "M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" options))
 (def external-link
   [:svg {:fill "none", :view-box "0 0 24 24", :height "21", :width "21"
          :stroke "currentColor"}
@@ -441,3 +480,6 @@
 
 (def online
   (hero-icon "M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"))
+
+(def collapse-right
+  (hero-icon "M4 6h16M4 12h16m-7 6h7"))

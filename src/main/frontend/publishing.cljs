@@ -49,7 +49,7 @@
    (rf/router routes/routes {})
    route/set-route-match!
    ;; set to false to enable HistoryAPI
-   {:use-fragment false}))
+   {:use-fragment true}))
 
 (defn start []
   (when-let [node (.getElementById js/document "root")]

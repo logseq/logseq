@@ -1,4 +1,5 @@
 const fs = require('fs')
+const cp = require('child_process')
 const path = require('path')
 const gulp = require('gulp')
 const postcss = require('gulp-postcss')
@@ -62,7 +63,7 @@ const css = {
 
 const common = {
   clean () {
-    return del(outputPath)
+    return del(['./static/**/*', '!./static/yarn.lock', '!./static/node_modules'])
   },
 
   syncResourceFile () {
@@ -72,6 +73,38 @@ const common = {
   keepSyncResourceFile () {
     return gulp.watch(resourceFilePath, { ignoreInitial: false }, common.syncResourceFile)
   }
+}
+
+exports.electron = () => {
+  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
+    cp.execSync('yarn', {
+      cwd: outputPath,
+      stdio: 'inherit'
+    })
+  }
+
+  cp.execSync('yarn electron:dev', {
+    cwd: outputPath,
+    stdio: 'inherit'
+  })
+}
+
+exports.electronMaker = () => {
+  cp.execSync('yarn release', {
+    stdio: 'inherit'
+  })
+
+  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
+    cp.execSync('yarn', {
+      cwd: outputPath,
+      stdio: 'inherit'
+    })
+  }
+
+  cp.execSync('yarn electron:make', {
+    cwd: outputPath,
+    stdio: 'inherit'
+  })
 }
 
 exports.clean = common.clean

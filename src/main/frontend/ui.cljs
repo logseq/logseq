@@ -79,7 +79,7 @@
    child])
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [modal-class links-header z-index] :as opts}]
+  [content-fn links {:keys [modal-class links-header links-footer z-index] :as opts}]
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
@@ -100,7 +100,8 @@
 ]]
           (rum/with-key
             (menu-link new-options child)
-            title)))])
+            title)))
+      (when links-footer links-footer)])
    opts))
 
 (defn button
@@ -231,6 +232,8 @@
   []
   (let [cl (.-classList js/document.documentElement)]
     (if util/mac? (.add cl "is-mac"))
+    (if util/win32? (.add cl "is-win32"))
+    (if (util/electron?) (.add cl "is-electron"))
     (if (util/ios?) (.add cl "is-ios"))
     (if (util/mobile?) (.add cl "is-mobile"))
     (if (util/safari?) (.add cl "is-safari"))))

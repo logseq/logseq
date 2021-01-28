@@ -57,7 +57,7 @@
      [:div.cp__diff-file-header
       [:a.mr-2 {:on-click (fn [] (toggle-collapse? path))}
        (if collapse?
-         (svg/arrow-right)
+         (svg/arrow-right-2)
          (svg/arrow-down))]
       [:span.cp__diff-file-header-content {:style {:word-break "break-word"}}
        path]
