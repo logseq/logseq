@@ -609,10 +609,10 @@
              ;; fix editing template with multiple headings
              (when (> (count blocks) 1)
                (let [new-value (-> (text/remove-level-spaces (:block/content (first blocks)) (:block/format (first blocks)))
-                                  (string/trim-newline))
-                    edit-input-id (state/get-edit-input-id)]
-                (when edit-input-id
-                  (state/set-edit-content! edit-input-id new-value))))
+                                   (string/trim-newline))
+                     edit-input-id (state/get-edit-input-id)]
+                 (when edit-input-id
+                   (state/set-edit-content! edit-input-id new-value))))
 
              (when (or (seq retract-refs) pre-block?)
                (ui-handler/re-render-root!))
@@ -1736,13 +1736,17 @@
         pages))))
 
 (defn get-matched-blocks
-  [q]
+  [q block-id]
   ;; remove current block
-  (let [current-block (state/get-edit-block)]
+  (let [current-block (state/get-edit-block)
+        block-parents (set (->> (db/get-block-parents (state/get-current-repo)
+                                                      block-id
+                                                      99)
+                                (map (comp str :block/uuid))))
+        current-and-parents (set/union #{(str (:block/uuid current-block))} block-parents)]
     (remove
      (fn [h]
-       (= (:block/uuid current-block)
-          (:block/uuid h)))
+       (contains? current-and-parents (:block/uuid h)))
      (search/search q 10))))
 
 (defn get-matched-templates

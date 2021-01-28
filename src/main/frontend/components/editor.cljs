@@ -141,12 +141,13 @@
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
               edit-content (state/sub [:editor/content id])
+              edit-block (state/get-edit-block)
               q (or
                  @editor-handler/*selected-text
                  (when (> (count edit-content) current-pos)
                    (subs edit-content pos current-pos)))
               matched-blocks (when-not (string/blank? q)
-                               (editor-handler/get-matched-blocks q))
+                               (editor-handler/get-matched-blocks q (:block/uuid edit-block)))
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search! false)
                                (let [uuid-string (str (:block/uuid chosen))]
