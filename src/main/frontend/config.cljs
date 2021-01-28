@@ -323,7 +323,11 @@
 (defn get-file-path
   [repo-url relative-path]
   (if (and (util/electron?) (local-db? repo-url))
-    (str (get-repo-dir repo-url) "/" relative-path)
+    (let [dir (get-repo-dir repo-url)]
+      (if (string/starts-with? relative-path dir)
+        relative-path
+        (str dir "/"
+             (string/replace relative-path #"^/" ""))))
     relative-path))
 
 (defn get-config-path

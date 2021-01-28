@@ -65,7 +65,7 @@
   (->
    (do
      (protocol/write-file! (get-fs dir) repo dir path content opts)
-     (db/set-file-last-modified-at! repo path (js/Date.)))
+     (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.)))
    (p/catch (fn [error]
               (log/error :file/write-failed? {:dir dir
                                               :path path
@@ -86,13 +86,7 @@
 
 (defn stat
   [dir path]
-  (let [append-path (if path
-                      (str "/"
-                           (if (= \/ (first path))
-                             (subs path 1)
-                             path))
-                      "")]
-    (protocol/stat (get-fs dir) dir path)))
+  (protocol/stat (get-fs dir) dir path))
 
 (defn open-dir
   [ok-handler]

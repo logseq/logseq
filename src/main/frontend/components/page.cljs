@@ -480,7 +480,7 @@
               [:th (t :page/name)]
               [:th (t :file/last-modified-at)]]]
             [:tbody
-             (for [[page modified-at] pages]
+             (for [page pages]
                (let [encoded-page (util/encode-str page)]
                  [:tr {:key encoded-page}
                   [:td [:a {:on-click (fn [e]
@@ -495,10 +495,7 @@
                             :href (rfe/href :page {:name encoded-page})}
                         page]]
                   [:td [:span.text-gray-500.text-sm
-                        (if (zero? modified-at)
-                          (t :file/no-data)
-                          (date/get-date-time-string
-                           (t/to-default-time-zone (tc/to-date-time modified-at))))]]]))]]))])))
+                        (t :file/no-data)]]]))]]))])))
 
 (rum/defcs new < rum/reactive
   (rum/local "" ::title)
