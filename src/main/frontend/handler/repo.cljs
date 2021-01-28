@@ -173,7 +173,7 @@
 (defn- reset-contents-and-blocks!
   [repo-url files blocks-pages delete-files delete-blocks]
   (db/transact-files-db! repo-url files)
-  (let [files (map #(select-keys % [:file/path]) files)
+  (let [files (map #(select-keys % [:file/path :file/last-modified-at]) files)
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils))]
     (db/transact! repo-url all-data)))
@@ -328,6 +328,9 @@
                                                     :idx idx
                                                     :container (gobj/get container "id")})))
 
+     (when (seq files)
+       (file-handler/alter-files repo files opts))
+
      (db/transact-react!
       repo
       tx
@@ -335,9 +338,7 @@
      (when (seq pages)
        (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
          (when (seq children-tx)
-           (db/transact! repo children-tx))))
-     (when (seq files)
-       (file-handler/alter-files repo files opts)))))
+           (db/transact! repo children-tx)))))))
 
 (declare push)
 
@@ -625,16 +626,12 @@
     (do
       (doseq [{:keys [id url]} (:repos me)]
         (let [repo url]
-          (p/let [config-exists? (fs/file-exists?
-                                  (config/get-repo-dir url)
-                                  ".git/config")]
-            (if (and config-exists?
-                     (db/cloned? repo))
-              (p/do!
-               (git-handler/git-set-username-email! repo me)
-               (pull repo nil))
-              (p/do!
-               (clone-and-load-db repo))))))
+          (if (db/cloned? repo)
+            (p/do!
+             (git-handler/git-set-username-email! repo me)
+             (pull repo nil))
+            (p/do!
+             (clone-and-load-db repo)))))
 
       (periodically-pull-current-repo)
       (periodically-push-current-repo))

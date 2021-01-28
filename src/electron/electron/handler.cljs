@@ -137,8 +137,9 @@
                  (let [message (bean/->clj args-js)]
                    (bean/->js (handle window message)))
                  (catch js/Error e
-                   (println "IPC error: " {:event event
-                                           :args args-js}
-                            e)
+                   (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
+                     (println "IPC error: " {:event event
+                                            :args args-js}
+                             e))
                    e))))
     #(.removeHandler ipcMain main-channel)))

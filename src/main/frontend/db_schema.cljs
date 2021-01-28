@@ -49,8 +49,6 @@
                      :db/cardinality :db.cardinality/many}
    :page/journal?   {}
    :page/journal-day {}
-   :page/created-at {}
-   :page/last-modified-at {}
 
    ;; block
    :block/uuid   {:db/unique      :db.unique/identity}

@@ -343,7 +343,7 @@
 (defn sort-blocks
   [blocks]
   (let [pages-ids (map (comp :db/id :block/page) blocks)
-        pages (db-utils/pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
+        pages (db-utils/pull-many '[:db/id :page/name :page/original-name] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]
@@ -1189,3 +1189,17 @@
         tx-data (map (fn [page-id] [:db/retract page-id :page/alias]) page-ids)]
     (when (seq tx-data)
       (db-utils/transact! repo tx-data))))
+
+(defn set-file-content!
+  [repo path content]
+  (when (and repo path)
+    (let [tx-data {:file/path path
+                   :file/content content}
+          tx-data (if (config/local-db? repo)
+                    (dissoc tx-data :file/last-modified-at)
+                    tx-data)]
+      (react/transact-react!
+       repo
+       [tx-data]
+       {:key [:file/content path]
+        :files-db? true}))))

@@ -70,9 +70,7 @@
                          :page/journal? journal?
                          :page/journal-day (if journal?
                                              (date/journal-title->int (string/capitalize page))
-                                             0)
-                         :page/created-at journal-date-long
-                         :page/last-modified-at journal-date-long})
+                                             0)})
                         (seq properties)
                         (assoc :page/properties properties)
 

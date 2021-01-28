@@ -209,10 +209,14 @@
 
 (defn- handle-diffs!
   [repo nfs? old-files new-files handle-path path-handles re-index?]
-  (let [get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
+  (let [get-last-modified-at (fn [path] (some (fn [file]
+                                                (when (= path (:file/path file))
+                                                  (:file/last-modified-at file)))
+                                              new-files))
+        get-file-f (fn [path files] (some #(when (= (:file/path %) path) %) files))
         {:keys [added modified deleted] :as diffs} (compute-diffs old-files new-files)
         ;; Use the same labels as isomorphic-git
-        rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file}) col))
+        rename-f (fn [typ col] (mapv (fn [file] {:type typ :path file :last-modified-at (get-last-modified-at file)}) col))
         _ (when (and nfs? (seq deleted))
             (let [deleted (doall
                            (-> (map (fn [path] (if (= "/" (first path))

@@ -72,7 +72,6 @@
                             :file/last-modified-at modified-at}
                            {:page/name file
                             :page/file path
-                            :page/last-modified-at (tc/to-long (t/now))
                             :page/journal? false}])))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)

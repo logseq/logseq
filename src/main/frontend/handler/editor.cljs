@@ -53,12 +53,6 @@
 (defonce *image-uploading-process (atom 0))
 (defonce *selected-text (atom nil))
 
-(defn modified-time-tx
-  [page file]
-  (let [modified-at (tc/to-long (t/now))]
-    [[:db/add (:db/id page) :page/last-modified-at modified-at]
-     [:db/add (:db/id file) :file/last-modified-at modified-at]]))
-
 (defn- get-selection-and-format
   []
   (when-let [block (state/get-edit-block)]
@@ -556,9 +550,6 @@
                  [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
                  retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
                  page-id (:db/id page)
-                 modified-time (let [modified-at (tc/to-long (t/now))]
-                                 [[:db/add page-id :page/last-modified-at modified-at]
-                                  [:db/add (:db/id file) :file/last-modified-at modified-at]])
                  page-properties (when pre-block?
                                    (if (seq new-properties)
                                      [[:db/retract page-id :page/properties]
@@ -597,8 +588,7 @@
                 page-properties
                 page-tags
                 page-alias
-                after-blocks
-                modified-time)
+                after-blocks)
                {:key :block/change
                 :data (map (fn [block] (assoc block :block/page page)) blocks)}
                (let [new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)]
@@ -1944,15 +1934,12 @@
                                                                 (concat hc2 hc1)])]
                   (when (and start-pos end-pos)
                     (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
-                          modified-time (modified-time-tx page file)
                           blocks-meta (rebuild-blocks-meta start-pos blocks)]
                       (profile
                        (str "Move block " (if up? "up: " "down: "))
                        (repo-handler/transact-react-and-alter-file!
                         repo
-                        (concat
-                         blocks-meta
-                         modified-time)
+                        blocks-meta
                         {:key :block/change
                          :data (map (fn [block] (assoc block :block/page page)) blocks)}
                         [[file-path new-file-content]])))))))))))))
@@ -2029,16 +2016,14 @@
                 ;;         :last-start-pos @last-start-pos})
                 file-path (:file/path file)
                 file-content (db/get-file file-path)
-                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
-                modified-time (modified-time-tx page file)]
+                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))]
             (profile
              "Indent/outdent: "
              (repo-handler/transact-react-and-alter-file!
               repo
               (concat
                blocks
-               after-blocks
-               modified-time)
+               after-blocks)
               {:key :block/change
                :data (map (fn [block] (assoc block :block/page page)) blocks)}
               [[file-path new-content]])))
@@ -2095,16 +2080,14 @@
               after-blocks (rebuild-after-blocks repo file old-end-pos @last-start-pos)
               file-path (:file/path file)
               file-content (db/get-file file-path)
-              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
-              modified-time (modified-time-tx page file)]
+              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))]
           (profile
            "Indent/outdent: "
            (repo-handler/transact-react-and-alter-file!
             repo
             (concat
              blocks
-             after-blocks
-             modified-time)
+             after-blocks)
             {:key :block/change
              :data (map (fn [block] (assoc block :block/page page)) blocks)}
             [[file-path new-content]])))

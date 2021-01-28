@@ -228,8 +228,7 @@
           (db/set-file-content! repo path content))))
 
     (when-let [chan (state/get-file-write-chan)]
-      (let [chan-callback
-            (:chan-callback opts)]
+      (let [chan-callback (:chan-callback opts)]
         (async/put! chan [repo files opts file->content])
         (when chan-callback
           (chan-callback))))))
