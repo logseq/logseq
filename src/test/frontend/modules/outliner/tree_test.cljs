@@ -64,41 +64,41 @@
 
 (extend-type TestNode
   tree/INode
-  (tree/-get-id [this]
+  (-get-id [this]
     (:id this))
 
-  (tree/-get-parent-id [this]
+  (-get-parent-id [this]
     (:parent this))
 
-  (tree/-set-parent-id [this parent-id]
+  (-set-parent-id [this parent-id]
     (assoc this :parent parent-id))
 
-  (tree/-get-left-id [this]
+  (-get-left-id [this]
     (:left this))
 
-  (tree/-set-left-id [this left-id]
+  (-set-left-id [this left-id]
     (assoc this :left left-id))
 
-  (tree/-get-parent [this]
+  (-get-parent [this]
     (find-node (:parent this)))
 
-  (tree/-get-left [this]
+  (-get-left [this]
     (find-node (:left this)))
 
-  (tree/-get-right [this]
+  (-get-right [this]
     (find-node (:parent this)
                (:id this)))
 
-  (tree/-get-down [this]
+  (-get-down [this]
     (find-node (:id this) (:id this)))
 
-  (tree/-save [this]
+  (-save [this]
     (let [id (:id this)]
       (swap! db (fn [db]
                   (-> (remove #(= (:id %) id) db)
                       (conj this))))))
 
-  (tree/-get-children [this]
+  (-get-children [this]
     (let [first-child (tree/-get-down this)]
       (loop [current first-child
              children [first-child]]

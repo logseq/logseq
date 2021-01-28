@@ -17,43 +17,43 @@
 
 (extend-type Block
   tree/INode
-  (tree/-get-id [this]
+  (-get-id [this]
     (:id this))
 
-  (tree/-get-parent-id [this]
+  (-get-parent-id [this]
     (get-in this [:data :block/parent-id]))
 
-  (tree/-set-parent-id [this parent-id]
+  (-set-parent-id [this parent-id]
     (update this :data assoc :block/parent-id parent-id))
 
-  (tree/-get-left-id [this]
+  (-get-left-id [this]
     (get-in this [:data :block/left-id]))
 
-  (tree/-set-left-id [this left-id]
+  (-set-left-id [this left-id]
     (update this :data assoc :block/left-id left-id))
 
-  (tree/-get-parent [this]
+  (-get-parent [this]
     (let [parent-id (tree/-get-parent-id this)]
       (get-block-from-db parent-id)))
 
-  (tree/-get-left [this]
+  (-get-left [this]
     (let [left-id (tree/-get-left-id this)]
       (get-block-from-db left-id)))
 
-  (tree/-get-right [this]
+  (-get-right [this]
     (let [left-id (tree/-get-id this)
           parent-id (tree/-get-parent-id this)]
       (get-block-from-db parent-id left-id)))
 
-  (tree/-get-down [this]
+  (-get-down [this]
     (let [parent-id (tree/-get-id this)]
       (get-block-from-db parent-id parent-id)))
 
-  (tree/-save [this]
+  (-save [this]
     (let [conn (conn/get-outliner-conn)]
      (db-outliner/save-block conn (:data this))))
 
-  (tree/-get-children [this]
+  (-get-children [this]
     (let [first-child (tree/-get-down this)]
       (loop [current first-child
              children [first-child]]
