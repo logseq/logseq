@@ -5,6 +5,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [cljs-time.coerce :as tc]
             [frontend.config :as config]
             [cljs-bean.core :as bean]
             [frontend.db :as db]
@@ -13,13 +14,10 @@
 
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
-  ;; (prn {:type type
-  ;;       :payload payload
-  ;;       :db-content (db/get-file path)
-  ;;       :timestamp (db/get-file-last-modified-at (state/get-current-repo) path)})
   (when dir
     (let [repo (config/get-local-repo dir)
-          {:keys [mtime]} stat]
+          {:keys [mtime]} stat
+          mtime (tc/to-long mtime)]
       (cond
         (= "add" type)
         (let [db-content (db/get-file path)]
