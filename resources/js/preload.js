@@ -5,6 +5,19 @@ const { ipcRenderer, contextBridge, shell, clipboard, BrowserWindow } = require(
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
 
+function getFilePathFromClipboard () {
+  if (IS_WIN32) {
+    const rawFilePath = clipboard.read('FileNameW')
+    return rawFilePath.replace(new RegExp(String.fromCharCode(0), 'g'), '')
+  }
+
+  return clipboard.read('public.file-url').replace('file://', '')
+}
+
+function isClipboardHasImage () {
+  return !clipboard.readImage().isEmpty()
+}
+
 contextBridge.exposeInMainWorld('apis', {
   doAction: async (arg) => {
     return await ipcRenderer.invoke('main', arg)
@@ -65,11 +78,12 @@ contextBridge.exposeInMainWorld('apis', {
 
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
-    from = from || getFilePathFromClipboard()
+    from = decodeURIComponent(from || getFilePathFromClipboard())
 
     if (from) {
       // console.debug('copy file: ', from, dest)
-      return await fs.promises.copyFile(from, dest)
+      await fs.promises.copyFile(from, dest)
+      return path.basename(from)
     }
 
     // support image
@@ -82,16 +96,6 @@ contextBridge.exposeInMainWorld('apis', {
         dest.replace(rawExt, '.png'),
         nImg.toPNG()
       )
-    }
-
-    // fns
-    function getFilePathFromClipboard () {
-      if (IS_WIN32) {
-        const rawFilePath = clipboard.read('FileNameW')
-        return rawFilePath.replace(new RegExp(String.fromCharCode(0), 'g'), '')
-      }
-
-      return clipboard.read('public.file-url').replace('file://', '')
     }
   },
 
@@ -107,5 +111,8 @@ contextBridge.exposeInMainWorld('apis', {
    */
   async _callApplication (type, ...args) {
     return await ipcRenderer.invoke('call-application', type, ...args)
-  }
+  },
+
+  getFilePathFromClipboard,
+  isClipboardHasImage
 })
