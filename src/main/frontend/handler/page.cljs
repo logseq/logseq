@@ -496,18 +496,11 @@
         (let [templates (map string/lower-case templates)]
           (contains? (set templates) (string/lower-case title)))))))
 
+;; TODO: add use :file/last-modified-at
 (defn get-pages-with-modified-at
   [repo]
-  (let [now-long (tc/to-long (t/now))]
-    (->> (db/get-modified-pages repo)
-         (seq)
-         (sort-by (fn [[page modified-at]]
-                    [modified-at page]))
-         (reverse)
-         (remove (fn [[page modified-at]]
-                   (or (util/file-page? page)
-                       (and modified-at
-                            (> modified-at now-long))))))))
+  (->> (db/get-modified-pages repo)
+       (remove util/file-page?)))
 
 (defn page-exists?
   [page-name]

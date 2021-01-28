@@ -82,12 +82,12 @@
 
 (defn get-modified-pages
   [repo]
-  (d/q
-   '[:find ?page-name ?modified-at
-     :where
-     [?page :page/original-name ?page-name]
-     [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
-   (conn/get-conn repo)))
+  (-> (d/q
+       '[:find ?page-name
+         :where
+         [?page :page/original-name ?page-name]]
+       (conn/get-conn repo))
+      (db-utils/seq-flatten)))
 
 (defn get-page-alias
   [repo page-name]
@@ -130,7 +130,7 @@
           '[:find ?path ?modified-at
             :where
             [?file :file/path ?path]
-            [(get-else $ ?file :file/last-modified-at 0) ?modified-at]]
+            [?file :file/last-modified-at ?modified-at]]
           conn)
          (seq)
          (sort-by last)

@@ -16,8 +16,7 @@
   [type {:keys [dir path content stat] :as payload}]
   (when dir
     (let [repo (config/get-local-repo dir)
-          {:keys [mtime]} stat
-          mtime (tc/to-long mtime)]
+          {:keys [mtime]} stat]
       (cond
         (= "add" type)
         (let [db-content (db/get-file path)]
@@ -39,6 +38,7 @@
              (not= content (db/get-file path))
              (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
                (> mtime last-modified-at)))
+
         (file-handler/alter-file repo path content {:re-render-root? true})
 
         (= "unlink" type)

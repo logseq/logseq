@@ -8,6 +8,7 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.bfs :as bfs]
             [frontend.fs.node :as node]
+            [frontend.db :as db]
             [cljs-bean.core :as bean]
             [frontend.state :as state]))
 
@@ -62,7 +63,9 @@
 (defn write-file!
   [repo dir path content opts]
   (->
-   (protocol/write-file! (get-fs dir) repo dir path content opts)
+   (do
+     (protocol/write-file! (get-fs dir) repo dir path content opts)
+     (db/set-file-last-modified-at! repo path (js/Date.)))
    (p/catch (fn [error]
               (log/error :file/write-failed? {:dir dir
                                               :path path
