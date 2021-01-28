@@ -743,6 +743,13 @@
                                              (fn [items]
                                                (if (util/electron?)
                                                  (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
+                                                       existed-file-path (if (and
+                                                                              (string? existed-file-path)
+                                                                              (not util/mac?)
+                                                                              (not util/win32?)) ; FIXME: linuxcx
+                                                                           (when (re-find #"^(/[^/ ]*)+/?$" existed-file-path)
+                                                                             existed-file-path)
+                                                                           existed-file-path)
                                                        has-file-path? (not (string/blank? existed-file-path))
                                                        has-image? (js/window.apis.isClipboardHasImage)]
                                                    (if (or has-image? has-file-path?)
@@ -758,7 +765,6 @@
                                              items (or (.-items clipboard-data)
                                                        (.-files clipboard-data))
                                              picked (pick-one-allowed-item items)]
-                                         (js/console.log (get picked 1))
                                          (if (get picked 1)
                                            (match picked
                                              [:asset file] (editor-handler/set-asset-pending-file file))))]
