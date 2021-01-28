@@ -66,13 +66,11 @@
           (fs/write-file! repo repo-dir path data nil)
           (git-handler/git-add repo path)
           (ok-handler file)
-          (let [modified-at (tc/to-long (t/now))]
-            (db/transact! repo
-                          [{:file/path path
-                            :file/last-modified-at modified-at}
-                           {:page/name file
-                            :page/file path
-                            :page/journal? false}])))
+          (db/transact! repo
+            [{:file/path path}
+             {:page/name file
+              :page/file path
+              :page/journal? false}]))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))

@@ -158,8 +158,7 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                            {:file/path file
-                             :file/last-modified-at t}
+                            {:file/path file}
                              new?
                              (assoc :file/created-at t)))])]
       (db/transact! repo-url tx))))
