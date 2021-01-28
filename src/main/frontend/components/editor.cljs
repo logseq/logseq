@@ -742,7 +742,6 @@
                                        (let [pick-one-allowed-item
                                              (fn [items]
                                                (if (util/electron?)
-
                                                  (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
                                                        has-file-path? (not (string/blank? existed-file-path))
                                                        has-image? (js/window.apis.isClipboardHasImage)]

@@ -9,9 +9,11 @@ function getFilePathFromClipboard () {
   if (IS_WIN32) {
     const rawFilePath = clipboard.read('FileNameW')
     return rawFilePath.replace(new RegExp(String.fromCharCode(0), 'g'), '')
+  } else if (IS_MAC) {
+    return clipboard.read('public.file-url').replace('file://', '')
+  } else{
+    return clipboard.readText()
   }
-
-  return clipboard.read('public.file-url').replace('file://', '')
 }
 
 function isClipboardHasImage () {
