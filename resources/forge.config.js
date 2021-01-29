@@ -15,7 +15,6 @@ module.exports = {
     {
       name: '@electron-forge/maker-dmg',
       config: {
-        background: './img/dmg-bg.png',
         format: 'ULFO',
         icon: './icons/logseq_big_sur.icns',
         name: 'Logseq'
