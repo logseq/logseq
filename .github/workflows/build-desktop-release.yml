@@ -1,0 +1,55 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Build-Desktop-Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ macos-latest]
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v1
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 10
+
+      - name: Install clojure
+        run: |
+          curl -O https://download.clojure.org/install/linux-install-1.10.1.763.sh
+          chmod +x linux-install-1.10.1.763.sh
+          sudo ./linux-install-1.10.1.763.sh
+
+      - name: Build/release Electron app
+        run: yarn release-electron
+
+      - name: clean build
+        if: matrix.os == 'macos-latest'
+        run: |
+          find ./static -name "*.zip" -type f -exec cp {} ./static \;
+          npx rimraf "static/!(*.zip)"
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./static/**
+          asset_name: Logseq.zip
