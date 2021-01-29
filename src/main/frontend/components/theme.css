@@ -127,6 +127,17 @@ html.is-electron {
     .cp__right-sidebar {
       top: 4rem;
     }
+
+    &.is-fullscreen {
+      .cp__header {
+        padding-top: 0;
+        height: 2.6rem;
+
+        &:before {
+          display: none;
+        }
+      }
+    }
   }
 
   #search {
