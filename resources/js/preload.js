@@ -55,7 +55,11 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   showItemInFolder (fullpath) {
-    shell.showItemInFolder(fullpath)
+    if (IS_WIN32) {
+      shell.openPath(path.dirname(fullpath))
+    } else {
+      shell.showItemInFolder(fullpath)
+    }
   },
 
   /**
