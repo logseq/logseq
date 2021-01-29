@@ -380,7 +380,7 @@
                  [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
                  [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
                                                        :word-break    "break-word"}
-                                               :href  (rfe/href :file {:path (util/url-encode file-path)})}
+                                               :href  (rfe/href :file {:path file-path})}
                   file-path]
 
                  (when (and (not config/mobile?)
@@ -394,7 +394,7 @@
                    [:div.text-sm.ml-1.mb-4 {:key "page-file"}
                     [:span.opacity-50 "Alias: "]
                     (for [item alias]
-                      [:a.ml-1.mr-1 {:href (rfe/href :page {:name (util/encode-str item)})}
+                      [:a.ml-1.mr-1 {:href (rfe/href :page {:name item})}
                        item])])))
 
              (when (and block? (not sidebar?))

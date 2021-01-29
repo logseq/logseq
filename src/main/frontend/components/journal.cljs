@@ -78,7 +78,7 @@
     [:div.flex-1.journal.page {:class (if intro? "intro" "")}
      (ui/foldable
       [:a.initial-color.title
-       {:href     (rfe/href :page {:name encoded-page-name})
+       {:href     (rfe/href :page {:name page})
         :on-click (fn [e]
                     (when (gobj/get e "shiftKey")
                       (when-let [page (db/pull [:page/name (string/lower-case title)])]
