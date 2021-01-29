@@ -54,7 +54,8 @@
 (defn setup-app-manager!
   [^js win]
   (let [toggle-win-channel "toggle-max-or-min-active-win"
-        call-app-channel "call-application"]
+        call-app-channel "call-application"
+        web-contents (. win -webContents)]
     (doto ipcMain
       (.handle toggle-win-channel
                (fn [_ toggle-min?]
@@ -72,11 +73,17 @@
                    (js-invoke app type args)
                    (catch js/Error e
                      (js/console.error e))))))
-    (.. win -webContents (on "new-window"
-                             (fn [e url]
-                               (.. log (info "new-window" url))
-                               (open url)
-                               (.preventDefault e))))
+
+    (.on web-contents  "new-window"
+         (fn [e url]
+           (.. log (info "new-window" url))
+           (open url)
+           (.preventDefault e)))
+
+    (doto win
+      (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
+      (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
+
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain call-app-channel))))
 

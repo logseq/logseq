@@ -1,6 +1,6 @@
 const fs = require('fs')
 const path = require('path')
-const { ipcRenderer, contextBridge, shell, clipboard, BrowserWindow } = require('electron')
+const { ipcRenderer, contextBridge, shell, clipboard } = require('electron')
 
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
@@ -11,7 +11,7 @@ function getFilePathFromClipboard () {
     return rawFilePath.replace(new RegExp(String.fromCharCode(0), 'g'), '')
   } else if (IS_MAC) {
     return clipboard.read('public.file-url').replace('file://', '')
-  } else{
+  } else {
     return clipboard.readText()
   }
 }
