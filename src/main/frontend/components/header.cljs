@@ -140,8 +140,9 @@
           :options {:on-click user-handler/sign-out!}
           :icon svg/logout-sm})]
       (remove nil?))
-     {:links-footer (when (and (util/electron?) (not logged?))
-                      [:div.px-2.py-2 (login logged?)])})))
+     ;; {:links-footer (when (and (util/electron?) (not logged?))
+     ;;                  [:div.px-2.py-2 (login logged?)])}
+)))
 
 (rum/defc header
   < rum/reactive
