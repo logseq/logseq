@@ -468,36 +468,35 @@
     (util/format "{{{%s}}}" name)))
 
 (declare block-content)
-(defn block-reference
+(rum/defc block-reference < rum/reactive
   [config id]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (when-not (string/blank? id)
-      (let [block (and (util/uuid-string? id)
-                       (db/pull-block (uuid id)))]
-        (if block
-          [:span
-           [:div.block-ref-wrap
-            {:on-click (fn [e]
-                         (util/stop e)
-                         (if (gobj/get e "shiftKey")
-                           (state/sidebar-add-block!
-                            (state/get-current-repo)
-                            (:db/id block)
-                            :block-ref
-                            {:block block})
-                           (route-handler/redirect! {:to          :page
-                                                     :path-params {:name id}})))}
+  (when-not (string/blank? id)
+    (let [block (and (util/uuid-string? id)
+                     (db/pull-block (uuid id)))]
+      (if block
+        [:span
+         [:div.block-ref-wrap
+          {:on-click (fn [e]
+                       (util/stop e)
+                       (if (gobj/get e "shiftKey")
+                         (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id block)
+                          :block-ref
+                          {:block block})
+                         (route-handler/redirect! {:to          :page
+                                                   :path-params {:name id}})))}
 
-            (let [title (:block/title block)]
-              (if (empty? title)
-                ;; display the content
-                [:div.block-ref
-                 (block-content config block nil (:block/uuid block) (:slide? config))]
-                (->elem
-                 :span.block-ref
-                 (map-inline config title))))]]
-          [:span.warning.mr-1 {:title "Block ref invalid"}
-           (util/format "((%s))" id)])))))
+          (let [title (:block/title block)]
+            (if (empty? title)
+              ;; display the content
+              [:div.block-ref
+               (block-content config block nil (:block/uuid block) (:slide? config))]
+              (->elem
+               :span.block-ref
+               (map-inline config title))))]]
+        [:span.warning.mr-1 {:title "Block ref invalid"}
+         (util/format "((%s))" id)]))))
 
 (defn inline-text
   [format v]
