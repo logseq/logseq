@@ -563,7 +563,6 @@
     (if (and s (util/tag-valid? s))
       [:a.tag {:href (rfe/href :page {:name s})
                :on-click (fn [e]
-                           (.preventDefault e)
                            (let [repo (state/get-current-repo)
                                  page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
                              (when (gobj/get e "shiftKey")
@@ -571,7 +570,8 @@
                                 repo
                                 (:db/id page)
                                 :page
-                                {:page page}))))}
+                                {:page page})
+                               (.preventDefault e))))}
        (str "#" s)]
       [:span.warning.mr-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
        (str "#" s)])
