@@ -130,10 +130,11 @@
           '[:find ?path ?modified-at
             :where
             [?file :file/path ?path]
-            [?file :file/last-modified-at ?modified-at]]
+            ;; [?file :file/last-modified-at ?modified-at]
+]
           conn)
          (seq)
-         (sort-by last)
+         ;; (sort-by last)
          (reverse))))
 
 (defn get-files-blocks
