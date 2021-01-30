@@ -127,7 +127,8 @@
   [repo]
   (when-let [conn (conn/get-conn repo)]
     (->> (d/q
-          '[:find ?path ?modified-at
+           '[:find ?path
+             ;; ?modified-at
             :where
             [?file :file/path ?path]
             ;; [?file :file/last-modified-at ?modified-at]
