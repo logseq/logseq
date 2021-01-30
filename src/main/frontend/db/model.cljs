@@ -703,9 +703,10 @@
             property-name (when (and (= "Properties" (ffirst ast))
                                      (not (string/blank? (:title (last (first ast))))))
                             (:title (last (first ast))))
-            first-block-name (and first-block
-                                  ;; FIXME:
-                                  (str (last (first (:title first-block)))))
+            first-block-name (let [title (last (first (:title first-block)))]
+                               (and first-block
+                                    (string? title)
+                                    title))
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (when-let [file-name (first (util/split-last "." file-name))]
                           (-> file-name
