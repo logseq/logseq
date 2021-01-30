@@ -49,6 +49,8 @@
             [lambdaisland.glogi :as log]
             [frontend.context.i18n :as i18n]))
 
+;; TODO: remove rum/with-context because it'll make reactive queries not working
+
 (defn safe-read-string
   ([s]
    (safe-read-string s true))
