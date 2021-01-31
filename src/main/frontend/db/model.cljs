@@ -127,13 +127,15 @@
   [repo]
   (when-let [conn (conn/get-conn repo)]
     (->> (d/q
-          '[:find ?path ?modified-at
+           '[:find ?path
+             ;; ?modified-at
             :where
             [?file :file/path ?path]
-            [?file :file/last-modified-at ?modified-at]]
+            ;; [?file :file/last-modified-at ?modified-at]
+]
           conn)
          (seq)
-         (sort-by last)
+         ;; (sort-by last)
          (reverse))))
 
 (defn get-files-blocks
@@ -703,9 +705,10 @@
             property-name (when (and (= "Properties" (ffirst ast))
                                      (not (string/blank? (:title (last (first ast))))))
                             (:title (last (first ast))))
-            first-block-name (and first-block
-                                  ;; FIXME:
-                                  (str (last (first (:title first-block)))))
+            first-block-name (let [title (last (first (:title first-block)))]
+                               (and first-block
+                                    (string? title)
+                                    title))
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (when-let [file-name (first (util/split-last "." file-name))]
                           (-> file-name

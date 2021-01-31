@@ -63,14 +63,14 @@
          [:a.mb-1 {:key (str "recent-page-" page)
                    :href (rfe/href :page {:name page})
                    :on-click (fn [e]
-                               (.preventDefault e)
                                (when (gobj/get e "shiftKey")
                                  (when-let [page (db/pull [:page/name (string/lower-case page)])]
                                    (state/sidebar-add-block!
                                     (state/get-current-repo)
                                     (:db/id page)
                                     :page
-                                    {:page page}))))}
+                                    {:page page}))
+                                 (.preventDefault e)))}
           page]))]))
 
 (rum/defc contents < rum/reactive db-mixins/query
