@@ -87,7 +87,8 @@
                          (:db/id page)
                          :page
                          {:page     page
-                          :journal? true}))))}
+                          :journal? true}))
+                      (.preventDefault e)))}
        [:h1.title
         (util/capitalize-all title)]]
 
