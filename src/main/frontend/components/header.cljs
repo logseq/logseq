@@ -116,9 +116,10 @@
                       :target "_blank"}
             :icon svg/external-link}))
 
-       {:title (t :settings)
-        :options {:href (rfe/href :settings)}
-        :icon svg/settings-sm}
+       (when current-repo
+         {:title (t :settings)
+          :options {:href (rfe/href :settings)}
+          :icon svg/settings-sm})
 
        (when current-repo
          {:title (t :export)
