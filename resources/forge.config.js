@@ -2,7 +2,14 @@ const path = require('path')
 
 module.exports = {
   packagerConfig: {
-    icon: './icons/logseq_big_sur.icns'
+    icon: './icons/logseq_big_sur.icns',
+    osxSign: {
+      identity: 'Developer ID Application: Tiansheng Qin',
+      'hardened-runtime': true,
+      entitlements: 'entitlements.plist',
+      'entitlements-inherit': 'entitlements.plist',
+      'signature-flags': 'library'
+    }
   },
 
   makers: [
