@@ -64,27 +64,33 @@ jobs:
           name: Logseq-linux.zip
           path: static/out/make/zip/linux/x64/Logseq-linux.zip
 
-#  build-windows:
-#    runs-on: windows-latest
-#    steps:
-#      - name: Set up JDK 11
-#        uses: actions/setup-java@v1
-#        with:
-#          java-version: 1.11
-#
-#      - name: Install Node.js, NPM and Yarn
-#        uses: actions/setup-node@v1
-#        with:
-#          node-version: 14
-#
-#      - name: Check out Git repository
-#        uses: actions/checkout@v1
-#
-#      - name: Build/release Electron app
-#        run: yarn install && yarn release-electron
-#
-#      - name: List file
-#        run: Dir .
+  build-windows:
+    runs-on: windows-latest
+    needs: [ build-linux ]
+    steps:
+      - name: Download The Linux Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: static.zip
+          path: ./
+
+      - name: Unzip Static FIles
+        run: unzip static.zip
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+
+      - name: Build/release Electron app
+        run: yarn && yarn electron:make
+        working-directory: ./static
+
+      - name: List Files
+        run: dir /s /b .
+
+      - name: List Tree
+        run: tree .
 
 
   build-macos:
@@ -95,12 +101,14 @@ jobs:
       - name: Download The Linux Asset
         uses: actions/download-artifact@v1
         with:
-            name: static.zip
-            path: ./static.zip
+          name: static.zip
+          path: ./
+
+      - name: List FILES
+        run: ls -al
 
       - name: Unzip Static FIles
-        run: unzip static.zip
-
+        run: unzip ./static.zip
 
       - name: Download The static Asset
         run: ls -al ./static
