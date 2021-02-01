@@ -41,11 +41,14 @@ jobs:
       - name: List files
         run: du -a static/out
 
-#      - name: Cache Artifact
-#        uses: actions/upload-artifact@v1
-#        with:
-#          name: Logseq-x64.dmg
-#          path: static/out/make/Logseq.dmg
+      - name: Change artifact name
+        run: mv static/out/make/zip/linux/x64/logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
+
+      - name: Cache Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-linux.zip
+          path: static/out/make/zip/linux/x64/Logseq-linux.zip
 
   build-windows:
     runs-on: windows-latest
@@ -74,22 +77,31 @@ jobs:
       - name: Build/release Electron app
         run: yarn install && yarn release-electron
 
+      - name: Change artifact name
+        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-x86.dmg
+
       - name: Cache Artifact
         uses: actions/upload-artifact@v1
         with:
           name: Logseq-x64.dmg
-          path: static/out/make/Logseq.dmg
+          path: static/out/make/Logseq-x86.dmg
 
   release:
     needs: [ build-macos, build-linux, build-windows ]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download the Linux Asset
+      - name: Download the MacOS X64 Asset
         uses: actions/download-artifact@v1
         with:
           name: Logseq-x64.dmg
-          path: ./Logseq-x64.dmg
+          path: ./
+
+      - name: Download the Linux Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-linux.zip
+          path: ./
 
       - name: List file
         run: ls -rl
@@ -115,3 +127,14 @@ jobs:
           asset_path: ./Logseq-x64.dmg
           asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-name }}.dmg
           asset_content_type: application/x-apple-diskimage
+
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-linux.zip
+          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-name }}.zip
+          asset_content_type: application/zip
