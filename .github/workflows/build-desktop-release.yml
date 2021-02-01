@@ -78,13 +78,13 @@ jobs:
         run: yarn install && yarn release-electron
 
       - name: Change Artifact Name
-        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-x86.dmg
+        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-x64.dmg
 
       - name: Cache Artifact
         uses: actions/upload-artifact@v1
         with:
           name: Logseq-x64.dmg
-          path: static/out/make/Logseq-x86.dmg
+          path: static/out/make/Logseq-x64.dmg
 
   release:
     needs: [ build-macos, build-linux, build-windows ]
