@@ -31,7 +31,7 @@
                    :preload                 (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
-    (when win32? (.removeMenu win))
+    ;(when win32? (.removeMenu win))
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))
