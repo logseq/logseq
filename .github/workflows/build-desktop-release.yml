@@ -118,7 +118,7 @@ jobs:
           prerelease: true
 
       - name: Upload MacOS X64 Artifact
-        id: upload-release-asset
+        id: upload-macos-x64-artifact
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,7 +129,7 @@ jobs:
           asset_content_type: application/x-apple-diskimage
 
       - name: Upload Linux Artifact
-        id: upload-release-asset
+        id: upload-linux-artifact
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
