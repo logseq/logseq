@@ -2,7 +2,7 @@ const path = require('path')
 
 module.exports = {
   packagerConfig: {
-    icon: './icons/logseq_big_sur.icns',
+    icon: './icons/logseq.png',
     osxSign: {
       identity: 'Developer ID Application: Tiansheng Qin',
       'hardened-runtime': true,
