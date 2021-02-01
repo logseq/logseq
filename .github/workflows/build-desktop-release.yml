@@ -24,6 +24,28 @@ jobs:
         with:
           node-version: 14
 
+      - name: Setup Java JDK
+        uses: actions/setup-java@v1.4.3
+        with:
+          java-version: 1.8
+
+      - name: Install clojure
+        run: |
+          curl -O https://download.clojure.org/install/linux-install-1.10.1.763.sh
+          chmod +x linux-install-1.10.1.763.sh
+          sudo ./linux-install-1.10.1.763.sh
+
+      - name: Build/release Electron app
+        run: yarn install && yarn release-electron
+
+      - name: List files
+        run: du -a static/out
+
+#      - name: Cache Artifact
+#        uses: actions/upload-artifact@v1
+#        with:
+#          name: Logseq-x64.dmg
+#          path: static/out/make/Logseq.dmg
 
   build-windows:
     runs-on: windows-latest
