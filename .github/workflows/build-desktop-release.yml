@@ -104,9 +104,18 @@ jobs:
         run: yarn && yarn electron:make
         working-directory: ./static
 
-      - name: List Tree
-        run: tree
+      - name: Change Artifact Name
+        run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName win64.exe
 
+      - name: List Tree
+        run: dir
+        working-directory: static/out/make/squirrel.windows/x64/
+
+      - name: Cache Artifact
+        uses: actions/upload-artifact@v1
+        with:
+            name: win64.exe
+            path: static/out/make/squirrel.windows/x64/win64.exe
 
   build-macos:
     needs: [ compile-cljs ]
