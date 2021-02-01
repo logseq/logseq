@@ -114,7 +114,7 @@ jobs:
       - name: Cache Artifact
         uses: actions/upload-artifact@v1
         with:
-          name: win64.exe
+          name: Logseq-win64.exe
           path: static/out/make/squirrel.windows/x64/Logseq-win64.exe
 
   build-macos:
