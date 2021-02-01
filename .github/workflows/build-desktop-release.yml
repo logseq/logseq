@@ -5,8 +5,8 @@ name: Build-Desktop-Release
 on:
   workflow_dispatch:
     inputs:
-      tag-name:
-        description: "Release Tag Name"
+      tag-version:
+        description: "Release Tag Version"
         required: true
       git-ref:
         description: "Release Git Ref"
@@ -37,6 +37,15 @@ jobs:
 
       - name: Compile CLJS
         run: yarn install && gulp build  && yarn cljs:release
+
+      - name: Update APP Version
+        run: |
+          sed -i 's/"version": "0.0.1"/"version": "${{ github.event.inputs.tag-version }}"/g' ./package.json
+        working-directory: ./static
+
+      - name: Display package
+        run: cat ./package.json
+        working-directory: ./static
 
       - name: Zip static files
         run: zip -r static.zip ./static
@@ -187,8 +196,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.event.inputs.tag-name }}
-          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-name }}
+          tag_name: ${{ github.event.inputs.tag-version }}
+          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-version }}
           draft: true
           prerelease: true
 
@@ -200,7 +209,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Logseq-x64.dmg
-          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-name }}.dmg
+          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
           asset_content_type: application/x-apple-diskimage
 
       - name: Upload Linux Artifact
@@ -211,7 +220,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Logseq-linux.zip
-          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-name }}.zip
+          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
           asset_content_type: application/zip
 
       - name: Upload Windows Artifact
@@ -222,5 +231,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Logseq-win64.exe
-          asset_name: logseq-win-x64-${{ github.event.inputs.tag-name }}.exe
+          asset_name: logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
           asset_content_type: application/octet-stream
