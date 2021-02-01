@@ -14,7 +14,7 @@
 (defonce *teardown-fn (volatile! nil))
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
-(when (js/require "electron-squirrel-startup") (.quit app))
+;(when (js/require "electron-squirrel-startup") (.quit app))
 
 (defn create-main-window
   "create main app window"
@@ -47,7 +47,8 @@
    protocol "assets"
    (fn [^js request callback]
      (let [url (.-url request)
-           path (string/replace url "assets://" "")]
+           path (string/replace url "assets://" "")
+           path (js/decodeURIComponent path)]
        (callback #js {:path path}))))
   #(.unregisterProtocol protocol "assets"))
 
