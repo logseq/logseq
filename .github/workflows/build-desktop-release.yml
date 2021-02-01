@@ -13,7 +13,7 @@ on:
         required: true
 
 jobs:
-  build-linux:
+  compile-cljs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out Git repository
@@ -51,22 +51,9 @@ jobs:
         run: ls -al && ls -al
         working-directory: ./static
 
-      - name: Build/release Electron app
-        run: yarn && yarn electron:make
-        working-directory: ./static
-
-      - name: Change artifact name
-        run: mv static/out/make/zip/linux/x64/logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
-
-      - name: Cache Artifact
-        uses: actions/upload-artifact@v1
-        with:
-          name: Logseq-linux.zip
-          path: static/out/make/zip/linux/x64/Logseq-linux.zip
-
-  build-windows:
-    runs-on: windows-latest
-    needs: [ build-linux ]
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: [ compile-cljs ]
     steps:
       - name: Download The Linux Asset
         uses: actions/download-artifact@v1
@@ -86,15 +73,43 @@ jobs:
         run: yarn && yarn electron:make
         working-directory: ./static
 
-      - name: List Files
-        run: dir /s /b .
+      - name: Change artifact name
+        run: mv static/out/make/zip/linux/x64/logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
+
+      - name: Cache Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-linux.zip
+          path: static/out/make/zip/linux/x64/Logseq-linux.zip
+
+  build-windows:
+    runs-on: windows-latest
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Linux Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: static.zip
+          path: ./
+
+      - name: Unzip Static FIles
+        run: unzip static.zip
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+
+      - name: Build/release Electron app
+        run: yarn && yarn electron:make
+        working-directory: ./static
 
       - name: List Tree
-        run: tree .
+        run: tree
 
 
   build-macos:
-    needs: [ build-linux ]
+    needs: [ compile-cljs ]
     runs-on: macos-latest
 
     steps:
