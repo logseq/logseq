@@ -43,11 +43,15 @@ jobs:
           sed -i 's/"version": "0.0.1"/"version": "${{ github.event.inputs.tag-version }}"/g' ./package.json
         working-directory: ./static
 
-      - name: Display package
+      - name: Display Package.json
         run: cat ./package.json
         working-directory: ./static
 
-      - name: Zip static files
+      - name: List Files
+        run: ls -al
+        working-directory: ./static
+
+      - name: Compress Static Files
         run: zip -r static.zip ./static
 
       - name: Cache Static File
@@ -56,21 +60,17 @@ jobs:
           name: static.zip
           path: static.zip
 
-      - name: List File
-        run: ls -al && ls -al
-        working-directory: ./static
-
   build-linux:
     runs-on: ubuntu-latest
     needs: [ compile-cljs ]
     steps:
-      - name: Download The Linux Asset
+      - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
           name: static.zip
           path: ./
 
-      - name: Unzip Static FIles
+      - name: Uncompress Static FIles
         run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
@@ -78,11 +78,11 @@ jobs:
         with:
           node-version: 14
 
-      - name: Build/release Electron app
+      - name: Build/Release Electron App
         run: yarn && yarn electron:make
         working-directory: ./static
 
-      - name: Change artifact name
+      - name: Change Artifact Name
         run: mv static/out/make/zip/linux/x64/logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
 
       - name: Cache Artifact
@@ -95,13 +95,13 @@ jobs:
     runs-on: windows-latest
     needs: [ compile-cljs ]
     steps:
-      - name: Download The Linux Asset
+      - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
           name: static.zip
           path: ./
 
-      - name: Unzip Static FIles
+      - name: Uncompress Static FIles
         run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
@@ -109,14 +109,14 @@ jobs:
         with:
           node-version: 14
 
-      - name: Build/release Electron app
+      - name: Build/Release Electron app
         run: yarn && yarn electron:make
         working-directory: ./static
 
       - name: Change Artifact Name
         run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName Logseq-win64.exe
 
-      - name: List Tree
+      - name: List Directory
         run: dir
         working-directory: static/out/make/squirrel.windows/x64/
 
@@ -131,19 +131,16 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Download The Linux Asset
+      - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
           name: static.zip
           path: ./
 
-      - name: List FILES
-        run: ls -al
-
-      - name: Unzip Static FIles
+      - name: Uncompress Static Files
         run: unzip ./static.zip
 
-      - name: Download The static Asset
+      - name: List Static Files
         run: ls -al ./static
 
       - name: Install Node.js, NPM and Yarn
@@ -151,7 +148,7 @@ jobs:
         with:
           node-version: 14
 
-      - name: Build/release Electron app
+      - name: Build/Release Electron App
         run: yarn && yarn electron:make
         working-directory: ./static
 
@@ -169,25 +166,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download The MacOS X64 Asset
+      - name: Download The MacOS X64 Artifact
         uses: actions/download-artifact@v1
         with:
           name: Logseq-x64.dmg
           path: ./
 
-      - name: Download The Linux Asset
+      - name: Download The Linux Artifact
         uses: actions/download-artifact@v1
         with:
           name: Logseq-linux.zip
           path: ./
 
-      - name: Download The Windows Asset
+      - name: Download The Windows Artifact
         uses: actions/download-artifact@v1
         with:
           name: Logseq-win64.exe
           path: ./
 
-      - name: List file
+      - name: List files
         run: ls -rl
 
       - name: Create Release Draft
