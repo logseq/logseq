@@ -44,7 +44,7 @@
         "cljs:watch": "clojure -M:cljs watch app publishing electron",
         "cljs:electron-watch": "clojure -M:cljs watch app electron",
         "cljs:release": "clojure -M:cljs release app publishing electron",
-        "cljs:electron-release": "clojure -M:cljs release app --config-merge '{:asset-path \"./js\" :release {:asset-path \"./js\"}}' publishing electron",
+        "cljs:electron-release": "clojure -M:cljs release app publishing electron --config-merge '{:asset-path \"./js\"}'",
         "cljs:test": "clojure -A:test compile test",
         "cljs:run-test": "node static/tests.js",
         "cljs:watch-app": "clojure -M:cljs watch app",

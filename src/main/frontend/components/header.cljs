@@ -196,12 +196,12 @@
 
        (if config/publishing?
          [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}
-          (t :graph)]
+          (t :graph)])
 
-         (dropdown-menu {:me me
-                         :t t
-                         :current-repo current-repo
-                         :default-home default-home}))
+       (dropdown-menu {:me me
+                       :t t
+                       :current-repo current-repo
+                       :default-home default-home})
 
        [:a#download-as-html.hidden]
        [:a#download-as-zip.hidden]])))

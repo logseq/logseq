@@ -153,10 +153,7 @@
     (when (or (db/cloned? repo)
               (and (config/local-db? repo)
                    ;; config file exists
-                   (let [path (config/get-config-path)
-                         path (if (and (util/electron?) (config/local-db? repo))
-                                (str (config/get-repo-dir repo) "/" path)
-                                path)]
+                   (let [path (config/get-config-path)]
                      (db/get-file path))))
       (let [today-page (string/lower-case (date/today))]
         (when (empty? (db/get-page-blocks-no-cache repo today-page))

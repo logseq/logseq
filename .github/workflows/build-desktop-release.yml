@@ -29,7 +29,6 @@ jobs:
 
       - name: Build/release Electron app
         run: yarn install && yarn release-electron
-
       - name: clean build
         if: matrix.os == 'macos-latest'
         run: |
