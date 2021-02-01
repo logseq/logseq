@@ -25,6 +25,13 @@ jobs:
           node-version: 14
 
 
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: List file
+        run: Dir .
+
+
   build-macos:
     runs-on: macos-latest
 
@@ -51,12 +58,6 @@ jobs:
           name: Logseq-x64.dmg
           path: static/out/make/Logseq.dmg
 
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: List file
-        run: Dir .
-
   release:
     needs: [ build-macos, build-linux, build-windows ]
     runs-on: ubuntu-latest
@@ -66,7 +67,7 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: Logseq-x64.dmg
-          path: .
+          path: ./Logseq-x64.dmg
 
       - name: List file
         run: ls -rl
