@@ -35,11 +35,25 @@ jobs:
           chmod +x linux-install-1.10.1.763.sh
           sudo ./linux-install-1.10.1.763.sh
 
-      - name: Build/release Electron app
-        run: yarn install && yarn release-electron
+      - name: Compile CLJS
+        run: yarn install && gulp build  && yarn cljs:release
 
-      - name: List files
-        run: du -a static/out
+      - name: Zip static files
+        run: zip -r static.zip ./static
+
+      - name: Cache Static File
+        uses: actions/upload-artifact@v1
+        with:
+          name: static.zip
+          path: static.zip
+
+      - name: List File
+        run: ls -al && ls -al
+        working-directory: ./static
+
+      - name: Build/release Electron app
+        run: yarn && yarn electron:make
+        working-directory: ./static
 
       - name: Change artifact name
         run: mv static/out/make/zip/linux/x64/logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
@@ -50,32 +64,55 @@ jobs:
           name: Logseq-linux.zip
           path: static/out/make/zip/linux/x64/Logseq-linux.zip
 
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: List file
-        run: Dir .
+#  build-windows:
+#    runs-on: windows-latest
+#    steps:
+#      - name: Set up JDK 11
+#        uses: actions/setup-java@v1
+#        with:
+#          java-version: 1.11
+#
+#      - name: Install Node.js, NPM and Yarn
+#        uses: actions/setup-node@v1
+#        with:
+#          node-version: 14
+#
+#      - name: Check out Git repository
+#        uses: actions/checkout@v1
+#
+#      - name: Build/release Electron app
+#        run: yarn install && yarn release-electron
+#
+#      - name: List file
+#        run: Dir .
 
 
   build-macos:
+    needs: [ build-linux ]
     runs-on: macos-latest
 
     steps:
-      - name: Check out Git Repository
-        uses: actions/checkout@v1
+      - name: Download The Linux Asset
+        uses: actions/download-artifact@v1
+        with:
+            name: static.zip
+            path: ./static.zip
+
+      - name: Unzip Static FIles
+        run: unzip static.zip
+
+
+      - name: Download The static Asset
+        run: ls -al ./static
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v1
         with:
           node-version: 14
 
-      - name: Install Brew & Clojure
-        run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          brew install clojure/tools/clojure
-
-      - name: Build/Release Electron app
-        run: yarn install && yarn release-electron
+      - name: Build/release Electron app
+        run: yarn && yarn electron:make
+        working-directory: ./static
 
       - name: Change Artifact Name
         run: mv static/out/make/Logseq.dmg static/out/make/Logseq-x64.dmg
@@ -86,55 +123,55 @@ jobs:
           name: Logseq-x64.dmg
           path: static/out/make/Logseq-x64.dmg
 
-  release:
-    needs: [ build-macos, build-linux, build-windows ]
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download The MacOS X64 Asset
-        uses: actions/download-artifact@v1
-        with:
-          name: Logseq-x64.dmg
-          path: ./
-
-      - name: Download The Linux Asset
-        uses: actions/download-artifact@v1
-        with:
-          name: Logseq-linux.zip
-          path: ./
-
-      - name: List file
-        run: ls -rl
-
-      - name: Create Release Draft
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.event.inputs.tag-name }}
-          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-name }}
-          draft: true
-          prerelease: true
-
-      - name: Upload MacOS X64 Artifact
-        id: upload-macos-x64-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Logseq-x64.dmg
-          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-name }}.dmg
-          asset_content_type: application/x-apple-diskimage
-
-      - name: Upload Linux Artifact
-        id: upload-linux-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Logseq-linux.zip
-          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-name }}.zip
-          asset_content_type: application/zip
+#  release:
+#    needs: [ build-macos, build-linux, build-windows ]
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#      - name: Download The MacOS X64 Asset
+#        uses: actions/download-artifact@v1
+#        with:
+#          name: Logseq-x64.dmg
+#          path: ./
+#
+#      - name: Download The Linux Asset
+#        uses: actions/download-artifact@v1
+#        with:
+#          name: Logseq-linux.zip
+#          path: ./
+#
+#      - name: List file
+#        run: ls -rl
+#
+#      - name: Create Release Draft
+#        id: create_release
+#        uses: actions/create-release@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          tag_name: ${{ github.event.inputs.tag-name }}
+#          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-name }}
+#          draft: true
+#          prerelease: true
+#
+#      - name: Upload MacOS X64 Artifact
+#        id: upload-macos-x64-artifact
+#        uses: actions/upload-release-asset@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          upload_url: ${{ steps.create_release.outputs.upload_url }}
+#          asset_path: ./Logseq-x64.dmg
+#          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-name }}.dmg
+#          asset_content_type: application/x-apple-diskimage
+#
+#      - name: Upload Linux Artifact
+#        id: upload-linux-artifact
+#        uses: actions/upload-release-asset@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          upload_url: ${{ steps.create_release.outputs.upload_url }}
+#          asset_path: ./Logseq-linux.zip
+#          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-name }}.zip
+#          asset_content_type: application/zip
