@@ -11,6 +11,14 @@ on:
       git-ref:
         description: "Release Git Ref"
         required: true
+      is-draft:
+        description: 'Draft Release? '
+        required: true
+        default: "true"
+      is-pre-release:
+        description: 'Pre Release?'
+        required: true
+        default: "true"
 
 jobs:
   compile-cljs:
@@ -194,9 +202,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.event.inputs.tag-version }}
-          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-version }}
-          draft: true
-          prerelease: true
+          release_name: Desktop APP ${{ github.event.inputs.tag-version }} (alpha testing)
+          draft: ${{ github.event.inputs.is-draft }}
+          prerelease: ${{ github.event.inputs.is-pre-release }}
 
       - name: Upload MacOS X64 Artifact
         id: upload-macos-x64-artifact
