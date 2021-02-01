@@ -4,14 +4,29 @@ name: Build-Desktop-Release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag-name:
+        description: "Release Tag Name"
+        required: true
+      git-ref:
+        description: "Release Git Ref"
+        required: true
 
 jobs:
-  release:
-    runs-on: ${{ matrix.os }}
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v1
 
-    strategy:
-      matrix:
-        os: [ macos-latest]
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+
+
+  build-macos:
+    runs-on: macos-latest
 
     steps:
       - name: Check out Git repository
@@ -29,27 +44,46 @@ jobs:
 
       - name: Build/release Electron app
         run: yarn install && yarn release-electron
-      - name: clean build
-        if: matrix.os == 'macos-latest'
-        run: |
-          find ./static -name "*.zip" -type f -exec cp {} ./static \;
-          npx rimraf "static/!(*.zip)"
 
-      - name: Create Release
+      - name: Cache Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-x64.dmg
+          path: static/out/make/Logseq.dmg
+
+
+  release:
+    needs: [ build-macos, build-linux, build-windows ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download the Linux Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-x64.dmg
+          path: .
+
+      - name: List file
+        run: ls -rl
+
+      - name: Create Release Draft
         id: create_release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ github.event.inputs.tag-name }}
+          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-name }}
           draft: true
           prerelease: true
 
       - name: Upload Release Asset
         id: upload-release-asset
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./static/**
-          asset_name: Logseq.zip
+          asset_path: ./Logseq-x64.dmg
+          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-name }}.dmg
+          asset_content_type: application/x-apple-diskimage
