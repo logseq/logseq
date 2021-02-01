@@ -51,6 +51,11 @@ jobs:
           name: Logseq-x64.dmg
           path: static/out/make/Logseq.dmg
 
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: List file
+        run: Dir .
 
   release:
     needs: [ build-macos, build-linux, build-windows ]
