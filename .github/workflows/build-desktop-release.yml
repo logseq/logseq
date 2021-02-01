@@ -105,7 +105,7 @@ jobs:
         working-directory: ./static
 
       - name: Change Artifact Name
-        run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName win64.exe
+        run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName Logseq-win64.exe
 
       - name: List Tree
         run: dir
@@ -114,8 +114,8 @@ jobs:
       - name: Cache Artifact
         uses: actions/upload-artifact@v1
         with:
-            name: win64.exe
-            path: static/out/make/squirrel.windows/x64/win64.exe
+          name: win64.exe
+          path: static/out/make/squirrel.windows/x64/Logseq-win64.exe
 
   build-macos:
     needs: [ compile-cljs ]
@@ -155,55 +155,72 @@ jobs:
           name: Logseq-x64.dmg
           path: static/out/make/Logseq-x64.dmg
 
-#  release:
-#    needs: [ build-macos, build-linux, build-windows ]
-#    runs-on: ubuntu-latest
-#
-#    steps:
-#      - name: Download The MacOS X64 Asset
-#        uses: actions/download-artifact@v1
-#        with:
-#          name: Logseq-x64.dmg
-#          path: ./
-#
-#      - name: Download The Linux Asset
-#        uses: actions/download-artifact@v1
-#        with:
-#          name: Logseq-linux.zip
-#          path: ./
-#
-#      - name: List file
-#        run: ls -rl
-#
-#      - name: Create Release Draft
-#        id: create_release
-#        uses: actions/create-release@v1
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        with:
-#          tag_name: ${{ github.event.inputs.tag-name }}
-#          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-name }}
-#          draft: true
-#          prerelease: true
-#
-#      - name: Upload MacOS X64 Artifact
-#        id: upload-macos-x64-artifact
-#        uses: actions/upload-release-asset@v1
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        with:
-#          upload_url: ${{ steps.create_release.outputs.upload_url }}
-#          asset_path: ./Logseq-x64.dmg
-#          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-name }}.dmg
-#          asset_content_type: application/x-apple-diskimage
-#
-#      - name: Upload Linux Artifact
-#        id: upload-linux-artifact
-#        uses: actions/upload-release-asset@v1
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        with:
-#          upload_url: ${{ steps.create_release.outputs.upload_url }}
-#          asset_path: ./Logseq-linux.zip
-#          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-name }}.zip
-#          asset_content_type: application/zip
+  release:
+    needs: [ build-macos, build-linux, build-windows ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download The MacOS X64 Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-x64.dmg
+          path: ./
+
+      - name: Download The Linux Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-linux.zip
+          path: ./
+
+      - name: Download The Windows Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-win64.exe
+          path: ./
+
+      - name: List file
+        run: ls -rl
+
+      - name: Create Release Draft
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.tag-name }}
+          release_name: TEST CI (DON'T DOWNLOAD) ${{ github.event.inputs.tag-name }}
+          draft: true
+          prerelease: true
+
+      - name: Upload MacOS X64 Artifact
+        id: upload-macos-x64-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-x64.dmg
+          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-name }}.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload Linux Artifact
+        id: upload-linux-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-linux.zip
+          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-name }}.zip
+          asset_content_type: application/zip
+
+      - name: Upload Windows Artifact
+        id: upload-win-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-win64.exe
+          asset_name: logseq-win-x64-${{ github.event.inputs.tag-name }}.exe
+          asset_content_type: application/octet-stream
