@@ -9,9 +9,12 @@ module.exports = {
       entitlements: 'entitlements.plist',
       'entitlements-inherit': 'entitlements.plist',
       'signature-flags': 'library'
-    }
+    },
+    osxNotarize: {
+      appleId: "my-fake-apple-id",
+      appleIdPassword: "my-fake-apple-id-password",
+    },
   },
-
   makers: [
     {
       'name': '@electron-forge/maker-squirrel',
