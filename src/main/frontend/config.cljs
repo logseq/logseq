@@ -25,6 +25,9 @@
     "http://localhost:3000/api/v1/"
     (str website "/api/v1/")))
 
+(def asset-domain (util/format "https://asset.%s.com"
+                               app-name))
+
 (defn asset-uri
   [path]
   (if (util/file-protocol?)
