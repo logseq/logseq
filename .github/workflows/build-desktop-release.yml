@@ -51,6 +51,12 @@ jobs:
           sed -i 's/"version": "0.0.1"/"version": "${{ github.event.inputs.tag-version }}"/g' ./package.json
         working-directory: ./static
 
+      - name: Update OSX Packager Config
+        run: |
+          sed -i 's/my-fake-apple-id/${{ secrets.APPLE_ID_EMAIL }}/g' ./forge.config.js
+          sed -i 's/my-fake-apple-id-password/${{ secrets.APPLE_ID_PASSWORD }}/g' ./forge.config.js
+        working-directory: ./static
+
       - name: Display Package.json
         run: cat ./package.json
         working-directory: ./static
