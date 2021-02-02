@@ -127,7 +127,7 @@
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
 
-       ["Upload an asset" [[:editor/click-hidden-file-input :id]]]
+       ["Upload an asset (image, pdf, docx, etc.)" [[:editor/click-hidden-file-input :id]]]
 
        (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])

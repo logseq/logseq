@@ -1,6 +1,7 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.tools.html-export :as html-export]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
@@ -306,11 +307,15 @@
                                                                              (page-handler/unpublish-page! page-name))}}
                                                       {:title   (t :page/publish)
                                                        :options {:on-click (fn []
-                                                                             (page-handler/publish-page! page-name project/add-project))}})
+                                                                             (page-handler/publish-page!
+                                                                               page-name project/add-project
+                                                                               html-export/export-page))}})
                                                     (when-not published?
                                                       {:title   (t :page/publish-as-slide)
                                                        :options {:on-click (fn []
-                                                                             (page-handler/publish-page-as-slide! page-name project/add-project))}})
+                                                                             (page-handler/publish-page-as-slide!
+                                                                               page-name project/add-project
+                                                                               html-export/export-page))}})
                                                     {:title   (t (if public? :page/make-private :page/make-public))
                                                      :options {:background (if public? "gray" "indigo")
                                                                :on-click (fn []

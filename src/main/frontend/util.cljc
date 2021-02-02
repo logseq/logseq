@@ -53,8 +53,9 @@
 #?(:cljs
    (defn electron?
      []
-     (let [ua (string/lower-case js/navigator.userAgent)]
-       (string/includes? ua " electron"))))
+     (when (and js/window (gobj/get js/window "navigator"))
+       (let [ua (string/lower-case js/navigator.userAgent)]
+         (string/includes? ua " electron")))))
 
 #?(:cljs
    (defn file-protocol?
@@ -340,6 +341,12 @@
           (-> (subs hash 1)
               (string/split #"\?")
               (first))))))
+
+#?(:cljs
+   (defn fragment-with-anchor
+     [anchor]
+     (let [fragment (get-fragment)]
+       (str "#" fragment "?anchor=" anchor))))
 
 ;; (defn scroll-into-view
 ;;   [element]

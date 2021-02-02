@@ -13,6 +13,7 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [frontend.config :as config]
+            ["ignore" :as Ignore]
             ["/frontend/utils" :as utils]))
 
 (defn get-ref
@@ -60,6 +61,13 @@
   [config]
   (assoc config
          :document/mode? (state/sub [:document/mode?])))
+
+(defn ignore-files
+  [pattern paths]
+  (-> (Ignore)
+      (.add pattern)
+      (.filter (bean/->js paths))
+      (bean/->clj)))
 
 (comment
   (let [repo (state/get-current-repo)]

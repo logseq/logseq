@@ -4,7 +4,6 @@
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
@@ -13,6 +12,7 @@
             [frontend.handler.git :as git-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
+            [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
             [frontend.handler.ui :as ui-handler]
@@ -173,9 +173,9 @@
     @plugins))
 
 (defn publish-page-as-slide!
-  ([page-name project-add-modal]
-   (publish-page-as-slide! page-name (db/get-page-blocks page-name) project-add-modal))
-  ([page-name blocks project-add-modal]
+  ([page-name project-add-modal export-page-html]
+   (publish-page-as-slide! page-name (db/get-page-blocks page-name) project-add-modal export-page-html))
+  ([page-name blocks project-add-modal export-page-html]
    (project-handler/exists-or-create!
     (fn [project]
       (config-handler/set-config! [:project :name] project)
@@ -186,7 +186,7 @@
             data {:project project
                   :title page-name
                   :permalink (:permalink properties)
-                  :html (html-export/export-page page-name blocks notification/show!)
+                  :html (export-page-html page-name blocks notification/show!)
                   :tags (:tags properties)
                   :settings (merge
                              (assoc properties
@@ -201,7 +201,7 @@
     project-add-modal)))
 
 (defn publish-page!
-  [page-name project-add-modal]
+  [page-name project-add-modal export-page-html]
   (project-handler/exists-or-create!
    (fn [project]
      (let [properties (db/get-page-properties page-name)
@@ -218,7 +218,7 @@
              (let [data {:project project
                          :title page-name
                          :permalink (:permalink properties)
-                         :html (html-export/export-page page-name blocks notification/show!)
+                         :html (export-page-html page-name blocks notification/show!)
                          :tags (:tags properties)
                          :settings (merge properties plugins)
                          :repo (state/get-current-repo)}]
@@ -495,6 +495,13 @@
       (when (seq templates)
         (let [templates (map string/lower-case templates)]
           (contains? (set templates) (string/lower-case title)))))))
+
+(defn ls-dir-files!
+  []
+  (web-nfs/ls-dir-files-with-handler!
+    (fn []
+      (init-commands!))))
+
 
 ;; TODO: add use :file/last-modified-at
 (defn get-pages-with-modified-at

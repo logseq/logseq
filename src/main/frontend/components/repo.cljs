@@ -9,6 +9,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.util :as util]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]
@@ -44,7 +45,7 @@
              [:div.mr-8
               (ui/button
                (t :open-a-directory)
-               :on-click nfs-handler/ls-dir-files)])
+               :on-click page-handler/ls-dir-files!)])
            (when (and (state/logged?) (not (util/electron?)))
              (ui/button
               "Add another git repo"

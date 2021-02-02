@@ -114,7 +114,7 @@
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
-        preferred-workflow (keyword (state/sub [:me :preferred_workflow]))
+        preferred-workflow (state/get-preferred-workflow)
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
         current-repo (state/get-current-repo)

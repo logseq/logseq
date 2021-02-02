@@ -10,6 +10,7 @@
             [frontend.components.external :as external]
             [frontend.components.publishing :as publishing]))
 
+;; http://localhost:3000/#?anchor=fn.1
 (def routes
   [["/"
     {:name :home
