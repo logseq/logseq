@@ -86,7 +86,7 @@ Open <http://localhost:3001>.
 ### 4. Build a release
 
 ``` bash
-yarn release 
+yarn release
 ```
 
 ### 5. Run tests
