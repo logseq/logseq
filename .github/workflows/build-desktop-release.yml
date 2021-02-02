@@ -11,6 +11,7 @@ on:
       git-ref:
         description: "Release Git Ref"
         required: true
+        default: "master"
       is-draft:
         description: 'Draft Release? '
         required: true
