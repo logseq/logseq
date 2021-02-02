@@ -26,10 +26,6 @@
 (def asset-domain (env/get-static :asset-domain))
 (def github-app-name (env/get-static :github-app-name))
 
-;; change if you want to use your own domain instead of default asset.logseq.com
-(def asset-domain (util/format "https://asset.%s.com"
-                               app-name))
-
 (defn asset-uri
   [path]
   (cond
