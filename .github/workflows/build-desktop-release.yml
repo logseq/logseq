@@ -242,7 +242,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.event.inputs.tag-version }}
-          release_name: Desktop APP ${{ github.event.inputs.tag-version }} (alpha testing)
+          release_name: Desktop APP ${{ github.event.inputs.tag-version }} (Alpha Testing)
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
 
