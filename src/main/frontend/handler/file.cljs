@@ -25,7 +25,6 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.utf8 :as utf8]
-            ["ignore" :as Ignore]
             ["/frontend/utils" :as utils]))
 
 ;; TODO: extract all git ops using a channel
@@ -302,13 +301,6 @@
     (let [path (:file/path file)
           content (db/get-file path)]
       (alter-file repo path content {:re-render-root? true}))))
-
-(defn ignore-files
-  [pattern paths]
-  (-> (Ignore)
-      (.add pattern)
-      (.filter (bean/->js paths))
-      (bean/->clj)))
 
 ;; TODO: batch writes, how to deal with file history?
 (defn run-writes-chan!

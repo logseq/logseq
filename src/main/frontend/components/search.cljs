@@ -200,7 +200,7 @@
         show-result? (boolean (seq search-result))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#search.flex-1.flex
-       [:div.flex.md:ml-0
+       [:div.inner
         [:label.sr-only {:for "search_field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
          [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
@@ -208,8 +208,8 @@
            {:view-box "0 0 20 20", :fill "currentColor"}
            [:path
             {:d
-             "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z",
-             :clip-rule "evenodd",
+             "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+             :clip-rule "evenodd"
              :fill-rule "evenodd"}]]]
          [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.sm:bg-transparent
 

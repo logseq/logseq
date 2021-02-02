@@ -1,5 +1,8 @@
-#search p {
-  margin: 0;
+#search {
+  > .inner {
+    width: 100%;
+    max-width: 280px;
+  }
 }
 
 #search-wrapper svg {

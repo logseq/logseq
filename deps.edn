@@ -1,4 +1,4 @@
-{:paths ["src/main" "resources"]
+{:paths ["src/main"]
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
   cheshire/cheshire {:mvn/version "5.10.0"}
@@ -37,16 +37,12 @@
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.764"}
                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
-                                cider/cider-nrepl           {:mvn/version "0.25.5"}
-                                aero/aero                   {:mvn/version "1.1.6"}
-                                mhuebert/shadow-env         {:mvn/version "0.1.6"}}
+                                cider/cider-nrepl           {:mvn/version "0.25.5"}}
                   :main-opts ["-m" "shadow.cljs.devtools.cli"]}
            :test
            {:extra-paths ["src/test/"]
             :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.764"}
-                          org.clojure/test.check {:mvn/version "RELEASE"}
-                          aero/aero                   {:mvn/version "1.1.6"}
-                          mhuebert/shadow-env         {:mvn/version "0.1.6"}}
+                          org.clojure/test.check {:mvn/version "RELEASE"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            :test-clj

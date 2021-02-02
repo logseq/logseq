@@ -53,8 +53,9 @@
 #?(:cljs
    (defn electron?
      []
-     (let [ua (string/lower-case js/navigator.userAgent)]
-       (string/includes? ua " electron"))))
+     (when (and js/window (gobj/get js/window "navigator"))
+       (let [ua (string/lower-case js/navigator.userAgent)]
+         (string/includes? ua " electron")))))
 
 #?(:cljs
    (defn file-protocol?

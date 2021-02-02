@@ -5,6 +5,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.ui :as ui]
@@ -87,7 +88,7 @@
        [:div.cp__widgets-open-local-directory
         [:div.select-file-wrap.cursor
          (when nfs-supported?
-           {:on-click nfs/ls-dir-files})
+           {:on-click page-handler/ls-dir-files!})
          [:div
           [:h1.title "Open a local directory"]
           [:p.text-sm

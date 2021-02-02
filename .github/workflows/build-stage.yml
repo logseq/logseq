@@ -37,11 +37,12 @@ jobs:
         run: yarn cache clean && yarn install --frozen-lockfile
 
       - name: Build Released-Web
-        run: yarn gulp:build && rm -Rf .shadow-cljs && ENV=staging clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}"}'
+        run: yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}"}'
 
       - uses: jakejarvis/s3-sync-action@master
         with:
-            args: --acl public-read --follow-symlinks --delete
+            #args: --acl public-read --follow-symlinks --delete
+            args: --acl public-read --follow-symlinks
         env:
           AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

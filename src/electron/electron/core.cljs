@@ -14,7 +14,7 @@
 (defonce *teardown-fn (volatile! nil))
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
-(when (js/require "electron-squirrel-startup") (.quit app))
+;(when (js/require "electron-squirrel-startup") (.quit app))
 
 (defn create-main-window
   "create main app window"
@@ -31,7 +31,7 @@
                    :preload                 (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
-    (when win32? (.removeMenu win))
+    ;(when win32? (.removeMenu win))
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))
@@ -47,7 +47,8 @@
    protocol "assets"
    (fn [^js request callback]
      (let [url (.-url request)
-           path (string/replace url "assets://" "")]
+           path (string/replace url "assets://" "")
+           path (js/decodeURIComponent path)]
        (callback #js {:path path}))))
   #(.unregisterProtocol protocol "assets"))
 

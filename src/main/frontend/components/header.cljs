@@ -15,6 +15,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.handler.project :as project-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
@@ -153,7 +154,12 @@
                    (remove #(= (:url %) config/local-repo)))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
-       {:on-double-click #(when (util/electron?) (js/window.apis.toggleMaxOrMinActiveWindow))}
+       {:on-double-click (fn [^js e]
+                           (when-let [target (.-target e)]
+                             (when (and (util/electron?)
+                                        (or (.. target -classList (contains "cp__header"))
+                                            (. target (closest "#search"))))
+                               (js/window.apis.toggleMaxOrMinActiveWindow))))}
        (left-menu-button {:on-click (fn []
                                       (open-fn)
                                       (state/set-left-sidebar-open! true))})
@@ -188,7 +194,7 @@
                   (not config/publishing?))
          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
           {:on-click (fn []
-                       (nfs/ls-dir-files))}
+                       (page-handler/ls-dir-files!))}
           [:div.flex.flex-row.text-center
            [:span.inline-block svg/folder-add]
            (when-not config/mobile?
