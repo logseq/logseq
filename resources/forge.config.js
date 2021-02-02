@@ -2,7 +2,7 @@ const path = require('path')
 
 module.exports = {
   packagerConfig: {
-    icon: './icons/logseq.png',
+    icon: './icons/logseq_big_sur.icns',
     osxSign: {
       identity: 'Developer ID Application: Tiansheng Qin',
       'hardened-runtime': true,
@@ -19,7 +19,8 @@ module.exports = {
     {
       'name': '@electron-forge/maker-squirrel',
       'config': {
-        'name': 'Logseq'
+        'name': 'Logseq',
+        'setupIcon': './icons/logseq.ico'
       }
     },
     {
