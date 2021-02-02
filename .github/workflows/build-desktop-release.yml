@@ -86,6 +86,13 @@ jobs:
         with:
           node-version: 14
 
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/node_modules
+          key: ${{ runner.os }}-${{ hashFiles('**/package.json') }}
+
       - name: Build/Release Electron App
         run: yarn && yarn electron:make
         working-directory: ./static
@@ -156,10 +163,18 @@ jobs:
         with:
           node-version: 14
 
-      - uses: apple-actions/import-codesign-certs@v1
+      - name: Signing By Apple Developer ID
+        uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/node_modules
+          key: ${{ runner.os }}-${{ hashFiles('**/package.json') }}
 
       - name: Build/Release Electron App
         run: yarn && yarn electron:make
