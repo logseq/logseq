@@ -53,8 +53,8 @@ jobs:
 
       - name: Update OSX Packager Config
         run: |
-          sed -i 's/my-fake-apple-id/${{ secrets.APPLE_ID_EMAIL }}/g' ./forge.config.js
-          sed -i 's/my-fake-apple-id-password/${{ secrets.APPLE_ID_PASSWORD }}/g' ./forge.config.js
+          sed -i 's/appleId: "my-fake-apple-id"/appleId: "${{ secrets.APPLE_ID_EMAIL }}"/' ./forge.config.js
+          sed -i 's/appleIdPassword: "my-fake-apple-id-password"/appleIdPassword: "${{ secrets.APPLE_ID_PASSWORD }}"/' ./forge.config.js
         working-directory: ./static
 
       - name: Display Package.json
