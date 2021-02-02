@@ -103,7 +103,7 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-${{ hashFiles('**/package.json') }}
+          key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
         run: yarn install --frozen-lockfile && yarn electron:make
@@ -141,7 +141,7 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-${{ hashFiles('**/package.json') }}
+          key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron app
         run: yarn install --frozen-lockfile && yarn electron:make
@@ -193,7 +193,7 @@ jobs:
         with:
           path: |
             **/node_modules
-          key: ${{ runner.os }}-${{ hashFiles('**/package.json') }}
+          key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
         run: yarn install --frozen-lockfile && yarn electron:make
