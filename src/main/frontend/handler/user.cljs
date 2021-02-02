@@ -41,7 +41,7 @@
 (defn set-preferred-format!
   [format]
   (when format
-    (config-handler/set-config! :preferred_format format)
+    (config-handler/set-config! :preferred-format format)
     (state/set-preferred-format! format)
     (when (:name (:me @state/state))
       (when (state/logged?)
