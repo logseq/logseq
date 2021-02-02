@@ -341,6 +341,12 @@
               (string/split #"\?")
               (first))))))
 
+#?(:cljs
+   (defn fragment-with-anchor
+     [anchor]
+     (let [fragment (get-fragment)]
+       (str "#" fragment "?anchor=" anchor))))
+
 ;; (defn scroll-into-view
 ;;   [element]
 ;;   (let [scroll-top (gobj/get element "offsetTop")
