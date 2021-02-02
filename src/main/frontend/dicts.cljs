@@ -351,7 +351,7 @@ title: How to take dummy notes?
         :help/docs "Dokumentation"
         :help/privacy "Datenschutzrichtlinie"
         :help/terms "Bedingungen"
-        :help/community "Discord-Gemeinschaft"
+        :help/community "Discord-Community"
         :help/shortcuts "Tastaturkürzel"
         :help/shortcuts-triggers "Auslöser"
         :help/shortcut "Tastaturkürzel"
@@ -541,7 +541,7 @@ title: How to take dummy notes?
         :new-file "Neue Datei"
         :graph "Graph"
         :publishing "Veröffentlichung"
-        :export "Öffentliche Seitene exportieren"
+        :export "Öffentliche Seiten exportieren"
         :all-graphs "Alle Graphen"
         :all-pages "Alle Seiten"
         :all-files "Alle Dateien"
@@ -1558,6 +1558,7 @@ title: How to take dummy notes?
 
 (def languages [{:label "English" :value :en}
                 {:label "Français" :value :fr}
+                {:label "Deutsch" :value :de}
                 {:label "简体中文" :value :zh-CN}
                 {:label "繁體中文" :value :zh-Hant}
                 {:label "Afrikaans" :value :af}])
