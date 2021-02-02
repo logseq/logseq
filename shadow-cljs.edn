@@ -15,7 +15,7 @@
    :asset-path "/static/js"
    :release {:asset-path "https://asset.logseq.com/static/js"}
    :compiler-options {:infer-externs :auto
-                      :output-feature-set :es6
+                      :output-feature-set :es-next
                       :source-map true
                       :externs ["datascript/externs.js"
                                 "externs.js"]
@@ -33,6 +33,13 @@
     :watch-path   "static"
     :preloads     [devtools.preload]}
    :build-hooks [(shadow-env.core/hook)]}
+
+  :electron {:target :node-script
+             :output-to "static/electron.js"
+             :main electron.core/main
+             :devtools
+             {:before-load electron.core/stop
+              :after-load electron.core/start}}
 
   :test
   {:target :node-test
@@ -56,7 +63,7 @@
                      goog.debug.LOGGING_ENABLED true}
 
    :compiler-options {:infer-externs :auto
-                      :output-feature-set :es6
+                      :output-feature-set :es-next
                       :externs ["datascript/externs.js"
                                 "externs.js"]
                       :warnings {:fn-deprecated false}}

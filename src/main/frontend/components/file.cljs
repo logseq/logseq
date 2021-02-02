@@ -71,7 +71,7 @@
   (let [path (get-path state)
         format (format/get-format path)
         page (db/get-file-page path)
-        config? (= path (str config/app-name "/" config/config-file))]
+        config? (= path (config/get-config-path))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-" path)}
        [:h1.title
@@ -81,14 +81,14 @@
           [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
                                   :href (rfe/href :page {:name page})
                                   :on-click (fn [e]
-                                              (.preventDefault e)
                                               (when (gobj/get e "shiftKey")
                                                 (when-let [page (db/entity [:page/name (string/lower-case page)])]
                                                   (state/sidebar-add-block!
                                                    (state/get-current-repo)
                                                    (:db/id page)
                                                    :page
-                                                   {:page page}))))}
+                                                   {:page page}))
+                                                (util/stop e)))}
            page]])
 
        (when (and page (not (string/starts-with? page "logseq/")))

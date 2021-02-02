@@ -58,7 +58,7 @@
                        (editor-handler/insert-command! id command-steps
                                                        format
                                                        {:restore? restore-slash?})))
-        :class "black"}))))
+        :class     "black"}))))
 
 (rum/defc block-commands < rum/reactive
   [id format]
@@ -71,7 +71,7 @@
                      (editor-handler/insert-command! id (get (into {} matched) chosen)
                                                      format
                                                      {:last-pattern commands/angle-bracket}))
-        :class "black"}))))
+        :class     "black"}))))
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
@@ -108,7 +108,7 @@
                                                                    page-ref-text
                                                                    format
                                                                    {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
-                                                                    :postfix-fn (fn [s] (util/replace-first "]]" s ""))}))))
+                                                                    :postfix-fn   (fn [s] (util/replace-first "]]" s ""))}))))
               non-exist-page-handler (fn [_state]
                                        (state/set-editor-show-page-search! false)
                                        (if (state/org-mode-file-link? (state/get-current-repo))
@@ -128,9 +128,9 @@
           (ui/auto-complete
            matched-pages
            {:on-chosen chosen-handler
-            :on-enter non-exist-page-handler
+            :on-enter  non-exist-page-handler
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
-            :class "black"}))))))
+            :class     "black"}))))))
 
 (rum/defc block-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
@@ -141,12 +141,13 @@
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
               edit-content (state/sub [:editor/content id])
+              edit-block (state/get-edit-block)
               q (or
                  @editor-handler/*selected-text
                  (when (> (count edit-content) current-pos)
                    (subs edit-content pos current-pos)))
               matched-blocks (when-not (string/blank? q)
-                               (editor-handler/get-matched-blocks q))
+                               (editor-handler/get-matched-blocks q (:block/uuid edit-block)))
               chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search! false)
                                (let [uuid-string (str (:block/uuid chosen))]
@@ -156,7 +157,7 @@
                                                                  (util/format "((%s))" uuid-string)
                                                                  format
                                                                  {:last-pattern (str "((" (if @editor-handler/*selected-text "" q))
-                                                                  :postfix-fn (fn [s] (util/replace-first "))" s ""))})
+                                                                  :postfix-fn   (fn [s] (util/replace-first "))" s ""))})
 
                                  ;; Save it so it'll be parsed correctly in the future
                                  (editor-handler/set-block-property! (:block/uuid chosen)
@@ -170,12 +171,12 @@
                                         (util/cursor-move-forward input 2))]
           (ui/auto-complete
            matched-blocks
-           {:on-chosen chosen-handler
-            :on-enter non-exist-block-handler
-            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+           {:on-chosen   chosen-handler
+            :on-enter    non-exist-block-handler
+            :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
             :item-render (fn [{:block/keys [content]}]
                            (subs content 0 64))
-            :class "black"}))))))
+            :class       "black"}))))))
 
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
@@ -223,12 +224,12 @@
                                   (state/set-editor-show-template-search! false))]
           (ui/auto-complete
            matched-templates
-           {:on-chosen chosen-handler
-            :on-enter non-exist-handler
-            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a template"]
+           {:on-chosen   chosen-handler
+            :on-enter    non-exist-handler
+            :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a template"]
             :item-render (fn [[template _block-db-id]]
                            template)
-            :class "black"}))))))
+            :class       "black"}))))))
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
@@ -252,17 +253,17 @@
     {:on-click #(commands/simple-insert!
                  parent-id "[[]]"
                  {:backward-pos 2
-                  :check-fn (fn [_ _ new-pos]
-                              (reset! commands/*slash-caret-pos new-pos)
-                              (commands/handle-step [:editor/search-page]))})}
+                  :check-fn     (fn [_ _ new-pos]
+                                  (reset! commands/*slash-caret-pos new-pos)
+                                  (commands/handle-step [:editor/search-page]))})}
     "[[]]"]
    [:button.font-extrabold.bottom-action.-mt-1
     {:on-click #(commands/simple-insert!
                  parent-id "(())"
                  {:backward-pos 2
-                  :check-fn (fn [_ _ new-pos]
-                              (reset! commands/*slash-caret-pos new-pos)
-                              (commands/handle-step [:editor/search-block]))})}
+                  :check-fn     (fn [_ _ new-pos]
+                                  (reset! commands/*slash-caret-pos new-pos)
+                                  (commands/handle-step [:editor/search-block]))})}
     "(())"]])
 
 (rum/defcs input < rum/reactive
@@ -276,7 +277,7 @@
             (let [input-value (get state ::input-value)
                   input-option (get @state/state :editor/show-input)]
               (when (seq @input-value)
-                ;; no new line input
+                                   ;; no new line input
                 (util/stop e)
                 (let [[_id on-submit] (:rum/args state)
                       {:keys [pos]} @*slash-caret-pos
@@ -306,11 +307,11 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                 {:key (str "modal-input-" (name id))
-                  :id (str "modal-input-" (name id))
-                  :type (or type "text")
-                  :on-change (fn [e]
-                               (swap! input-value assoc id (util/evalue e)))
+                 {:key           (str "modal-input-" (name id))
+                  :id            (str "modal-input-" (name id))
+                  :type          (or type "text")
+                  :on-change     (fn [e]
+                                   (swap! input-value assoc id (util/evalue e)))
                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
                   (assoc :placeholder placeholder))
@@ -357,31 +358,31 @@
     (when-let [pos (rum/react pos)]
       (ui/css-transition
        {:class-names "fade"
-        :timeout {:enter 500
-                  :exit 300}}
+        :timeout     {:enter 500
+                      :exit  300}}
        (absolute-modal cp set-default-width? pos)))))
 
 (rum/defc image-uploader < rum/reactive
   {:did-mount    (fn [state]
                    (let [[id format] (:rum/args state)]
-                     (add-watch editor-handler/*image-pending-file ::pending-image
+                     (add-watch editor-handler/*asset-pending-file ::pending-asset
                                 (fn [_ _ _ f]
                                   (reset! *slash-caret-pos (util/get-caret-pos (gdom/getElement id)))
-                                  (editor-handler/upload-image id #js[f] format editor-handler/*image-uploading? true))))
+                                  (editor-handler/upload-asset id #js[f] format editor-handler/*asset-uploading? true))))
                    state)
    :will-unmount (fn [state]
-                   (remove-watch editor-handler/*image-pending-file ::pending-image))}
+                   (remove-watch editor-handler/*asset-pending-file ::pending-asset))}
   [id format]
   [:div.image-uploader
    [:input
-    {:id "upload-file"
-     :type "file"
+    {:id        "upload-file"
+     :type      "file"
      :on-change (fn [e]
                   (let [files (.-files (.-target e))]
-                    (editor-handler/upload-image id files format editor-handler/*image-uploading? false)))
-     :hidden true}]
-   (when-let [uploading? (util/react editor-handler/*image-uploading?)]
-     (let [processing (util/react editor-handler/*image-uploading-process)]
+                    (editor-handler/upload-asset id files format editor-handler/*asset-uploading? false)))
+     :hidden    true}]
+   (when-let [uploading? (util/react editor-handler/*asset-uploading?)]
+     (let [processing (util/react editor-handler/*asset-uploading-process)]
        (transition-cp
         [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
          (ui/loading
@@ -434,21 +435,21 @@
                             (profile
                              "Insert block"
                              (editor-handler/insert-new-block! state))))))))))
-         ;; up
+                          ;; up
          38 (fn [state e]
               (when (and
                      (not (gobj/get e "ctrlKey"))
                      (not (gobj/get e "metaKey"))
                      (not (editor-handler/in-auto-complete? input)))
                 (editor-handler/on-up-down state e true)))
-         ;; down
+                          ;; down
          40 (fn [state e]
               (when (and
                      (not (gobj/get e "ctrlKey"))
                      (not (gobj/get e "metaKey"))
                      (not (editor-handler/in-auto-complete? input)))
                 (editor-handler/on-up-down state e false)))
-         ;; backspace
+                          ;; backspace
          8  (fn [state e]
               (let [node (gdom/getElement input-id)
                     current-pos (:pos (util/get-caret-pos node))
@@ -464,7 +465,7 @@
                   nil
 
                   (and (zero? current-pos)
-                       ;; not the top block in a block page
+                                        ;; not the top block in a block page
                        (not (and page
                                  (util/uuid-string? page)
                                  (= (medley/uuid page) block-id))))
@@ -482,7 +483,7 @@
                     (reset! *angle-bracket-caret-pos nil)
                     (reset! *show-block-commands false))
 
-                  ;; pair
+                                   ;; pair
                   (and
                    deleted
                    (contains?
@@ -505,13 +506,13 @@
                       :else
                       nil))
 
-                  ;; deleting hashtag
+                                   ;; deleting hashtag
                   (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
                   (state/set-editor-show-page-search-hashtag! false)
 
                   :else
                   nil)))
-         ;; tab
+                          ;; tab
          9  (fn [state e]
               (let [input-id (state/get-edit-input-id)
                     input (and input-id (gdom/getElement id))
@@ -615,18 +616,18 @@
           (let [k (gobj/get e "key")
                 format (:format (get-state state))]
             (when-not (state/get-editor-show-input)
-              (when (and @*show-commands (not= key-code 191))     ; not /
+              (when (and @*show-commands (not= key-code 191)) ; not /
                 (let [matched-commands (editor-handler/get-matched-commands input)]
                   (if (seq matched-commands)
                     (do
                       (reset! *show-commands true)
                       (reset! *matched-commands matched-commands))
                     (reset! *show-commands false))))
-              (when (and @*show-block-commands (not= key-code 188))     ; not <
+              (when (and @*show-block-commands (not= key-code 188)) ; not <
                 (let [matched-block-commands (editor-handler/get-matched-block-commands input)]
                   (if (seq matched-block-commands)
                     (cond
-                      (= key-code 9)      ;tab
+                      (= key-code 9)       ;tab
                       (when @*show-block-commands
                         (util/stop e)
                         (editor-handler/insert-command! input-id
@@ -638,41 +639,41 @@
                       (reset! *matched-block-commands matched-block-commands))
                     (reset! *show-block-commands false))))
               (editor-handler/close-autocomplete-if-outside input))))))))
-  {:did-mount (fn [state]
-                (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
-                      content (get-in @state/state [:editor/content id])
-                      input (gdom/getElement id)]
-                  (when block-parent-id
-                    (state/set-editing-block-dom-id! block-parent-id))
-                  (if (= :indent-outdent (state/get-editor-op))
-                    (when input
-                      (when-let [pos (state/get-edit-pos)]
-                        (util/set-caret-pos! input pos)))
-                    (editor-handler/restore-cursor-pos! id content dummy?))
+  {:did-mount    (fn [state]
+                   (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
+                         content (get-in @state/state [:editor/content id])
+                         input (gdom/getElement id)]
+                     (when block-parent-id
+                       (state/set-editing-block-dom-id! block-parent-id))
+                     (if (= :indent-outdent (state/get-editor-op))
+                       (when input
+                         (when-let [pos (state/get-edit-pos)]
+                           (util/set-caret-pos! input pos)))
+                       (editor-handler/restore-cursor-pos! id content dummy?))
 
-                  (when input
-                    (dnd/subscribe!
-                     input
-                     :upload-images
-                     {:drop (fn [e files]
-                              (editor-handler/upload-image id files format editor-handler/*image-uploading? true))}))
+                     (when input
+                       (dnd/subscribe!
+                        input
+                        :upload-images
+                        {:drop (fn [e files]
+                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))}))
 
-                  ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
-                  ;; which will hide the editor so no way for editing.
-                  (js/setTimeout #(keyboards-handler/esc-save! state) 100)
+                                    ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
+                                    ;; which will hide the editor so no way for editing.
+                     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
-                  (when-let [element (gdom/getElement id)]
-                    (.focus element)))
-                state)
-   :did-remount (fn [_old-state state]
-                  (keyboards-handler/esc-save! state)
-                  state)
+                     (when-let [element (gdom/getElement id)]
+                       (.focus element)))
+                   state)
+   :did-remount  (fn [_old-state state]
+                   (keyboards-handler/esc-save! state)
+                   state)
    :will-unmount (fn [state]
                    (let [{:keys [id value format block repo dummy? config]} (get-state state)
                          file? (:file? config)]
                      (when-let [input (gdom/getElement id)]
-                       ;; (.removeEventListener input "paste" (fn [event]
-                       ;;                                       (append-paste-doc! format event)))
+                                      ;; (.removeEventListener input "paste" (fn [event]
+                                      ;;                                       (append-paste-doc! format event)))
                        (let [s (str "cljs-drag-n-drop." :upload-images)
                              a (gobj/get input s)
                              timer (:timer a)]
@@ -698,8 +699,8 @@
                          (editor-handler/save-block! (get-state state) value))))
                    state)}
   [state {:keys [on-hide dummy? node format block block-parent-id]
-          :or {dummy? false}
-          :as option} id config]
+          :or   {dummy? false}
+          :as   option} id config]
   (let [content (state/get-edit-content)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
@@ -741,20 +742,33 @@
                             (when-let [handled
                                        (let [pick-one-allowed-item
                                              (fn [items]
-                                               (when (and items (.-length items))
-                                                 (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
-                                                       it (gobj/get files 0) ;;; TODO: support multiple files
-                                                       mime (and it (.-type it))]
-                                                   (cond
-                                                     (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:image (. it getAsFile)]))))
+                                               (if (util/electron?)
+                                                 (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
+                                                       existed-file-path (if (and
+                                                                              (string? existed-file-path)
+                                                                              (not util/mac?)
+                                                                              (not util/win32?)) ; FIXME: linuxcx
+                                                                           (when (re-find #"^(/[^/ ]*)+/?$" existed-file-path)
+                                                                             existed-file-path)
+                                                                           existed-file-path)
+                                                       has-file-path? (not (string/blank? existed-file-path))
+                                                       has-image? (js/window.apis.isClipboardHasImage)]
+                                                   (if (or has-image? has-file-path?)
+                                                     [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
+
+                                                 (when (and items (.-length items))
+                                                   (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
+                                                         it (gobj/get files 0) ;;; TODO: support multiple files
+                                                         mime (and it (.-type it))]
+                                                     (cond
+                                                       (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:asset (. it getAsFile)])))))
                                              clipboard-data (gobj/get e "clipboardData")
                                              items (or (.-items clipboard-data)
                                                        (.-files clipboard-data))
                                              picked (pick-one-allowed-item items)]
-                                         (when (and picked (get picked 1))
+                                         (if (get picked 1)
                                            (match picked
-                                             [:image file] (editor-handler/set-image-pending-file file))
-                                           true))]
+                                             [:asset file] (editor-handler/set-asset-pending-file file))))]
                               (util/stop e)))
        :auto-focus        false})
 

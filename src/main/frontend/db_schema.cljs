@@ -5,7 +5,6 @@
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
    :file/content {}
-   :file/last-modified-at {}
    :file/size {}
    :file/handle {}})
 
@@ -50,8 +49,6 @@
                      :db/cardinality :db.cardinality/many}
    :page/journal?   {}
    :page/journal-day {}
-   :page/created-at {}
-   :page/last-modified-at {}
 
    ;; block
    :block/uuid   {:db/unique      :db.unique/identity}

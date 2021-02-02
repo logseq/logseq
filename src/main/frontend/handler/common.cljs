@@ -35,7 +35,7 @@
           (gobj/get js/window "workerThread")
           (gobj/get js/window.workerThread "getChangedFiles"))
      (->
-      (p/let [files (js/window.workerThread.getChangedFiles (util/get-repo-dir repo))
+      (p/let [files (js/window.workerThread.getChangedFiles (config/get-repo-dir repo))
               files (bean/->clj files)]
         (->
          (p/let [remote-latest-commit (get-remote-ref repo)
@@ -68,12 +68,11 @@
             diffs (git/get-diffs repo local-oid remote-oid)]
       (println {:local-oid local-oid
                 :remote-oid remote-oid
-                :diffs diffs})))
-  )
+                :diffs diffs}))))
 
 (defn get-config
   [repo-url]
-  (db/get-file repo-url (str config/app-name "/" config/config-file)))
+  (db/get-file repo-url (config/get-config-path)))
 
 (defn reset-config!
   [repo-url content]
@@ -91,20 +90,20 @@
   [ok-handler error-handler]
   (let [repos (state/get-repos)
         installation-ids (->> (map :installation_id repos)
-                           (remove nil?)
-                           (distinct))]
+                              (remove nil?)
+                              (distinct))]
     (when (or (seq repos)
-            (seq installation-ids))
+              (seq installation-ids))
       (util/post (str config/api "refresh_github_token")
-        {:installation-ids installation-ids
-         :repos repos}
-        (fn [result]
-          (state/set-github-installation-tokens! result)
-          (when ok-handler (ok-handler)))
-        (fn [error]
-          (log/error :token/http-request-failed error)
-          (js/console.dir error)
-          (when error-handler (error-handler)))))))
+                 {:installation-ids installation-ids
+                  :repos repos}
+                 (fn [result]
+                   (state/set-github-installation-tokens! result)
+                   (when ok-handler (ok-handler)))
+                 (fn [error]
+                   (log/error :token/http-request-failed error)
+                   (js/console.dir error)
+                   (when error-handler (error-handler)))))))
 
 (defn- get-github-token*
   [repo]
@@ -114,7 +113,7 @@
           (state/get-github-token repo)]
       (spec/validate :repos/repo token-state)
       (if (and (map? token-state)
-            (string? expires_at))
+               (string? expires_at))
         (let [expires-at (tf/parse (tf/formatters :date-time-no-ms) expires_at)
               now (t/now)
               expired? (t/after? now expires-at)]
@@ -129,26 +128,17 @@
   ([repo]
    (when-not (config/local-db? repo)
      (js/Promise.
-       (fn [resolve reject]
-         (let [{:keys [expired? token exist?]} (get-github-token* repo)
-               valid-token? (and exist? (not expired?))]
-           (if valid-token?
-             (resolve token)
-             (request-app-tokens!
-               (fn []
-                 (let [{:keys [expired? token exist?] :as token-m} (get-github-token* repo)
-                       valid-token? (and exist? (not expired?))]
-                   (if valid-token?
-                     (resolve token)
-                     (do (log/error :token/failed-get-token token-m)
-                         (reject)))))
-               nil))))))))
-
-(defn verify-permission
-  [repo handle read-write?]
-  (let [repo (or repo (state/get-current-repo))]
-    (p/then
-      (utils/verifyPermission handle read-write?)
-      (fn []
-        (state/set-state! [:nfs/user-granted? repo] true)
-        true))))
+      (fn [resolve reject]
+        (let [{:keys [expired? token exist?]} (get-github-token* repo)
+              valid-token? (and exist? (not expired?))]
+          (if valid-token?
+            (resolve token)
+            (request-app-tokens!
+             (fn []
+               (let [{:keys [expired? token exist?] :as token-m} (get-github-token* repo)
+                     valid-token? (and exist? (not expired?))]
+                 (if valid-token?
+                   (resolve token)
+                   (do (log/error :token/failed-get-token token-m)
+                       (reject)))))
+             nil))))))))

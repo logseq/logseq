@@ -61,8 +61,8 @@ html[data-theme=dark] {
   --ls-page-blockquote-border-color: var(--ls-border-color);
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-page-inline-code-bg-color: #01222a;
-  --ls-scrollbar-foreground-color: rgba(255, 255, 255, 0.1);
-  --ls-scrollbar-background-color: rgba(255, 255, 255, 0.05);
+  --ls-scrollbar-foreground-color: rgba(255, 255, 255, 0.05);
+  --ls-scrollbar-background-color: rgba(30, 60, 67, 0.9);
   --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
   --ls-icon-color: var(--ls-link-text-color);
@@ -578,11 +578,6 @@ h1.title {
   padding: -1px;
 }
 
-.content img {
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
 span.timestamp {
   margin: 0 0.25rem;
 }
@@ -710,4 +705,9 @@ svg.tip {
 hr {
   margin: 2rem 0;
   border-color: var(--ls-border-color, #ccc);
+}
+
+.resize {
+    resize: both;
+    overflow: hidden;
 }

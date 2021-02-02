@@ -3,6 +3,7 @@
             [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
             [clojure.string :as string]
+            [cljs-bean.core :as bean]
             [medley.core :as medley]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -95,6 +96,10 @@
     :sidebar/blocks '()
 
     :preferred-language (storage/get :preferred-language)
+
+    ;; electron
+    :electron/updater-pending? false
+    :electron/updater {}
 
     ;; all notification contents as k-v pairs
     :notification/contents {}
@@ -194,8 +199,7 @@
   ;;         (get (sub-config) (get-current-repo))))
 
   ;; Disable block timestamps for now, because it doesn't work with undo/redo
-  false
-  )
+  false)
 
 ;; Enable by default
 (defn show-brackets?
@@ -714,6 +718,17 @@
   []
   (get @state :ui/root-component))
 
+(defn setup-electron-updater!
+  []
+  (when (util/electron?)
+    (js/window.apis.setUpdatesCallback
+     (fn [_ args]
+       (let [data (bean/->clj args)
+             pending? (not= (:type data) "completed")]
+         (set-state! :electron/updater-pending? pending?)
+         (when pending? (set-state! :electron/updater data))
+         nil)))))
+
 (defn set-file-component!
   [component]
   (set-state! :ui/file-component component))
@@ -767,7 +782,7 @@
   (or
    (when-let [repo (get-current-repo)]
      (get-in @state [:config repo :date-formatter]))
-   ;; TODO:
+    ;; TODO:
    (get-in @state [:me :settings :date-formatter])
    "MMM do, yyyy"))
 
@@ -1005,7 +1020,7 @@
      (when-let [last-time (get-in @state [:editor/last-input-time repo])]
        (let [now (util/time-ms)]
          (>= (- now last-time) 1000)))
-     ;; not in editing mode
+      ;; not in editing mode
      (not (get-edit-input-id)))))
 
 (defn set-last-persist-transact-id!
@@ -1027,7 +1042,7 @@
                                     (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
                        latest-txs)
           new-txs (update-in latest-txs [repo files?] (fn [result]
-                                                        (vec (conj result {:tx-id tx-id
+                                                        (vec (conj result {:tx-id   tx-id
                                                                            :tx-data tx-data}))))]
       (storage/set-transit! :db/latest-txs new-txs)
       (set-state! :db/latest-txs new-txs))))

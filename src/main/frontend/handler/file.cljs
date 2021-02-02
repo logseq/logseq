@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [load-file])
   (:require [frontend.util :as util :refer-macros [profile]]
             [frontend.fs :as fs]
+            [frontend.fs.nfs :as nfs]
             [promesa.core :as p]
             [frontend.state :as state]
             [frontend.db :as db]
@@ -24,12 +25,15 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.utf8 :as utf8]
-            ["ignore" :as Ignore]))
+            ["ignore" :as Ignore]
+            ["/frontend/utils" :as utils]))
+
+;; TODO: extract all git ops using a channel
 
 (defn load-file
   [repo-url path]
   (->
-   (p/let [content (fs/read-file (util/get-repo-dir repo-url) path)]
+   (p/let [content (fs/read-file (config/get-repo-dir repo-url) path)]
      content)
    (p/catch
     (fn [e]
@@ -96,7 +100,8 @@
   (state/set-loading-files! true)
   (p/let [files (git/list-files repo-url)
           files (bean/->clj files)
-          config-content (load-file repo-url (str config/app-name "/" config/config-file))
+          config-content (load-file repo-url
+                                    (config/get-config-path repo-url))
           files (if config-content
                   (let [config (restore-config! repo-url config-content true)]
                     (if-let [patterns (seq (:hidden config))]
@@ -125,7 +130,23 @@
 
 (defn reset-file!
   [repo-url file content]
-  (let [new? (nil? (db/entity [:file/path file]))]
+  (let [electron-local-repo? (and (util/electron?)
+                                  (config/local-db? repo-url))
+        ;; FIXME: store relative path in db
+        file (cond
+               (and electron-local-repo?
+                    util/win32?
+                    (utils/win32 file))
+               file
+
+               (and electron-local-repo? (or
+                                          util/win32?
+                                          (not= "/" (first file))))
+               (str (config/get-repo-dir repo-url) "/" file)
+
+               :else
+               file)
+        new? (nil? (db/entity [:file/path file]))]
     (db/set-file-content! repo-url file content)
     (let [format (format/get-format file)
           utf8-content (utf8/encode content)
@@ -137,8 +158,7 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                            {:file/path file
-                             :file/last-modified-at t}
+                            {:file/path file}
                              new?
                              (assoc :file/created-at t)))])]
       (db/transact! repo-url tx))))
@@ -161,13 +181,13 @@
         (reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file repo (util/get-repo-dir repo) path content {:old-content original-content
-                                                                :last-modified-at (db/get-file-last-modified-at repo path)})
+     (fs/write-file! repo (config/get-repo-dir repo) path content {:old-content original-content
+                                                                   :last-modified-at (db/get-file-last-modified-at repo path)})
      (fn [_]
        (git-handler/git-add repo path update-status?)
-       (when (= path (str config/app-name "/" config/config-file))
+       (when (= path (config/get-config-path repo))
          (restore-config! repo true))
-       (when (= path (str config/app-name "/" config/custom-css-file))
+       (when (= path (config/get-custom-css-path repo))
          (ui-handler/add-style-if-exists!))
        (when re-render-root? (ui-handler/re-render-root!))
        (when add-history?
@@ -207,8 +227,7 @@
           (db/set-file-content! repo path content))))
 
     (when-let [chan (state/get-file-write-chan)]
-      (let [chan-callback
-            (:chan-callback opts)]
+      (let [chan-callback (:chan-callback opts)]
         (async/put! chan [repo files opts file->content])
         (when chan-callback
           (chan-callback))))))
@@ -220,10 +239,10 @@
                     reset? false}} file->content]
   (let [write-file-f (fn [[path content]]
                        (let [original-content (get file->content path)]
-                         (-> (p/let [_ (fs/check-directory-permission! repo)]
-                               (fs/write-file repo (util/get-repo-dir repo) path content
-                                              {:old-content original-content
-                                               :last-modified-at (db/get-file-last-modified-at repo path)}))
+                         (-> (p/let [_ (nfs/check-directory-permission! repo)]
+                               (fs/write-file! repo (config/get-repo-dir repo) path content
+                                               {:old-content original-content
+                                                :last-modified-at (db/get-file-last-modified-at repo path)}))
                              (p/catch (fn [error]
                                         (log/error :write-file/failed {:path path
                                                                        :content content
@@ -263,10 +282,7 @@
   (when-not (string/blank? file)
     (->
      (p/let [_ (git/remove-file repo file)
-             result (fs/unlink (str (util/get-repo-dir repo)
-                                    "/"
-                                    file)
-                               nil)]
+             result (fs/unlink! (config/get-repo-path repo file) nil)]
        (when-let [file (db/entity repo [:file/path file])]
          (common-handler/check-changed-files-status)
          (let [file-id (:db/id file)
@@ -304,3 +320,13 @@
         (<p! (apply alter-files-handler! args)))
       (recur))
     chan))
+
+(defn watch-for-local-dirs!
+  []
+  (when (util/electron?)
+    (let [repos (->> (state/get-repos)
+                     (filter (fn [repo]
+                               (config/local-db? (:url repo)))))
+          directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
+      (doseq [dir directories]
+        (fs/watch-dir! dir)))))

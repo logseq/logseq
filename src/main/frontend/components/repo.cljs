@@ -45,7 +45,7 @@
               (ui/button
                (t :open-a-directory)
                :on-click nfs-handler/ls-dir-files)])
-           (when (state/logged?)
+           (when (and (state/logged?) (not (util/electron?)))
              (ui/button
               "Add another git repo"
               :href (rfe/href :repo-add nil {:graph-types "github"})))]
@@ -65,7 +65,7 @@
                              :on-click (fn []
                                          (if local?
                                            (nfs-handler/rebuild-index! url
-                                                                 repo-handler/create-today-journal!)
+                                                                       repo-handler/create-today-journal!)
                                            (repo-handler/rebuild-index! url))
                                          (js/setTimeout
                                           (fn []
@@ -97,7 +97,7 @@
              [:a
               {:on-click #(nfs-handler/refresh! repo
                                                 repo-handler/create-today-journal!)
-               :title (str "Sync files with the local directory: " (config/get-local-dir repo) ".\nVersion: "
+               :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}
               svg/refresh]])
           (let [changed-files (state/sub [:repo/changed-files repo])
@@ -199,7 +199,11 @@
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
              [:a#repo-switch {:on-click toggle-fn}
-              [:span (get-repo-name current-repo)]
+              (let [repo-name (get-repo-name current-repo)
+                    repo-name (if (util/electron?)
+                                (last (string/split repo-name #"/"))
+                                repo-name)]
+                [:span repo-name])
               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
            (mapv
             (fn [{:keys [id url]}]
@@ -221,7 +225,9 @@
           (and current-repo (not local-repo?))
           (let [repo-name (get-repo-name current-repo)]
             (if (config/local-db? current-repo)
-              repo-name
+              (if (util/electron?)
+                (last (string/split repo-name #"/"))
+                repo-name)
               [:a
                {:href current-repo
                 :target "_blank"}

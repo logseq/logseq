@@ -19,14 +19,23 @@
 (def prod? (= :prod (env/get-static :runtime)))
 
 (def app-name "logseq")
+
+
 (def website (env/get-static :website))
 (def api (env/get-static :api))
 (def asset-domain (env/get-static :asset-domain))
 (def github-app-name (env/get-static :github-app-name))
 
+;; change if you want to use your own domain instead of default asset.logseq.com
+(def asset-domain (util/format "https://asset.%s.com"
+                               app-name))
+
 (defn asset-uri
   [path]
   (cond
+    (util/file-protocol?)
+    (string/replace path "/static/" "./")
+
     dev? path
 
     staging?
@@ -268,6 +277,7 @@
   (util/starts-with? path default-draw-directory))
 
 (defonce local-repo "local")
+(defonce local-assets-dir "assets")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def metadata-file "metadata.edn")
@@ -289,6 +299,60 @@
   [s]
   (string/starts-with? s local-db-prefix))
 
+(defn local-asset?
+  [s]
+  (or (string/starts-with? s (str "/" local-assets-dir))
+      (string/starts-with? s (str "../" local-assets-dir))))
+
 (defn get-local-dir
   [s]
   (string/replace s local-db-prefix ""))
+
+(defn get-local-repo
+  [dir]
+  (str local-db-prefix dir))
+
+(defn get-repo-dir
+  [repo-url]
+  (if (and (util/electron?) (local-db? repo-url))
+    (get-local-dir repo-url)
+    (str "/"
+         (->> (take-last 2 (string/split repo-url #"/"))
+              (string/join "_")))))
+
+(defn get-repo-path
+  [repo-url path]
+  (if (and (util/electron?) (local-db? repo-url))
+    path
+    (str (get-repo-dir repo-url) "/" path)))
+
+(defn get-file-path
+  [repo-url relative-path]
+  (when (and repo-url relative-path)
+    (cond
+      (and (util/electron?) (local-db? repo-url))
+      (let [dir (get-repo-dir repo-url)]
+        (if (string/starts-with? relative-path dir)
+          relative-path
+          (str dir "/"
+               (string/replace relative-path #"^/" ""))))
+      (= "/" (first relative-path))
+      (subs relative-path 1)
+
+      :else
+      relative-path)))
+
+(defn get-config-path
+  ([]
+   (get-config-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" config-file)))))
+
+(defn get-custom-css-path
+  ([]
+   (get-custom-css-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo
+                    (str app-name "/" custom-css-file)))))

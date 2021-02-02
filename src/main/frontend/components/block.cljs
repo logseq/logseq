@@ -49,15 +49,20 @@
             [lambdaisland.glogi :as log]
             [frontend.context.i18n :as i18n]))
 
+;; TODO: remove rum/with-context because it'll make reactive queries not working
+
 (defn safe-read-string
-  [s]
-  (try
-    (reader/read-string s)
-    (catch js/Error e
-      (println "read-string error:")
-      (js/console.error e)
-      [:div.warning {:title "read-string failed"}
-       s])))
+  ([s]
+   (safe-read-string s true))
+  ([s warn?]
+   (try
+     (reader/read-string s)
+     (catch js/Error e
+       (println "read-string error:")
+       (js/console.error e)
+       (when warn?
+         [:div.warning {:title "read-string failed"}
+          s])))))
 
 ;; local state
 (defonce *block-children
@@ -156,36 +161,94 @@
                 parts (remove #(string/blank? %) parts)]
             (string/join "/" (reverse parts))))))))
 
+(defonce *resizing-image? (atom false))
+(rum/defcs resizable-image <
+  (rum/local nil ::size)
+  {:will-unmount (fn [state]
+                   (reset! *resizing-image? false)
+                   state)}
+  [state config title src metadata full_text local?]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [size (get state ::size)]
+      (ui/resize-provider
+       (ui/resize-consumer
+        (cond->
+         {:className "resize"
+          :onSizeChanged (fn [value]
+                           (when (and (not @*resizing-image?)
+                                      (some? @size)
+                                      (not= value @size))
+                             (reset! *resizing-image? true))
+                           (reset! size value))
+          :onMouseUp (fn []
+                       (when @size
+                         (when-let [block-id (:block/uuid config)]
+                           (let [size (bean/->clj @size)]
+                             (editor-handler/resize-image! block-id metadata full_text size))))
+                       (when @*resizing-image?
+                         ;; TODO: need a better way to prevent the clicking to edit current block
+                         (js/setTimeout #(reset! *resizing-image? false) 200)))
+          :onClick (fn [e]
+                     (when @*resizing-image? (util/stop e)))}
+          (and (:width metadata) (not (util/mobile?)))
+          (assoc :style {:width (:width metadata)}))
+        [:div.asset-container
+         [:img.rounded-sm.shadow-xl.relative
+          (merge
+           {:loading "lazy"
+            :src     src
+            :title   title}
+           metadata)]
+         [:span.ctl
+          [:a.delete
+           {:title "Delete this image"
+            :on-click
+            (fn [e]
+              (when-let [block-id (:block/uuid config)]
+                (let [confirm-fn (ui/make-confirm-modal
+                                  {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                   :sub-title     (if local? :asset/physical-delete "")
+                                   :sub-checkbox? local?
+                                   :on-confirm    (fn [e {:keys [close-fn sub-selected]}]
+                                                    (close-fn)
+                                                    (editor-handler/delete-asset-of-block!
+                                                     {:block-id    block-id
+                                                      :local?      local?
+                                                      :repo        (state/get-current-repo)
+                                                      :href        src
+                                                      :title       title
+                                                      :full-text   full_text}))})]
+                  (state/set-modal! confirm-fn)
+                  (util/stop e))))}
+           svg/trash-sm]]])))))
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
-  [state href label]
-  (let [title (second (first label))
-        src (::src state)
+  [state config title href label metadata full_text]
+  (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
 
-    (when granted?
+    (when (or granted? (util/electron?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      [:img
-       {:loading "lazy"
-        :src     @src
-        :title   title}])))
+      (resizable-image config title @src metadata full_text true))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
-(defn image-link [config url href label]
-  (if (or (util/starts-with? href "/assets")
-          (util/starts-with? href "../assets"))
-    (asset-link href label)
-    (let [href (if (util/starts-with? href "http")
-                 href
-                 (get-file-absolute-path config href))]
-      [:img.rounded-sm.shadow-xl
-       {:loading "lazy"
-        ;; :on-error (fn [])
-        :src     href
-        :title   (second (first label))}])))
+
+
+(defn image-link [config url href label metadata full_text]
+  (let [metadata (if (string/blank? metadata)
+                   nil
+                   (safe-read-string metadata false))
+        title (second (first label))]
+    (if (config/local-asset? href)
+      (asset-link config title href label metadata full_text)
+      (let [href (if (util/starts-with? href "http")
+                   href
+                   (get-file-absolute-path config href))]
+        (resizable-image config title href metadata full_text false)))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
@@ -315,6 +378,12 @@
            label
            original-page-name))])))
 
+(rum/defc asset-reference
+  [title path]
+  (let [repo-path (config/get-repo-dir (state/get-current-repo))
+        full-path (str repo-path (string/replace path "../" "/"))]
+    [:a.asset-ref {:target "_blank" :href full-path} (or title path)]))
+
 (rum/defc page-reference < rum/reactive
   [html-export? s config label]
   (let [show-brackets? (state/show-brackets?)
@@ -401,36 +470,35 @@
     (util/format "{{{%s}}}" name)))
 
 (declare block-content)
-(defn block-reference
+(rum/defc block-reference < rum/reactive
   [config id]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (when-not (string/blank? id)
-      (let [block (and (util/uuid-string? id)
-                       (db/pull-block (uuid id)))]
-        (if block
-          [:span
-           [:div.block-ref-wrap
-            {:on-click (fn [e]
-                         (util/stop e)
-                         (if (gobj/get e "shiftKey")
-                           (state/sidebar-add-block!
-                            (state/get-current-repo)
-                            (:db/id block)
-                            :block-ref
-                            {:block block})
-                           (route-handler/redirect! {:to          :page
-                                                     :path-params {:name id}})))}
+  (when-not (string/blank? id)
+    (let [block (and (util/uuid-string? id)
+                     (db/pull-block (uuid id)))]
+      (if block
+        [:span
+         [:div.block-ref-wrap
+          {:on-click (fn [e]
+                       (util/stop e)
+                       (if (gobj/get e "shiftKey")
+                         (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id block)
+                          :block-ref
+                          {:block block})
+                         (route-handler/redirect! {:to          :page
+                                                   :path-params {:name id}})))}
 
-            (let [title (:block/title block)]
-              (if (empty? title)
-                ;; display the content
-                [:div.block-ref
-                 (block-content config block nil (:block/uuid block) (:slide? config))]
-                (->elem
-                 :span.block-ref
-                 (map-inline config title))))]]
-          [:span.warning.mr-1 {:title "Block ref invalid"}
-           (util/format "((%s))" id)])))))
+          (let [title (:block/title block)]
+            (if (empty? title)
+              ;; display the content
+              [:div.block-ref
+               (block-content config block nil (:block/uuid block) (:slide? config))]
+              (->elem
+               :span.block-ref
+               (map-inline config title))))]]
+        [:span.warning.mr-1 {:title "Block ref invalid"}
+         (util/format "((%s))" id)]))))
 
 (defn inline-text
   [format v]
@@ -494,17 +562,17 @@
     (->elem :sub (map-inline config l))
     ["Tag" s]
     (if (and s (util/tag-valid? s))
-      [:a.tag.mr-1 {:href (rfe/href :page {:name s})
-                    :on-click (fn [e]
-                                (.preventDefault e)
-                                (let [repo (state/get-current-repo)
-                                      page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
-                                  (when (gobj/get e "shiftKey")
-                                    (state/sidebar-add-block!
-                                     repo
-                                     (:db/id page)
-                                     :page
-                                     {:page page}))))}
+      [:a.tag {:href (rfe/href :page {:name s})
+               :on-click (fn [e]
+                           (let [repo (state/get-current-repo)
+                                 page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
+                             (when (gobj/get e "shiftKey")
+                               (state/sidebar-add-block!
+                                repo
+                                (:db/id page)
+                                :page
+                                {:page page})
+                               (.preventDefault e))))}
        (str "#" s)]
       [:span.warning.mr-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
        (str "#" s)])
@@ -550,17 +618,18 @@
     (nested-link config html-export? link)
 
     ["Link" link]
-    (let [{:keys [url label title]} link
+    (let [{:keys [url label title metadata full_text]} link
           img-formats (set (map name (config/img-formats)))]
       (match url
         ["Search" s]
         (cond
           ;; image
           (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) s)) img-formats)
-          (image-link config url s label)
+          (image-link config url s label metadata full_text)
 
           (= \# (first s))
           (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
+
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
           (and (= \* (first s))
                (not= \* (last s)))
@@ -569,6 +638,9 @@
           (re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s}
                   (map-inline config label))
+
+          (and (util/electron?) (config/local-asset? s))
+          (asset-reference (second (first label)) s)
 
           :else
           (page-reference html-export? s config label))
@@ -589,7 +661,7 @@
 
             (= protocol "file")
             (if (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
-              (image-link config url href label)
+              (image-link config url href label metadata full_text)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
                            {:page/name (db/get-file-page (string/replace href "file:" ""))}
@@ -612,7 +684,7 @@
 
             ;; image
             (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
-            (image-link config url href label)
+            (image-link config url href label metadata full_text)
 
             :else
             (->elem
@@ -701,27 +773,23 @@
 
         (= name "youtube")
         (let [url (first arguments)]
-          (when-let [youtube-id (cond
-                                  (string/starts-with? url "https://youtu.be/")
-                                  (string/replace url "https://youtu.be/" "")
-
-                                  (string? url)
-                                  url
-
-                                  :else
-                                  nil)]
-            (when-not (string/blank? youtube-id)
-              (let [width (min (- (util/get-width) 96)
-                               560)
-                    height (int (* width (/ 315 560)))]
-                [:iframe
-                 {:allow-full-screen "allowfullscreen"
-                  :allow
-                  "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  :frame-border "0"
-                  :src (str "https://www.youtube.com/embed/" youtube-id)
-                  :height height
-                  :width width}]))))
+          (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
+            (when-let [youtube-id (cond
+                                    (== 11 (count url)) url
+                                    :else
+                                    (nth (re-find YouTube-regex url) 5))]
+              (when-not (string/blank? youtube-id)
+                (let [width (min (- (util/get-width) 96)
+                                 560)
+                      height (int (* width (/ 315 560)))]
+                  [:iframe
+                   {:allow-full-screen "allowfullscreen"
+                    :allow
+                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    :frame-border "0"
+                    :src (str "https://www.youtube.com/embed/" youtube-id)
+                    :height height
+                    :width width}])))))
 
         (= name "embed")
         (let [a (first arguments)]
@@ -837,13 +905,13 @@
      [:a (if (not dummy?)
            {:href (rfe/href :page {:name uuid})
             :on-click (fn [e]
-                        (.preventDefault e)
                         (when (gobj/get e "shiftKey")
                           (state/sidebar-add-block!
                            (state/get-current-repo)
                            (:db/id block)
                            :block
-                           block)))})
+                           block)
+                          (util/stop e)))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
@@ -1087,8 +1155,7 @@
                       [:span (t :page/edit-properties-placeholder)]
                       (markup-elements-cp (assoc config :block/format format) ast))]]
       (if slide?
-        [:div [:h1 (:page-name config)]
-         block-cp]
+        [:div [:h1 (:page-name config)]]
         block-cp))))
 
 (rum/defc properties-cp
@@ -1386,7 +1453,8 @@
                           (reset! *dragging-block nil)
                           (editor-handler/unhighlight-block!))
                :on-mouse-move (fn [e]
-                                (when (non-dragging? e)
+                                (when (and (non-dragging? e)
+                                           (not @*resizing-image?))
                                   (state/into-selection-mode!)))
                :on-mouse-down (fn [e]
                                 (when (and

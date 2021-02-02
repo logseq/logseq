@@ -1,0 +1,280 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Build-Desktop-Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag-version:
+        description: "Release Tag Version"
+        required: true
+      git-ref:
+        description: "Release Git Ref"
+        required: true
+        default: "master"
+      is-draft:
+        description: 'Draft Release? '
+        required: true
+        default: "true"
+      is-pre-release:
+        description: 'Pre Release?'
+        required: true
+        default: "true"
+
+jobs:
+  compile-cljs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v1
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v1.4.3
+        with:
+          java-version: 1.8
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven
+
+      - name: Install clojure
+        run: |
+          curl -O https://download.clojure.org/install/linux-install-1.10.1.763.sh
+          chmod +x linux-install-1.10.1.763.sh
+          sudo ./linux-install-1.10.1.763.sh
+
+      - name: Compile CLJS
+        run: yarn install --frozen-lockfile && gulp build  && yarn cljs:release
+
+      - name: Update APP Version
+        run: |
+          sed -i 's/"version": "0.0.1"/"version": "${{ github.event.inputs.tag-version }}"/g' ./package.json
+        working-directory: ./static
+
+      - name: Update OSX Packager Config
+        run: |
+          sed -i 's/appleId: "my-fake-apple-id"/appleId: "${{ secrets.APPLE_ID_EMAIL }}"/' ./forge.config.js
+          sed -i 's/appleIdPassword: "my-fake-apple-id-password"/appleIdPassword: "${{ secrets.APPLE_ID_PASSWORD }}"/' ./forge.config.js
+        working-directory: ./static
+
+      - name: Display Package.json
+        run: cat ./package.json
+        working-directory: ./static
+
+      - name: List Files
+        run: ls -al
+        working-directory: ./static
+
+      - name: Compress Static Files
+        run: zip -r static.zip ./static
+
+      - name: Cache Static File
+        uses: actions/upload-artifact@v1
+        with:
+          name: static.zip
+          path: static.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: static.zip
+          path: ./
+
+      - name: Uncompress Static FIles
+        run: unzip static.zip
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/node_modules
+          key: ${{ runner.os }}-node-modules
+
+      - name: Build/Release Electron App
+        run: yarn install --frozen-lockfile && yarn electron:make
+        working-directory: ./static
+
+      - name: Change Artifact Name
+        run: mv static/out/make/zip/linux/x64/logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
+
+      - name: Cache Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-linux.zip
+          path: static/out/make/zip/linux/x64/Logseq-linux.zip
+
+  build-windows:
+    runs-on: windows-latest
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: static.zip
+          path: ./
+
+      - name: Uncompress Static FIles
+        run: unzip static.zip
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/node_modules
+          key: ${{ runner.os }}-node-modules
+
+      - name: Build/Release Electron app
+        run: yarn install --frozen-lockfile && yarn electron:make
+        working-directory: ./static
+
+      - name: Change Artifact Name
+        run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName Logseq-win64.exe
+
+      - name: List Directory
+        run: dir
+        working-directory: static/out/make/squirrel.windows/x64/
+
+      - name: Cache Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-win64.exe
+          path: static/out/make/squirrel.windows/x64/Logseq-win64.exe
+
+  build-macos:
+    needs: [ compile-cljs ]
+    runs-on: macos-latest
+
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: static.zip
+          path: ./
+
+      - name: Uncompress Static Files
+        run: unzip ./static.zip
+
+      - name: List Static Files
+        run: ls -al ./static
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+
+      - name: Signing By Apple Developer ID
+        uses: apple-actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/node_modules
+          key: ${{ runner.os }}-node-modules
+
+      - name: Build/Release Electron App
+        run: yarn install --frozen-lockfile && yarn electron:make
+        working-directory: ./static
+
+      - name: Change Artifact Name
+        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-x64.dmg
+
+      - name: Cache Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-x64.dmg
+          path: static/out/make/Logseq-x64.dmg
+
+  release:
+    needs: [ build-macos, build-linux, build-windows ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download The MacOS X64 Artifact
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-x64.dmg
+          path: ./
+
+      - name: Download The Linux Artifact
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-linux.zip
+          path: ./
+
+      - name: Download The Windows Artifact
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-win64.exe
+          path: ./
+
+      - name: List files
+        run: ls -rl
+
+      - name: Create Release Draft
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.tag-version }}
+          release_name: Desktop APP ${{ github.event.inputs.tag-version }} (Alpha Testing)
+          draft: ${{ github.event.inputs.is-draft }}
+          prerelease: ${{ github.event.inputs.is-pre-release }}
+
+      - name: Upload MacOS X64 Artifact
+        id: upload-macos-x64-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-x64.dmg
+          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload Linux Artifact
+        id: upload-linux-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-linux.zip
+          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
+          asset_content_type: application/zip
+
+      - name: Upload Windows Artifact
+        id: upload-win-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-win64.exe
+          asset_name: logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
+          asset_content_type: application/octet-stream

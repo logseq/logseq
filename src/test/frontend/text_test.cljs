@@ -39,20 +39,24 @@
     "foo bar" "foo bar"
     "foo, bar" #{"foo" "bar"}
     "foo \"bar\"" #{"foo" "bar"}
-    "[[foo]] [[bar]]" #{"[[foo]] [[bar]]"}
+    "[[foo]] [[bar]]" #{"foo]] [[bar"}
     "[[foo]],[[bar]]" #{"foo", "bar"}
     "[[foo]], [[bar]]" #{"foo", "bar"}
-    "[[foo]]" "foo"
-    "[[nested [[foo]]]]" "nested [[foo]]"
-    "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}))
+    "[[foo]]" #{"foo"}
+    "[[nested [[foo]]]]" #{"nested [[foo]]"}
+    "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}
+    "#tag," #{"tag"}
+    "#tag" #{"tag"}
+    "#tag1,#tag2" #{"tag1" "tag2"}
+    "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
 
 (defn extract-level-spaces
   []
   (testing "markdown"
     (are [x y] (= (text/extract-level-spaces x :markdown) y)
-     "# foobar" "# "
-     "##   foobar" "##   "
-     "#####################   foobar" "#####################   "))
+      "# foobar" "# "
+      "##   foobar" "##   "
+      "#####################   foobar" "#####################   "))
   (testing "org mode"
     (are [x y] (= (text/extract-level-spaces x :org) y)
       "* foobar" "* "
@@ -77,10 +81,10 @@
       "**   foobar" "foobar"
       "*********************   foobar" "foobar"))
   (testing "org without spaces between the `#` and title"
-      (are [x y] (= (text/remove-level-spaces x :org) y)
-        "*foobar" "foobar"
-        "**foobar" "foobar"
-        "*********************foobar" "foobar")))
+    (are [x y] (= (text/remove-level-spaces x :org) y)
+      "*foobar" "foobar"
+      "**foobar" "foobar"
+      "*********************foobar" "foobar")))
 
 (defn append-newline-after-level-spaces
   []

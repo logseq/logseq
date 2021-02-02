@@ -10,6 +10,11 @@
   width: 100%;
   top: 0;
   left: 0;
+
+  user-select: none;
+  .it svg {
+      transform: scale(0.8);
+  }
 }
 
 .cp__header-left-menu {

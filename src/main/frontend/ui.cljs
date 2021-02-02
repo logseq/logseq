@@ -3,6 +3,7 @@
             [frontend.rum :as r]
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
+            ["react-resize-context" :as Resize]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
@@ -12,11 +13,14 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [medley.core :as medley]
-            [frontend.ui.date-picker]))
+            [frontend.ui.date-picker]
+            [frontend.context.i18n :as i18n]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
+(def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
+(def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 
 (rum/defc ls-textarea < rum/reactive
   [{:keys [on-change] :as props}]
@@ -59,7 +63,7 @@
        :or   {z-index 999}
        :as   opts}]]
   (let [{:keys [open? toggle-fn]} state
-        modal-content             (modal-content-fn state)]
+        modal-content (modal-content-fn state)]
     [:div.ml-1.relative {:style {:z-index z-index}}
      (content-fn state)
      (css-transition
@@ -75,7 +79,7 @@
    child])
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [modal-class links-header z-index] :as opts}]
+  [content-fn links {:keys [modal-class links-header links-footer z-index] :as opts}]
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
@@ -91,28 +95,29 @@
               child [:div
                      {:style {:display "flex" :flex-direction "row"}}
                      [:div {:style {:margin-right "8px"}} title]
-                     ;; [:div {:style {:position "absolute" :right "8px"}}
-                     ;;  icon]
+                      ;; [:div {:style {:position "absolute" :right "8px"}}
+                      ;;  icon]
 ]]
           (rum/with-key
             (menu-link new-options child)
-            title)))])
+            title)))
+      (when links-footer links-footer)])
    opts))
 
 (defn button
   [text & {:keys [background on-click href]
-           :as option}]
+           :as   option}]
   (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-700.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
         class (if background (string/replace class "indigo" background) class)]
     (if href
       [:a.button (merge
-                  {:type "button"
+                  {:type  "button"
                    :class (util/hiccup->class class)}
                   (dissoc option :background))
        text]
       [:button
        (merge
-        {:type "button"
+        {:type  "button"
          :class (util/hiccup->class class)}
         (dissoc option :background))
        text])))
@@ -127,19 +132,19 @@
              [:svg.h-6.w-6.text-green-400
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path
-               {:d "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width "2"
+               {:d               "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                :stroke-width    "2"
                 :stroke-linejoin "round"
-                :stroke-linecap "round"}]]]
+                :stroke-linecap  "round"}]]]
             :warning
             ["text-gray-900"
              [:svg.h-6.w-6.text-yellow-500
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path
-               {:d "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                :stroke-width "2"
+               {:d               "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                :stroke-width    "2"
                 :stroke-linejoin "round"
-                :stroke-linecap "round"}]]]
+                :stroke-linecap  "round"}]]]
 
             ["text-red-500"
              [:svg.h-6.w-6.text-red-500
@@ -154,7 +159,7 @@
                                  (= state "exited"))
                            -1
                            99)
-                :top "3.2em"}}
+                :top     "3.2em"}}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
@@ -192,7 +197,7 @@
                          v (second el)]
                      (css-transition
                       {:timeout 100
-                       :key (name k)}
+                       :key     (name k)}
                       (fn [state]
                         (notification-content state (:content v) (:status v) k)))))
                  contents)))))
@@ -227,9 +232,13 @@
   []
   (let [cl (.-classList js/document.documentElement)]
     (if util/mac? (.add cl "is-mac"))
+    (if util/win32? (.add cl "is-win32"))
+    (if (util/electron?) (.add cl "is-electron"))
     (if (util/ios?) (.add cl "is-ios"))
     (if (util/mobile?) (.add cl "is-mobile"))
-    (if (util/safari?) (.add cl "is-safari"))))
+    (if (util/safari?) (.add cl "is-safari"))
+    (if (util/electron?)
+      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))))
 
 (defn inject-dynamic-style-node!
   []
@@ -297,7 +306,7 @@
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
   [state body {:keys [on-load on-top-reached]
-               :as opts}]
+               :as   opts}]
   body)
 
 (rum/defcs auto-complete <
@@ -324,7 +333,7 @@
                       element-top (gobj/get element "offsetTop")
                       scroll-top (- (gobj/get element "offsetTop") 360)]
                   (set! (.-scrollTop ac-inner) scroll-top)))))
-       ;; down
+         ;; down
        40 (fn [state e]
             (let [current-idx (get state ::current-idx)
                   matched (first (:rum/args state))]
@@ -339,7 +348,7 @@
                       scroll-top (- (gobj/get element "offsetTop") 360)]
                   (set! (.-scrollTop ac-inner) scroll-top)))))
 
-       ;; enter
+         ;; enter
        13 (fn [state e]
             (util/stop e)
             (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)]
@@ -365,7 +374,7 @@
              {:id       (str "ac-" idx)
               :class    (when (= @current-idx idx)
                           "chosen")
-                ;; :tab-index -1
+               ;; :tab-index -1
               :on-click (fn [e]
                           (.preventDefault e)
                           (if (and (gobj/get e "shiftKey") on-shift-chosen)
@@ -383,9 +392,9 @@
   [:a {:on-click on-click}
    [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
     {:aria-checked "false", :tab-index "0", :role "checkbox"
-     :class (if on? "bg-indigo-600" "bg-gray-200")}
+     :class        (if on? "bg-indigo-600" "bg-gray-200")}
     [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
-     {:class (if on? "translate-x-5" "translate-x-0")
+     {:class       (if on? "translate-x-5" "translate-x-0")
       :aria-hidden "true"}]]])
 
 (defn tooltip
@@ -422,15 +431,15 @@
    [:div.absolute.top-0.right-0.pt-4.pr-4
     [:button.text-gray-400.hover:text-gray-500.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
      {:aria-label "Close"
-      :type "button"
-      :on-click close-fn}
+      :type       "button"
+      :on-click   close-fn}
      [:svg.h-6.w-6
       {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
       [:path
-       {:d "M6 18L18 6M6 6l12 12"
-        :stroke-width "2"
+       {:d               "M6 18L18 6M6 6l12 12"
+        :stroke-width    "2"
         :stroke-linejoin "round"
-        :stroke-linecap "round"}]]]]
+        :stroke-linecap  "round"}]]]]
 
    (panel-content close-fn)])
 
@@ -450,6 +459,52 @@
       {:in show? :timeout 0}
       (fn [state]
         (modal-panel modal-panel-content state close-fn)))]))
+
+(defn make-confirm-modal
+  [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm] :as opts}]
+  (fn [close-fn]
+    (rum/with-context [[t] i18n/*tongue-context*]
+      (let [*sub-checkbox-selected (and sub-checkbox? (atom []))]
+        [:div.ui__confirm-modal
+         {:class (str "is-" tag)}
+         [:div.sm:flex.sm:items-start
+          [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
+           [:svg.h-6.w-6.text-red-600
+            {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
+            [:path
+             {:d
+              "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              :stroke-width    "2"
+              :stroke-linejoin "round"
+              :stroke-linecap  "round"}]]]
+          [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+           [:h2.headline.text-lg.leading-6.font-medium.text-gray-900
+            (if (keyword? title) (t title) title)]
+           [:label.sublabel
+            (when sub-checkbox?
+              (checkbox
+               {:default-value false
+                :on-change     (fn [e]
+                                 (let [checked (.. e -target -checked)]
+                                   (reset! *sub-checkbox-selected [checked])))}))
+            [:h3.subline.text-gray-400
+             (if (keyword? sub-title)
+               (t sub-title)
+               sub-title)]]]]
+
+         [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+          [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+           [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+            {:type     "button"
+             :on-click #(and (fn? on-confirm)
+                             (on-confirm % {:close-fn close-fn
+                                            :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))}
+            (t :yes)]]
+          [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
+           [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+            {:type     "button"
+             :on-click (comp on-cancel close-fn)}
+            (t :cancel)]]]]))))
 
 (defn loading
   [content]
@@ -471,12 +526,12 @@
     [:div.flex.flex-col
      [:div.content
       [:div.flex-1.flex-row.foldable-title {:on-mouse-over #(reset! control? true)
-                                            :on-mouse-out #(reset! control? false)}
+                                            :on-mouse-out  #(reset! control? false)}
        [:div.flex.flex-row.items-center
         [:a.block-control.opacity-50.hover:opacity-100.mr-2
-         {:style {:width 14
-                  :height 16
-                  :margin-left -24}
+         {:style    {:width       14
+                     :height      16
+                     :margin-left -24}
           :on-click (fn [e]
                       (util/stop e)
                       (swap! collapsed? not))}
@@ -534,13 +589,13 @@
 (rum/defc select
   [options on-change]
   [:select.mt-1.form-select.block.w-full.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
-   {:style {:padding "0 0 0 12px"}
+   {:style     {:padding "0 0 0 12px"}
     :on-change (fn [e]
                  (let [value (util/evalue e)]
                    (on-change value)))}
    (for [{:keys [label value selected]} options]
      [:option (cond->
-               {:key label
+               {:key   label
                 :value (or value label)}
                 selected
                 (assoc :selected selected))

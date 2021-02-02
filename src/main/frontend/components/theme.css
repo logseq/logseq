@@ -10,7 +10,7 @@
   --ls-z-index-level-5: 99999;
 }
 
-html:not(.is-mac) {
+html {
   ::-webkit-scrollbar-thumb {
     background-color: var(--ls-scrollbar-foreground-color);
   }
@@ -26,7 +26,6 @@ html:not(.is-mac) {
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
-    -webkit-border-radius: 100px;
   }
 
   ::-webkit-scrollbar-thumb {
@@ -91,3 +90,118 @@ html[data-theme=light] {
     display: none;
   }
 }
+
+html.is-electron {
+  --frame-top-height: 24px;
+
+  .theme-inner {
+  }
+
+  .cp__header {
+    height: 2.6rem;
+    background-color: var(--ls-primary-background-color);
+    top: 0;
+  }
+
+  &.is-mac {
+    .cp__header {
+      height: calc(2.2rem + var(--frame-top-height));
+      padding-top: var(--frame-top-height);
+
+      &-logo {
+        height: var(--frame-top-height);
+      }
+
+      &:before {
+        content: " ";
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 8;
+        -webkit-app-region: drag;
+        width: 100%;
+        height: var(--frame-top-height);
+      }
+    }
+
+    .cp__right-sidebar {
+      top: 4rem;
+    }
+
+    &.is-fullscreen {
+      .cp__header {
+        padding-top: 0;
+        height: 2.6rem;
+
+        &:before {
+          display: none;
+        }
+      }
+    }
+  }
+
+  #search {
+    -webkit-app-region: drag;
+
+    #search-wrapper {
+      -webkit-app-region: no-drag;
+    }
+  }
+
+  .ls-window-frame-title-bar {
+    background-color: var(--ls-primary-background-color);
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 9;
+    height: var(--frame-top-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+    -webkit-app-region: drag;
+
+    & > .l {
+      display: flex;
+    }
+
+    & > .r {
+      & > .inner {
+        display: flex;
+      }
+    }
+
+    & > .c {
+      font-size: .7rem;
+    }
+
+    a.it {
+      padding: 0 2px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+
+      &:hover {
+        background-color: var(--ls-secondary-background-color);
+      }
+
+      &:active {
+        background-color: var(--ls-primary-background-color);
+      }
+
+      svg {
+        transform: scale(.6);
+        color: var(--ls-primary-text-color);
+        cursor: pointer;
+      }
+
+      &.maximize {
+        svg {
+          transform: scale(.5) translateY(2px) translateX(1px);
+          opacity: .7;
+        }
+      }
+    }
+  }
+}
+
+

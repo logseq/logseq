@@ -82,12 +82,12 @@
 
 (defn get-modified-pages
   [repo]
-  (d/q
-   '[:find ?page-name ?modified-at
-     :where
-     [?page :page/original-name ?page-name]
-     [(get-else $ ?page :page/last-modified-at 0) ?modified-at]]
-   (conn/get-conn repo)))
+  (-> (d/q
+       '[:find ?page-name
+         :where
+         [?page :page/original-name ?page-name]]
+       (conn/get-conn repo))
+      (db-utils/seq-flatten)))
 
 (defn get-page-alias
   [repo page-name]
@@ -127,13 +127,15 @@
   [repo]
   (when-let [conn (conn/get-conn repo)]
     (->> (d/q
-          '[:find ?path ?modified-at
+           '[:find ?path
+             ;; ?modified-at
             :where
             [?file :file/path ?path]
-            [(get-else $ ?file :file/last-modified-at 0) ?modified-at]]
+            ;; [?file :file/last-modified-at ?modified-at]
+]
           conn)
          (seq)
-         (sort-by last)
+         ;; (sort-by last)
          (reverse))))
 
 (defn get-files-blocks
@@ -203,7 +205,7 @@
 (defn set-file-last-modified-at!
   [repo path last-modified-at]
   (when (and repo path last-modified-at)
-    (when-let [conn (conn/get-files-conn repo)]
+    (when-let [conn (conn/get-conn repo false)]
       (d/transact! conn
                    [{:file/path path
                      :file/last-modified-at last-modified-at}]))))
@@ -211,7 +213,7 @@
 (defn get-file-last-modified-at
   [repo path]
   (when (and repo path)
-    (when-let [conn (conn/get-files-conn repo)]
+    (when-let [conn (conn/get-conn repo false)]
       (-> (d/entity (d/db conn) [:file/path path])
           :file/last-modified-at))))
 
@@ -258,7 +260,8 @@
 
 (defn get-custom-css
   []
-  (get-file "logseq/custom.css"))
+  (when-let [repo (state/get-current-repo)]
+    (get-file (config/get-file-path repo "logseq/custom.css"))))
 
 (defn get-file-no-sub
   ([path]
@@ -269,8 +272,12 @@
        (:file/content (d/entity (d/db conn) [:file/path path]))))))
 
 (defn get-block-by-uuid
-  [uuid]
-  (db-utils/entity [:block/uuid uuid]))
+  [id]
+  (db-utils/entity [:block/uuid (if (uuid? id) id (uuid id))]))
+
+(defn query-block-by-uuid
+  [id]
+  (db-utils/pull [:block/uuid (if (uuid? id) id (uuid id))]))
 
 (defn get-page-format
   [page-name]
@@ -338,7 +345,7 @@
 (defn sort-blocks
   [blocks]
   (let [pages-ids (map (comp :db/id :block/page) blocks)
-        pages (db-utils/pull-many '[:db/id :page/last-modified-at :page/name :page/original-name] pages-ids)
+        pages (db-utils/pull-many '[:db/id :page/name :page/original-name] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]
@@ -692,15 +699,16 @@
   [file ast]
   ;; headline
   (let [ast (map first ast)]
-    (if (util/starts-with? file "pages/contents.")
+    (if (string/includes? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter block/heading-block? ast)))
             property-name (when (and (= "Properties" (ffirst ast))
                                      (not (string/blank? (:title (last (first ast))))))
                             (:title (last (first ast))))
-            first-block-name (and first-block
-                                  ;; FIXME:
-                                  (str (last (first (:title first-block)))))
+            first-block-name (let [title (last (first (:title first-block)))]
+                               (and first-block
+                                    (string? title)
+                                    title))
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (when-let [file-name (first (util/split-last "." file-name))]
                           (-> file-name
@@ -711,6 +719,13 @@
             (if (= (state/page-name-order) "file")
               (or file-name first-block-name)
               (or first-block-name file-name)))))))
+
+(defn get-page-original-name
+  [page-name]
+  (when page-name
+    (let [page (db-utils/pull [:page/name (string/lower-case page-name)])]
+      (or (:page/original-name page)
+          (:page/name page)))))
 
 (defn get-block-content
   [utf8-content block]
@@ -1177,3 +1192,17 @@
         tx-data (map (fn [page-id] [:db/retract page-id :page/alias]) page-ids)]
     (when (seq tx-data)
       (db-utils/transact! repo tx-data))))
+
+(defn set-file-content!
+  [repo path content]
+  (when (and repo path)
+    (let [tx-data {:file/path path
+                   :file/content content}
+          tx-data (if (config/local-db? repo)
+                    (dissoc tx-data :file/last-modified-at)
+                    tx-data)]
+      (react/transact-react!
+       repo
+       [tx-data]
+       {:key [:file/content path]
+        :files-db? true}))))

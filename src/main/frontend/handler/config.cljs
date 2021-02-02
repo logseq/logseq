@@ -9,7 +9,7 @@
 (defn set-config!
   [k v]
   (when-let [repo (state/get-current-repo)]
-    (let [path (str config/app-name "/" config/config-file)]
+    (let [path (config/get-config-path)]
       (when-let [config (db/get-file-no-sub path)]
         (let [config (try
                        (rewrite/parse-string config)

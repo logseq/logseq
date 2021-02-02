@@ -13,6 +13,8 @@
 
 (defonce page-ref-re #"\[\[(.*?)\]\]")
 
+(defonce page-ref-re-2 #"(\[\[.*?\]\])")
+
 (defonce between-re #"\(between ([^\)]+)\)")
 
 (defn page-ref-un-brackets!
@@ -34,15 +36,21 @@
 (defn split-page-refs-without-brackets
   [s]
   (if (and (string? s)
-           (or (re-find #"[\"|\,|，]+" s)
+           (or (re-find #"[\"|\,|，|#]+" s)
                (re-find page-ref-re s)))
-    (let [result (->> s
-                      (sep-by-comma-or-quote)
-                      (map page-ref-un-brackets!)
+    (let [result (->> (string/split s page-ref-re-2)
+                      (remove string/blank?)
+                      (mapcat (fn [s]
+                                (if (page-ref? s)
+                                  [(page-ref-un-brackets! s)]
+                                  (sep-by-comma-or-quote s))))
                       (distinct))]
-      (if (and (coll? result)
-               (> (count result) 1))
-        (set result)
+      (if (or (coll? result)
+              (and (string? result)
+                   (string/starts-with? result "#")))
+        (let [result (if coll? result [result])
+              result (map (fn [s] (string/replace s #"^#+" "")) result)]
+          (set result))
         (first result)))
     s))
 

@@ -11,6 +11,7 @@
             [frontend.handler.graph :as graph-handler]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.util :as util]
             [frontend.date :as date]
             [medley.core :as medley]
@@ -60,32 +61,17 @@
      (if (seq pages)
        (for [page pages]
          [:a.mb-1 {:key (str "recent-page-" page)
-                   :href (rfe/href :page {:name page})}
+                   :href (rfe/href :page {:name page})
+                   :on-click (fn [e]
+                               (when (gobj/get e "shiftKey")
+                                 (when-let [page (db/pull [:page/name (string/lower-case page)])]
+                                   (state/sidebar-add-block!
+                                    (state/get-current-repo)
+                                    (:db/id page)
+                                    :page
+                                    {:page page}))
+                                 (.preventDefault e)))}
           page]))]))
-
-(rum/defcs foldable-list <
-  (rum/local false ::fold?)
-  [state page l]
-  (let [fold? (get state ::fold?)]
-    [:div
-     [:div.flex.flex-row.items-center.mb-1
-      [:a.control.opacity-50.hover:opacity-100
-       {:on-click #(swap! fold? not)
-        :style {:width "0.75rem"}}
-       (when (seq l)
-         (if @fold?
-           svg/arrow-down-v2
-           svg/arrow-right-v2))]
-
-      [:a.ml-2 {:key (str "contents-" page)
-                :href (rfe/href :page {:name page})}
-       (util/capitalize-all page)]]
-     (when (seq l)
-       [:div.contents-list.ml-4 {:class (if @fold? "hidden" "initial")}
-        (for [{:keys [page list]} l]
-          (rum/with-key
-            (foldable-list page list)
-            (str "toc-item-" page)))])]))
 
 (rum/defc contents < rum/reactive db-mixins/query
   []
@@ -113,7 +99,7 @@
     [(t :right-side-bar/help) (onboarding/help)]
 
     :page-graph
-    [(str (t :right-side-bar/graph-ref) (util/capitalize-all block-data))
+    [(str (t :right-side-bar/graph-ref) (db-model/get-page-original-name block-data))
      (page-graph block-data)]
 
     :block-ref
@@ -137,8 +123,11 @@
 
     :page
     (let [page-name (:page/name block-data)]
-      [[:a {:href (rfe/href :page {:name (util/url-encode page-name)})}
-        (util/capitalize-all page-name)]
+      [[:a {:href (rfe/href :page {:name page-name})
+            :on-click (fn [e]
+                        (when (gobj/get e "shiftKey")
+                          (.preventDefault e)))}
+        (db-model/get-page-original-name page-name)]
        [:div.ml-2
         (page-cp repo page-name)]])
 
@@ -154,8 +143,8 @@
                                                        :slide? true
                                                        :sidebar? true
                                                        :page-name page-name})]
-      [[:a {:href (str "/page/" (util/url-encode page-name))}
-        (util/capitalize-all page-name)]
+      [[:a {:href {:href (rfe/href :page {:name page-name})}}
+        (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide sections)]])
 
@@ -220,6 +209,9 @@
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub :sidebar/blocks)
+        blocks (if (empty? blocks)
+                 [[(state/get-current-repo) "contents" :contents nil]]
+                 blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)
         match (state/sub :route-match)
@@ -230,32 +222,35 @@
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner
-          [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
-                                                            (state/sidebar-add-block! repo "contents" :contents nil))}
-             (t :right-side-bar/contents)]]
+          [:div.flex.flex-row.justify-between.items-center
+           [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
+                                                             (state/sidebar-add-block! repo "contents" :contents nil))}
+              (t :right-side-bar/contents)]]
 
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                            (state/sidebar-add-block! repo "recent" :recent nil))}
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                             (state/sidebar-add-block! repo "recent" :recent nil))}
 
-             (t :right-side-bar/recent)]]
+              (t :right-side-bar/recent)]]
 
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                            (when-let [page (get-current-page)]
-                                                              (state/sidebar-add-block!
-                                                               repo
-                                                               (str "page-graph-" page)
-                                                               :page-graph
-                                                               page)))}
-             (t :right-side-bar/page)]]
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn []
+                                                             (when-let [page (get-current-page)]
+                                                               (state/sidebar-add-block!
+                                                                repo
+                                                                (str "page-graph-" page)
+                                                                :page-graph
+                                                                page)))}
+              (t :right-side-bar/page)]]
 
-           [:div.ml-4.text-sm
-            [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                            (state/sidebar-add-block! repo "help" :help nil))}
-             (t :right-side-bar/help)]]]
+            [:div.ml-4.text-sm
+             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                             (state/sidebar-add-block! repo "help" :help nil))}
+              (t :right-side-bar/help)]]]
+           [:a.close-arrow.opacity-50.hover:opacity-100 {:on-click state/toggle-sidebar-open?!}
+            (svg/big-arrow-right)]]
 
           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
             (rum/with-key

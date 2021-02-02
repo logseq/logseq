@@ -28,3 +28,6 @@ report.html
 strings.csv
 
 .calva
+resources/electron.js
+.clj-kondo/
+.lsp/

@@ -127,21 +127,7 @@
      (gobj/get js/window.navigator "language")
      (bean/->js {:hour "2-digit"
                  :minute "2-digit"
-                 :hour12 false}))))
-
-(defn journals-path
-  [year month preferred-format]
-  (let [month (if (< month 10) (str "0" month) month)
-        format (string/lower-case (name preferred-format))
-        format (if (= format "markdown") "md" format)]
-    (str "journals/" year "_" month "." format)))
-
-(defn current-journal-path
-  [preferred-format]
-  (when preferred-format
-    (let [{:keys [year month]} (get-date)
-          preferred-format preferred-format]
-      (journals-path year month preferred-format))))
+                 :hourCycle "h23"}))))
 
 (defn valid?
   [s]

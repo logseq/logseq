@@ -30,7 +30,8 @@
   ([repo-url file]
    (git-add repo-url file true))
   ([repo-url file update-status?]
-   (when-not (config/local-db? repo-url)
+   (when (and (not (config/local-db? repo-url))
+              (not (util/electron?)))
      (-> (p/let [result (git/add repo-url file)]
            (when update-status?
              (common-handler/check-changed-files-status)))
@@ -57,6 +58,6 @@
   [repo-url {:keys [name email]}]
   (when (and name email)
     (git/set-username-email
-     (util/get-repo-dir repo-url)
+     (config/get-repo-dir repo-url)
      name
      email)))

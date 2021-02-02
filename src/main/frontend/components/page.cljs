@@ -202,7 +202,7 @@
          [:ul.mt-2
           (for [[original-name name] pages]
             [:li {:key (str "tagged-page-" name)}
-             [:a {:href (str "/page/" (util/encode-str name))}
+             [:a {:href (rfe/href :page {:name name})}
               original-name]])])]])))
 
 (defonce last-route (atom :home))
@@ -283,6 +283,11 @@
                              :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}}
                             {:title (t :page/rename)
                              :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}}
+                            (when (and file-path (util/electron?))
+                              [{:title   (t :page/open-in-finder)
+                                :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
+                               {:title (t :page/open-with-default-app)
+                                :options {:on-click #(js/window.apis.openPath file-path)}}])
                             {:title (t :page/delete)
                              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}}
                             {:title   (t :page/action-publish)
@@ -304,8 +309,8 @@
                                                                              (page-handler/publish-page! page-name project/add-project))}})
                                                     (when-not published?
                                                       {:title   (t :page/publish-as-slide)
-                                                      :options {:on-click (fn []
-                                                                            (page-handler/publish-page-as-slide! page-name project/add-project))}})
+                                                       :options {:on-click (fn []
+                                                                             (page-handler/publish-page-as-slide! page-name project/add-project))}})
                                                     {:title   (t (if public? :page/make-private :page/make-public))
                                                      :options {:background (if public? "gray" "indigo")
                                                                :on-click (fn []
@@ -326,6 +331,7 @@
                                                                     :on-click #(.writeText js/navigator.clipboard page-data))]
                                                         :success
                                                         false)))}})]
+                           (flatten)
                            (remove nil?))]
                 (when (seq links)
                   (ui/dropdown-with-links
@@ -373,12 +379,11 @@
                  {:key "page-file"}
                  [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
                  [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
-                                                       :word-break "break-word"}
-                                               :href (str "/file/" (util/url-encode file-path))}
+                                                       :word-break    "break-word"}
+                                               :href  (rfe/href :file {:path file-path})}
                   file-path]
 
-                 (when (and (not config/mobile?)
-                            (not journal?))
+                 (when (not config/mobile?)
                    (presentation repo page))])]
 
              (when (and repo (not block?))
@@ -387,7 +392,7 @@
                    [:div.text-sm.ml-1.mb-4 {:key "page-file"}
                     [:span.opacity-50 "Alias: "]
                     (for [item alias]
-                      [:a.ml-1.mr-1 {:href (str "/page/" (util/encode-str item))}
+                      [:a.ml-1.mr-1 {:href (rfe/href :page {:name item})}
                        item])])))
 
              (when (and block? (not sidebar?))
@@ -434,7 +439,7 @@
            {:width (if (and (> width 1280) sidebar-open?)
                      (- width 24 600)
                      (- width 24))
-            :height (- height 120)
+            :height height
             :ref (fn [v] (reset! graph-ref v))
             :ref-atom graph-ref}))
          [:div.ls-center.mt-20
@@ -473,11 +478,10 @@
               [:th (t :page/name)]
               [:th (t :file/last-modified-at)]]]
             [:tbody
-             (for [[page modified-at] pages]
+             (for [page pages]
                (let [encoded-page (util/encode-str page)]
                  [:tr {:key encoded-page}
                   [:td [:a {:on-click (fn [e]
-                                        (.preventDefault e)
                                         (let [repo (state/get-current-repo)
                                               page (db/pull repo '[*] [:page/name (string/lower-case page)])]
                                           (when (gobj/get e "shiftKey")
@@ -489,10 +493,7 @@
                             :href (rfe/href :page {:name encoded-page})}
                         page]]
                   [:td [:span.text-gray-500.text-sm
-                        (if (zero? modified-at)
-                          (t :file/no-data)
-                          (date/get-date-time-string
-                           (t/to-default-time-zone (tc/to-date-time modified-at))))]]]))]]))])))
+                        (t :file/no-data)]]]))]]))])))
 
 (rum/defcs new < rum/reactive
   (rum/local "" ::title)

@@ -1,5 +1,6 @@
 (ns frontend.components.journal
   (:require [rum.core :as rum]
+            [reitit.frontend.easy :as rfe]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -77,17 +78,17 @@
     [:div.flex-1.journal.page {:class (if intro? "intro" "")}
      (ui/foldable
       [:a.initial-color.title
-       {:href (str "/page/" encoded-page-name)
+       {:href     (rfe/href :page {:name page})
         :on-click (fn [e]
-                    (.preventDefault e)
                     (when (gobj/get e "shiftKey")
                       (when-let [page (db/pull [:page/name (string/lower-case title)])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
                          :page
-                         {:page page
-                          :journal? true}))))}
+                         {:page     page
+                          :journal? true}))
+                      (.preventDefault e)))}
        [:h1.title
         (util/capitalize-all title)]]
 

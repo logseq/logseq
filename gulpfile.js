@@ -1,4 +1,5 @@
 const fs = require('fs')
+const cp = require('child_process')
 const path = require('path')
 const gulp = require('gulp')
 const postcss = require('gulp-postcss')
@@ -62,7 +63,7 @@ const css = {
 
 const common = {
   clean () {
-    return del(outputPath)
+    return del(['./static/**/*', '!./static/yarn.lock', '!./static/node_modules'])
   },
 
   syncResourceFile () {
@@ -72,6 +73,50 @@ const common = {
   keepSyncResourceFile () {
     return gulp.watch(resourceFilePath, { ignoreInitial: false }, common.syncResourceFile)
   }
+}
+
+exports.electron = () => {
+  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
+    cp.execSync('yarn', {
+      cwd: outputPath,
+      stdio: 'inherit'
+    })
+  }
+
+  cp.execSync('yarn electron:dev', {
+    cwd: outputPath,
+    stdio: 'inherit'
+  })
+}
+
+exports.electronMaker = async () => {
+  cp.execSync('yarn cljs:electron-release', {
+    stdio: 'inherit'
+  })
+
+  const pkgPath = path.join(outputPath, 'package.json')
+  const pkg = require(pkgPath)
+  const version = fs.readFileSync(path.join(__dirname, 'src/main/frontend/version.cljs'))
+    .toString().match(/[0-9.]{3,}/)[0]
+
+  if (!version) {
+    throw new Error('release version error in src/**/*/version.cljs')
+  }
+
+  pkg.version = version
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
+
+  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
+    cp.execSync('yarn', {
+      cwd: outputPath,
+      stdio: 'inherit'
+    })
+  }
+
+  cp.execSync('yarn electron:make', {
+    cwd: outputPath,
+    stdio: 'inherit'
+  })
 }
 
 exports.clean = common.clean

@@ -14,6 +14,7 @@
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/mode/clojure/clojure"]
+            ["codemirror/mode/powershell/powershell"]
             ["codemirror/mode/javascript/javascript"]
             ["codemirror/mode/clike/clike"]
             ["codemirror/mode/vue/vue"]
