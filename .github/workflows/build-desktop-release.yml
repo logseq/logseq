@@ -124,6 +124,13 @@ jobs:
         with:
           node-version: 14
 
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/node_modules
+          key: ${{ runner.os }}-${{ hashFiles('**/package.json') }}
+
       - name: Build/Release Electron app
         run: yarn install --frozen-lockfile && yarn electron:make
         working-directory: ./static
