@@ -249,6 +249,9 @@
    [:button.bottom-action
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
     svg/multi-line-input]
+   [:button.bottom-action
+    {:on-click #(commands/simple-insert! parent-id "TODO " {})}
+    svg/checkbox]
    [:button.font-extrabold.bottom-action.-mt-1
     {:on-click #(commands/simple-insert!
                  parent-id "[[]]"
