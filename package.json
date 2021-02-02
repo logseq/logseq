@@ -25,7 +25,8 @@
     },
     "scripts": {
         "watch": "run-p gulp:build gulp:watch cljs:watch",
-        "release": "run-s gulp:build cljs:release",
+        "release": "ENV=prod run-s gulp:build cljs:release",
+        "release-staging": "ENV=staging run-s gulp:build cljs:release",
         "watch-app": "run-p gulp:watch cljs:watch-app",
         "release-app": "run-s gulp:build cljs:release-app",
         "release-publishing": "run-s gulp:build cljs:release-publishing",
