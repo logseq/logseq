@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.env :as env]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -13,32 +14,33 @@
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
+(def test? (= :test (env/get-static :runtime)))
+(def staging? (= :staging (env/get-static :runtime)))
+(def prod? (= :prod (env/get-static :runtime)))
 
 (def app-name "logseq")
-(def website
-  (if dev?
-    "http://localhost:3000"
-    (util/format "https://%s.com" app-name)))
 
-(def api
-  (if dev?
-    "http://localhost:3000/api/v1/"
-    (str website "/api/v1/")))
 
-;; change if you want to use your own domain instead of default asset.logseq.com
-(def asset-domain (util/format "https://asset.%s.com"
-                               app-name))
+(def website (env/get-static :website))
+(def api (env/get-static :api))
+(def asset-domain (env/get-static :asset-domain))
+(def github-app-name (env/get-static :github-app-name))
 
 (defn asset-uri
   [path]
-  (if (util/file-protocol?)
+  (cond
+    (util/file-protocol?)
     (string/replace path "/static/" "./")
-    (if dev? path
-        (str asset-domain path))))
 
-(goog-define GITHUB_APP_NAME "logseq-test")
+    dev? path
 
-(def github-app-name (if dev? GITHUB_APP_NAME "logseq"))
+    staging?
+    (if-let [branch (-> (state/get-me) :git-branch)]
+      (str asset-domain "/" branch path)
+      (str asset-domain path))
+
+    :else
+    (str asset-domain path)))
 
 (defn git-pull-secs
   []

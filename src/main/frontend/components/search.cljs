@@ -129,9 +129,10 @@
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              page (:page/name (:block/page (db/entity [:block/uuid block-uuid])))
-                              path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
-                          (route/redirect-with-fragment! path))
+                              page (:page/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                          (route/redirect! {:to :page
+                                            :path-params {:name page}
+                                            :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))
                         nil))
          :on-shift-chosen (fn [{:keys [type data]}]
                             (case type

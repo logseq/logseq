@@ -31,7 +31,8 @@
     :http-root    "public"
     :http-port    3001
     :watch-path   "static"
-    :preloads     [devtools.preload]}}
+    :preloads     [devtools.preload]}
+   :build-hooks [(shadow-env.core/hook)]}
 
   :electron {:target :node-script
              :output-to "static/electron.js"
@@ -44,7 +45,8 @@
   {:target :node-test
    :output-to "static/tests.js"
    :closure-defines {frontend.util/NODETEST true}
-   :devtools {:enabled false}}
+   :devtools {:enabled false}
+   :build-hooks [(shadow-env.core/hook)]}
 
   :publishing
   {:target :browser
@@ -70,4 +72,5 @@
    {:before-load frontend.core/stop
     ;; after live-reloading finishes call this function
     :after-load frontend.core/start
-    :preloads     [devtools.preload]}}}}
+    :preloads     [devtools.preload]}
+   :build-hooks [(shadow-env.core/hook)]}}}

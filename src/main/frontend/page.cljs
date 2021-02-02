@@ -49,4 +49,4 @@
         ;;           :timeout {:enter 300
         ;;                     :exit 200}}
         ;;          (route-view view route-match)))))))
-         [:div "404 Page"])))))
+         )))))

@@ -628,12 +628,12 @@
           (image-link config url s label metadata full_text)
 
           (= \# (first s))
-          (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
+          (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
           ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
           (and (= \* (first s))
                (not= \* (last s)))
-          (->elem :a {:href (str "#" (mldoc/anchorLink (subs s 1)))} (map-inline config label))
+          (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
           (re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s}
@@ -751,7 +751,7 @@
       [:sup.fn
        [:a {:id (str "fnr." encode-name)
             :class "footref"
-            :href (str "#fn." encode-name)}
+            :on-click #(route-handler/jump-to-anchor! (str "fn." encode-name))}
         name]])
 
     ["Macro" options]
@@ -1934,7 +1934,7 @@
            [:a.ml-1 {:id (str "fn." id)
                      :style {:font-size 14}
                      :class "footnum"
-                     :href (str "#fnr." id)}
+                     :on-click #(route-handler/jump-to-anchor! (str "fnr." id))}
             [:sup.fn (str name "↩︎")]])]])
 
       :else

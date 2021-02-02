@@ -23,11 +23,6 @@
   []
   (redirect! {:to :home}))
 
-(defn redirect-with-fragment!
-  [path]
-  (.pushState js/window.history nil "" path)
-  (rfh/-on-navigate @rfe/history path))
-
 (defn get-title
   [name path-params]
   (case name
@@ -78,13 +73,17 @@
 
 (defn set-route-match!
   [route]
-  (swap! state/state assoc :route-match route)
-  (let [{:keys [data path-params]} route
-        title (get-title (:name data) path-params)]
-    (util/set-title! title)
-    (if-let [fragment (util/get-fragment)]
-      (ui-handler/highlight-element! fragment)
+  (let [route route]
+    (swap! state/state assoc :route-match route)
+    (let [{:keys [data path-params]} route
+          title (get-title (:name data) path-params)]
+      (util/set-title! title)
       (util/scroll-to-top))))
+
+(defn jump-to-anchor!
+  [anchor-text]
+  (when anchor-text
+    (ui-handler/highlight-element! anchor-text)))
 
 (defn go-to-search!
   []
