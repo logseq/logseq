@@ -1,0 +1,17 @@
+{:runtime #profile {:dev :dev
+                    :staging :staging
+                    :test :test
+                    :prod :prod}
+ :website #profile {:dev "http://localhost:3000"
+                    :staging "https://staging.logseq.com"
+                    :prod "https://logseq.com"}
+ :api #profile {:dev "http://localhost:3000/api/v1/"
+                :staging "https://staging.logseq.com/api/v1/"
+                :prod "https://logseq.com/api/v1/"}
+ :asset-domain #profile {:dev ""
+                         :staging "https://d2mcfbcftfbnmt.cloudfront.net"
+                         :prod "https://assets.logseq.com"}
+ :github-app-name #profile {:dev "logseq-test"
+                            :staging "logseq-staging"
+                            :prod "logseq"}}
+
