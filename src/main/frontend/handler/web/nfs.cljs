@@ -4,12 +4,10 @@
             [promesa.core :as p]
             [medley.core :as medley]
             [goog.object :as gobj]
-            [goog.dom :as gdom]
             [frontend.util :as util]
             [frontend.handler.common :as common-handler]
             ["/frontend/utils" :as utils]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file :as file-handler]
             [frontend.idb :as idb]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -33,7 +31,7 @@
       (if-let [file (:file/file ignore-file)]
         (p/let [content (.text file)]
           (when content
-            (let [paths (set (file-handler/ignore-files content (map :file/path files)))]
+            (let [paths (set (common-handler/ignore-files content (map :file/path files)))]
               (when (seq paths)
                 (filter (fn [f] (contains? paths (:file/path f))) files)))))
         (p/resolved files))
@@ -99,8 +97,8 @@
     (set-files-aux! handles)))
 
 ;; TODO: extract code for `ls-dir-files` and `reload-dir!`
-(defn ls-dir-files
-  []
+(defn ls-dir-files-with-handler!
+  [ok-handler]
   (let [path-handles (atom {})
         electron? (util/electron?)
         nfs? (not electron?)]
@@ -154,6 +152,7 @@
                                                        :nfs-files    files})
 
                        (state/add-repo! {:url repo :nfs? true})
+                       (and ok-handler (ok-handler))
                        (when (util/electron?)
                          (fs/watch-dir! dir-name)))))
            (p/catch (fn [error]

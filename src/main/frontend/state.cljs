@@ -144,7 +144,7 @@
 
 (defn get-current-repo
   []
-  (:git/current-repo @state))
+  (or (:git/current-repo @state) "local"))
 
 (defn get-config
   ([]

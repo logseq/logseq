@@ -291,7 +291,8 @@
 
 (defn local-db?
   [s]
-  (string/starts-with? s local-db-prefix))
+  (and (string? s)
+       (string/starts-with? s local-db-prefix)))
 
 (defn local-asset?
   [s]

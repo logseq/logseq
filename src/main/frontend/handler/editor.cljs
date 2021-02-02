@@ -1772,6 +1772,7 @@
          (and last-command
               (commands/get-matched-commands last-command)))))
     (catch js/Error e
+      (js/console.error e)
       nil)))
 
 (defn get-matched-block-commands

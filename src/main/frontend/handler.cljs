@@ -17,7 +17,6 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.export :as export-handler]
             [frontend.handler.web.nfs :as nfs]
             [frontend.fs.watcher-handler :as fs-watcher-handler]
             [frontend.ui :as ui]

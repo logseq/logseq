@@ -15,6 +15,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.handler.project :as project-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
@@ -188,7 +189,7 @@
                   (not config/publishing?))
          [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
           {:on-click (fn []
-                       (nfs/ls-dir-files))}
+                       (page-handler/ls-dir-files!))}
           [:div.flex.flex-row.text-center
            [:span.inline-block svg/folder-add]
            (when-not config/mobile?
