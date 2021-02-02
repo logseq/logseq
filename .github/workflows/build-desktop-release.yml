@@ -58,6 +58,10 @@ jobs:
         working-directory: ./static
 
       - name: Display Package.json
+        run: cat ./forge.config.js
+        working-directory: ./static
+
+      - name: Display Package.json
         run: cat ./package.json
         working-directory: ./static
 
