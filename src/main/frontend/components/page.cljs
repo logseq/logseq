@@ -383,9 +383,7 @@
                                                :href  (rfe/href :file {:path file-path})}
                   file-path]
 
-                 (when (and (not config/mobile?)
-                            (not (util/electron?))
-                            (not journal?))
+                 (when (not config/mobile?)
                    (presentation repo page))])]
 
              (when (and repo (not block?))

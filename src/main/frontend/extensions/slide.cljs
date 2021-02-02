@@ -29,28 +29,33 @@
               (bean/->js
                {:embedded true
                 :controls true
-                :history true
+                :history false
                 :center true
                 :transition "slide"}))]
     (.initialize deck)))
 
 (defn slide-content
   [loading? style sections]
-  [:div.reveal {:style style}
-   (when loading?
-     [:div.ls-center (ui/loading "")])
-   [:div.slides
-    (for [[idx sections] (medley/indexed sections)]
-      (if (> (count sections) 1)       ; nested
-        [:section {:key (str "slide-section-" idx)}
-         (for [[idx2 [block block-cp]] (medley/indexed sections)]
-           [:section (-> {:key (str "slide-section-" idx "-" idx2)}
+  [:div
+   [:p.text-sm
+    [:span.opacity-70 "Tip: press "]
+    [:code "F"]
+    [:span.opacity-70 " to go fullscreen"]]
+   [:div.reveal {:style style}
+    (when loading?
+      [:div.ls-center (ui/loading "")])
+    [:div.slides
+     (for [[idx sections] (medley/indexed sections)]
+       (if (> (count sections) 1)       ; nested
+         [:section {:key (str "slide-section-" idx)}
+          (for [[idx2 [block block-cp]] (medley/indexed sections)]
+            [:section (-> {:key (str "slide-section-" idx "-" idx2)}
+                          (with-properties block))
+             block-cp])]
+         (let [[block block-cp] (first sections)]
+           [:section (-> {:key (str "slide-section-" idx)}
                          (with-properties block))
-            block-cp])]
-        (let [[block block-cp] (first sections)]
-          [:section (-> {:key (str "slide-section-" idx)}
-                        (with-properties block))
-           block-cp])))]])
+            block-cp])))]]])
 
 (rum/defc slide < rum/reactive
   {:did-mount (fn [state]

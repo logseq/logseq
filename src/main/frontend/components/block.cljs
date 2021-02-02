@@ -1155,8 +1155,7 @@
                       [:span (t :page/edit-properties-placeholder)]
                       (markup-elements-cp (assoc config :block/format format) ast))]]
       (if slide?
-        [:div [:h1 (:page-name config)]
-         block-cp]
+        [:div [:h1 (:page-name config)]]
         block-cp))))
 
 (rum/defc properties-cp
