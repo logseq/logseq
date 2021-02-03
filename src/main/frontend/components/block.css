@@ -30,7 +30,6 @@
     display: inline-block;
     position: relative;
     margin-top: .5rem;
-    margin-bottom: .5rem;
 
     .ctl {
       position: absolute;
@@ -71,6 +70,10 @@
         display: flex;
       }
     }
+  }
+
+  .resize {
+    display: flex;
   }
 }
 
