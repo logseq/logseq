@@ -191,10 +191,10 @@
     postcss "7.0.32"
     purgecss "^3.0.0"
 
-"@kanru/rage-wasm@^0.1.3":
-  version "0.1.3"
-  resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.1.3.tgz#fdb71ca6d1ee1ed2d969c32d138095aefe209271"
-  integrity sha512-sKaiHuHe5eVq2vaVBrr6lhWfYBBh76qRM6rjTIkYh8WLFcd8JRS6BhtDOmGxOgCGLtHXJo4A8pozMoWbOuUZAw==
+"@kanru/rage-wasm@^0.1.4":
+  version "0.1.4"
+  resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.1.4.tgz#76bc29b319a60acd4600ee9d4f4e340aa152fc3c"
+  integrity sha512-jl3V0Mrb8/Yzk+O4rjIbHz3mWQFWA4MO79OxkqWxHls/qW+wJMIbfb08ci1BkiDKu91rxKUF9XIjyl9UQ4ArrA==
 
 "@nodelib/fs.scandir@2.1.3":
   version "2.1.3"

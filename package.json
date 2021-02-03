@@ -48,7 +48,7 @@
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html"
     },
     "dependencies": {
-        "@kanru/rage-wasm": "^0.1.3",
+        "@kanru/rage-wasm": "^0.1.4",
         "bip39": "^3.0.3",
         "codemirror": "^5.58.1",
         "diff": "^4.0.2",
