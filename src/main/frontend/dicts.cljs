@@ -631,7 +631,7 @@ title: How to take dummy notes?
            :undo "撤销"
            :redo "重做"
            :help/zoom-in "聚焦"
-           :help/zoom-out "推出聚焦"
+           :help/zoom-out "退出聚焦"
            :help/follow-link-under-cursor "跟随光标下的链接"
            :help/open-link-in-sidebar "在侧边栏打开"
            :expand "展开"
