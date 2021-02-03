@@ -109,7 +109,8 @@
              block-id (:block/uuid block)
              format (:block/format block)]
          [[:div.ml-2.mt-1
-           (block/block-parents repo block-id format)]
+           (block/block-parents {:id "block-parent"
+                                 :block? true} repo block-id format)]
           [:div.ml-2
            (block-cp repo idx block)]])])
 
@@ -117,7 +118,8 @@
     (when-let [block (db/entity repo [:block/uuid (:block/uuid block-data)])]
       (let [block-id (:block/uuid block-data)
             format (:block/format block-data)]
-        [(block/block-parents repo block-id format)
+        [(block/block-parents {:id "block-parent"
+                               :block? true} repo block-id format)
          [:div.ml-2
           (block-cp repo idx block-data)]]))
 
