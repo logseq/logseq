@@ -200,10 +200,19 @@ jobs:
         run: yarn install --frozen-lockfile && yarn electron:make
         working-directory: ./static
 
-      - name: Cache Artifact
+      - name: Change DMG Name
+        run: mv static/out/make/Logseq.dmg static/out/make/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+
+      - name: Cache Artifact DMG
         uses: actions/upload-artifact@v1
         with:
           name: Logseq-x64.dmg
+          path: static/out/make/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+
+      - name: Cache Artifact ZIP
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-x64.zip
           path: static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
 
   release:
@@ -211,10 +220,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download The MacOS X64 Artifact
+      - name: Download The MacOS X64 DMG Artifact
         uses: actions/download-artifact@v1
         with:
           name: Logseq-x64.dmg
+          path: ./
+
+      - name: Download The MacOS X64 ZIP Artifact
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-x64.zip
           path: ./
 
       - name: Download The Linux Artifact
@@ -243,8 +258,8 @@ jobs:
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
 
-      - name: Upload MacOS X64 Artifact
-        id: upload-macos-x64-artifact
+      - name: Upload MacOS X64 ZIP Artifact
+        id: upload-macos-x64-zip-artifact
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -253,6 +268,17 @@ jobs:
           asset_path: ./logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
           asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
           asset_content_type: application/zip
+
+      - name: Upload MacOS X64 DMG Artifact
+        id: upload-macos-x64-dmg-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          asset_content_type: application/x-apple-diskimage
 
       - name: Upload Linux Artifact
         id: upload-linux-artifact
