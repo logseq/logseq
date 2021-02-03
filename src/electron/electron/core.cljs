@@ -1,7 +1,7 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [mac? win32? prod? dev? log open]]
+            [electron.utils :refer [mac? win32? prod? dev? logger open]]
             [clojure.string :as string]
             ["fs" :as fs]
             ["path" :as path]
@@ -39,7 +39,7 @@
 (defn setup-updater! [^js win]
   ;; manual updater
   (init-updater {:repo   "logseq/logseq"
-                 :logger log
+                 :logger logger
                  :win    win}))
 
 (defn setup-interceptor! []
@@ -77,7 +77,7 @@
 
     (.on web-contents  "new-window"
          (fn [e url]
-           (.. log (info "new-window" url))
+           (.. logger (info "new-window" url))
            (open url)
            (.preventDefault e)))
 
@@ -97,7 +97,7 @@
                *win (atom win)
                *quitting? (atom false)]
 
-           (.. log (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+           (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
            (vreset! *setup-fn
                     (fn []
