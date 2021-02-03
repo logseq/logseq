@@ -249,6 +249,9 @@
    [:button.bottom-action
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
     svg/multi-line-input]
+   [:button.bottom-action
+    {:on-click #(commands/simple-insert! parent-id "TODO " {})}
+    svg/checkbox]
    [:button.font-extrabold.bottom-action.-mt-1
     {:on-click #(commands/simple-insert!
                  parent-id "[[]]"
@@ -264,7 +267,10 @@
                   :check-fn     (fn [_ _ new-pos]
                                   (reset! commands/*slash-caret-pos new-pos)
                                   (commands/handle-step [:editor/search-block]))})}
-    "(())"]])
+    "(())"]
+    [:button.font-extrabold.bottom-action.-mt-1
+    {:on-click #(commands/simple-insert! parent-id "/" {})}
+    "/"]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
