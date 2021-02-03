@@ -226,8 +226,8 @@
   (rum/local nil ::src)
   [state config title href label metadata full_text]
   (let [src (::src state)
-        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
-
+        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
+        href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
@@ -236,8 +236,6 @@
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
-
-
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
