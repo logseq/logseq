@@ -21,7 +21,9 @@
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
   prismatic/dommy             {:mvn/version "1.1.0"}
   org.clojure/core.match      {:mvn/version "1.0.0"}
-  com.andrewmcveigh/cljs-time {:mvn/version "0.5.2"}
+  ;; fork
+  com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time",
+                               :sha "61140e157012e71b4a7c79b041a208459a5f03b0"}
   cljs-drag-n-drop/cljs-drag-n-drop
   {:mvn/version "0.1.0"}
   borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
