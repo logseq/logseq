@@ -228,10 +228,13 @@
         path-page-name page-name
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
-        format (db/get-page-format page-name)
-        journal? (db/journal-page? page-name)
         block? (util/uuid-string? page-name)
         block-id (and block? (uuid page-name))
+        format (let [page (if block-id
+                            (:page/name (:block/page (db/entity [:block/uuid block-id])))
+                            page-name)]
+                 (db/get-page-format page))
+        journal? (db/journal-page? page-name)
         sidebar? (:sidebar? option)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (cond
@@ -401,8 +404,10 @@
                        item])])))
 
              (when (and block? (not sidebar?))
-               [:div.mb-4
-                (block/block-parents repo block-id format)])
+               (let [config {:id "block-parent"
+                             :block? true}]
+                 [:div.mb-4
+                  (block/block-parents config repo block-id format)]))
 
              ;; blocks
              (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]
