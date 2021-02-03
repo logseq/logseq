@@ -30,7 +30,7 @@
         (-write writer (str "\"" (.toString sym) "\"")))))
 
 ;; doms
-#?(:cljs (defn html-node []  js/document.documentElement))
+#?(:cljs (defn app-scroll-container-node []  js/document.documentElement))
 
 #?(:cljs
     (defn ios?
@@ -392,26 +392,27 @@
       (when-not (re-find #"^/\d+$" elem-id)
         (when elem-id
           (when-let [elem (gdom/getElement elem-id)]
-            (.scroll (html-node)
+            (.scroll (app-scroll-container-node)
                      #js {:top (let [top (element-top elem 0)]
-                                 (if (> top 68)
-                                   (- top 68)
-                                   top))
+                                 (if (< top 256)
+                                   0 top))
                           :behavior "smooth"}))))))
 
 #?(:cljs
     (defn scroll-to
       ([pos]
-       (scroll-to (html-node) pos))
-      ([node pos]
+       (scroll-to pos true))
+      ([pos animate?]
+       (scroll-to (app-scroll-container-node) pos animate?))
+      ([node pos animate?]
        (.scroll node
                 #js {:top      pos
-                     :behavior "smooth"}))))
+                     :behavior (if animate? "smooth" "auto")}))))
 
 #?(:cljs
     (defn scroll-to-top
       []
-      (scroll-to 0)))
+      (scroll-to 0 false)))
 
 (defn url-encode
   [string]

@@ -204,7 +204,7 @@
           (for [[original-name name] pages]
             [:li {:key (str "tagged-page-" name)}
              [:a {:href (rfe/href :page {:name name})}
-              original-name]])])]])))
+              original-name]])] false)]])))
 
 (defonce last-route (atom :home))
 ;; A page is just a logical block
