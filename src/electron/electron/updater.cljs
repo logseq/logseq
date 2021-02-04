@@ -1,5 +1,5 @@
 (ns electron.updater
-  (:require [electron.utils :refer [mac? win32? prod? open fetch]]
+  (:require [electron.utils :refer [mac? win32? prod? open fetch logger]]
             [frontend.version :refer [version]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -11,6 +11,7 @@
 
 (def *update-ready-to-install (atom nil))
 (def *update-pending (atom nil))
+(def debug (partial (.-warn logger) "[updater]"))
 
 ;Event: 'error'
 ;Event: 'checking-for-update'
@@ -23,7 +24,8 @@
 (defn get-latest-artifact-info
   [repo]
   (let [;endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.4"
-        endpoint (str "https://update.electronjs.org/" repo "/" (if mac? "darwin" "win32") "-x64/" version)]
+        endpoint (str "https://update.electronjs.org/" repo "/" js/process.platform "-" js/process.arch "/" version)]
+    (debug "[updater]" endpoint)
     (p/catch
      (p/let [res (fetch endpoint)
              status (.-status res)
@@ -37,10 +39,9 @@
        (throw e)))))
 
 (defn check-for-updates
-  [{:keys           [repo ^js logger ^js win]
+  [{:keys           [repo ^js ^js win]
     [auto-download] :args}]
-  (let [debug (partial (.-warn logger) "[updater]")
-        emit (fn [type payload]
+  (let [emit (fn [type payload]
                (.. win -webContents
                    (send "updates-callback" (bean/->js {:type type :payload payload}))))]
     (debug "check for updates #" repo version)

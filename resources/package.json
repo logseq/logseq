@@ -1,8 +1,8 @@
 {
-  "name": "logseq",
+  "name": "Logseq",
   "version": "0.0.1",
   "main": "electron.js",
-  "author": "logseq",
+  "author": "Logseq",
   "description": "A privacy-first, open-source platform for knowledge sharing and management.",
   "scripts": {
     "electron:dev": "electron-forge start",
