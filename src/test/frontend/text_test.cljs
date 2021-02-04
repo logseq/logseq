@@ -19,13 +19,12 @@
     "[single bracket]" "[single bracket]"
     "no brackets" "no brackets"))
 
-(deftest sep-by-comma-or-quote
+(deftest sep-by-comma
   []
-  (are [x y] (= (text/sep-by-comma-or-quote x) y)
+  (are [x y] (= (text/sep-by-comma x) y)
     "foo,bar" ["foo" "bar"]
     "foo, bar" ["foo" "bar"]
     "foo bar" ["foo bar"]
-    "foo \"bar\"" ["foo" "bar"]
     "[[foo]] [[bar]]" ["[[foo]] [[bar]]"]
     "[[foo]],[[bar]]" ["[[foo]]", "[[bar]]"]
     "[[foo]], [[bar]]" ["[[foo]]", "[[bar]]"]

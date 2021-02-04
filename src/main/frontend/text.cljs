@@ -24,35 +24,38 @@
       (subs s 2 (- (count s) 2))
       s)))
 
-;; E.g "Foo Bar \"Bar Baz\""
-(defn sep-by-comma-or-quote
+;; E.g "Foo Bar"
+(defn sep-by-comma
   [s]
   (when s
     (some->>
-     (string/split s #"[\"|\,|，]{1}")
+     (string/split s #"[\,|，]{1}")
      (remove string/blank?)
      (map string/trim))))
 
 (defn split-page-refs-without-brackets
-  [s]
-  (if (and (string? s)
-           (or (re-find #"[\"|\,|，|#]+" s)
-               (re-find page-ref-re s)))
-    (let [result (->> (string/split s page-ref-re-2)
-                      (remove string/blank?)
-                      (mapcat (fn [s]
-                                (if (page-ref? s)
-                                  [(page-ref-un-brackets! s)]
-                                  (sep-by-comma-or-quote s))))
-                      (distinct))]
-      (if (or (coll? result)
-              (and (string? result)
-                   (string/starts-with? result "#")))
-        (let [result (if coll? result [result])
-              result (map (fn [s] (string/replace s #"^#+" "")) result)]
-          (set result))
-        (first result)))
-    s))
+  ([s]
+   (split-page-refs-without-brackets s false))
+  ([s comma?]
+   (if (and (string? s)
+            ;; Either a page ref, a tag or a comma separated collection
+            (or (re-find page-ref-re s)
+                (re-find (if comma? #"[\,|，|#]+" #"#") s)))
+     (let [result (->> (string/split s page-ref-re-2)
+                       (remove string/blank?)
+                       (mapcat (fn [s]
+                                 (if (page-ref? s)
+                                   [(page-ref-un-brackets! s)]
+                                   (sep-by-comma s))))
+                       (distinct))]
+       (if (or (coll? result)
+               (and (string? result)
+                    (string/starts-with? result "#")))
+         (let [result (if coll? result [result])
+               result (map (fn [s] (string/replace s #"^#+" "")) result)]
+           (set result))
+         (first result)))
+     s)))
 
 (defn extract-level-spaces
   [text format]

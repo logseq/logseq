@@ -427,9 +427,10 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties remove-properties rebuild-content? chan chan-callback]
+    {:keys [indent-left? init-properties custom-properties remove-properties rebuild-content? chan chan-callback]
      :or {rebuild-content? true
           custom-properties nil
+          init-properties nil
           remove-properties nil}
      :as opts}]
    (let [repo (or repo (state/get-current-repo))
@@ -464,8 +465,9 @@
          text-properties (text/extract-properties value)
          old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
          properties (merge old-hidden-properties
-                           custom-properties
-                           text-properties)
+                           init-properties
+                           text-properties
+                           custom-properties)
          remove-properties (->
                             (set/difference (set (keys (:block/properties block)))
                                             (set (keys text-properties))
@@ -1138,7 +1140,7 @@
       (when-not (:block/pre-block? block)
         (let [{:block/keys [content properties]} block]
           (cond
-            (and (get properties key)
+            (and (string? (get properties key))
                  (= (string/trim (get properties key)) value))
             nil
 
@@ -1415,7 +1417,7 @@
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
     (save-block-if-changed! block new-value
                             (merge
-                             {:custom-properties properties}
+                             {:init-properties properties}
                              opts))))
 
 (defn save-block!
