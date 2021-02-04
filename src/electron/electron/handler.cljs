@@ -89,8 +89,11 @@
   (let [watcher (.watch watcher dir
                         (clj->js
                          {:ignored (fn [path]
-                                     (some #(string/starts-with? path (str dir "/" %))
-                                           ["." "assets" "node_modules"]))
+                                     (or
+                                      (some #(string/starts-with? path (str dir "/" %))
+                                            ["." "assets" "node_modules"])
+                                      (some #(string/ends-with? path (str dir "/" %))
+                                            [".swap" ".crswap" ".tmp"])))
                           ;; :ignoreInitial true
                           :persistent true
                           :awaitWriteFinish true}))]

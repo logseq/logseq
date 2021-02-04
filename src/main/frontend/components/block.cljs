@@ -226,8 +226,8 @@
   (rum/local nil ::src)
   [state config title href label metadata full_text]
   (let [src (::src state)
-        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
-
+        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
+        href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
@@ -236,8 +236,6 @@
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
-
-
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
@@ -1359,9 +1357,9 @@
        (not @*dragging?)))
 
 (defn block-parents
-  ([repo block-id format]
-   (block-parents repo block-id format true))
-  ([repo block-id format show-page?]
+  ([config repo block-id format]
+   (block-parents config repo block-id format true))
+  ([config repo block-id format show-page?]
    (let [parents (db/get-block-parents repo block-id 3)
          page (db/get-block-page repo block-id)
          page-name (:page/name page)]
@@ -1379,12 +1377,10 @@
                           [:span.mx-2.opacity-50 "➤"])
 
                         (when (seq parents)
-                          (let [parents (for [{:block/keys [uuid content]} parents]
-                                          (let [title (string/trim (text/remove-level-spaces content format))]
-                                            (when (and (not (string/blank? title))
-                                                       (not= (string/lower-case page-name) (string/lower-case title)))
-                                              [:a {:href (rfe/href :page {:name uuid})}
-                                               title])))
+                          (let [parents (doall
+                                         (for [{:block/keys [uuid title]} parents]
+                                           [:a {:href (rfe/href :page {:name uuid})}
+                                            (map-inline config title)]))
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)
                             (when (seq parents)
@@ -1503,7 +1499,7 @@
        (merge attrs))
 
      (when (and ref? breadcrumb-show?)
-       (when-let [comp (block-parents repo uuid format false)]
+       (when-let [comp (block-parents config repo uuid format false)]
          [:div.my-2.opacity-50.ml-4 comp]))
 
      (dnd-separator-wrapper block slide? (zero? idx))

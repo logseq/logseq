@@ -1599,6 +1599,17 @@
                             (string/replace #"^../" "/")
                             (string/replace #"^assets://" ""))) nil))))
 
+;; assets/journals_2021_02_03_1612350230540_0.png
+(defn resolve-relative-path
+  [file-path]
+  (if-let [current-file (some-> (state/get-edit-block)
+                                :block/file
+                                :db/id
+                                (db/entity)
+                                :file/path)]
+    (util/get-relative-path current-file file-path)
+    file-path))
+
 (defn upload-asset
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
@@ -1611,7 +1622,7 @@
                (let [image? (util/ext-of-image? url)]
                  (insert-command!
                   id
-                  (get-asset-file-link format (get-asset-link url)
+                  (get-asset-file-link format (resolve-relative-path url)
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format
