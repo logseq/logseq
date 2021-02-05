@@ -91,7 +91,7 @@
     [:div.page-blocks-inner
 
      ;; more than one file conflict
-     (when (seq grouped-blocks-by-file)
+     (when (seq (dissoc grouped-blocks-by-file file-path))
        [:div.conflict-files-warning-wrap
         [:h3 "⚠️ Those pages have the same title, you might want to only keep one file: "]
         (for [[file-path blocks] (into (sorted-map) grouped-blocks-by-file)]
