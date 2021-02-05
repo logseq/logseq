@@ -111,7 +111,7 @@ jobs:
         working-directory: ./static
 
       - name: Change Artifact Name
-        run: mv static/out/make/zip/linux/x64/logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
+        run: mv static/out/make/zip/linux/x64/Logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
 
       - name: Cache Artifact
         uses: actions/upload-artifact@v1
