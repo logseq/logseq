@@ -22,6 +22,7 @@
             [frontend.components.project :as project]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.utils :as db-utils]
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [goog.dom :as gdom]
@@ -51,10 +52,22 @@
         (page-handler/add-page-to-recent! repo page-original-name)
         (db/get-page-blocks repo page-name)))))
 
+(rum/defc page-conflict-file-warning
+  [file-path blocks]
+  [:div.conflict-files-warning-it
+   [:a {:title "Go to change the page title"
+        :key file-path
+        :href (rfe/href :file {:path file-path})} file-path]])
+
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
+        grouped-blocks-by-file (into {} (for [[k v] (db-utils/group-by-file raw-page-blocks)]
+                                          [(:file/path (db-utils/entity (:db/id k))) v]))
+        raw-page-blocks (if (contains? grouped-blocks-by-file file-path)
+                          (get grouped-blocks-by-file file-path)
+                          raw-page-blocks)
         page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
                         (let [content (db/get-file repo file-path)]
@@ -74,11 +87,21 @@
                        :editor-box editor/box}
         hiccup-config (common-handler/config-with-document-mode hiccup-config)
         hiccup (block/->hiccup page-blocks hiccup-config {})]
-    (rum/with-key
-      (content/content page-name
-                       {:hiccup hiccup
-                        :sidebar? sidebar?})
-      (str encoded-page-name "-hiccup"))))
+
+    [:div.page-blocks-inner
+
+     ;; more than one file conflict
+     (when (seq grouped-blocks-by-file)
+       [:div.conflict-files-warning-wrap
+        [:h3 "⚠️ Those pages have the same title, you might want to only keep one file: "]
+        (for [[file-path blocks] (into (sorted-map) grouped-blocks-by-file)]
+          (page-conflict-file-warning file-path blocks))])
+
+     (rum/with-key
+       (content/content page-name
+                        {:hiccup   hiccup
+                         :sidebar? sidebar?})
+       (str encoded-page-name "-hiccup"))]))
 
 (defn contents-page
   [{:page/keys [name original-name file] :as contents}]
@@ -311,14 +334,14 @@
                                                       {:title   (t :page/publish)
                                                        :options {:on-click (fn []
                                                                              (page-handler/publish-page!
-                                                                               page-name project/add-project
-                                                                               html-export/export-page))}})
+                                                                              page-name project/add-project
+                                                                              html-export/export-page))}})
                                                     (when-not published?
                                                       {:title   (t :page/publish-as-slide)
                                                        :options {:on-click (fn []
                                                                              (page-handler/publish-page-as-slide!
-                                                                               page-name project/add-project
-                                                                               html-export/export-page))}})
+                                                                              page-name project/add-project
+                                                                              html-export/export-page))}})
                                                     {:title   (t (if public? :page/make-private :page/make-public))
                                                      :options {:background (if public? "gray" "indigo")
                                                                :on-click (fn []
@@ -410,7 +433,8 @@
                   (block/block-parents config repo block-id format)]))
 
              ;; blocks
-             (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]
+             [:div.page-blocks-root
+              (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]]
 
            (when-not block?
              (today-queries repo today? sidebar?))
