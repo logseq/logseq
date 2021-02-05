@@ -69,7 +69,7 @@
   (let [result (.showOpenDialogSync dialog (bean/->js
                                             {:properties ["openDirectory"]}))
         path (first result)]
-    (.. window -webContents
+    (.. ^js window -webContents
         (send "open-dir-confirmed"
               (bean/->js {:opened? true})))
     (get-files path)))

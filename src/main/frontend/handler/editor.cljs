@@ -981,7 +981,7 @@
   [{:block/keys [uuid marker content meta file dummy? properties] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
     (save-block-if-changed! block new-content
-                            (with-marker-time block marker))))
+                            {:custom-properties (with-marker-time block new-marker)})))
 
 (defn set-priority
   [{:block/keys [uuid marker priority content meta file dummy?] :as block} new-priority]
