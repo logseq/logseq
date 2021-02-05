@@ -2,47 +2,6 @@
   color: var(--ls-title-text-color);
 }
 
-.page-blocks {
-  &-inner {
-    .conflict-files-warning {
-      &-wrap {
-        font-size: 13px;
-        padding: 4px 15px;
-        padding-bottom: 8px;
-        line-height: 1;
-        margin: 5px;
-        margin-bottom: 20px;
-        border-width: 1px;
-        border-style: dotted;
-        border-radius: var(--ls-border-radius-low);
-        border-color: var(--ls-secondary-border-color);
-
-        > h3 {
-          font-weight: bold;
-          padding-top: 8px;
-          padding-bottom: 5px;
-          font-size: 14px;
-          line-height: 1.2em;
-          color: var(--ls-secondary-text-color);
-        }
-      }
-
-      &-it {
-        a {
-          display: flex;
-          align-items: center;
-          padding: 3px 0;
-        }
-
-        svg {
-          display: inline;
-          transform: scale(.6);
-        }
-      }
-    }
-  }
-}
-
 .cp__page {
   &-publish-actions {
     background-color: var(--ls-primary-background-color);
