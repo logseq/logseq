@@ -1636,12 +1636,12 @@
               (reset! *asset-uploading? false)
               (reset! *asset-uploading-process 0))))
       (image/upload
-        files
-        (fn [file file-name file-type]
+       files
+       (fn [file file-name file-type]
          (image-handler/request-presigned-url
-           file file-name file-type
-           uploading?
-           (fn [signed-url]
+          file file-name file-type
+          uploading?
+          (fn [signed-url]
             (insert-command! id
                              (get-asset-file-link format signed-url file-name true)
                              format
@@ -1650,7 +1650,7 @@
 
             (reset! *asset-uploading? false)
             (reset! *asset-uploading-process 0))
-           (fn [e]
+          (fn [e]
             (let [process (* (/ (gobj/get e "loaded")
                                 (gobj/get e "total"))
                              100)]
@@ -2139,7 +2139,7 @@
     (when-not (string/blank? (:title m))
       (let [file (draw/title->file-name (:title m))
             value (util/format
-                   "[[%s]]\n<iframe class=\"draw-iframe\" src=\"/draw?file=%s\" width=\"100%\" height=\"400\" frameborder=\"0\" allowfullscreen></iframe>"
+                   "[[%s]]\n<iframe class=\"draw-iframe\" src=\"/#/draw?file=%s\" width=\"100%\" height=\"400\" frameborder=\"0\" allowfullscreen></iframe>"
                    file
                    file)]
         (insert-command! id
