@@ -116,7 +116,8 @@
    :block/title {}
    :block/content {}
    :block/properties {}
-   :block/ref-blocks {:db/cardinality :db.cardinality/many}
+   :block/ref-blocks {:db/valueType :db.type/ref
+                      :db/cardinality :db.cardinality/many}
    :block/embed-blocks {:db/cardinality :db.cardinality/many}
    :block/created-at {}
    :block/updated-at {}
