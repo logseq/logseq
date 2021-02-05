@@ -15,7 +15,14 @@
                            (dissoc h :block/meta))) col)
         parent? (fn [item children]
                   (and (seq children)
-                       (every? #(< (:block/level item) (:block/level %)) children)))]
+                       (every? #(< (:block/level item) (:block/level %)) children)))
+        get-all-refs (fn [block]
+                       (let [refs (if-let [refs (seq (:block/refs-with-children block))]
+                                    refs
+                                    (concat
+                                     (:block/ref-pages block)
+                                     (:block/tags block)))]
+                         (distinct refs)))]
     (loop [col (reverse col)
            children (list)]
       (if (empty? col)
@@ -23,7 +30,8 @@
         (let [[item & others] col
               cur-level (:block/level item)
               bottom-level (:block/level (first children))
-              pre-block? (:block/pre-block? item)]
+              pre-block? (:block/pre-block? item)
+              item (assoc item :block/refs-with-children (get-all-refs item))]
           (cond
             (empty? children)
             (recur others (list item))
@@ -38,9 +46,12 @@
             (let [[children other-children] (split-with (fn [h]
                                                           (> (:block/level h) cur-level))
                                                         children)
-
+                  refs-with-children (-> (mapcat get-all-refs (cons item children))
+                                         distinct)
                   children (cons
-                            (assoc item :block/children children)
+                            (assoc item
+                                   :block/children children
+                                   :block/refs-with-children refs-with-children)
                             other-children)]
               (recur others children))))))))
 

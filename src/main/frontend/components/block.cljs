@@ -347,7 +347,8 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))]
       [:a.page-ref
-       {:href href
+       {:data-ref page-name
+        :href href
         :on-click (fn [e]
                     (util/stop e)
                     (if (gobj/get e "shiftKey")
@@ -560,7 +561,8 @@
     (->elem :sub (map-inline config l))
     ["Tag" s]
     (if (and s (util/tag-valid? s))
-      [:a.tag {:href (rfe/href :page {:name s})
+      [:a.tag {:data-ref s
+               :href (rfe/href :page {:name s})
                :on-click (fn [e]
                            (let [repo (state/get-current-repo)
                                  page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
@@ -634,7 +636,8 @@
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
           (re-find #"(?i)^http[s]?://" s)
-          (->elem :a {:href s}
+          (->elem :a {:href s
+                      :data-href s}
                   (map-inline config label))
 
           (and (util/electron?) (config/local-asset? s))
@@ -675,7 +678,8 @@
                   (->elem
                    :a
                    (cond->
-                    {:href href}
+                    {:href href
+                     :data-href href}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -1054,7 +1058,8 @@
      (mapv (fn [tag]
              (when-let [page (db/entity (:db/id tag))]
                (let [tag (:page/name page)]
-                 [:a.tag.mx-1 {:key (str "tag-" (:db/id tag))
+                 [:a.tag.mx-1 {:data-ref tag
+                               :key (str "tag-" (:db/id tag))
                                :href (rfe/href :page {:name tag})}
                   (str "#" tag)])))
            tags))))
@@ -1400,7 +1405,7 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties] :as block}]
+  [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties refs-with-children] :as block}]
   (let [ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
@@ -1486,6 +1491,11 @@
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
       {:id block-id
+       :data-refs (let [refs (model/get-page-names-by-ids
+                              (map :db/id refs-with-children))
+                        refs (map (fn [ref] (str "\"" ref "\"")) refs)]
+                    (util/format "[%s]"
+                                 (string/join ", " refs)))
        :style {:position "relative"}
        :class (str uuid
                    (when dummy? " dummy")
