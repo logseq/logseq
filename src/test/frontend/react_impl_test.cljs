@@ -34,6 +34,7 @@
                   (empty?)))
        :get-value-fn
        (fn [] (deref (get-in @react-defines [f :result])))})))
+
 (comment
   (let [react-ref (atom 1)
         f (fn []

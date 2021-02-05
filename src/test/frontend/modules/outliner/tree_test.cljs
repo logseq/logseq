@@ -6,16 +6,30 @@
             [datascript.core :as d]
             [frontend.util :as util]))
 
-(defn build-block
+(defn build-block-by-ident
   ([id]
-   (build-block id nil nil))
+   (build-block-by-ident id nil nil))
   ([id parent-id left-id & [m]]
-   (let [m (-> (merge m {:block/id id})
-               (util/assoc-when :block/parent-id parent-id
-                                :block/left-id left-id))
-         m (->> (remove #(nil? (val %)) m)
+   (let [m (->> (merge m {:block/id id
+                          :block/parent-id parent-id
+                          :block/left-id left-id})
+                (remove #(nil? (val %)))
                 (into {}))]
-     (tree/->Block id m))))
+     (tree/->Block m))))
+
+(defn block-id->ident
+  [id]
+  (when id [:block/id id]))
+
+(defn build-by-block-id
+  ([id]
+   (build-block-by-ident id nil nil))
+  ([id parent-id left-id & [m]]
+   (build-block-by-ident
+     id
+     (block-id->ident parent-id)
+     (block-id->ident left-id)
+     m)))
 
 (defrecord RenderNode [id children])
 (defrecord TestNode [id parent left])
@@ -34,7 +48,7 @@
   [tree-record]
   (letfn [(build [node queue]
             (let [{:keys [id left parent]} node
-                  block (build-block id  parent left)
+                  block (build-by-block-id id parent left)
                   left (atom (:id node))
                   children (map (fn [c]
                                   (let [node (assoc c :left @left :parent (:id node))]
@@ -58,66 +72,14 @@
                    [15]]]
               [16 [[17]]]]])
 
-(def records (-> (build-render-tree tree)
-                 (build-sql-records)))
+(def node-tree (build-render-tree tree))
 
-(def db (atom records))
-
-(defn find-node
-  ([id]
-   (when-let [m (some #(when (= id (:id %)) %)
-                      @db)]
-     (map->TestNode m)))
-  ([parent left]
-   (when-let [m (some #(when (and (= parent (:parent %))
-                                  (= left (:left %)))
-                         %)
-                      @db)]
-     (map->TestNode m))))
-
-(extend-type TestNode
-  tree/INode
-  (-get-id [this]
-    (:id this))
-
-  (-get-parent-id [this]
-    (:parent this))
-
-  (-set-parent-id [this parent-id]
-    (assoc this :parent parent-id))
-
-  (-get-left-id [this]
-    (:left this))
-
-  (-set-left-id [this left-id]
-    (assoc this :left left-id))
-
-  (-get-parent [this]
-    (find-node (:parent this)))
-
-  (-get-left [this]
-    (find-node (:left this)))
-
-  (-get-right [this]
-    (find-node (:parent this)
-               (:id this)))
-
-  (-get-down [this]
-    (find-node (:id this) (:id this)))
-
-  (-save [this]
-    (let [id (:id this)]
-      (swap! db (fn [db]
-                  (-> (remove #(= (:id %) id) db)
-                      (conj this))))))
-
-  (-get-children [this]
-    (let [first-child (tree/-get-down this)]
-      (loop [current first-child
-             children [first-child]]
-        (if-let [node (tree/-get-right current)]
-          (recur node (conj children node))
-          children)))))
+(comment
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-sql-records node-tree)
+    (dotimes [i 18]
+      (when-not (= i 0)
+        (prn (d/pull @conn/*outline-db* '[*] [:block/id i]))))))
 
 (deftest test-insert-node-after-first
   "
@@ -133,14 +95,15 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (reset! db records)
-  (let [new-node (->TestNode 18 nil nil)
-        left-node (->TestNode 6 2 3)]
-    (tree/insert-node-after-first new-node left-node)
-    (let [children-of-2 (->> (->TestNode 2 1 1)
-                             (tree/-get-children)
-                             (mapv :id))]
-      (is (= [3 6 18 9] children-of-2)))))
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-sql-records node-tree)
+    (let [new-node (build-by-block-id 18 nil nil)
+          left-node (build-by-block-id 6 2 3)]
+      (tree/insert-node-after-first new-node left-node)
+      (let [children-of-2 (->> (build-block-by-ident 2 1 1)
+                               (tree/-get-children)
+                               (mapv #(-> % :data :block/id)))]
+        (is (= [3 6 18 9] children-of-2))))))
 
 (deftest test-insert-node-as-first
   "
@@ -157,14 +120,15 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (reset! db records)
-  (let [new-node (->TestNode 18 nil nil)
-        parent-node (->TestNode 2 1 1)]
-    (tree/insert-node-as-first new-node parent-node)
-    (let [children-of-2 (->> (->TestNode 2 1 1)
-                             (tree/-get-children)
-                             (mapv :id))]
-      (is (= [18 3 6 9] children-of-2)))))
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-sql-records node-tree)
+    (let [new-node (build-by-block-id 18 nil nil)
+          parent-node (build-by-block-id 2 1 1)]
+      (tree/insert-node-as-first new-node parent-node)
+      (let [children-of-2 (->> (build-by-block-id 2 1 1)
+                               (tree/-get-children)
+                               (mapv #(-> % :data :block/id)))]
+        (is (= [18 3 6 9] children-of-2))))))
 
 (deftest test-delete-node
   "
@@ -179,13 +143,14 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (reset! db records)
-  (let [node (->TestNode 6 2 3)]
-    (tree/delete-node node)
-    (let [children-of-2 (->> (->TestNode 2 1 1)
-                             (tree/-get-children)
-                             (mapv :id))]
-      (is (= [3 9] children-of-2)))))
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-sql-records node-tree)
+    (let [node (build-by-block-id 6 2 3)]
+      (tree/delete-node node)
+      (let [children-of-2 (->> (build-by-block-id 2 1 1)
+                               (tree/-get-children)
+                               (mapv #(-> % :data :block/id)))]
+        (is (= [3 9] children-of-2))))))
 
 
 (deftest test-move-subtree
@@ -201,37 +166,39 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (reset! db records)
-  (let [node (->TestNode 3 2 2)
-        new-parent (->TestNode 12 1 2)
-        new-left (->TestNode 14 12 13)]
-    (tree/move-subtree node new-parent new-left)
-    (let [old-parent's-children (->> (->TestNode 2 1 1)
-                                     (tree/-get-children)
-                                     (mapv :id))
-          new-parent's-children (->> (->TestNode 12 1 2)
-                                     (tree/-get-children)
-                                     (mapv :id))]
-      (is (= [6 9] old-parent's-children))
-      (is (= [13 14 3 15] new-parent's-children)))))
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-sql-records node-tree)
+   (let [node (build-by-block-id 3 2 2)
+         new-parent (build-by-block-id 12 1 2)
+         new-left (build-by-block-id 14 12 13)]
+     (tree/move-subtree node new-parent new-left)
+     (let [old-parent's-children (->> (build-by-block-id 2 1 1)
+                                      (tree/-get-children)
+                                      (mapv #(-> % :data :block/id)))
+           new-parent's-children (->> (build-by-block-id 12 1 2)
+                                      (tree/-get-children)
+                                      (mapv #(-> % :data :block/id)))]
+       (is (= [6 9] old-parent's-children))
+       (is (= [13 14 3 15] new-parent's-children))))))
 
-(deftest test-get-node-list-with-cursor
-  (reset! db records)
-  (let [cursor (-> (build-root-test-node 1)
-                   (tree/init-cursor))
-        number 7
-        {:keys [acc cursor]}
-        (tree/get-node-list-with-cursor number cursor)]
-    (is (= [1 2 3 4 5 6 7] (mapv :id acc)))
-
-    (let [{:keys [acc cursor]}
+#_(deftest test-get-node-list-with-cursor
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-sql-records node-tree)
+    (let [cursor (-> (build-by-block-id 1 nil nil)
+                     (tree/init-cursor))
+          number 7
+          {:keys [acc cursor]}
           (tree/get-node-list-with-cursor number cursor)]
+      (is (= [1 2 3 4 5 6 7] (mapv #(-> % :data :block/id) acc)))
 
-      (is (= [8 9 10 11 12 13 14] (mapv :id acc)))
-
-      (let [{:keys [acc]}
+      (let [{:keys [acc cursor]}
             (tree/get-node-list-with-cursor number cursor)]
-        (is (= [15 16 17] (mapv :id acc)))))))
+
+        (is (= [8 9 10 11 12 13 14] (mapv #(-> % :data :block/id) acc)))
+
+        (let [{:keys [acc]}
+              (tree/get-node-list-with-cursor number cursor)]
+          (is (= [15 16 17] (mapv #(-> % :data :block/id) acc))))))))
 
 
 (comment

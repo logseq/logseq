@@ -73,9 +73,14 @@
   []
   (d/create-conn db-schema/outline-schema))
 
-(defn get-outliner-conn
-  []
-  (deref (delay (create-outliner-db))))
+(def ^:dynamic *outline-db* nil)
+
+(let [db (delay (create-outliner-db))]
+  (defn get-outliner-conn
+    []
+    (if *outline-db*
+      *outline-db*
+      @db)))
 
 (defn start!
   ([me repo]

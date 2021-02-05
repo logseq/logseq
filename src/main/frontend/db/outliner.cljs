@@ -28,6 +28,10 @@
   [conn block-m]
   (d/transact! conn [block-m]))
 
+(defn del-block
+  [conn id-or-look-ref]
+  (d/transact! conn [[:db.fn/retractEntity id-or-look-ref]]))
+
 (defn get-journals
   [conn]
   (let [r (d/q '[:find (pull ?a [*])
