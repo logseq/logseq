@@ -637,7 +637,8 @@
 
           (re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s
-                      :data-href s}
+                      :data-href s
+                      :target "_blank"}
                   (map-inline config label))
 
           (and (util/electron?) (config/local-asset? s))
@@ -679,7 +680,8 @@
                    :a
                    (cond->
                     {:href href
-                     :data-href href}
+                     :data-href href
+                     :target "_blank"}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
