@@ -40,16 +40,16 @@
 
         (file-handler/alter-file repo path content {:re-render-root? true})
 
-        (= "unlink" type)
-        (when-let [page-name (db/get-file-page path)]
-          (page-handler/delete!
-           page-name
-           (fn []
-             (notification/show! (str "Page " page-name " was deleted on disk.")
-                                 :success)
-             (when (= (state/get-current-page) page-name)
-               ;; redirect to home
-               (route-handler/redirect-to-home!)))))
+        ;; (= "unlink" type)
+        ;; (when-let [page-name (db/get-file-page path)]
+        ;;   (page-handler/delete!
+        ;;    page-name
+        ;;    (fn []
+        ;;      (notification/show! (str "Page " page-name " was deleted on disk.")
+        ;;                          :success)
+        ;;      (when (= (state/get-current-page) page-name)
+        ;;        ;; redirect to home
+        ;;        (route-handler/redirect-to-home!)))))
 
         (contains? #{"add" "change" "unlink"} type)
         nil
