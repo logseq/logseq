@@ -7,7 +7,6 @@
             [frontend.handler.route :as route-handler]
             [cljs-time.coerce :as tc]
             [frontend.config :as config]
-            [cljs-bean.core :as bean]
             [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as string]))
@@ -58,11 +57,3 @@
         :else
         (log/error :fs/watcher-no-handler {:type type
                                            :payload payload})))))
-
-(defn run-dirs-watcher!
-  []
-  ;; TODO: move "file-watcher" to electron.ipc.channels
-  (js/window.apis.on "file-watcher"
-                     (fn [data]
-                       (let [{:keys [type payload]} (bean/->clj data)]
-                         (handle-changed! type payload)))))

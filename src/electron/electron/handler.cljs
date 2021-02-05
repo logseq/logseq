@@ -54,13 +54,13 @@
 (defn- get-files
   [path]
   (let [result (->> (map
-                     (fn [path]
-                       (let [stat (fs/statSync path)]
-                         (when-not (.isDirectory stat)
-                           {:path (fix-win-path! path)
-                            :content (read-file path)
-                            :stat stat})))
-                     (readdir path))
+                      (fn [path]
+                        (let [stat (fs/statSync path)]
+                          (when-not (.isDirectory stat)
+                            {:path (fix-win-path! path)
+                             :content (read-file path)
+                             :stat stat})))
+                      (readdir path))
                     (remove nil?))]
     (vec (cons {:path (fix-win-path! path)} result))))
 
@@ -69,6 +69,9 @@
   (let [result (.showOpenDialogSync dialog (bean/->js
                                             {:properties ["openDirectory"]}))
         path (first result)]
+    (.. window -webContents
+        (send "open-dir-confirmed"
+              (bean/->js {:opened? true})))
     (get-files path)))
 
 (defmethod handle :getFiles [window [_ path]]
@@ -86,44 +89,45 @@
 
 (defn watch-dir!
   [win dir]
-  (let [watcher (.watch watcher dir
-                        (clj->js
-                         {:ignored (fn [path]
-                                     (or
-                                      (some #(string/starts-with? path (str dir "/" %))
-                                            ["." "assets" "node_modules"])
-                                      (some #(string/ends-with? path (str dir "/" %))
-                                            [".swap" ".crswap" ".tmp"])))
-                          :ignoreInitial true
-                          :persistent true
-                          :awaitWriteFinish true}))]
-    (.on watcher "add"
-         (fn [path]
-           (send-file-watcher! win "add"
-                               {:dir (fix-win-path! dir)
-                                :path (fix-win-path! path)
-                                :content (read-file path)
-                                :stat (fs/statSync path)})))
-    (.on watcher "change"
-         (fn [path]
-           (send-file-watcher! win "change"
-                               {:dir (fix-win-path! dir)
-                                :path (fix-win-path! path)
-                                :content (read-file path)
-                                :stat (fs/statSync path)})))
-    (.on watcher "unlink"
-         (fn [path]
-           (send-file-watcher! win "unlink"
-                               {:dir (fix-win-path! dir)
-                                :path (fix-win-path! path)})))
-    (.on watcher "error"
-         (fn [path]
-           (println "Watch error happened: "
-                    {:path path})))
+  (when (fs/existsSync dir)
+    (let [watcher (.watch watcher dir
+                          (clj->js
+                           {:ignored (fn [path]
+                                       (or
+                                        (some #(string/starts-with? path (str dir "/" %))
+                                              ["." "assets" "node_modules"])
+                                        (some #(string/ends-with? path (str dir "/" %))
+                                              [".swap" ".crswap" ".tmp"])))
+                            :ignoreInitial true
+                            :persistent true
+                            :awaitWriteFinish true}))]
+      (.on watcher "add"
+           (fn [path]
+             (send-file-watcher! win "add"
+                                 {:dir (fix-win-path! dir)
+                                  :path (fix-win-path! path)
+                                  :content (read-file path)
+                                  :stat (fs/statSync path)})))
+      (.on watcher "change"
+           (fn [path]
+             (send-file-watcher! win "change"
+                                 {:dir (fix-win-path! dir)
+                                  :path (fix-win-path! path)
+                                  :content (read-file path)
+                                  :stat (fs/statSync path)})))
+      (.on watcher "unlink"
+           (fn [path]
+             (send-file-watcher! win "unlink"
+                                 {:dir (fix-win-path! dir)
+                                  :path (fix-win-path! path)})))
+      (.on watcher "error"
+           (fn [path]
+             (println "Watch error happened: "
+                      {:path path})))
 
-    (.on app "quit" #(.close watcher))
+      (.on app "quit" #(.close watcher))
 
-    true))
+      true)))
 
 (defmethod handle :addDirWatcher [window [_ dir]]
   (when dir

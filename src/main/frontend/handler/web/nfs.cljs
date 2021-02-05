@@ -8,6 +8,7 @@
             [frontend.handler.common :as common-handler]
             ["/frontend/utils" :as utils]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
             [frontend.state :as state]
             [clojure.string :as string]
@@ -108,6 +109,8 @@
                                    (when nfs?
                                      (swap! path-handles assoc path handle))))
              _ (state/set-loading-files! true)
+             _ (when-not (state/home?)
+                 (route-handler/redirect-to-home!))
              root-handle (first result)
              dir-name (if nfs?
                         (gobj/get root-handle "name")
@@ -144,7 +147,6 @@
                                            (:file/content file))]
                            (assoc file :file/content content))) markup-files))
            (p/then (fn [result]
-                     _ (state/set-loading-files! false)
                      (let [files (map #(dissoc % :file/file) result)]
                        (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
                        (repo-handler/load-repo-to-db! repo
@@ -152,13 +154,15 @@
                                                        :nfs-files    files})
 
                        (state/add-repo! {:url repo :nfs? true})
+                       (state/set-loading-files! false)
                        (and ok-handler (ok-handler))
                        (when (util/electron?)
                          (fs/watch-dir! dir-name)))))
            (p/catch (fn [error]
                       (log/error :nfs/load-files-error error)))))
      (p/catch (fn [error]
-                (when (not= "AbortError" (gobj/get error "name"))
+                (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
+                  (state/set-loading-files! false)
                   (log/error :nfs/open-dir-error error)))))))
 
 (defn get-local-repo

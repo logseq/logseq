@@ -237,7 +237,7 @@
     (if (util/ios?) (.add cl "is-ios"))
     (if (util/mobile?) (.add cl "is-mobile"))
     (if (util/safari?) (.add cl "is-safari"))
-    (if (util/electron?)
+    (when (util/electron?)
       (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))))
 
 (defn inject-dynamic-style-node!
