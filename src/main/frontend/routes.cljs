@@ -6,6 +6,7 @@
             [frontend.components.diff :as diff]
             [frontend.components.draw :as draw]
             [frontend.components.journal :as journal]
+            [frontend.components.journal :as journal1]
             [frontend.components.settings :as settings]
             [frontend.components.external :as external]
             [frontend.components.publishing :as publishing]))
@@ -66,6 +67,10 @@
    ["/all-journals"
     {:name :all-journals
      :view journal/all-journals}]
+
+   ["/all-journals1"
+    {:name :all-journals1
+     :view journal1/all-journals}]
 
    ["/my-publishing"
     {:name :my-publishing

@@ -75,7 +75,7 @@
 
 (defn get-outliner-conn
   []
-  nil)
+  (deref (delay (create-outliner-db))))
 
 (defn start!
   ([me repo]
