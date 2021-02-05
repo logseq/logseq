@@ -37,3 +37,18 @@
         _ (d/transact! conn data)
         result (outliner/get-by-parent-id conn "1")]
     (is (= ["2" "3"] (mapv :block/id result)))))
+
+(deftest test-get-journals
+  (let [conn (conn/create-outliner-db)
+        data [{:block/id "1"}
+              {:block/id "2"
+               :block/parent-id [:block/id "1"]
+               :block/left-id [:block/id "1"]
+               :block/journal? true}
+              {:block/id "3"
+               :block/parent-id [:block/id "1"]
+               :block/left-id [:block/id "2"]
+               :block/journal? true}]
+        _ (d/transact! conn data)
+        result (outliner/get-journals conn)]
+    (is (= ["2" "3"] (mapv :block/id result)))))

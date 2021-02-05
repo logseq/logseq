@@ -28,3 +28,10 @@
   [conn block-m]
   (d/transact! conn [block-m]))
 
+(defn get-journals
+  [conn]
+  (let [r (d/q '[:find (pull ?a [*])
+                 :where
+                 [?a :block/journal? true]]
+               @conn)]
+    (flatten r)))
