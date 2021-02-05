@@ -86,9 +86,10 @@
           properties (->> (take-while directive? ast)
                           (map (fn [[_ k v]]
                                  (let [k (keyword (string/lower-case k))
+                                       comma? (contains? #{:tags :alias :roam_tags} k)
                                        v (if (contains? #{:title :description :roam_tags} k)
                                            v
-                                           (text/split-page-refs-without-brackets v))]
+                                           (text/split-page-refs-without-brackets v comma?))]
                                    [k v])))
                           (into {}))
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
