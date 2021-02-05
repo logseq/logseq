@@ -3,7 +3,7 @@
 
 (defn get-by-id
   [conn id]
-  (d/pull @conn '[*] [:block/id id]))
+  (d/pull @conn '[*] id))
 
 (defn get-by-parent-&-left
   [conn parent-id left-id]
@@ -12,7 +12,7 @@
                  :where
                  [?a :block/left-id ?l]
                  [?a :block/parent-id ?p]]
-               @conn [:block/id parent-id] [:block/id left-id])]
+               @conn parent-id left-id)]
     (ffirst r)))
 
 (defn get-by-parent-id
@@ -21,7 +21,7 @@
                  :in $ ?id
                  :where
                  [?a :block/parent-id ?id]]
-               @conn [:block/id id])]
+               @conn id)]
     (flatten r)))
 
 (defn save-block

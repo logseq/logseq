@@ -1,6 +1,21 @@
 (ns frontend.modules.outliner.tree-test
   (:require [cljs.test :refer [deftest is are testing use-fixtures]]
-            [frontend.modules.outliner.tree :as tree]))
+            [frontend.modules.outliner.tree :as tree]
+            [frontend.db.conn :as conn]
+            [frontend.db.outliner :as db-outliner]
+            [datascript.core :as d]
+            [frontend.util :as util]))
+
+(defn build-block
+  ([id]
+   (build-block id nil nil))
+  ([id parent-id left-id & [m]]
+   (let [m (-> (merge m {:block/id id})
+               (util/assoc-when :block/parent-id parent-id
+                                :block/left-id left-id))
+         m (->> (remove #(nil? (val %)) m)
+                (into {}))]
+     (tree/->Block id m))))
 
 (defrecord RenderNode [id children])
 (defrecord TestNode [id parent left])
@@ -17,23 +32,21 @@
 (defn build-sql-records
   "build RDS record from memory node struct."
   [tree-record]
-  (letfn [(build [acc node queue]
+  (letfn [(build [node queue]
             (let [{:keys [id left parent]} node
-                  sql-record (->TestNode id parent left)
+                  block (build-block id  parent left)
                   left (atom (:id node))
                   children (map (fn [c]
                                   (let [node (assoc c :left @left :parent (:id node))]
                                     (swap! left (constantly (:id c)))
                                     node))
                                 (:children node))
-                  queue (concat queue children)
-                  acc (conj acc sql-record)]
-              (if (seq queue)
-                (build acc (first queue) (rest queue))
-                acc)))]
-    (let [id (:id tree-record)
-          root (assoc tree-record :left id :parent nil)]
-      (build nil root '()))))
+                  queue (concat queue children)]
+              (tree/-save block)
+              (when (seq queue)
+                (build (first queue) (rest queue)))))]
+    (let [root (assoc tree-record :left nil :parent nil)]
+      (build root '()))))
 
 (def tree [1 [[2 [[3 [[4]
                       [5]]]
