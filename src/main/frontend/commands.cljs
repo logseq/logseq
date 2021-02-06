@@ -261,6 +261,26 @@
     (when check-fn
       (check-fn new-value (dec (count prefix)) new-pos))))
 
+(defn insert-before!
+  [id value
+   {:keys [backward-pos forward-pos check-fn]
+    :as option}]
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        current-pos (:pos (util/get-caret-pos input))
+        suffix (subs edit-content 0 current-pos)
+        new-value (str value
+                       suffix
+                       (subs edit-content current-pos))
+        new-pos (- (+ (count suffix)
+                      (count value)
+                      (or forward-pos 0))
+                   (or backward-pos 0))]
+    (state/set-block-content-and-last-pos! id new-value new-pos)
+    (util/move-cursor-to input new-pos)
+    (when check-fn
+      (check-fn new-value (dec (count suffix)) new-pos))))
+
 (defn simple-replace!
   [id value selected
    {:keys [backward-pos forward-pos check-fn]
