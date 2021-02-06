@@ -24,16 +24,18 @@
 (defn react-fn
   [f]
   {:pre [(fn? f)]}
-  (let [result-ref (atom nil)]
-    (binding [*react-fn* f]
-      (swap! react-defines assoc f {:result result-ref
-                                    :watches #{}})
-      (reset! result-ref (f))
+  (let [result-ref (atom nil)
+        ;; Each react-fn invoke will generate new *react-fn*, though the same f.
+        f' (fn [] (f))]
+    (binding [*react-fn* f']
+      (swap! react-defines assoc f' {:result result-ref
+                                     :watches #{}})
+      (reset! result-ref (f'))
       {:clear-state-fn
-       (fn [] (-> (swap! react-defines dissoc f)
+       (fn [] (-> (swap! react-defines dissoc f')
                   (empty?)))
        :get-value-fn
-       (fn [] (deref (get-in @react-defines [f :result])))})))
+       (fn [] (deref (get-in @react-defines [f' :result])))})))
 
 (comment
   (let [react-ref (atom 1)
