@@ -22,6 +22,7 @@
             [frontend.components.project :as project]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
@@ -36,6 +37,7 @@
             [cljs.pprint :as pprint]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
+            [frontend.text :as text]
             [frontend.handler.block :as block-handler]))
 
 (defn- get-page-name
@@ -288,7 +290,10 @@
               developer-mode? (state/sub [:ui/developer-mode?])
               published? (= "true" (:published properties))
               public? (= "true" (:public properties))]
-          [:div.flex-1.page.relative
+          [:div.flex-1.page.relative (if (seq (:page/tags page))
+                                       (let [page-names (model/get-page-names-by-ids (map :db/id (:page/tags page)))]
+                                         {:data-page-tags (text/build-data-value page-names)})
+                                       {})
            [:div.relative
             (when (and (not block?)
                        (not sidebar?)

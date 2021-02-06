@@ -251,3 +251,9 @@
               body (drop-while properties? properties-and-body)]
           (->> (concat title-lines new-properties body)
                (string/join "\n")))))))
+
+(defn build-data-value
+  [col]
+  (let [items (map (fn [item] (str "\"" item "\"")) col)]
+    (util/format "[%s]"
+                 (string/join ", " items))))

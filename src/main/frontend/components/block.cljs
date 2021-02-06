@@ -1494,10 +1494,8 @@
      (cond->
       {:id block-id
        :data-refs (let [refs (model/get-page-names-by-ids
-                              (map :db/id refs-with-children))
-                        refs (map (fn [ref] (str "\"" ref "\"")) refs)]
-                    (util/format "[%s]"
-                                 (string/join ", " refs)))
+                              (map :db/id refs-with-children))]
+                    (text/build-data-value refs))
        :style {:position "relative"}
        :class (str uuid
                    (when dummy? " dummy")
