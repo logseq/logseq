@@ -46,7 +46,7 @@
     id
 
     :else
-    (throw (js/Error (util/format "Not a id format: %s" id)))))
+    nil))
 
 (extend-type Block
   INode

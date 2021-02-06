@@ -181,7 +181,7 @@
        (is (= [6 9] old-parent's-children))
        (is (= [13 14 3 15] new-parent's-children))))))
 
-#_(deftest test-get-node-list-with-cursor
+(deftest test-get-node-list-with-cursor
   (binding [conn/*outline-db* (conn/create-outliner-db)]
     (build-sql-records node-tree)
     (let [cursor (-> (build-by-block-id 1 nil nil)
