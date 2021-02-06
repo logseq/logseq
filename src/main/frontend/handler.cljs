@@ -23,7 +23,8 @@
             [goog.object :as gobj]
             [frontend.idb :as idb]
             [lambdaisland.glogi :as log]
-            [frontend.handler.common :as common-handler]))
+            [frontend.handler.common :as common-handler]
+            [electron.listener :as el]))
 
 (defn- watch-for-date!
   []
@@ -159,4 +160,4 @@
     (file-handler/run-writes-chan!)
     (editor-handler/periodically-save!)
     (when (util/electron?)
-      (fs-watcher-handler/run-dirs-watcher!))))
+      (el/listen!))))

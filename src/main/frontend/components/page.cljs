@@ -22,6 +22,7 @@
             [frontend.components.project :as project]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.utils :as db-utils]
             [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [goog.dom :as gdom]
@@ -55,6 +56,9 @@
   db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
+        grouped-blocks-by-file (into {} (for [[k v] (db-utils/group-by-file raw-page-blocks)]
+                                          [(:file/path (db-utils/entity (:db/id k))) v]))
+        raw-page-blocks (get grouped-blocks-by-file file-path raw-page-blocks)
         page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
                         (let [content (db/get-file repo file-path)]
@@ -74,11 +78,23 @@
                        :editor-box editor/box}
         hiccup-config (common-handler/config-with-document-mode hiccup-config)
         hiccup (block/->hiccup page-blocks hiccup-config {})]
-    (rum/with-key
-      (content/content page-name
-                       {:hiccup hiccup
-                        :sidebar? sidebar?})
-      (str encoded-page-name "-hiccup"))))
+    [:div.page-blocks-inner
+     (when (and (seq grouped-blocks-by-file)
+                (> (count grouped-blocks-by-file) 1))
+       (ui/admonition
+        :warning
+        [:div.text-sm
+         [:p.font-medium "Those pages have the same title, you might want to only keep one file."]
+         [:ol
+          (for [[file-path blocks] (into (sorted-map) grouped-blocks-by-file)]
+            [:li [:a {:key file-path
+                      :href (rfe/href :file {:path file-path})} file-path]])]]))
+
+     (rum/with-key
+       (content/content page-name
+                        {:hiccup   hiccup
+                         :sidebar? sidebar?})
+       (str encoded-page-name "-hiccup"))]))
 
 (defn contents-page
   [{:page/keys [name original-name file] :as contents}]
@@ -204,7 +220,7 @@
           (for [[original-name name] pages]
             [:li {:key (str "tagged-page-" name)}
              [:a {:href (rfe/href :page {:name name})}
-              original-name]])])]])))
+              original-name]])] false)]])))
 
 (defonce last-route (atom :home))
 ;; A page is just a logical block
@@ -228,10 +244,13 @@
         path-page-name page-name
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
-        format (db/get-page-format page-name)
-        journal? (db/journal-page? page-name)
         block? (util/uuid-string? page-name)
         block-id (and block? (uuid page-name))
+        format (let [page (if block-id
+                            (:page/name (:block/page (db/entity [:block/uuid block-id])))
+                            page-name)]
+                 (db/get-page-format page))
+        journal? (db/journal-page? page-name)
         sidebar? (:sidebar? option)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (cond
@@ -308,14 +327,14 @@
                                                       {:title   (t :page/publish)
                                                        :options {:on-click (fn []
                                                                              (page-handler/publish-page!
-                                                                               page-name project/add-project
-                                                                               html-export/export-page))}})
+                                                                              page-name project/add-project
+                                                                              html-export/export-page))}})
                                                     (when-not published?
                                                       {:title   (t :page/publish-as-slide)
                                                        :options {:on-click (fn []
                                                                              (page-handler/publish-page-as-slide!
-                                                                               page-name project/add-project
-                                                                               html-export/export-page))}})
+                                                                              page-name project/add-project
+                                                                              html-export/export-page))}})
                                                     {:title   (t (if public? :page/make-private :page/make-public))
                                                      :options {:background (if public? "gray" "indigo")
                                                                :on-click (fn []
@@ -401,8 +420,10 @@
                        item])])))
 
              (when (and block? (not sidebar?))
-               [:div.mb-4
-                (block/block-parents repo block-id format)])
+               (let [config {:id "block-parent"
+                             :block? true}]
+                 [:div.mb-4
+                  (block/block-parents config repo block-id format)]))
 
              ;; blocks
              (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]

@@ -295,8 +295,11 @@
 
 (defn local-asset?
   [s]
-  (or (string/starts-with? s (str "/" local-assets-dir))
-      (string/starts-with? s (str "../" local-assets-dir))))
+  (re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
+
+(defn get-local-asset-absolute-path
+  [s]
+  (str "/" (string/replace s #"^[./]*" "")))
 
 (defn get-local-dir
   [s]

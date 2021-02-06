@@ -127,7 +127,7 @@
   [repo]
   (when-let [conn (conn/get-conn repo)]
     (->> (d/q
-           '[:find ?path
+          '[:find ?path
              ;; ?modified-at
             :where
             [?file :file/path ?path]
@@ -307,12 +307,19 @@
      (set)
      (set/union #{page-id}))))
 
+(defn get-page-names-by-ids
+  ([ids]
+   (get-page-names-by-ids (state/get-current-repo) ids))
+  ([repo ids]
+   (when repo
+     (->> (db-utils/pull-many repo '[:page/name] ids)
+          (map :page/name)))))
+
 (defn get-page-alias-names
   [repo page-name]
   (let [alias-ids (page-alias-set repo page-name)]
     (when (seq alias-ids)
-      (->> (db-utils/pull-many repo '[:page/name] alias-ids)
-           (map :page/name)
+      (->> (get-page-names-by-ids repo alias-ids)
            distinct
            (remove #(= (string/lower-case %) (string/lower-case page-name)))))))
 

@@ -27,7 +27,6 @@
     :repo/sync-status {}
     :repo/changed-files nil
     :nfs/user-granted? {}
-    :nfs/loading-files? nil
     :nfs/refreshing? nil
     ;; TODO: how to detect the network reliably?
     :network/online? true
@@ -112,6 +111,10 @@
 (defn get-current-route
   []
   (get-in (get-route-match) [:data :name]))
+
+(defn home?
+  []
+  (= :home (get-current-route)))
 
 (defn get-current-page
   []

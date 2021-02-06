@@ -12,8 +12,17 @@
   left: 0;
 
   user-select: none;
+
   .it svg {
       transform: scale(0.8);
+  }
+
+  .repos {
+    .dropdown-wrapper {
+      left: unset;
+      right: -46px;
+      min-width: 14rem;
+    }
   }
 }
 

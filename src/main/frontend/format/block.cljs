@@ -141,6 +141,9 @@
       (update "created_at" util/safe-parse-int)
       (update "last_modified_at" util/safe-parse-int)))
 
+(defonce non-parsing-properties
+  (atom #{"background_color"}))
+
 (defn extract-properties
   [[_ properties] _start-pos _end-pos]
   (let [properties (into {} properties)
@@ -155,14 +158,25 @@
                    (distinct))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (let [k' (and k (string/trim (string/lower-case k)))
-                                               v' (and v (string/trim v))
-                                               v' (if (and k' v'
-                                                           (contains? config/markers k')
-                                                           (util/safe-parse-int v'))
-                                                    (util/safe-parse-int v')
-                                                    (text/split-page-refs-without-brackets v'))]
-                                           [k' v'])))
+                                         (let [v (string/trim v)]
+                                           (cond
+                                             (and (= "\"" (first v) (last v))) ; wrapped in ""
+                                             [(string/lower-case k) (string/trim (subs v 1 (dec (count v))))]
+
+                                             (contains? @non-parsing-properties (string/lower-case k))
+                                             [(string/lower-case k) v]
+
+                                             :else
+                                             (let [k' (and k (string/trim (string/lower-case k)))
+                                                   v' v
+                                                   ;; built-in collections
+                                                   comma? (contains? #{"tags" "alias"} k)
+                                                   v' (if (and k' v'
+                                                               (contains? config/markers k')
+                                                               (util/safe-parse-int v'))
+                                                        (util/safe-parse-int v')
+                                                        (text/split-page-refs-without-brackets v' comma?))]
+                                               [k' v'])))))
                         (->schema-properties))]
     {:properties properties
      :page-refs page-refs}))

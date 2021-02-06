@@ -7,7 +7,6 @@
             [frontend.handler.route :as route-handler]
             [cljs-time.coerce :as tc]
             [frontend.config :as config]
-            [cljs-bean.core :as bean]
             [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as string]))
@@ -32,7 +31,7 @@
 
         (and (= "change" type)
              (nil? (db/get-file path)))
-        (println "Can't get file in the db: " path)
+        (js/console.warn "Can't get file in the db: " path)
 
         (and (= "change" type)
              (not= content (db/get-file path))
@@ -41,16 +40,16 @@
 
         (file-handler/alter-file repo path content {:re-render-root? true})
 
-        (= "unlink" type)
-        (when-let [page-name (db/get-file-page path)]
-          (page-handler/delete!
-           page-name
-           (fn []
-             (notification/show! (str "Page " page-name " was deleted on disk.")
-                                 :success)
-             (when (= (state/get-current-page) page-name)
-               ;; redirect to home
-               (route-handler/redirect-to-home!)))))
+        ;; (= "unlink" type)
+        ;; (when-let [page-name (db/get-file-page path)]
+        ;;   (page-handler/delete!
+        ;;    page-name
+        ;;    (fn []
+        ;;      (notification/show! (str "Page " page-name " was deleted on disk.")
+        ;;                          :success)
+        ;;      (when (= (state/get-current-page) page-name)
+        ;;        ;; redirect to home
+        ;;        (route-handler/redirect-to-home!)))))
 
         (contains? #{"add" "change" "unlink"} type)
         nil
@@ -58,11 +57,3 @@
         :else
         (log/error :fs/watcher-no-handler {:type type
                                            :payload payload})))))
-
-(defn run-dirs-watcher!
-  []
-  ;; TODO: move "file-watcher" to electron.ipc.channels
-  (js/window.apis.on "file-watcher"
-                     (fn [data]
-                       (let [{:keys [type payload]} (bean/->clj data)]
-                         (handle-changed! type payload)))))

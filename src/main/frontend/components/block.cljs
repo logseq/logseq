@@ -226,8 +226,8 @@
   (rum/local nil ::src)
   [state config title href label metadata full_text]
   (let [src (::src state)
-        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])]
-
+        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
+        href (config/get-local-asset-absolute-path href)]
     (when (or granted? (util/electron?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
@@ -236,8 +236,6 @@
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
-
-
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
@@ -349,7 +347,8 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))]
       [:a.page-ref
-       {:href href
+       {:data-ref page-name
+        :href href
         :on-click (fn [e]
                     (util/stop e)
                     (if (gobj/get e "shiftKey")
@@ -562,7 +561,8 @@
     (->elem :sub (map-inline config l))
     ["Tag" s]
     (if (and s (util/tag-valid? s))
-      [:a.tag {:href (rfe/href :page {:name s})
+      [:a.tag {:data-ref s
+               :href (rfe/href :page {:name s})
                :on-click (fn [e]
                            (let [repo (state/get-current-repo)
                                  page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
@@ -636,7 +636,9 @@
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
           (re-find #"(?i)^http[s]?://" s)
-          (->elem :a {:href s}
+          (->elem :a {:href s
+                      :data-href s
+                      :target "_blank"}
                   (map-inline config label))
 
           (and (util/electron?) (config/local-asset? s))
@@ -677,7 +679,9 @@
                   (->elem
                    :a
                    (cond->
-                    {:href href}
+                    {:href href
+                     :data-href href
+                     :target "_blank"}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
@@ -1056,7 +1060,8 @@
      (mapv (fn [tag]
              (when-let [page (db/entity (:db/id tag))]
                (let [tag (:page/name page)]
-                 [:a.tag.mx-1 {:key (str "tag-" (:db/id tag))
+                 [:a.tag.mx-1 {:data-ref tag
+                               :key (str "tag-" (:db/id tag))
                                :href (rfe/href :page {:name tag})}
                   (str "#" tag)])))
            tags))))
@@ -1359,9 +1364,9 @@
        (not @*dragging?)))
 
 (defn block-parents
-  ([repo block-id format]
-   (block-parents repo block-id format true))
-  ([repo block-id format show-page?]
+  ([config repo block-id format]
+   (block-parents config repo block-id format true))
+  ([config repo block-id format show-page?]
    (let [parents (db/get-block-parents repo block-id 3)
          page (db/get-block-page repo block-id)
          page-name (:page/name page)]
@@ -1379,12 +1384,10 @@
                           [:span.mx-2.opacity-50 "➤"])
 
                         (when (seq parents)
-                          (let [parents (for [{:block/keys [uuid content]} parents]
-                                          (let [title (string/trim (text/remove-level-spaces content format))]
-                                            (when (and (not (string/blank? title))
-                                                       (not= (string/lower-case page-name) (string/lower-case title)))
-                                              [:a {:href (rfe/href :page {:name uuid})}
-                                               title])))
+                          (let [parents (doall
+                                         (for [{:block/keys [uuid title]} parents]
+                                           [:a {:href (rfe/href :page {:name uuid})}
+                                            (map-inline config title)]))
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)
                             (when (seq parents)
@@ -1404,7 +1407,7 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties] :as block}]
+  [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties refs-with-children] :as block}]
   (let [ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
@@ -1490,6 +1493,11 @@
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
       {:id block-id
+       :data-refs (let [refs (model/get-page-names-by-ids
+                              (map :db/id refs-with-children))
+                        refs (map (fn [ref] (str "\"" ref "\"")) refs)]
+                    (util/format "[%s]"
+                                 (string/join ", " refs)))
        :style {:position "relative"}
        :class (str uuid
                    (when dummy? " dummy")
@@ -1503,7 +1511,7 @@
        (merge attrs))
 
      (when (and ref? breadcrumb-show?)
-       (when-let [comp (block-parents repo uuid format false)]
+       (when-let [comp (block-parents config repo uuid format false)]
          [:div.my-2.opacity-50.ml-4 comp]))
 
      (dnd-separator-wrapper block slide? (zero? idx))

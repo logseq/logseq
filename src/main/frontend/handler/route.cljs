@@ -109,7 +109,7 @@
                 :path-params {:path path}})))
 
 (defn toggle-between-page-and-file!
-  []
+  [state e]
   (let [current-route (state/get-current-route)]
     (case current-route
       :home

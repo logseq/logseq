@@ -67,10 +67,10 @@
           (git-handler/git-add repo path)
           (ok-handler file)
           (db/transact! repo
-            [{:file/path path}
-             {:page/name file
-              :page/file path
-              :page/journal? false}]))
+                        [{:file/path path
+                          :page/name file
+                          :page/file [:file/path path]
+                          :page/journal? false}]))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))

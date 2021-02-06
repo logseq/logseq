@@ -427,9 +427,10 @@
    (save-block-if-changed! block value nil))
   ([{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks] :as block}
     value
-    {:keys [indent-left? custom-properties remove-properties rebuild-content? chan chan-callback]
+    {:keys [indent-left? init-properties custom-properties remove-properties rebuild-content? chan chan-callback]
      :or {rebuild-content? true
           custom-properties nil
+          init-properties nil
           remove-properties nil}
      :as opts}]
    (let [repo (or repo (state/get-current-repo))
@@ -464,8 +465,9 @@
          text-properties (text/extract-properties value)
          old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
          properties (merge old-hidden-properties
-                           custom-properties
-                           text-properties)
+                           init-properties
+                           text-properties
+                           custom-properties)
          remove-properties (->
                             (set/difference (set (keys (:block/properties block)))
                                             (set (keys text-properties))
@@ -1138,7 +1140,7 @@
       (when-not (:block/pre-block? block)
         (let [{:block/keys [content properties]} block]
           (cond
-            (and (get properties key)
+            (and (string? (get properties key))
                  (= (string/trim (get properties key)) value))
             nil
 
@@ -1415,7 +1417,7 @@
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
     (save-block-if-changed! block new-value
                             (merge
-                             {:custom-properties properties}
+                             {:init-properties properties}
                              opts))))
 
 (defn save-block!
@@ -1522,7 +1524,7 @@
   [format url file-name image?]
   (case (keyword format)
     :markdown (util/format (str (when image? "!") "[%s](%s)") file-name url)
-    :org (util/format "[[%s][%s]]" url file-name)
+    :org (util/format "[[%s]]" url)
     nil))
 
 (defn- get-asset-link
@@ -1599,6 +1601,17 @@
                             (string/replace #"^../" "/")
                             (string/replace #"^assets://" ""))) nil))))
 
+;; assets/journals_2021_02_03_1612350230540_0.png
+(defn resolve-relative-path
+  [file-path]
+  (if-let [current-file (some-> (state/get-edit-block)
+                                :block/file
+                                :db/id
+                                (db/entity)
+                                :file/path)]
+    (util/get-relative-path current-file file-path)
+    file-path))
+
 (defn upload-asset
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)
@@ -1611,7 +1624,7 @@
                (let [image? (util/ext-of-image? url)]
                  (insert-command!
                   id
-                  (get-asset-file-link format (get-asset-link url)
+                  (get-asset-file-link format (resolve-relative-path url)
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format
@@ -1623,12 +1636,12 @@
               (reset! *asset-uploading? false)
               (reset! *asset-uploading-process 0))))
       (image/upload
-        files
-        (fn [file file-name file-type]
+       files
+       (fn [file file-name file-type]
          (image-handler/request-presigned-url
-           file file-name file-type
-           uploading?
-           (fn [signed-url]
+          file file-name file-type
+          uploading?
+          (fn [signed-url]
             (insert-command! id
                              (get-asset-file-link format signed-url file-name true)
                              format
@@ -1637,7 +1650,7 @@
 
             (reset! *asset-uploading? false)
             (reset! *asset-uploading-process 0))
-           (fn [e]
+          (fn [e]
             (let [process (* (/ (gobj/get e "loaded")
                                 (gobj/get e "total"))
                              100)]
@@ -2126,7 +2139,7 @@
     (when-not (string/blank? (:title m))
       (let [file (draw/title->file-name (:title m))
             value (util/format
-                   "[[%s]]\n<iframe class=\"draw-iframe\" src=\"/draw?file=%s\" width=\"100%\" height=\"400\" frameborder=\"0\" allowfullscreen></iframe>"
+                   "[[%s]]\n<iframe class=\"draw-iframe\" src=\"/#/draw?file=%s\" width=\"100%\" height=\"400\" frameborder=\"0\" allowfullscreen></iframe>"
                    file
                    file)]
         (insert-command! id

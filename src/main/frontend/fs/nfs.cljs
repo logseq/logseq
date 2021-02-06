@@ -132,7 +132,9 @@
                   format (-> (util/get-file-ext path)
                              (config/get-file-format))
                   pending-writes (state/get-write-chan-length)]
-            (if (and local-content old-content new?
+            (if (and local-content (or old-content
+                                       ;; temporally fix
+                                       (and path (string/ends-with? path ".excalidraw"))) new?
                      (or
                       (> pending-writes 0)
                       not-changed?

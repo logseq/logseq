@@ -80,8 +80,8 @@
 
 (defn chord-aux
   [f]
-  (fn [_state _e]
-    (f)
+  (fn [state e]
+    (f state e)
     ;; return false to prevent default browser behavior
     ;; and stop event from bubbling
     false))
@@ -92,7 +92,7 @@
    "t t" state/toggle-theme!
    "t r" ui-handler/toggle-right-sidebar!
    "t e" state/toggle-new-block-shortcut!
-   "s" route-handler/toggle-between-page-and-file!
+   "s" (chord-aux route-handler/toggle-between-page-and-file!)
    "mod+s" (chord-aux editor-handler/save!)
    "mod+c mod+s" (chord-aux search-handler/rebuild-indices!)
    "mod+c mod+b" (chord-aux config-handler/toggle-ui-show-brackets!)})

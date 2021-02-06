@@ -5,7 +5,7 @@
 
 (defonce prod? (= js/process.env.NODE_ENV "production"))
 (defonce dev? (not prod?))
-(defonce log (js/require "electron-log"))
+(defonce logger (js/require "electron-log"))
 
 (defonce open (js/require "open"))
 (defonce fetch (js/require "node-fetch"))
