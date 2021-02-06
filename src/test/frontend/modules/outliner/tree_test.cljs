@@ -201,6 +201,50 @@
           (is (= [15 16 17] (mapv #(-> % :data :block/id) acc))))))))
 
 
+(defn- get-block-id
+  [block]
+  (get-in block [:data :block/id]))
+
+(defn single-node
+  [node]
+  (get-block-id node))
+
+(defn node-&-children
+  [node children]
+  [(get-block-id node) children])
+
+(defn sibling-nodes
+  [acc new-sibling]
+  (if (empty? acc)
+    [new-sibling]
+    (conj acc new-sibling)))
+
+(deftest test-render-react-tree
+  "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+      "
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-sql-records node-tree)
+    (let [root (build-by-block-id 1 nil nil)
+          number 10
+          renders {:single-node-render single-node
+                   :parent-&-children-render node-&-children
+                   :sibling-nodes-render sibling-nodes}
+          result (tree/render-react-tree root number renders)]
+      (is (= [[1 [[2 [[3 [4
+                          5]]
+                      [6 [[7 [8]]]]
+                      [9 [10]]]]]]]
+             result)))))
+
 (comment
   (defn build-node-from-sql-record
     "build node from RDS records"
