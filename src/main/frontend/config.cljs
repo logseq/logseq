@@ -346,6 +346,13 @@
    (when repo
      (get-file-path repo (str app-name "/" config-file)))))
 
+(defn get-metadata-path
+  ([]
+   (get-metadata-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" metadata-file)))))
+
 (defn get-custom-css-path
   ([]
    (get-custom-css-path (state/get-current-repo)))

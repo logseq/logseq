@@ -6,7 +6,8 @@
             [clojure.string :as str]
             ["bip39" :as bip39]
             ["buffer" :as buffer]
-            ["@kanru/rage-wasm" :as rage]))
+            ["@kanru/rage-wasm" :as rage]
+            [lambdaisland.glogi :as log]))
 
 (defonce age-pem-header-line "-----BEGIN AGE ENCRYPTED FILE-----")
 (defonce age-version-line "age-encryption.org/v1")
@@ -24,7 +25,7 @@
   [repo-url]
   (db-utils/get-key-value repo-url :db/secret-phrase))
 
-(defn- save-mnemonic
+(defn save-mnemonic!
   [repo-url mnemonic]
   (db/set-key-value repo-url :db/secret-phrase mnemonic)
   (db/set-key-value repo-url :db/encrypted? true))
@@ -33,11 +34,11 @@
   []
   (bip39/generateMnemonic 256))
 
-(defn generate-mnemonic-and-save
+(defn generate-mnemonic-and-save!
   [repo-url]
   (when-not (get-mnemonic repo-url)
     (let [mnemonic (generate-mnemonic)]
-      (save-mnemonic repo-url mnemonic))))
+      (save-mnemonic! repo-url mnemonic))))
 
 (defn- derive-key-from-mnemonic
   [mnemonic]
@@ -74,9 +75,10 @@
    (cond
      (and (encrypted-db? repo-url)
           (content-encrypted? content))
-     (let [content (utf8/encode content)
-           secret-key (get-secret-key repo-url)
-           decrypted (rage/decrypt_with_x25519 secret-key content)]
-       (utf8/decode decrypted))
+     (let [content (utf8/encode content)]
+       (if-let [secret-key (get-secret-key repo-url)]
+         (let [decrypted (rage/decrypt_with_x25519 secret-key content)]
+           (utf8/decode decrypted))
+         (log/error :encrypt/empty-secret-key (str "Can't find the secret key for repo: " repo-url))))
      :else
      content)))

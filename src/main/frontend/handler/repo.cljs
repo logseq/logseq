@@ -25,6 +25,7 @@
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [frontend.spec :as spec]
+            [frontend.encrypt :as encrypt]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.components.encryption :as encryption]))
@@ -193,12 +194,11 @@
                      (util/remove-nils))]
     (db/transact! repo-url all-data)))
 
-(defn parse-files-and-load-to-db!
-  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
-                   :or {re-render? true}}]
-  (state/set-loading-files! false)
-  (state/set-importing-to-db! true)
-  (let [file-paths (map :file/path files)
+(defn- parse-files-and-create-default-files!
+  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts encrypted?]
+  (let [files (if encrypted? (map (fn [file]
+                                    (update file :file/content encrypt/decrypt))
+                               files) files)
         parsed-files (filter
                       (fn [file]
                         (let [format (format/get-format (:file/path file))]
@@ -207,20 +207,40 @@
         blocks-pages (if (seq parsed-files)
                        (extract-handler/extract-all-blocks-pages repo-url parsed-files)
                        [])]
-    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks))
     (let [config-file (config/get-config-path)]
       (if (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
-    (when first-clone?
+    (if (and first-clone? (not db-encrypted?))
       (state/set-modal!
        (encryption/encryption-setup-dialog
         repo-url
-        #(create-default-files! repo-url %))))
+        #(create-default-files! repo-url %)))
+      (create-default-files! repo-url db-encrypted?))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
-    (state/set-importing-to-db! false)))
+  (state/set-importing-to-db! false))
+
+(defn parse-files-and-load-to-db!
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
+                   :or {re-render? true}}]
+  (state/set-loading-files! false)
+  (state/set-importing-to-db! true)
+  (let [file-paths (map :file/path files)]
+    (let [metadata-file (config/get-metadata-path)
+          metadata-content (some #(when (= (:file/path %) metadata-file)
+                                    (:file/content %)) files)
+          metadata (when metadata-content
+                     (common-handler/read-metadata! repo-url metadata-content))
+          db-encrypted? (:db/encrypted? metadata)]
+      (if db-encrypted?
+        (state/set-modal!
+         (encryption/encryption-input-secret-dialog
+          repo-url
+          #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts true)))
+        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts false)))))
 
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files]
