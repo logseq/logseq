@@ -143,7 +143,8 @@
            (when-not file-exists?
              (file-handler/reset-file! repo-url path content)
              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
-               (ui-handler/re-render-root!)
+               (when-not (state/editing?)
+                 (ui-handler/re-render-root!))
                (git-handler/git-add repo-url path)))))))))
 
 (defn create-today-journal!

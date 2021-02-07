@@ -370,6 +370,10 @@
   []
   (ffirst (:editor/editing? @state)))
 
+(defn editing?
+  []
+  (some? (get-edit-input-id)))
+
 (defn get-edit-content
   []
   (get (:editor/content @state) (get-edit-input-id)))
