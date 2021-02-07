@@ -198,8 +198,10 @@
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
     (when first-clone?
-      (create-default-files! repo-url)
-      (state/set-modal! (encryption/encryption-setup-dialog repo-url)))
+      (state/set-modal!
+       (encryption/encryption-setup-dialog
+        repo-url
+        #(create-default-files! repo-url))))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
     (state/set-importing-to-db! false)))

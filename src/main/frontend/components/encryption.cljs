@@ -73,6 +73,9 @@
         (t :no)]]]]))
 
 (defn encryption-setup-dialog
-  [repo-url]
-  (fn [close-fn]
-    (encryption-setup-dialog-inner repo-url close-fn)))
+  [repo-url close-fn]
+  (fn [close-modal-fn]
+    (let [close-fn (fn []
+                     (close-fn)
+                     (close-modal-fn))]
+      (encryption-setup-dialog-inner repo-url close-fn))))
