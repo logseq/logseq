@@ -26,7 +26,8 @@
             [frontend.dicts :as dicts]
             [frontend.spec :as spec]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.components.encryption :as encryption]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -196,7 +197,9 @@
         (when-let [content (some #(when (= (:file/path %) config-file)
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
-    (when first-clone? (create-default-files! repo-url))
+    (when first-clone?
+      (create-default-files! repo-url)
+      (state/set-modal! (encryption/encryption-setup-dialog repo-url)))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
     (state/set-importing-to-db! false)))

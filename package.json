@@ -57,6 +57,8 @@
     },
     "dependencies": {
         "chokidar": "^3.5.1",
+        "@kanru/rage-wasm": "^0.1.4",
+        "bip39": "^3.0.3",
         "codemirror": "^5.58.1",
         "diff": "5.0.0",
         "diff-match-patch": "^1.0.5",

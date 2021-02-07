@@ -19,7 +19,8 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.config :as config]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.encrypt :as encrypt]))
 
 (defn remove-ignore-files
   [files]
@@ -145,7 +146,7 @@
                          (p/let [content (if nfs?
                                            (.text (:file/file file))
                                            (:file/content file))]
-                           (assoc file :file/content content))) markup-files))
+                           (assoc file :file/content (encrypt/decrypt content)))) markup-files))
            (p/then (fn [result]
                      (let [files (map #(dissoc % :file/file) result)]
                        (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
@@ -240,7 +241,7 @@
                         (p/let [content (if nfs?
                                           (.text (:file/file file))
                                           (:file/content file))]
-                          (assoc file :file/content content)))) added-or-modified))
+                          (assoc file :file/content (encrypt/decrypt content))))) added-or-modified))
         (p/then (fn [result]
                   (let [files (map #(dissoc % :file/file :file/handle) result)
                         non-modified? (fn [file]

@@ -7,6 +7,7 @@
             [frontend.text :as text]
             [frontend.git :as git]
             [frontend.db :as db]
+            [frontend.encrypt :as e]
             [lambdaisland.glogi :as log]
             [cljs.reader :as reader]
             [frontend.spec :as spec]
