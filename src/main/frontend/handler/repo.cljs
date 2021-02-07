@@ -161,13 +161,29 @@
         (when (empty? (db/get-page-blocks-no-cache repo today-page))
           (create-today-journal-if-not-exists repo))))))
 
-(defn create-default-files!
-  [repo-url]
+(defn create-metadata-file
+  [repo-url encrypted?]
   (spec/validate :repos/url repo-url)
-  (create-config-file-if-not-exists repo-url)
-  (create-today-journal-if-not-exists repo-url)
-  (create-contents-file repo-url)
-  (create-custom-theme repo-url))
+  (let [repo-dir (config/get-repo-dir repo-url)
+        path (str config/app-name "/" config/metadata-file)
+        file-path (str "/" path)
+        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+      (when-not file-exists?
+        (file-handler/reset-file! repo-url path default-content)
+        (git-handler/git-add repo-url path)))))
+
+(defn create-default-files!
+  ([repo-url]
+   (create-default-files! repo-url false))
+  ([repo-url encrypted?]
+   (spec/validate :repos/url repo-url)
+   (create-metadata-file repo-url encrypted?)
+   (create-config-file-if-not-exists repo-url)
+   (create-today-journal-if-not-exists repo-url)
+   (create-contents-file repo-url)
+   (create-custom-theme repo-url)))
 
 (defn- reset-contents-and-blocks!
   [repo-url files blocks-pages delete-files delete-blocks]
@@ -201,7 +217,7 @@
       (state/set-modal!
        (encryption/encryption-setup-dialog
         repo-url
-        #(create-default-files! repo-url))))
+        #(create-default-files! repo-url %))))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
     (state/set-importing-to-db! false)))
