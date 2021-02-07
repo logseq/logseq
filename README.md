@@ -111,10 +111,10 @@ clj -Mtest-clj
 yarn watch
 ```
 
-### 2. Open the debug app
+### 2. Open the dev app
 
 ``` bash
-yarn debug-electron
+yarn dev-electron-app
 ```
 
 ### 3. Build a release
