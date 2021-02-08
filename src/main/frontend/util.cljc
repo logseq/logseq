@@ -399,20 +399,20 @@
                           :behavior "smooth"}))))))
 
 #?(:cljs
-    (defn scroll-to
-      ([pos]
-       (scroll-to pos true))
-      ([pos animate?]
-       (scroll-to (app-scroll-container-node) pos animate?))
-      ([node pos animate?]
-       (.scroll node
-                #js {:top      pos
-                     :behavior (if animate? "smooth" "auto")}))))
+   (defn scroll-to
+     ([pos]
+      (scroll-to (app-scroll-container-node) pos))
+     ([node pos]
+      (scroll-to node pos true))
+     ([node pos animate?]
+      (.scroll node
+               #js {:top      pos
+                    :behavior (if animate? "smooth" "auto")}))))
 
 #?(:cljs
     (defn scroll-to-top
       []
-      (scroll-to 0 false)))
+      (scroll-to (app-scroll-container-node) 0 false)))
 
 (defn url-encode
   [string]
