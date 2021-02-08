@@ -65,7 +65,7 @@
     (vec (cons {:path (fix-win-path! path)} result))))
 
 ;; TODO: Is it going to be slow if it's a huge directory
-(defmethod handle :openDir [window _messages]
+(defmethod handle :openDir [^js window _messages]
   (let [result (.showOpenDialogSync dialog (bean/->js
                                             {:properties ["openDirectory"]}))
         path (first result)]
