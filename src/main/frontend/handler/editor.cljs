@@ -1563,14 +1563,14 @@
         (if (util/electron?)
           (let [from (.-path file)]
             (p/then (js/window.apis.copyFileToAssets dir filename from)
-                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file)])))
+                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
           (p/then (fs/write-file! repo dir filename (.stream file) nil)
                   #(p/resolved [filename file]))))))))
 
 (defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
-  [path]                                                    ;; path start with "/assets" or compatible for "../assets"
+  [path] ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         path (string/replace path "../" "/")]
     (if (util/electron?)
@@ -1620,11 +1620,11 @@
       (-> (save-assets! block repo (js->clj files))
           (p/then
            (fn [res]
-             (when-let [[url file] (and (seq res) (first res))]
-               (let [image? (util/ext-of-image? url)]
+             (when-let [[asset-file-name file full-file-path] (and (seq res) (first res))]
+               (let [image? (util/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
-                  (get-asset-file-link format (resolve-relative-path url)
+                  (get-asset-file-link format (resolve-relative-path (or full-file-path asset-file-name))
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format

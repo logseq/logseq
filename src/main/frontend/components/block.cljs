@@ -380,7 +380,7 @@
 (rum/defc asset-reference
   [title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (str repo-path (string/replace path "../" "/"))]
+        full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))]
     [:a.asset-ref {:target "_blank" :href full-path} (or title path)]))
 
 (rum/defc page-reference < rum/reactive
