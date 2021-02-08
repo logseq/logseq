@@ -38,7 +38,8 @@
   [repo-url]
   (when-not (get-mnemonic repo-url)
     (let [mnemonic (generate-mnemonic)]
-      (save-mnemonic! repo-url mnemonic))))
+      (save-mnemonic! repo-url mnemonic)
+      mnemonic)))
 
 (defn- derive-key-from-mnemonic
   [mnemonic]
@@ -89,6 +90,7 @@
         encrypted (rage/encrypt_with_user_passphrase passphrase content true)]
     (utf8/decode encrypted)))
 
+;; TODO: What if decryption failed
 (defn decrypt-with-passphrase
   [passphrase content]
   (let [content (utf8/encode content)

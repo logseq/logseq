@@ -65,7 +65,7 @@
                 (when (e/encrypted-db? url)
                   [:a.control {:title "Show encryption information about this graph"
                                :on-click (fn []
-                                           (state/set-modal! (encryption/encryptioin-dialog url)))}
+                                           (state/set-modal! (encryption/encryption-dialog url)))}
                    "🔐"])
                 [:a.control.ml-4 {:title (if local?
                                            "Sync with the local directory"

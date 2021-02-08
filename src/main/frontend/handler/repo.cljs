@@ -28,6 +28,7 @@
             [frontend.encrypt :as encrypt]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            ;; TODO: remove component dependency from handlers, we can use a core.async channel
             [frontend.components.encryption :as encryption]))
 
 ;; Project settings should be checked in two situations:
@@ -162,25 +163,13 @@
         (when (empty? (db/get-page-blocks-no-cache repo today-page))
           (create-today-journal-if-not-exists repo))))))
 
-(defn create-metadata-file
-  [repo-url encrypted?]
-  (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        path (str config/app-name "/" config/metadata-file)
-        file-path (str "/" path)
-        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)
-        (git-handler/git-add repo-url path)))))
-
 (defn create-default-files!
   ([repo-url]
    (create-default-files! repo-url false))
   ([repo-url encrypted?]
    (spec/validate :repos/url repo-url)
-   (create-metadata-file repo-url encrypted?)
+   (file-handler/create-metadata-file repo-url encrypted?)
+   ;; TODO: move to frontend.handler.file
    (create-config-file-if-not-exists repo-url)
    (create-today-journal-if-not-exists repo-url)
    (create-contents-file repo-url)
@@ -574,14 +563,9 @@
          (git-handler/set-git-error! repo-url e)
          (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))
 
-(defn set-config-content!
-  [repo path new-content]
-  (file-handler/alter-file repo path new-content {:reset? false
-                                                  :re-render-root? false}))
-
 (defn remove-repo!
   [{:keys [id url] :as repo}]
-  (spec/validate :repos/repo repo)
+  ;; (spec/validate :repos/repo repo)
   (let [delete-db-f (fn []
                       (db/remove-conn! url)
                       (db/remove-db! url)

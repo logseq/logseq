@@ -195,6 +195,11 @@
        (println "Write file failed, path: " path ", content: " content)
        (js/console.error error)))))
 
+(defn set-file-content!
+  [repo path new-content]
+  (alter-file repo path new-content {:reset? false
+                                     :re-render-root? false}))
+
 (defn create!
   ([path]
    (create! path ""))
@@ -322,3 +327,15 @@
           directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
       (doseq [dir directories]
         (fs/watch-dir! dir)))))
+
+(defn create-metadata-file
+  [repo-url encrypted?]
+  (let [repo-dir (config/get-repo-dir repo-url)
+        path (str config/app-name "/" config/metadata-file)
+        file-path (str "/" path)
+        default-content (if encrypted? "{:db/encrypted? true}" "{}")]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+      (when-not file-exists?
+        (reset-file! repo-url path default-content)
+        (git-handler/git-add repo-url path)))))

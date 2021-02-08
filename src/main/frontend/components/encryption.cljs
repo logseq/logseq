@@ -5,7 +5,8 @@
             [frontend.context.i18n :as i18n]
             [frontend.db.utils :as db-utils]
             [clojure.string :as string]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.handler.metadata :as metadata-handler]))
 
 (rum/defcs encryption-dialog-inner <
   (rum/local false ::reveal-secret-phrase?)
@@ -44,10 +45,45 @@
            :on-click close-fn}
           (t :close)]]]])))
 
-(defn encryptioin-dialog
+(defn encryption-dialog
   [repo-url]
   (fn [close-fn]
     (encryption-dialog-inner repo-url close-fn)))
+
+(rum/defcs input-password-inner <
+  (rum/local "" ::password)
+  [state repo-url close-fn]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [password (get state ::password)]
+      [:div
+       [:div.sm:flex.sm:items-start
+        [:div.mt-3.text-center.sm:mt-0.sm:text-left
+         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+          "Enter a password"]]]
+
+       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+        {:auto-focus true
+         :style {:color "#000"}
+         :on-change (fn [e]
+                      (reset! password (util/evalue e)))}]
+
+       [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+        [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+          {:type "button"
+           :on-click (fn []
+                       (let [value @password]
+                         (when-not (string/blank? value)
+                           (when-let [mnemonic (e/generate-mnemonic-and-save! repo-url)]
+                             (let [db-encrypted-secret (e/encrypt-with-passphrase value mnemonic)]
+                               (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)))
+                           (close-fn true))))}
+          "Submit"]]]])))
+
+(defn input-password
+  [repo-url close-fn]
+  (fn [_close-fn]
+    (input-password-inner repo-url close-fn)))
 
 (rum/defcs encryption-setup-dialog-inner
   [state repo-url close-fn]
@@ -63,8 +99,7 @@
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
         {:type "button"
          :on-click (fn []
-                     (e/generate-mnemonic-and-save! repo-url)
-                     (close-fn true))}
+                     (state/set-modal! (input-password repo-url close-fn)))}
         (t :yes)]]
       [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5

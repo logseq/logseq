@@ -65,8 +65,9 @@
 (defn write-file!
   [repo dir path content opts]
   (when content
-    (let [metadata? (string/ends-with? path config/metadata-file)
-          content (if metadata? content (encrypt/encrypt content))]
+    (let [metadata-or-css? (or (string/ends-with? path config/metadata-file)
+                               (string/ends-with? path config/custom-css-file))
+          content (if metadata-or-css? content (encrypt/encrypt content))]
       (->
        (do
          (protocol/write-file! (get-fs dir) repo dir path content opts)
