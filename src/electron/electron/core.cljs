@@ -77,8 +77,10 @@
 
     (.on web-contents  "new-window"
          (fn [e url]
-           (.. logger (info "new-window" url))
-           (open url)
+           (let [url (if (string/starts-with? url "file:")
+                       (js/decodeURIComponent url) url)]
+             (.. logger (info "new-window" url))
+             (open url))
            (.preventDefault e)))
 
     (doto win
