@@ -27,7 +27,7 @@
 
 (defn save-mnemonic!
   [repo-url mnemonic]
-  (db/set-key-value repo-url :db/secret-phrase mnemonic)
+  (db/set-key-value repo-url :db/secret-phrase (str/trim mnemonic))
   (db/set-key-value repo-url :db/encrypted? true))
 
 (defn- generate-mnemonic
@@ -82,3 +82,15 @@
          (log/error :encrypt/empty-secret-key (str "Can't find the secret key for repo: " repo-url))))
      :else
      content)))
+
+(defn encrypt-with-passphrase
+  [passphrase content]
+  (let [content (utf8/encode content)
+        encrypted (rage/encrypt_with_user_passphrase passphrase content true)]
+    (utf8/decode encrypted)))
+
+(defn decrypt-with-passphrase
+  [passphrase content]
+  (let [content (utf8/encode content)
+        decrypted (rage/decrypt_with_user_passphrase passphrase content)]
+    (utf8/decode decrypted)))

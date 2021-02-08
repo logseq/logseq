@@ -82,37 +82,41 @@
 
 (rum/defcs encryption-input-secret-inner <
   (rum/local "" ::secret)
-  [state repo-url close-fn]
+  [state repo-url db-encrypted-secret close-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [secret (get state ::secret)]
       [:div
-      [:div.sm:flex.sm:items-start
-       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-        [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
-         "Enter your secret phrase"]]]
+       [:div.sm:flex.sm:items-start
+        [:div.mt-3.text-center.sm:mt-0.sm:text-left
+         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+          (if db-encrypted-secret
+            "Enter your password"
+            "Enter your secret phrase")]]]
 
-      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-       {:auto-focus true
-        :style {:color "#000"}
-        :on-change (fn [e]
-                     (reset! secret (util/evalue e)))}]
+       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+        {:auto-focus true
+         :style {:color "#000"}
+         :on-change (fn [e]
+                      (reset! secret (util/evalue e)))}]
 
-      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-         {:type "button"
-          :on-click (fn []
-                      (let [value @secret]
-                        (when-not (string/blank? value) ; TODO: length or other checks
-                          (let [repo (state/get-current-repo)]
-                            (e/save-mnemonic! repo value)
-                            (close-fn true)))))}
-         "Submit"]]]])))
+       [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+        [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+          {:type "button"
+           :on-click (fn []
+                       (let [value @secret]
+                         (when-not (string/blank? value) ; TODO: length or other checks
+                           (let [repo (state/get-current-repo)]
+                             (if db-encrypted-secret
+                               (e/save-mnemonic! repo (e/decrypt-with-passphrase value db-encrypted-secret))
+                               (e/save-mnemonic! repo value))
+                             (close-fn true)))))}
+          "Submit"]]]])))
 
 (defn encryption-input-secret-dialog
-  [repo-url close-fn]
+  [repo-url db-encrypted-secret close-fn]
   (fn [close-modal-fn]
     (let [close-fn (fn [encrypted?]
                      (close-fn encrypted?)
                      (close-modal-fn))]
-      (encryption-input-secret-inner repo-url close-fn))))
+      (encryption-input-secret-inner repo-url db-encrypted-secret close-fn))))
