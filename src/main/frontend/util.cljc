@@ -8,6 +8,7 @@
       #?(:cljs ["/frontend/caret_pos" :as caret-pos])
       #?(:cljs ["/frontend/selection" :as selection])
       #?(:cljs ["/frontend/utils" :as utils])
+      #?(:cljs ["path" :as nodePath])
       #?(:cljs [goog.dom :as gdom])
       #?(:cljs [goog.object :as gobj])
       #?(:cljs [goog.string :as gstring])
@@ -29,7 +30,7 @@
       (-pr-writer [sym writer _]
         (-write writer (str "\"" (.toString sym) "\"")))))
 
-;; doms
+#?(:cljs (defonce ^js node-path nodePath))
 #?(:cljs (defn app-scroll-container-node []  js/document.documentElement))
 
 #?(:cljs
