@@ -47,7 +47,10 @@
 .cp__header-logo,
 .cp__right-menu-button {
   opacity: 0.7;
-  display: none;
+}
+
+.cp__header-logo {
+    display: none;
 }
 
 .cp__header-logo:hover,
@@ -64,6 +67,10 @@
   @apply ml-3;
 }
 
+.cp__right-menu-button {
+    display: block;
+}
+
 @screen sm {
   .cp__header {
     @apply shadow-none;
@@ -76,9 +83,5 @@
   .cp__header-logo {
     display: flex;
     align-items: center;
-  }
-
-  .cp__right-menu-button {
-    display: block;
   }
 }

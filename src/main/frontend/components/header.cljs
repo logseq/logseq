@@ -77,8 +77,9 @@
         {:on-click toggle-fn}
         (svg/horizontal-dots nil)])
      (->>
-      [{:title (t :help/toggle-right-sidebar)
-        :options {:on-click state/toggle-sidebar-open?!}}
+      [(when-not (util/mobile?)
+         {:title (t :help/toggle-right-sidebar)
+          :options {:on-click state/toggle-sidebar-open?!}})
 
        (when current-repo
          {:title (t :graph)
