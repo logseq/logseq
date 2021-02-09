@@ -28,16 +28,16 @@
                            (state/sub :editor/show-page-search?)
                            (state/sub :editor/show-block-search?)
                            (state/sub :editor/show-template-search?))
-        composition? (atom false)
-        set-composition? #(reset! composition? %)
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
                            (case e.type
-                             "compositionend" (do (set-composition? false) (on-change e))
-                             (set-composition? true))))
+                             "compositionend" (do
+                                                (state/set-editor-in-composition! false)
+                                                (on-change e))
+                             (state/set-editor-in-composition! true))))
         props (assoc props
-                     :on-change (fn [e] (when-not @composition?
+                     :on-change (fn [e] (when-not (state/editor-in-composition?)
                                           (on-change e)))
                      :on-composition-start on-composition
                      :on-composition-update on-composition

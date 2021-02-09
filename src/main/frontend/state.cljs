@@ -71,6 +71,7 @@
     :editor/show-input nil
     :editor/last-saved-cursor nil
     :editor/editing? nil
+    :editor/in-composition? false
     :editor/pos 0
     :editor/content {}
     :editor/block nil
@@ -980,6 +981,14 @@
 (defn set-graph-syncing?
   [value]
   (set-state! :graph/syncing? value))
+
+(defn set-editor-in-composition!
+  [value]
+  (set-state! :editor/in-composition? value))
+
+(defn editor-in-composition?
+  []
+  (:editor/in-composition? @state))
 
 (defn set-loading-files!
   [value]

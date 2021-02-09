@@ -1437,7 +1437,9 @@
    (save-current-block-when-idle! {}))
   ([{:keys [check-idle? chan chan-callback]
      :or {check-idle? true}}]
-   (when (nil? (state/get-editor-op))
+   (when (and (nil? (state/get-editor-op))
+              ;; non English input method
+              (not (state/editor-in-composition?)))
      (when-let [repo (state/get-current-repo)]
        (when (and (if check-idle? (state/input-idle? repo) true)
                   (not (state/get-editor-show-page-search?))
