@@ -62,7 +62,7 @@
         "diff-match-patch": "^1.0.5",
         "electron": "^11.2.0",
         "fs": "^0.0.1-security",
-        "fuzzysort": "^1.1.4",
+        "fuzzysort": "git+https://github.com/getstation/fuzzysort#a66f5813825d2415b606cc69129070c4eb612ae2",
         "gulp-cached": "^1.1.1",
         "ignore": "^5.1.8",
         "jszip": "^3.5.0",

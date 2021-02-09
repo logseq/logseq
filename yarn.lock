@@ -2399,10 +2399,9 @@ function-bind@^1.1.1:
   resolved "https://registry.yarnpkg.com/function-bind/-/function-bind-1.1.1.tgz#a56899d3ea3c9bab874bb9773b7c5ede92f4895d"
   integrity sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A==
 
-fuzzysort@^1.1.4:
+"fuzzysort@git+https://github.com/getstation/fuzzysort#a66f5813825d2415b606cc69129070c4eb612ae2":
   version "1.1.4"
-  resolved "https://registry.yarnpkg.com/fuzzysort/-/fuzzysort-1.1.4.tgz#a0510206ed44532cbb52cf797bf5a3cb12acd4ba"
-  integrity sha512-JzK/lHjVZ6joAg3OnCjylwYXYVjRiwTY6Yb25LvfpJHK8bjisfnZJ5bY8aVWwTwCXgxPNgLAtmHL+Hs5q1ddLQ==
+  resolved "git+https://github.com/getstation/fuzzysort#a66f5813825d2415b606cc69129070c4eb612ae2"
 
 gensync@^1.0.0-beta.1:
   version "1.0.0-beta.2"
