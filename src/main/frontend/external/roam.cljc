@@ -43,6 +43,15 @@
                                              (util/format "{{%s %s}}" name arg))
                                            original)))))
 
+(defn- fenced-code-transform
+  [text]
+  (string/replace text
+                  #"```([a-z]*\n[\s\S]*?\n*)```"
+                  (fn [[_ match]]
+                    (str "```"
+                         (str match "\n")
+                         "```"))))
+
 (defn load-all-refed-uids!
   [data]
   (let [full-text (atom "")]
@@ -66,7 +75,8 @@
       (string/replace "{{[[TODO]]}}" "TODO")
       (string/replace "{{[[DONE]]}}" "DONE")
       (uid-transform)
-      (macro-transform)))
+      (macro-transform)
+      (fenced-code-transform)))
 
 (declare children->text)
 (defn child->text
