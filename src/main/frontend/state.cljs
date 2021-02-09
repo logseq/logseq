@@ -791,7 +791,7 @@
      (get-in @state [:config repo :date-formatter]))
     ;; TODO:
    (get-in @state [:me :settings :date-formatter])
-   "MMM do, yyyy"))
+   "MMMM do, yyyy"))
 
 (defn set-git-status!
   [repo-url value]
