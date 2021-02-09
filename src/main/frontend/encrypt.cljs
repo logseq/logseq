@@ -4,8 +4,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as str]
-            ["bip39" :as bip39]
-            ["buffer" :as buffer]
+            [cljs.reader :as reader]
             ["@kanru/rage-wasm" :as rage]
             [lambdaisland.glogi :as log]))
 
@@ -21,40 +20,34 @@
   [repo-url]
   (db-utils/get-key-value repo-url :db/encrypted?))
 
-(defn get-mnemonic
+(defn get-key-pair
   [repo-url]
-  (db-utils/get-key-value repo-url :db/secret-phrase))
+  (db-utils/get-key-value repo-url :db/encryption-keys))
 
-(defn save-mnemonic!
-  [repo-url mnemonic]
-  (db/set-key-value repo-url :db/secret-phrase (str/trim mnemonic))
-  (db/set-key-value repo-url :db/encrypted? true))
+(defn save-key-pair!
+  [repo-url keys]
+  (let [keys (if (string? keys) (reader/read-string keys) keys)]
+    (db/set-key-value repo-url :db/encryption-keys keys)
+    (db/set-key-value repo-url :db/encrypted? true)))
 
-(defn- generate-mnemonic
+(defn- generate-key-pair
   []
-  (bip39/generateMnemonic 256))
+  (rage/keygen))
 
-(defn generate-mnemonic-and-save!
+(defn generate-key-pair-and-save!
   [repo-url]
-  (when-not (get-mnemonic repo-url)
-    (let [mnemonic (generate-mnemonic)]
-      (save-mnemonic! repo-url mnemonic)
-      mnemonic)))
-
-(defn- derive-key-from-mnemonic
-  [mnemonic]
-  (let [entropy (-> (bip39/mnemonicToEntropy mnemonic)
-                    (buffer/Buffer.from "hex"))
-        keys (rage/keygen_from_random_bytes entropy)]
-    keys))
+  (when-not (get-key-pair repo-url)
+    (let [keys (generate-key-pair)]
+      (save-key-pair! repo-url keys)
+      (pr-str keys))))
 
 (defn get-public-key
   [repo-url]
-  (second (derive-key-from-mnemonic (get-mnemonic repo-url))))
+  (second (get-key-pair repo-url)))
 
 (defn get-secret-key
   [repo-url]
-  (first (derive-key-from-mnemonic (get-mnemonic repo-url))))
+  (first (get-key-pair repo-url)))
 
 (defn encrypt
   ([content]

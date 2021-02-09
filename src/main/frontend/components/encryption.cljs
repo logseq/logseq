@@ -12,7 +12,7 @@
   (rum/local false ::reveal-secret-phrase?)
   [state repo-url close-fn]
   (let [reveal-secret-phrase? (get state ::reveal-secret-phrase?)
-        secret-phrase (e/get-mnemonic repo-url)
+        secret-phrase (e/get-key-pair repo-url)
         public-key (e/get-public-key repo-url)
         private-key (e/get-secret-key repo-url)]
     (rum/with-context [[t] i18n/*tongue-context*]
@@ -28,15 +28,13 @@
           {:on-click (fn []
                        (when (not @reveal-secret-phrase?)
                          (reset! reveal-secret-phrase? true)))}
+          [:div.font-medium.text-gray-900 "Public Key:"]
+          [:div public-key]
           (if @reveal-secret-phrase?
             [:div
-             [:div.font-medium.text-gray-900 "Secret Phrase:"]
-             [:div secret-phrase]
-             [:div.font-medium.text-gray-900 "Public Key:"]
-             [:div public-key]
-             [:div.font-medium.text-gray-900 "Private Key:"]
+             [:div.mt-1.font-medium.text-gray-900 "Private Key:"]
              [:div private-key]]
-            "click to view the secret phrase")]]]
+            [:div.text-gray-500 "click to view the private key"])]]]
 
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
         [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
@@ -74,8 +72,8 @@
            :on-click (fn []
                        (let [value @password]
                          (when-not (string/blank? value)
-                           (when-let [mnemonic (e/generate-mnemonic-and-save! repo-url)]
-                             (let [db-encrypted-secret (e/encrypt-with-passphrase value mnemonic)]
+                           (when-let [keys (e/generate-key-pair-and-save! repo-url)]
+                             (let [db-encrypted-secret (e/encrypt-with-passphrase value keys)]
                                (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)))
                            (close-fn true))))}
           "Submit"]]]])))
@@ -124,9 +122,7 @@
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
          [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
-          (if db-encrypted-secret
-            "Enter your password"
-            "Enter your secret phrase")]]]
+          "Enter your password"]]]
 
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:auto-focus true
@@ -142,9 +138,7 @@
                        (let [value @secret]
                          (when-not (string/blank? value) ; TODO: length or other checks
                            (let [repo (state/get-current-repo)]
-                             (if db-encrypted-secret
-                               (e/save-mnemonic! repo (e/decrypt-with-passphrase value db-encrypted-secret))
-                               (e/save-mnemonic! repo value))
+                             (e/save-key-pair! repo (e/decrypt-with-passphrase value db-encrypted-secret))
                              (close-fn true)))))}
           "Submit"]]]])))
 
