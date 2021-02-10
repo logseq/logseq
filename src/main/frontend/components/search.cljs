@@ -31,6 +31,41 @@
   (let [switch (reductions not= true (map pred? coll (rest coll)))]
     (map (partial map first) (partition-by second (map list coll switch)))))
 
+(defn highlight-exact-query
+  [content q]
+  (let [q-words (string/split q #" ")
+        lc-content (string/lower-case content)
+        lc-q (string/lower-case q)]
+    (if (or (string/includes? lc-content lc-q)
+            (not (re-find #" " q)))
+      (let [i (string/index-of lc-content lc-q)
+            [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
+        [:p
+         (when-not (string/blank? before)
+           [:span before])
+         [:mark (subs content i (+ i (count q)))]
+         (when-not (string/blank? after)
+           [:span after])])
+      (let [elements (loop [words q-words
+                            content content
+                            result []]
+                       (if (and (seq words) content)
+                         (let [word (first words)
+                               lc-word (string/lower-case word)
+                               lc-content (string/lower-case content)]
+                           (if-let [i (string/index-of lc-content lc-word)]
+                             (recur (rest words)
+                                    (subs content (+ i (count word)))
+                                    (vec
+                                     (concat result
+                                             [[:span (subs content 0 i)]
+                                              [:mark (subs content i (+ i (count word)))]])))
+                             (recur nil
+                                    content
+                                    result)))
+                         (conj result [:span content])))]
+        [:p elements]))))
+
 (rum/defc highlight-fuzzy
   [content indexes]
   (let [n (count content)
@@ -182,7 +217,7 @@
                                          (:page/name page))]
                             [:div.flex-1
                              [:div.text-sm.font-medium (str "-> " page)]
-                             (highlight-fuzzy content indexes)])
+                             (highlight-exact-query content search-q)])
 
                           nil))})])))
 

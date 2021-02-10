@@ -3,14 +3,17 @@
             [frontend.state :as state]
             [goog.dom :as gdom]
             [frontend.search :as search]
-            [frontend.handler.notification :as notification-handler]))
+            [frontend.handler.notification :as notification-handler]
+            [promesa.core :as p]))
 
 (defn search
   [q]
-  (swap! state/state assoc :search/result
-         {:pages (search/page-search q)
-          :files (search/file-search q)
-          :blocks (search/search q 10)}))
+  ;; TODO: separate rendering for blocks
+  (p/let [blocks-result (search/block-search q 10)]
+    (swap! state/state assoc :search/result
+           {:pages (search/page-search q)
+            :files (search/file-search q)
+            :blocks blocks-result})))
 
 (defn clear-search!
   []
