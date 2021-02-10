@@ -6,14 +6,8 @@
             [frontend.state :as state]
             [clojure.string :as str]
             [cljs.reader :as reader]
-            [shadow.lazy :as lazy]
+            [shadow.loader :as loader]
             [lambdaisland.glogi :as log]))
-
-(def lazy-keygen (lazy/loadable frontend.extensions.age-encryption/keygen))
-(def lazy-encrypt-with-x25519 (lazy/loadable frontend.extensions.age-encryption/encrypt-with-x25519))
-(def lazy-decrypt-with-x25519 (lazy/loadable frontend.extensions.age-encryption/decrypt-with-x25519))
-(def lazy-encrypt-with-user-passphrase (lazy/loadable frontend.extensions.age-encryption/encrypt-with-user-passphrase))
-(def lazy-decrypt-with-user-passphrase (lazy/loadable frontend.extensions.age-encryption/decrypt-with-user-passphrase))
 
 (defonce age-pem-header-line "-----BEGIN AGE ENCRYPTED FILE-----")
 (defonce age-version-line "age-encryption.org/v1")
@@ -39,9 +33,9 @@
 
 (defn generate-key-pair
   []
-  (let [await (p/deferred)]
-    (lazy/load lazy-keygen #(p/resolve! await))
-    (p/then await #(@lazy-keygen))))
+  (p/let [_ (loader/load :age-encryption)
+          lazy-keygen (resolve 'frontend.extensions.age-encryption/keygen)]
+    (lazy-keygen)))
 
 (defn generate-key-pair-and-save!
   [repo-url]
@@ -64,13 +58,12 @@
   ([repo-url content]
    (cond
      (encrypted-db? repo-url)
-     (let [await (p/deferred)]
-       (lazy/load lazy-encrypt-with-x25519 #(p/resolve! await))
-       (p/let [_ await
-               content (utf8/encode content)
-               public-key (get-public-key repo-url)
-               encrypted (@lazy-encrypt-with-x25519 public-key content true)]
-         (utf8/decode encrypted)))
+     (p/let [_ (loader/load :age-encryption)
+             lazy-encrypt-with-x25519 (resolve 'frontend.extensions.age-encryption/encrypt-with-x25519)
+             content (utf8/encode content)
+             public-key (get-public-key repo-url)
+             encrypted (lazy-encrypt-with-x25519 public-key content true)]
+       (utf8/decode encrypted))
      :else
      (p/resolved content))))
 
@@ -81,12 +74,11 @@
    (cond
      (and (encrypted-db? repo-url)
           (content-encrypted? content))
-     (let [content (utf8/encode content)
-           await (p/deferred)]
-       (lazy/load lazy-decrypt-with-x25519 #(p/resolve! await))
+     (let [content (utf8/encode content)]
        (if-let [secret-key (get-secret-key repo-url)]
-         (p/let [_ await
-                 decrypted (@lazy-decrypt-with-x25519 secret-key content)]
+         (p/let [_ (loader/load :age-encryption)
+                 lazy-decrypt-with-x25519 (resolve 'frontend.extensions.age-encryption/decrypt-with-x25519)
+                 decrypted (lazy-decrypt-with-x25519 secret-key content)]
            (utf8/decode decrypted))
          (log/error :encrypt/empty-secret-key (str "Can't find the secret key for repo: " repo-url))))
      :else
@@ -94,19 +86,17 @@
 
 (defn encrypt-with-passphrase
   [passphrase content]
-  (let [await (p/deferred)]
-    (lazy/load lazy-encrypt-with-user-passphrase #(p/resolve! await))
-    (p/let [_ await
-            content (utf8/encode content)
-            encrypted (@lazy-encrypt-with-user-passphrase passphrase content true)]
-      (utf8/decode encrypted))))
+  (p/let [_ (loader/load :age-encryption)
+          lazy-encrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/encrypt-with-user-passphrase)
+          content (utf8/encode content)
+          encrypted (@lazy-encrypt-with-user-passphrase passphrase content true)]
+    (utf8/decode encrypted)))
 
 ;; ;; TODO: What if decryption failed
 (defn decrypt-with-passphrase
   [passphrase content]
-  (let [await (p/deferred)]
-    (lazy/load lazy-decrypt-with-user-passphrase #(p/resolve! await))
-    (p/let [_ await
-            content (utf8/encode content)
-            decrypted (@lazy-decrypt-with-user-passphrase passphrase content)]
-      (utf8/decode decrypted))))
+  (p/let [_ (loader/load :age-encryption)
+          lazy-decrypt-with-user-passphrase (resolve 'frontend.extensions.age-encryption/decrypt-with-user-passphrase)
+          content (utf8/encode content)
+          decrypted (lazy-decrypt-with-user-passphrase passphrase content)]
+    (utf8/decode decrypted)))
