@@ -2,9 +2,12 @@
   (:require [frontend.utf8 :as utf8]
             [frontend.db.utils :as db-utils]
             [frontend.db :as db]
+            [promesa.core :as p]
             [frontend.state :as state]
             [clojure.string :as str]
             [cljs.reader :as reader]
+            ;; required for async npm module
+            ["regenerator-runtime/runtime"]
             ["@kanru/rage-wasm" :as rage]
             [lambdaisland.glogi :as log]))
 
@@ -37,7 +40,7 @@
 (defn generate-key-pair-and-save!
   [repo-url]
   (when-not (get-key-pair repo-url)
-    (let [keys (generate-key-pair)]
+    (p/let [keys (generate-key-pair)]
       (save-key-pair! repo-url keys)
       (pr-str keys))))
 
@@ -55,12 +58,12 @@
   ([repo-url content]
    (cond
      (encrypted-db? repo-url)
-     (let [content (utf8/encode content)
-           public-key (get-public-key repo-url)
-           encrypted (rage/encrypt_with_x25519 public-key content true)]
+     (p/let [content (utf8/encode content)
+             public-key (get-public-key repo-url)
+             encrypted (rage/encrypt_with_x25519 public-key content true)]
        (utf8/decode encrypted))
      :else
-     content)))
+     (p/resolved content))))
 
 (defn decrypt
   ([content]
@@ -71,21 +74,21 @@
           (content-encrypted? content))
      (let [content (utf8/encode content)]
        (if-let [secret-key (get-secret-key repo-url)]
-         (let [decrypted (rage/decrypt_with_x25519 secret-key content)]
+         (p/let [decrypted (rage/decrypt_with_x25519 secret-key content)]
            (utf8/decode decrypted))
          (log/error :encrypt/empty-secret-key (str "Can't find the secret key for repo: " repo-url))))
      :else
-     content)))
+     (p/resolved content))))
 
 (defn encrypt-with-passphrase
   [passphrase content]
-  (let [content (utf8/encode content)
-        encrypted (rage/encrypt_with_user_passphrase passphrase content true)]
+  (p/let [content (utf8/encode content)
+          encrypted (rage/encrypt_with_user_passphrase passphrase content true)]
     (utf8/decode encrypted)))
 
 ;; TODO: What if decryption failed
 (defn decrypt-with-passphrase
   [passphrase content]
-  (let [content (utf8/encode content)
-        decrypted (rage/decrypt_with_user_passphrase passphrase content)]
+  (p/let [content (utf8/encode content)
+          decrypted (rage/decrypt_with_user_passphrase passphrase content)]
     (utf8/decode decrypted)))

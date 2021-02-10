@@ -145,8 +145,9 @@
        (-> (p/all (map (fn [file]
                          (p/let [content (if nfs?
                                            (.text (:file/file file))
-                                           (:file/content file))]
-                           (assoc file :file/content (encrypt/decrypt content)))) markup-files))
+                                           (:file/content file))
+                                 content (encrypt/decrypt content)]
+                           (assoc file :file/content content))) markup-files))
            (p/then (fn [result]
                      (let [files (map #(dissoc % :file/file) result)]
                        (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
@@ -240,8 +241,9 @@
                       (when-let [file (get-file-f path new-files)]
                         (p/let [content (if nfs?
                                           (.text (:file/file file))
-                                          (:file/content file))]
-                          (assoc file :file/content (encrypt/decrypt content))))) added-or-modified))
+                                          (:file/content file))
+                                content (encrypt/decrypt content)]
+                          (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
                   (let [files (map #(dissoc % :file/file :file/handle) result)
                         non-modified? (fn [file]

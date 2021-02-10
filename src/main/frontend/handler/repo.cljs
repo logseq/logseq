@@ -185,32 +185,34 @@
 
 (defn- parse-files-and-create-default-files!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts encrypted?]
-  (let [files (if encrypted? (map (fn [file]
-                                    (update file :file/content encrypt/decrypt))
-                                  files) files)
-        parsed-files (filter
-                      (fn [file]
-                        (let [format (format/get-format (:file/path file))]
-                          (contains? config/mldoc-support-formats format)))
-                      files)
-        blocks-pages (if (seq parsed-files)
-                       (extract-handler/extract-all-blocks-pages repo-url parsed-files)
-                       [])]
-    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks))
-  (let [config-file (config/get-config-path)]
-    (if (contains? (set file-paths) config-file)
-      (when-let [content (some #(when (= (:file/path %) config-file)
-                                  (:file/content %)) files)]
-        (file-handler/restore-config! repo-url content true))))
-  (if (and first-clone? (not db-encrypted?))
-    (state/set-modal!
-     (encryption/encryption-setup-dialog
-      repo-url
-      #(create-default-files! repo-url %)))
-    (create-default-files! repo-url db-encrypted?))
-  (when re-render?
-    (ui-handler/re-render-root! re-render-opts))
-  (state/set-importing-to-db! false))
+  (p/do!
+   (p/let [files (p/all (if encrypted? (map (fn [file]
+                                              (p/let [content (encrypt/decrypt (:file/content file))]
+                                                (assoc file :file/content content)))
+                                            files) files))
+           parsed-files (filter
+                         (fn [file]
+                           (let [format (format/get-format (:file/path file))]
+                             (contains? config/mldoc-support-formats format)))
+                         files)
+           blocks-pages (if (seq parsed-files)
+                          (extract-handler/extract-all-blocks-pages repo-url parsed-files)
+                          [])]
+     (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks))
+   (let [config-file (config/get-config-path)]
+     (if (contains? (set file-paths) config-file)
+       (when-let [content (some #(when (= (:file/path %) config-file)
+                                   (:file/content %)) files)]
+         (file-handler/restore-config! repo-url content true))))
+   (if (and first-clone? (not db-encrypted?))
+     (state/set-modal!
+      (encryption/encryption-setup-dialog
+       repo-url
+       #(create-default-files! repo-url %)))
+     (create-default-files! repo-url db-encrypted?))
+   (when re-render?
+     (ui-handler/re-render-root! re-render-opts))
+   (state/set-importing-to-db! false)))
 
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts

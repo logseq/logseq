@@ -1,5 +1,6 @@
 (ns frontend.components.encryption
   (:require [rum.core :as rum]
+            [promesa.core :as p]
             [frontend.encrypt :as e]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.context.i18n :as i18n]
@@ -72,10 +73,10 @@
            :on-click (fn []
                        (let [value @password]
                          (when-not (string/blank? value)
-                           (when-let [keys (e/generate-key-pair-and-save! repo-url)]
-                             (let [db-encrypted-secret (e/encrypt-with-passphrase value keys)]
-                               (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)))
-                           (close-fn true))))}
+                           (p/let [keys (e/generate-key-pair-and-save! repo-url)
+                                   db-encrypted-secret (e/encrypt-with-passphrase value keys)]
+                             (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
+                             (close-fn true)))))}
           "Submit"]]]])))
 
 (defn input-password
@@ -137,8 +138,9 @@
            :on-click (fn []
                        (let [value @secret]
                          (when-not (string/blank? value) ; TODO: length or other checks
-                           (let [repo (state/get-current-repo)]
-                             (e/save-key-pair! repo (e/decrypt-with-passphrase value db-encrypted-secret))
+                           (p/let [repo (state/get-current-repo)
+                                   keys (e/decrypt-with-passphrase value db-encrypted-secret)]
+                             (e/save-key-pair! repo keys)
                              (close-fn true)))))}
           "Submit"]]]])))
 

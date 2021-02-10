@@ -206,10 +206,10 @@
   dependencies:
     purgecss "^3.1.3"
 
-"@kanru/rage-wasm@^0.1.4":
-  version "0.1.4"
-  resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.1.4.tgz#76bc29b319a60acd4600ee9d4f4e340aa152fc3c"
-  integrity sha512-jl3V0Mrb8/Yzk+O4rjIbHz3mWQFWA4MO79OxkqWxHls/qW+wJMIbfb08ci1BkiDKu91rxKUF9XIjyl9UQ4ArrA==
+"@kanru/rage-wasm@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@kanru/rage-wasm/-/rage-wasm-0.2.0.tgz#34f776ca1e24302b954e0c151472e117005b2a9f"
+  integrity sha512-wRTM5TJJ02AqAbiHbjMLXo/aV0q+vu91miJHSd2+piq6uWyt02Epg3CafsQNP6mLSArZL6zl1xBYsreaU+Sr0g==
 
 "@nodelib/fs.scandir@2.1.4":
   version "2.1.4"
