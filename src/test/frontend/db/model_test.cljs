@@ -25,7 +25,7 @@
       4 (count b-aliases)
       1 (count b-ref-blocks)
       1 (count a-ref-blocks)
-      ["b" "c" "d"] alias-names)))
+      (set ["b" "c" "d"]) (set alias-names))))
 
 (deftest test-page-alias-set
   []
