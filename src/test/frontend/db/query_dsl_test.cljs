@@ -7,7 +7,7 @@
             [frontend.db-schema :as schema]
             [frontend.handler.repo :as repo-handler]
             [promesa.core :as p]
-            [cljs.test :refer [deftest is are testing use-fixtures async]]))
+            [cljs.test :refer [deftest is are testing use-fixtures]]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -94,9 +94,7 @@ parent: child page 2
 :last_modified_at: 1609084800002
 :END:
 "}]]
-    (async done
-      (-> (p/then (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false}) done)
-          (p/catch #(done))))))
+    (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
 
 (def parse (partial dsl/parse test-db))
 
