@@ -1767,7 +1767,7 @@
     (remove
      (fn [h]
        (contains? current-and-parents (:block/uuid h)))
-     (search/search q 10))))
+     (search/block-search q 10))))
 
 (defn get-matched-templates
   [q]
