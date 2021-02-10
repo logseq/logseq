@@ -56,7 +56,7 @@
         "cljs:build-electron": "clojure -A:cljs compile app electron"
     },
     "dependencies": {
-        "@kanru/rage-wasm": "^0.2.0",
+        "@kanru/rage-wasm": "^0.2.1",
         "chokidar": "^3.5.1",
         "codemirror": "^5.58.1",
         "diff": "5.0.0",
