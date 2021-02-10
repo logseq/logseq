@@ -21,7 +21,7 @@
 ;; repo -> idx
 (defonce history-idx (atom {}))
 
-(defonce history-limit 500)
+(defonce history-limit 100)
 
 ;; tx [[file1-path patches] [file2-path patches]]
 (defn add-history!
@@ -30,10 +30,9 @@
                 (remove (fn [[_ old new]] (= old new)))
                 (map (fn [[file old new]]
                        (when (and old new)
-                         (let [diffs (diff/diffs new old)
-                              patches (diff/get-patches new old diffs)]
-                           [file patches {:old old
-                                          :new new}]))))
+                         (let [diffs (diff/diffs new old)]
+                           [file {:old old
+                                  :new new}]))))
                 (remove nil?))]
     (when (seq tx)
       (let [last-edit-block (get @state/state :editor/last-edit-block)
@@ -74,10 +73,9 @@
             tx (get-in @history [repo idx'])
             {:keys [data]} tx
             _ (reset! *undoing? true)
-            promises (for [[path patches] data]
-                       (let [current-content (db/get-file-no-sub path)
-                             original-content (diff/apply-patches! current-content patches)]
-                         (alter-file repo path original-content
+            promises (for [[path {:keys [old]}] data]
+                       (let [current-content (db/get-file-no-sub path)]
+                         (alter-file repo path old
                                      {:add-history? false
                                       :re-render-root? true})))]
         (-> (p/all promises)
@@ -98,11 +96,9 @@
     (when (and (> (count txs) idx) (false? @*redoing?))
       (let [tx (get-in @history [repo idx])
             _ (reset! *redoing? true)
-            promises (for [[path patches] (:data tx)]
-                       (let [current-content (db/get-file-no-sub path)
-                             reversed-patches (utils/reversePatch patches)
-                             content (diff/apply-patches! current-content reversed-patches)]
-                         (alter-file repo path content
+            promises (for [[path {:keys [new]}] (:data tx)]
+                       (let [current-content (db/get-file-no-sub path)]
+                         (alter-file repo path new
                                      {:add-history? false
                                       :re-render-root? true})))]
         (-> (p/all promises)
