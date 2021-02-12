@@ -19,6 +19,7 @@ dummy.containsNode = function() {};
 dummy.select = function() {};
 dummy.search = function() {};
 dummy.add = function() {};
+dummy.remove = function() {};
 dummy.closest = function () {};
 dummy.setAttribute = function() {};
 dummy.getAttribute = function() {};
