@@ -203,4 +203,8 @@ export const win32 = path => {
 
   // UNC paths are always absolute
   return Boolean(result[2] || isUnc);
-}
+};
+
+export const searchTokenize = str => {
+  return str.split(/\W+/).concat(str.replace(/[\x00-\x7F]/g, '').split('')).filter(e => !!e);
+};
