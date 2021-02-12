@@ -14,7 +14,8 @@
             ["fuzzysort" :as fuzzy]
             ["flexsearch" :as flexsearch]
             [medley.core :as medley]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["/frontend/utils" :as utils]))
 
 (def fuzzy-go (gobj/get fuzzy "go"))
 (defonce prepare (gobj/get fuzzy "prepare"))
@@ -47,7 +48,9 @@
           indice (flexsearch.
                   (clj->js
                    {:encode "icase"
-                    :tokenize "full"
+                    ;; TODO: forward with multi-languages support
+                    ;; :tokenize "forward"
+                    :tokenize utils/searchTokenize
                     :doc {:id "id"
                           :field ["uuid" "content"]}
                     :async true}))]
