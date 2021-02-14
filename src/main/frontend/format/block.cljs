@@ -251,9 +251,9 @@
      (concat title body))
     (let [ref-blocks (remove string/blank? @ref-blocks)]
       (assoc block :ref-blocks (map
-                                (fn [id]
-                                  [:block/uuid (medley/uuid id)])
-                                ref-blocks)))))
+                                 (fn [id]
+                                   [:block/uuid (medley/uuid id)])
+                                 ref-blocks)))))
 
 (defn update-src-pos-meta!
   [{:keys [body] :as block}]

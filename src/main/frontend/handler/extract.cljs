@@ -157,7 +157,7 @@
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
-              block-ids-set (set block-ids)
+              block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               ;; To prevent "unique constraint" on datascript
               pages-index (map #(select-keys % [:page/name]) pages)
               blocks (map (fn [b]
