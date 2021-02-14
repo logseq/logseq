@@ -1075,6 +1075,14 @@
   []
   (:nfs/refreshing? @state))
 
+(defn set-search-result!
+  [value]
+  (set-state! :search/result value))
+
+(defn clear-search-result!
+  []
+  (set-search-result! nil))
+
 ;; TODO: Move those to the uni `state`
 
 (defonce editor-op (atom nil))

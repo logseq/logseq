@@ -1764,10 +1764,11 @@
                                                       99)
                                 (map (comp str :block/uuid))))
         current-and-parents (set/union #{(str (:block/uuid current-block))} block-parents)]
-    (remove
-     (fn [h]
-       (contains? current-and-parents (:block/uuid h)))
-     (search/block-search q 10))))
+    (p/let [result (search/block-search q 10)]
+      (remove
+       (fn [h]
+         (contains? current-and-parents (:block/uuid h)))
+       result))))
 
 (defn get-matched-templates
   [q]

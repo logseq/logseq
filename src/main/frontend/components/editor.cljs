@@ -132,23 +132,29 @@
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
             :class     "black"}))))))
 
-(rum/defc block-search < rum/reactive
-  {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
-  [id format]
+(rum/defcs block-search < rum/reactive
+  {:will-unmount (fn [state]
+                   (reset! editor-handler/*selected-text nil)
+                   (state/clear-search-result!)
+                   state)}
+  [state id format]
   (when (state/sub :editor/show-block-search?)
     (let [pos (:editor/last-saved-cursor @state/state)
-          input (gdom/getElement id)]
+          input (gdom/getElement id)
+          [id format] (:rum/args state)
+          current-pos (:pos (util/get-caret-pos input))
+          edit-content (state/sub [:editor/content id])
+          edit-block (state/get-edit-block)
+          q (or
+             @editor-handler/*selected-text
+             (when (> (count edit-content) current-pos)
+               (subs edit-content pos current-pos)))
+          _ (p/let [matched-blocks (when-not (string/blank? q)
+                                     (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+              (state/set-search-result! matched-blocks))
+          matched-blocks (state/sub :search/result)]
       (when input
-        (let [current-pos (:pos (util/get-caret-pos input))
-              edit-content (state/sub [:editor/content id])
-              edit-block (state/get-edit-block)
-              q (or
-                 @editor-handler/*selected-text
-                 (when (> (count edit-content) current-pos)
-                   (subs edit-content pos current-pos)))
-              matched-blocks (when-not (string/blank? q)
-                               (editor-handler/get-matched-blocks q (:block/uuid edit-block)))
-              chosen-handler (fn [chosen _click?]
+        (let [chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search! false)
                                (let [uuid-string (str (:block/uuid chosen))]
 
@@ -250,7 +256,7 @@
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
     svg/multi-line-input]
    [:button.bottom-action
-    {:on-click #(commands/insert-before! parent-id "TODO " {})} 
+    {:on-click #(commands/insert-before! parent-id "TODO " {})}
     svg/checkbox]
    [:button.font-extrabold.bottom-action.-mt-1
     {:on-click #(commands/simple-insert!
