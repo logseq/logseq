@@ -1200,10 +1200,7 @@
   [repo path content]
   (when (and repo path)
     (let [tx-data {:file/path path
-                   :file/content content}
-          tx-data (if (config/local-db? repo)
-                    (dissoc tx-data :file/last-modified-at)
-                    tx-data)]
+                   :file/content content}]
       (react/transact-react!
        repo
        [tx-data]

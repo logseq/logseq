@@ -180,8 +180,7 @@
         (reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file! repo (config/get-repo-dir repo) path content {:old-content original-content
-                                                                   :last-modified-at (db/get-file-last-modified-at repo path)})
+     (fs/write-file! repo (config/get-repo-dir repo) path content {:old-content original-content})
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (config/get-config-path repo))
@@ -240,8 +239,7 @@
                        (let [original-content (get file->content path)]
                          (-> (p/let [_ (nfs/check-directory-permission! repo)]
                                (fs/write-file! repo (config/get-repo-dir repo) path content
-                                               {:old-content original-content
-                                                :last-modified-at (db/get-file-last-modified-at repo path)}))
+                                               {:old-content original-content}))
                              (p/catch (fn [error]
                                         (log/error :write-file/failed {:path path
                                                                        :content content

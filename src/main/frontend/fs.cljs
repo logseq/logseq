@@ -62,17 +62,18 @@
 
 (defn write-file!
   [repo dir path content opts]
-  (->
-   (do
-     (protocol/write-file! (get-fs dir) repo dir path content opts)
-     (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.)))
-   (p/catch (fn [error]
-              (log/error :file/write-failed? {:dir dir
-                                              :path path
-                                              :error error})
-              ;; Disable this temporarily
-              ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-))))
+  (let [fs-record (get-fs dir)]
+    (->
+    (p/let [_ (protocol/write-file! fs-record repo dir path content opts)]
+      (when-not (= fs-record nfs-record)
+        (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+    (p/catch (fn [error]
+               (log/error :file/write-failed? {:dir dir
+                                               :path path
+                                               :error error})
+               ;; Disable this temporarily
+               ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+               )))))
 
 (defn rename!
   [repo old-path new-path]

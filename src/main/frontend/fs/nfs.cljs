@@ -104,7 +104,8 @@
         (and local-file (.text local-file)))))
 
   (write-file! [this repo dir path content opts]
-    (let [{:keys [old-content last-modified-at]} opts
+    (let [{:keys [old-content]} opts
+          last-modified-at (db/get-file-last-modified-at repo path)
           parts (string/split path "/")
           basename (last parts)
           sub-dir (->> (butlast parts)
@@ -136,7 +137,9 @@
                                        ;; temporally fix
                                        (and path (string/ends-with? path ".excalidraw"))) new?
                      (or
+                      ;; Writing not finished
                       (> pending-writes 0)
+                      ;; not changed by other editors
                       not-changed?
                       new-created?))
               (do
