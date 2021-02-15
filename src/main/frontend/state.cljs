@@ -71,6 +71,7 @@
     :editor/show-input nil
     :editor/last-saved-cursor nil
     :editor/editing? nil
+    :editor/last-edit-block-id nil
     :editor/in-composition? false
     :editor/pos 0
     :editor/content {}
@@ -371,6 +372,10 @@
   []
   (ffirst (:editor/editing? @state)))
 
+(defn get-last-edit-input-id
+  []
+  (:editor/last-edit-block-id @state))
+
 (defn editing?
   []
   (some? (get-edit-input-id)))
@@ -667,6 +672,7 @@
                    (assoc
                     :editor/block block
                     :editor/editing? {edit-input-id true}
+                    :editor/last-edit-block-id edit-input-id
                     :cursor-range cursor-range)))))))
 
 (defn clear-edit!

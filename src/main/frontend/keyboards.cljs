@@ -53,6 +53,10 @@
    (or (state/get-shortcut :editor/move-block-up) "alt+shift+up") [(fn [state e] (editor-handler/move-up-down e true)) true]
    (or (state/get-shortcut :editor/move-block-down) "alt+shift+down") [(fn [state e] (editor-handler/move-up-down e false)) true]
    (or (state/get-shortcut :editor/save) "mod+s") [editor-handler/save! true]
+
+   (or (state/get-shortcut :editor/next) "down") (fn [state e] (editor-handler/open-block! true))
+   (or (state/get-shortcut :editor/prev) "up") (fn [state e] (editor-handler/open-block! false))
+
    (or (state/get-shortcut :search/re-index) "mod+c mod+s") [search-handler/rebuild-indices! true]
    (or (state/get-shortcut :ui/toggle-brackets) "mod+c mod+b") [config-handler/toggle-ui-show-brackets! true]})
 
