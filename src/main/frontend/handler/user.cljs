@@ -8,7 +8,8 @@
             [promesa.core :as p]
             [goog.object :as gobj]
             [frontend.handler.notification :as notification]
-            [frontend.handler.config :as config-handler])
+            [frontend.handler.config :as config-handler]
+            [lambdaisland.glogi :as log])
   (:import [goog.format EmailAddress]))
 
 (defn email? [v]
@@ -63,12 +64,24 @@
                  (fn [_e])))))
 
 (defn sign-out!
-  [_e]
-  (when (js/confirm "Your local notes will be completely removed after signing out. Continue?")
-    (->
-     (idb/clear-local-storage-and-idb!)
-     (p/catch (fn [e]
-                (println "sign out error: ")
-                (js/console.dir e)))
-     (p/finally (fn []
-                  (set! (.-href js/window.location) "/logout"))))))
+  ([]
+   (sign-out! true))
+  ([confirm?]
+   (when (or (not confirm?)
+             (js/confirm "Your local notes will be completely removed after signing out. Continue?"))
+     (->
+      (idb/clear-local-storage-and-idb!)
+      (p/catch (fn [e]
+                 (println "sign out error: ")
+                 (js/console.dir e)))
+      (p/finally (fn []
+                   (set! (.-href js/window.location) "/logout")))))))
+
+(defn delete-account!
+  []
+  (p/let [_ (idb/clear-local-storage-and-idb!)]
+    (util/delete (str config/api "account")
+                 (fn []
+                   (sign-out! false))
+                 (fn [error]
+                   (log/error :user/delete-account-failed error)))))

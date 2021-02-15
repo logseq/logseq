@@ -341,8 +341,11 @@ title: How to take dummy notes?
         :dark "Dark"
         :remove-background "Remove background"
         :open "Open"
-        :open-a-directory "Open a local directory"}
-        
+        :open-a-directory "Open a local directory"
+        :user/delete-account "Delete account"
+        :user/delete-your-account "Delete your account"
+        :user/delete-account-notice "All your published pages on logseq.com will be deleted."}
+
    :de {:help/about "Über Logseq"
         :help/bug "Fehlerbericht"
         :help/feature "Feature-Anfrage"
@@ -571,7 +574,7 @@ title: How to take dummy notes?
         :remove-background "Hintergrund entfernen"
         :open "Öffnen"
         :open-a-directory "Öffne ein lokales Verzeichnis"}
-        
+
    :fr {:help/about "A propos de Logseq"
         :help/bug "Signaler une anomalie"
         :help/feature "Demander une fonctionnalité"
@@ -1055,7 +1058,10 @@ title: How to take dummy notes?
            :dark "暗黑"
            :remove-background "去除背景"
            :open "打开"
-           :open-a-directory "打开本地文件夹"}
+           :open-a-directory "打开本地文件夹"
+           :user/delete-account "删除帐号"
+           :user/delete-your-account "删除你的帐号"
+           :user/delete-account-notice "你在 logseq.com 发布的页面（假如有的话）也会被删除。"}
 
    :zh-Hant {:on-boarding/title "你好，歡迎使用 Logseq！"
              :on-boarding/sharing "分享"
