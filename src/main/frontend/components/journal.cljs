@@ -111,10 +111,7 @@
 
      (when intro? (onboarding/intro))]))
 
-(rum/defc journals <
-  {:did-mount (fn [state]
-                (editor-handler/open-last-block! true)
-                state)}
+(rum/defc journals
   [latest-journals]
   [:div#journals
    (ui/infinite-list
