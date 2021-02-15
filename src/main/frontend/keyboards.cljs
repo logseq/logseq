@@ -12,73 +12,9 @@
             ["mousetrap" :as mousetrap]
             [goog.object :as gobj]))
 
-;; KeyCodes.QUESTION_MARK
-
 ;; Credits to roamresearch
 
-;; Triggers
-;; Slash Autocomplete /
-;; Block Insert Autocomplete <
-;; Page reference Autocomplete [[]]
-;; Block Reference Autocomplete (())
-
-;; Key Commands (working with lists)
-;; Indent Block Tab
-;; Unindent Block Shift-Tab
-;; Create New Block Enter
-;; New Line in Block Shift-Enter
-;; Undo Ctrl-z
-;; Redo Ctrl-y
-;; Zoom In Alt-Right
-;; Zoom out Alt-left
-;; Follow link under cursor Ctrl-o
-;; Open link in Sidebar Ctrl-shift-o
-;; Select Block Above Shift-Up
-;; Select Block Below Shift-Down
-;; Select All Blocks Ctrl-Shift-a
-
-;; General
-;; Full Text Search
-;; Open Link in Sidebar
-;; Context Menu
-;; Jump to Journals
-
-;; Formatting
-;; Bold Ctrl-b
-;; Italics Ctrl-i
-;; Html Link Ctrl-k
-;; Highlight Ctrl-h
-
-;; Markdown
-;; Block
-
-(def keyboards
-  (->>
-   {"tab" (editor-handler/on-tab :right)
-    "shift+tab" (editor-handler/on-tab :left)
-    "ctrl+z" history-handler/undo!
-    "ctrl+y" history-handler/redo!
-    "ctrl+u" route-handler/go-to-search!
-    "alt+j" route-handler/go-to-journals!
-    (or (state/get-shortcut :editor/zoom-in)
-        (if util/mac? "alt+." "alt+right")) editor-handler/zoom-in!
-    (or (state/get-shortcut :editor/zoom-out)
-        (if util/mac? "alt+," "alt+left")) editor-handler/zoom-out!
-    "ctrl+enter" editor-handler/cycle-todo!
-    "ctrl+down" editor-handler/expand!
-    "ctrl+up" editor-handler/collapse!
-    "ctrl+o" editor-handler/follow-link-under-cursor!
-    "ctrl+shift+o" editor-handler/open-link-in-sidebar!
-    "ctrl+b" editor-handler/bold-format!
-    "ctrl+i" editor-handler/italics-format!
-    "ctrl+k" editor-handler/html-link-format!
-    "ctrl+h" editor-handler/highlight-format!
-    "ctrl+shift+a" editor-handler/select-all-blocks!
-    "alt+shift+up" (fn [state e] (editor-handler/move-up-down e true))
-    "alt+shift+down" (fn [state e] (editor-handler/move-up-down e false))}
-   (medley/map-keys util/->system-modifier)))
-
-(defn chord-aux
+(defn prevent-default-behavior
   [f]
   (fn [state e]
     (f state e)
@@ -86,20 +22,47 @@
     ;; and stop event from bubbling
     false))
 
+;; TODO: make the shortcuts configurable
 (defonce chords
-  {;; Toggle
+  {
    "t d" state/toggle-document-mode!
    "t t" state/toggle-theme!
    "t r" ui-handler/toggle-right-sidebar!
    "t e" state/toggle-new-block-shortcut!
-   "s" (chord-aux route-handler/toggle-between-page-and-file!)
-   "mod+s" (chord-aux editor-handler/save!)
-   "mod+c mod+s" (chord-aux search-handler/rebuild-indices!)
-   "mod+c mod+b" (chord-aux config-handler/toggle-ui-show-brackets!)})
+   "s" route-handler/toggle-between-page-and-file!
+   "tab" (editor-handler/on-tab :right)
+   "shift+tab" (editor-handler/on-tab :left)
+   "mod+z" [history-handler/undo! true]
+   "mod+y" [history-handler/redo! true]
+   "mod+u" [route-handler/go-to-search! true]
+   "alt+j" [route-handler/go-to-journals! true]
+   (or (state/get-shortcut :editor/zoom-in)
+       (if util/mac? "alt+." "alt+right")) [editor-handler/zoom-in! true]
+   (or (state/get-shortcut :editor/zoom-out)
+       (if util/mac? "alt+," "alt+left")) [editor-handler/zoom-out! true]
+   "mod+enter" [editor-handler/cycle-todo! true]
+   "mod+down" [editor-handler/expand! true]
+   "mod+up" [editor-handler/collapse! true]
+   "mod+shift+o" [editor-handler/open-link-in-sidebar! true]
+   "mod+b" [editor-handler/bold-format! true]
+   "mod+i" [editor-handler/italics-format! true]
+   "mod+k" [editor-handler/html-link-format! true]
+   "mod+h" [editor-handler/highlight-format! true]
+   "mod+shift+a" [editor-handler/select-all-blocks! true]
+   "alt+shift+up" [(fn [state e] (editor-handler/move-up-down e true)) true]
+   "alt+shift+down" [(fn [state e] (editor-handler/move-up-down e false)) true]
+   "mod+s" [editor-handler/save! true]
+   "mod+c mod+s" [search-handler/rebuild-indices! true]
+   "mod+c mod+b" [config-handler/toggle-ui-show-brackets! true]
+   "ctrl+o" [editor-handler/follow-link-under-cursor! true]})
 
 (defonce bind! (gobj/get mousetrap "bind"))
 
 (defn bind-shortcuts!
   []
   (doseq [[k f] chords]
-    (bind! k f)))
+    (let [[f prevent?] (if (coll? f)
+                         f
+                         [f false])
+          f (if prevent? (prevent-default-behavior f) f)]
+      (bind! k f))))

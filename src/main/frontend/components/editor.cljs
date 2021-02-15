@@ -718,6 +718,7 @@
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
+       :class             "mousetrap"
        :cacheMeasurements true
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)

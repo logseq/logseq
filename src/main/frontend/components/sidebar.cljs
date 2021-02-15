@@ -290,7 +290,6 @@
   {:did-mount (fn [state]
                 (keyboards/bind-shortcuts!)
                 state)}
-  (mixins/keyboards-mixin keyboards/keyboards)
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
