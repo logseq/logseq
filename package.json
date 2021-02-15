@@ -61,7 +61,7 @@
         "diff": "5.0.0",
         "diff-match-patch": "^1.0.5",
         "electron": "^11.2.0",
-        "flexsearch": "^0.6.32",
+        "flexsearch": "git+https://github.com/logseq/flexsearch",
         "fs": "^0.0.1-security",
         "fuzzysort": "git+https://github.com/getstation/fuzzysort#a66f5813825d2415b606cc69129070c4eb612ae2",
         "gulp-cached": "^1.1.1",

@@ -209,15 +209,7 @@ export const searchTokenize = str => {
   let ascii_words = str.split(/\W+/);
   let non_ascii_str = str.replace(/[\x00-\x7F]/g, '');
   if (non_ascii_str == '') {
-    // forward
-    const length = str.length;
-    let token = '';
-    let tokens = [];
-    for(let a = 0; a < length; a++){
-      token += str[a];
-      tokens.push(token);
-    };
-    return tokens;
+    return ascii_words;
   } else {
     return ascii_words.concat(non_ascii_str.split('')).filter(e => !!e);
   }

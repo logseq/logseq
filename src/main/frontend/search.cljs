@@ -48,11 +48,9 @@
           indice (flexsearch.
                   (clj->js
                    {:encode "icase"
-                    ;; TODO: forward with multi-languages support
-                    ;; :tokenize "forward"
                     :tokenize utils/searchTokenize
                     :doc {:id "id"
-                          :field ["uuid" "content"]}
+                          :field ["content"]}
                     :async true}))]
       (p/let [result (.add indice blocks)]
         (swap! indices assoc-in [repo :blocks] indice))
