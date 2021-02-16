@@ -110,23 +110,22 @@
 
 (defn toggle-between-page-and-file!
   [state e]
-  (when-not (state/editing?)
-    (let [current-route (state/get-current-route)]
-      (case current-route
-        :home
-        (redirect-to-file! (date/today))
+  (let [current-route (state/get-current-route)]
+    (case current-route
+      :home
+      (redirect-to-file! (date/today))
 
-        :all-journals
-        (redirect-to-file! (date/today))
+      :all-journals
+      (redirect-to-file! (date/today))
 
-        :page
-        (when-let [page-name (get-in (state/get-route-match) [:path-params :name])]
-          (redirect-to-file! page-name))
+      :page
+      (when-let [page-name (get-in (state/get-route-match) [:path-params :name])]
+        (redirect-to-file! page-name))
 
-        :file
-        (when-let [path (get-in (state/get-route-match) [:path-params :path])]
-          (when-let [page (db/get-file-page path)]
-            (redirect! {:to :page
-                        :path-params {:name page}})))
+      :file
+      (when-let [path (get-in (state/get-route-match) [:path-params :path])]
+        (when-let [page (db/get-file-page path)]
+          (redirect! {:to :page
+                      :path-params {:name page}})))
 
-        nil))))
+      nil)))
