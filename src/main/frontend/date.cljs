@@ -7,7 +7,13 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             [clojure.string :as string]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            ["chrono-node" :as chrono]))
+
+(defn nld-parse
+  [s]
+  (when (string? s)
+    ((gobj/get chrono "parseDate") s)))
 
 (defn format
   [date]

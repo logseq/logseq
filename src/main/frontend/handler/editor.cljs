@@ -294,8 +294,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                             {:block/uuid uuid
-                              :block/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -448,10 +448,10 @@
                                       :page/original-name tag}) tags))
          page-alias (when-let [alias (:alias new-properties)]
                       (map
-                       (fn [alias]
-                         {:page/original-name alias
-                          :page/name (string/lower-case alias)})
-                       (remove #{(:page/name page)} alias)))
+                        (fn [alias]
+                          {:page/original-name alias
+                           :page/name (string/lower-case alias)})
+                        (remove #{(:page/name page)} alias)))
 
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
@@ -508,8 +508,8 @@
                  ;; create the file
                  (let [value (block-text-with-time nil format value)
                        content (str (util/default-content-with-title format
-                                      (or (:page/original-name page)
-                                          (:page/name page)))
+                                                                     (or (:page/original-name page)
+                                                                         (:page/name page)))
                                     value)]
                    (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                            _ (git-handler/git-add repo path)]
@@ -1168,7 +1168,7 @@
                                                (if (string/starts-with? (string/lower-case line) key)
                                                  new-line
                                                  line))
-                                             lines)
+                                          lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
                                           (cons (first new-lines) ;; title
@@ -1561,7 +1561,7 @@
             ext (if ext (subs ext (string/last-index-of ext ".")) "")
             filename (str (gen-filename index file) ext)
             filename (str path "/" filename)]
-        ;(js/console.debug "Write asset #" dir filename file)
+                                        ;(js/console.debug "Write asset #" dir filename file)
         (if (util/electron?)
           (let [from (.-path file)]
             (p/then (js/window.apis.copyFileToAssets dir filename from)
@@ -1676,7 +1676,7 @@
    ;; "_" "_"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
    ;; "^" "^"
-})
+   })
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -2030,7 +2030,7 @@
                                                                 :end-pos end-pos}))]
                                  (reset! last-start-pos end-pos)
                                  block))
-                             blocks))
+                          blocks))
                 file-id (:db/id (:block/file block))
                 file (db/entity file-id)
                 page (:block/page block)
@@ -2097,7 +2097,7 @@
                                                               :end-pos end-pos}))]
                                (reset! last-start-pos end-pos)
                                block))
-                           blocks))
+                        blocks))
               file-id (:db/id (:block/file block))
               file (db/entity file-id)
               page (:block/page block)
@@ -2244,3 +2244,31 @@
         value (:block/content block)
         new-value (string/replace value full_text new-full-text)]
     (save-block-aux! block new-value (:block/format block) {})))
+
+(defn variable-rules
+  []
+  {"today" (util/format "[[%s]]" (date/today))
+   "yesterday" (util/format "[[%s]]" (date/yesterday))
+   "tomorrow" (util/format "[[%s]]" (date/tomorrow))
+   "time" (date/get-current-time)
+   "current page" (util/format "[[%s]]"
+                               (or (state/get-current-page)
+                                   (date/today)))})
+
+;; TODO: programmable
+;; context information, date, current page
+(defn resolve-dynamic-template!
+  [content]
+  (string/replace content #"<%([^%].*?)%>"
+                  (fn [[_ match]]
+                    (let [match (string/trim match)]
+                      (cond
+                       (string/blank? match)
+                       ""
+                       (get (variable-rules) (string/lower-case match))
+                       (get (variable-rules) (string/lower-case match))
+                       :else
+                       (if-let [nld (date/nld-parse match)]
+                         (let [date (tc/to-local-date-time nld)]
+                           (util/format "[[%s]]" (date/journal-name date)))
+                         match))))))

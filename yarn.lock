@@ -1112,6 +1112,13 @@ chokidar@^3.5.1:
   optionalDependencies:
     fsevents "~2.3.1"
 
+chrono-node@^2.2.1:
+  version "2.2.1"
+  resolved "https://registry.yarnpkg.com/chrono-node/-/chrono-node-2.2.1.tgz#6591c95724011fd7cadd8ae394bacb5004357bf2"
+  integrity sha512-Cdw4LxAlVb3BbfoAIw50v8MhVmFGBzzvTpQUO3F5ezyo/MnZ3db3G73cHNE2aiNsAhK9qpg39RpUl6jxTIUGeA==
+  dependencies:
+    dayjs "^1.10.0"
+
 cipher-base@^1.0.0, cipher-base@^1.0.1, cipher-base@^1.0.3:
   version "1.0.4"
   resolved "https://registry.yarnpkg.com/cipher-base/-/cipher-base-1.0.4.tgz#8760e4ecc272f4c363532f926d874aae2c1397de"
@@ -1615,6 +1622,11 @@ d@1, d@^1.0.1:
   dependencies:
     es5-ext "^0.10.50"
     type "^1.0.1"
+
+dayjs@^1.10.0:
+  version "1.10.4"
+  resolved "https://registry.yarnpkg.com/dayjs/-/dayjs-1.10.4.tgz#8e544a9b8683f61783f570980a8a80eaf54ab1e2"
+  integrity sha512-RI/Hh4kqRc1UKLOAf/T5zdMMX5DQIlDxwUe3wSyMMnEbGunnpENCdbUgM+dW7kXidZqCttBrmw7BhN4TMddkCw==
 
 debug@^2.2.0, debug@^2.3.3, debug@^2.6.9:
   version "2.6.9"
