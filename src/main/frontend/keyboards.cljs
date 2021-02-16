@@ -43,7 +43,7 @@
        "mod+enter") [editor-handler/cycle-todo! true]
    (or (state/get-shortcut :editor/expand-block-children) "mod+down") [editor-handler/expand! true]
    (or (state/get-shortcut :editor/collapse-block-children) "mod+up") [editor-handler/collapse! true]
-   (or (state/get-shortcut :editor/follow-link) "ctrl+o") [editor-handler/follow-link-under-cursor! true]
+   (or (state/get-shortcut :editor/follow-link) "mod+o") [editor-handler/follow-link-under-cursor! true]
    (or (state/get-shortcut :editor/open-link-in-sidebar) "mod+shift+o") [editor-handler/open-link-in-sidebar! true]
    (or (state/get-shortcut :editor/bold) "mod+b") [editor-handler/bold-format! true]
    (or (state/get-shortcut :editor/italics) "mod+i") [editor-handler/italics-format! true]
