@@ -49,11 +49,11 @@
    (or (shortcut :editor/undo) "mod+z") [history-handler/undo! true]
    (or (shortcut :editor/redo) "mod+y") [history-handler/redo! true]
    (or (shortcut :go/search) "mod+u") [route-handler/go-to-search! true]
-   (or (shortcut :go/journals) "alt+j") [route-handler/go-to-journals! true]
+   (or (shortcut :go/journals) (if util/mac? "mod+j" "alt+j")) [route-handler/go-to-journals! true]
    (or (shortcut :editor/zoom-in)
-       (if util/mac? "alt+." "alt+right")) [editor-handler/zoom-in! true]
+       (if util/mac? "mod+." "alt+right")) [editor-handler/zoom-in! true]
    (or (shortcut :editor/zoom-out)
-       (if util/mac? "alt+," "alt+left")) [editor-handler/zoom-out! true]
+       (if util/mac? "mod+," "alt+left")) [editor-handler/zoom-out! true]
    (or (shortcut :editor/cycle-todo)
        "mod+enter") [editor-handler/cycle-todo! true]
    (or (shortcut :editor/expand-block-children) "mod+down") [editor-handler/expand! true]
@@ -65,8 +65,8 @@
    (or (shortcut :editor/highlight) "mod+h") [editor-handler/highlight-format! true]
    (or (shortcut :editor/insert-link) "mod+k") [editor-handler/html-link-format! true]
    (or (shortcut :editor/select-all-blocks) "mod+shift+a") [editor-handler/select-all-blocks! true]
-   (or (shortcut :editor/move-block-up) "alt+shift+up") [(fn [state e] (editor-handler/move-up-down e true)) true]
-   (or (shortcut :editor/move-block-down) "alt+shift+down") [(fn [state e] (editor-handler/move-up-down e false)) true]
+   (or (shortcut :editor/move-block-up) (if util/mac? "mod+shift+up" "alt+shift+up")) [(fn [state e] (editor-handler/move-up-down e true)) true]
+   (or (shortcut :editor/move-block-down) (if util/mac? "mod+shift+down" "alt+shift+down")) [(fn [state e] (editor-handler/move-up-down e false)) true]
    (or (shortcut :editor/save) "mod+s") [editor-handler/save! true]
 
    (or (shortcut :editor/next) "down") (fn [state e] (editor-handler/open-block! true))
