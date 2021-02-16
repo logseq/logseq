@@ -7,7 +7,8 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.ui :as ui-handler]))
 
 ;; Undo && Redo that works with files
 
@@ -77,7 +78,7 @@
                        (let [current-content (db/get-file-no-sub path)]
                          (alter-file repo path old
                                      {:add-history? false
-                                      :re-render-root? true})))]
+                                      :re-render-root? false})))]
         (-> (p/all promises)
             (p/then (fn []
                       (db/clear-query-state!)
@@ -86,7 +87,8 @@
                       ;; restore cursor
                       (when (> idx' 0)
                         (let [prev-tx (get-in @history [repo (dec idx')])]
-                          (when restore-cursor (restore-cursor prev-tx)))))))))))
+                          (when restore-cursor (restore-cursor prev-tx))))
+                      (ui-handler/re-render-root!))))))))
 
 (defonce *redoing? (atom false))
 (defn redo!
@@ -100,11 +102,18 @@
                        (let [current-content (db/get-file-no-sub path)]
                          (alter-file repo path new
                                      {:add-history? false
-                                      :re-render-root? true})))]
+                                      :re-render-root? false})))]
         (-> (p/all promises)
             (p/then (fn []
                       (db/clear-query-state!)
                       (swap! history-idx assoc repo (inc idx))
                       (reset! *redoing? false)
+                      (ui-handler/re-render-root!)
                       ;; restore cursor
                       (when restore-cursor (restore-cursor tx)))))))))
+
+(comment
+  (prn
+   {:history-idx (get @history-idx (frontend.state/get-current-repo))
+    :history (get @history (frontend.state/get-current-repo))})
+  )
