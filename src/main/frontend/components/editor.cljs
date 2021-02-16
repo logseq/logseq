@@ -202,20 +202,29 @@
               chosen-handler (fn [[template db-id] _click?]
                                (if-let [block (db/entity db-id)]
                                  (let [new-level (:block/level edit-block)
+                                       properties (:block/properties block)
+                                       block-uuid (:block/uuid block)
+                                       including-parent? (not= (get properties "including-parent") "false")
                                        template-parent-level (:block/level block)
                                        pattern (config/get-block-pattern format)
                                        content
                                        (block-handler/get-block-full-content
                                         (state/get-current-repo)
                                         (:block/uuid block)
-                                        (fn [{:block/keys [level content properties] :as block}]
-                                          (let [new-level (+ new-level (- level template-parent-level))
-                                                properties' (dissoc (into {} properties) "id" "custom_id" "template")]
-                                            (-> content
-                                                (string/replace-first (apply str (repeat level pattern))
-                                                                      (apply str (repeat new-level pattern)))
-                                                text/remove-properties!
-                                                (text/rejoin-properties properties')))))
+                                        (fn [{:block/keys [uuid level content properties] :as block}]
+                                          (let [parent? (= uuid block-uuid)
+                                                ignore-parent? (and parent? (not including-parent?))]
+                                            (if ignore-parent?
+                                              ""
+                                              (let [new-level (+ new-level
+                                                                 (- level template-parent-level
+                                                                    (if (not including-parent?) 1 0)))
+                                                    properties' (dissoc (into {} properties) "id" "custom_id" "template")]
+                                                (-> content
+                                                   (string/replace-first (apply str (repeat level pattern))
+                                                                         (apply str (repeat new-level pattern)))
+                                                   text/remove-properties!
+                                                   (text/rejoin-properties properties')))))))
                                        content (if (string/includes? (string/trim edit-content) "\n")
                                                  content
                                                  (text/remove-level-spaces content format))
