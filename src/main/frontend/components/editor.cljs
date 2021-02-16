@@ -218,7 +218,8 @@
                                                 (text/rejoin-properties properties')))))
                                        content (if (string/includes? (string/trim edit-content) "\n")
                                                  content
-                                                 (text/remove-level-spaces content format))]
+                                                 (text/remove-level-spaces content format))
+                                       content (editor-handler/resolve-dynamic-template! content)]
                                    (state/set-editor-show-template-search! false)
                                    (editor-handler/insert-command! id
                                                                    content

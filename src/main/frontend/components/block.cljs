@@ -838,11 +838,15 @@
                                (get (state/get-macros) (keyword name)))
                 macro-content (if (and (seq arguments) macro-content)
                                 (block/macro-subs macro-content arguments)
-                                macro-content)]
+                                macro-content)
+                macro-content (when macro-content
+                                (editor-handler/resolve-dynamic-template! macro-content))]
             (render-macro config name arguments macro-content format))
 
           (when-let [macro-txt (macro->text name arguments)]
-            (let [format (get-in config [:block :block/format] :markdown)]
+            (let [macro-txt (when macro-txt
+                              (editor-handler/resolve-dynamic-template! macro-txt))
+                  format (get-in config [:block :block/format] :markdown)]
               (render-macro config name arguments macro-txt format))))))
 
     :else
