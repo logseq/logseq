@@ -22,43 +22,58 @@
     ;; and stop event from bubbling
     false))
 
+(defn enable-when-not-editing-mode!
+  [f]
+  (fn [state e]
+    (when-not (state/editing?)
+      (f state e))))
+
+(def shortcut state/get-shortcut)
+
 (defonce chords
   {
-   (or (state/get-shortcut :editor/toggle-document-mode) "t d") state/toggle-document-mode!
-   (or (state/get-shortcut :ui/toggle-theme) "t t") state/toggle-theme!
-   (or (state/get-shortcut :ui/toggle-right-sidebar) "t r") ui-handler/toggle-right-sidebar!
-   (or (state/get-shortcut :ui/toggle-new-block) "t e") state/toggle-new-block-shortcut!
-   (or (state/get-shortcut :ui/toggle-between-page-and-file) "s") route-handler/toggle-between-page-and-file!
+   ;; non-editing mode
+   (or (shortcut :editor/toggle-document-mode) "t d")
+   (enable-when-not-editing-mode! state/toggle-document-mode!)
+   (or (shortcut :ui/toggle-theme) "t t")
+   (enable-when-not-editing-mode! state/toggle-theme!)
+   (or (shortcut :ui/toggle-right-sidebar) "t r")
+   (enable-when-not-editing-mode! ui-handler/toggle-right-sidebar!)
+   (or (shortcut :ui/toggle-new-block) "t e")
+   (enable-when-not-editing-mode! state/toggle-new-block-shortcut!)
+   (or (shortcut :ui/toggle-between-page-and-file) "s")
+   (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
+
    "tab" (editor-handler/on-tab :right)
    "shift+tab" (editor-handler/on-tab :left)
-   (or (state/get-shortcut :editor/undo) "mod+z") [history-handler/undo! true]
-   (or (state/get-shortcut :editor/redo) "mod+y") [history-handler/redo! true]
-   (or (state/get-shortcut :go/search) "mod+u") [route-handler/go-to-search! true]
-   (or (state/get-shortcut :go/journals) "alt+j") [route-handler/go-to-journals! true]
-   (or (state/get-shortcut :editor/zoom-in)
+   (or (shortcut :editor/undo) "mod+z") [history-handler/undo! true]
+   (or (shortcut :editor/redo) "mod+y") [history-handler/redo! true]
+   (or (shortcut :go/search) "mod+u") [route-handler/go-to-search! true]
+   (or (shortcut :go/journals) "alt+j") [route-handler/go-to-journals! true]
+   (or (shortcut :editor/zoom-in)
        (if util/mac? "alt+." "alt+right")) [editor-handler/zoom-in! true]
-   (or (state/get-shortcut :editor/zoom-out)
+   (or (shortcut :editor/zoom-out)
        (if util/mac? "alt+," "alt+left")) [editor-handler/zoom-out! true]
-   (or (state/get-shortcut :editor/cycle-todo)
+   (or (shortcut :editor/cycle-todo)
        "mod+enter") [editor-handler/cycle-todo! true]
-   (or (state/get-shortcut :editor/expand-block-children) "mod+down") [editor-handler/expand! true]
-   (or (state/get-shortcut :editor/collapse-block-children) "mod+up") [editor-handler/collapse! true]
-   (or (state/get-shortcut :editor/follow-link) "mod+o") [editor-handler/follow-link-under-cursor! true]
-   (or (state/get-shortcut :editor/open-link-in-sidebar) "mod+shift+o") [editor-handler/open-link-in-sidebar! true]
-   (or (state/get-shortcut :editor/bold) "mod+b") [editor-handler/bold-format! true]
-   (or (state/get-shortcut :editor/italics) "mod+i") [editor-handler/italics-format! true]
-   (or (state/get-shortcut :editor/highlight) "mod+h") [editor-handler/highlight-format! true]
-   (or (state/get-shortcut :editor/insert-link) "mod+k") [editor-handler/html-link-format! true]
-   (or (state/get-shortcut :editor/select-all-blocks) "mod+shift+a") [editor-handler/select-all-blocks! true]
-   (or (state/get-shortcut :editor/move-block-up) "alt+shift+up") [(fn [state e] (editor-handler/move-up-down e true)) true]
-   (or (state/get-shortcut :editor/move-block-down) "alt+shift+down") [(fn [state e] (editor-handler/move-up-down e false)) true]
-   (or (state/get-shortcut :editor/save) "mod+s") [editor-handler/save! true]
+   (or (shortcut :editor/expand-block-children) "mod+down") [editor-handler/expand! true]
+   (or (shortcut :editor/collapse-block-children) "mod+up") [editor-handler/collapse! true]
+   (or (shortcut :editor/follow-link) "mod+o") [editor-handler/follow-link-under-cursor! true]
+   (or (shortcut :editor/open-link-in-sidebar) "mod+shift+o") [editor-handler/open-link-in-sidebar! true]
+   (or (shortcut :editor/bold) "mod+b") [editor-handler/bold-format! true]
+   (or (shortcut :editor/italics) "mod+i") [editor-handler/italics-format! true]
+   (or (shortcut :editor/highlight) "mod+h") [editor-handler/highlight-format! true]
+   (or (shortcut :editor/insert-link) "mod+k") [editor-handler/html-link-format! true]
+   (or (shortcut :editor/select-all-blocks) "mod+shift+a") [editor-handler/select-all-blocks! true]
+   (or (shortcut :editor/move-block-up) "alt+shift+up") [(fn [state e] (editor-handler/move-up-down e true)) true]
+   (or (shortcut :editor/move-block-down) "alt+shift+down") [(fn [state e] (editor-handler/move-up-down e false)) true]
+   (or (shortcut :editor/save) "mod+s") [editor-handler/save! true]
 
-   (or (state/get-shortcut :editor/next) "down") (fn [state e] (editor-handler/open-block! true))
-   (or (state/get-shortcut :editor/prev) "up") (fn [state e] (editor-handler/open-block! false))
+   (or (shortcut :editor/next) "down") (fn [state e] (editor-handler/open-block! true))
+   (or (shortcut :editor/prev) "up") (fn [state e] (editor-handler/open-block! false))
 
-   (or (state/get-shortcut :search/re-index) "mod+c mod+s") [search-handler/rebuild-indices! true]
-   (or (state/get-shortcut :ui/toggle-brackets) "mod+c mod+b") [config-handler/toggle-ui-show-brackets! true]})
+   (or (shortcut :search/re-index) "mod+c mod+s") [search-handler/rebuild-indices! true]
+   (or (shortcut :ui/toggle-brackets) "mod+c mod+b") [config-handler/toggle-ui-show-brackets! true]})
 
 (defonce bind! (gobj/get mousetrap "bind"))
 
