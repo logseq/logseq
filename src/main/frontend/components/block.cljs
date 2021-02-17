@@ -181,7 +181,7 @@
                              (reset! *resizing-image? true))
                            (reset! size value))
           :onMouseUp (fn []
-                       (when @size
+                       (when (and @size @*resizing-image?)
                          (when-let [block-id (:block/uuid config)]
                            (let [size (bean/->clj @size)]
                              (editor-handler/resize-image! block-id metadata full_text size))))
