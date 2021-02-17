@@ -30,7 +30,7 @@
     (ipc/ipc "unlink" path))
   (rmdir! [this dir]
     nil)
-  (read-file [this dir path]
+  (read-file [this dir path _options]
     (let [path (concat-path dir path)]
       (ipc/ipc "readFile" path)))
   (write-file! [this repo dir path content _opts]

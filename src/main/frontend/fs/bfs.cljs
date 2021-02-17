@@ -22,9 +22,8 @@
           (p/rejected "Unlinking a directory is not allowed")))))
   (rmdir! [this dir]
     (js/window.workerThread.rimraf dir))
-  (read-file [this dir path]
-    (let [option (clj->js {:encoding "utf8"})]
-      (js/window.pfs.readFile (str dir "/" path) option)))
+  (read-file [this dir path options]
+    (js/window.pfs.readFile (str dir "/" path) (clj->js options)))
   (write-file! [this repo dir path content opts]
     (when-not (util/electron?)
       (js/window.pfs.writeFile (str dir "/" path) content)))

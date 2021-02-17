@@ -97,7 +97,7 @@
   (rmdir! [this dir]
     nil)
 
-  (read-file [this dir path]
+  (read-file [this dir path options]
     (let [handle-path (str "handle" dir "/" path)]
       (p/let [handle (idb/get-item handle-path)
               local-file (and handle (.getFile handle))]

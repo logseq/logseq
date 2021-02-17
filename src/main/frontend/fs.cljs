@@ -57,8 +57,14 @@
   (protocol/rmdir! (get-fs dir) dir))
 
 (defn read-file
-  [dir path]
-  (protocol/read-file (get-fs dir) dir path))
+  ([dir path]
+   (let [fs (get-fs dir)
+         options (if (= fs bfs-record)
+                   {:encoding "utf8"}
+                   {})]
+     (read-file dir path {})))
+  ([dir path options]
+   (protocol/read-file (get-fs dir) dir path options)))
 
 (defn write-file!
   [repo dir path content opts]
