@@ -200,7 +200,7 @@
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
     (when first-clone?
-      (if (not db-encrypted?)
+      (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
         (state/set-modal!
          (encryption/encryption-setup-dialog
           repo-url

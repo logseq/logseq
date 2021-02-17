@@ -138,6 +138,7 @@
         enable-timetracking? (state/enable-timetracking?)
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
+        enable-encryption? (state/enable-encryption? current-repo)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
@@ -292,6 +293,13 @@
                                      :else
                                      (notification/show! "Please make sure the page exists!" :warning))))}]]]])
 
+         (toggle "enable_encryption"
+                 (t :settings-page/enable-encryption)
+                 enable-encryption?
+                 (fn []
+                   (let [value (not enable-encryption?)]
+                     (config-handler/set-config! :feature/enable-encryption? value))))
+
          (when (string/starts-with? current-repo "https://")
            (toggle "enable_git_auto_push"
                    "Enable Git auto push"
@@ -299,6 +307,25 @@
                    (fn []
                      (let [value (not enable-git-auto-push?)]
                        (config-handler/set-config! :git-auto-push value))))) [:hr]
+
+         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           (t :settings-page/current-version)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:p version]
+           (if (util/electron?) (app-updater))]]
+
+         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
+           {:for "developer_mode"}
+           (t :settings-page/developer-mode)]
+          [:div.mt-1.sm:mt-0.sm:col-span-2
+           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+            (ui/button (if developer-mode? (t :settings-page/disable-developer-mode) (t :settings-page/enable-developer-mode))
+                       :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
+
+         [:br]
+         (t :settings-page/developer-mode-desc)
 
          (when logged?
            [:div
@@ -325,30 +352,7 @@
                                     (if (= "Enter" k)
                                       (when-let [server (util/evalue event)]
                                         (user-handler/set-cors! server)
-                                        (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
-
-            [:hr]])
-
-         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-           (t :settings-page/current-version)]
-          [:div.mt-1.sm:mt-0.sm:col-span-2
-           [:p version]
-           (if (util/electron?) (app-updater))]]
-
-         [:hr]
-
-         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-          [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70
-           {:for "developer_mode"}
-           (t :settings-page/developer-mode)]
-          [:div.mt-1.sm:mt-0.sm:col-span-2
-           [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-            (ui/button (if developer-mode? (t :settings-page/disable-developer-mode) (t :settings-page/enable-developer-mode))
-                       :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
-
-         [:br]
-         (t :settings-page/developer-mode-desc)
+                                        (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]])
 
          [:hr]
 

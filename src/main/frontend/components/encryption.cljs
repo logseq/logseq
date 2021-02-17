@@ -7,7 +7,8 @@
             [frontend.db.utils :as db-utils]
             [clojure.string :as string]
             [frontend.state :as state]
-            [frontend.handler.metadata :as metadata-handler]))
+            [frontend.handler.metadata :as metadata-handler]
+            [frontend.ui :as ui]))
 
 (rum/defcs encryption-dialog-inner <
   (rum/local false ::reveal-secret-phrase?)
@@ -57,9 +58,13 @@
       [:div
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900.font-bold
           "Enter a password"]]]
 
+       (ui/admonition
+        :warning
+        [:div.text-gray-700
+         "If you lose your password, all the data can't be decrypted!! Make sure keeping a secure backup of your password."])
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:auto-focus true
          :style {:color "#000"}
