@@ -1495,23 +1495,29 @@
                                (when doc-mode?
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
-                                     (d/add-class! node "hide-inner-bullet")))))}]
-    [:div.ls-block.flex.flex-col.rounded-sm
-     (cond->
-      {:id block-id
-       :data-refs (let [refs (model/get-page-names-by-ids
+                                     (d/add-class! node "hide-inner-bullet")))))}
+        data-refs (let [refs (model/get-page-names-by-ids
                               (->> (map :db/id refs-with-children)
                                    (remove nil?)))]
                     (text/build-data-value refs))
-       :style {:position "relative"}
-       :class (str uuid
-                   (when dummy? " dummy")
-                   (when (and collapsed? has-child?) " collapsed")
-                   (when pre-block? " pre-block"))
-       :blockid (str uuid)
-       :repo repo
-       :level level
-       :haschild (str has-child?)}
+        data-refs-self (let [refs  (model/get-page-names-by-ids
+                                    (->> (map :db/id (:block/ref-pages block))
+                                         (remove nil?)))]
+                         (text/build-data-value refs))]
+    [:div.ls-block.flex.flex-col.rounded-sm
+     (cond->
+         {:id block-id
+          :data-refs data-refs
+          :data-refs-self data-refs-self
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-block? " pre-block"))
+          :blockid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
        (not slide?)
        (merge attrs))
 
