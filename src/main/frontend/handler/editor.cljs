@@ -2190,7 +2190,8 @@
         (let [block-id (and node (d/attr node "blockid"))
               edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
               block-id (medley/uuid block-id)]
-          (when-let [block (db/entity [:block/uuid block-id])]
+          (when-let [block (or (db/entity [:block/uuid block-id])
+                               {:block/uuid block-id})]
             (edit-block! block
                          :max
                          (:block/format block)
