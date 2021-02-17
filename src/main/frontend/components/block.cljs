@@ -1105,7 +1105,8 @@
             {:style {:background-color bg-color
                      :padding-left 6
                      :padding-right 6
-                     :color "#FFFFFF"}}))
+                     :color "#FFFFFF"}
+             :class "with-bg-color"}))
          (remove-nils
           (concat
            [(when-not slide? checkbox)
