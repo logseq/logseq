@@ -43,9 +43,11 @@
    (enable-when-not-editing-mode! state/toggle-new-block-shortcut!)
    (or (shortcut :ui/toggle-between-page-and-file) "s")
    (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
+   "tab" (-> (editor-handler/on-tab :right)
+             enable-when-not-editing-mode!)
+   "shift+tab" (-> (editor-handler/on-tab :left)
+                   enable-when-not-editing-mode!)
 
-   "tab" (editor-handler/on-tab :right)
-   "shift+tab" (editor-handler/on-tab :left)
    (or (shortcut :editor/undo) "mod+z") [history-handler/undo! true]
    (or (shortcut :editor/redo) "mod+y") [history-handler/redo! true]
    (or (shortcut :go/search) "mod+u") [route-handler/go-to-search! true]

@@ -1498,7 +1498,8 @@
      (cond->
       {:id block-id
        :data-refs (let [refs (model/get-page-names-by-ids
-                              (map :db/id refs-with-children))]
+                              (->> (map :db/id refs-with-children)
+                                   (remove nil?)))]
                     (text/build-data-value refs))
        :style {:position "relative"}
        :class (str uuid

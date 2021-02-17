@@ -1983,7 +1983,7 @@
                                 true)))
 
 (defn cycle-collapse!
-  [_state e]
+  [e]
   (when (and
          ;; not input, t
          (nil? (state/get-edit-input-id))
@@ -1994,7 +1994,7 @@
 
 (defn on-tab
   [direction]
-  (fn [state e]
+  (fn [e]
     (when-let [repo (state/get-current-repo)]
       (let [blocks (seq (state/get-selection-blocks))]
         (cond
@@ -2056,7 +2056,7 @@
           nil
 
           :else
-          (cycle-collapse! state e))))))
+          (cycle-collapse! e))))))
 
 (defn bulk-make-todos
   [state e]
@@ -2115,7 +2115,7 @@
             {:key :block/change
              :data (map (fn [block] (assoc block :block/page page)) blocks)}
             [[file-path new-content]])))
-        (cycle-collapse! state e)))))
+        (cycle-collapse! e)))))
 
 (defn- get-link
   [format link label]
