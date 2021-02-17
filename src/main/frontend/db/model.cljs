@@ -717,11 +717,7 @@
                                     (string? title)
                                     title))
             file-name (when-let [file-name (last (string/split file #"/"))]
-                        (when-let [file-name (first (util/split-last "." file-name))]
-                          (-> file-name
-                              (string/replace "-" " ")
-                              (string/replace "_" " ")
-                              (util/capitalize-all))))]
+                        (first (util/split-last "." file-name)))]
         (or property-name
             (if (= (state/page-name-order) "file")
               (or file-name first-block-name)
@@ -1204,10 +1200,7 @@
   [repo path content]
   (when (and repo path)
     (let [tx-data {:file/path path
-                   :file/content content}
-          tx-data (if (config/local-db? repo)
-                    (dissoc tx-data :file/last-modified-at)
-                    tx-data)]
+                   :file/content content}]
       (react/transact-react!
        repo
        [tx-data]

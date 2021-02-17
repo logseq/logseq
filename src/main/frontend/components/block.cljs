@@ -181,7 +181,7 @@
                              (reset! *resizing-image? true))
                            (reset! size value))
           :onMouseUp (fn []
-                       (when @size
+                       (when (and @size @*resizing-image?)
                          (when-let [block-id (:block/uuid config)]
                            (let [size (bean/->clj @size)]
                              (editor-handler/resize-image! block-id metadata full_text size))))
@@ -241,7 +241,8 @@
                    nil
                    (safe-read-string metadata false))
         title (second (first label))]
-    (if (config/local-asset? href)
+    (if (and (config/local-asset? href)
+             (config/local-db? (state/get-current-repo)))
       (asset-link config title href label metadata full_text)
       (let [href (if (util/starts-with? href "http")
                    href
@@ -380,7 +381,7 @@
 (rum/defc asset-reference
   [title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (str repo-path (string/replace path "../" "/"))]
+        full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))]
     [:a.asset-ref {:target "_blank" :href full-path} (or title path)]))
 
 (rum/defc page-reference < rum/reactive
@@ -838,11 +839,15 @@
                                (get (state/get-macros) (keyword name)))
                 macro-content (if (and (seq arguments) macro-content)
                                 (block/macro-subs macro-content arguments)
-                                macro-content)]
+                                macro-content)
+                macro-content (when macro-content
+                                (editor-handler/resolve-dynamic-template! macro-content))]
             (render-macro config name arguments macro-content format))
 
           (when-let [macro-txt (macro->text name arguments)]
-            (let [format (get-in config [:block :block/format] :markdown)]
+            (let [macro-txt (when macro-txt
+                              (editor-handler/resolve-dynamic-template! macro-txt))
+                  format (get-in config [:block :block/format] :markdown)]
               (render-macro config name arguments macro-txt format))))))
 
     :else
@@ -1100,7 +1105,8 @@
             {:style {:background-color bg-color
                      :padding-left 6
                      :padding-right 6
-                     :color "#FFFFFF"}}))
+                     :color "#FFFFFF"}
+             :class "with-bg-color"}))
          (remove-nils
           (concat
            [(when-not slide? checkbox)
@@ -1489,22 +1495,29 @@
                                (when doc-mode?
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
-                                     (d/add-class! node "hide-inner-bullet")))))}]
+                                     (d/add-class! node "hide-inner-bullet")))))}
+        data-refs (let [refs (model/get-page-names-by-ids
+                              (->> (map :db/id refs-with-children)
+                                   (remove nil?)))]
+                    (text/build-data-value refs))
+        data-refs-self (let [refs  (model/get-page-names-by-ids
+                                    (->> (map :db/id (:block/ref-pages block))
+                                         (remove nil?)))]
+                         (text/build-data-value refs))]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
-      {:id block-id
-       :data-refs (let [refs (model/get-page-names-by-ids
-                              (map :db/id refs-with-children))]
-                    (text/build-data-value refs))
-       :style {:position "relative"}
-       :class (str uuid
-                   (when dummy? " dummy")
-                   (when (and collapsed? has-child?) " collapsed")
-                   (when pre-block? " pre-block"))
-       :blockid (str uuid)
-       :repo repo
-       :level level
-       :haschild (str has-child?)}
+         {:id block-id
+          :data-refs data-refs
+          :data-refs-self data-refs-self
+          :style {:position "relative"}
+          :class (str uuid
+                      (when dummy? " dummy")
+                      (when (and collapsed? has-child?) " collapsed")
+                      (when pre-block? " pre-block"))
+          :blockid (str uuid)
+          :repo repo
+          :level level
+          :haschild (str has-child?)}
        (not slide?)
        (merge attrs))
 

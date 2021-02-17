@@ -10,6 +10,7 @@
             [frontend.state :as state]
             [promesa.core :as p]
             [frontend.db-schema :as db-schema]
+            [frontend.db.default :as default-db]
             [clojure.core.async :as async]
             [frontend.idb :as idb]))
 
@@ -147,7 +148,8 @@
          (p/let [stored (idb/get-item db-name)
                  _ (when stored
                      (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                           attached-db (d/db-with stored-db
+                                                  [(me-tx stored-db me)])]
                        (conn/reset-conn! db-conn attached-db)))
                  db-name (datascript-db repo)
                  db-conn (d/create-conn db-schema/schema)
@@ -156,7 +158,9 @@
                  stored (idb/get-item db-name)
                  _ (if stored
                      (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                           attached-db (d/db-with stored-db (concat
+                                                             [(me-tx stored-db me)]
+                                                             default-db/built-in-pages))]
                        (conn/reset-conn! db-conn attached-db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]

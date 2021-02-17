@@ -12,25 +12,31 @@
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
             ["fuzzysort" :as fuzzy]
-            [medley.core :as medley]))
+            ["flexsearch" :as flexsearch]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            ["/frontend/utils" :as utils]))
 
 (def fuzzy-go (gobj/get fuzzy "go"))
 (defonce prepare (gobj/get fuzzy "prepare"))
 (defonce highlight (gobj/get fuzzy "highlight"))
 
 (defn go
-  [q indice opts]
-  (fuzzy-go q indice opts))
+  [q indice-type indice opts]
+  (case indice-type
+    :page
+    (fuzzy-go q indice opts)
+
+    :block
+    (.search indice q opts)))
 
 (defn block->index
   [{:block/keys [uuid content format] :as block}]
-  (when (<= (count content) 1000) ; performance
-    (when-let [result (->> (text/remove-level-spaces content format)
-                           (text/remove-properties!)
-                           (prepare))]
-      (gobj/set result "id" (:db/id block))
-      (gobj/set result "uuid" (str uuid))
-      result)))
+  (when-let [result (->> (text/remove-level-spaces content format)
+                         (text/remove-properties!))]
+    {:id (:db/id block)
+     :uuid (str uuid)
+     :content result}))
 
 (defn make-blocks-indice!
   []
@@ -38,9 +44,17 @@
     (let [blocks (->> (db/get-all-block-contents)
                       (map block->index)
                       (remove nil?)
-                      (bean/->js))]
-      (swap! indices assoc-in [repo :blocks] blocks)
-      blocks)))
+                      (bean/->js))
+          indice (flexsearch.
+                  (clj->js
+                   {:encode "icase"
+                    :tokenize utils/searchTokenize
+                    :doc {:id "id"
+                          :field ["content"]}
+                    :async true}))]
+      (p/let [result (.add indice blocks)]
+        (swap! indices assoc-in [repo :blocks] indice))
+      indice)))
 
 (defn make-pages-indice!
   []
@@ -136,10 +150,9 @@
                                      :score (score query (.toLowerCase s))})))))
          (map :data))))
 
-(defn search
-  "Block search"
+(defn block-search
   ([q]
-   (search q 10))
+   (block-search q 10))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (when-not (string/blank? q)
@@ -147,21 +160,17 @@
              q (escape-str q)]
          (when-not (string/blank? q)
            (let [indice (or (get-in @indices [repo :blocks])
-                            (make-blocks-indice!))
-                 result (->
-                         (go q indice (clj->js {:limit limit
-                                                :allowTypo false
-                                                :threshold -10000}))
-                         (bean/->clj))]
-             (->>
-              (map
-               (fn [{:keys [target uuid indexes]}]
-                 {:block/uuid uuid
-                  :block/content target
-                  :block/page (:block/page (db/entity [:block/uuid (medley/uuid (str uuid))]))
-                  :block/indexes indexes}) ; For result highlight
-               result)
-              (remove nil?)))))))))
+                            (make-blocks-indice!))]
+             (p/let [result (go q :block indice (clj->js {:limit limit}))
+                     result (bean/->clj result)]
+               (->>
+                (map
+                 (fn [{:keys [content uuid] :as block}]
+                   {:block/uuid uuid
+                    :block/content content
+                    :block/page (:block/page (db/entity [:block/uuid (medley/uuid (str uuid))]))})
+                 result)
+                (remove nil?))))))))))
 
 (defn page-search
   ([q]
@@ -173,11 +182,12 @@
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
                           (make-pages-indice!))
-               result (->> (go q indice (clj->js {:limit limit
-                                                  :key "name"
-                                                  :allowTypo false
-                                                  :threshold -10000}))
+               result (->> (go q :page indice (clj->js {:limit limit
+                                                        :key "name"
+                                                        :allowTypo false
+                                                        :threshold -10000}))
                            (bean/->clj))]
+           ;; TODO: add indexes for highlights
            (->> (map
                  (fn [{:keys [obj]}]
                    (:name obj))
@@ -250,8 +260,10 @@
                                           (map :e)
                                           (set))]
             (swap! search-db/indices update-in [repo :blocks]
-                   (fn [blocks]
-                     (let [blocks (or blocks (array))
-                           blocks (.filter blocks (fn [block]
-                                                    (not (contains? blocks-to-remove-set (gobj/get block "id")))))]
-                       (.concat blocks (bean/->js blocks-to-add)))))))))))
+                   (fn [indice]
+                     (when indice
+                       (doseq [block-id blocks-to-remove-set]
+                         (.remove indice #js {:id block-id}))
+                       (when (seq blocks-to-add)
+                         (.add indice (bean/->js blocks-to-add))))
+                     indice))))))))

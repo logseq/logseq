@@ -31,7 +31,8 @@
               cur-level (:block/level item)
               bottom-level (:block/level (first children))
               pre-block? (:block/pre-block? item)
-              item (assoc item :block/refs-with-children (get-all-refs item))]
+              item (assoc item :block/refs-with-children (->> (get-all-refs item)
+                                                              (remove nil?)))]
           (cond
             (empty? children)
             (recur others (list item))
@@ -46,8 +47,9 @@
             (let [[children other-children] (split-with (fn [h]
                                                           (> (:block/level h) cur-level))
                                                         children)
-                  refs-with-children (-> (mapcat get-all-refs (cons item children))
-                                         distinct)
+                  refs-with-children (->> (mapcat get-all-refs (cons item children))
+                                          (remove nil?)
+                                          distinct)
                   children (cons
                             (assoc item
                                    :block/children children

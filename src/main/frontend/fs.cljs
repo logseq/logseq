@@ -57,28 +57,35 @@
   [dir]
   (protocol/rmdir! (get-fs dir) dir))
 
-(defn read-file
-  [dir path]
-  (p/chain (protocol/read-file (get-fs dir) dir path)
-           encrypt/decrypt))
-
 (defn write-file!
   [repo dir path content opts]
   (when content
-    (p/let [metadata-or-css? (or (string/ends-with? path config/metadata-file)
-                                 (string/ends-with? path config/custom-css-file))
-            content (if metadata-or-css? content (encrypt/encrypt content))]
-      (->
-       (do
-         (protocol/write-file! (get-fs dir) repo dir path content opts)
-         (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.)))
-       (p/catch (fn [error]
-                  (log/error :file/write-failed? {:dir dir
-                                                  :path path
-                                                  :error error})
-                  ;; Disable this temporarily
-                  ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-))))))
+    (let [fs-record (get-fs dir)]
+      (p/let [metadata-or-css? (or (string/ends-with? path config/metadata-file)
+                                  (string/ends-with? path config/custom-css-file))
+             content (if metadata-or-css? content (encrypt/encrypt content))]
+       (->
+        (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+          (when-not (= fs-record nfs-record)
+           (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+        (p/catch (fn [error]
+                   (log/error :file/write-failed? {:dir dir
+                                                   :path path
+                                                   :error error})
+                   ;; Disable this temporarily
+                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+                   )))))))
+
+(defn read-file
+  ([dir path]
+   (let [fs (get-fs dir)
+         options (if (= fs bfs-record)
+                   {:encoding "utf8"}
+                   {})]
+     (read-file dir path {})))
+  ([dir path options]
+   (p/chain (protocol/read-file (get-fs dir) dir path options)
+            encrypt/decrypt)))
 
 (defn rename!
   [repo old-path new-path]

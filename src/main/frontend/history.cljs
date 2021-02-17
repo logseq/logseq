@@ -7,7 +7,8 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.ui :as ui-handler]))
 
 ;; Undo && Redo that works with files
 
@@ -21,7 +22,7 @@
 ;; repo -> idx
 (defonce history-idx (atom {}))
 
-(defonce history-limit 500)
+(defonce history-limit 100)
 
 ;; tx [[file1-path patches] [file2-path patches]]
 (defn add-history!
@@ -30,10 +31,9 @@
                 (remove (fn [[_ old new]] (= old new)))
                 (map (fn [[file old new]]
                        (when (and old new)
-                         (let [diffs (diff/diffs new old)
-                              patches (diff/get-patches new old diffs)]
-                           [file patches {:old old
-                                          :new new}]))))
+                         (let [diffs (diff/diffs new old)]
+                           [file {:old old
+                                  :new new}]))))
                 (remove nil?))]
     (when (seq tx)
       (let [last-edit-block (get @state/state :editor/last-edit-block)
@@ -74,12 +74,11 @@
             tx (get-in @history [repo idx'])
             {:keys [data]} tx
             _ (reset! *undoing? true)
-            promises (for [[path patches] data]
-                       (let [current-content (db/get-file-no-sub path)
-                             original-content (diff/apply-patches! current-content patches)]
-                         (alter-file repo path original-content
+            promises (for [[path {:keys [old]}] data]
+                       (let [current-content (db/get-file-no-sub path)]
+                         (alter-file repo path old
                                      {:add-history? false
-                                      :re-render-root? true})))]
+                                      :re-render-root? false})))]
         (-> (p/all promises)
             (p/then (fn []
                       (db/clear-query-state!)
@@ -88,7 +87,8 @@
                       ;; restore cursor
                       (when (> idx' 0)
                         (let [prev-tx (get-in @history [repo (dec idx')])]
-                          (when restore-cursor (restore-cursor prev-tx)))))))))))
+                          (when restore-cursor (restore-cursor prev-tx))))
+                      (ui-handler/re-render-root!))))))))
 
 (defonce *redoing? (atom false))
 (defn redo!
@@ -98,17 +98,22 @@
     (when (and (> (count txs) idx) (false? @*redoing?))
       (let [tx (get-in @history [repo idx])
             _ (reset! *redoing? true)
-            promises (for [[path patches] (:data tx)]
-                       (let [current-content (db/get-file-no-sub path)
-                             reversed-patches (utils/reversePatch patches)
-                             content (diff/apply-patches! current-content reversed-patches)]
-                         (alter-file repo path content
+            promises (for [[path {:keys [new]}] (:data tx)]
+                       (let [current-content (db/get-file-no-sub path)]
+                         (alter-file repo path new
                                      {:add-history? false
-                                      :re-render-root? true})))]
+                                      :re-render-root? false})))]
         (-> (p/all promises)
             (p/then (fn []
                       (db/clear-query-state!)
                       (swap! history-idx assoc repo (inc idx))
                       (reset! *redoing? false)
+                      (ui-handler/re-render-root!)
                       ;; restore cursor
                       (when restore-cursor (restore-cursor tx)))))))))
+
+(comment
+  (prn
+   {:history-idx (get @history-idx (frontend.state/get-current-repo))
+    :history (get @history (frontend.state/get-current-repo))})
+  )

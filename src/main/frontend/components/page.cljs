@@ -224,15 +224,10 @@
              [:a {:href (rfe/href :page {:name name})}
               original-name]])] false)]])))
 
-(defonce last-route (atom :home))
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
-                ;; only when route changed
-                (when (not= @last-route (state/get-current-route))
-                  (editor-handler/open-last-block! false))
-                (reset! last-route (state/get-current-route))
                 state)
    :did-update (fn [state]
                  (ui-handler/scroll-and-highlight! state)

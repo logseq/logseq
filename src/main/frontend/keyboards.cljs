@@ -12,73 +12,9 @@
             ["mousetrap" :as mousetrap]
             [goog.object :as gobj]))
 
-;; KeyCodes.QUESTION_MARK
-
 ;; Credits to roamresearch
 
-;; Triggers
-;; Slash Autocomplete /
-;; Block Insert Autocomplete <
-;; Page reference Autocomplete [[]]
-;; Block Reference Autocomplete (())
-
-;; Key Commands (working with lists)
-;; Indent Block Tab
-;; Unindent Block Shift-Tab
-;; Create New Block Enter
-;; New Line in Block Shift-Enter
-;; Undo Ctrl-z
-;; Redo Ctrl-y
-;; Zoom In Alt-Right
-;; Zoom out Alt-left
-;; Follow link under cursor Ctrl-o
-;; Open link in Sidebar Ctrl-shift-o
-;; Select Block Above Shift-Up
-;; Select Block Below Shift-Down
-;; Select All Blocks Ctrl-Shift-a
-
-;; General
-;; Full Text Search
-;; Open Link in Sidebar
-;; Context Menu
-;; Jump to Journals
-
-;; Formatting
-;; Bold Ctrl-b
-;; Italics Ctrl-i
-;; Html Link Ctrl-k
-;; Highlight Ctrl-h
-
-;; Markdown
-;; Block
-
-(def keyboards
-  (->>
-   {"tab" (editor-handler/on-tab :right)
-    "shift+tab" (editor-handler/on-tab :left)
-    "ctrl+z" history-handler/undo!
-    "ctrl+y" history-handler/redo!
-    "ctrl+u" route-handler/go-to-search!
-    "alt+j" route-handler/go-to-journals!
-    (or (state/get-shortcut :editor/zoom-in)
-        (if util/mac? "alt+." "alt+right")) editor-handler/zoom-in!
-    (or (state/get-shortcut :editor/zoom-out)
-        (if util/mac? "alt+," "alt+left")) editor-handler/zoom-out!
-    "ctrl+enter" editor-handler/cycle-todo!
-    "ctrl+down" editor-handler/expand!
-    "ctrl+up" editor-handler/collapse!
-    "ctrl+o" editor-handler/follow-link-under-cursor!
-    "ctrl+shift+o" editor-handler/open-link-in-sidebar!
-    "ctrl+b" editor-handler/bold-format!
-    "ctrl+i" editor-handler/italics-format!
-    "ctrl+k" editor-handler/html-link-format!
-    "ctrl+h" editor-handler/highlight-format!
-    "ctrl+shift+a" editor-handler/select-all-blocks!
-    "alt+shift+up" (fn [state e] (editor-handler/move-up-down e true))
-    "alt+shift+down" (fn [state e] (editor-handler/move-up-down e false))}
-   (medley/map-keys util/->system-modifier)))
-
-(defn chord-aux
+(defn prevent-default-behavior
   [f]
   (fn [state e]
     (f state e)
@@ -86,20 +22,68 @@
     ;; and stop event from bubbling
     false))
 
+(defn enable-when-not-editing-mode!
+  [f]
+  (fn [state e]
+    (when-not (state/editing?)
+      (f state e))))
+
+(def shortcut state/get-shortcut)
+
 (defonce chords
-  {;; Toggle
-   "t d" state/toggle-document-mode!
-   "t t" state/toggle-theme!
-   "t r" ui-handler/toggle-right-sidebar!
-   "t e" state/toggle-new-block-shortcut!
-   "s" (chord-aux route-handler/toggle-between-page-and-file!)
-   "mod+s" (chord-aux editor-handler/save!)
-   "mod+c mod+s" (chord-aux search-handler/rebuild-indices!)
-   "mod+c mod+b" (chord-aux config-handler/toggle-ui-show-brackets!)})
+  {
+   ;; non-editing mode
+   (or (shortcut :editor/toggle-document-mode) "t d")
+   (enable-when-not-editing-mode! state/toggle-document-mode!)
+   (or (shortcut :ui/toggle-theme) "t t")
+   (enable-when-not-editing-mode! state/toggle-theme!)
+   (or (shortcut :ui/toggle-right-sidebar) "t r")
+   (enable-when-not-editing-mode! ui-handler/toggle-right-sidebar!)
+   (or (shortcut :ui/toggle-new-block) "t e")
+   (enable-when-not-editing-mode! state/toggle-new-block-shortcut!)
+   (or (shortcut :ui/toggle-between-page-and-file) "s")
+   (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
+   "tab" (-> (editor-handler/on-tab :right)
+             enable-when-not-editing-mode!)
+   "shift+tab" (-> (editor-handler/on-tab :left)
+                   enable-when-not-editing-mode!)
+
+   (or (shortcut :editor/undo) "mod+z") [history-handler/undo! true]
+   (or (shortcut :editor/redo) "mod+y") [history-handler/redo! true]
+   (or (shortcut :go/search) "mod+u") [route-handler/go-to-search! true]
+   (or (shortcut :go/journals) (if util/mac? "mod+j" "alt+j")) [route-handler/go-to-journals! true]
+   (or (shortcut :editor/zoom-in)
+       (if util/mac? "mod+." "alt+right")) [editor-handler/zoom-in! true]
+   (or (shortcut :editor/zoom-out)
+       (if util/mac? "mod+," "alt+left")) [editor-handler/zoom-out! true]
+   (or (shortcut :editor/cycle-todo)
+       "mod+enter") [editor-handler/cycle-todo! true]
+   (or (shortcut :editor/expand-block-children) "mod+down") [editor-handler/expand! true]
+   (or (shortcut :editor/collapse-block-children) "mod+up") [editor-handler/collapse! true]
+   (or (shortcut :editor/follow-link) "mod+o") [editor-handler/follow-link-under-cursor! true]
+   (or (shortcut :editor/open-link-in-sidebar) "mod+shift+o") [editor-handler/open-link-in-sidebar! true]
+   (or (shortcut :editor/bold) "mod+b") [editor-handler/bold-format! true]
+   (or (shortcut :editor/italics) "mod+i") [editor-handler/italics-format! true]
+   (or (shortcut :editor/highlight) "mod+h") [editor-handler/highlight-format! true]
+   (or (shortcut :editor/insert-link) "mod+k") [editor-handler/html-link-format! true]
+   (or (shortcut :editor/select-all-blocks) "mod+shift+a") [editor-handler/select-all-blocks! true]
+   (or (shortcut :editor/move-block-up) (if util/mac? "mod+shift+up" "alt+shift+up")) [(fn [state e] (editor-handler/move-up-down e true)) true]
+   (or (shortcut :editor/move-block-down) (if util/mac? "mod+shift+down" "alt+shift+down")) [(fn [state e] (editor-handler/move-up-down e false)) true]
+   (or (shortcut :editor/save) "mod+s") [editor-handler/save! true]
+
+   (or (shortcut :editor/next) "down") (fn [state e] (editor-handler/open-block! true))
+   (or (shortcut :editor/prev) "up") (fn [state e] (editor-handler/open-block! false))
+
+   (or (shortcut :search/re-index) "mod+c mod+s") [search-handler/rebuild-indices! true]
+   (or (shortcut :ui/toggle-brackets) "mod+c mod+b") [config-handler/toggle-ui-show-brackets! true]})
 
 (defonce bind! (gobj/get mousetrap "bind"))
 
 (defn bind-shortcuts!
   []
   (doseq [[k f] chords]
-    (bind! k f)))
+    (let [[f prevent?] (if (coll? f)
+                         f
+                         [f false])
+          f (if prevent? (prevent-default-behavior f) f)]
+      (bind! k f))))

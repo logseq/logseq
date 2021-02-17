@@ -111,6 +111,25 @@
                (util/stop e))}
             svg/external-link " release channel"]])])]))
 
+(rum/defc delete-account-confirm
+  [close-fn]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    [:div
+     (ui/admonition
+      :important
+      [:p.text-gray-700 (t :user/delete-account-notice)])
+     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :on-click user-handler/delete-account!}
+        (t :user/delete-account)]]
+      [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :on-click close-fn}
+        "Cancel"]]]]))
+
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
@@ -329,4 +348,16 @@
                        :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
 
          [:br]
-         (t :settings-page/developer-mode-desc)]]])))
+         (t :settings-page/developer-mode-desc)
+
+         [:hr]
+
+         (when logged?
+           [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+            [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70.text-red-600
+             {:for "delete account"}
+             (t :user/delete-account)]
+            [:div.mt-1.sm:mt-0.sm:col-span-2
+             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+              (ui/button (t :user/delete-your-account)
+                :on-click #(state/set-modal! delete-account-confirm))]]])]]])))

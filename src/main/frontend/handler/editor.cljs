@@ -294,8 +294,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                             {:block/uuid uuid
-                              :block/meta new-meta}
+                                {:block/uuid uuid
+                                 :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -448,10 +448,10 @@
                                       :page/original-name tag}) tags))
          page-alias (when-let [alias (:alias new-properties)]
                       (map
-                       (fn [alias]
-                         {:page/original-name alias
-                          :page/name (string/lower-case alias)})
-                       (remove #{(:page/name page)} alias)))
+                        (fn [alias]
+                          {:page/original-name alias
+                           :page/name (string/lower-case alias)})
+                        (remove #{(:page/name page)} alias)))
 
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
@@ -508,8 +508,8 @@
                  ;; create the file
                  (let [value (block-text-with-time nil format value)
                        content (str (util/default-content-with-title format
-                                      (or (:page/original-name page)
-                                          (:page/name page)))
+                                                                     (or (:page/original-name page)
+                                                                         (:page/name page)))
                                     value)]
                    (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                            _ (git-handler/git-add repo path)]
@@ -981,7 +981,7 @@
   [{:block/keys [uuid marker content meta file dummy? properties] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
     (save-block-if-changed! block new-content
-                            (with-marker-time block marker))))
+                            {:custom-properties (with-marker-time block new-marker)})))
 
 (defn set-priority
   [{:block/keys [uuid marker priority content meta file dummy?] :as block} new-priority]
@@ -1168,7 +1168,7 @@
                                                (if (string/starts-with? (string/lower-case line) key)
                                                  new-line
                                                  line))
-                                             lines)
+                                          lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
                                           (cons (first new-lines) ;; title
@@ -1437,7 +1437,9 @@
    (save-current-block-when-idle! {}))
   ([{:keys [check-idle? chan chan-callback]
      :or {check-idle? true}}]
-   (when (nil? (state/get-editor-op))
+   (when (and (nil? (state/get-editor-op))
+              ;; non English input method
+              (not (state/editor-in-composition?)))
      (when-let [repo (state/get-current-repo)]
        (when (and (if check-idle? (state/input-idle? repo) true)
                   (not (state/get-editor-show-page-search?))
@@ -1559,18 +1561,18 @@
             ext (if ext (subs ext (string/last-index-of ext ".")) "")
             filename (str (gen-filename index file) ext)
             filename (str path "/" filename)]
-        ;(js/console.debug "Write asset #" dir filename file)
+                                        ;(js/console.debug "Write asset #" dir filename file)
         (if (util/electron?)
           (let [from (.-path file)]
             (p/then (js/window.apis.copyFileToAssets dir filename from)
-                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file)])))
+                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
           (p/then (fs/write-file! repo dir filename (.stream file) nil)
                   #(p/resolved [filename file]))))))))
 
 (defonce *assets-url-cache (atom {}))
 
 (defn make-asset-url
-  [path]                                                    ;; path start with "/assets" or compatible for "../assets"
+  [path] ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         path (string/replace path "../" "/")]
     (if (util/electron?)
@@ -1620,11 +1622,11 @@
       (-> (save-assets! block repo (js->clj files))
           (p/then
            (fn [res]
-             (when-let [[url file] (and (seq res) (first res))]
-               (let [image? (util/ext-of-image? url)]
+             (when-let [[asset-file-name file full-file-path] (and (seq res) (first res))]
+               (let [image? (util/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
-                  (get-asset-file-link format (resolve-relative-path url)
+                  (get-asset-file-link format (resolve-relative-path (or full-file-path asset-file-name))
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format
@@ -1674,7 +1676,7 @@
    ;; "_" "_"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
    ;; "^" "^"
-})
+   })
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -1762,10 +1764,11 @@
                                                       99)
                                 (map (comp str :block/uuid))))
         current-and-parents (set/union #{(str (:block/uuid current-block))} block-parents)]
-    (remove
-     (fn [h]
-       (contains? current-and-parents (:block/uuid h)))
-     (search/search q 10))))
+    (p/let [result (search/block-search q 10)]
+      (remove
+       (fn [h]
+         (contains? current-and-parents (:block/uuid h)))
+       result))))
 
 (defn get-matched-templates
   [q]
@@ -1980,7 +1983,7 @@
                                 true)))
 
 (defn cycle-collapse!
-  [_state e]
+  [e]
   (when (and
          ;; not input, t
          (nil? (state/get-edit-input-id))
@@ -1991,7 +1994,7 @@
 
 (defn on-tab
   [direction]
-  (fn [state e]
+  (fn [e]
     (when-let [repo (state/get-current-repo)]
       (let [blocks (seq (state/get-selection-blocks))]
         (cond
@@ -2027,7 +2030,7 @@
                                                                 :end-pos end-pos}))]
                                  (reset! last-start-pos end-pos)
                                  block))
-                             blocks))
+                          blocks))
                 file-id (:db/id (:block/file block))
                 file (db/entity file-id)
                 page (:block/page block)
@@ -2053,7 +2056,7 @@
           nil
 
           :else
-          (cycle-collapse! state e))))))
+          (cycle-collapse! e))))))
 
 (defn bulk-make-todos
   [state e]
@@ -2094,7 +2097,7 @@
                                                               :end-pos end-pos}))]
                                (reset! last-start-pos end-pos)
                                block))
-                           blocks))
+                        blocks))
               file-id (:db/id (:block/file block))
               file (db/entity file-id)
               page (:block/page block)
@@ -2112,7 +2115,7 @@
             {:key :block/change
              :data (map (fn [block] (assoc block :block/page page)) blocks)}
             [[file-path new-content]])))
-        (cycle-collapse! state e)))))
+        (cycle-collapse! e)))))
 
 (defn- get-link
   [format link label]
@@ -2164,26 +2167,36 @@
   [block-id value]
   (set-block-property! block-id "heading" value))
 
-;; Should preserve the cursor too.
-(defn open-last-block!
-  [journal?]
-  (let [edit-id (state/get-edit-input-id)
-        last-pos (state/get-edit-pos)
-        block-id (when edit-id (subs edit-id (- (count edit-id) 36)))]
-    (let [last-edit-block (first (array-seq (js/document.getElementsByClassName block-id)))
-          first-block (first (array-seq (js/document.getElementsByClassName "ls-block")))
-          node (or last-edit-block
-                   (and (not journal?) first-block))]
+(defn open-block!
+  [first?]
+  (when-not (state/editing?)
+    (let [edit-id (state/get-last-edit-input-id)
+          block-id (when edit-id (subs edit-id (- (count edit-id) 36)))
+          last-edit-block (first (array-seq (js/document.getElementsByClassName block-id)))
+          nodes (array-seq (js/document.getElementsByClassName "ls-block"))
+          first-node (first nodes)
+          node (cond
+                 last-edit-block
+                 last-edit-block
+                 first?
+                 first-node
+                 :else
+                 (when-let [blocks-container (util/rec-get-blocks-container first-node)]
+                   (let [nodes (dom/by-class blocks-container "ls-block")]
+                     (last nodes))))]
       (when node
+        (state/clear-selection!)
+        (unhighlight-block!)
         (let [block-id (and node (d/attr node "blockid"))
               edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
               block-id (medley/uuid block-id)]
-          (when-let [block (db/entity [:block/uuid block-id])]
+          (when-let [block (or (db/entity [:block/uuid block-id])
+                               {:block/uuid block-id})]
             (edit-block! block
-                         (or (and last-edit-block last-pos)
-                             :max)
+                         :max
                          (:block/format block)
-                         edit-block-id)))))))
+                         edit-block-id))))
+      false)))
 
 (defn get-search-q
   []
@@ -2232,3 +2245,31 @@
         value (:block/content block)
         new-value (string/replace value full_text new-full-text)]
     (save-block-aux! block new-value (:block/format block) {})))
+
+(defn variable-rules
+  []
+  {"today" (util/format "[[%s]]" (date/today))
+   "yesterday" (util/format "[[%s]]" (date/yesterday))
+   "tomorrow" (util/format "[[%s]]" (date/tomorrow))
+   "time" (date/get-current-time)
+   "current page" (util/format "[[%s]]"
+                               (or (state/get-current-page)
+                                   (date/today)))})
+
+;; TODO: programmable
+;; context information, date, current page
+(defn resolve-dynamic-template!
+  [content]
+  (string/replace content #"<%([^%].*?)%>"
+                  (fn [[_ match]]
+                    (let [match (string/trim match)]
+                      (cond
+                       (string/blank? match)
+                       ""
+                       (get (variable-rules) (string/lower-case match))
+                       (get (variable-rules) (string/lower-case match))
+                       :else
+                       (if-let [nld (date/nld-parse match)]
+                         (let [date (tc/to-local-date-time nld)]
+                           (util/format "[[%s]]" (date/journal-name date)))
+                         match))))))

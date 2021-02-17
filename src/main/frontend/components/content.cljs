@@ -72,12 +72,28 @@
    "#264c9b"
    "#793e3e"])
 
-(rum/defcs block-template <
+(defonce *including-parent? (atom nil))
+
+(rum/defc template-checkbox
+  [including-parent?]
+  [:div.flex.flex-row
+   [:span.text-medium.mr-2 "Including the parent block in the template?"]
+   (ui/toggle including-parent?
+              #(swap! *including-parent? not))])
+
+(rum/defcs block-template < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input)
   [state block-id]
   (let [edit? (get state ::edit?)
-        input (get state ::input)]
+        input (get state ::input)
+        including-parent? (rum/react *including-parent?)
+        block-id (if (string? block-id) (uuid block-id) block-id)
+        block (db/entity [:block/uuid block-id])
+        has-children? (seq (:block/children block))]
+    (when (and (nil? including-parent?) has-children?)
+      (reset! *including-parent? true))
+
     (if @edit?
       (do
         (state/clear-edit!)
@@ -87,6 +103,8 @@
           {:auto-focus true
            :on-change (fn [e]
                         (reset! input (util/evalue e)))}]
+         (when has-children?
+           (template-checkbox including-parent?))
          (ui/button "Submit"
                     :on-click (fn []
                                 (let [title (string/trim @input)]
@@ -97,6 +115,8 @@
                                        :error)
                                       (do
                                         (editor-handler/set-block-property! block-id "template" title)
+                                        (when-not including-parent?
+                                          (editor-handler/set-block-property! block-id "including-parent" false))
                                         (state/hide-custom-context-menu!)))))))])
       (ui/menu-link
        {:key "Make template"
