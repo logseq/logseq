@@ -22,6 +22,13 @@
 ;; TODO: extract to specific models and move data transform logic to the
 ;; correponding handlers.
 
+(def rules
+  '[[(parent ?p ?c)
+     [?p :block/children ?c]]
+    [(parent ?p ?c)
+     [?t :block/children ?c]
+     (parent ?p ?t)]])
+
 (defn transact-files-db!
   ([tx-data]
    (db-utils/transact! (state/get-current-repo) tx-data))
@@ -569,17 +576,12 @@
   (when-let [conn (conn/get-conn repo)]
     (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
       (->> (d/q
-            '[:find ?e1
-              :in $ ?e2 %
-              :where (parent ?e2 ?e1)]
-            conn
-            eid
-             ;; recursive rules
-            '[[(parent ?e2 ?e1)
-               [?e2 :block/children ?e1]]
-              [(parent ?e2 ?e1)
-               [?t :block/children ?e1]
-               (parent ?e2 ?t)]])
+             '[:find ?c
+               :in $ ?p %
+               :where (parent ?p ?c)]
+             conn
+             eid
+             rules)
            (apply concat)))))
 
 (defn get-block-immediate-children
