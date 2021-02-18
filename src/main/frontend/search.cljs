@@ -38,6 +38,13 @@
      :uuid (str uuid)
      :content result}))
 
+(def default-block-indice (flexsearch.
+                           (clj->js
+                            {:encode "icase"
+                             :tokenize utils/searchTokenize
+                             :doc {:id "id"
+                                   :field ["content"]}
+                             :async true})))
 (defn make-blocks-indice!
   []
   (when-let [repo (state/get-current-repo)]
@@ -45,13 +52,7 @@
                       (map block->index)
                       (remove nil?)
                       (bean/->js))
-          indice (flexsearch.
-                  (clj->js
-                   {:encode "icase"
-                    :tokenize utils/searchTokenize
-                    :doc {:id "id"
-                          :field ["content"]}
-                    :async true}))]
+          indice default-block-indice]
       (p/let [result (.add indice blocks)]
         (swap! indices assoc-in [repo :blocks] indice))
       indice)))
@@ -81,7 +82,7 @@
 (defn reset-indice!
   [repo]
   (swap! indices assoc repo {:pages #js []
-                             :blocks #js []}))
+                             :blocks default-block-indice}))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
