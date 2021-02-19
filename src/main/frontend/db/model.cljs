@@ -1257,6 +1257,7 @@
                    ;; (matches-all (union ?p ?b) :block/ref-pages ?refs)
                    [?p :block/ref-pages ?p-ref]
                    [?b :block/ref-pages ?b-ref]
+                   [(not= ?p-ref ?b-ref)]
                    [(contains? ?refs ?p-ref)]
                    [(contains? ?refs ?b-ref)]
                    ))]
