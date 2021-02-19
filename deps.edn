@@ -8,7 +8,7 @@
   ;; FIXME: doesn't work on my archlinux laptop (tienson)
   ;; The required namespace "datascript.core" is not available, it was required by "frontend/db.cljs".
   datascript/datascript       {:git/url "https://github.com/tiensonqin/datascript",
-                               :sha "7c2822565d9a114c7d8604c335af89de4640e2e5"}
+                               :sha "efde8d389e6703b6f60ca3538f484a579b0d6de0"}
   ;; datascript                  {:mvn/version "1.0.1"}
   datascript-transit/datascript-transit
   {:mvn/version "0.3.0"

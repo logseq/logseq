@@ -27,7 +27,26 @@
      [?p :block/children ?c]]
     [(parent ?p ?c)
      [?t :block/children ?c]
-     (parent ?p ?t)]])
+     (parent ?p ?t)]
+
+    ;; from https://stackoverflow.com/questions/43784258/find-entities-whose-ref-to-many-attribute-contains-all-elements-of-input
+    ;; Quote:
+    ;; You're tackling the general problem of 'dynamic conjunction' in Datomic's Datalog.
+    ;; Write a dynamic Datalog query which uses 2 negations and 1 disjunction or a recursive rule
+    ;; Datalog has no direct way of expressing dynamic conjunction (logical AND / 'for all ...' / set intersection).
+    ;; However, you can achieve it in pure Datalog by combining one disjunction
+    ;; (logical OR / 'exists ...' / set union) and two negations, i.e
+    ;; (For all ?g in ?Gs p(?e,?g)) <=> NOT(Exists ?g in ?Gs, such that NOT(p(?e, ?g)))
+
+    ;; TODO: benchmark,
+
+    [(matches-all ?e ?a ?vs)
+     [(first ?vs) ?v0]
+     [?e ?a ?v0]
+     (not-join [?e ?vs]
+               [(identity ?vs) [?v ...]]
+               (not-join [?e ?v]
+                         [?e ?a ?v]))]])
 
 (defn transact-files-db!
   ([tx-data]
@@ -321,6 +340,16 @@
    (when repo
      (->> (db-utils/pull-many repo '[:page/name] ids)
           (map :page/name)))))
+
+(defn get-page-ids-by-names
+  ([names]
+   (get-page-ids-by-names (state/get-current-repo) names))
+  ([repo names]
+   (when repo
+     (let [lookup-refs (map (fn [name]
+                              [:page/name (string/lower-case name)]) names)]
+       (->> (db-utils/pull-many repo '[:db/id] lookup-refs)
+            (mapv :db/id))))))
 
 (defn get-page-alias-names
   [repo page-name]
@@ -1208,3 +1237,30 @@
        [tx-data]
        {:key [:file/content path]
         :files-db? true}))))
+
+(comment
+  (def page-names ["foo" "bar"])
+
+  (def page-ids (set (get-page-ids-by-names page-names)))
+
+  (d/q '[:find [(pull ?b [*]) ...]
+         :in $ % ?refs
+         :where
+         [?b :block/ref-pages ?p]
+         ;; Filter other blocks
+         [(contains? ?refs ?p)]
+         (or-join [?b ?refs]
+                  (matches-all ?b :block/ref-pages ?refs)
+                  (and
+                   (parent ?p ?b)
+                   ;; FIXME: not working
+                   ;; (matches-all (union ?p ?b) :block/ref-pages ?refs)
+                   [?p :block/ref-pages ?p-ref]
+                   [?b :block/ref-pages ?b-ref]
+                   [(contains? ?refs ?p-ref)]
+                   [(contains? ?refs ?b-ref)]
+                   ))]
+    (conn/get-conn)
+    rules
+    page-ids)
+  )
