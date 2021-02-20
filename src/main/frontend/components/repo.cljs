@@ -87,7 +87,7 @@
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
-            [:div.ml-2.mr-1.opacity-70.hover:opacity-100 {:class (if syncing? "loader" "initial")}
+            [:div.ml-2.mr-1.opacity-70.hover:opacity-100.refresh {:class (if syncing? "loader" "initial")}
              [:a
               {:on-click #(nfs-handler/refresh! repo
                                                 repo-handler/create-today-journal!)
