@@ -135,11 +135,11 @@ parent: child page 2
   (testing "Single page query"
     (are [x y] (= (q-count x) y)
       "[[page 1]]"
-      {:query '[[?b :block/ref-pages [:page/name "page 1"]]]
+      {:query '[[?b :block/path-ref-pages [:page/name "page 1"]]]
        :count 6}
 
       "[[page 2]]"
-      {:query '[[?b :block/ref-pages [:page/name "page 2"]]]
+      {:query '[[?b :block/path-ref-pages [:page/name "page 2"]]]
        :count 4}))
 
   (testing "Block properties query"
@@ -326,29 +326,29 @@ parent: child page 2
   (testing "AND queries"
     (are [x y] (= (q-count x) y)
       "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/ref-pages [:page/name "tag1"]]
-                [?b :block/ref-pages [:page/name "page 2"]])
+      {:query '([?b :block/path-ref-pages [:page/name "tag1"]]
+                [?b :block/path-ref-pages [:page/name "page 2"]])
        :count 1})
 
     (are [x y] (= (q-count x) y)
       "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/ref-pages [:page/name "tag1"]]
-                [?b :block/ref-pages [:page/name "page 2"]])
+      {:query '([?b :block/path-ref-pages [:page/name "tag1"]]
+                [?b :block/path-ref-pages [:page/name "page 2"]])
        :count 1}))
 
   (testing "OR queries"
     (are [x y] (= (q-count x) y)
       "(or [[tag1]] [[page 2]])"
       {:query '(or
-                (and [?b :block/ref-pages [:page/name "tag1"]])
-                (and [?b :block/ref-pages [:page/name "page 2"]]))
+                (and [?b :block/path-ref-pages [:page/name "tag1"]])
+                (and [?b :block/path-ref-pages [:page/name "page 2"]]))
        :count 4}))
 
   (testing "NOT queries"
     (are [x y] (= (q-count x) y)
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
-                (not [?b :block/ref-pages [:page/name "page 1"]]))
+                (not [?b :block/path-ref-pages [:page/name "page 1"]]))
        :count 8}))
 
   (testing "Between query"
@@ -374,15 +374,15 @@ parent: child page 2
       {:query '([?b :block/uuid]
                 [?b :block/marker ?marker]
                 [(contains? #{"DONE"} ?marker)]
-                (not [?b :block/ref-pages [:page/name "page 1"]]))
+                (not [?b :block/path-ref-pages [:page/name "page 1"]]))
        :count 0})
 
     (are [x y] (= (q-count x) y)
       "(and (todo now later) (or [[page 1]] [[page 2]]))"
       {:query '([?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER"} ?marker)]
-                (or (and [?b :block/ref-pages [:page/name "page 1"]])
-                    (and [?b :block/ref-pages [:page/name "page 2"]])))
+                (or (and [?b :block/path-ref-pages [:page/name "page 1"]])
+                    (and [?b :block/path-ref-pages [:page/name "page 2"]])))
        :count 3})
 
     (are [x y] (= (q-count x) y)
@@ -392,8 +392,8 @@ parent: child page 2
                  [?b :block/marker ?marker]
                  [(contains? #{"NOW" "LATER"} ?marker)]
                  (or
-                  (and [?b :block/ref-pages [:page/name "page 1"]])
-                  (and [?b :block/ref-pages [:page/name "page 2"]]))))
+                  (and [?b :block/path-ref-pages [:page/name "page 1"]])
+                  (and [?b :block/path-ref-pages [:page/name "page 2"]]))))
        :count 11})
 
     ;; FIXME: not working
@@ -411,8 +411,8 @@ parent: child page 2
                 [?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
                 (or
-                 (and [?b :block/ref-pages [:page/name "page 1"]])
-                 (and (not [?b :block/ref-pages [:page/name "page 1"]]))))
+                 (and [?b :block/path-ref-pages [:page/name "page 1"]])
+                 (and (not [?b :block/path-ref-pages [:page/name "page 1"]]))))
        :count 5}))
 
   (testing "sort-by (created_at defaults to desc)"
