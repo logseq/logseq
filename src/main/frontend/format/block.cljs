@@ -423,10 +423,7 @@
                                                                    (:start-pos meta)
                                                                    (:end-pos meta))}
                                    ;; Preserve the original block id
-                                   (when (and (zero? idx)
-                                              ;; not custom-id
-                                              (not (get-in block [:block/properties "custom_id"]))
-                                              (not (get-in block [:block/properties "id"])))
+                                   (when (zero? idx)
                                      {:block/uuid uuid})
                                    (when (seq ref-pages)
                                      {:block/ref-pages
