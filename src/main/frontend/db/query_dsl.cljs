@@ -148,7 +148,7 @@
                            (string/lower-case))]
          (when (and (not (string/blank? page-name))
                     (some? (db-utils/entity repo [:page/name page-name])))
-           [['?b :block/ref-pages [:page/name page-name]]]))
+           [['?b :block/path-ref-pages [:page/name page-name]]]))
 
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]

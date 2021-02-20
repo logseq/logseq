@@ -1506,18 +1506,18 @@
                          (text/build-data-value refs))]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
-         {:id block-id
-          :data-refs data-refs
-          :data-refs-self data-refs-self
-          :style {:position "relative"}
-          :class (str uuid
-                      (when dummy? " dummy")
-                      (when (and collapsed? has-child?) " collapsed")
-                      (when pre-block? " pre-block"))
-          :blockid (str uuid)
-          :repo repo
-          :level level
-          :haschild (str has-child?)}
+      {:id block-id
+       :data-refs data-refs
+       :data-refs-self data-refs-self
+       :style {:position "relative"}
+       :class (str uuid
+                   (when dummy? " dummy")
+                   (when (and collapsed? has-child?) " collapsed")
+                   (when pre-block? " pre-block"))
+       :blockid (str uuid)
+       :repo repo
+       :level level
+       :haschild (str has-child?)}
        (not slide?)
        (merge attrs))
 
@@ -1748,9 +1748,11 @@
             (and (seq result)
                  (or only-blocks? blocks-grouped-by-page?))
             (->hiccup result (cond-> (assoc config
-                                            ;; :editor-box editor/box
                                             :custom-query? true
-                                            :group-by-page? blocks-grouped-by-page?)
+                                            ;; :breadcrumb-show? true
+                                            :group-by-page? blocks-grouped-by-page?
+                                            ;; :ref? true
+)
                                children?
                                (assoc :ref? true))
                       {:style {:margin-top "0.25rem"
@@ -2044,17 +2046,18 @@
      (assoc :class "doc-mode"))
    (if (:group-by-page? config)
      [:div.flex.flex-col
-      (for [[page blocks] blocks]
-        (let [alias? (:page/alias? page)
-              page (db/entity (:db/id page))]
-          [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
-                       (:ref? config)
-                       (assoc :class "color-level px-7 py-2 rounded"))
-           (ui/foldable
-            [:div
-             (page-cp config page)
-             (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-            (blocks-container blocks config))]))]
+      (let [blocks (sort-by (comp :page/journal-day first) > blocks)]
+        (for [[page blocks] blocks]
+          (let [alias? (:page/alias? page)
+                page (db/entity (:db/id page))]
+            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                         (:ref? config)
+                         (assoc :class "color-level px-7 py-2 rounded"))
+             (ui/foldable
+              [:div
+               (page-cp config page)
+               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+              (blocks-container blocks config))])))]
      (blocks-container blocks config))])
 
 (comment

@@ -12,7 +12,6 @@
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
             [frontend.config :as config]
-            [frontend.format.block :as block]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -38,15 +37,14 @@
     ;; (logical OR / 'exists ...' / set union) and two negations, i.e
     ;; (For all ?g in ?Gs p(?e,?g)) <=> NOT(Exists ?g in ?Gs, such that NOT(p(?e, ?g)))
 
-    ;; TODO: benchmark,
-
-    [(matches-all ?e ?a ?vs)
-     [(first ?vs) ?v0]
-     [?e ?a ?v0]
-     (not-join [?e ?vs]
-               [(identity ?vs) [?v ...]]
-               (not-join [?e ?v]
-                         [?e ?a ?v]))]])
+    ;; [(matches-all ?e ?a ?vs)
+    ;;  [(first ?vs) ?v0]
+    ;;  [?e ?a ?v0]
+    ;;  (not-join [?e ?vs]
+    ;;            [(identity ?vs) [?v ...]]
+    ;;            (not-join [?e ?v]
+    ;;                      [?e ?a ?v]))]
+])
 
 (defn transact-files-db!
   ([tx-data]
@@ -388,7 +386,7 @@
 (defn sort-blocks
   [blocks]
   (let [pages-ids (map (comp :db/id :block/page) blocks)
-        pages (db-utils/pull-many '[:db/id :page/name :page/original-name] pages-ids)
+        pages (db-utils/pull-many '[:db/id :page/name :page/original-name :page/journal-day] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]
@@ -511,7 +509,8 @@
 (defn get-block-parent
   [repo block-id]
   (when-let [conn (conn/get-conn repo)]
-    (d/entity conn [:block/children [:block/uuid block-id]])))
+    (when-let [block (d/entity conn [:block/uuid block-id])]
+      (d/entity conn [:block/children [:block/uuid block-id]]))))
 
 ;; non recursive query
 (defn get-block-parents
@@ -605,12 +604,12 @@
   (when-let [conn (conn/get-conn repo)]
     (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
       (->> (d/q
-             '[:find ?c
-               :in $ ?p %
-               :where (parent ?p ?c)]
-             conn
-             eid
-             rules)
+            '[:find ?c
+              :in $ ?p %
+              :where (parent ?p ?c)]
+            conn
+            eid
+            rules)
            (apply concat)))))
 
 (defn get-block-immediate-children
@@ -733,13 +732,19 @@
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:page/name page-name])))
 
+(defn- heading-block?
+  [block]
+  (and
+   (vector? block)
+   (= "Heading" (first block))))
+
 (defn get-page-name
   [file ast]
   ;; headline
   (let [ast (map first ast)]
     (if (string/includes? file "pages/contents.")
       "Contents"
-      (let [first-block (last (first (filter block/heading-block? ast)))
+      (let [first-block (last (first (filter heading-block? ast)))
             property-name (when (and (= "Properties" (ffirst ast))
                                      (not (string/blank? (:title (last (first ast))))))
                             (:title (last (first ast))))
@@ -1259,9 +1264,7 @@
                    [?b :block/ref-pages ?b-ref]
                    [(not= ?p-ref ?b-ref)]
                    [(contains? ?refs ?p-ref)]
-                   [(contains? ?refs ?b-ref)]
-                   ))]
-    (conn/get-conn)
-    rules
-    page-ids)
-  )
+                   [(contains? ?refs ?b-ref)]))]
+       (conn/get-conn)
+       rules
+       page-ids))

@@ -192,7 +192,7 @@
          (history/add-history! repo [[path original-content content]])))
      (fn [error]
        (println "Write file failed, path: " path ", content: " content)
-       (js/console.error error)))))
+       (log/error :write/failed error)))))
 
 (defn create!
   ([path]
