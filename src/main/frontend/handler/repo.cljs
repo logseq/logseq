@@ -650,6 +650,18 @@
         (p/catch (fn [error]
                    (prn "Delete repo failed, error: " error))))))
 
+(defn re-index!
+  [nfs-rebuild-index!]
+  (when-let [repo (state/get-current-repo)]
+    (let [local? (config/local-db? repo)]
+      (if local?
+        (nfs-rebuild-index! repo create-today-journal!)
+        (rebuild-index! repo))
+      (js/setTimeout
+       (fn []
+         (route-handler/redirect! {:to :home}))
+       500))))
+
 (defn git-commit-and-push!
   [commit-message]
   (when-let [repo (state/get-current-repo)]

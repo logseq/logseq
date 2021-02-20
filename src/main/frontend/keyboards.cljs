@@ -5,6 +5,8 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.util :as util]
@@ -29,6 +31,8 @@
       (f state e))))
 
 (def shortcut state/get-shortcut)
+
+(def re-index! #(repo-handler/re-index! nfs-handler/rebuild-index!))
 
 (defonce chords
   {
@@ -75,6 +79,9 @@
    (or (shortcut :editor/prev) "up") (fn [state e] (editor-handler/open-block! false))
 
    (or (shortcut :search/re-index) "mod+c mod+s") [search-handler/rebuild-indices! true]
+
+   (or (shortcut :graph/re-index) "mod+c mod+r") [re-index! true]
+
    (or (shortcut :ui/toggle-brackets) "mod+c mod+b") [config-handler/toggle-ui-show-brackets! true]})
 
 (defonce bind! (gobj/get mousetrap "bind"))

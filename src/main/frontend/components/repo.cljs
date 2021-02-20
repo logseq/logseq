@@ -64,14 +64,7 @@
                                       "Sync with the local directory"
                                       "Clone again and re-index the db")
                              :on-click (fn []
-                                         (if local?
-                                           (nfs-handler/rebuild-index! url
-                                                                       repo-handler/create-today-journal!)
-                                           (repo-handler/rebuild-index! url))
-                                         (js/setTimeout
-                                          (fn []
-                                            (route-handler/redirect! {:to :home}))
-                                          500))}
+                                         (repo-handler/re-index! nfs-handler/rebuild-index!))}
                  "Re-index"]
                 [:a.control.ml-4 {:title "Clone again and re-index the db"
                                   :on-click (fn []
