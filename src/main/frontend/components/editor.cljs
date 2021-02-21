@@ -150,10 +150,8 @@
              @editor-handler/*selected-text
              (when (> (count edit-content) current-pos)
                (subs edit-content pos current-pos)))
-          _ (p/let [matched-blocks (when-not (string/blank? q)
-                                     (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-              (state/set-search-result! matched-blocks))
-          matched-blocks (state/sub :search/result)]
+          matched-blocks (when-not (string/blank? q)
+                           (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
       (when input
         (let [chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search! false)
