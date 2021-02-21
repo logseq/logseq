@@ -36,10 +36,12 @@
                    (= typ "Search")
                    ;; FIXME: alert error
                    (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
-                   (let [page (second (:url (second block)))]
-                     (when (and (not (util/starts-with? page "http"))
-                                (not (util/starts-with? page "file"))
-                                (not (string/ends-with? page ".html")))
+                   (let [page (second (:url (second block)))
+                         ext (some-> (util/get-file-ext page) keyword)]
+                     (when (and (not (util/starts-with? page "http:"))
+                                (not (util/starts-with? page "https:"))
+                                (not (util/starts-with? page "file:"))
+                                (not (contains? (config/supported-formats) ext)))
                        page)))
 
                   (and
