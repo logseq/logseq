@@ -124,8 +124,10 @@
   (when-let [input (gdom/getElement "search_field")]
     (.blur input)))
 
+(defonce search-timeout (atom nil))
+
 (rum/defc search-auto-complete
-  [{:keys [pages files blocks]} search-q]
+  [{:keys [pages files blocks] :as result} search-q]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [new-file (when-let [ext (util/get-file-ext search-q)]
                      (when (contains? config/mldoc-support-formats (keyword (string/lower-case ext)))
@@ -133,9 +135,11 @@
           pages (map (fn [page] {:type :page :data page}) pages)
           files (map (fn [file] {:type :file :data file}) files)
           blocks (map (fn [block] {:type :block :data block}) blocks)
-          new-page (if (and (seq pages)
-                            (= (string/lower-case search-q)
-                               (string/lower-case (:data (first pages)))))
+          new-page (if (or
+                        (and (seq pages)
+                             (= (string/lower-case search-q)
+                                (string/lower-case (:data (first pages)))))
+                        (nil? result))
                      []
                      [{:type :new-page}])
           result (if config/publishing?
@@ -224,8 +228,6 @@
                              (highlight-exact-query content search-q)])
 
                           nil))})])))
-
-(defonce search-timeout (atom nil))
 
 (rum/defc search < rum/reactive
   (mixins/event-mixin
