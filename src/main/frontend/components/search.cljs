@@ -127,13 +127,17 @@
 (rum/defc search-auto-complete
   [{:keys [pages files blocks]} search-q]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [new-page [{:type :new-page}]
-          new-file (when-let [ext (util/get-file-ext search-q)]
+    (let [new-file (when-let [ext (util/get-file-ext search-q)]
                      (when (contains? config/mldoc-support-formats (keyword (string/lower-case ext)))
                        [{:type :new-file}]))
           pages (map (fn [page] {:type :page :data page}) pages)
           files (map (fn [file] {:type :file :data file}) files)
           blocks (map (fn [block] {:type :block :data block}) blocks)
+          new-page (if (and (seq pages)
+                            (= (string/lower-case search-q)
+                               (string/lower-case (:data (first pages)))))
+                     []
+                     [{:type :new-page}])
           result (if config/publishing?
                    (concat pages files blocks)
                    (concat new-page pages new-file files blocks))]
@@ -221,6 +225,8 @@
 
                           nil))})])))
 
+(defonce search-timeout (atom nil))
+
 (rum/defc search < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -253,12 +259,17 @@
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
            :default-value ""
            :on-change (fn [e]
+                        (when @search-timeout
+                          (js/clearTimeout @search-timeout))
                         (let [value (util/evalue e)]
                           (if (string/blank? value)
                             (search-handler/clear-search!)
                             (do
                               (state/set-q! value)
-                              (search-handler/search value)))))}]
+                              (reset! search-timeout
+                                      (js/setTimeout
+                                       #(search-handler/search value)
+                                       500))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
             {:class-names "fade"
