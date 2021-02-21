@@ -14,7 +14,8 @@
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.core]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.template :as template]))
 
 ;; Query fields:
 
@@ -377,8 +378,9 @@
 
 (defn query
   [repo query-string]
-  (when query-string
-    (let [{:keys [query sort-by blocks?]} (parse repo query-string)]
+  (when (string? query-string)
+    (let [query-string (template/resolve-dynamic-template! query-string)
+          {:keys [query sort-by blocks?]} (parse repo query-string)]
       (when query
         (let [query (query-wrapper query blocks?)]
           (query-custom/react-query repo

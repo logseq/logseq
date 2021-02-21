@@ -47,7 +47,8 @@
             [reitit.frontend.easy :as rfe]
             [frontend.commands :as commands]
             [lambdaisland.glogi :as log]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [frontend.template :as template]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -841,12 +842,12 @@
                                 (block/macro-subs macro-content arguments)
                                 macro-content)
                 macro-content (when macro-content
-                                (editor-handler/resolve-dynamic-template! macro-content))]
+                                (template/resolve-dynamic-template! macro-content))]
             (render-macro config name arguments macro-content format))
 
           (when-let [macro-txt (macro->text name arguments)]
             (let [macro-txt (when macro-txt
-                              (editor-handler/resolve-dynamic-template! macro-txt))
+                              (template/resolve-dynamic-template! macro-txt))
                   format (get-in config [:block :block/format] :markdown)]
               (render-macro config name arguments macro-txt format))))))
 

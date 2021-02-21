@@ -32,6 +32,7 @@
             [medley.core :as medley]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.text :as text]
+            [frontend.template :as template]
             ["/frontend/utils" :as utils]))
 
 (rum/defc commands < rum/reactive
@@ -228,7 +229,7 @@
                                        content (if (string/includes? (string/trim edit-content) "\n")
                                                  content
                                                  (text/remove-level-spaces content format))
-                                       content (editor-handler/resolve-dynamic-template! content)]
+                                       content (template/resolve-dynamic-template! content)]
                                    (state/set-editor-show-template-search! false)
                                    (editor-handler/insert-command! id
                                                                    content
