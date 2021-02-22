@@ -54,6 +54,7 @@
 
    (or (shortcut :editor/undo) "mod+z") [history-handler/undo! true]
    (or (shortcut :editor/redo) "mod+y") [history-handler/redo! true]
+   (or (shortcut :editor/redo) "mod+shift+z") [history-handler/redo! true]
    (or (shortcut :go/search) "mod+u") [route-handler/go-to-search! true]
    (or (shortcut :go/journals) (if util/mac? "mod+j" "alt+j")) [route-handler/go-to-journals! true]
    (or (shortcut :editor/zoom-in)
