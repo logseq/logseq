@@ -297,6 +297,7 @@
                    (state/set-left-sidebar-open! false))
         me (state/sub :me)
         current-repo (state/sub :git/current-repo)
+        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))
         sidebar-open? (state/sub :ui/sidebar-open?)
@@ -310,8 +311,11 @@
         default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (theme/container
-       {:theme theme
-        :on-click editor-handler/unhighlight-block!}
+       {:theme         theme
+        :route         route-match
+        :nfs-granted?  granted?
+        :db-restoring? db-restoring?
+        :on-click      editor-handler/unhighlight-block!}
 
        [:div.theme-inner
         (sidebar-mobile-sidebar
