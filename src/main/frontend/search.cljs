@@ -49,7 +49,8 @@
                      (map (fn [p] {:name p}))
                      (bean/->js))
           indice (fuse. pages
-                        (clj->js {:keys ["name"]}))]
+                        (clj->js {:keys ["name"]
+                                  :threshold 0.4}))]
       (swap! indices assoc-in [repo :pages] indice)
       indice)))
 
@@ -170,7 +171,7 @@
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
                           (make-pages-indice!))
-               result (->> (go q indice {})
+               result (->> (go q indice (clj->js {:limit limit}))
                            (bean/->clj))]
            ;; TODO: add indexes for highlights
            (->> (map
