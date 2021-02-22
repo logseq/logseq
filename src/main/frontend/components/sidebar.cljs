@@ -55,16 +55,16 @@
         left-sidebar? (state/sub :ui/left-sidebar-open?)]
     (when left-sidebar?
       [:nav.flex-1.left-sidebar-inner
-       (nav-item "Journals" "/"
+       (nav-item "Journals" "#/"
                  "M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10M9 21h6"
                  (active? :home)
                  close-modal-fn)
-       (nav-item "All Pages" "/all-pages"
+       (nav-item "All Pages" "#/all-pages"
                  "M6 2h9a1 1 0 0 1 .7.3l4 4a1 1 0 0 1 .3.7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.1.9-2 2-2zm9 2.41V7h2.59L15 4.41zM18 9h-3a2 2 0 0 1-2-2V4H6v16h12V9zm-2 7a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm0-4a1 1 0 0 1-1 1H9a1 1 0 0 1 0-2h6a1 1 0 0 1 1 1zm-5-4a1 1 0 0 1-1 1H9a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1z"
                  (active? :all-pages)
                  close-modal-fn)
        (when-not config/publishing?
-         (nav-item "All Files" "/all-files"
+         (nav-item "All Files" "#/all-files"
                    "M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z"
                    (active? :all-files)
                    close-modal-fn))
