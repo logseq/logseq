@@ -278,12 +278,12 @@
               (db/transact! tx-data)
               ;; remove file
               (->
-               (p/let [_ (git/remove-file repo file-path)
+               (p/let [_ (or (config/local-db? repo) (git/remove-file repo file-path))
                        _ (fs/unlink! (config/get-repo-path repo file-path) nil)]
                  (common-handler/check-changed-files-status)
                  (repo-handler/push-if-auto-enabled! repo))
                (p/catch (fn [err]
-                          (prn "error: " err))))))
+                          (js/console.error "error: " err))))))
 
           (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
