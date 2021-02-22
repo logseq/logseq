@@ -58,7 +58,8 @@
         (let [page (util/url-decode name)
               page (db/pull [:page/name (string/lower-case page)])]
           (or (:page/original-name page)
-              (:page/name page)))))
+              (:page/name page)
+              "Logseq"))))
     :tag
     (str "#" (util/url-decode (:name path-params)))
     :diff
@@ -71,14 +72,18 @@
     "Import data into Logseq"
     "Logseq"))
 
+(defn update-page-title!
+  [route]
+  (let [{:keys [data path-params]} route
+        title (get-title (:name data) path-params)]
+    (util/set-title! title)))
+
 (defn set-route-match!
   [route]
   (let [route route]
     (swap! state/state assoc :route-match route)
-    (let [{:keys [data path-params]} route
-          title (get-title (:name data) path-params)]
-      (util/set-title! title)
-      (util/scroll-to-top))))
+    (update-page-title! route)
+    (util/scroll-to-top)))
 
 (defn jump-to-anchor!
   [anchor-text]
