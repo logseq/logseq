@@ -14,7 +14,7 @@
 (defonce *teardown-fn (volatile! nil))
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
-;(when (js/require "electron-squirrel-startup") (.quit app))
+(when (js/require "electron-squirrel-startup") (.quit app))
 
 (defn create-main-window
   "create main app window"
