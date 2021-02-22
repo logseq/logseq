@@ -41,6 +41,17 @@ html {
   }
 }
 
+.form-checkbox {
+    color: var(--ls-page-checkbox-color, #6093a0);
+    background-color: var(--ls-page-checkbox-color, #6093a0);
+    border-color: var(--ls-page-checkbox-border-color, #6093a0);
+    border: none;
+}
+
+.form-checkbox:hover {
+    transform: scale(1.1);
+}
+
 html[data-theme=dark] {
   background-color: var(--ls-primary-background-color);
 
@@ -50,13 +61,6 @@ html[data-theme=dark] {
 
   input.form-input {
     background: none;
-  }
-
-  .form-checkbox {
-    color: var(--ls-page-checkbox-color, #6093a0);
-    background-color: var(--ls-page-checkbox-color, #6093a0);
-    border-color: var(--ls-page-checkbox-border-color, #6093a0);
-    border: none;
   }
 }
 
@@ -203,5 +207,3 @@ html.is-electron {
     }
   }
 }
-
-

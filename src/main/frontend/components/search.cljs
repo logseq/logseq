@@ -246,7 +246,7 @@
        [:div.inner
         [:label.sr-only {:for "search_field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
-         [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
+         [:div.absolute.inset-y-0.flex.items-center.pointer-events-none {:style {:left 6}}
           [:svg.h-5.w-5
            {:view-box "0 0 20 20", :fill "currentColor"}
            [:path

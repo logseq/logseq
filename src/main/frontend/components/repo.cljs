@@ -87,7 +87,7 @@
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
-            [:div.ml-2.mr-1.opacity-70.hover:opacity-100.refresh {:class (if syncing? "loader" "initial")}
+            [:div.ml-2.mr-2.opacity-30.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
              [:a
               {:on-click #(nfs-handler/refresh! repo
                                                 repo-handler/create-today-journal!)
@@ -192,7 +192,7 @@
           (> (count repos) 1)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch {:on-click toggle-fn}
+             [:a#repo-switch.fade-link {:on-click toggle-fn}
               (let [repo-name (get-repo-name current-repo)
                     repo-name (if (util/electron?)
                                 (last (string/split repo-name #"/"))
@@ -221,8 +221,9 @@
             (if (config/local-db? current-repo)
               (if (util/electron?)
                 (last (string/split repo-name #"/"))
-                repo-name)
-              [:a
+                [:span.fade-link
+                 repo-name])
+              [:a.fade-link
                {:href current-repo
                 :target "_blank"}
                repo-name]))

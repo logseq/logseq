@@ -394,7 +394,7 @@
      (when (and (or show-brackets? nested-link?)
                 (not html-export?)
                 (not contents-page?))
-       [:span.text-gray-500 "[["])
+       [:span.text-gray-500.bracket "[["])
      (if (string/ends-with? s ".excalidraw")
        [:a.page-ref
         {:on-click (fn [e]
@@ -410,7 +410,7 @@
      (when (and (or show-brackets? nested-link?)
                 (not html-export?)
                 (not contents-page?))
-       [:span.text-gray-500 "]]"])]))
+       [:span.text-gray-500.bracket "]]"])]))
 
 (defn- latex-environment-content
   [name option content]

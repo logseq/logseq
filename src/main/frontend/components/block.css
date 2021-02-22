@@ -94,7 +94,7 @@
 }
 
 .block-children {
-  border-left: 2px solid;
+  border-left: 1px solid;
   border-left-color: var(--ls-guideline-color, #ddd);
 
   padding-top: 2px;
@@ -118,7 +118,6 @@
 }
 
 .block-ref {
-  color: var(--ls-link-text-color);
   padding-bottom: 2px;
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
@@ -176,6 +175,7 @@
 
   &:hover {
     color: var(--ls-link-text-hover-color);
+    opacity: 1;
   }
 }
 
