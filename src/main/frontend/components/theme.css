@@ -55,10 +55,6 @@ html {
 html[data-theme=dark] {
   background-color: var(--ls-primary-background-color);
 
-  input {
-    color: var(--ls-secondary-text-color);
-  }
-
   input.form-input {
     background: none;
   }
