@@ -1,60 +1,60 @@
 (ns frontend.react-impl-test
-  "To facilitate testing, imitate the behavior of react")
+  "To facilitate testing, imitate the behavior of react"
+  (:require [frontend.react-impl :as r]
+            [cljs.test :refer [deftest is are testing use-fixtures]]))
 
-;{:component-key {:result nil
-;                 :watches []}}
-(def react-defines (atom {}))
-(def ^:dynamic *react-fn* nil)
+(deftest simple-react-test
+  (r/auto-clean-state
+    (let [react-ref (atom 1)]
 
-(defn react
-  [react-ref]
-  (let [f *react-fn*]
-    (cond
-      (= :from-watching-fn f)
-      @react-ref
+      (r/defc simple-component
+        []
+        (+ 2 (r/react react-ref)))
 
-      (ifn? f)
-      (let [component (get @react-defines f)]
-        (when-not ((:watches component) react-ref)
-          (let [new-component (update component :watches conj react-ref)]
-            (add-watch react-ref react-ref
-                       (fn [& _]
-                         (binding [*react-fn* :from-watching-fn]
-                           (reset! (:result component) (f)))))
-            (swap! react-defines assoc f new-component)
-            @react-ref)))
+      (let [get-result (simple-component)]
 
-      :else (deref react-ref))))
+        (is (= 3 (get-result)))
+        (reset! react-ref 2)
+        (is (= 4 (get-result)))))))
 
-(defn react-fn
-  [f]
-  {:pre [(fn? f)]}
-  (let [result-ref (atom nil)
-        ;; Each react-fn invoke will generate new *react-fn*, though the same f.
-        f' (fn [] (f))]
-    (binding [*react-fn* f']
-      (swap! react-defines assoc f' {:result result-ref
-                                     :watches #{}})
-      (reset! result-ref (f'))
-      {:clear-state-fn
-       (fn [] (-> (swap! react-defines dissoc f')
-                  (empty?)))
-       :get-value-fn
-       (fn [] (deref (get-in @react-defines [f' :result])))})))
+(deftest nest-component-test
+  (r/auto-clean-state
+    (let [a (atom 1)
+          b (atom 2)]
 
-(defn clear-react-resources
-  []
-  (reset! react-defines nil))
+      (r/defc inner
+        []
+        (r/react b))
 
-(comment
-  (let [react-ref (atom 1)
-        f (fn []
-            (let [haha (react react-ref)]
-              (* haha 2)))
-        {:keys [clear-state-fn get-value-fn]} (react-fn f)]
-    (prn (get-value-fn))
-    (reset! react-ref 2)
-    (prn (get-value-fn))
-    (clear-state-fn)))
+      (r/defc out
+        []
+        (let [out (r/react a)
+              get-inner-result (inner)]
+          (+ out (get-inner-result))))
 
+      (let [get-out-result (out)]
+        (is (= 3 (get-out-result)))
+        (reset! b 4)
+        (is (= 5 (get-out-result)))))))
 
+(deftest defc-params-test
+  (r/auto-clean-state
+    (let [a (atom 1)
+          b (atom 2)]
+
+      (r/defc inner-1
+        [c]
+        (+ c (r/react b)))
+
+      (r/defc out-1
+        []
+        (let [out (r/react a)
+              get-inner-result (inner-1 5)]
+          (+ out (get-inner-result))))
+
+      (let [get-out-result (out-1)]
+        (is (= 8 (get-out-result)))
+
+        (reset! b 4)
+
+        (is (= 10 (get-out-result)))))))
