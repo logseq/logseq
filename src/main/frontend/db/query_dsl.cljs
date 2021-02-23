@@ -14,7 +14,8 @@
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.core]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.template :as template]))
 
 ;; Query fields:
 
@@ -148,7 +149,7 @@
                            (string/lower-case))]
          (when (and (not (string/blank? page-name))
                     (some? (db-utils/entity repo [:page/name page-name])))
-           [['?b :block/ref-pages [:page/name page-name]]]))
+           [['?b :block/path-ref-pages [:page/name page-name]]]))
 
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]
@@ -377,8 +378,9 @@
 
 (defn query
   [repo query-string]
-  (when query-string
-    (let [{:keys [query sort-by blocks?]} (parse repo query-string)]
+  (when (string? query-string)
+    (let [query-string (template/resolve-dynamic-template! query-string)
+          {:keys [query sort-by blocks?]} (parse repo query-string)]
       (when query
         (let [query (query-wrapper query blocks?)]
           (query-custom/react-query repo

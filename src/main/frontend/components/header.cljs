@@ -40,8 +40,8 @@
 
       (ui/dropdown-with-links
        (fn [{:keys [toggle-fn]}]
-         [:a {:on-click toggle-fn}
-          [:span.ml-1.text-sm (t :login)]])
+         [:a.fade-link {:on-click toggle-fn}
+          [:span.ml-1 (t :login)]])
        (let [list [{:title (t :login-google)
                     :url (str config/website "/login/google")}
                    {:title (t :login-github)

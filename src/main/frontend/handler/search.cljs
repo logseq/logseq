@@ -8,12 +8,10 @@
 
 (defn search
   [q]
-  ;; TODO: separate rendering for blocks
-  (p/let [blocks-result (search/block-search q 10)]
-    (swap! state/state assoc :search/result
-           {:pages (search/page-search q)
-            :files (search/file-search q)
-            :blocks blocks-result})))
+  (swap! state/state assoc :search/result
+         {:pages (search/page-search q)
+          :files (search/file-search q)
+          :blocks (search/block-search q 10)}))
 
 (defn clear-search!
   []

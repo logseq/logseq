@@ -36,7 +36,8 @@
                    (fn [[page blocks]]
                      (if page
                        (map (fn [block]
-                              (let [block-ref-pages (seq (:block/ref-pages block))]
+                              (let [block-ref-pages (seq (:block/ref-pages block))
+                                    block-path-ref-pages (seq (:block/path-ref-pages block))]
                                 (when block-ref-pages
                                   (swap! ref-pages set/union (set block-ref-pages)))
                                 (-> block
@@ -48,7 +49,8 @@
                                            :block/ref-pages (mapv
                                                              (fn [page]
                                                                (block/page-with-journal page))
-                                                             block-ref-pages)))))
+                                                             block-ref-pages)
+                                           :block/path-ref-pages block-path-ref-pages))))
                             blocks)))
                    (remove nil? pages)))
           pages (doall

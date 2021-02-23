@@ -82,7 +82,7 @@
          options (if (= fs bfs-record)
                    {:encoding "utf8"}
                    {})]
-     (read-file dir path {})))
+     (read-file dir path options)))
   ([dir path options]
    (p/chain (protocol/read-file (get-fs dir) dir path options)
             encrypt/decrypt)))

@@ -124,16 +124,24 @@
   (when-let [input (gdom/getElement "search_field")]
     (.blur input)))
 
+(defonce search-timeout (atom nil))
+
 (rum/defc search-auto-complete
-  [{:keys [pages files blocks]} search-q]
+  [{:keys [pages files blocks] :as result} search-q]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [new-page [{:type :new-page}]
-          new-file (when-let [ext (util/get-file-ext search-q)]
+    (let [new-file (when-let [ext (util/get-file-ext search-q)]
                      (when (contains? config/mldoc-support-formats (keyword (string/lower-case ext)))
                        [{:type :new-file}]))
           pages (map (fn [page] {:type :page :data page}) pages)
           files (map (fn [file] {:type :file :data file}) files)
           blocks (map (fn [block] {:type :block :data block}) blocks)
+          new-page (if (or
+                        (and (seq pages)
+                             (= (string/lower-case search-q)
+                                (string/lower-case (:data (first pages)))))
+                        (nil? result))
+                     []
+                     [{:type :new-page}])
           result (if config/publishing?
                    (concat pages files blocks)
                    (concat new-page pages new-file files blocks))]
@@ -238,7 +246,7 @@
        [:div.inner
         [:label.sr-only {:for "search_field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
-         [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
+         [:div.absolute.inset-y-0.flex.items-center.pointer-events-none {:style {:left 6}}
           [:svg.h-5.w-5
            {:view-box "0 0 20 20", :fill "currentColor"}
            [:path
@@ -253,12 +261,17 @@
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
            :default-value ""
            :on-change (fn [e]
+                        (when @search-timeout
+                          (js/clearTimeout @search-timeout))
                         (let [value (util/evalue e)]
                           (if (string/blank? value)
                             (search-handler/clear-search!)
                             (do
                               (state/set-q! value)
-                              (search-handler/search value)))))}]
+                              (reset! search-timeout
+                                      (js/setTimeout
+                                       #(search-handler/search value)
+                                       500))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
             {:class-names "fade"

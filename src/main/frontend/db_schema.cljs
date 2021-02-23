@@ -62,6 +62,9 @@
    ;; referenced pages
    :block/ref-pages {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
+   ;; referenced pages inherited from the parents
+   :block/path-ref-pages {:db/valueType   :db.type/ref
+                          :db/cardinality :db.cardinality/many}
 
    ;; Referenced pages
    ;; Notice: it's only for org mode, :tag1:tag2:

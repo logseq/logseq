@@ -12,7 +12,6 @@
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
             [frontend.config :as config]
-            [frontend.format.block :as block]
             [cljs.reader :as reader]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -21,6 +20,31 @@
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; correponding handlers.
+
+(def rules
+  '[[(parent ?p ?c)
+     [?p :block/children ?c]]
+    [(parent ?p ?c)
+     [?t :block/children ?c]
+     (parent ?p ?t)]
+
+    ;; from https://stackoverflow.com/questions/43784258/find-entities-whose-ref-to-many-attribute-contains-all-elements-of-input
+    ;; Quote:
+    ;; You're tackling the general problem of 'dynamic conjunction' in Datomic's Datalog.
+    ;; Write a dynamic Datalog query which uses 2 negations and 1 disjunction or a recursive rule
+    ;; Datalog has no direct way of expressing dynamic conjunction (logical AND / 'for all ...' / set intersection).
+    ;; However, you can achieve it in pure Datalog by combining one disjunction
+    ;; (logical OR / 'exists ...' / set union) and two negations, i.e
+    ;; (For all ?g in ?Gs p(?e,?g)) <=> NOT(Exists ?g in ?Gs, such that NOT(p(?e, ?g)))
+
+    ;; [(matches-all ?e ?a ?vs)
+    ;;  [(first ?vs) ?v0]
+    ;;  [?e ?a ?v0]
+    ;;  (not-join [?e ?vs]
+    ;;            [(identity ?vs) [?v ...]]
+    ;;            (not-join [?e ?v]
+    ;;                      [?e ?a ?v]))]
+])
 
 (defn transact-files-db!
   ([tx-data]
@@ -315,6 +339,16 @@
      (->> (db-utils/pull-many repo '[:page/name] ids)
           (map :page/name)))))
 
+(defn get-page-ids-by-names
+  ([names]
+   (get-page-ids-by-names (state/get-current-repo) names))
+  ([repo names]
+   (when repo
+     (let [lookup-refs (map (fn [name]
+                              [:page/name (string/lower-case name)]) names)]
+       (->> (db-utils/pull-many repo '[:db/id] lookup-refs)
+            (mapv :db/id))))))
+
 (defn get-page-alias-names
   [repo page-name]
   (let [alias-ids (page-alias-set repo page-name)]
@@ -352,7 +386,7 @@
 (defn sort-blocks
   [blocks]
   (let [pages-ids (map (comp :db/id :block/page) blocks)
-        pages (db-utils/pull-many '[:db/id :page/name :page/original-name] pages-ids)
+        pages (db-utils/pull-many '[:db/id :page/name :page/original-name :page/journal-day] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]
@@ -475,7 +509,8 @@
 (defn get-block-parent
   [repo block-id]
   (when-let [conn (conn/get-conn repo)]
-    (d/entity conn [:block/children [:block/uuid block-id]])))
+    (when-let [block (d/entity conn [:block/uuid block-id])]
+      (d/entity conn [:block/children [:block/uuid block-id]]))))
 
 ;; non recursive query
 (defn get-block-parents
@@ -569,17 +604,12 @@
   (when-let [conn (conn/get-conn repo)]
     (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
       (->> (d/q
-            '[:find ?e1
-              :in $ ?e2 %
-              :where (parent ?e2 ?e1)]
+            '[:find ?c
+              :in $ ?p %
+              :where (parent ?p ?c)]
             conn
             eid
-             ;; recursive rules
-            '[[(parent ?e2 ?e1)
-               [?e2 :block/children ?e1]]
-              [(parent ?e2 ?e1)
-               [?t :block/children ?e1]
-               (parent ?e2 ?t)]])
+            rules)
            (apply concat)))))
 
 (defn get-block-immediate-children
@@ -702,13 +732,19 @@
     (db-utils/entity [:block/uuid (uuid page-name)])
     (db-utils/entity [:page/name page-name])))
 
+(defn- heading-block?
+  [block]
+  (and
+   (vector? block)
+   (= "Heading" (first block))))
+
 (defn get-page-name
   [file ast]
   ;; headline
   (let [ast (map first ast)]
     (if (string/includes? file "pages/contents.")
       "Contents"
-      (let [first-block (last (first (filter block/heading-block? ast)))
+      (let [first-block (last (first (filter heading-block? ast)))
             property-name (when (and (= "Properties" (ffirst ast))
                                      (not (string/blank? (:title (last (first ast))))))
                             (:title (last (first ast))))
@@ -1206,3 +1242,29 @@
        [tx-data]
        {:key [:file/content path]
         :files-db? true}))))
+
+(comment
+  (def page-names ["foo" "bar"])
+
+  (def page-ids (set (get-page-ids-by-names page-names)))
+
+  (d/q '[:find [(pull ?b [*]) ...]
+         :in $ % ?refs
+         :where
+         [?b :block/ref-pages ?p]
+         ;; Filter other blocks
+         [(contains? ?refs ?p)]
+         (or-join [?b ?refs]
+                  (matches-all ?b :block/ref-pages ?refs)
+                  (and
+                   (parent ?p ?b)
+                   ;; FIXME: not working
+                   ;; (matches-all (union ?p ?b) :block/ref-pages ?refs)
+                   [?p :block/ref-pages ?p-ref]
+                   [?b :block/ref-pages ?b-ref]
+                   [(not= ?p-ref ?b-ref)]
+                   [(contains? ?refs ?p-ref)]
+                   [(contains? ?refs ?b-ref)]))]
+       (conn/get-conn)
+       rules
+       page-ids))

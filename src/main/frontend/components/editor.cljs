@@ -32,6 +32,7 @@
             [medley.core :as medley]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.text :as text]
+            [frontend.template :as template]
             ["/frontend/utils" :as utils]))
 
 (rum/defc commands < rum/reactive
@@ -149,10 +150,8 @@
              @editor-handler/*selected-text
              (when (> (count edit-content) current-pos)
                (subs edit-content pos current-pos)))
-          _ (p/let [matched-blocks (when-not (string/blank? q)
-                                     (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-              (state/set-search-result! matched-blocks))
-          matched-blocks (state/sub :search/result)]
+          matched-blocks (when-not (string/blank? q)
+                           (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
       (when input
         (let [chosen-handler (fn [chosen _click?]
                                (state/set-editor-show-block-search! false)
@@ -228,7 +227,7 @@
                                        content (if (string/includes? (string/trim edit-content) "\n")
                                                  content
                                                  (text/remove-level-spaces content format))
-                                       content (editor-handler/resolve-dynamic-template! content)]
+                                       content (template/resolve-dynamic-template! content)]
                                    (state/set-editor-show-template-search! false)
                                    (editor-handler/insert-command! id
                                                                    content

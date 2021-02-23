@@ -82,29 +82,6 @@
   border-left: 4px solid transparent;
 }
 
-.form-checkbox {
-  color: var(--ls-page-checkbox-color, #137cbd);
-  background-color: transparent;
-  border-radius: 0;
-  border: 2px solid;
-  border-color: var(--ls-page-checkbox-border-color);
-  appearance: none
-}
-
-.form-checkbox {
-  &:checked {
-    border: none;
-
-    &:focus {
-      box-shadow: none;
-    }
-  }
-
-  &:not(:checked):focus {
-    box-shadow: none;
-  }
-}
-
 .form-select {
   background-color: var(--ls-primary-background-color, transparent);
   background-repeat: no-repeat;

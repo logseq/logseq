@@ -81,45 +81,45 @@ html[data-theme=dark] {
 .white-theme,
 html[data-theme=light] {
   --ls-primary-background-color: white;
-  --ls-secondary-background-color: #dee9f2;
-  --ls-tertiary-background-color: #f0f8ff;
-  --ls-quaternary-background-color: #e1f0fe;
+  --ls-secondary-background-color: #f7f6f4;
+  --ls-tertiary-background-color: #f1eee8;
+  --ls-quaternary-background-color: #e8e5de;
   --ls-table-tr-even-background-color: #f4f5f7;
   --ls-active-primary-color: rgb(4, 85, 145);
   --ls-active-secondary-color: #003761;
-  --ls-block-properties-background-color: var(--ls-tertiary-background-color);
+  --ls-block-properties-background-color: #f7f6f4;
   --ls-block-ref-link-text-color: #D8E1E8;
   --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #ccc;
   --ls-secondary-border-color: #e2e2e2;
-  --ls-guideline-color: var(--ls-border-color);
+  --ls-guideline-color: rgba(46, 27, 5, 0.08);
   --ls-menu-hover-color: var(--ls-a-chosen-bg);
-  --ls-primary-text-color: #24292e;
+  --ls-primary-text-color: #433F38;
   --ls-secondary-text-color: #161e2e;
-  --ls-title-text-color: #222;
-  --ls-link-text-color: var(--ls-active-primary-color);
-  --ls-link-text-hover-color: var(--ls-active-secondary-color);
-  --ls-link-ref-text-color: var(--ls-link-text-color);
-  --ls-link-ref-text-hover-color: var(--ls-link-text-hover-color);
-  --ls-tag-text-color: var(--ls-link-text-color);
-  --ls-tag-text-hover-color: var(--ls-link-text-hover-color);
+  --ls-title-text-color: var(--ls-primary-text-color);
+  --ls-link-text-color: #106BA3;
+  --ls-link-text-hover-color: #5d9cd6;
+  --ls-link-ref-text-color: #106BA3;
+  --ls-link-ref-text-hover-color: #5d9cd6;
+  --ls-tag-text-color: var(--ls-link-ref-text-color);
+  --ls-tag-text-hover-color: var(--ls-link-ref-text-hover-color);
   --ls-slide-background-color: #fff;
-  --ls-block-bullet-border-color: var(--ls-border-color);
-  --ls-block-bullet-color: #394b59;
+  --ls-block-bullet-border-color: #dedede;
+  --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
   --ls-block-highlight-color: #c0e6fd;
   --ls-selection-background-color: #e4f2ff;
-  --ls-page-checkbox-color: var(--ls-active-primary-color);
-  --ls-page-checkbox-border-color: #8c8c8c;
+  --ls-page-checkbox-color: #9dbbd8;
+  --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
   --ls-page-blockquote-color: var(--ls-primary-text-color);
-  --ls-page-blockquote-bg-color: var(--ls-secondary-background-color);
-  --ls-page-blockquote-border-color: var(--ls-active-primary-color);
-  --ls-page-inline-code-bg-color: var(--ls-secondary-background-color);
+  --ls-page-blockquote-bg-color: #fbfaf8;
+  --ls-page-blockquote-border-color: #799bbc;
+  --ls-page-inline-code-bg-color: #f7f6f4;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
   --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
   --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
-  --ls-icon-color: #6b7280;
+  --ls-icon-color: #c1bdb7;
   --ls-search-icon-color: var(--ls-icon-color);
   --ls-a-chosen-bg: #f4f5f7;
   --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
@@ -445,6 +445,10 @@ li p:last-child,
   opacity: 0.6;
 }
 
+.opacity-30 {
+    opacity: 0.3;
+}
+
 .opacity-70 {
   opacity: 0.7;
 }
@@ -542,22 +546,6 @@ li p:last-child,
   overflow-y: auto;
 }
 
-.marker-switch {
-  font-size: 85%;
-  margin-right: 6px;
-  margin-left: 2px;
-  border-radius: 3px;
-  font-weight: 500;
-  display: inline-block;
-  text-align: center;
-  width: 16px;
-  height: 18px;
-  opacity: 0.5;
-  padding: 0 2px 0 2px;
-  border: 1px solid;
-  line-height: 1.3;
-}
-
 .heading-bg {
   border-radius: 50%;
   width: 12px;
@@ -571,6 +559,7 @@ h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
   font-size: var(--ls-page-title-size, 36px);
+  font-weight: 700;
 }
 
 .block-highlight,
@@ -636,10 +625,6 @@ a.login:hover {
   color: var(--ls-link-text-hover-color, #000);
 }
 
-a.marker-switch:hover {
-  opacity: 1;
-}
-
 a.tooltip-priority {
   display: contents;
   position: absolute;
@@ -672,13 +657,16 @@ img.small {
 }
 
 a.tag {
-  opacity: var(--ls-tag-text-opacity, 0.6);
-  color: var(--ls-tag-text-color, #045591);
+    font-size: 13px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    cursor: pointer;
+    opacity: 0.8;
 }
 
 a.tag:hover {
-  opacity: var(--ls-tag-text-hover-opacity, 0.8);
-  color: var(--ls-tag-text-hover-color, #045591);
+    opacity: 1;
 }
 
 svg.note {
@@ -712,4 +700,129 @@ hr {
 .resize {
     resize: both;
     overflow: hidden;
+}
+
+/* ideas from https://github.com/PiotrSss/logseq-bujo-theme/blob/main/main.css */
+
+/***************************************************************
+***************************** TOP ******************************
+***************************************************************/
+
+.cp__header-logo, .fade-link {
+    opacity: .3;
+    transition: .3s;
+}
+
+a.fade-link:hover {
+    opacity: 1;
+}
+
+/* import (arrows) icon */
+
+#head .refresh svg {
+    height: 20px;
+}
+
+#head {
+    background: none;
+}
+
+/* < > buttons */
+
+a[title="Go Back"],
+a[title="Go Forward"] {
+    border-radius: 3px;
+    opacity: 1;
+    transition: .3s;
+}
+
+/* search-field */
+
+#search-wrapper {
+    opacity: 0;
+    transition: .3s;
+    padding-right: 12px;
+}
+
+#search-wrapper:hover,
+#search-wrapper:focus-within {
+    opacity: 1;
+}
+
+#search>.inner {
+    max-width: 100%;
+    border-radius: 4px;
+}
+
+#search_field:focus {
+    background: var(--ls-search-background-color);
+}
+
+/* text mark/highlight */
+
+mark {
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 14px;
+}
+
+/* page reference */
+
+.page-reference {
+    border-radius: 3px;
+    padding: 2px 0px;
+    transition: .3s;
+}
+
+.page-reference .bracket {
+    opacity: .3;
+}
+
+/* block references */
+
+.block-ref {
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-style: italic;
+}
+
+.block-ref .block-ref {
+    padding: 6px 5px;
+    border: none;
+}
+
+/* inline code */
+:not(pre)>code {
+    border-radius: 3px;
+    font-size: .9em;
+    font-family: MonoLisa, "Fira Code", Monaco, Menlo, Consolas, "COURIER NEW", monospace;
+    padding: 3px 5px !important;
+}
+
+a {
+    transition: .3s;
+}
+
+/* search-field */
+
+.dark-theme #search_field {
+    background: linear-gradient(to right, #021c23 0%, #021b21 200px, #002b36 100%);
+    transition: background .3s;
+}
+
+.dark-theme #search_field:focus {
+    box-shadow: 0px 0px 20px 0px rgba(18, 18, 18, .8);
+}
+
+.page-reference:hover {
+    background: var(--ls-secondary-background-color);
+}
+
+.references-blocks .page-reference:hover {
+    background: var(--ls-tertiary-background-color);
+}
+
+#head .fade-link {
+    font-weight: 600;
+    font-size: 13px;
 }

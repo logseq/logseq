@@ -204,13 +204,3 @@ export const win32 = path => {
   // UNC paths are always absolute
   return Boolean(result[2] || isUnc);
 };
-
-export const searchTokenize = str => {
-  let ascii_words = str.split(/\W+/);
-  let non_ascii_str = str.replace(/[\x00-\x7F]/g, '');
-  if (non_ascii_str == '') {
-    return ascii_words;
-  } else {
-    return ascii_words.concat(non_ascii_str.split('')).filter(e => !!e);
-  }
-};

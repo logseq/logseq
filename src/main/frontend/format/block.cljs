@@ -9,7 +9,9 @@
             [datascript.core :as d]
             [frontend.date :as date]
             [frontend.text :as text]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.state :as state]
+            [frontend.db :as db]))
 
 (defn heading-block?
   [block]
@@ -34,10 +36,12 @@
                    (= typ "Search")
                    ;; FIXME: alert error
                    (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
-                   (let [page (second (:url (second block)))]
-                     (when (and (not (util/starts-with? page "http"))
-                                (not (util/starts-with? page "file"))
-                                (not (string/ends-with? page ".html")))
+                   (let [page (second (:url (second block)))
+                         ext (some-> (util/get-file-ext page) keyword)]
+                     (when (and (not (util/starts-with? page "http:"))
+                                (not (util/starts-with? page "https:"))
+                                (not (util/starts-with? page "file:"))
+                                (not (contains? (config/supported-formats) ext)))
                        page)))
 
                   (and
@@ -251,9 +255,9 @@
      (concat title body))
     (let [ref-blocks (remove string/blank? @ref-blocks)]
       (assoc block :ref-blocks (map
-                                 (fn [id]
-                                   [:block/uuid (medley/uuid id)])
-                                 ref-blocks)))))
+                                (fn [id]
+                                  [:block/uuid (medley/uuid id)])
+                                ref-blocks)))))
 
 (defn update-src-pos-meta!
   [{:keys [body] :as block}]
@@ -285,6 +289,43 @@
   (map (fn [block]
          (block-keywordize (util/remove-nils block)))
        blocks))
+
+(defn with-path-refs
+  [blocks]
+  (loop [blocks blocks
+         acc []
+         parents []]
+    (if (empty? blocks)
+      acc
+      (let [block (first blocks)
+            cur-level (:block/level block)
+            level-diff (- cur-level
+                          (get (last parents) :block/level 0))
+            [path-refs parents]
+            (cond
+              (zero? level-diff)            ; sibling
+              (let [path-refs (mapcat :block/ref-pages (drop-last parents))
+                    parents (conj (vec (butlast parents)) block)]
+                [path-refs parents])
+
+              (> level-diff 0)              ; child
+              (let [path-refs (mapcat :block/ref-pages parents)]
+                [path-refs (conj parents block)])
+
+              (< level-diff 0)              ; new parent
+              (let [parents (take-while (fn [p] (< (:block/level p) cur-level)) parents)
+                    path-refs (mapcat :block/ref-pages parents)]
+                [path-refs (conj parents block)]))]
+        (recur (rest blocks)
+               (conj acc (assoc block :block/path-ref-pages
+                                (->> path-refs
+                                     (concat (:block/ref-pages block))
+                                     (remove string/blank?)
+                                     (map string/lower-case)
+                                     (distinct)
+                                     (map (fn [p]
+                                            {:page/name p})))))
+               parents)))))
 
 (defn extract-blocks
   [blocks last-pos encoded-content]
@@ -361,29 +402,30 @@
             (-> (reverse headings)
                 safe-blocks)))]
     (let [first-block (first blocks)
-          first-block-start-pos (get-in first-block [:block/meta :start-pos])]
-      (if (and
-           (not (string/blank? encoded-content))
-           (or (empty? blocks)
-               (> first-block-start-pos 1)))
-        (cons
-         (merge
-          (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                uuid (d/squuid)]
-            (->
-             {:uuid uuid
-              :content content
-              :anchor (str uuid)
-              :level 2
-              :meta {:start-pos 0
-                     :end-pos (or first-block-start-pos
-                                  (utf8/length encoded-content))}
-              :body (take-while (fn [block] (not (heading-block? block))) blocks)
-              :pre-block? true}
-             (block-keywordize)))
-          (select-keys first-block [:block/file :block/format :block/page]))
-         blocks)
-        blocks))))
+          first-block-start-pos (get-in first-block [:block/meta :start-pos])
+          blocks (if (and
+                      (not (string/blank? encoded-content))
+                      (or (empty? blocks)
+                          (> first-block-start-pos 1)))
+                   (cons
+                    (merge
+                     (let [content (utf8/substring encoded-content 0 first-block-start-pos)
+                           uuid (d/squuid)]
+                       (->
+                        {:uuid uuid
+                         :content content
+                         :anchor (str uuid)
+                         :level 2
+                         :meta {:start-pos 0
+                                :end-pos (or first-block-start-pos
+                                             (utf8/length encoded-content))}
+                         :body (take-while (fn [block] (not (heading-block? block))) blocks)
+                         :pre-block? true}
+                        (block-keywordize)))
+                     (select-keys first-block [:block/file :block/format :block/page]))
+                    blocks)
+                   blocks)]
+      (with-path-refs blocks))))
 
 (defn- page-with-journal
   [original-page-name]
@@ -408,10 +450,18 @@
            content-length (utf8/length encoded-content)
            blocks (extract-blocks ast content-length encoded-content)
            ref-pages-atom (atom [])
+           parent-ref-pages (->> (db/get-block-parent (state/get-current-repo) uuid)
+                                 :block/path-ref-pages
+                                 (map :db/id))
            blocks (doall
                    (map-indexed
                     (fn [idx {:block/keys [ref-pages ref-blocks meta] :as block}]
-                      (let [block (merge
+                      (let [path-ref-pages (->> ref-pages
+                                                (remove string/blank?)
+                                                (map string/lower-case)
+                                                (map (fn [p] [:page/name p]))
+                                                (concat parent-ref-pages))
+                            block (merge
                                    block
                                    {:block/meta meta
                                     :block/marker (get block :block/marker "nil")
@@ -421,12 +471,10 @@
                                     :block/page page
                                     :block/content (utf8/substring encoded-content
                                                                    (:start-pos meta)
-                                                                   (:end-pos meta))}
+                                                                   (:end-pos meta))
+                                    :block/path-ref-pages path-ref-pages}
                                    ;; Preserve the original block id
-                                   (when (and (zero? idx)
-                                              ;; not custom-id
-                                              (not (get-in block [:block/properties "custom_id"]))
-                                              (not (get-in block [:block/properties "id"])))
+                                   (when (zero? idx)
                                      {:block/uuid uuid})
                                    (when (seq ref-pages)
                                      {:block/ref-pages

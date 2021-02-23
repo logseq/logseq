@@ -192,7 +192,7 @@
          (history/add-history! repo [[path original-content content]])))
      (fn [error]
        (println "Write file failed, path: " path ", content: " content)
-       (js/console.error error)))))
+       (log/error :write/failed error)))))
 
 (defn set-file-content!
   [repo path new-content]
@@ -283,7 +283,7 @@
   [repo file]
   (when-not (string/blank? file)
     (->
-     (p/let [_ (git/remove-file repo file)
+     (p/let [_ (or (config/local-db? repo) (git/remove-file repo file))
              result (fs/unlink! (config/get-repo-path repo file) nil)]
        (when-let [file (db/entity repo [:file/path file])]
          (common-handler/check-changed-files-status)
@@ -296,7 +296,7 @@
            (when (seq tx-data)
              (db/transact! repo tx-data)))))
      (p/catch (fn [err]
-                (prn "error: " err))))))
+                (js/console.error "error: " err))))))
 
 (defn re-index!
   [file]
