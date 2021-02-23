@@ -42,15 +42,15 @@
         (when-not ((:watches component) react-ref)
           (let [new-component (update component :watches conj react-ref)]
             (add-watch react-ref react-ref
-
-              (fn [& _]
-                (binding [*from-watching-fn* true]
-                  (reset! (:result component) (f))
-                  (let [f-path (rest (get-in @react-defines [ident :f-path]))]
-                    (doseq [{:keys [f ident]} f-path]
-                      (binding [*f-indent* ident]
-                        (let [component (get @react-defines ident)]
-                          (reset! (:result component) (f)))))))))
+              (fn [_key _atom old-state new-state]
+                (when-not (= old-state new-state)
+                 (binding [*from-watching-fn* true]
+                   (reset! (:result component) (f))
+                   (let [f-path (rest (get-in @react-defines [ident :f-path]))]
+                     (doseq [{:keys [f ident]} f-path]
+                       (binding [*f-indent* ident]
+                         (let [component (get @react-defines ident)]
+                           (reset! (:result component) (f))))))))))
             (swap! react-defines assoc *f-indent* new-component)
             @react-ref)))
 

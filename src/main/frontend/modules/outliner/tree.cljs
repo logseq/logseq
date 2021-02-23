@@ -126,7 +126,6 @@
         new-right-node (-set-left-id right-node (-get-id new-node))
         node (-> (-set-left-id new-node (-get-id left-node))
                  (-set-parent-id (-get-parent-id left-node)))]
-    (prn "insert-node-after-first" node new-right-node)
     (-save node)
     (-save new-right-node)))
 

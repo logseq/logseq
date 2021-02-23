@@ -6,7 +6,7 @@
             [frontend.db.outliner :as db-outliner]
             [datascript.impl.entity :as e]
             [frontend.util :as util]
-            [frontend.react-impl-test :as react-impl]))
+            [frontend.react-impl :as r]))
 
 (defrecord TestBlock [data])
 
@@ -50,9 +50,7 @@
                     (atom (->TestBlock r))
                     (atom r))]
     (save-block-refs parent-id left-id block-ref)
-    (react-impl/react block-ref)))
-
-
+    (r/react block-ref)))
 
 (defn ensure-block-id
   [id]
@@ -109,23 +107,18 @@
     (let [conn (conn/get-outliner-conn)
           data (:data this)
           block-id (tree/-get-id this)]
-      (prn "result: get-block-by-id" (get-block-by-id block-id))
       (if-let [old-block (get-block-by-id block-id)]
         (let [parent-id (tree/-get-parent-id old-block)
               left-id (tree/-get-left-id old-block)]
-          (prn "-save" [parent-id left-id])
           (when-let [block (get-block-from-react-refs parent-id left-id)]
             (let [atom-still-mine? (= block-id (tree/-get-id block))]
-              (prn "atom-still-mine?: " atom-still-mine?)
               (when atom-still-mine?
                 (let [new-parent-id (tree/-get-parent-id this)
                       new-left-id (tree/-get-left-id this)]
-                  (prn "new-parent-id new-left-id" [new-parent-id new-left-id])
                   (if (and
                         (= new-parent-id parent-id)
                         (= new-left-id left-id))
-                    (do (prn "save?")
-                        (save-block-refs parent-id left-id (atom block)))
+                    (save-block-refs parent-id left-id (atom block))
                     (del-block-refs parent-id left-id)))))))
         (let [parent-id (tree/-get-parent-id this)
               left-id (tree/-get-left-id this)]
@@ -332,32 +325,43 @@
     [new-sibling]
     (conj acc new-sibling)))
 
-(defn render-react-tree
+(declare render)
+
+(r/defc down-component
+  [number node]
+  (let [down (tree/-get-down node)]
+    (if (and
+          (tree/satisfied-inode? down)
+          (pos? @number))
+      (do (swap! number dec)
+          (let [result-fn (render number down nil)]
+            [(get-block-id node) (result-fn)]))
+      (get-block-id node))))
+
+(r/defc right-component
+  [number node children node-tree]
+  (let [right (tree/-get-right node)
+        new-children (sibling-nodes children node-tree)]
+    (if (and
+          (tree/satisfied-inode? right)
+          (pos? @number))
+      (do (swap! number dec)
+          (let [result-fn (render number right new-children)]
+            (result-fn)))
+      new-children)))
+
+(r/defc render
+  [number node children]
+  (let [result-fn (down-component number node)
+        node-tree (result-fn)]
+    (let [result-fn (right-component number node children node-tree)]
+      (result-fn))))
+
+(r/defc render-react-tree
   [init-node node-number]
-  (let [number (atom (dec node-number))]
-    (letfn [(render [node children]
-              (let [f (fn []
-                        (let [down (tree/-get-down node)]
-                          (if (and (tree/satisfied-inode? down)
-                                (pos? @number))
-                            (do (swap! number dec)
-                                [(get-block-id node) (render down nil)])
-                            (get-block-id node))))
-                    {:keys [get-value-fn]} (react-impl/react-fn f)
-                    _ (prn "get-down:" (get-value-fn))
-                    node-tree (get-value-fn)]
-                (let [f (fn []
-                          (let [right (tree/-get-right node)
-                                new-children (sibling-nodes children node-tree)]
-                            (if (and (tree/satisfied-inode? right)
-                                  (pos? @number))
-                              (do (swap! number dec)
-                                  (render right new-children))
-                              new-children)))
-                      {:keys [get-value-fn]} (react-impl/react-fn f)]
-                  (prn "get right" (get-value-fn))
-                  (get-value-fn))))]
-      (render init-node nil))))
+  (let [number (atom (dec node-number))
+        result-fn (render number init-node nil)]
+    (result-fn)))
 
 (deftest test-render-react-tree
   "
@@ -373,26 +377,26 @@
       "
   (binding [conn/*outline-db* (conn/create-outliner-db)]
     (build-db-records node-tree)
-    (let [root (build-by-block-id 1 nil nil)
-          number 10
-          f (fn [] (render-react-tree root number))
-          {:keys [get-value-fn]} (react-impl/react-fn f)]
-      (is (= [[1 [[2 [[3 [4
-                          5]]
-                      [6 [[7 [8]]]]
-                      [9 [10]]]]]]]
-            (get-value-fn)))
-      #_[1 [[2 [[3 [[4]
-                    [5]]]
-                [18] ;; add node
-                [6 [[7 [[8]]]]]
-                [9 [[10]
-                    [11]]]]]
-            [12 [[13]
-                 [14]
-                 [15]]]
-            [16 [[17]]]]]
-      (let [new-node (build-by-block-id 18 nil nil)
-            left-node (build-by-block-id 3 2 2)]
-        (tree/insert-node-after-first new-node left-node)
-        (prn (get-value-fn))))))
+    (r/auto-clean-state
+      (let [root (build-by-block-id 1 nil nil)
+            number 10
+            result-fn (render-react-tree root number)]
+        (is (= [[1 [[2 [[3 [4
+                            5]]
+                        [6 [[7 [8]]]]
+                        [9 [10]]]]]]]
+              (result-fn)))
+        #_[1 [[2 [[3 [[4]
+                      [5]]]
+                  [18] ;; add node
+                  [6 [[7 [[8]]]]]
+                  [9 [[10]
+                      [11]]]]]
+              [12 [[13]
+                   [14]
+                   [15]]]
+              [16 [[17]]]]]
+        (let [new-node (build-by-block-id 18 nil nil)
+              left-node (build-by-block-id 3 2 2)]
+          (tree/insert-node-after-first new-node left-node)
+          (prn (result-fn)))))))
