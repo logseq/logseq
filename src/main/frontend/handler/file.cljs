@@ -180,7 +180,7 @@
         (reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle
-     (fs/write-file! repo (config/get-repo-dir repo) path content {:old-content original-content})
+     (fs/write-file! repo (config/get-repo-dir repo) path content (when original-content {:old-content original-content}))
      (fn [_]
        (git-handler/git-add repo path update-status?)
        (when (= path (config/get-config-path repo))
@@ -188,7 +188,7 @@
        (when (= path (config/get-custom-css-path repo))
          (ui-handler/add-style-if-exists!))
        (when re-render-root? (ui-handler/re-render-root!))
-       (when add-history?
+       (when (and add-history? original-content)
          (history/add-history! repo [[path original-content content]])))
      (fn [error]
        (println "Write file failed, path: " path ", content: " content)
