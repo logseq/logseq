@@ -782,8 +782,6 @@ mark {
 
 .block-ref {
     padding: 2px 5px;
-    border-radius: 3px;
-    font-style: italic;
 }
 
 .block-ref .block-ref {
