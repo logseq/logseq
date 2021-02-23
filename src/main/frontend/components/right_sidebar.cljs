@@ -208,6 +208,32 @@
         theme (:ui/theme @state/state)]
     (get-page match)))
 
+(rum/defc sidebar-resizer
+  []
+  (let [el-ref (rum/use-ref nil)]
+    (rum/use-effect!
+     (fn []
+       (when-let [el (and (fn? js/interact) (rum/deref el-ref))]
+         (-> (js/interact el)
+             (.draggable
+              (bean/->js
+               {:listeners
+                {:move
+                 (fn [^js/MouseEvent e]
+                   (let [width js/document.documentElement.clientWidth
+                         offset (.-left (.-rect e))
+                         to-val (- 1 (.toFixed (/ offset width) 6))
+                         to-val (cond
+                                  (< to-val 0.2) 0.2
+                                  (> to-val 0.7) 0.7
+                                  :else to-val)]
+                     (.setProperty (.-style js/document.documentElement)
+                                   "--ls-right-sidebar-width"
+                                   (str (* to-val 100) "%"))))}}))))
+       #())
+     [])
+    [:span.resizer {:ref el-ref}]))
+
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub :sidebar/blocks)
@@ -224,6 +250,7 @@
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner
+          (sidebar-resizer)
           [:div.flex.flex-row.justify-between.items-center
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
