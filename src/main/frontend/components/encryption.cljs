@@ -150,7 +150,8 @@
           "Enter your password"]]]
 
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-        {:auto-focus true
+        {:type "password"
+         :auto-focus true
          :style {:color "#000"}
          :on-change (fn [e]
                       (reset! secret (util/evalue e)))}]
