@@ -9,8 +9,11 @@
 (defn react
   [react-ref]
   (let [f *react-fn*]
-    (if (= :from-watching-fn f)
+    (cond
+      (= :from-watching-fn f)
       @react-ref
+
+      (ifn? f)
       (let [component (get @react-defines f)]
         (when-not ((:watches component) react-ref)
           (let [new-component (update component :watches conj react-ref)]
@@ -19,7 +22,9 @@
                          (binding [*react-fn* :from-watching-fn]
                            (reset! (:result component) (f)))))
             (swap! react-defines assoc f new-component)
-            @react-ref))))))
+            @react-ref)))
+
+      :else (deref react-ref))))
 
 (defn react-fn
   [f]
@@ -36,6 +41,10 @@
                   (empty?)))
        :get-value-fn
        (fn [] (deref (get-in @react-defines [f' :result])))})))
+
+(defn clear-react-resources
+  []
+  (reset! react-defines nil))
 
 (comment
   (let [react-ref (atom 1)
