@@ -334,8 +334,7 @@
           (tree/satisfied-inode? down)
           (pos? @number))
       (do (swap! number dec)
-          (let [result-fn (render number down nil)]
-            [(get-block-id node) (result-fn)]))
+          [(get-block-id node) (deref (render number down nil))])
       (get-block-id node))))
 
 (r/defc right-component
@@ -346,22 +345,18 @@
           (tree/satisfied-inode? right)
           (pos? @number))
       (do (swap! number dec)
-          (let [result-fn (render number right new-children)]
-            (result-fn)))
+          (deref (render number right new-children)))
       new-children)))
 
 (r/defc render
   [number node children]
-  (let [result-fn (down-component number node)
-        node-tree (result-fn)]
-    (let [result-fn (right-component number node children node-tree)]
-      (result-fn))))
+  (let [node-tree (deref (down-component number node))]
+    (deref (right-component number node children node-tree))))
 
 (r/defc render-react-tree
   [init-node node-number]
-  (let [number (atom (dec node-number))
-        result-fn (render number init-node nil)]
-    (result-fn)))
+  (let [number (atom (dec node-number))]
+    (deref (render number init-node nil))))
 
 (deftest test-render-react-tree
   "
@@ -380,12 +375,12 @@
     (r/auto-clean-state
       (let [root (build-by-block-id 1 nil nil)
             number 10
-            result-fn (render-react-tree root number)]
+            result (render-react-tree root number)]
         (is (= [[1 [[2 [[3 [4
                             5]]
                         [6 [[7 [8]]]]
                         [9 [10]]]]]]]
-              (result-fn)))
+              @result))
         #_[1 [[2 [[3 [[4]
                       [5]]]
                   [18] ;; add node
@@ -399,4 +394,4 @@
         (let [new-node (build-by-block-id 18 nil nil)
               left-node (build-by-block-id 3 2 2)]
           (tree/insert-node-after-first new-node left-node)
-          (prn (result-fn)))))))
+          (prn @result))))))

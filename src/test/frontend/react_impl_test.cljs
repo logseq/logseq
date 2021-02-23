@@ -11,11 +11,11 @@
         []
         (+ 2 (r/react react-ref)))
 
-      (let [get-result (simple-component)]
+      (let [result (simple-component)]
 
-        (is (= 3 (get-result)))
+        (is (= 3 @result))
         (reset! react-ref 2)
-        (is (= 4 (get-result)))))))
+        (is (= 4 @result))))))
 
 (deftest nest-component-test
   (r/auto-clean-state
@@ -29,13 +29,13 @@
       (r/defc out
         []
         (let [out (r/react a)
-              get-inner-result (inner)]
-          (+ out (get-inner-result))))
+              inner-result (inner)]
+          (+ out @inner-result)))
 
-      (let [get-out-result (out)]
-        (is (= 3 (get-out-result)))
+      (let [out-result (out)]
+        (is (= 3 @out-result))
         (reset! b 4)
-        (is (= 5 (get-out-result)))))))
+        (is (= 5 @out-result))))))
 
 (deftest defc-params-test
   (r/auto-clean-state
@@ -49,12 +49,12 @@
       (r/defc out-1
         []
         (let [out (r/react a)
-              get-inner-result (inner-1 5)]
-          (+ out (get-inner-result))))
+              inner-result (inner-1 5)]
+          (+ out @inner-result)))
 
-      (let [get-out-result (out-1)]
-        (is (= 8 (get-out-result)))
+      (let [out-result (out-1)]
+        (is (= 8 @out-result))
 
         (reset! b 4)
 
-        (is (= 10 (get-out-result)))))))
+        (is (= 10 @out-result))))))

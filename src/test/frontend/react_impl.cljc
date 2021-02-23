@@ -3,23 +3,6 @@
   ;;#?(:clj (:require [clojure.tools.macro :refer [name-with-attributes]]))
   #?(:cljs (:require-macros [frontend.react-impl])))
 
-(defn name-with-attributes
-  "copy: https://github.com/clojure/tools.macro/blob/master/src/main/clojure/clojure/tools/macro.clj#L282"
-  [name macro-args]
-  (let [[docstring macro-args] (if (string? (first macro-args))
-                                 [(first macro-args) (next macro-args)]
-                                 [nil macro-args])
-        [attr macro-args] (if (map? (first macro-args))
-                            [(first macro-args) (next macro-args)]
-                            [{} macro-args])
-        attr (if docstring
-               (assoc attr :doc docstring)
-               attr)
-        attr (if (meta name)
-               (conj (meta name) attr)
-               attr)]
-    [(with-meta name attr) macro-args]))
-
 #_{:component-key {:result nil
                    :watches []
                    :f-path nil
@@ -67,7 +50,7 @@
                                              :f-path *react-f-path*
                                              :f f})
       (reset! result-ref (f))
-      (deref (get-in @react-defines [ident :result])))))
+      (get-in @react-defines [ident :result]))))
 
 #?(:clj (defmacro react
           [react-ref]
@@ -76,9 +59,8 @@
 #?(:clj (defmacro defc
           [sym args & body]
           `(defn ~sym ~args
-             (fn []
-               (let [f# (fn [] ~@body)]
-                 (react-fn f#))))))
+             (let [f# (fn [] ~@body)]
+               (react-fn f#)))))
 
 #?(:clj (defmacro auto-clean-state
           [& body]
@@ -86,10 +68,3 @@
                (let [result# ~@body]
                  (reset! react-defines {})
                  result#))))
-
-(comment
-  (def b (atom 1))
-
-  (defc inner
-    [c]
-    (+ c (react b))))
