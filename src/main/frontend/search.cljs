@@ -68,8 +68,8 @@
 
 (defn reset-indice!
   [repo]
-  (swap! indices assoc repo {:pages #js []
-                             :blocks #js []}))
+  (swap! indices assoc repo {:pages nil
+                             :blocks nil}))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance

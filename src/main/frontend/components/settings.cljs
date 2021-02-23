@@ -354,14 +354,14 @@
                                         (user-handler/set-cors! server)
                                         (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]])
 
-         [:hr]
-
          (when logged?
-           [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70.text-red-600
-             {:for "delete account"}
-             (t :user/delete-account)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
-              (ui/button (t :user/delete-your-account)
-                :on-click #(state/set-modal! delete-account-confirm))]]])]]])))
+           [:div
+            [:hr]
+            [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+             [:label.block.text-sm.font-medium.leading-5.sm:mt-px.sm:pt-2.opacity-70.text-red-600
+              {:for "delete account"}
+              (t :user/delete-account)]
+             [:div.mt-1.sm:mt-0.sm:col-span-2
+              [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+               (ui/button (t :user/delete-your-account)
+                 :on-click #(state/set-modal! delete-account-confirm))]]]])]]])))

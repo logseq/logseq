@@ -8,7 +8,8 @@
             [clojure.string :as string]
             [frontend.state :as state]
             [frontend.handler.metadata :as metadata-handler]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [frontend.handler.notification :as notification]))
 
 (rum/defcs encryption-dialog-inner <
   (rum/local false ::reveal-secret-phrase?)
@@ -52,9 +53,11 @@
 
 (rum/defcs input-password-inner <
   (rum/local "" ::password)
+  (rum/local "" ::password-confirm)
   [state repo-url close-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [password (get state ::password)]
+    (let [password (get state ::password)
+          password-confirm (get state ::password-confirm)]
       [:div
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -64,12 +67,21 @@
        (ui/admonition
         :warning
         [:div.text-gray-700
-         "If you lose your password, all the data can't be decrypted!! Make sure keeping a secure backup of your password."])
+         "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."])
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-        {:auto-focus true
+        {:type "password"
+         :placeholder "Password"
+         :auto-focus true
          :style {:color "#000"}
          :on-change (fn [e]
                       (reset! password (util/evalue e)))}]
+       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+        {:type "password"
+         :placeholder "Re-enter the password"
+         :auto-focus true
+         :style {:color "#000"}
+         :on-change (fn [e]
+                      (reset! password-confirm (util/evalue e)))}]
 
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
         [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
@@ -77,7 +89,14 @@
           {:type "button"
            :on-click (fn []
                        (let [value @password]
-                         (when-not (string/blank? value)
+                         (cond
+                           (string/blank? value)
+                           nil
+
+                           (not= @password @password-confirm)
+                           (notification/show! "The passwords are not matched." :error)
+
+                           :else
                            (p/let [keys (e/generate-key-pair-and-save! repo-url)
                                    db-encrypted-secret (e/encrypt-with-passphrase value keys)]
                              (metadata-handler/set-db-encrypted-secret! db-encrypted-secret)
@@ -96,7 +115,7 @@
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
-        "Create encrypted graph?"]]]
+        "Do you want to create an encrypted graph?"]]]
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
