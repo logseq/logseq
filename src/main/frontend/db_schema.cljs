@@ -15,7 +15,8 @@
   {:schema/version  {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
-
+   :db/encrypted?    {}
+   :db/encryption-keys {}
    ;; user
    :me/name  {}
    :me/email {}

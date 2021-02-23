@@ -4,6 +4,7 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.encrypt :as e]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
@@ -16,6 +17,7 @@
             [frontend.version :as version]
             [frontend.components.commit :as commit]
             [frontend.components.svg :as svg]
+            [frontend.components.encryption :as encryption]
             [frontend.context.i18n :as i18n]
             [clojure.string :as string]
             [clojure.string :as str]))
@@ -60,11 +62,17 @@
                       :href url}
                   (db/get-repo-path url)])
                [:div.controls
-                [:a.control {:title (if local?
-                                      "Sync with the local directory"
-                                      "Clone again and re-index the db")
-                             :on-click (fn []
-                                         (repo-handler/re-index! nfs-handler/rebuild-index!))}
+                (when (e/encrypted-db? url)
+                  [:a.control {:title "Show encryption information about this graph"
+                               :on-click (fn []
+                                           (state/set-modal! (encryption/encryption-dialog url)))}
+                   "🔐"])
+                [:a.control.ml-4 {:title (if local?
+                                           "Sync with the local directory"
+                                           "Clone again and re-index the db")
+                                  :on-click (fn []
+                                              (repo-handler/re-index! nfs-handler/rebuild-index!)
+                                              )}
                  "Re-index"]
                 [:a.control.ml-4 {:title "Clone again and re-index the db"
                                   :on-click (fn []

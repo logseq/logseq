@@ -193,6 +193,11 @@
   (not (false? (:feature/enable-journals?
                 (get (sub-config) repo)))))
 
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption?
+   (get (sub-config) repo)))
+
 (defn enable-git-auto-push?
   [repo]
   (not (false? (:git-auto-push

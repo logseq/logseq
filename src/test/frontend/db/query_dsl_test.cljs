@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [frontend.db-schema :as schema]
             [frontend.handler.repo :as repo-handler]
+            [promesa.core :as p]
             [cljs.test :refer [deftest is are testing use-fixtures]]))
 
 ;; TODO: quickcheck

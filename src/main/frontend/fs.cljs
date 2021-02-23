@@ -10,7 +10,8 @@
             [frontend.fs.node :as node]
             [frontend.db :as db]
             [cljs-bean.core :as bean]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.encrypt :as encrypt]))
 
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
@@ -56,6 +57,25 @@
   [dir]
   (protocol/rmdir! (get-fs dir) dir))
 
+(defn write-file!
+  [repo dir path content opts]
+  (when content
+    (let [fs-record (get-fs dir)]
+      (p/let [metadata-or-css? (or (string/ends-with? path config/metadata-file)
+                                  (string/ends-with? path config/custom-css-file))
+             content (if metadata-or-css? content (encrypt/encrypt content))]
+       (->
+        (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+          (when-not (= fs-record nfs-record)
+           (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+        (p/catch (fn [error]
+                   (log/error :file/write-failed? {:dir dir
+                                                   :path path
+                                                   :error error})
+                   ;; Disable this temporarily
+                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+                   )))))))
+
 (defn read-file
   ([dir path]
    (let [fs (get-fs dir)
@@ -64,22 +84,8 @@
                    {})]
      (read-file dir path options)))
   ([dir path options]
-   (protocol/read-file (get-fs dir) dir path options)))
-
-(defn write-file!
-  [repo dir path content opts]
-  (let [fs-record (get-fs dir)]
-    (->
-    (p/let [_ (protocol/write-file! fs-record repo dir path content opts)]
-      (when-not (= fs-record nfs-record)
-        (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
-    (p/catch (fn [error]
-               (log/error :file/write-failed? {:dir dir
-                                               :path path
-                                               :error error})
-               ;; Disable this temporarily
-               ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-               )))))
+   (p/chain (protocol/read-file (get-fs dir) dir path options)
+            encrypt/decrypt)))
 
 (defn rename!
   [repo old-path new-path]

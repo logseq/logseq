@@ -7,6 +7,7 @@
             [frontend.text :as text]
             [frontend.git :as git]
             [frontend.db :as db]
+            [frontend.encrypt :as e]
             [lambdaisland.glogi :as log]
             [cljs.reader :as reader]
             [frontend.spec :as spec]
@@ -93,6 +94,15 @@
                      {}))]
       (state/set-config! repo-url config)
       config)))
+
+(defn read-metadata!
+  [repo-url content]
+  (try
+   (reader/read-string content)
+   (catch js/Error e
+     (println "Parsing metadata file failed: ")
+     (js/console.dir e)
+     {})))
 
 (defn request-app-tokens!
   [ok-handler error-handler]

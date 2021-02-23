@@ -25,8 +25,11 @@
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [frontend.spec :as spec]
+            [frontend.encrypt :as encrypt]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            ;; TODO: remove component dependency from handlers, we can use a core.async channel
+            [frontend.components.encryption :as encryption]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -161,12 +164,16 @@
           (create-today-journal-if-not-exists repo))))))
 
 (defn create-default-files!
-  [repo-url]
-  (spec/validate :repos/url repo-url)
-  (create-config-file-if-not-exists repo-url)
-  (create-today-journal-if-not-exists repo-url)
-  (create-contents-file repo-url)
-  (create-custom-theme repo-url))
+  ([repo-url]
+   (create-default-files! repo-url false))
+  ([repo-url encrypted?]
+   (spec/validate :repos/url repo-url)
+   (file-handler/create-metadata-file repo-url encrypted?)
+   ;; TODO: move to frontend.handler.file
+   (create-config-file-if-not-exists repo-url)
+   (create-today-journal-if-not-exists repo-url)
+   (create-contents-file repo-url)
+   (create-custom-theme repo-url)))
 
 (defn- reset-contents-and-blocks!
   [repo-url files blocks-pages delete-files delete-blocks]
@@ -176,13 +183,9 @@
                      (util/remove-nils))]
     (db/transact! repo-url all-data)))
 
-(defn parse-files-and-load-to-db!
-  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
-                   :or {re-render? true}}]
-  (state/set-loading-files! false)
-  (state/set-importing-to-db! true)
-  (let [file-paths (map :file/path files)
-        parsed-files (filter
+(defn- parse-files-and-create-default-files-inner!
+  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts]
+  (let [parsed-files (filter
                       (fn [file]
                         (let [format (format/get-format (:file/path file))]
                           (contains? config/mldoc-support-formats format)))
@@ -196,10 +199,48 @@
         (when-let [content (some #(when (= (:file/path %) config-file)
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
-    (when first-clone? (create-default-files! repo-url))
+    (when first-clone?
+      (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
+        (state/set-modal!
+         (encryption/encryption-setup-dialog
+          repo-url
+          #(create-default-files! repo-url %)))
+        (create-default-files! repo-url db-encrypted?)))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
     (state/set-importing-to-db! false)))
+
+(defn- parse-files-and-create-default-files!
+  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts]
+  (if db-encrypted?
+    (p/let [files (p/all
+                   (map (fn [file]
+                          (p/let [content (encrypt/decrypt (:file/content file))]
+                            (assoc file :file/content content)))
+                        files))]
+      (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts))
+    (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts)))
+
+(defn parse-files-and-load-to-db!
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
+                   :or {re-render? true}}]
+  (state/set-loading-files! false)
+  (state/set-importing-to-db! true)
+  (let [file-paths (map :file/path files)]
+    (let [metadata-file (config/get-metadata-path)
+          metadata-content (some #(when (= (:file/path %) metadata-file)
+                                    (:file/content %)) files)
+          metadata (when metadata-content
+                     (common-handler/read-metadata! repo-url metadata-content))
+          db-encrypted? (:db/encrypted? metadata)
+          db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
+      (if db-encrypted?
+        (state/set-modal!
+         (encryption/encryption-input-secret-dialog
+          repo-url
+          db-encrypted-secret
+          #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts)))
+        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts)))))
 
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files]
@@ -531,14 +572,9 @@
          (git-handler/set-git-error! repo-url e)
          (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))
 
-(defn set-config-content!
-  [repo path new-content]
-  (file-handler/alter-file repo path new-content {:reset? false
-                                                  :re-render-root? false}))
-
 (defn remove-repo!
   [{:keys [id url] :as repo}]
-  (spec/validate :repos/repo repo)
+  ;; (spec/validate :repos/repo repo)
   (let [delete-db-f (fn []
                       (db/remove-conn! url)
                       (db/remove-db! url)
