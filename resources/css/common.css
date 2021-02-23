@@ -1,6 +1,6 @@
 :root {
-  --ls-tag-text-opacity: 0.6;
-  --ls-tag-text-hover-opacity: 0.8;
+  --ls-tag-text-opacity: 0.8;
+  --ls-tag-text-hover-opacity: 1;
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
@@ -662,11 +662,13 @@ a.tag {
     text-decoration: none;
     display: inline-block;
     cursor: pointer;
-    opacity: 0.8;
+    color: var(--ls-tag-text-color, #045591);
+    opacity: var(--ls-tag-text-opacity, 0.8);
 }
 
 a.tag:hover {
-    opacity: 1;
+  opacity: var(--ls-tag-text-hover-opacity, 1);
+  color: var(--ls-tag-text-hover-color, #045591);
 }
 
 svg.note {
