@@ -293,12 +293,12 @@
                                      :else
                                      (notification/show! "Please make sure the page exists!" :warning))))}]]]])
 
-         (toggle "enable_encryption"
-                 (t :settings-page/enable-encryption)
-                 enable-encryption?
-                 (fn []
-                   (let [value (not enable-encryption?)]
-                     (config-handler/set-config! :feature/enable-encryption? value))))
+         ;; (toggle "enable_encryption"
+         ;;         (t :settings-page/enable-encryption)
+         ;;         enable-encryption?
+         ;;         (fn []
+         ;;           (let [value (not enable-encryption?)]
+         ;;             (config-handler/set-config! :feature/enable-encryption? value))))
 
          (when (string/starts-with? current-repo "https://")
            (toggle "enable_git_auto_push"
