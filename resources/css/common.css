@@ -36,7 +36,7 @@ html[data-theme=dark] {
   --ls-active-secondary-color: #d0e8e8;
   --ls-block-properties-background-color: #02222a;
   --ls-block-ref-link-text-color: #1a6376;
-  --ls-search-background-color: var(--ls-primary-background-color);
+  --ls-search-background-color: linear-gradient(to right,#021c23 0,#021b21 200px,#002b36 100%);
   --ls-border-color: #0e5263;
   --ls-secondary-border-color: #126277;
   --ls-guideline-color: #0b4a5a;
@@ -806,12 +806,12 @@ a {
 /* search-field */
 
 .dark-theme #search_field {
-    background: linear-gradient(to right, #021c23 0%, #021b21 200px, #002b36 100%);
+    background: var(--ls-search-background-color);
     transition: background .3s;
 }
 
 .dark-theme #search_field:focus {
-    box-shadow: 0px 0px 20px 0px rgba(18, 18, 18, .8);
+    box-shadow: 0px 0px 20px 0px rgba(18, 18, 18, .3);
 }
 
 .page-reference:hover {
