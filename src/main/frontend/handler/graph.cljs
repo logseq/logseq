@@ -24,23 +24,26 @@
   [dark? current-page edges tags nodes]
   (let [pages (->> (set (flatten nodes))
                    (remove nil?))]
-    (mapv (fn [p]
-            (let [current-page? (= p current-page)
-                  color (case [dark? current-page?] ; FIXME: Put it into CSS
-                          [false false] "#222222"
-                          [false true]  "#045591"
-                          [true false]  "#8abbbb"
-                          [true true]   "#ffffff")
-                  color (if (contains? tags (string/lower-case p))
-                          (if dark? "orange" "green")
-                          color)]
-              {:id p
-               :name p
-               :val (get-connections p edges)
-               :autoColorBy "group"
-               :group (js/Math.ceil (* (js/Math.random) 12))
-               :color color}))
-          pages)))
+    (->>
+     (mapv (fn [p]
+             (when p
+               (let [current-page? (= p current-page)
+                     color (case [dark? current-page?] ; FIXME: Put it into CSS
+                             [false false] "#222222"
+                             [false true]  "#045591"
+                             [true false]  "#8abbbb"
+                             [true true]   "#ffffff")
+                     color (if (contains? tags (string/lower-case (str p)))
+                             (if dark? "orange" "green")
+                             color)]
+                 {:id p
+                  :name p
+                  :val (get-connections p edges)
+                  :autoColorBy "group"
+                  :group (js/Math.ceil (* (js/Math.random) 12))
+                  :color color})))
+           pages)
+     (remove nil?))))
 
 (defn- normalize-page-name
   [{:keys [nodes links] :as g}]
