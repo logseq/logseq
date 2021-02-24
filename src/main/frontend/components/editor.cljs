@@ -720,7 +720,9 @@
                                (if (and journal? new-name (not= old-page-name (string/lower-case new-name)))
                                  (notification/show! "Journal title can't be changed." :warning)
                                  (let [new-name (if journal? (date/journal-title->default new-name) new-name)
-                                       new-path (page-handler/compute-new-file-path path new-name)]
+                                       new-path (if (= (string/lower-case new-name) (string/lower-case old-page-name))
+                                                  path
+                                                  (page-handler/compute-new-file-path path new-name))]
                                    (file/alter-file (state/get-current-repo) new-path (string/trim value)
                                                     {:re-render-root? true})))))))
                        (when-not (contains? #{:insert :indent-outdent :auto-save} (state/get-editor-op))

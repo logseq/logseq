@@ -388,7 +388,7 @@
           (do
             (rename! old-name new-name)
             [false new-name]))
-        [journal? new-name]))))
+        [journal? old-name]))))
 
 (defn handle-add-page-to-contents!
   [page-name]
