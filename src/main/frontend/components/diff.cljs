@@ -16,7 +16,8 @@
             [promesa.core :as p]
             [frontend.github :as github]
             [frontend.diff :as diff]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.encrypt :as encrypt]))
 
 (defonce remote-hash-id (atom nil))
 (defonce diff-state (atom {}))
@@ -162,8 +163,9 @@
               path
               remote-latest-commit
               (fn [{:keys [repo-url path ref content]}]
-                (swap! state/state
-                       assoc-in [:github/contents repo-url remote-latest-commit path] content))
+                (p/let [content (encrypt/decrypt content)]
+                  (swap! state/state
+                        assoc-in [:github/contents repo-url remote-latest-commit path] content)))
               (fn [response]
                 (when (= (gobj/get response "status") 401)
                   (notification/show!
