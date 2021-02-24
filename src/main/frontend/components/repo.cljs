@@ -227,10 +227,10 @@
           (and current-repo (not local-repo?))
           (let [repo-name (get-repo-name current-repo)]
             (if (config/local-db? current-repo)
-              (if (util/electron?)
-                (last (string/split repo-name #"/"))
-                [:span.fade-link
-                 repo-name])
+              [:span.fade-link
+               (if (util/electron?)
+                 (last (string/split repo-name #"/"))
+                 repo-name)]
               [:a.fade-link
                {:href current-repo
                 :target "_blank"}

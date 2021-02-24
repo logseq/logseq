@@ -188,7 +188,7 @@
 
        (repo/sync-status current-repo)
 
-       [:div.repos.hidden.md:block.opacity-30.hover:opacity-100
+       [:div.repos.hidden.md:block
         (repo/repos-dropdown true nil)]
 
        (when (and (nfs/supported?) (empty? repos)
