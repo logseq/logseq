@@ -11,7 +11,7 @@
         []
         (+ 2 (r/react react-ref)))
 
-      (let [result (simple-component)]
+      (let [result (r/with-key 1 (simple-component))]
 
         (is (= 3 @result))
         (reset! react-ref 2)
@@ -24,15 +24,17 @@
 
       (r/defc inner
         []
-        (r/react b))
+
+        (let [r (r/react b)]
+          r))
 
       (r/defc out
         []
         (let [out (r/react a)
-              inner-result (inner)]
+              inner-result (r/with-key "1" (inner))]
           (+ out @inner-result)))
 
-      (let [out-result (out)]
+      (let [out-result (r/with-key "2" (out))]
         (is (= 3 @out-result))
         (reset! b 4)
         (is (= 5 @out-result))))))
@@ -49,10 +51,10 @@
       (r/defc out-1
         []
         (let [out (r/react a)
-              inner-result (inner-1 5)]
+              inner-result (r/with-key 1 (inner-1 5))]
           (+ out @inner-result)))
 
-      (let [out-result (out-1)]
+      (let [out-result (r/with-key 2 (out-1))]
         (is (= 8 @out-result))
 
         (reset! b 4)

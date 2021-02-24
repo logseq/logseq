@@ -8,6 +8,16 @@
             [frontend.util :as util]
             [frontend.react-impl :as r]))
 
+(def block-react-refs (atom {}))
+
+;(defn block-react-refs-fixtures
+;  [f]
+;  (reset! block-react-refs {})
+;  (f)
+;  (reset! block-react-refs {}))
+;
+;(use-fixtures :each block-react-refs-fixtures)
+
 (defrecord TestBlock [data])
 
 (defn get-block-by-id
@@ -17,41 +27,108 @@
                (catch js/Error e nil))]
     (when r (->TestBlock r))))
 
-(def block-react-refs (atom {}))
+(defn- save-block-ref
+  ([block]
+   {:pre [(tree/satisfied-inode? block)]}
+   (let [parent-id (tree/-get-parent-id block)
+         left-id (tree/-get-left-id block)]
+     (save-block-ref parent-id left-id block)))
+  ([parent-id left-id block-value]
+   (let [ref-key [parent-id left-id]]
+     (if-let [ref-atom (get @block-react-refs ref-key)]
+       (do (reset! ref-atom {:block block-value
+                             :parent-id parent-id
+                             :left-id left-id})
+           ref-atom)
+       (let [block-ref (atom {:block block-value
+                              :parent-id parent-id
+                              :left-id left-id})]
+         (swap! block-react-refs assoc ref-key block-ref)
+         block-ref)))))
 
-(defn save-block-refs
-  [parent-id left-id block-value]
-  (let [ref-key [parent-id left-id]]
-    (if-let [ref-atom (get @block-react-refs ref-key)]
-      (do (reset! ref-atom block-value)
-          ref-atom)
-      (let [block-ref (atom block-value)]
-        (swap! block-react-refs assoc ref-key block-ref)
-        block-ref))))
+(defn- del-block-ref
+  ([block]
+   {:pre [(tree/satisfied-inode? block)]}
+   (let [parent-id (tree/-get-parent-id block)
+         left-id (tree/-get-left-id block)]
+     (del-block-ref parent-id left-id)))
+  ([parent-id left-id]
+   (let [ref-key [parent-id left-id]]
+     (when-let [ref-atom (get @block-react-refs ref-key)]
+       (reset! ref-atom {:block nil
+                         :parent-id parent-id
+                         :left-id left-id})))))
 
-(defn del-block-refs
-  [parent-id left-id]
-  (let [ref-key [parent-id left-id]]
-    (when-let [ref-atom (get @block-react-refs ref-key)]
-      (reset! ref-atom nil))))
+(defn- get-block-from-ref
+  ([block]
+   {:pre [(tree/satisfied-inode? block)]}
+   (let [parent-id (tree/-get-parent-id block)
+         left-id (tree/-get-left-id block)]
+     (get-block-from-ref parent-id left-id)))
+  ([parent-id left-id]
+   (let [ref-key [parent-id left-id]]
+     (when-let [ref (get @block-react-refs ref-key)]
+       (assert
+         (instance? cljs.core/Atom (atom nil))
+         "block-react-ref should be atom.")
+       ref))))
 
-(defn get-block-from-react-refs
-  [parent-id left-id]
-  (let [ref-key [parent-id left-id]]
-    (when-let [ref (get @block-react-refs ref-key)]
-      (assert
-        (instance? cljs.core/Atom (atom nil))
-        "block-react-ref should be atom.")
-      (deref ref))))
+(defn- position-changed?
+  [old-block new-block]
+  (let [old-parent-id (tree/-get-parent-id old-block)
+        old-left-id (tree/-get-left-id old-block)
+        new-parent-id (tree/-get-parent-id new-block)
+        new-left-id (tree/-get-left-id new-block)
+        the-same-position
+        (and
+          (= old-parent-id new-parent-id)
+          (= old-left-id new-left-id))]
+    (not the-same-position)))
+
+(defn- position-taken?
+  [block block-in-cache]
+  (not= (tree/-get-id block)
+    (tree/-get-id block-in-cache)))
+
+(defn save-block-ref-logic
+  "Main logic to handler cache."
+  [block]
+  (let [block-id (tree/-get-id block)
+        block-in-datascript (get-block-by-id block-id)]
+    (cond
+      ;; no legacy cache need to process, save directly.
+      (not block-in-datascript)
+      (save-block-ref block)
+
+      :else
+      (if (position-changed? block-in-datascript block)
+        (do
+          (save-block-ref block)
+          (let [block-in-cache
+                (some-> (get-block-from-ref block-in-datascript) deref :block)]
+            (when (and block-in-cache
+                    (not (position-taken? block block-in-cache)))
+              (del-block-ref block-in-datascript))))
+        (let [block-in-cache
+              (some-> (get-block-from-ref block-in-datascript) deref :block)]
+          (if (and block-in-cache
+                (position-taken? block block-in-cache))
+            (throw (js/Error. "Other node should not take my seat."))
+            (save-block-ref block)))))))
 
 (defn get-block-by-parent-&-left
   [parent-id left-id]
-  (let [c (conn/get-outliner-conn)
-        r (db-outliner/get-by-parent-&-left
-            c [:block/id parent-id] [:block/id left-id])
-        block (when r (->TestBlock r))
-        block-ref (save-block-refs parent-id left-id block)]
-    (r/react block-ref)))
+  (let [block-ref
+        (if-let [block-ref (get-block-from-ref parent-id left-id)]
+          block-ref
+          (let [c (conn/get-outliner-conn)
+                r (db-outliner/get-by-parent-&-left
+                    c [:block/id parent-id] [:block/id left-id])
+                block (when r (->TestBlock r))
+                block-ref (save-block-ref parent-id left-id block)]
+            block-ref))]
+    (-> (r/react block-ref)
+      :block)))
 
 (defn ensure-block-id
   [id]
@@ -106,36 +183,20 @@
 
   (-save [this]
     (let [conn (conn/get-outliner-conn)
-          data (:data this)
-          block-id (tree/-get-id this)]
-      (if-let [old-block (get-block-by-id block-id)]
-        (let [parent-id (tree/-get-parent-id old-block)
-              left-id (tree/-get-left-id old-block)]
-          (when-let [block (get-block-from-react-refs parent-id left-id)]
-            (let [atom-still-mine? (= block-id (tree/-get-id block))]
-              (when atom-still-mine?
-                (let [new-parent-id (tree/-get-parent-id this)
-                      new-left-id (tree/-get-left-id this)]
-                  (if (and
-                        (= new-parent-id parent-id)
-                        (= new-left-id left-id))
-                    (save-block-refs parent-id left-id block)
-                    (del-block-refs parent-id left-id)))))))
-        (let [parent-id (tree/-get-parent-id this)
-              left-id (tree/-get-left-id this)]
-          (save-block-refs parent-id left-id this)))
+          data (:data this)]
+      (save-block-ref-logic this)
       (db-outliner/save-block conn data)))
 
   (-del [this]
     (let [conn (conn/get-outliner-conn)
           block-id (tree/-get-id this)]
       (when-let [old-block (get-block-by-id block-id)]
-        (let [parent-id (tree/-get-parent-id old-block)
-              left-id (tree/-get-left-id old-block)]
-          (if-let [data (get-block-from-react-refs parent-id left-id)]
-            (let [atom-still-mine? (= block-id (:block/id data))]
-              (when atom-still-mine?
-                (del-block-refs parent-id left-id))))))
+        (if-let [data (-> (get-block-from-ref old-block)
+                        (deref)
+                        :block)]
+          (let [atom-still-mine? (= block-id (:block/id data))]
+            (when atom-still-mine?
+              (del-block-ref old-block)))))
       (db-outliner/del-block conn [:block/id block-id])))
 
   (-get-children [this]
@@ -174,7 +235,7 @@
 (defrecord TreeNode [id children])
 
 (defn build-node-tree
-  [[id children :as tree]]
+  [[id children :as _tree]]
   (let [children (mapv build-node-tree children)]
     (->TreeNode id children)))
 
@@ -333,10 +394,14 @@
   (let [down (tree/-get-down node)]
     (if (and
           (tree/satisfied-inode? down)
-          (pos? @number))
+          (pos? @number)
+          )
       (do (swap! number dec)
-          [(get-block-id node) (deref (render number down nil))])
-      (get-block-id node))))
+          [(get-block-id node)
+           (->> (render number down nil)
+             (r/with-key (str (tree/-get-id down) "-children"))
+             (deref))])
+      [(get-block-id node)])))
 
 (r/defc right-component
   [number node children node-tree]
@@ -344,20 +409,29 @@
         new-children (sibling-nodes children node-tree)]
     (if (and
           (tree/satisfied-inode? right)
-          (pos? @number))
+          (pos? @number)
+          )
       (do (swap! number dec)
-          (deref (render number right new-children)))
+          (->> (render number right new-children)
+            (r/with-key (str (tree/-get-id right) "-find-right"))
+            (deref)))
       new-children)))
 
 (r/defc render
   [number node children]
-  (let [node-tree (deref (down-component number node))]
-    (deref (right-component number node children node-tree))))
+  (let [node-tree (->> (down-component number node)
+                    (r/with-key (str (tree/-get-id node) "-render-find-down"))
+                    (deref))]
+    (->> (right-component number node children node-tree)
+      (r/with-key (str (tree/-get-id node) "-render-find-right"))
+      (deref))))
 
 (r/defc render-react-tree
   [init-node node-number]
   (let [number (atom (dec node-number))]
-    (deref (render number init-node nil))))
+    (->> (render number init-node nil)
+      (r/with-key (str "render-react-tree-" (tree/-get-id init-node)))
+      (deref))))
 
 (deftest test-render-react-tree
   "
@@ -376,13 +450,13 @@
     (r/auto-clean-state
       (let [root (build-by-block-id 1 nil nil)
             number 10
-            result (render-react-tree root number)]
-        (is (= [[1 [[2 [[3 [4
-                            5]]
-                        [6 [[7 [8]]]]
-                        [9 [10]]]]]]]
+            result (->> (render-react-tree root number)
+                     (r/with-key (str "root-" (tree/-get-id root))))]
+        (is (= [[1 [[2 [[3 [[4]
+                            [5]]]
+                        [6 [[7 [[8]]]]]
+                        [9 [[10]]]]]]]]
               @result))
-        ;;(prn (get @block-react-refs [2 3]))
         #_[1 [[2 [[3 [[4]
                       [5]]]
                   [18] ;; add node
@@ -396,6 +470,8 @@
         (let [new-node (build-by-block-id 18 nil nil)
               left-node (build-by-block-id 3 2 2)]
           (tree/insert-node-after-first new-node left-node)
-          ;;(prn (get @block-react-refs [2 3]))
-          (prn @result)
-          )))))
+          (is (= [[1 [[2 [[3 [[4] [5]]]
+                          [18]
+                          [6 [[7 [[8]]]]]
+                          [9]]]]]]
+                @result)))))))
