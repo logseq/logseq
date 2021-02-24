@@ -71,7 +71,7 @@
                          :page/file [:file/path file]
                          :page/journal? journal?
                          :page/journal-day (if journal?
-                                             (date/journal-title->int (string/capitalize page))
+                                             (date/journal-title->int page)
                                              0)})
                         (seq properties)
                         (assoc :page/properties properties)
