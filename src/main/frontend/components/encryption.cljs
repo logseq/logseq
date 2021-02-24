@@ -23,7 +23,7 @@
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
          [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
-          "This graph is encrypted"]]]
+          "This graph is encrypted with " [:a {:href "https://age-encryption.org/" :target "_blank" :rel "noopener"} "age-encryption.org/v1"]]]]
 
        [:div.mt-1
         [:div.max-w-2xl.rounded-md.shadow-sm.sm:max-w-xl
