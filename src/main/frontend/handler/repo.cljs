@@ -59,16 +59,13 @@
         app-dir config/app-name
         dir (str repo-dir "/" app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
-      (let [default-content config/config-default-content]
+      (let [default-content config/config-default-content
+            path (str app-dir "/" config/config-file)]
         (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
-          (let [path (str app-dir "/" config/config-file)
-                old-content (when file-exists?
-                              (db/get-file repo-url path))
-                content (or old-content default-content)]
-            (file-handler/reset-file! repo-url path content)
-            (common-handler/reset-config! repo-url content)
-            (when-not (= content old-content)
-              (git-handler/git-add repo-url path))))))))
+          (when-not file-exists?
+            (file-handler/reset-file! repo-url path default-content)
+            (common-handler/reset-config! repo-url default-content)
+            (git-handler/git-add repo-url path)))))))
 
 (defn create-contents-file
   [repo-url]
