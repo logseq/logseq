@@ -78,7 +78,6 @@
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:type "password"
          :placeholder "Re-enter the password"
-         :auto-focus true
          :style {:color "#000"}
          :on-change (fn [e]
                       (reset! password-confirm (util/evalue e)))}]
