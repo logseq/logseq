@@ -45,6 +45,8 @@
    (enable-when-not-editing-mode! ui-handler/toggle-right-sidebar!)
    (or (shortcut :ui/toggle-new-block) "t e")
    (enable-when-not-editing-mode! state/toggle-new-block-shortcut!)
+   (or (shortcut :ui/show-contents) "t c")
+   [(enable-when-not-editing-mode! ui-handler/toggle-contents!) true]
    (or (shortcut :ui/toggle-between-page-and-file) "s")
    (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
    "tab" (-> (editor-handler/on-tab :right)

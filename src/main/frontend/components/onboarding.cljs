@@ -258,6 +258,7 @@
          [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
          [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
          [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
+         [:tr [:td (t :help/toggle-contents)] [:td "t c"]]
          [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
          [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
          [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
