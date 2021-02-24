@@ -382,7 +382,8 @@
           new-name (let [ast (mldoc/->edn content (mldoc/default-config format))]
                      (db/get-page-name path ast))]
       (when (not= old-name new-name)
-        (rename! old-name new-name)))))
+        (rename! old-name new-name)
+        new-name))))
 
 (defn handle-add-page-to-contents!
   [page-name]
