@@ -145,7 +145,7 @@
                                                        :slide? true
                                                        :sidebar? true
                                                        :page-name page-name})]
-      [[:a {:href {:href (rfe/href :page {:name page-name})}}
+      [[:a {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
         (slide/slide sections)]])
