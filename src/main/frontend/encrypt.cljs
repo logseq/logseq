@@ -34,8 +34,9 @@
 (defn generate-key-pair
   []
   (p/let [_ (loader/load :age-encryption)
-          lazy-keygen (resolve 'frontend.extensions.age-encryption/keygen)]
-    (lazy-keygen)))
+          lazy-keygen (resolve 'frontend.extensions.age-encryption/keygen)
+          js-keys (lazy-keygen)]
+    (array-seq js-keys)))
 
 (defn generate-key-pair-and-save!
   [repo-url]
