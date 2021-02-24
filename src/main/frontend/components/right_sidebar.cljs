@@ -213,7 +213,7 @@
   (let [el-ref (rum/use-ref nil)]
     (rum/use-effect!
      (fn []
-       (when-let [el (and (fn? js/interact) (rum/deref el-ref))]
+       (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
          (-> (js/interact el)
              (.draggable
               (bean/->js
