@@ -1,7 +1,7 @@
 (ns frontend.react-impl-test
   "To facilitate testing, imitate the behavior of react"
   (:require [frontend.react-impl :as r]
-            [cljs.test :refer [deftest is are testing use-fixtures]]))
+            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]))
 
 (deftest simple-react-test
   (r/auto-clean-state

@@ -1,5 +1,5 @@
 (ns frontend.modules.outliner.tree-test
-  (:require [cljs.test :refer [deftest is are testing use-fixtures]]
+  (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
             [frontend.modules.outliner.tree :as tree]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
@@ -20,11 +20,14 @@
 (def block-react-refs (atom {}))
 
 (defn save-block-refs
-  [parent-id left-id block-ref]
+  [parent-id left-id block-value]
   (let [ref-key [parent-id left-id]]
     (if-let [ref-atom (get @block-react-refs ref-key)]
-      (reset! ref-atom @block-ref)
-      (swap! block-react-refs assoc ref-key block-ref))))
+      (do (reset! ref-atom block-value)
+          ref-atom)
+      (let [block-ref (atom block-value)]
+        (swap! block-react-refs assoc ref-key block-ref)
+        block-ref))))
 
 (defn del-block-refs
   [parent-id left-id]
@@ -46,10 +49,8 @@
   (let [c (conn/get-outliner-conn)
         r (db-outliner/get-by-parent-&-left
             c [:block/id parent-id] [:block/id left-id])
-        block-ref (if r
-                    (atom (->TestBlock r))
-                    (atom r))]
-    (save-block-refs parent-id left-id block-ref)
+        block (when r (->TestBlock r))
+        block-ref (save-block-refs parent-id left-id block)]
     (r/react block-ref)))
 
 (defn ensure-block-id
@@ -118,11 +119,11 @@
                   (if (and
                         (= new-parent-id parent-id)
                         (= new-left-id left-id))
-                    (save-block-refs parent-id left-id (atom block))
+                    (save-block-refs parent-id left-id block)
                     (del-block-refs parent-id left-id)))))))
         (let [parent-id (tree/-get-parent-id this)
               left-id (tree/-get-left-id this)]
-          (save-block-refs parent-id left-id (atom this))))
+          (save-block-refs parent-id left-id this)))
       (db-outliner/save-block conn data)))
 
   (-del [this]
@@ -381,6 +382,7 @@
                         [6 [[7 [8]]]]
                         [9 [10]]]]]]]
               @result))
+        ;;(prn (get @block-react-refs [2 3]))
         #_[1 [[2 [[3 [[4]
                       [5]]]
                   [18] ;; add node
@@ -394,4 +396,6 @@
         (let [new-node (build-by-block-id 18 nil nil)
               left-node (build-by-block-id 3 2 2)]
           (tree/insert-node-after-first new-node left-node)
-          (prn @result))))))
+          ;;(prn (get @block-react-refs [2 3]))
+          (prn @result)
+          )))))
