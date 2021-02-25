@@ -92,7 +92,12 @@
          [:div
           [:h1.title "Open a local directory"]
           [:p.text-sm
-           "Your data will be stored only in your device."]
+           "Logseq support both Markdown and Org mode, you can open an existing directory or creating a new directory.
+Logseq will creates 3 sub-directories in the opened directory:
+1. \"journals\" - store your journal pages
+2. \"pages\" - store the other pages
+3. \"logseq\" - store configuration and custom.css.
+Your data will be stored only in your device."]
           (when-not nfs-supported?
             (ui/admonition :warning
                            [:p "It seems that your browser doesn't support the "
@@ -106,7 +111,7 @@
   [state & {:keys [graph-types]
             :or {graph-types [:local :github]}
             :as opts}]
-  (let [github-authed? (:github-authed? (state/get-me))
+  (let [github-authed? (state/github-authed?)
         generate-f (fn [x]
                      (case x
                        :github

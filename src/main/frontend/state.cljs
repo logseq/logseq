@@ -828,6 +828,10 @@
   []
   (:me @state))
 
+(defn github-authed?
+  []
+  (:github-authed? (get-me)))
+
 (defn get-name
   []
   (:name (get-me)))
