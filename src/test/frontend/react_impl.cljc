@@ -8,8 +8,10 @@
                    :root-info nil
                    :f nil}}
 (def react-defines (atom {}))
+(def ^:dynamic *with-key* nil)
 (def ^:dynamic *ident-key* nil)
 (def ^:dynamic *root-info* nil)
+
 
 (defn react
   [react-ref]
@@ -26,7 +28,7 @@
                     (when-not (= old-state new-state)
                       (let [root-f (get-in @react-defines [ident :root-info])]
                         (let [{:keys [f ident]} root-f]
-                          (binding [*ident-key* ident
+                          (binding [*with-key* ident
                                     *root-info* root-f]
                             (let [component (get @react-defines ident)]
                               (reset! (:result component) (f))))))))))))
@@ -58,15 +60,19 @@
 #?(:clj (defmacro defc
           [sym args & body]
           `(defn ~sym ~args
-             (assert (some? *ident-key*) "should with-key.")
+             (assert (some? *with-key*)
+               "should specify component key by frontend.react-impl/with-key.")
              (let [f# (fn []
-                        (binding [*ident-key* *ident-key*]
+                        (binding [*ident-key* *with-key*
+                                  ;; inner component should specify own *with-key*
+                                  *with-key* nil]
                           ~@body))]
-               (react-fn f#)))))
+               (binding [*ident-key* *with-key*]
+                 (react-fn f#))))))
 
 #?(:clj (defmacro with-key
           [key & body]
-          `(binding [*ident-key* ~key]
+          `(binding [*with-key* ~key]
              ~@body)))
 
 #?(:clj (defmacro auto-clean-state
