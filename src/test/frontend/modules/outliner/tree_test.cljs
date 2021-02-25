@@ -434,7 +434,38 @@
       (r/with-key (str "render-react-tree-" (tree/-get-id init-node)))
       (deref))))
 
-(deftest test-render-react-tree
+(deftest test-react-for-update-paginate-number
+  "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+      "
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-db-records node-tree)
+    (r/auto-clean-state
+      (let [root (build-by-block-id 1 nil nil)
+            number (atom 10)
+            result (->> (render-react-tree root number)
+                     (r/with-key (str "root-" (tree/-get-id root))))]
+        (is (= [[1 [[2 [[3 [[4]
+                            [5]]]
+                        [6 [[7 [[8]]]]]
+                        [9 [[10]]]]]]]]
+              @result))
+        (do (reset! number 12)
+            (is [[1 [[2 [[3 [[4] [5]]]
+                         [6 [[7 [[8]]]]]
+                         [9 [[10] [11]]]]]
+                     [12]]]]
+              @result))))))
+
+(deftest test-react-for-insert-node-after-first
   "
   [1 [[2 [[3 [[4]
               [5]]]
@@ -467,7 +498,8 @@
                           [9]]]]]]
                 @result)))))))
 
-(deftest test-render-react-paginate
+
+(deftest test-react-insert-node-as-first
   "
   [1 [[2 [[3 [[4]
               [5]]]
@@ -491,10 +523,86 @@
                         [6 [[7 [[8]]]]]
                         [9 [[10]]]]]]]]
               @result))
-        (do (reset! number 12)
-          (is [[1 [[2 [[3 [[4] [5]]]
+        (let [new-node (build-by-block-id 18 nil nil)
+              parent-node (build-by-block-id 2 1 1)]
+          (tree/insert-node-as-first new-node parent-node)
+          (is [[1 [[2 [[18]
+                       [3 [[4] [5]]]
                        [6 [[7 [[8]]]]]
-                       [9 [[10] [11]]]]]
-                   [12]]]]
+                       [9]]]]]]
             @result))))))
+
+(deftest test-react-for-delete-node
+  "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+      "
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-db-records node-tree)
+    (r/auto-clean-state
+      (let [root (build-by-block-id 1 nil nil)
+            number (atom 10)
+            result (->> (render-react-tree root number)
+                     (r/with-key (str "root-" (tree/-get-id root))))]
+        (is (= [[1 [[2 [[3 [[4]
+                            [5]]]
+                        [6 [[7 [[8]]]]]
+                        [9 [[10]]]]]]]]
+              @result))
+        (let [node (build-by-block-id 6 2 3)]
+          (tree/delete-node node)
+          (is [[1 [[2 [[3 [[4] [5]]]
+                       [9 [[10] [11]]]]]
+                   [12 [[13]]]]]]
+            @result))))))
+
+(deftest test-react-for-move-subtree
+  "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+      "
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-db-records node-tree)
+    (r/auto-clean-state
+      (let [root (build-by-block-id 1 nil nil)
+            number (atom 20)
+            result (->> (render-react-tree root number)
+                     (r/with-key (str "root-" (tree/-get-id root))))]
+        (is (= [[1 [[2 [[3 [[4]
+                            [5]]]
+                        [6 [[7 [[8]]]]]
+                        [9 [[10]
+                            [11]]]]]
+                    [12 [[13]
+                         [14]
+                         [15]]]
+                    [16 [[17]]]]]]
+              @result))
+        (let [node (build-by-block-id 3 2 2)
+              new-parent (build-by-block-id 12 1 2)
+              new-left (build-by-block-id 14 12 13)]
+          (tree/move-subtree node new-parent new-left)
+          (is (= [[1 [[2 [[6 [[7 [[8]]]]]
+                          [9 [[10] [11]]]]]
+                      [12 [[13]
+                           [14]
+                           [3 [[4]
+                               [5]]]
+                           [15]]]
+                      [16 [[17]]]]]]
+                @result)))))))
 
