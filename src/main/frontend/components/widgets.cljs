@@ -91,13 +91,12 @@
            {:on-click page-handler/ls-dir-files!})
          [:div
           [:h1.title "Open a local directory"]
-          [:p.text-sm
-           "Logseq support both Markdown and Org mode, you can open an existing directory or creating a new directory.
-Logseq will creates 3 sub-directories in the opened directory:
-1. \"journals\" - store your journal pages
-2. \"pages\" - store the other pages
-3. \"logseq\" - store configuration and custom.css.
-Your data will be stored only in your device."]
+          [:p "Logseq supports both Markdown and Org-mode, you can open an existing directory or creating a new one. Your data will be stored only on this device."]
+          [:p "After you opened your directory, it will create three sub-directories in that directory:"]
+          [:ul
+           [:li "/journals - store your journal pages"]
+           [:li "/pages - store the other pages"]
+           [:li "/logseq - store configuration, custom.css, and some metadata."]]
           (when-not nfs-supported?
             (ui/admonition :warning
                            [:p "It seems that your browser doesn't support the "
