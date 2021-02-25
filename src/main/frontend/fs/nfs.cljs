@@ -150,7 +150,7 @@
                     (nfs-saved-handler repo path file))))
               (do
                 (js/alert (str "The file has been modified in your local disk! File path: " path
-                               ", save your changes and click the refresh button to reload it.")))))
+                               ", please save your changes and click the refresh button to reload it.")))))
            ;; create file handle
           (->
            (p/let [handle (idb/get-item handle-path)]

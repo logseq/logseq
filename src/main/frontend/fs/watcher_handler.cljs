@@ -27,7 +27,8 @@
                      ;; 4. old content will overwrites the new content in step 2
                      (not (and db-content
                                (string/starts-with? db-content content))))
-            (file-handler/alter-file repo path content {:re-render-root? true})))
+            (file-handler/alter-file repo path content {:re-render-root? true
+                                                        :from-disk? true})))
 
         (and (= "change" type)
              (nil? (db/get-file path)))
@@ -38,7 +39,9 @@
              (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
                (> mtime last-modified-at)))
 
-        (file-handler/alter-file repo path content {:re-render-root? true})
+        (let [_ (file-handler/alter-file repo path content {:re-render-root? true
+                                                              :from-disk? true})]
+          (db/set-file-last-modified-at! repo path mtime))
 
         ;; (= "unlink" type)
         ;; (when-let [page-name (db/get-file-page path)]
