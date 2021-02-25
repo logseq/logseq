@@ -35,9 +35,9 @@
    (p/let [content (fs/read-file (config/get-repo-dir repo-url) path)]
      content)
    (p/catch
-    (fn [e]
-      (println "Load file failed: " path)
-      (js/console.error e)))))
+       (fn [e]
+         (println "Load file failed: " path)
+         (js/console.error e)))))
 
 (defn load-multiple-files
   [repo-url paths]
@@ -116,7 +116,7 @@
     (-> (p/all (load-multiple-files repo-url files))
         (p/then (fn [contents]
                   (let [file-contents (cond->
-                                       (zipmap files contents)
+                                        (zipmap files contents)
 
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
@@ -157,42 +157,46 @@
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]
                            (cond->
-                            {:file/path file}
+                             {:file/path file}
                              new?
                              (assoc :file/created-at t)))])]
       (db/transact! repo-url tx))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? add-history? update-status?]
+  [repo path content {:keys [reset? re-render-root? add-history? update-status? from-disk?]
                       :or {reset? true
                            re-render-root? false
                            add-history? true
-                           update-status? false}}]
+                           update-status? false
+                           from-disk? false}}]
   (let [edit-block (state/get-edit-block)
-        original-content (db/get-file-no-sub repo path)]
+        original-content (db/get-file-no-sub repo path)
+        write-file! (if from-disk?
+                      #(p/resolved nil)
+                      #(fs/write-file! repo (config/get-repo-dir repo) path content (when original-content {:old-content original-content})))]
     (if reset?
       (do
         (when-let [page-id (db/get-file-page-id path)]
           (db/transact! repo
-                        [[:db/retract page-id :page/alias]
-                         [:db/retract page-id :page/tags]]))
+            [[:db/retract page-id :page/alias]
+             [:db/retract page-id :page/tags]]))
         (reset-file! repo path content))
       (db/set-file-content! repo path content))
-    (util/p-handle
-     (fs/write-file! repo (config/get-repo-dir repo) path content (when original-content {:old-content original-content}))
-     (fn [_]
-       (git-handler/git-add repo path update-status?)
-       (when (= path (config/get-config-path repo))
-         (restore-config! repo true))
-       (when (= path (config/get-custom-css-path repo))
-         (ui-handler/add-style-if-exists!))
-       (when re-render-root? (ui-handler/re-render-root!))
-       (when (and add-history? original-content)
-         (history/add-history! repo [[path original-content content]])))
-     (fn [error]
-       (println "Write file failed, path: " path ", content: " content)
-       (log/error :write/failed error)))))
+    (util/p-handle (write-file!)
+                   (fn [_]
+                     (when-not from-disk?
+                       (git-handler/git-add repo path update-status?))
+                     (when (= path (config/get-config-path repo))
+                       (restore-config! repo true))
+                     (when (= path (config/get-custom-css-path repo))
+                       (ui-handler/add-style-if-exists!))
+                     (when re-render-root? (ui-handler/re-render-root!))
+                     (when (and add-history? original-content)
+                       (history/add-history! repo [[path original-content content]])))
+                   (fn [error]
+                     (println "Write file failed, path: " path ", content: " content)
+                     (log/error :write/failed error)))))
 
 (defn set-file-content!
   [repo path new-content]
@@ -253,9 +257,9 @@
                     (let [add-helper
                           (fn []
                             (map
-                             (fn [[path content]]
-                               (git-handler/git-add repo path update-status?))
-                             files))]
+                              (fn [[path content]]
+                                (git-handler/git-add repo path update-status?))
+                              files))]
                       (-> (p/all (add-helper))
                           (p/then (fn [_]
                                     (when git-add-cb
@@ -290,9 +294,9 @@
          (let [file-id (:db/id file)
                page-id (db/get-file-page-id (:file/path file))
                tx-data (map
-                        (fn [db-id]
-                          [:db.fn/retractEntity db-id])
-                        (remove nil? [file-id page-id]))]
+                         (fn [db-id]
+                           [:db.fn/retractEntity db-id])
+                         (remove nil? [file-id page-id]))]
            (when (seq tx-data)
              (db/transact! repo tx-data)))))
      (p/catch (fn [err]
