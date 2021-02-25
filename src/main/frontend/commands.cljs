@@ -131,6 +131,11 @@
 
        (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
+
+     (when (util/zh-CN-supported?)
+       ["Embed Bilibili Video" [[:editor/input "{{bilibili }}" {:last-pattern slash
+                                                                :backward-pos 2}]]])
+
      ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]
      ["Html Inline " (->inline "html")]

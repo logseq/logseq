@@ -797,6 +797,28 @@
                     :height height
                     :width width}])))))
 
+        ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
+        (= name "bilibili")
+        (let [url (first arguments)
+              id-regex #"https?://www\.bilibili\.com/video/([\w\W]+)"]
+          (when-let [id (cond
+                          (<= (count url) 15) url
+                          :else
+                          (last (re-find id-regex url)))]
+            (when-not (string/blank? id)
+              (let [width (min (- (util/get-width) 96)
+                               560)
+                    height (int (* width (/ 315 560)))]
+                [:iframe
+                 {:allowfullscreen true
+                  :framespacing "0"
+                  :frameborder "no"
+                  :border "0"
+                  :scrolling "no"
+                  :src (str "https://player.bilibili.com/player.html?bvid=" id)
+                  :width width
+                  :height (max 500 height)}]))))
+
         (= name "embed")
         (let [a (first arguments)]
           (cond
