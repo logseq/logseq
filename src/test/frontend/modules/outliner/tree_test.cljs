@@ -10,13 +10,13 @@
 
 (def block-react-refs (atom {}))
 
-;(defn block-react-refs-fixtures
-;  [f]
-;  (reset! block-react-refs {})
-;  (f)
-;  (reset! block-react-refs {}))
-;
-;(use-fixtures :each block-react-refs-fixtures)
+(defn block-react-refs-fixtures
+  [f]
+  (reset! block-react-refs {})
+  (f)
+  (reset! block-react-refs {}))
+
+(use-fixtures :each block-react-refs-fixtures)
 
 (defrecord TestBlock [data])
 
@@ -428,7 +428,8 @@
 
 (r/defc render-react-tree
   [init-node node-number]
-  (let [number (atom (dec node-number))]
+  (let [num-react (r/react node-number)
+        number (atom (dec num-react))]
     (->> (render number init-node nil)
       (r/with-key (str "render-react-tree-" (tree/-get-id init-node)))
       (deref))))
@@ -449,7 +450,7 @@
     (build-db-records node-tree)
     (r/auto-clean-state
       (let [root (build-by-block-id 1 nil nil)
-            number 10
+            number (atom 10)
             result (->> (render-react-tree root number)
                      (r/with-key (str "root-" (tree/-get-id root))))]
         (is (= [[1 [[2 [[3 [[4]
@@ -457,16 +458,6 @@
                         [6 [[7 [[8]]]]]
                         [9 [[10]]]]]]]]
               @result))
-        #_[1 [[2 [[3 [[4]
-                      [5]]]
-                  [18] ;; add node
-                  [6 [[7 [[8]]]]]
-                  [9 [[10]
-                      [11]]]]]
-              [12 [[13]
-                   [14]
-                   [15]]]
-              [16 [[17]]]]]
         (let [new-node (build-by-block-id 18 nil nil)
               left-node (build-by-block-id 3 2 2)]
           (tree/insert-node-after-first new-node left-node)
@@ -475,3 +466,35 @@
                           [6 [[7 [[8]]]]]
                           [9]]]]]]
                 @result)))))))
+
+(deftest test-render-react-paginate
+  "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+      "
+  (binding [conn/*outline-db* (conn/create-outliner-db)]
+    (build-db-records node-tree)
+    (r/auto-clean-state
+      (let [root (build-by-block-id 1 nil nil)
+            number (atom 10)
+            result (->> (render-react-tree root number)
+                     (r/with-key (str "root-" (tree/-get-id root))))]
+        (is (= [[1 [[2 [[3 [[4]
+                            [5]]]
+                        [6 [[7 [[8]]]]]
+                        [9 [[10]]]]]]]]
+              @result))
+        (do (reset! number 12)
+          (is [[1 [[2 [[3 [[4] [5]]]
+                       [6 [[7 [[8]]]]]
+                       [9 [[10] [11]]]]]
+                   [12]]]]
+            @result))))))
+
