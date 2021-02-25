@@ -256,7 +256,6 @@
              :clip-rule "evenodd"
              :fill-rule "evenodd"}]]]
          [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.sm:bg-transparent
-
           {:style {:padding-left "2rem"}
            :placeholder (t :search)
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
@@ -272,7 +271,7 @@
                               (reset! search-timeout
                                       (js/setTimeout
                                        #(search-handler/search value)
-                                       100))))))}]
+                                       200))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
             {:class-names "fade"
