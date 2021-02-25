@@ -98,9 +98,9 @@ html[data-theme=light] {
   --ls-secondary-text-color: #161e2e;
   --ls-title-text-color: var(--ls-primary-text-color);
   --ls-link-text-color: #106BA3;
-  --ls-link-text-hover-color: #5d9cd6;
+  --ls-link-text-hover-color: #1a537c;
   --ls-link-ref-text-color: #106BA3;
-  --ls-link-ref-text-hover-color: #5d9cd6;
+  --ls-link-ref-text-hover-color: #1a537c;
   --ls-tag-text-color: var(--ls-link-ref-text-color);
   --ls-tag-text-hover-color: var(--ls-link-ref-text-hover-color);
   --ls-slide-background-color: #fff;

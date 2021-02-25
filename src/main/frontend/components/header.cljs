@@ -82,7 +82,7 @@
           :options {:on-click state/toggle-sidebar-open?!}})
 
        (when current-repo
-         {:title (t :graph)
+         {:title (t :graph-view)
           :options {:href (rfe/href :graph)}
           :icon svg/graph-sm})
 

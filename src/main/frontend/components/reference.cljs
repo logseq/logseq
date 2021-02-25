@@ -54,7 +54,8 @@
 
           (ui/foldable
            [:h2.font-bold.opacity-50 (let []
-                                       (str n-ref " Linked References"))]
+                                       (str n-ref " Linked Reference"
+                                            (if (> n-ref 1) "s")))]
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup ref-blocks
                                              {:id page-name
@@ -98,7 +99,8 @@
           (ui/foldable
            [:h2.font-bold {:style {:opacity "0.3"}}
             (if @n-ref
-              (str @n-ref " Unlinked References")
+              (str @n-ref " Unlinked Reference" (if (> @n-ref 1)
+                                                  "s"))
               "Unlinked References")]
            (fn [] (unlinked-references-aux page-name n-ref))
            true)]]))))

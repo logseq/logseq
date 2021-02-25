@@ -997,8 +997,10 @@
          new-block (case (name text-format)
                      "org"
                      "** "
+
                      "markdown"
                      "## "
+
                      "")]
      (if contents?
        new-block

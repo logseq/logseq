@@ -229,7 +229,8 @@
 
                           nil))})])))
 
-(rum/defc search < rum/reactive
+(rum/defcs search < rum/reactive
+  (rum/local false ::inside-box?)
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
@@ -237,7 +238,7 @@
       :on-hide (fn []
                  (search-handler/clear-search!)
                  (leave-focus)))))
-  []
+  [state]
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
         show-result? (boolean (seq search-result))]
@@ -271,7 +272,7 @@
                               (reset! search-timeout
                                       (js/setTimeout
                                        #(search-handler/search value)
-                                       500))))))}]
+                                       100))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
             {:class-names "fade"

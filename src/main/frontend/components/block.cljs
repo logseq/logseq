@@ -1114,18 +1114,9 @@
             (when-not slide? marker-switch)
             marker-cp
             priority]
-           (cond
-             dummy?
-             [[:span.opacity-50 "Click here to start writing"]]
-
-             ;; empty item
-             (and contents? (or
-                             (empty? title)
-                             (= title [["Plain" "[[]]"]])))
-             [[:span.opacity-50 "Click here to add a page, e.g. [[favorite-page]]"]]
-
-             :else
-             (map-inline config title))
+           (if title
+             (map-inline config title)
+             [[:span.opacity-50 "Click here to start writing"]])
            [tags])))))))
 
 (defn dnd-same-block?
