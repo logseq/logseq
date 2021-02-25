@@ -731,10 +731,8 @@ a.fade-link:hover {
 
 /* < > buttons */
 
-a[title="Go Back"],
-a[title="Go Forward"] {
+a.navigation {
     border-radius: 3px;
-    opacity: 1;
     transition: .3s;
 }
 

@@ -380,10 +380,15 @@
   (when (and page (contains? config/mldoc-support-formats format))
     (let [old-name page
           new-name (let [ast (mldoc/->edn content (mldoc/default-config format))]
-                     (db/get-page-name path ast))]
-      (when (not= old-name new-name)
-        (rename! old-name new-name)
-        new-name))))
+                     (db/get-page-name path ast))
+          journal? (date/valid-journal-title? old-name)]
+      (if (not= old-name new-name)
+        (if journal?
+          [true old-name]
+          (do
+            (rename! old-name new-name)
+            [false new-name]))
+        [journal? old-name]))))
 
 (defn handle-add-page-to-contents!
   [page-name]

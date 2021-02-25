@@ -59,16 +59,13 @@
         app-dir config/app-name
         dir (str repo-dir "/" app-dir)]
     (p/let [_ (fs/mkdir-if-not-exists dir)]
-      (let [default-content config/config-default-content]
+      (let [default-content config/config-default-content
+            path (str app-dir "/" config/config-file)]
         (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
-          (let [path (str app-dir "/" config/config-file)
-                old-content (when file-exists?
-                              (db/get-file repo-url path))
-                content (or old-content default-content)]
-            (file-handler/reset-file! repo-url path content)
-            (common-handler/reset-config! repo-url content)
-            (when-not (= content old-content)
-              (git-handler/git-add repo-url path))))))))
+          (when-not file-exists?
+            (file-handler/reset-file! repo-url path default-content)
+            (common-handler/reset-config! repo-url default-content)
+            (git-handler/git-add repo-url path)))))))
 
 (defn create-contents-file
   [repo-url]
@@ -193,12 +190,12 @@
         blocks-pages (if (seq parsed-files)
                        (extract-handler/extract-all-blocks-pages repo-url parsed-files)
                        [])]
-    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (let [config-file (config/get-config-path)]
-      (if (contains? (set file-paths) config-file)
+      (when (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
+    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (when first-clone?
       (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
         (state/set-modal!

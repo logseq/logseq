@@ -98,7 +98,7 @@
                                               ["." "assets" "node_modules"])
                                         (some #(string/ends-with? path (str dir "/" %))
                                               [".swap" ".crswap" ".tmp"])))
-                            :ignoreInitial true
+                            :ignoreInitial false
                             :persistent true
                             :awaitWriteFinish true}))]
       (.on watcher "add"

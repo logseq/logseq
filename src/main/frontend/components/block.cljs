@@ -1535,7 +1535,7 @@
       (block-content-or-editor config block edit-input-id block-id slide?)]
 
      (when (seq children)
-       [:div.block-children {:style {:margin-left (if doc-mode? 12 22)
+       [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
                                      :display (if collapsed? "none" "")}}
         (for [child children]
           (when (map? child)

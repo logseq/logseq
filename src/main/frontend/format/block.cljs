@@ -431,7 +431,7 @@
   [original-page-name]
   (when original-page-name
     (let [page-name (string/lower-case original-page-name)]
-      (if-let [d (date/journal-title->int (string/capitalize page-name))]
+      (if-let [d (date/journal-title->int page-name)]
         {:page/name page-name
          :page/original-name original-page-name
          :page/journal? true

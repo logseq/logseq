@@ -148,7 +148,7 @@
 (defn valid-journal-title?
   [title]
   (and title
-       (valid? (string/capitalize title))))
+       (valid? (util/capitalize-all title))))
 
 (defn journal-title->
   [journal-title then-fn]
@@ -156,7 +156,7 @@
     (when-let [time (->> (map
                           (fn [formatter]
                             (try
-                              (tf/parse (tf/formatter formatter) journal-title)
+                              (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
                               (catch js/Error _e
                                 nil)))
                           (journal-title-formatters))
@@ -166,7 +166,9 @@
 
 (defn journal-title->int
   [journal-title]
-  (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))
+  (when journal-title
+    (let [journal-title (util/capitalize-all journal-title)]
+      (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))))
 
 (defn journal-title->long
   [journal-title]

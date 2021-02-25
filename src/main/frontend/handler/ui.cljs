@@ -25,6 +25,13 @@
   []
   (state/toggle-sidebar-open?!))
 
+(defn toggle-contents!
+  []
+  (when-let [current-repo (state/get-current-repo)]
+    (let [id "contents"]
+      (if (state/sidebar-block-exists? id)
+        (state/sidebar-remove-block! id)
+        (state/sidebar-add-block! current-repo id :contents nil)))))
 
 ;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
 
