@@ -815,7 +815,7 @@
                   :frameborder "no"
                   :border "0"
                   :scrolling "no"
-                  :src (str "https://player.bilibili.com/player.html?bvid=" id)
+                  :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
                   :width width
                   :height (max 500 height)}]))))
 
