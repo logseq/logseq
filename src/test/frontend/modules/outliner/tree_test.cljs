@@ -459,11 +459,11 @@
                         [9 [[10]]]]]]]]
               @result))
         (do (reset! number 12)
-            (is [[1 [[2 [[3 [[4] [5]]]
-                         [6 [[7 [[8]]]]]
-                         [9 [[10] [11]]]]]
-                     [12]]]]
-              @result))))))
+            (is (= [[1 [[2 [[3 [[4] [5]]]
+                            [6 [[7 [[8]]]]]
+                            [9 [[10] [11]]]]]
+                        [12]]]]
+                  @result)))))))
 
 (deftest test-react-for-insert-node-after-first
   "
@@ -492,7 +492,8 @@
         (let [new-node (build-by-block-id 18 nil nil)
               left-node (build-by-block-id 3 2 2)]
           (tree/insert-node-after-first new-node left-node)
-          (is (= [[1 [[2 [[3 [[4] [5]]]
+          (is (= [[1 [[2 [[3 [[4]
+                              [5]]]
                           [18]
                           [6 [[7 [[8]]]]]
                           [9]]]]]]
@@ -526,11 +527,11 @@
         (let [new-node (build-by-block-id 18 nil nil)
               parent-node (build-by-block-id 2 1 1)]
           (tree/insert-node-as-first new-node parent-node)
-          (is [[1 [[2 [[18]
-                       [3 [[4] [5]]]
-                       [6 [[7 [[8]]]]]
-                       [9]]]]]]
-            @result))))))
+          (is (= [[1 [[2 [[18]
+                          [3 [[4] [5]]]
+                          [6 [[7 [[8]]]]]
+                          [9]]]]]]
+                @result)))))))
 
 (deftest test-react-for-delete-node
   "
@@ -558,10 +559,10 @@
               @result))
         (let [node (build-by-block-id 6 2 3)]
           (tree/delete-node node)
-          (is [[1 [[2 [[3 [[4] [5]]]
-                       [9 [[10] [11]]]]]
-                   [12 [[13]]]]]]
-            @result))))))
+          (is (= [[1 [[2 [[3 [[4] [5]]]
+                          [9 [[10] [11]]]]]
+                      [12 [[13]]]]]]
+                @result)))))))
 
 (deftest test-react-for-move-subtree
   "

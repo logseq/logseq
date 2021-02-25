@@ -1,6 +1,5 @@
 (ns frontend.react-impl
   "Note: don't run component parallel"
-  ;;#?(:clj (:require [clojure.tools.macro :refer [name-with-attributes]]))
   #?(:cljs (:require-macros [frontend.react-impl])))
 
 #_{:component-key {:result nil
