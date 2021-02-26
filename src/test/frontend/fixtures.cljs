@@ -21,7 +21,7 @@
 (defn outliner-db
   [f]
   (let [fresh-db (conn/create-outliner-db)]
-    (reset! conn/outliner-db fresh-db)
+    (reset! conn/outliner-db @fresh-db)
     (let [r (f)]
-      (reset! outliner-state/position-state fresh-db)
+      (reset! outliner-state/position-state @fresh-db)
       r)))

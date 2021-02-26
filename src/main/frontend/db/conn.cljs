@@ -70,8 +70,8 @@
                      :me/avatar avatar}))
 
 (defn create-outliner-db [] (d/create-conn db-schema/outline-schema))
-(def outliner-db (atom (create-outliner-db)))
-(defn get-outliner-conn [] @outliner-db)
+(def outliner-db (create-outliner-db))
+(defn get-outliner-conn [] outliner-db)
 
 (defn start!
   ([me repo]
