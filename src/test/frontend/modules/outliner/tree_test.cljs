@@ -73,7 +73,7 @@
     (when-not (= i 0)
       (prn (d/pull @conn/outliner-db '[*] [:block/id i])))))
 
-(deftest test-insert-node-after-first
+(deftest test-insert-node-as-sibling
   "
   Inert a node between 6 and 9.
   [1 [[2 [[3 [[4]
@@ -90,13 +90,13 @@
   (build-db-records node-tree)
   (let [new-node (build-block 18 nil nil)
         left-node (build-block 6 2 3)]
-    (tree/insert-node-after-first new-node left-node)
+    (tree/insert-node-as-sibling new-node left-node)
     (let [children-of-2 (->> (build-block 2 1 1)
                           (tree/-get-children)
                           (mapv #(-> % :data :block/id)))]
       (is (= [3 6 18 9] children-of-2)))))
 
-(deftest test-insert-node-as-first
+(deftest test-insert-node-as-first-child
   "
   Inert a node between 6 and 9.
   [1 [[2 [[18]         ;; add
@@ -114,7 +114,7 @@
   (build-db-records node-tree)
   (let [new-node (build-block 18 nil nil)
         parent-node (build-block 2 1 1)]
-    (tree/insert-node-as-first new-node parent-node)
+    (tree/insert-node-as-first-child new-node parent-node)
     (let [children-of-2 (->> (build-block 2 1 1)
                           (tree/-get-children)
                           (mapv #(-> % :data :block/id)))]
@@ -253,7 +253,7 @@
                     [12]]]]
               @result)))))
 
-(deftest test-react-for-insert-node-after-first
+(deftest test-react-for-insert-node-as-sibling
   "
   [1 [[2 [[3 [[4]
               [5]]]
@@ -277,7 +277,7 @@
           @result))
     (let [new-node (build-block 18 nil nil)
           left-node (build-block 3 2 2)]
-      (tree/insert-node-after-first new-node left-node)
+      (tree/insert-node-as-sibling new-node left-node)
       (is (= [[1 [[2 [[3 [[4]
                           [5]]]
                       [18]
@@ -286,7 +286,7 @@
             @result)))))
 
 
-(deftest test-react-insert-node-as-first
+(deftest test-react-insert-node-as-first-child
   "
   [1 [[2 [[3 [[4]
               [5]]]
@@ -310,7 +310,7 @@
           @result))
     (let [new-node (build-block 18 nil nil)
           parent-node (build-block 2 1 1)]
-      (tree/insert-node-as-first new-node parent-node)
+      (tree/insert-node-as-first-child new-node parent-node)
       (is (= [[1 [[2 [[18]
                       [3 [[4] [5]]]
                       [6 [[7 [[8]]]]]

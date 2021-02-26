@@ -20,8 +20,8 @@
   [node]
   (satisfies? INode node))
 
-(defn insert-node-as-first
-  "Insert a node as first child of its parent."
+(defn insert-node-as-first-child
+  "Insert a node as first child."
   [new-node parent-node]
   (:pre [(every? satisfied-inode? [new-node parent-node])])
   (let [right-node (-get-down parent-node)
@@ -32,8 +32,8 @@
     (-save node)
     (-save new-right-node)))
 
-(defn insert-node-after-first
-  "Insert a node after first child of its parent."
+(defn insert-node-as-sibling
+  "Insert a node as sibling."
   [new-node left-node]
   (:pre [(every? satisfied-inode? [new-node left-node])])
   (let [right-node (-get-right left-node)
@@ -65,8 +65,8 @@
                        (-set-left-id left-node-id))]
     (-save right-node)
     (if (nil? left-node)
-      (insert-node-as-first root parent-node)
-      (insert-node-after-first root left-node))))
+      (insert-node-as-first-child root parent-node)
+      (insert-node-as-sibling root left-node))))
 
 (defn render-react-tree
   [init-node node-number
