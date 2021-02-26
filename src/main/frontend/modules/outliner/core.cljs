@@ -7,51 +7,6 @@
             [frontend.util :as util]
             [frontend.modules.outliner.utils :as outliner-u]))
 
-(defn block-id?
-  [id]
-  (or
-    (number? id)
-    (string? id)))
-
-(defn check-block-id
-  [id]
-  (assert (block-id? id)
-    (util/format "The id should match block-id?: %s" (pr-str id))))
-
-(defn ->block-id
-  [id]
-  (cond
-    (block-id? id)
-    id
-
-    (and
-      (vector? id)
-      (= (first id) :block/id))
-    (second id)
-
-    (or (e/entity? id) (map? id))
-    (let [conn (conn/get-outliner-conn)]
-      (-> (db-outliner/get-by-id conn (:db/id id))
-        (:block/id)))
-
-    :else nil))
-
-(defn ->block-look-ref
-  [id]
-  (cond
-    (and
-      (vector? id)
-      (= (first id) :block/id))
-    id
-
-    (block-id? id)
-    [:block/id id]
-
-    (or (e/entity? id) (map? id))
-    id
-
-    :else nil))
-
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent-id, :block/left-id should be datascript lookup ref
 
@@ -64,18 +19,18 @@
 
   (-get-parent-id [this]
     (-> (get-in this [:data :block/parent-id])
-      (->block-id)))
+      (outliner-u/->block-id)))
 
   (-set-parent-id [this parent-id]
-    (check-block-id parent-id)
+    (outliner-u/check-block-id parent-id)
     (update this :data assoc :block/parent-id [:block/id parent-id]))
 
   (-get-left-id [this]
     (-> (get-in this [:data :block/left-id])
-      (->block-id)))
+      (outliner-u/->block-id)))
 
   (-set-left-id [this left-id]
-    (check-block-id left-id)
+    (outliner-u/check-block-id left-id)
     (update this :data assoc :block/left-id [:block/id left-id]))
 
   (-get-parent [this]
@@ -89,11 +44,11 @@
   (-get-right [this]
     (let [left-id (tree/-get-id this)
           parent-id (tree/-get-parent-id this)]
-      (state/get-block-by-parent-&-left parent-id left-id)))
+      (state/get-block-and-ensure-state parent-id left-id)))
 
   (-get-down [this]
     (let [parent-id (tree/-get-id this)]
-      (state/get-block-by-parent-&-left parent-id parent-id)))
+      (state/get-block-and-ensure-state parent-id parent-id)))
 
   (-save [this]
     (let [conn (conn/get-outliner-conn)

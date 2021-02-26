@@ -59,6 +59,7 @@
     root: root of subtree
     left-node: left node of destination"
   [root parent-node left-node]
+  {:pre [(every? satisfied-inode? [root parent-node left-node])]}
   (let [left-node-id (-get-left-id root)
         right-node (-> (-get-right root)
                        (-set-left-id left-node-id))]

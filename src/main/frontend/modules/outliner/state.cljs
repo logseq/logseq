@@ -106,14 +106,16 @@
           (when atom-still-mine?
             (del-position old-block)))))))
 
-(defn get-block-by-parent-&-left
+(defn get-block-and-ensure-state
   [parent-id left-id]
   (let [block-ref
         (if-let [block-ref (get-block-by-position parent-id left-id)]
           block-ref
           (let [c (conn/get-outliner-conn)
                 r (db-outliner/get-by-parent-&-left
-                    c [:block/id parent-id] [:block/id left-id])
+                    c
+                    (outliner-u/->block-look-ref parent-id)
+                    (outliner-u/->block-look-ref left-id))
                 block (when r (outliner-u/->Block r))
                 block-ref (save-position parent-id left-id block)]
             block-ref))]

@@ -5,7 +5,7 @@
             [frontend.tools.react-impl :as r]
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
-            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.core]
             [frontend.fixtures :as fixtures]))
 
 (def fixtures (test/join-fixtures
@@ -21,9 +21,9 @@
   ([id parent-id left-id & [m]]
    (let [m (->> (merge m {:block/id id
                           :block/parent-id
-                          (outliner-core/->block-look-ref parent-id)
+                          (outliner-u/->block-look-ref parent-id)
                           :block/left-id
-                          (outliner-core/->block-look-ref left-id)})
+                          (outliner-u/->block-look-ref left-id)})
              (remove #(nil? (val %)))
              (into {}))]
      (outliner-u/->Block m))))
