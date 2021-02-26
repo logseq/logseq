@@ -1162,10 +1162,9 @@
 
 (defn filter-only-public-pages-and-blocks
   [db]
-  (let [public-pages (get-public-pages db)
-        contents-id (:db/id (db-utils/entity [:page/name "contents"]))]
+  (let [public-pages (get-public-pages db)]
     (when (seq public-pages)
-      (let [public-pages (set (conj public-pages contents-id))
+      (let [public-pages (set public-pages)
             page-or-block? #(contains? #{"page" "block" "me" "recent" "file"} %)
             filtered-db (d/filter db
                                   (fn [db datom]
