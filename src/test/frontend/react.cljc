@@ -1,6 +1,7 @@
-(ns frontend.tools.react-impl
-  "Note: don't run component parallel"
-  #?(:cljs (:require-macros [frontend.tools.react-impl])))
+(ns frontend.react
+  "A React implement for test.
+  Note: don't run component parallel"
+  #?(:cljs (:require-macros [frontend.react])))
 
 #_{:component-key {:result nil
                    :watches []
@@ -73,4 +74,5 @@
                (let [result# ~@body]
                  (reset! react-components {})
                  result#))))
+
 

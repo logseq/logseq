@@ -3,7 +3,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.utils :as outliner-u]
-            [frontend.tools.react-impl :as r]))
+            [frontend.react-impls :as r]))
 
 (def position-state (atom {}))
 
@@ -119,5 +119,5 @@
                 block (when r (outliner-u/->Block r))
                 block-ref (save-position parent-id left-id block)]
             block-ref))]
-    (-> (r/react block-ref)
+    (-> (@r/react block-ref)
       :block)))

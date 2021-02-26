@@ -3,7 +3,6 @@
             [frontend.modules.outliner.state :as state]
             [frontend.db.outliner :as db-outliner]
             [frontend.db.conn :as conn]
-            [datascript.impl.entity :as e]
             [frontend.util :as util]
             [frontend.modules.outliner.utils :as outliner-u]))
 

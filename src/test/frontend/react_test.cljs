@@ -1,11 +1,12 @@
-(ns frontend.react-impl-test
+(ns frontend.react-test
   "To facilitate testing, imitate the behavior of react"
-  (:require [frontend.tools.react-impl :as r]
+  (:require [frontend.react :as r]
             [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
             [frontend.fixtures :as fixtures]))
 
 (use-fixtures :each
-  fixtures/react-components)
+  fixtures/react-components
+  fixtures/react-impl)
 
 (deftest simple-react-test
   (let [react-ref (atom 1)]

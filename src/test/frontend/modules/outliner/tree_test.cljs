@@ -2,14 +2,15 @@
   (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests] :as test]
             [frontend.modules.outliner.tree :as tree]
             [datascript.core :as d]
-            [frontend.tools.react-impl :as r]
+            [frontend.react :as r]
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.core]
             [frontend.fixtures :as fixtures]))
 
 (def fixtures (test/join-fixtures
-                [fixtures/react-components
+                [fixtures/react-impl
+                 fixtures/react-components
                  fixtures/outliner-position-state
                  fixtures/outliner-db]))
 
