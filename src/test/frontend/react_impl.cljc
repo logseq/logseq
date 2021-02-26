@@ -16,23 +16,23 @@
 (defn react
   [react-ref]
   (let [ident *ident-key*
-        f (get-in @react-components [ident :f])]
+        component (get @react-components ident)]
     (cond
-      (ifn? f)
-      (do (let [component (get @react-components ident)]
-            (when-not ((:watches component) react-ref)
-              (let [new-component (update component :watches conj react-ref)]
-                (swap! react-components assoc *ident-key* new-component)
-                (add-watch react-ref ident
-                  (fn [_key _atom old-state new-state]
-                    (when-not (= old-state new-state)
-                      (let [root-info (get-in @react-components [ident :root-info])]
-                        (let [{:keys [f ident]} root-info]
-                          (binding [*with-key* ident
-                                    *root-info* root-info]
-                            (let [component (get @react-components ident)]
-                              (reset! (:result component) (f))))))))))))
-          @react-ref)
+      (some? component)
+      (do
+        (when-not ((:watches component) react-ref)
+          (let [new-component (update component :watches conj react-ref)]
+            (swap! react-components assoc *ident-key* new-component)
+            (add-watch react-ref ident
+              (fn [_key _atom old-state new-state]
+                (when-not (= old-state new-state)
+                  (let [root-info (get-in @react-components [ident :root-info])]
+                    (let [{:keys [f ident]} root-info]
+                      (binding [*with-key* ident
+                                *root-info* root-info]
+                        (let [component (get @react-components ident)]
+                          (reset! (:result component) (f)))))))))))
+        @react-ref)
 
       ;; Sometime react is not used in component by accident, return the val.
       :else
@@ -48,8 +48,7 @@
           (let [component {:result result
                            :watches #{}
                            :ident *ident-key*
-                           :root-info *root-info*
-                           :f f}]
+                           :root-info *root-info*}]
             (swap! react-components assoc *ident-key* component))
           (reset! result (f))
           result)))))
