@@ -98,19 +98,13 @@
   (-save [this]
     (let [conn (conn/get-outliner-conn)
           data (:data this)]
-      (state/save-block-ref-logic this)
+      (state/save-into-state this)
       (db-outliner/save-block conn data)))
 
   (-del [this]
     (let [conn (conn/get-outliner-conn)
           block-id (tree/-get-id this)]
-      (when-let [old-block (outliner-u/get-block-by-id block-id)]
-        (when-let [data (some-> (state/get-block-from-ref old-block)
-                          (deref)
-                          :block)]
-          (let [atom-still-mine? (= block-id (:block/id data))]
-            (when atom-still-mine?
-              (state/del-block-ref old-block)))))
+      (state/del-from-state this)
       (db-outliner/del-block conn [:block/id block-id])))
 
   (-get-children [this]

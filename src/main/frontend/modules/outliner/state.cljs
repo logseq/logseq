@@ -7,12 +7,12 @@
 
 (def position-state (atom {}))
 
-(defn- save-block-ref
+(defn- save-position
   ([block]
    {:pre [(tree/satisfied-inode? block)]}
    (let [parent-id (tree/-get-parent-id block)
          left-id (tree/-get-left-id block)]
-     (save-block-ref parent-id left-id block)))
+     (save-position parent-id left-id block)))
   ([parent-id left-id block-value]
    (let [ref-key [parent-id left-id]]
      (if-let [ref-atom (get @position-state ref-key)]
@@ -26,12 +26,12 @@
          (swap! position-state assoc ref-key block-ref)
          block-ref)))))
 
-(defn- del-block-ref
+(defn- del-position
   ([block]
    {:pre [(tree/satisfied-inode? block)]}
    (let [parent-id (tree/-get-parent-id block)
          left-id (tree/-get-left-id block)]
-     (del-block-ref parent-id left-id)))
+     (del-position parent-id left-id)))
   ([parent-id left-id]
    (let [ref-key [parent-id left-id]]
      (when-let [ref-atom (get @position-state ref-key)]
@@ -39,12 +39,12 @@
                          :parent-id parent-id
                          :left-id left-id})))))
 
-(defn- get-block-from-ref
+(defn- get-block-by-position
   ([block]
    {:pre [(tree/satisfied-inode? block)]}
    (let [parent-id (tree/-get-parent-id block)
          left-id (tree/-get-left-id block)]
-     (get-block-from-ref parent-id left-id)))
+     (get-block-by-position parent-id left-id)))
   ([parent-id left-id]
    (let [ref-key [parent-id left-id]]
      (when-let [ref (get @position-state ref-key)]
@@ -70,42 +70,52 @@
   (not= (tree/-get-id block)
     (tree/-get-id block-in-cache)))
 
-(defn save-block-ref-logic
-  "Main logic to handler cache."
+(defn save-into-state
   [block]
   (let [block-id (tree/-get-id block)
         block-in-datascript (outliner-u/get-block-by-id block-id)]
     (cond
       ;; no legacy cache need to process, save directly.
       (not block-in-datascript)
-      (save-block-ref block)
+      (save-position block)
 
       :else
       (if (position-changed? block-in-datascript block)
         (do
-          (save-block-ref block)
+          (save-position block)
           (let [block-in-cache
-                (some-> (get-block-from-ref block-in-datascript) deref :block)]
+                (some-> (get-block-by-position block-in-datascript) deref :block)]
             (when (and block-in-cache
                     (not (position-taken? block block-in-cache)))
-              (del-block-ref block-in-datascript))))
+              (del-position block-in-datascript))))
         (let [block-in-cache
-              (some-> (get-block-from-ref block-in-datascript) deref :block)]
+              (some-> (get-block-by-position block-in-datascript) deref :block)]
           (if (and block-in-cache
                 (position-taken? block block-in-cache))
             (throw (js/Error. "Other node should not take my seat."))
-            (save-block-ref block)))))))
+            (save-position block)))))))
+
+(defn del-from-state
+  [block]
+  (let [block-id (tree/-get-id block)]
+    (when-let [old-block (outliner-u/get-block-by-id block-id)]
+      (when-let [data (some-> (get-block-by-position old-block)
+                        (deref)
+                        :block)]
+        (let [atom-still-mine? (= block-id (:block/id data))]
+          (when atom-still-mine?
+            (del-position old-block)))))))
 
 (defn get-block-by-parent-&-left
   [parent-id left-id]
   (let [block-ref
-        (if-let [block-ref (get-block-from-ref parent-id left-id)]
+        (if-let [block-ref (get-block-by-position parent-id left-id)]
           block-ref
           (let [c (conn/get-outliner-conn)
                 r (db-outliner/get-by-parent-&-left
                     c [:block/id parent-id] [:block/id left-id])
                 block (when r (outliner-u/->Block r))
-                block-ref (save-block-ref parent-id left-id block)]
+                block-ref (save-position parent-id left-id block)]
             block-ref))]
     (-> (r/react block-ref)
       :block)))
