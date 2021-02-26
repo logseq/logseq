@@ -69,18 +69,9 @@
                      :me/email email
                      :me/avatar avatar}))
 
-(defn create-outliner-db
-  []
-  (d/create-conn db-schema/outline-schema))
-
-(def ^:dynamic *outline-db* nil)
-
-(let [db (delay (create-outliner-db))]
-  (defn get-outliner-conn
-    []
-    (if *outline-db*
-      *outline-db*
-      @db)))
+(defn create-outliner-db [] (d/create-conn db-schema/outline-schema))
+(def outliner-db (atom (create-outliner-db)))
+(defn get-outliner-conn [] @outliner-db)
 
 (defn start!
   ([me repo]

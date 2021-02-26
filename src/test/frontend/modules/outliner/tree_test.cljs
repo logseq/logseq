@@ -1,16 +1,18 @@
 (ns frontend.modules.outliner.tree-test
-  (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
+  (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests] :as test]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.db.conn :as conn]
             [datascript.core :as d]
             [frontend.tools.react-impl :as r]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.core]
             [frontend.fixtures :as fixtures]))
 
-(use-fixtures :each
-  fixtures/react-components
-  fixtures/outliner-position-state)
+(def fixtures (test/join-fixtures
+                [fixtures/react-components
+                 fixtures/outliner-position-state
+                 fixtures/outliner-db]))
+
+(use-fixtures :each fixtures)
 
 (defn build-block-by-ident
   ([id]
@@ -76,11 +78,10 @@
 (def node-tree (build-node-tree tree))
 
 (comment
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (dotimes [i 18]
-      (when-not (= i 0)
-        (prn (d/pull @conn/*outline-db* '[*] [:block/id i]))))))
+  (build-db-records node-tree)
+  (dotimes [i 18]
+    (when-not (= i 0)
+      (prn (d/pull @conn/*outline-db* '[*] [:block/id i])))))
 
 (deftest test-insert-node-after-first
   "
@@ -96,15 +97,14 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (let [new-node (build-by-block-id 18 nil nil)
-          left-node (build-by-block-id 6 2 3)]
-      (tree/insert-node-after-first new-node left-node)
-      (let [children-of-2 (->> (build-block-by-ident 2 1 1)
-                            (tree/-get-children)
-                            (mapv #(-> % :data :block/id)))]
-        (is (= [3 6 18 9] children-of-2))))))
+  (build-db-records node-tree)
+  (let [new-node (build-by-block-id 18 nil nil)
+        left-node (build-by-block-id 6 2 3)]
+    (tree/insert-node-after-first new-node left-node)
+    (let [children-of-2 (->> (build-block-by-ident 2 1 1)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/id)))]
+      (is (= [3 6 18 9] children-of-2)))))
 
 (deftest test-insert-node-as-first
   "
@@ -121,15 +121,14 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (let [new-node (build-by-block-id 18 nil nil)
-          parent-node (build-by-block-id 2 1 1)]
-      (tree/insert-node-as-first new-node parent-node)
-      (let [children-of-2 (->> (build-by-block-id 2 1 1)
-                            (tree/-get-children)
-                            (mapv #(-> % :data :block/id)))]
-        (is (= [18 3 6 9] children-of-2))))))
+  (build-db-records node-tree)
+  (let [new-node (build-by-block-id 18 nil nil)
+        parent-node (build-by-block-id 2 1 1)]
+    (tree/insert-node-as-first new-node parent-node)
+    (let [children-of-2 (->> (build-by-block-id 2 1 1)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/id)))]
+      (is (= [18 3 6 9] children-of-2)))))
 
 (deftest test-delete-node
   "
@@ -144,14 +143,13 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (let [node (build-by-block-id 6 2 3)]
-      (tree/delete-node node)
-      (let [children-of-2 (->> (build-by-block-id 2 1 1)
-                            (tree/-get-children)
-                            (mapv #(-> % :data :block/id)))]
-        (is (= [3 9] children-of-2))))))
+  (build-db-records node-tree)
+  (let [node (build-by-block-id 6 2 3)]
+    (tree/delete-node node)
+    (let [children-of-2 (->> (build-by-block-id 2 1 1)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/id)))]
+      (is (= [3 9] children-of-2)))))
 
 
 (deftest test-move-subtree
@@ -167,20 +165,19 @@
            [15]]]
       [16 [[17]]]]]
    "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (let [node (build-by-block-id 3 2 2)
-          new-parent (build-by-block-id 12 1 2)
-          new-left (build-by-block-id 14 12 13)]
-      (tree/move-subtree node new-parent new-left)
-      (let [old-parent's-children (->> (build-by-block-id 2 1 1)
-                                    (tree/-get-children)
-                                    (mapv #(-> % :data :block/id)))
-            new-parent's-children (->> (build-by-block-id 12 1 2)
-                                    (tree/-get-children)
-                                    (mapv #(-> % :data :block/id)))]
-        (is (= [6 9] old-parent's-children))
-        (is (= [13 14 3 15] new-parent's-children))))))
+  (build-db-records node-tree)
+  (let [node (build-by-block-id 3 2 2)
+        new-parent (build-by-block-id 12 1 2)
+        new-left (build-by-block-id 14 12 13)]
+    (tree/move-subtree node new-parent new-left)
+    (let [old-parent's-children (->> (build-by-block-id 2 1 1)
+                                  (tree/-get-children)
+                                  (mapv #(-> % :data :block/id)))
+          new-parent's-children (->> (build-by-block-id 12 1 2)
+                                  (tree/-get-children)
+                                  (mapv #(-> % :data :block/id)))]
+      (is (= [6 9] old-parent's-children))
+      (is (= [13 14 3 15] new-parent's-children)))))
 
 (defn- get-block-id
   [block]
@@ -249,24 +246,22 @@
            [15]]]
       [16 [[17]]]]]
       "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (r/auto-clean-state
-      (let [root (build-by-block-id 1 nil nil)
-            number (atom 10)
-            result (->> (render-react-tree root number)
-                     (r/with-key (str "root-" (tree/-get-id root))))]
-        (is (= [[1 [[2 [[3 [[4]
-                            [5]]]
+  (build-db-records node-tree)
+  (let [root (build-by-block-id 1 nil nil)
+        number (atom 10)
+        result (->> (render-react-tree root number)
+                 (r/with-key (str "root-" (tree/-get-id root))))]
+    (is (= [[1 [[2 [[3 [[4]
+                        [5]]]
+                    [6 [[7 [[8]]]]]
+                    [9 [[10]]]]]]]]
+          @result))
+    (do (reset! number 12)
+        (is (= [[1 [[2 [[3 [[4] [5]]]
                         [6 [[7 [[8]]]]]
-                        [9 [[10]]]]]]]]
-              @result))
-        (do (reset! number 12)
-            (is (= [[1 [[2 [[3 [[4] [5]]]
-                            [6 [[7 [[8]]]]]
-                            [9 [[10] [11]]]]]
-                        [12]]]]
-                  @result)))))))
+                        [9 [[10] [11]]]]]
+                    [12]]]]
+              @result)))))
 
 (deftest test-react-for-insert-node-after-first
   "
@@ -280,27 +275,25 @@
            [15]]]
       [16 [[17]]]]]
       "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (r/auto-clean-state
-      (let [root (build-by-block-id 1 nil nil)
-            number (atom 10)
-            result (->> (render-react-tree root number)
-                     (r/with-key (str "root-" (tree/-get-id root))))]
-        (is (= [[1 [[2 [[3 [[4]
-                            [5]]]
-                        [6 [[7 [[8]]]]]
-                        [9 [[10]]]]]]]]
-              @result))
-        (let [new-node (build-by-block-id 18 nil nil)
-              left-node (build-by-block-id 3 2 2)]
-          (tree/insert-node-after-first new-node left-node)
-          (is (= [[1 [[2 [[3 [[4]
-                              [5]]]
-                          [18]
-                          [6 [[7 [[8]]]]]
-                          [9]]]]]]
-                @result)))))))
+  (build-db-records node-tree)
+  (let [root (build-by-block-id 1 nil nil)
+        number (atom 10)
+        result (->> (render-react-tree root number)
+                 (r/with-key (str "root-" (tree/-get-id root))))]
+    (is (= [[1 [[2 [[3 [[4]
+                        [5]]]
+                    [6 [[7 [[8]]]]]
+                    [9 [[10]]]]]]]]
+          @result))
+    (let [new-node (build-by-block-id 18 nil nil)
+          left-node (build-by-block-id 3 2 2)]
+      (tree/insert-node-after-first new-node left-node)
+      (is (= [[1 [[2 [[3 [[4]
+                          [5]]]
+                      [18]
+                      [6 [[7 [[8]]]]]
+                      [9]]]]]]
+            @result)))))
 
 
 (deftest test-react-insert-node-as-first
@@ -315,26 +308,24 @@
            [15]]]
       [16 [[17]]]]]
       "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (r/auto-clean-state
-      (let [root (build-by-block-id 1 nil nil)
-            number (atom 10)
-            result (->> (render-react-tree root number)
-                     (r/with-key (str "root-" (tree/-get-id root))))]
-        (is (= [[1 [[2 [[3 [[4]
-                            [5]]]
-                        [6 [[7 [[8]]]]]
-                        [9 [[10]]]]]]]]
-              @result))
-        (let [new-node (build-by-block-id 18 nil nil)
-              parent-node (build-by-block-id 2 1 1)]
-          (tree/insert-node-as-first new-node parent-node)
-          (is (= [[1 [[2 [[18]
-                          [3 [[4] [5]]]
-                          [6 [[7 [[8]]]]]
-                          [9]]]]]]
-                @result)))))))
+  (build-db-records node-tree)
+  (let [root (build-by-block-id 1 nil nil)
+        number (atom 10)
+        result (->> (render-react-tree root number)
+                 (r/with-key (str "root-" (tree/-get-id root))))]
+    (is (= [[1 [[2 [[3 [[4]
+                        [5]]]
+                    [6 [[7 [[8]]]]]
+                    [9 [[10]]]]]]]]
+          @result))
+    (let [new-node (build-by-block-id 18 nil nil)
+          parent-node (build-by-block-id 2 1 1)]
+      (tree/insert-node-as-first new-node parent-node)
+      (is (= [[1 [[2 [[18]
+                      [3 [[4] [5]]]
+                      [6 [[7 [[8]]]]]
+                      [9]]]]]]
+            @result)))))
 
 (deftest test-react-for-delete-node
   "
@@ -348,24 +339,22 @@
            [15]]]
       [16 [[17]]]]]
       "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (r/auto-clean-state
-      (let [root (build-by-block-id 1 nil nil)
-            number (atom 10)
-            result (->> (render-react-tree root number)
-                     (r/with-key (str "root-" (tree/-get-id root))))]
-        (is (= [[1 [[2 [[3 [[4]
-                            [5]]]
-                        [6 [[7 [[8]]]]]
-                        [9 [[10]]]]]]]]
-              @result))
-        (let [node (build-by-block-id 6 2 3)]
-          (tree/delete-node node)
-          (is (= [[1 [[2 [[3 [[4] [5]]]
-                          [9 [[10] [11]]]]]
-                      [12 [[13]]]]]]
-                @result)))))))
+  (build-db-records node-tree)
+  (let [root (build-by-block-id 1 nil nil)
+        number (atom 10)
+        result (->> (render-react-tree root number)
+                 (r/with-key (str "root-" (tree/-get-id root))))]
+    (is (= [[1 [[2 [[3 [[4]
+                        [5]]]
+                    [6 [[7 [[8]]]]]
+                    [9 [[10]]]]]]]]
+          @result))
+    (let [node (build-by-block-id 6 2 3)]
+      (tree/delete-node node)
+      (is (= [[1 [[2 [[3 [[4] [5]]]
+                      [9 [[10] [11]]]]]
+                  [12 [[13]]]]]]
+            @result)))))
 
 (deftest test-react-for-move-subtree
   "
@@ -379,34 +368,31 @@
            [15]]]
       [16 [[17]]]]]
       "
-  (binding [conn/*outline-db* (conn/create-outliner-db)]
-    (build-db-records node-tree)
-    (r/auto-clean-state
-      (let [root (build-by-block-id 1 nil nil)
-            number (atom 20)
-            result (->> (render-react-tree root number)
-                     (r/with-key (str "root-" (tree/-get-id root))))]
-        (is (= [[1 [[2 [[3 [[4]
-                            [5]]]
-                        [6 [[7 [[8]]]]]
-                        [9 [[10]
-                            [11]]]]]
-                    [12 [[13]
-                         [14]
-                         [15]]]
-                    [16 [[17]]]]]]
-              @result))
-        (let [node (build-by-block-id 3 2 2)
-              new-parent (build-by-block-id 12 1 2)
-              new-left (build-by-block-id 14 12 13)]
-          (tree/move-subtree node new-parent new-left)
-          (is (= [[1 [[2 [[6 [[7 [[8]]]]]
-                          [9 [[10] [11]]]]]
-                      [12 [[13]
-                           [14]
-                           [3 [[4]
-                               [5]]]
-                           [15]]]
-                      [16 [[17]]]]]]
-                @result)))))))
-
+  (build-db-records node-tree)
+  (let [root (build-by-block-id 1 nil nil)
+        number (atom 20)
+        result (->> (render-react-tree root number)
+                 (r/with-key (str "root-" (tree/-get-id root))))]
+    (is (= [[1 [[2 [[3 [[4]
+                        [5]]]
+                    [6 [[7 [[8]]]]]
+                    [9 [[10]
+                        [11]]]]]
+                [12 [[13]
+                     [14]
+                     [15]]]
+                [16 [[17]]]]]]
+          @result))
+    (let [node (build-by-block-id 3 2 2)
+          new-parent (build-by-block-id 12 1 2)
+          new-left (build-by-block-id 14 12 13)]
+      (tree/move-subtree node new-parent new-left)
+      (is (= [[1 [[2 [[6 [[7 [[8]]]]]
+                      [9 [[10] [11]]]]]
+                  [12 [[13]
+                       [14]
+                       [3 [[4]
+                           [5]]]
+                       [15]]]
+                  [16 [[17]]]]]]
+            @result)))))
