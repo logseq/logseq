@@ -9,6 +9,7 @@
             [frontend.db :as db]
             [frontend.config :as config]
             [frontend.state :as state]
+            [frontend.handler.notification :as notification]
             ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
@@ -155,14 +156,19 @@
           (->
            (p/let [handle (idb/get-item handle-path)]
              (if handle
-               (do
-                 (p/let [_ (verify-permission repo handle true)
-                         file-handle (.getFileHandle ^js handle basename #js {:create true})
-                         _ (idb/set-item! basename-handle-path file-handle)
-                         _ (utils/writeFile file-handle content)
-                         file (.getFile file-handle)]
-                   (when file
-                     (nfs-saved-handler repo path file))))
+               (p/let [_ (verify-permission repo handle true)
+                       file-handle (.getFileHandle ^js handle basename #js {:create true})
+                       ;; File exists if the file-handle has some content in it.
+                       file (.getFile file-handle)
+                       text (.text file)]
+                 (if (string/blank? text)
+                   (p/let [_ (idb/set-item! basename-handle-path file-handle)
+                          _ (utils/writeFile file-handle content)
+                          file (.getFile file-handle)]
+                    (when file
+                      (nfs-saved-handler repo path file)))
+                   (notification/show! (str "The file " path " already exists, please save your changes and click the refresh button to reload it.")
+                    :warning)))
                (println "Error: directory handle not exists: " handle-path)))
            (p/catch (fn [error]
                       (println "Write local file failed: " {:path path})
