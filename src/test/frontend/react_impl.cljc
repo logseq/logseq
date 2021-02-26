@@ -7,7 +7,7 @@
                    :ident nil
                    :root-info nil
                    :f nil}}
-(def react-defines (atom {}))
+(def react-components (atom {}))
 (def ^:dynamic *with-key* nil)
 (def ^:dynamic *ident-key* nil)
 (def ^:dynamic *root-info* nil)
@@ -16,21 +16,21 @@
 (defn react
   [react-ref]
   (let [ident *ident-key*
-        f (get-in @react-defines [ident :f])]
+        f (get-in @react-components [ident :f])]
     (cond
       (ifn? f)
-      (do (let [component (get @react-defines ident)]
+      (do (let [component (get @react-components ident)]
             (when-not ((:watches component) react-ref)
               (let [new-component (update component :watches conj react-ref)]
-                (swap! react-defines assoc *ident-key* new-component)
+                (swap! react-components assoc *ident-key* new-component)
                 (add-watch react-ref ident
                   (fn [_key _atom old-state new-state]
                     (when-not (= old-state new-state)
-                      (let [root-f (get-in @react-defines [ident :root-info])]
-                        (let [{:keys [f ident]} root-f]
+                      (let [root-info (get-in @react-components [ident :root-info])]
+                        (let [{:keys [f ident]} root-info]
                           (binding [*with-key* ident
-                                    *root-info* root-f]
-                            (let [component (get @react-defines ident)]
+                                    *root-info* root-info]
+                            (let [component (get @react-components ident)]
                               (reset! (:result component) (f))))))))))))
           @react-ref)
 
@@ -38,22 +38,19 @@
       :else
       @react-ref)))
 
-(defn react-fn
+(defn set-comp-and-calc-result
   [f]
-  (let [{result :result :as component} (get @react-defines *ident-key*)]
+  (let [{result :result :as component} (get @react-components *ident-key*)]
     (if component
-      (do (reset! result (f))
-          result)
+      (do (reset! result (f)) result)
       (let [result (atom nil)]
-        (binding [*root-info* (if *root-info*
-                                *root-info*
-                                {:f f :ident *ident-key*})]
+        (binding [*root-info* (if *root-info* *root-info* {:f f :ident *ident-key*})]
           (let [component {:result result
                            :watches #{}
                            :ident *ident-key*
                            :root-info *root-info*
                            :f f}]
-            (swap! react-defines assoc *ident-key* component))
+            (swap! react-components assoc *ident-key* component))
           (reset! result (f))
           result)))))
 
@@ -68,7 +65,7 @@
                                   *with-key* nil]
                           ~@body))]
                (binding [*ident-key* *with-key*]
-                 (react-fn f#))))))
+                 (set-comp-and-calc-result f#))))))
 
 #?(:clj (defmacro with-key
           [key & body]
@@ -77,7 +74,7 @@
 
 #?(:clj (defmacro auto-clean-state
           [& body]
-          `(do (reset! react-defines {})
+          `(do (reset! react-components {})
                (let [result# ~@body]
-                 (reset! react-defines {})
+                 (reset! react-components {})
                  result#))))
