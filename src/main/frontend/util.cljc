@@ -375,8 +375,15 @@
 (def moving-frequency 15)
 
 #?(:cljs
-    (defn cur-doc-top []
-      (.. js/document -documentElement -scrollTop)))
+   (defn cur-doc-top []
+     (.. js/document -documentElement -scrollTop)))
+
+#?(:cljs
+   (defn lock-global-scroll
+     ([] (lock-global-scroll true))
+     ([v] (js-invoke (.-classList (app-scroll-container-node))
+                     (if v "add" "remove")
+                     "locked-scroll"))))
 
 #?(:cljs
     (defn element-top [elem top]

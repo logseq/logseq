@@ -422,17 +422,17 @@
 
 (rum/defc modal-panel
   [panel-content state close-fn]
-  [:div.relative.bg-white.rounded-lg.px-4.pt-5.pb-4.overflow-hidden.shadow-xl.transform.transition-all.sm:max-w-lg.sm:w-full.sm:p-6
+  [:div.relative.bg-white.rounded-md.px-4.pt-5.pb-4.overflow-hidden.shadow-xl.transform.transition-all.sm:min-w-lg.sm:p-6
    {:class (case state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-   [:div.absolute.top-0.right-0.pt-4.pr-4
+   [:div.absolute.top-0.right-0.pt-2.pr-2
     [:button.text-gray-400.hover:text-gray-500.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
      {:aria-label "Close"
       :type       "button"
-      :on-click   close-fn}
+      :on-click   (fn [] (apply (or (gobj/get close-fn "user-close") close-fn) []))}
      [:svg.h-6.w-6
       {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
       [:path

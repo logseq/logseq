@@ -205,3 +205,7 @@ html.is-electron {
     }
   }
 }
+
+html.locked-scroll {
+  overflow: hidden !important;
+}

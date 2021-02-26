@@ -52,6 +52,16 @@
   }
 }
 
+.settings-modal {
+  background-color: var(--ls-primary-background-color);
+
+  max-height: 70vh;
+  max-width: 800px;
+  overflow: auto;
+  margin: -25px;
+  padding: 20px;
+}
+
 .cp__sidebar-layout {
   display: flex;
   flex-direction: column;
