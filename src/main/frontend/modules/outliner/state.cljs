@@ -113,8 +113,8 @@
           (let [c (conn/get-outliner-conn)
                 r (db-outliner/get-by-parent-&-left
                     c
-                    (outliner-u/->block-look-ref parent-id)
-                    (outliner-u/->block-look-ref left-id))
+                    (outliner-u/->block-lookup-ref parent-id)
+                    (outliner-u/->block-lookup-ref left-id))
                 block (when r (outliner-u/->Block r))
                 block-ref (fill-block-into-position parent-id left-id block)]
             block-ref))]

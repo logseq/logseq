@@ -33,7 +33,7 @@
 
     :else nil))
 
-(defn ->block-look-ref
+(defn ->block-lookup-ref
   "
   string? or number?  -> [:block/id x]
   [:block/id x] -> [:block/id x]
@@ -60,6 +60,6 @@
 (defn get-block-by-id
   [id]
   (let [c (conn/get-outliner-conn)
-        r (try (db-outliner/get-by-id c (->block-look-ref id))
+        r (try (db-outliner/get-by-id c (->block-lookup-ref id))
                (catch js/Error e nil))]
     (when r (->Block r))))

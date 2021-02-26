@@ -22,9 +22,9 @@
   ([id parent-id left-id & [m]]
    (let [m (->> (merge m {:block/id id
                           :block/parent-id
-                          (outliner-u/->block-look-ref parent-id)
+                          (outliner-u/->block-lookup-ref parent-id)
                           :block/left-id
-                          (outliner-u/->block-look-ref left-id)})
+                          (outliner-u/->block-lookup-ref left-id)})
              (remove #(nil? (val %)))
              (into {}))]
      (outliner-u/->Block m))))
