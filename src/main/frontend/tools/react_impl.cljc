@@ -1,15 +1,14 @@
-(ns frontend.react-impl
+(ns frontend.tools.react-impl
   "Note: don't run component parallel"
-  #?(:cljs (:require-macros [frontend.react-impl])))
+  #?(:cljs (:require-macros [frontend.tools.react-impl])))
 
 #_{:component-key {:result nil
                    :watches []
-                   :root-info nil }}
+                   :root-info nil}}
 (def react-components (atom {}))
 (def ^:dynamic *with-key* nil)
 (def ^:dynamic *comp-key* nil)
 (def ^:dynamic *root-info* nil)
-
 
 (defn react
   [react-ref]
@@ -74,3 +73,4 @@
                (let [result# ~@body]
                  (reset! react-components {})
                  result#))))
+

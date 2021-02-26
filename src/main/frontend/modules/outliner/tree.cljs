@@ -1,8 +1,4 @@
-(ns frontend.modules.outliner.tree
-  (:require [frontend.db.conn :as conn]
-            [frontend.db.outliner :as db-outliner]
-            [frontend.util :as util]
-            [datascript.impl.entity :as e]))
+(ns frontend.modules.outliner.tree)
 
 (defprotocol INode
   (-get-id [this])
@@ -23,88 +19,6 @@
 (defn satisfied-inode?
   [node]
   (satisfies? INode node))
-
-(defrecord Block [data])
-
-(defn get-block-from-db
-  ([id]
-   (let [c (conn/get-outliner-conn)
-         r (db-outliner/get-by-id c id)]
-     (when r (->Block r))))
-  ([parent-id left-id]
-   (let [c (conn/get-outliner-conn)
-         r (db-outliner/get-by-parent-&-left c parent-id left-id)]
-     (when r (->Block r)))))
-
-(defn ensure-ident-form
-  [id]
-  (cond
-    (or (e/entity? id) (map? id))
-    (:db/id id)
-
-    (vector? id)
-    id
-
-    :else
-    nil))
-
-(extend-type Block
-  INode
-  (-get-id [this]
-    (if-let [id (get-in this [:data :db/id])]
-      id
-      (if-let [block-id (get-in this [:data :block/id])]
-        [:block/id block-id]
-        (throw (js/Error (util/format "Cant find id: %s" this))))))
-
-  (-get-parent-id [this]
-    (-> (get-in this [:data :block/parent-id])
-        (ensure-ident-form)))
-
-  (-set-parent-id [this parent-id]
-    (update this :data assoc :block/parent-id parent-id))
-
-  (-get-left-id [this]
-    (-> (get-in this [:data :block/left-id])
-        (ensure-ident-form)))
-
-  (-set-left-id [this left-id]
-    (update this :data assoc :block/left-id left-id))
-
-  (-get-parent [this]
-    (let [parent-id (-get-parent-id this)]
-      (get-block-from-db parent-id)))
-
-  (-get-left [this]
-    (let [left-id (-get-left-id this)]
-      (get-block-from-db left-id)))
-
-  (-get-right [this]
-    (let [left-id (-get-id this)
-          parent-id (-get-parent-id this)]
-      (get-block-from-db parent-id left-id)))
-
-  (-get-down [this]
-    (let [parent-id (-get-id this)]
-      (get-block-from-db parent-id parent-id)))
-
-  (-save [this]
-    (let [conn (conn/get-outliner-conn)]
-      (db-outliner/save-block conn (:data this))))
-
-  (-del [this]
-    (let [conn (conn/get-outliner-conn)]
-      (->> (-get-id this)
-           (db-outliner/del-block conn))))
-
-  (-get-children [this]
-    (let [first-child (-get-down this)]
-      (loop [current first-child
-             children [first-child]]
-        (if-let [node (-get-right current)]
-          (recur node (conj children node))
-          children)))))
-
 
 (defn insert-node-as-first
   "Insert a node as first child of its parent."
@@ -175,4 +89,3 @@
                         (render right new-children))
                     new-children))))]
       (render init-node nil))))
-

@@ -3,209 +3,14 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
-            [frontend.db.outliner :as db-outliner]
-            [datascript.impl.entity :as e]
-            [frontend.util :as util]
-            [frontend.react-impl :as r]))
+            [frontend.tools.react-impl :as r]
+            [frontend.modules.outliner.utils :as outliner-u]
+            [frontend.modules.outliner.core]
+            [frontend.fixtures :as fixtures]))
 
-(def block-react-refs (atom {}))
-
-(defn block-react-refs-fixtures
-  [f]
-  (reset! block-react-refs {})
-  (f)
-  (reset! block-react-refs {}))
-
-(use-fixtures :each block-react-refs-fixtures)
-
-(defrecord TestBlock [data])
-
-(defn get-block-by-id
-  [id]
-  (let [c (conn/get-outliner-conn)
-        r (try (db-outliner/get-by-id c [:block/id id])
-               (catch js/Error e nil))]
-    (when r (->TestBlock r))))
-
-(defn- save-block-ref
-  ([block]
-   {:pre [(tree/satisfied-inode? block)]}
-   (let [parent-id (tree/-get-parent-id block)
-         left-id (tree/-get-left-id block)]
-     (save-block-ref parent-id left-id block)))
-  ([parent-id left-id block-value]
-   (let [ref-key [parent-id left-id]]
-     (if-let [ref-atom (get @block-react-refs ref-key)]
-       (do (reset! ref-atom {:block block-value
-                             :parent-id parent-id
-                             :left-id left-id})
-           ref-atom)
-       (let [block-ref (atom {:block block-value
-                              :parent-id parent-id
-                              :left-id left-id})]
-         (swap! block-react-refs assoc ref-key block-ref)
-         block-ref)))))
-
-(defn- del-block-ref
-  ([block]
-   {:pre [(tree/satisfied-inode? block)]}
-   (let [parent-id (tree/-get-parent-id block)
-         left-id (tree/-get-left-id block)]
-     (del-block-ref parent-id left-id)))
-  ([parent-id left-id]
-   (let [ref-key [parent-id left-id]]
-     (when-let [ref-atom (get @block-react-refs ref-key)]
-       (reset! ref-atom {:block nil
-                         :parent-id parent-id
-                         :left-id left-id})))))
-
-(defn- get-block-from-ref
-  ([block]
-   {:pre [(tree/satisfied-inode? block)]}
-   (let [parent-id (tree/-get-parent-id block)
-         left-id (tree/-get-left-id block)]
-     (get-block-from-ref parent-id left-id)))
-  ([parent-id left-id]
-   (let [ref-key [parent-id left-id]]
-     (when-let [ref (get @block-react-refs ref-key)]
-       (assert
-         (instance? cljs.core/Atom (atom nil))
-         "block-react-ref should be atom.")
-       ref))))
-
-(defn- position-changed?
-  [old-block new-block]
-  (let [old-parent-id (tree/-get-parent-id old-block)
-        old-left-id (tree/-get-left-id old-block)
-        new-parent-id (tree/-get-parent-id new-block)
-        new-left-id (tree/-get-left-id new-block)
-        the-same-position
-        (and
-          (= old-parent-id new-parent-id)
-          (= old-left-id new-left-id))]
-    (not the-same-position)))
-
-(defn- position-taken?
-  [block block-in-cache]
-  (not= (tree/-get-id block)
-    (tree/-get-id block-in-cache)))
-
-(defn save-block-ref-logic
-  "Main logic to handler cache."
-  [block]
-  (let [block-id (tree/-get-id block)
-        block-in-datascript (get-block-by-id block-id)]
-    (cond
-      ;; no legacy cache need to process, save directly.
-      (not block-in-datascript)
-      (save-block-ref block)
-
-      :else
-      (if (position-changed? block-in-datascript block)
-        (do
-          (save-block-ref block)
-          (let [block-in-cache
-                (some-> (get-block-from-ref block-in-datascript) deref :block)]
-            (when (and block-in-cache
-                    (not (position-taken? block block-in-cache)))
-              (del-block-ref block-in-datascript))))
-        (let [block-in-cache
-              (some-> (get-block-from-ref block-in-datascript) deref :block)]
-          (if (and block-in-cache
-                (position-taken? block block-in-cache))
-            (throw (js/Error. "Other node should not take my seat."))
-            (save-block-ref block)))))))
-
-(defn get-block-by-parent-&-left
-  [parent-id left-id]
-  (let [block-ref
-        (if-let [block-ref (get-block-from-ref parent-id left-id)]
-          block-ref
-          (let [c (conn/get-outliner-conn)
-                r (db-outliner/get-by-parent-&-left
-                    c [:block/id parent-id] [:block/id left-id])
-                block (when r (->TestBlock r))
-                block-ref (save-block-ref parent-id left-id block)]
-            block-ref))]
-    (-> (r/react block-ref)
-      :block)))
-
-(defn ensure-block-id
-  [id]
-  (cond
-    (or (e/entity? id) (map? id))
-    (-> (db-outliner/get-by-id (conn/get-outliner-conn) (:db/id id))
-      (:block/id))
-
-    (vector? id)
-    (second id)
-
-    :else
-    nil))
-
-(extend-type TestBlock
-  tree/INode
-  (-get-id [this]
-    (if-let [block-id (get-in this [:data :block/id])]
-      block-id
-      (throw (js/Error (util/format "Cant find id: %s" this)))))
-
-  (-get-parent-id [this]
-    (-> (get-in this [:data :block/parent-id])
-      (ensure-block-id)))
-
-  (-set-parent-id [this parent-id]
-    (update this :data assoc :block/parent-id [:block/id parent-id]))
-
-  (-get-left-id [this]
-    (-> (get-in this [:data :block/left-id])
-      (ensure-block-id)))
-
-  (-set-left-id [this left-id]
-    (update this :data assoc :block/left-id [:block/id left-id]))
-
-  (-get-parent [this]
-    (let [parent-id (tree/-get-parent-id this)]
-      (get-block-by-id parent-id)))
-
-  (-get-left [this]
-    (let [left-id (tree/-get-left-id this)]
-      (get-block-by-id left-id)))
-
-  (-get-right [this]
-    (let [left-id (tree/-get-id this)
-          parent-id (tree/-get-parent-id this)]
-      (get-block-by-parent-&-left parent-id left-id)))
-
-  (-get-down [this]
-    (let [parent-id (tree/-get-id this)]
-      (get-block-by-parent-&-left parent-id parent-id)))
-
-  (-save [this]
-    (let [conn (conn/get-outliner-conn)
-          data (:data this)]
-      (save-block-ref-logic this)
-      (db-outliner/save-block conn data)))
-
-  (-del [this]
-    (let [conn (conn/get-outliner-conn)
-          block-id (tree/-get-id this)]
-      (when-let [old-block (get-block-by-id block-id)]
-        (if-let [data (-> (get-block-from-ref old-block)
-                        (deref)
-                        :block)]
-          (let [atom-still-mine? (= block-id (:block/id data))]
-            (when atom-still-mine?
-              (del-block-ref old-block)))))
-      (db-outliner/del-block conn [:block/id block-id])))
-
-  (-get-children [this]
-    (let [first-child (tree/-get-down this)]
-      (loop [current first-child
-             children [first-child]]
-        (if-let [node (tree/-get-right current)]
-          (recur node (conj children node))
-          children)))))
+(use-fixtures :each
+  fixtures/react-components
+  fixtures/outliner-position-state)
 
 (defn build-block-by-ident
   ([id]
@@ -216,7 +21,7 @@
                           :block/left-id left-id})
              (remove #(nil? (val %)))
              (into {}))]
-     (->TestBlock m))))
+     (outliner-u/->Block m))))
 
 (defn block-id->ident
   [id]
