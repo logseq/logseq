@@ -274,7 +274,8 @@
              nil)))
 
        (= 'page fe)
-       (let [page-name (string/lower-case (first (rest e)))]
+       (let [page-name (string/lower-case (first (rest e)))
+             page-name (text/page-ref-un-brackets! page-name)]
          [['?b :block/page [:page/name page-name]]])
 
        (= 'page-property fe)
