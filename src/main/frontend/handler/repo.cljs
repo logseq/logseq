@@ -76,7 +76,12 @@
                   "/contents."
                   (config/get-file-extension format))
         file-path (str "/" path)
-        default-content (util/default-content-with-title format "contents")]
+        default-content (case (name format)
+                          "org"
+                          "** What's **Contents**?\n*** It's a normal page called [[Contents]], you can use it for:\n**** 1. table of content/index/MOC\n**** 2. pinning/bookmarking favorites pages/blocks (e.g. [[Logseq]])\n**** 3. You can also put many different things, depending on your personal workflow."
+                          "markdown"
+                          "## What's **Contents**?\n### It's a normal page called [[Contents]], you can use it for:\n#### 1. table of content/index/MOC\n#### 2. pinning/bookmarking favorites pages/blocks (e.g. [[Logseq]])\n#### 3. You can also put many different things, depending on your personal workflow."
+                          "")]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?

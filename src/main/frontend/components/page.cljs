@@ -294,22 +294,26 @@
                        (not sidebar?)
                        (not config/publishing?))
 
-              (let [links (->>
-                           [(when file
-                              {:title (t :page/re-index)
-                               :options {:on-click (fn []
-                                                     (file/re-index! file))}})
-                            {:title (t :page/add-to-contents)
-                             :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}}
-                            {:title (t :page/rename)
-                             :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}}
+              (let [contents? (= (string/lower-case (str page-name)) "contents")
+                    links (->>
+                           [(when-not contents?
+                              {:title (t :page/add-to-contents)
+                               :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+
+                            (when-not contents?
+                              {:title (t :page/rename)
+                               :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
+
                             (when (and file-path (util/electron?))
                               [{:title   (t :page/open-in-finder)
                                 :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
                                {:title (t :page/open-with-default-app)
                                 :options {:on-click #(js/window.apis.openPath file-path)}}])
-                            {:title (t :page/delete)
-                             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}}
+
+                            (when-not contents?
+                              {:title (t :page/delete)
+                               :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+
                             {:title   (t :page/action-publish)
                              :options {:on-click
                                        (fn []
@@ -342,6 +346,12 @@
                                                                             page-name
                                                                             (if public? false true))
                                                                            (state/close-modal!))}}])])))}}
+
+                            (when file
+                              {:title (t :page/re-index)
+                               :options {:on-click (fn []
+                                                     (file/re-index! file))}})
+
                             (when developer-mode?
                               {:title "(Dev) Show page data"
                                :options {:on-click (fn []

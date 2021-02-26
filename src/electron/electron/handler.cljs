@@ -36,7 +36,9 @@
   (read-file path))
 
 (defmethod handle :writeFile [_window [_ path content]]
-  (fs/writeFileSync path content))
+  ;; TODO: handle error
+  (fs/writeFileSync path content)
+  (fs/statSync path))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))

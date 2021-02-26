@@ -40,8 +40,12 @@
       (if (seq repos)
         [:div#graphs
          [:h1.title "All Graphs"]
+         [:p.ml-2.opacity-70
+          (if (state/github-authed?)
+            "A \"graph\" in Logseq could be either a local directory or a git repo."
+            "A \"graph\" in Logseq means a local directory.")]
 
-         [:div.pl-1.content
+         [:div.pl-1.content.mt-3
           [:div.flex.flex-row.my-4
            (when (nfs-handler/supported?)
              [:div.mr-8
@@ -74,11 +78,12 @@
                                               (repo-handler/re-index! nfs-handler/rebuild-index!)
                                               )}
                  "Re-index"]
-                [:a.control.ml-4 {:title "Clone again and re-index the db"
-                                  :on-click (fn []
-                                              (export-handler/export-repo-as-json! (:url repo)))}
-                 "Export as JSON"]
-                [:a.text-gray-400.ml-4 {:on-click (fn []
+                ;; [:a.control.ml-4 {:title "Export as JSON"
+                ;;                   :on-click (fn []
+                ;;                               (export-handler/export-repo-as-json! (:url repo)))}
+                ;;  "Export as JSON"]
+                [:a.text-gray-400.ml-4 {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
+                                        :on-click (fn []
                                                     (repo-handler/remove-repo! repo))}
                  "Unlink"]]]))]
 

@@ -78,17 +78,19 @@
         title (get-title (:name data) path-params)]
     (util/set-title! title)))
 
+(defn jump-to-anchor!
+  [anchor-text]
+  (when anchor-text
+    (ui-handler/highlight-element! anchor-text)))
+
 (defn set-route-match!
   [route]
   (let [route route]
     (swap! state/state assoc :route-match route)
     (update-page-title! route)
-    (util/scroll-to-top)))
-
-(defn jump-to-anchor!
-  [anchor-text]
-  (when anchor-text
-    (ui-handler/highlight-element! anchor-text)))
+    (when-let [anchor (get-in route [:query-params :anchor])]
+      (jump-to-anchor! anchor)
+      (util/scroll-to-top))))
 
 (defn go-to-search!
   []
