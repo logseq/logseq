@@ -75,7 +75,7 @@
   (let [block-id (tree/-get-id block)
         block-in-datascript (outliner-u/get-block-by-id block-id)]
     (cond
-      ;; no legacy cache need to process, save directly.
+      ;; no legacy state need to process, save directly.
       (not block-in-datascript)
       (fill-block-into-position block)
 
@@ -102,9 +102,8 @@
       (when-let [data (some-> (get-block-by-position old-block)
                         (deref)
                         :block)]
-        (let [position-still-mine? (= block-id (:block/id data))]
-          (when position-still-mine?
-            (reset-position-as-empty old-block)))))))
+        (when-not (position-taken? block data)
+          (reset-position-as-empty old-block))))))
 
 (defn get-block-and-ensure-position
   [parent-id left-id]

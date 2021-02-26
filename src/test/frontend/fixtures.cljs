@@ -31,5 +31,4 @@
   [f]
   (reset! react-impls/react react-test/react)
   (let [r (f)]
-    (reset! react-impls/react rum/react)
-    r))
+    (reset! react-impls/react rum/react) r))
