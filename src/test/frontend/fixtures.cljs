@@ -30,5 +30,6 @@
 (defn react-impl
   [f]
   (reset! react-impls/react react-test/react)
-  (f)
-  (reset! react-impls/react rum/react))
+  (let [r (f)]
+    (reset! react-impls/react rum/react)
+    r))
