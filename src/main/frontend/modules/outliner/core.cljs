@@ -43,22 +43,22 @@
   (-get-right [this]
     (let [left-id (tree/-get-id this)
           parent-id (tree/-get-parent-id this)]
-      (state/get-block-and-ensure-state parent-id left-id)))
+      (state/get-block-and-ensure-position parent-id left-id)))
 
   (-get-down [this]
     (let [parent-id (tree/-get-id this)]
-      (state/get-block-and-ensure-state parent-id parent-id)))
+      (state/get-block-and-ensure-position parent-id parent-id)))
 
   (-save [this]
     (let [conn (conn/get-outliner-conn)
           data (:data this)]
-      (state/save-into-state this)
+      (state/save-&-revise-positions this)
       (db-outliner/save-block conn data)))
 
   (-del [this]
     (let [conn (conn/get-outliner-conn)
           block-id (tree/-get-id this)]
-      (state/del-from-state this)
+      (state/reset-the-position this)
       (db-outliner/del-block conn [:block/id block-id])))
 
   (-get-children [this]

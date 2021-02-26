@@ -7,12 +7,12 @@
 
 (def position-state (atom {}))
 
-(defn- save-position
+(defn- fill-block-into-position
   ([block]
    {:pre [(tree/satisfied-inode? block)]}
    (let [parent-id (tree/-get-parent-id block)
          left-id (tree/-get-left-id block)]
-     (save-position parent-id left-id block)))
+     (fill-block-into-position parent-id left-id block)))
   ([parent-id left-id block-value]
    (let [ref-key [parent-id left-id]]
      (if-let [ref-atom (get @position-state ref-key)]
@@ -26,12 +26,12 @@
          (swap! position-state assoc ref-key block-ref)
          block-ref)))))
 
-(defn- del-position
+(defn- reset-position-as-empty
   ([block]
    {:pre [(tree/satisfied-inode? block)]}
    (let [parent-id (tree/-get-parent-id block)
          left-id (tree/-get-left-id block)]
-     (del-position parent-id left-id)))
+     (reset-position-as-empty parent-id left-id)))
   ([parent-id left-id]
    (let [ref-key [parent-id left-id]]
      (when-let [ref-atom (get @position-state ref-key)]
@@ -70,43 +70,43 @@
   (not= (tree/-get-id block)
     (tree/-get-id block-in-cache)))
 
-(defn save-into-state
+(defn save-&-revise-positions
   [block]
   (let [block-id (tree/-get-id block)
         block-in-datascript (outliner-u/get-block-by-id block-id)]
     (cond
       ;; no legacy cache need to process, save directly.
       (not block-in-datascript)
-      (save-position block)
+      (fill-block-into-position block)
 
       :else
       (if (position-changed? block-in-datascript block)
         (do
-          (save-position block)
-          (let [block-in-cache
+          (fill-block-into-position block)
+          (let [block-from-position
                 (some-> (get-block-by-position block-in-datascript) deref :block)]
-            (when (and block-in-cache
-                    (not (position-taken? block block-in-cache)))
-              (del-position block-in-datascript))))
+            (when (and block-from-position
+                    (not (position-taken? block block-from-position)))
+              (reset-position-as-empty block-in-datascript))))
         (let [block-in-cache
               (some-> (get-block-by-position block-in-datascript) deref :block)]
           (if (and block-in-cache
                 (position-taken? block block-in-cache))
             (throw (js/Error. "Other node should not take my seat."))
-            (save-position block)))))))
+            (fill-block-into-position block)))))))
 
-(defn del-from-state
+(defn reset-the-position
   [block]
   (let [block-id (tree/-get-id block)]
     (when-let [old-block (outliner-u/get-block-by-id block-id)]
       (when-let [data (some-> (get-block-by-position old-block)
                         (deref)
                         :block)]
-        (let [atom-still-mine? (= block-id (:block/id data))]
-          (when atom-still-mine?
-            (del-position old-block)))))))
+        (let [position-still-mine? (= block-id (:block/id data))]
+          (when position-still-mine?
+            (reset-position-as-empty old-block)))))))
 
-(defn get-block-and-ensure-state
+(defn get-block-and-ensure-position
   [parent-id left-id]
   (let [block-ref
         (if-let [block-ref (get-block-by-position parent-id left-id)]
@@ -117,7 +117,7 @@
                     (outliner-u/->block-look-ref parent-id)
                     (outliner-u/->block-look-ref left-id))
                 block (when r (outliner-u/->Block r))
-                block-ref (save-position parent-id left-id block)]
+                block-ref (fill-block-into-position parent-id left-id block)]
             block-ref))]
     (-> (@r/react block-ref)
       :block)))
