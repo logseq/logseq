@@ -394,8 +394,7 @@
   (let [down (tree/-get-down node)]
     (if (and
           (tree/satisfied-inode? down)
-          (pos? @number)
-          )
+          (pos? @number))
       (do (swap! number dec)
           [(get-block-id node)
            (->> (render number down nil)
@@ -409,8 +408,7 @@
         new-children (sibling-nodes children node-tree)]
     (if (and
           (tree/satisfied-inode? right)
-          (pos? @number)
-          )
+          (pos? @number))
       (do (swap! number dec)
           (->> (render number right new-children)
             (r/with-key (str (tree/-get-id right) "-find-right"))
