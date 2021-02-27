@@ -18,7 +18,7 @@
   (swap! state/state assoc
          :search/result nil
          :search/q "")
-  (when-let [input (gdom/getElement "search_field")]
+  (when-let [input (gdom/getElement "search-field")]
     (gobj/set input "value" "")))
 
 (defn rebuild-indices!

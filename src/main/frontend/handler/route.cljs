@@ -94,7 +94,7 @@
 
 (defn go-to-search!
   []
-  (when-let [element (gdom/getElement "search_field")]
+  (when-let [element (gdom/getElement "search-field")]
     (.focus element)))
 
 (defn go-to-journals!
