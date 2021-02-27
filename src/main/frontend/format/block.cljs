@@ -519,4 +519,4 @@
 
 (defn trim-break-lines!
   [ast]
-  (->> (drop-while break-line-paragraph? ast)))
+  (drop-while break-line-paragraph? ast))
