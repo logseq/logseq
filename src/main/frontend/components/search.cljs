@@ -241,7 +241,9 @@
   [state]
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
-        show-result? (boolean (seq search-result))]
+        show-result? (boolean (seq search-result))
+        blocks-count (or (db/blocks-count) 0)
+        timeout (if (> blocks-count 2000) 300 100)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#search.flex-1.flex
        [:div.inner
@@ -271,7 +273,7 @@
                               (reset! search-timeout
                                       (js/setTimeout
                                        #(search-handler/search value)
-                                       200))))))}]
+                                       timeout))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
             {:class-names "fade"

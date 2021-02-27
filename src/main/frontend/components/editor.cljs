@@ -413,6 +413,7 @@
         false
         *slash-caret-pos)))])
 
+(def search-timeout (atom nil))
 (rum/defcs box < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -661,7 +662,8 @@
                       :else
                       (reset! *matched-block-commands matched-block-commands))
                     (reset! *show-block-commands false))))
-              (editor-handler/close-autocomplete-if-outside input))))))))
+              (when (nil? @search-timeout)
+                (editor-handler/close-autocomplete-if-outside input)))))))))
   {:did-mount    (fn [state]
                    (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
                          content (get-in @state/state [:editor/content id])
@@ -746,29 +748,16 @@
                               (state/set-edit-pos! current-pos)
                               (editor-handler/close-autocomplete-if-outside input)))
        :on-change         (fn [e]
-                            (let [value (util/evalue e)
-                                  current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
-                              (state/set-edit-content! id value false)
-                              (state/set-edit-pos! current-pos)
-                              (when-let [repo (or (:block/repo block)
-                                                  (state/get-current-repo))]
-                                (state/set-editor-last-input-time! repo (util/time-ms))
-                                (db/clear-repo-persistent-job! repo))
-                              (let [input (gdom/getElement id)
-                                    native-e (gobj/get e "nativeEvent")
-                                    last-input-char (util/nth-safe value (dec current-pos))]
-                                (case last-input-char
-                                  "/"
-                                   ;; TODO: is it cross-browser compatible?
-                                  (when (not= (gobj/get native-e "inputType") "insertFromPaste")
-                                    (when-let [matched-commands (seq (editor-handler/get-matched-commands input))]
-                                      (reset! *slash-caret-pos (util/get-caret-pos input))
-                                      (reset! *show-commands true)))
-                                  "<"
-                                  (when-let [matched-commands (seq (editor-handler/get-matched-block-commands input))]
-                                    (reset! *angle-bracket-caret-pos (util/get-caret-pos input))
-                                    (reset! *show-block-commands true))
-                                  nil))))
+                            (if (state/sub :editor/show-block-search?)
+                              (let [blocks-count (or (db/blocks-count) 0)
+                                    timeout (if (> blocks-count 2000) 300 100)]
+                                (when @search-timeout
+                                  (js/clearTimeout @search-timeout))
+                                (reset! search-timeout
+                                        (js/setTimeout
+                                         #(editor-handler/edit-box-on-change! e block id)
+                                         timeout)))
+                              (editor-handler/edit-box-on-change! e block id)))
        :on-paste          (fn [e]
                             (when-let [handled
                                        (let [pick-one-allowed-item

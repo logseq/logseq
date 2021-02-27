@@ -2257,3 +2257,29 @@
         value (:block/content block)
         new-value (string/replace value full_text new-full-text)]
     (save-block-aux! block new-value (:block/format block) {})))
+
+(defn edit-box-on-change!
+  [e block id]
+  (let [value (util/evalue e)
+        current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+    (state/set-edit-content! id value false)
+    (state/set-edit-pos! current-pos)
+    (when-let [repo (or (:block/repo block)
+                        (state/get-current-repo))]
+      (state/set-editor-last-input-time! repo (util/time-ms))
+      (db/clear-repo-persistent-job! repo))
+    (let [input (gdom/getElement id)
+          native-e (gobj/get e "nativeEvent")
+          last-input-char (util/nth-safe value (dec current-pos))]
+      (case last-input-char
+        "/"
+        ;; TODO: is it cross-browser compatible?
+        (when (not= (gobj/get native-e "inputType") "insertFromPaste")
+          (when-let [matched-commands (seq (get-matched-commands input))]
+            (reset! commands/*slash-caret-pos (util/get-caret-pos input))
+            (reset! commands/*show-commands true)))
+        "<"
+        (when-let [matched-commands (seq (get-matched-block-commands input))]
+          (reset! commands/*angle-bracket-caret-pos (util/get-caret-pos input))
+          (reset! commands/*show-block-commands true))
+        nil))))
