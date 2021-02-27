@@ -84,6 +84,9 @@
 (rum/defcs block-template < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input)
+  {:will-unmount (fn [state]
+                   (reset! *including-parent? nil)
+                   state)}
   [state block-id]
   (let [edit? (get state ::edit?)
         input (get state ::input)
@@ -91,6 +94,7 @@
         block-id (if (string? block-id) (uuid block-id) block-id)
         block (db/entity [:block/uuid block-id])
         has-children? (seq (:block/children block))]
+    (prn {:has-children? has-children?})
     (when (and (nil? including-parent?) has-children?)
       (reset! *including-parent? true))
 
@@ -99,7 +103,7 @@
         (state/clear-edit!)
         [:div.px-4.py-2 {:on-click (fn [e] (util/stop e))}
          [:p "What's the template's name?"]
-         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.text-gray-700
+         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
           {:auto-focus true
            :on-change (fn [e]
                         (reset! input (util/evalue e)))}]
@@ -115,7 +119,7 @@
                                        :error)
                                       (do
                                         (editor-handler/set-block-property! block-id "template" title)
-                                        (when-not including-parent?
+                                        (when (false? including-parent?)
                                           (editor-handler/set-block-property! block-id "including-parent" false))
                                         (state/hide-custom-context-menu!)))))))])
       (ui/menu-link
