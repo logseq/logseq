@@ -1,5 +1,5 @@
 (ns frontend.react
-  "A React implement for test.
+  "To facilitate testing, imitate the behavior of react.
   Note: don't run component parallel"
   #?(:cljs (:require-macros [frontend.react])))
 

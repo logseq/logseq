@@ -1,5 +1,4 @@
 (ns frontend.react-test
-  "To facilitate testing, imitate the behavior of react"
   (:require [frontend.react :as r]
             [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
             [frontend.fixtures :as fixtures]))
