@@ -388,14 +388,16 @@
 (def datepicker frontend.ui.date-picker/date-picker)
 
 (defn toggle
-  [on? on-click]
-  [:a {:on-click on-click}
-   [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
-    {:aria-checked "false", :tab-index "0", :role "checkbox"
-     :class        (if on? "bg-indigo-600" "bg-gray-200")}
-    [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
-     {:class       (if on? "translate-x-5" "translate-x-0")
-      :aria-hidden "true"}]]])
+  ([on? on-click] (toggle on? on-click false))
+  ([on? on-click small?]
+   [:a.ui__toggle {:on-click on-click
+                   :class (if small? "is-small" "")}
+    [:span.wrapper.transition-colors.ease-in-out.duration-200
+     {:aria-checked "false", :tab-index "0", :role "checkbox"
+      :class        (if on? "bg-indigo-600" "bg-gray-200")}
+     [:span.switcher.transform.transition.ease-in-out.duration-200
+      {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
+       :aria-hidden "true"}]]]))
 
 (defn tooltip
   ([label children]
