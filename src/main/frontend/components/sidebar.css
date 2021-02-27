@@ -149,6 +149,8 @@
   &-inner {
     padding: 15px;
     padding-top: 0;
+    position: relative;
+    min-height: 100%;
 
     .resizer {
       position: absolute;
@@ -183,7 +185,6 @@
     display: block;
     width: var(--ls-right-sidebar-width);
     opacity: 1;
-    transition: width 0.2s;
   }
 
   .page {

@@ -44,14 +44,14 @@ html {
 }
 
 .form-checkbox {
-    color: var(--ls-page-checkbox-color, #6093a0);
-    background-color: var(--ls-page-checkbox-color, #6093a0);
-    border-color: var(--ls-page-checkbox-border-color, #6093a0);
-    border: none;
+  color: var(--ls-page-checkbox-color, #6093a0);
+  background-color: var(--ls-page-checkbox-color, #6093a0);
+  border-color: var(--ls-page-checkbox-border-color, #6093a0);
+  border: none;
 }
 
 .form-checkbox:hover {
-    transform: scale(1.1);
+  transform: scale(1.1);
 }
 
 html[data-theme=dark] {
@@ -208,4 +208,10 @@ html.is-electron {
 
 html.locked-scroll {
   overflow: hidden !important;
+}
+
+html.is-resizing-buf {
+  #right-sidebar {
+    transition: none;
+  }
 }
