@@ -52,7 +52,7 @@
    (or (shortcut :ui/toggle-between-page-and-file) "s")
    (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
    (or (shortcut :git/commit) "c")
-   [(enable-when-not-editing-mode! (git-handler/show-commit-modal! commit/add-commit-message)) true]
+   (enable-when-not-editing-mode! (git-handler/show-commit-modal! commit/add-commit-message))
    "tab" (-> (editor-handler/on-tab :right)
              enable-when-not-editing-mode!)
    "shift+tab" (-> (editor-handler/on-tab :left)
