@@ -966,9 +966,7 @@
              react
              db-utils/seq-flatten
              sort-blocks
-             db-utils/group-by-page
-             (remove (fn [[page _blocks]]
-                       (= journal-title (:page/original-name page)))))))))
+             db-utils/group-by-page)))))
 
 (defn get-files-that-referenced-page
   [page-id]
