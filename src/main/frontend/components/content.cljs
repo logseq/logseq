@@ -94,7 +94,6 @@
         block-id (if (string? block-id) (uuid block-id) block-id)
         block (db/entity [:block/uuid block-id])
         has-children? (seq (:block/children block))]
-    (prn {:has-children? has-children?})
     (when (and (nil? including-parent?) has-children?)
       (reset! *including-parent? true))
 
