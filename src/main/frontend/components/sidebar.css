@@ -56,11 +56,13 @@
   background-color: var(--ls-primary-background-color);
 
   max-height: 80vh;
-  max-width: 800px;
-  min-width: 62vw;
   overflow: auto;
   margin: -25px;
   padding: 20px;
+
+  @screen sm {
+    width: 768px;
+  }
 }
 
 .cp__sidebar-layout {

@@ -150,7 +150,7 @@
         dark? (= "dark" theme)
         switch-theme (if dark? "white" "dark")]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#settings
+      [:div#settings.cp__settings-main
        [:h1.title (t :settings)]
 
        [:div.panel-wrap
