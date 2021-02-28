@@ -52,6 +52,27 @@
   }
 }
 
+.ui__modal {
+  @apply fixed bottom-0 inset-x-0
+  sm:inset-0 sm:flex sm:items-center sm:justify-center
+  px-4 pb-4;
+
+  &-overlay {
+    @apply fixed inset-0 transition-opacity;
+  }
+
+  &-panel {
+    @apply relative bg-white rounded-md px-4 pt-5
+    pb-4 overflow-hidden shadow-xl;
+  }
+
+  &-close {
+    @apply text-gray-400 hover:text-gray-500
+    focus:outline-none focus:text-gray-500
+    transition ease-in-out duration-150;
+  }
+}
+
 .ui__confirm-modal {
   .sublabel {
     display: flex;

@@ -52,15 +52,16 @@
 ;;      (dissoc state name))})
 
 (defn hide-when-esc-or-outside
-  [state & {:keys [on-hide node visibilitychange?]}]
+  [state & {:keys [on-hide node visibilitychange? outside?]}]
   (try
     (let [dom-node (rum/dom-node state)]
       (when-let [dom-node (or node dom-node)]
-        (listen state js/window "mousedown"
-                (fn [e]
-                 ;; If the click target is outside of current node
-                  (when-not (dom/contains dom-node (.. e -target))
-                    (on-hide state e :click))))
+        (or (false? outside?)
+            (listen state js/window "mousedown"
+                    (fn [e]
+                      ;; If the click target is outside of current node
+                      (when-not (dom/contains dom-node (.. e -target))
+                        (on-hide state e :click)))))
         (listen state js/window "keydown"
                 (fn [e]
                   (case (.-keyCode e)

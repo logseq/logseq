@@ -414,7 +414,7 @@
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state]
-  [:div.fixed.inset-0.transition-opacity
+  [:div.ui__modal-overlay
    {:class (case state
              "entering" "ease-out duration-300 opacity-0"
              "entered" "ease-out duration-300 opacity-100"
@@ -423,15 +423,15 @@
    [:div.absolute.inset-0.bg-gray-500.opacity-75]])
 
 (rum/defc modal-panel
-  [panel-content state close-fn]
-  [:div.relative.bg-white.rounded-md.px-4.pt-5.pb-4.overflow-hidden.shadow-xl.transform.transition-all.sm:min-w-lg.sm:p-6
-   {:class (case state
+  [panel-content transition-state close-fn]
+  [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm.p-6
+   {:class (case transition-state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
    [:div.absolute.top-0.right-0.pt-2.pr-2
-    [:button.text-gray-400.hover:text-gray-500.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
+    [:button.ui__modal-close
      {:aria-label "Close"
       :type       "button"
       :on-click   (fn [] (apply (or (gobj/get close-fn "user-close") close-fn) []))}
@@ -446,12 +446,20 @@
    (panel-content close-fn)])
 
 (rum/defc modal < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide (fn []
+                 (-> (.querySelector (rum/dom-node state) "button.ui__modal-close")
+                     (.click)))
+      :outside? false)))
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         show? (boolean modal-panel-content)
         close-fn #(state/close-modal!)
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
-    [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
+    [:div.ui__modal
      {:style {:z-index (if show? 10 -1)}}
      (css-transition
       {:in show? :timeout 0}
