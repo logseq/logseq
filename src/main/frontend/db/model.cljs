@@ -966,9 +966,7 @@
              react
              db-utils/seq-flatten
              sort-blocks
-             db-utils/group-by-page
-             (remove (fn [[page _blocks]]
-                       (= journal-title (:page/original-name page)))))))))
+             db-utils/group-by-page)))))
 
 (defn get-files-that-referenced-page
   [page-id]
@@ -1133,9 +1131,10 @@
   ([cache?]
    (if (and cache? @blocks-count-cache)
      @blocks-count-cache
-     (let [n (count (d/datoms (conn/get-conn) :avet :block/uuid))]
-       (reset! blocks-count-cache n)
-       n))))
+     (when-let [conn (conn/get-conn)]
+       (let [n (count (d/datoms conn :avet :block/uuid))]
+        (reset! blocks-count-cache n)
+        n)))))
 
 ;; block/uuid and block/content
 (defn get-all-block-contents

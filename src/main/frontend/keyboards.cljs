@@ -6,7 +6,9 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.git :as git-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.components.commit :as commit]
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.util :as util]
@@ -26,9 +28,9 @@
 
 (defn enable-when-not-editing-mode!
   [f]
-  (fn [state e]
+  (fn [e]
     (when-not (state/editing?)
-      (f state e))))
+      (f e))))
 
 (def shortcut state/get-shortcut)
 
@@ -49,6 +51,8 @@
    [(enable-when-not-editing-mode! ui-handler/toggle-contents!) true]
    (or (shortcut :ui/toggle-between-page-and-file) "s")
    (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
+   (or (shortcut :git/commit) "c")
+   (enable-when-not-editing-mode! (git-handler/show-commit-modal! commit/add-commit-message))
    "tab" (-> (editor-handler/on-tab :right)
              enable-when-not-editing-mode!)
    "shift+tab" (-> (editor-handler/on-tab :left)

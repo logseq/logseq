@@ -121,7 +121,7 @@
 
 (defn- leave-focus
   []
-  (when-let [input (gdom/getElement "search_field")]
+  (when-let [input (gdom/getElement "search-field")]
     (.blur input)))
 
 (defonce search-timeout (atom nil))
@@ -241,11 +241,13 @@
   [state]
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
-        show-result? (boolean (seq search-result))]
+        show-result? (boolean (seq search-result))
+        blocks-count (or (db/blocks-count) 0)
+        timeout (if (> blocks-count 2000) 300 100)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#search.flex-1.flex
        [:div.inner
-        [:label.sr-only {:for "search_field"} (t :search)]
+        [:label.sr-only {:for "search-field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
          [:div.absolute.inset-y-0.flex.items-center.pointer-events-none {:style {:left 6}}
           [:svg.h-5.w-5
@@ -255,7 +257,7 @@
              "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
              :clip-rule "evenodd"
              :fill-rule "evenodd"}]]]
-         [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.sm:bg-transparent
+         [:input#search-field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.sm:bg-transparent
           {:style {:padding-left "2rem"}
            :placeholder (t :search)
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
@@ -271,7 +273,7 @@
                               (reset! search-timeout
                                       (js/setTimeout
                                        #(search-handler/search value)
-                                       200))))))}]
+                                       timeout))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
             {:class-names "fade"
