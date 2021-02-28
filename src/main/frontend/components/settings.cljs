@@ -336,13 +336,7 @@
 
         (when logged?
           [:div
-           (ui/admonition
-            :important
-            [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-             [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
-                  :target "_blank"}
-              "https://github.com/isomorphic-git/cors-proxy"]])
-           [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
+           [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
             [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
              {:for "cors"}
              (t :settings-page/custom-cors-proxy-server)]
@@ -359,17 +353,26 @@
                                    (if (= "Enter" k)
                                      (when-let [server (util/evalue event)]
                                        (user-handler/set-cors! server)
-                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]])
+                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+           (ui/admonition
+             :important
+             [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
+              [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
+                   :target "_blank"}
+               "https://github.com/isomorphic-git/cors-proxy"]])
+           ])
 
         (when logged?
           [:div
            [:hr]
-           [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600
+           [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+            [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
              {:for "delete account"}
              (t :user/delete-account)]
             [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.shadow-sm.sm:max-w-xs
+             [:div.max-w-lg.rounded-md.sm:max-w-xs
               (ui/button (t :user/delete-your-account)
-                         :on-click #(state/set-modal! delete-account-confirm))]]]])]])))
+                         :on-click (fn []
+                                     (ui-handler/toggle-settings-modal!)
+                                     (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]])))
 

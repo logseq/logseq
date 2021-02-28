@@ -54,6 +54,12 @@
         }
       }
     }
+
+    .admonitionblock {
+      p {
+        @apply text-sm;
+      }
+    }
   }
 
   &-app-updater {
