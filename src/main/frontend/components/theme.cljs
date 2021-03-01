@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler.route :as route-handler]
-            [frontend.version :refer [version]]
             [frontend.components.svg :as svg]))
 
 (rum/defc container

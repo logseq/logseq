@@ -21,10 +21,15 @@
 ;Event: 'update-downloaded'
 ;Event: 'completed'
 
+(def electron-version
+  (let [parts (string/split version #"\.")
+        parts (take 3 parts)]
+    (string/join "." parts)))
+
 (defn get-latest-artifact-info
   [repo]
   (let [;endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.4"
-        endpoint (str "https://update.electronjs.org/" repo "/" js/process.platform "-" js/process.arch "/" version)]
+        endpoint (str "https://update.electronjs.org/" repo "/" js/process.platform "-" js/process.arch "/" electron-version)]
     (debug "[updater]" endpoint)
     (p/catch
      (p/let [res (fetch endpoint)

@@ -37,7 +37,9 @@
                       (bean/->js))
           indice (fuse. blocks
                         (clj->js {:keys ["uuid" "content"]
-                                  }))]
+                                  :shouldSort true
+                                  :minMatchCharLength 2
+                                  :threshold 0.4}))]
       (swap! indices assoc-in [repo :blocks] indice)
       indice)))
 
@@ -50,7 +52,10 @@
                      (bean/->js))
           indice (fuse. pages
                         (clj->js {:keys ["name"]
-                                  :threshold 0.4}))]
+                                  :shouldSort true
+                                  :minMatchCharLength 2
+                                  :threshold 0.2
+                                  }))]
       (swap! indices assoc-in [repo :pages] indice)
       indice)))
 
@@ -153,11 +158,12 @@
                    result (bean/->clj result)]
                (->>
                 (map
-                 (fn [{:keys [item] :as block}]
-                   (let [{:keys [content uuid]} item]
-                     {:block/uuid uuid
-                      :block/content content
-                      :block/page (:block/page (db/entity [:block/uuid (medley/uuid (str uuid))]))}))
+                  (fn [{:keys [item matches] :as block}]
+                    (let [{:keys [content uuid]} item]
+                      {:block/uuid uuid
+                       :block/content content
+                       :block/page (:block/page (db/entity [:block/uuid (medley/uuid (str uuid))]))
+                       :search/matches matches}))
                  result)
                 (remove nil?))))))))))
 

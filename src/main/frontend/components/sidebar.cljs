@@ -258,6 +258,7 @@
                         (editor-handler/clear-selection! e)
                         (state/set-selection-start-block! nil))))
 
+     ;; TODO: move to keyboards
      (mixins/on-key-down
       state
       {;; esc
@@ -275,20 +276,7 @@
        ;; ?
        191 (fn [state e]
              (when-not (util/input? (gobj/get e "target"))
-               (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))
-       ;; c
-       67 (fn [state e]
-            (when (and
-                   (string/starts-with? (state/get-current-repo) "https://")
-                   (not (util/input? (gobj/get e "target")))
-                   (not (gobj/get e "shiftKey"))
-                   (not (gobj/get e "ctrlKey"))
-                   (not (gobj/get e "altKey"))
-                   (not (gobj/get e "metaKey")))
-              (when-let [repo-url (state/get-current-repo)]
-                (when-not (state/get-edit-input-id)
-                  (util/stop e)
-                  (state/set-modal! commit/add-commit-message)))))})))
+               (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))})))
   {:did-mount (fn [state]
                 (keyboards/bind-shortcuts!)
                 state)}

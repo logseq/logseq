@@ -235,7 +235,8 @@
                                  workflow (if (= workflow :now/later)
                                             :now
                                             :todo)]
-                             (user-handler/set-preferred-workflow! workflow)))}
+                             (user-handler/set-preferred-workflow! workflow)
+                             (config-handler/set-preferred-workflow! workflow)))}
              (for [workflow [:now :todo]]
                [:option (cond->
                          {:key (name workflow)}

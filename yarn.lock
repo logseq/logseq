@@ -3906,10 +3906,10 @@ mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@^0.4.0:
-  version "0.4.0"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.4.0.tgz#3e372ec2a40856084d9051882fef609546b48174"
-  integrity sha512-FLb09RfqWltA3XEhUzLfxZFjGtbnfxhCCtSoB+AQo37WnpuDvPldGgmw8VtRuv05vvNh89q/onQ+8bYllWI8bQ==
+mldoc@^0.4.9:
+  version "0.4.9"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.4.9.tgz#22b9a42975251b619c9e1efd59008b8eec95ee55"
+  integrity sha512-zgFTZuio1vPXldcgQGDEKA8533Ub1RXAYez1jqdbXA3rwhU5Ad3PpKpgPKlc48zubJ7kazzFO5pmfpcdELc5zA==
   dependencies:
     yargs "^12.0.2"
 
