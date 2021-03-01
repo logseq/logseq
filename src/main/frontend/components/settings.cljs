@@ -377,4 +377,3 @@
                          :on-click (fn []
                                      (ui-handler/toggle-settings-modal!)
                                      (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]])))
-
