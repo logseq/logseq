@@ -78,7 +78,8 @@
     (.on web-contents  "new-window"
          (fn [e url]
            (let [url (if (string/starts-with? url "file:")
-                       (js/decodeURIComponent url) url)]
+                       (js/decodeURIComponent url) url)
+                 url (if-not win32? (string/replace url "file://" "") url)]
              (.. logger (info "new-window" url))
              (open url))
            (.preventDefault e)))
