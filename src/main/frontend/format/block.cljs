@@ -313,18 +313,18 @@
                 [path-refs (conj parents block)])
 
               (< level-diff 0)              ; new parent
-              (let [parents (take-while (fn [p] (< (:block/level p) cur-level)) parents)
+              (let [parents (vec (take-while (fn [p] (< (:block/level p) cur-level)) parents))
                     path-refs (mapcat :block/ref-pages parents)]
-                [path-refs (conj parents block)]))]
+                [path-refs (conj parents block)]))
+            path-ref-pages (->> path-refs
+                                (concat (:block/ref-pages block))
+                                (remove string/blank?)
+                                (map string/lower-case)
+                                (distinct)
+                                (map (fn [p]
+                                       {:page/name p})))]
         (recur (rest blocks)
-               (conj acc (assoc block :block/path-ref-pages
-                                (->> path-refs
-                                     (concat (:block/ref-pages block))
-                                     (remove string/blank?)
-                                     (map string/lower-case)
-                                     (distinct)
-                                     (map (fn [p]
-                                            {:page/name p})))))
+               (conj acc (assoc block :block/path-ref-pages path-ref-pages))
                parents)))))
 
 (defn extract-blocks
