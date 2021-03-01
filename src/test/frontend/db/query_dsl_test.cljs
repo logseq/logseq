@@ -129,7 +129,7 @@ parent: child page 2
       " " empty-result))
 
   (testing "Non exists page should be ignored"
-    (are [x y] (= (q x) y)
+    (are [x y] (nil? (:result (q x)))
       "[[page-not-exist]]" empty-result
       "[[another-page-not-exist]]" empty-result))
 
@@ -259,32 +259,32 @@ parent: child page 2
     (are [x y] (= (q-count x) y)
       "(page-tags [[page-tag-1]])"
       {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag]
-                [(contains? #{"page-tag-1"} ?tag)]]
+                [?t :page/name ?tag1]
+                [(contains? #{"page-tag-1"} ?tag1)]]
        :count 1}
 
       "(page-tags page-tag-2)"
       {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag]
-                [(contains? #{"page-tag-2"} ?tag)]]
+                [?t :page/name ?tag1]
+                [(contains? #{"page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags page-tag-1 page-tag-2)"
       {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag)]]
+                [?t :page/name ?tag1]
+                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags page-TAG-1 page-tag-2)"
       {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag)]]
+                [?t :page/name ?tag1]
+                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags [page-tag-1 page-tag-2])"
       {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag)]]
+                [?t :page/name ?tag1]
+                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}))
 
   (testing "page-property queries"
