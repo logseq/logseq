@@ -47,7 +47,8 @@
             [frontend.handler.repeated :as repeated]
             [frontend.template :as template]
             [clojure.core.async :as async]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [cljs.core.match :refer-macros [match]]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -2595,3 +2596,60 @@
               (reset! *show-block-commands false))))
         (when (nil? @search-timeout)
           (close-autocomplete-if-outside input))))))
+
+(defn editor-on-click!
+  [id]
+  (fn [_e]
+    (let [input (gdom/getElement id)
+          current-pos (:pos (util/get-caret-pos input))]
+      (state/set-edit-pos! current-pos)
+      (close-autocomplete-if-outside input))))
+
+(defn editor-on-change!
+  [block id search-timeout]
+  (fn [e]
+    (if (state/sub :editor/show-block-search?)
+      (let [blocks-count (or (db/blocks-count) 0)
+            timeout (if (> blocks-count 2000) 300 100)]
+        (when @search-timeout
+          (js/clearTimeout @search-timeout))
+        (reset! search-timeout
+                (js/setTimeout
+                 #(edit-box-on-change! e block id)
+                 timeout)))
+      (edit-box-on-change! e block id))))
+
+(defn editor-on-paste!
+  [id]
+  (fn [e]
+    (when-let [handled
+               (let [pick-one-allowed-item
+                     (fn [items]
+                       (if (util/electron?)
+                         (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
+                               existed-file-path (if (and
+                                                      (string? existed-file-path)
+                                                      (not util/mac?)
+                                                      (not util/win32?)) ; FIXME: linux
+                                                   (when (re-find #"^(/[^/ ]*)+/?$" existed-file-path)
+                                                     existed-file-path)
+                                                   existed-file-path)
+                               has-file-path? (not (string/blank? existed-file-path))
+                               has-image? (js/window.apis.isClipboardHasImage)]
+                           (if (or has-image? has-file-path?)
+                             [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
+
+                         (when (and items (.-length items))
+                           (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
+                                 it (gobj/get files 0) ;;; TODO: support multiple files
+                                 mime (and it (.-type it))]
+                             (cond
+                               (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:asset (. it getAsFile)])))))
+                     clipboard-data (gobj/get e "clipboardData")
+                     items (or (.-items clipboard-data)
+                               (.-files clipboard-data))
+                     picked (pick-one-allowed-item items)]
+                 (if (get picked 1)
+                   (match picked
+                     [:asset file] (set-asset-pending-file file))))]
+      (util/stop e))))
