@@ -327,10 +327,12 @@
          [:label.block.text-sm.font-medium.leading-5.opacity-70
           {:for "developer_mode"}
           (t :settings-page/developer-mode)]
+
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.max-w-lg.rounded-md.sm:max-w-xs
-           (ui/button (if developer-mode? (t :settings-page/disable-developer-mode) (t :settings-page/enable-developer-mode))
-                      :on-click #(state/set-developer-mode! (not developer-mode?)))]]]
+           (ui/toggle developer-mode?
+                      #(state/set-developer-mode! (not developer-mode?))
+                      true)]]]
         [:div.text-sm.opacity-50
          (t :settings-page/developer-mode-desc)]
 
