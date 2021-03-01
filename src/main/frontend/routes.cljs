@@ -6,7 +6,7 @@
             [frontend.components.diff :as diff]
             [frontend.components.draw :as draw]
             [frontend.components.journal :as journal]
-            [frontend.components.journal :as journal1]
+            [frontend.components.journal1 :as journal1]
             [frontend.components.settings :as settings]
             [frontend.components.external :as external]
             [frontend.components.publishing :as publishing]))

@@ -5,7 +5,7 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.react-impls :as r]))
 
-(def position-state (atom {}))
+(defonce position-state (atom {}))
 
 (defn- fill-block-into-position
   ([block]

@@ -1,5 +1,5 @@
 (ns frontend.react-impls
   "Support different react implements."
-  (:require [rum.core :as rum]))
+  (:require [frontend.util :as util]))
 
-(def react (atom rum/react))
+(def react (atom util/react))

@@ -6,15 +6,14 @@
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.core]
-            [frontend.fixtures :as fixtures]))
+            [frontend.fixtures :as fixtures]
+            [cljs-run-test]))
 
-(def fixtures (test/join-fixtures
-                [fixtures/react-impl
-                 fixtures/react-components
-                 fixtures/outliner-position-state
-                 fixtures/outliner-db]))
-
-(use-fixtures :each fixtures)
+(use-fixtures :each
+  fixtures/react-impl
+  fixtures/react-components
+  fixtures/outliner-position-state
+  fixtures/outliner-db)
 
 (defn build-block
   ([id]
@@ -24,7 +23,8 @@
                           :block/parent-id
                           (outliner-u/->block-lookup-ref parent-id)
                           :block/left-id
-                          (outliner-u/->block-lookup-ref left-id)})
+                          (outliner-u/->block-lookup-ref left-id)
+                          :block/content (str id)})
              (remove #(nil? (val %)))
              (into {}))]
      (outliner-u/->Block m))))

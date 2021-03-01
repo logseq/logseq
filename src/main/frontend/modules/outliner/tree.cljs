@@ -24,24 +24,28 @@
   "Insert a node as first child."
   [new-node parent-node]
   (:pre [(every? satisfied-inode? [new-node parent-node])])
-  (let [right-node (-get-down parent-node)
-        parent-id (-get-id parent-node)
-        new-right-node (-set-left-id right-node (-get-id new-node))
+  (let [parent-id (-get-id parent-node)
         node (-> (-set-left-id new-node parent-id)
-                 (-set-parent-id parent-id))]
-    (-save node)
-    (-save new-right-node)))
+               (-set-parent-id parent-id))
+        right-node (-get-down parent-node)]
+    (if (satisfied-inode? right-node)
+      (let [new-right-node (-set-left-id right-node (-get-id new-node))]
+        (-save node)
+        (-save new-right-node))
+      (-save node))))
 
 (defn insert-node-as-sibling
   "Insert a node as sibling."
   [new-node left-node]
   (:pre [(every? satisfied-inode? [new-node left-node])])
-  (let [right-node (-get-right left-node)
-        new-right-node (-set-left-id right-node (-get-id new-node))
-        node (-> (-set-left-id new-node (-get-id left-node))
-                 (-set-parent-id (-get-parent-id left-node)))]
-    (-save node)
-    (-save new-right-node)))
+  (let [node (-> (-set-left-id new-node (-get-id left-node))
+               (-set-parent-id (-get-parent-id left-node)))
+        right-node (-get-right left-node)]
+    (if (satisfied-inode? right-node)
+      (let [new-right-node (-set-left-id right-node (-get-id new-node))]
+        (-save node)
+        (-save new-right-node))
+      (-save node))))
 
 (defn delete-node
   "Delete node from the tree."
@@ -59,14 +63,18 @@
     root: root of subtree
     left-node: left node of destination"
   [root parent-node left-node]
-  {:pre [(every? satisfied-inode? [root parent-node left-node])]}
-  (let [left-node-id (-get-left-id root)
-        right-node (-> (-get-right root)
-                       (-set-left-id left-node-id))]
-    (-save right-node)
+  {:pre [(every? satisfied-inode? [root parent-node])
+         (or
+           (satisfied-inode? left-node)
+           (nil? left-node))]}
+  (let [left-node-id (-get-left-id root)]
     (if (nil? left-node)
       (insert-node-as-first-child root parent-node)
-      (insert-node-as-sibling root left-node))))
+      (insert-node-as-sibling root left-node))
+    (let [right-node (-get-right root)]
+      (when (satisfied-inode? right-node)
+        (let [new-right-node (-set-left-id right-node left-node-id)]
+         (-save new-right-node))))))
 
 (defn render-react-tree
   [init-node node-number
@@ -78,14 +86,14 @@
     (letfn [(render [node children]
               (let [node-tree (let [down (-get-down node)]
                                 (if (and (satisfied-inode? down)
-                                         (pos? @number))
+                                      (pos? @number))
                                   (do (swap! number dec)
                                       (parent-&-children-render node (render down nil)))
                                   (single-node-render node)))
                     right (-get-right node)]
                 (let [new-children (sibling-nodes-render children node-tree)]
                   (if (and (satisfied-inode? right)
-                           (pos? @number))
+                        (pos? @number))
                     (do (swap! number dec)
                         (render right new-children))
                     new-children))))]

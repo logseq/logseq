@@ -4,7 +4,18 @@
             [frontend.db.outliner :as db-outliner]
             [frontend.db.conn :as conn]
             [frontend.util :as util]
-            [frontend.modules.outliner.utils :as outliner-u]))
+            [frontend.modules.outliner.utils :as outliner-u]
+            [nano-id.core :as nano]))
+
+(def block-id-size 9)
+
+(defn gen-block-id
+  []
+  (nano/nano-id block-id-size))
+
+(defn block
+  [m]
+  (outliner-u/->Block m))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent-id, :block/left-id should be datascript lookup ref
@@ -12,9 +23,8 @@
 (extend-type outliner-u/Block
   tree/INode
   (-get-id [this]
-    (if-let [block-id (get-in this [:data :block/id])]
-      block-id
-      (throw (js/Error (util/format "Cant find id: %s" this)))))
+    (when-let [block-id (get-in this [:data :block/id])]
+      block-id))
 
   (-get-parent-id [this]
     (-> (get-in this [:data :block/parent-id])
