@@ -147,9 +147,7 @@
        page-ref?
        (let [page-name (-> (text/page-ref-un-brackets! e)
                            (string/lower-case))]
-         (when (and (not (string/blank? page-name))
-                    (some? (db-utils/entity repo [:page/name page-name])))
-           [['?b :block/path-ref-pages [:page/name page-name]]]))
+         [['?b :block/path-ref-pages [:page/name page-name]]])
 
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]
@@ -301,9 +299,11 @@
                tags (map (comp string/lower-case name) tags)]
            (when (seq tags)
              (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
-               [['?p :page/tags '?t]
-                ['?t :page/name '?tag]
-                [(list 'contains? tags '?tag)]]))))
+               (let [sym-1 (uniq-symbol counter "?t")
+                     sym-2 (uniq-symbol counter "?tag")]
+                 [['?p :page/tags sym-1]
+                  [sym-1 :page/name sym-2]
+                  [(list 'contains? tags sym-2)]])))))
 
        (= 'all-page-tags fe)
        [['?e :page/tags '?p]]
