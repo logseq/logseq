@@ -61,9 +61,13 @@
     @apply fixed inset-0 transition-opacity;
   }
 
+  &-overlay div {
+    background: var(--ls-quaternary-background-color);
+  }
+
   &-panel {
     @apply relative bg-white rounded-md px-4 pt-5
-    pb-4 overflow-hidden shadow-xl;
+    pb-4 shadow-xl;
   }
 
   &-close {

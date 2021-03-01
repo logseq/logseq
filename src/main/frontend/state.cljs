@@ -50,7 +50,7 @@
     :modal/show? false
 
     ;; right sidebar
-    :ui/setting-open? false
+    :ui/settings-open? false
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
@@ -1108,6 +1108,14 @@
 (defn clear-search-result!
   []
   (set-search-result! nil))
+
+(defn toggle!
+  [path]
+  (update-state! path not))
+
+(defn toggle-settings!
+  []
+  (toggle! :ui/settings-open?))
 
 ;; TODO: Move those to the uni `state`
 

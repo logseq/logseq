@@ -1,9 +1,9 @@
 .cp__settings {
   &-main {
-    padding-bottom: 20px;
+    padding: 24px;
 
     > h1.title {
-      margin-bottom: .8rem;
+      margin-bottom: 2rem;
     }
 
     hr {

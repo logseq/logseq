@@ -34,8 +34,8 @@
         (state/sidebar-add-block! current-repo id :contents nil)))))
 
 (defn toggle-settings-modal!
-  ([] (toggle-settings-modal! (not (:ui/setting-open? @state/state))))
-  ([v] (state/set-state! :ui/setting-open? v)))
+  []
+  (state/toggle-settings!))
 
 ;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
 

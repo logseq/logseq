@@ -30,13 +30,8 @@
   [f]
   (fn [e]
     (when-not (state/editing?)
-      (f e) true)))
-
-(defn enable-when-editing-mode!
-  [f]
-  (fn [e]
-    (when (state/editing?)
-      (f e) true)))
+      (f e))
+    true))
 
 (def shortcut state/get-shortcut)
 
@@ -53,7 +48,9 @@
        (or (shortcut :ui/toggle-new-block) "t e")
        (enable-when-not-editing-mode! state/toggle-new-block-shortcut!)
        (or (shortcut :ui/show-contents) "t c")
-       [(enable-when-not-editing-mode! ui-handler/toggle-contents!) true]
+       (enable-when-not-editing-mode! ui-handler/toggle-contents!)
+       (or (shortcut :editor/toggle-settings) "t s")
+       (enable-when-not-editing-mode! ui-handler/toggle-settings-modal!)
        (or (shortcut :ui/toggle-between-page-and-file) "s")
        (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
        (or (shortcut :git/commit) "c")
@@ -68,16 +65,9 @@
        (or (shortcut :editor/redo) "mod+shift+z") [history-handler/redo! true]
        (or (shortcut :go/search) "mod+u") [route-handler/go-to-search! true]
        (or (shortcut :go/journals) (if util/mac? "mod+j" "alt+j")) [route-handler/go-to-journals! true]
-       (or (shortcut :editor/zoom-in)
-           (if util/mac? "mod+." "alt+right")) [editor-handler/zoom-in! true]
-       (or (shortcut :editor/zoom-out)
-           (if util/mac? "mod+," "alt+left")) [(fn []
-                                                 ((some-fn apply)
-                                                  (enable-when-editing-mode! editor-handler/zoom-out!)
-                                                  #(if util/mac? (ui-handler/toggle-settings-modal!) true)))
-                                               true]
-       (or (shortcut :editor/cycle-todo)
-           "mod+enter") [editor-handler/cycle-todo! true]
+       (or (shortcut :editor/zoom-in) (if util/mac? "mod+." "alt+right")) [editor-handler/zoom-in! true]
+       (or (shortcut :editor/zoom-out) (if util/mac? "mod+," "alt+left")) [editor-handler/zoom-out! true]
+       (or (shortcut :editor/cycle-todo) "mod+enter") [editor-handler/cycle-todo! true]
        (or (shortcut :editor/expand-block-children) "mod+down") [editor-handler/expand! true]
        (or (shortcut :editor/collapse-block-children) "mod+up") [editor-handler/collapse! true]
        (or (shortcut :editor/follow-link) "mod+o") [editor-handler/follow-link-under-cursor! true]

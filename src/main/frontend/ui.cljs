@@ -420,7 +420,7 @@
              "entered" "ease-out duration-300 opacity-100"
              "exiting" "ease-in duration-200 opacity-100"
              "exited" "ease-in duration-200 opacity-0")}
-   [:div.absolute.inset-0.bg-gray-500.opacity-75]])
+   [:div.absolute.inset-0.opacity-75]])
 
 (rum/defc modal-panel
   [panel-content transition-state close-fn]
