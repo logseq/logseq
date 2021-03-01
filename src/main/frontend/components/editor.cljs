@@ -16,7 +16,6 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [clojure.string :as string]
-            [cljs.core.match :refer-macros [match]]
             [frontend.commands :as commands
              :refer [*show-commands
                      *matched-commands
@@ -361,54 +360,9 @@
        :cacheMeasurements true
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)
-       :on-click          (fn [_e]
-                            (let [input (gdom/getElement id)
-                                  current-pos (:pos (util/get-caret-pos input))]
-                              (state/set-edit-pos! current-pos)
-                              (editor-handler/close-autocomplete-if-outside input)))
-       :on-change         (fn [e]
-                            (if (state/sub :editor/show-block-search?)
-                              (let [blocks-count (or (db/blocks-count) 0)
-                                    timeout (if (> blocks-count 2000) 300 100)]
-                                (when @search-timeout
-                                  (js/clearTimeout @search-timeout))
-                                (reset! search-timeout
-                                        (js/setTimeout
-                                         #(editor-handler/edit-box-on-change! e block id)
-                                         timeout)))
-                              (editor-handler/edit-box-on-change! e block id)))
-       :on-paste          (fn [e]
-                            (when-let [handled
-                                       (let [pick-one-allowed-item
-                                             (fn [items]
-                                               (if (util/electron?)
-                                                 (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
-                                                       existed-file-path (if (and
-                                                                              (string? existed-file-path)
-                                                                              (not util/mac?)
-                                                                              (not util/win32?)) ; FIXME: linuxcx
-                                                                           (when (re-find #"^(/[^/ ]*)+/?$" existed-file-path)
-                                                                             existed-file-path)
-                                                                           existed-file-path)
-                                                       has-file-path? (not (string/blank? existed-file-path))
-                                                       has-image? (js/window.apis.isClipboardHasImage)]
-                                                   (if (or has-image? has-file-path?)
-                                                     [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
-
-                                                 (when (and items (.-length items))
-                                                   (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
-                                                         it (gobj/get files 0) ;;; TODO: support multiple files
-                                                         mime (and it (.-type it))]
-                                                     (cond
-                                                       (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:asset (. it getAsFile)])))))
-                                             clipboard-data (gobj/get e "clipboardData")
-                                             items (or (.-items clipboard-data)
-                                                       (.-files clipboard-data))
-                                             picked (pick-one-allowed-item items)]
-                                         (if (get picked 1)
-                                           (match picked
-                                             [:asset file] (editor-handler/set-asset-pending-file file))))]
-                              (util/stop e)))
+       :on-click          (editor-handler/editor-on-click! id)
+       :on-change         (editor-handler/editor-on-change! block id search-timeout)
+       :on-paste          (editor-handler/editor-on-paste! id)
        :auto-focus        false})
 
      ;; TODO: how to render the transitions asynchronously?
