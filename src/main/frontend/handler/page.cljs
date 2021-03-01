@@ -25,7 +25,8 @@
             [lambdaisland.glogi :as log]
             [frontend.format.mldoc :as mldoc]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [goog.object :as gobj]))
 
 (defn- get-directory
   [journal?]
@@ -519,3 +520,52 @@
   [page-name]
   (when page-name
     (db/entity [:page/name page-name])))
+
+;; Editor
+(defn page-not-exists-handler
+  [input id q current-pos]
+  (state/set-editor-show-page-search! false)
+  (if (state/org-mode-file-link? (state/get-current-repo))
+    (let [page-ref-text (get-page-ref-text q)
+          value (gobj/get input "value")
+          old-page-ref (util/format "[[%s]]" q)
+          new-value (string/replace value
+                                    old-page-ref
+                                    page-ref-text)]
+      (state/set-edit-content! id new-value)
+      (let [new-pos (+ current-pos
+                       (- (count page-ref-text)
+                          (count old-page-ref))
+                       2)]
+        (util/move-cursor-to input new-pos)))
+    (util/cursor-move-forward input 2)))
+
+(defn on-chosen-handler
+  [input id q pos format]
+  (let [current-pos (:pos (util/get-caret-pos input))
+        edit-content (state/sub [:editor/content id])
+        edit-block (state/sub :editor/block)
+        q (or
+           @editor-handler/*selected-text
+           (when (state/sub :editor/show-page-search-hashtag?)
+             (util/safe-subs edit-content pos current-pos))
+           (when (> (count edit-content) current-pos)
+             (util/safe-subs edit-content pos current-pos)))]
+    (if (state/sub :editor/show-page-search-hashtag?)
+      (fn [chosen _click?]
+        (state/set-editor-show-page-search! false)
+        (let [chosen (if (re-find #"\s+" chosen)
+                       (util/format "[[%s]]" chosen)
+                       chosen)]
+          (editor-handler/insert-command! id
+                                          (str "#" chosen)
+                                          format
+                                          {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))})))
+      (fn [chosen _click?]
+        (state/set-editor-show-page-search! false)
+        (let [page-ref-text (get-page-ref-text chosen)]
+          (editor-handler/insert-command! id
+                                          page-ref-text
+                                          format
+                                          {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
+                                           :postfix-fn   (fn [s] (util/replace-first "]]" s ""))}))))))

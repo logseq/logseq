@@ -62,7 +62,7 @@
   }
 
   &-overlay div {
-    background: var(--ls-quaternary-background-color);
+    background: var(--ls-tertiary-background-color);
   }
 
   &-panel {

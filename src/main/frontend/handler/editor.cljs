@@ -12,6 +12,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.draw :as draw]
             [frontend.handler.expand :as expand]
+            [frontend.handler.block :as block-handler]
             [frontend.format.mldoc :as mldoc]
             [frontend.format :as format]
             [frontend.format.block :as block]
@@ -44,6 +45,7 @@
             [frontend.text :as text]
             [frontend.date :as date]
             [frontend.handler.repeated :as repeated]
+            [frontend.template :as template]
             [clojure.core.async :as async]
             [lambdaisland.glogi :as log]))
 
@@ -2283,3 +2285,67 @@
           (reset! commands/*angle-bracket-caret-pos (util/get-caret-pos input))
           (reset! commands/*show-block-commands true))
         nil))))
+
+(defn block-on-chosen-handler
+  [input id q format]
+  (fn [chosen _click?]
+    (state/set-editor-show-block-search! false)
+    (let [uuid-string (str (:block/uuid chosen))]
+
+      ;; block reference
+      (insert-command! id
+                       (util/format "((%s))" uuid-string)
+                       format
+                       {:last-pattern (str "((" (if @*selected-text "" q))
+                        :postfix-fn   (fn [s] (util/replace-first "))" s ""))})
+
+      ;; Save it so it'll be parsed correctly in the future
+      (set-block-property! (:block/uuid chosen)
+                           "ID"
+                           uuid-string)
+
+      (when-let [input (gdom/getElement id)]
+        (.focus input)))))
+
+(defn block-non-exist-handler
+  [input]
+  (fn []
+    (state/set-editor-show-block-search! false)
+    (util/cursor-move-forward input 2)))
+
+(defn template-on-chosen-handler
+  [input id q format edit-block edit-content]
+  (fn [[template db-id] _click?]
+    (if-let [block (db/entity db-id)]
+      (let [new-level (:block/level edit-block)
+            properties (:block/properties block)
+            block-uuid (:block/uuid block)
+            including-parent? (not= (get properties "including-parent") "false")
+            template-parent-level (:block/level block)
+            pattern (config/get-block-pattern format)
+            content
+            (block-handler/get-block-full-content
+             (state/get-current-repo)
+             (:block/uuid block)
+             (fn [{:block/keys [uuid level content properties] :as block}]
+               (let [parent? (= uuid block-uuid)
+                     ignore-parent? (and parent? (not including-parent?))]
+                 (if ignore-parent?
+                   ""
+                   (let [new-level (+ new-level
+                                      (- level template-parent-level
+                                         (if (not including-parent?) 1 0)))
+                         properties' (dissoc (into {} properties) "id" "custom_id" "template" "including-parent")]
+                     (-> content
+                         (string/replace-first (apply str (repeat level pattern))
+                                               (apply str (repeat new-level pattern)))
+                         text/remove-properties!
+                         (text/rejoin-properties properties')))))))
+            content (if (string/includes? (string/trim edit-content) "\n")
+                      content
+                      (text/remove-level-spaces content format))
+            content (template/resolve-dynamic-template! content)]
+        (state/set-editor-show-template-search! false)
+        (insert-command! id content format {})))
+    (when-let [input (gdom/getElement id)]
+      (.focus input))))
