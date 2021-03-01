@@ -52,6 +52,19 @@
   }
 }
 
+.settings-modal {
+  background-color: var(--ls-primary-background-color);
+
+  max-height: 80vh;
+  overflow: auto;
+  margin: -25px;
+  padding: 20px;
+
+  @screen sm {
+    width: 768px;
+  }
+}
+
 .cp__sidebar-layout {
   display: flex;
   flex-direction: column;
@@ -139,6 +152,8 @@
   &-inner {
     padding: 15px;
     padding-top: 0;
+    position: relative;
+    min-height: 100%;
 
     .resizer {
       position: absolute;
@@ -173,7 +188,6 @@
     display: block;
     width: var(--ls-right-sidebar-width);
     opacity: 1;
-    transition: width 0.2s;
   }
 
   .page {

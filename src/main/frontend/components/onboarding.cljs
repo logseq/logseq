@@ -262,6 +262,7 @@
          [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
          [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
          [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
+         [:tr [:td (t :help/toggle-settings)] [:td "t s"]]
          [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
          [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Alt-j")]]]]
        [:table

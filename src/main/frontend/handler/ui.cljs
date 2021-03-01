@@ -33,6 +33,10 @@
         (state/sidebar-remove-block! id)
         (state/sidebar-add-block! current-repo id :contents nil)))))
 
+(defn toggle-settings-modal!
+  []
+  (state/toggle-settings!))
+
 ;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
 
 

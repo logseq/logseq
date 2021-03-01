@@ -28,16 +28,16 @@
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
-    (page/page {:parameters {:path {:name (str id)}}
-                :sidebar? true
+    (page/page {:parameters  {:path {:name (str id)}}
+                :sidebar?    true
                 :sidebar/idx idx
-                :repo repo})))
+                :repo        repo})))
 
 (rum/defc page-cp < rum/reactive
   [repo page-name]
   (page/page {:parameters {:path {:name page-name}}
-              :sidebar? true
-              :repo repo}))
+              :sidebar?   true
+              :repo       repo}))
 
 (rum/defc page-graph < db-mixins/query
   [page]
@@ -51,7 +51,7 @@
        (graph-2d/graph
         (graph/build-graph-opts
          graph dark? false
-         {:width 600
+         {:width  600
           :height 600}))])))
 
 (defn recent-pages
@@ -60,8 +60,8 @@
     [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
      (if (seq pages)
        (for [page pages]
-         [:a.mb-1 {:key (str "recent-page-" page)
-                   :href (rfe/href :page {:name page})
+         [:a.mb-1 {:key      (str "recent-page-" page)
+                   :href     (rfe/href :page {:name page})
                    :on-click (fn [e]
                                (when (gobj/get e "shiftKey")
                                  (when-let [page (db/pull [:page/name (string/lower-case page)])]
@@ -87,7 +87,7 @@
                       (util/stop e)
                       (if-not (db/entity [:page/name "contents"])
                         (page-handler/create! "contents")
-                        (route-handler/redirect! {:to :page
+                        (route-handler/redirect! {:to          :page
                                                   :path-params {:name "contents"}})))}
       (t :right-side-bar/contents)]
      (contents)]
@@ -109,7 +109,7 @@
              block-id (:block/uuid block)
              format (:block/format block)]
          [[:div.ml-2.mt-1
-           (block/block-parents {:id "block-parent"
+           (block/block-parents {:id     "block-parent"
                                  :block? true} repo block-id format)]
           [:div.ml-2
            (block-cp repo idx block)]])])
@@ -118,14 +118,14 @@
     (when-let [block (db/entity repo [:block/uuid (:block/uuid block-data)])]
       (let [block-id (:block/uuid block-data)
             format (:block/format block-data)]
-        [(block/block-parents {:id "block-parent"
+        [(block/block-parents {:id     "block-parent"
                                :block? true} repo block-id format)
          [:div.ml-2
           (block-cp repo idx block-data)]]))
 
     :page
     (let [page-name (:page/name block-data)]
-      [[:a {:href (rfe/href :page {:name page-name})
+      [[:a {:href     (rfe/href :page {:name page-name})
             :on-click (fn [e]
                         (when (gobj/get e "shiftKey")
                           (.preventDefault e)))}
@@ -140,11 +140,11 @@
           blocks (if journal?
                    (rest blocks)
                    blocks)
-          sections (block/build-slide-sections blocks {:id "slide-reveal-js"
+          sections (block/build-slide-sections blocks {:id          "slide-reveal-js"
                                                        :start-level 2
-                                                       :slide? true
-                                                       :sidebar? true
-                                                       :page-name page-name})]
+                                                       :slide?      true
+                                                       :sidebar?    true
+                                                       :page-name   page-name})]
       [[:a {:href (rfe/href :page {:name page-name})}
         (db-model/get-page-original-name page-name)]
        [:div.ml-2.slide.mt-2
@@ -229,7 +229,10 @@
                                   :else to-val)]
                      (.setProperty (.-style js/document.documentElement)
                                    "--ls-right-sidebar-width"
-                                   (str (* to-val 100) "%"))))}}))))
+                                   (str (* to-val 100) "%"))))}}))
+             (.styleCursor false)
+             (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
+             (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
        #())
      [])
     [:span.resizer {:ref el-ref}]))

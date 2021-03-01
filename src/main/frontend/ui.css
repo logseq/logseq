@@ -30,6 +30,53 @@
   }
 }
 
+.ui__toggle {
+  .wrapper {
+    @apply relative inline-block flex-shrink-0
+    h-6 w-11 border-2 border-transparent flex
+    rounded-full cursor-pointer focus:outline-none focus:shadow-outline;
+  }
+
+  .switcher {
+    @apply inline-block h-5 w-5 rounded-full bg-white shadow;
+  }
+
+  &.is-small {
+    .wrapper {
+      @apply h-4 w-8;
+    }
+
+    .switcher {
+      @apply h-3 w-3;
+    }
+  }
+}
+
+.ui__modal {
+  @apply fixed bottom-0 inset-x-0
+  sm:inset-0 sm:flex sm:items-center sm:justify-center
+  px-4 pb-4;
+
+  &-overlay {
+    @apply fixed inset-0 transition-opacity;
+  }
+
+  &-overlay div {
+    background: var(--ls-quaternary-background-color);
+  }
+
+  &-panel {
+    @apply relative bg-white rounded-md px-4 pt-5
+    pb-4 shadow-xl;
+  }
+
+  &-close {
+    @apply text-gray-400 hover:text-gray-500
+    focus:outline-none focus:text-gray-500
+    transition ease-in-out duration-150;
+  }
+}
+
 .ui__confirm-modal {
   .sublabel {
     display: flex;
@@ -83,17 +130,31 @@
 }
 
 .form-select {
+  @apply block w-full pl-3 pr-10 py-2 text-base leading-6
+  border-gray-300 focus:outline-none focus:shadow-outline-blue sm:text-sm sm:leading-5;
+
   background-color: var(--ls-primary-background-color, transparent);
   background-repeat: no-repeat;
   border-width: 1px;
   border-color: var(--ls-border-color);
+
+  &.is-small {
+    @apply pl-2 py-1.5 sm:leading-4 sm:text-xs;
+  }
 }
 
 .form-input {
+  @apply block w-full pl-2
+  sm:text-sm sm:leading-5;
+
   border-width: 1px;
   border-color: var(--ls-border-color);
 
   &:focus {
     box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+  }
+
+  &.is-small {
+    @apply py-1.5 sm:leading-4 sm:text-xs;
   }
 }

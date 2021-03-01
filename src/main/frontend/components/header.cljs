@@ -9,6 +9,7 @@
             [frontend.storage :as storage]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.export :as export]
             [frontend.components.svg :as svg]
@@ -120,7 +121,7 @@
 
        (when current-repo
          {:title (t :settings)
-          :options {:href (rfe/href :settings)}
+          :options {:on-click #(ui-handler/toggle-settings-modal!)}
           :icon svg/settings-sm})
 
        (when current-repo
