@@ -31,3 +31,7 @@
   [project]
   (when-not (string/blank? project)
     (set-config! [:project :name] project)))
+
+(defn set-preferred-workflow!
+  [workflow]
+  (set-config! :preferred-workflow (name workflow)))
