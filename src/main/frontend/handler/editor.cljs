@@ -50,6 +50,8 @@
             [lambdaisland.glogi :as log]))
 
 ;; FIXME: should support multiple images concurrently uploading
+
+
 (defonce *asset-pending-file (atom nil))
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
@@ -296,8 +298,8 @@
                                 (reset! last-child-end-pos old-end-pos)))
 
                             (cond->
-                                {:block/uuid uuid
-                                 :block/meta new-meta}
+                             {:block/uuid uuid
+                              :block/meta new-meta}
                               (and (some? indent-left?) (not @next-leq-level?))
                               (assoc :block/level (if indent-left? (dec level) (inc level)))
                               (and new-content (not @next-leq-level?))
@@ -450,10 +452,10 @@
                                       :page/original-name tag}) tags))
          page-alias (when-let [alias (:alias new-properties)]
                       (map
-                        (fn [alias]
-                          {:page/original-name alias
-                           :page/name (string/lower-case alias)})
-                        (remove #{(:page/name page)} alias)))
+                       (fn [alias]
+                         {:page/original-name alias
+                          :page/name (string/lower-case alias)})
+                       (remove #{(:page/name page)} alias)))
 
          permalink-changed? (when (and pre-block? (:permalink old-properties))
                               (not= (:permalink old-properties)
@@ -522,8 +524,8 @@
                        ;; create the file
                        (let [value (block-text-with-time nil format value)
                              content (str (util/default-content-with-title format
-                                                                           (or (:page/original-name page)
-                                                                               (:page/name page)))
+                                            (or (:page/original-name page)
+                                                (:page/name page)))
                                           value)]
                          (p/let [_ (fs/create-if-not-exists repo dir file-path content)
                                  _ (git-handler/git-add repo path)]
@@ -1182,7 +1184,7 @@
                                                (if (string/starts-with? (string/lower-case line) key)
                                                  new-line
                                                  line))
-                                          lines)
+                                             lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
                                           (cons (first new-lines) ;; title
@@ -1690,7 +1692,7 @@
    ;; "_" "_"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
    ;; "^" "^"
-   })
+})
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -2044,7 +2046,7 @@
                                                                 :end-pos end-pos}))]
                                  (reset! last-start-pos end-pos)
                                  block))
-                          blocks))
+                             blocks))
                 file-id (:db/id (:block/file block))
                 file (db/entity file-id)
                 page (:block/page block)
@@ -2111,7 +2113,7 @@
                                                               :end-pos end-pos}))]
                                (reset! last-start-pos end-pos)
                                block))
-                        blocks))
+                           blocks))
               file-id (:db/id (:block/file block))
               file (db/entity file-id)
               page (:block/page block)
@@ -2349,3 +2351,247 @@
         (insert-command! id content format {})))
     (when-let [input (gdom/getElement id)]
       (.focus input))))
+
+(defn keydown-enter-handler
+  [state input]
+  (fn [state e]
+    (when (and (not (gobj/get e "ctrlKey"))
+               (not (gobj/get e "metaKey"))
+               (not (in-auto-complete? input)))
+      (let [{:keys [block config]} (get-state state)]
+        (when (and block
+                   (not (:ref? config))
+                   (not (:custom-query? config))) ; in reference section
+          (let [content (state/get-edit-content)]
+            (if (and
+                 (> (:block/level block) 2)
+                 (string/blank? content))
+              (do
+                (util/stop e)
+                (adjust-block-level! state :left))
+              (let [shortcut (state/get-new-block-shortcut)
+                    insert? (cond
+                              config/mobile?
+                              true
+
+                              (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
+                              false
+
+                              (gobj/get e "shiftKey")
+                              false
+
+                              :else
+                              true)]
+                (when (and
+                       insert?
+                       (not (in-auto-complete? input)))
+                  (util/stop e)
+                  (profile
+                   "Insert block"
+                   (insert-new-block! state)))))))))))
+
+(defn keydown-up-down-handler
+  [input up?]
+  (fn [state e]
+    (when (and
+           (not (gobj/get e "ctrlKey"))
+           (not (gobj/get e "metaKey"))
+           (not (in-auto-complete? input)))
+      (on-up-down state e up?))))
+
+(defn keydown-backspace-handler
+  [repo input id]
+  (fn [state e]
+    (let [current-pos (:pos (util/get-caret-pos input))
+          value (gobj/get input "value")
+          deleted (and (> current-pos 0)
+                       (util/nth-safe value (dec current-pos)))
+          selected-start (gobj/get input "selectionStart")
+          selected-end (gobj/get input "selectionEnd")
+          block-id (:block-id (first (:rum/args state)))
+          page (state/get-current-page)]
+      (cond
+        (not= selected-start selected-end)
+        nil
+
+        (and (zero? current-pos)
+             ;; not the top block in a block page
+             (not (and page
+                       (util/uuid-string? page)
+                       (= (medley/uuid page) block-id))))
+        (delete-block! state repo e)
+
+        (and (> current-pos 1)
+             (= (util/nth-safe value (dec current-pos)) commands/slash))
+        (do
+          (reset! *slash-caret-pos nil)
+          (reset! *show-commands false))
+
+        (and (> current-pos 1)
+             (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
+        (do
+          (reset! *angle-bracket-caret-pos nil)
+          (reset! *show-block-commands false))
+
+        ;; pair
+        (and
+         deleted
+         (contains?
+          (set (keys delete-map))
+          deleted)
+         (>= (count value) (inc current-pos))
+         (= (util/nth-safe value current-pos)
+            (get delete-map deleted)))
+
+        (do
+          (util/stop e)
+          (commands/delete-pair! id)
+          (cond
+            (and (= deleted "[") (state/get-editor-show-page-search?))
+            (state/set-editor-show-page-search! false)
+
+            (and (= deleted "(") (state/get-editor-show-block-search?))
+            (state/set-editor-show-block-search! false)
+
+            :else
+            nil))
+
+        ;; deleting hashtag
+        (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
+        (state/set-editor-show-page-search-hashtag! false)
+
+        :else
+        nil))))
+
+(defn keydown-tab-handler
+  [input input-id]
+  (fn [state e]
+    (let [pos (and input (:pos (util/get-caret-pos input)))]
+      (when (and (not (state/get-editor-show-input))
+                 (not (state/get-editor-show-date-picker?))
+                 (not (state/get-editor-show-template-search?)))
+        (util/stop e)
+        (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
+                          :left
+                          :right)]
+          (p/let [_ (adjust-block-level! state direction)]
+            (and input pos
+                 (js/setTimeout
+                  #(when-let [input (gdom/getElement input-id)]
+                     (util/move-cursor-to input pos))
+                  0))))))))
+
+(defn keydown-not-matched-handler
+  [input input-id format]
+  (fn [e key-code]
+    (let [key (gobj/get e "key")
+          value (gobj/get input "value")
+          ctrlKey (gobj/get e "ctrlKey")
+          metaKey (gobj/get e "metaKey")
+          pos (util/get-input-pos input)]
+      (cond
+        (or ctrlKey metaKey)
+        nil
+
+        (or
+         (and (= key "#")
+              (and
+               (> pos 0)
+               (= "#" (util/nth-safe value (dec pos)))))
+         (and (= key " ")
+              (state/get-editor-show-page-search-hashtag?)))
+        (state/set-editor-show-page-search-hashtag! false)
+
+        (or
+         (surround-by? input "#" " ")
+         (surround-by? input "#" :end)
+         (= key "#"))
+        (do
+          (commands/handle-step [:editor/search-page-hashtag])
+          (state/set-last-pos! (:pos (util/get-caret-pos input)))
+          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+        (and
+         (= key " ")
+         (state/get-editor-show-page-search-hashtag?))
+        (state/set-editor-show-page-search-hashtag! false)
+
+        (and
+         (contains? (set/difference (set (keys reversed-autopair-map))
+                                    #{"`"})
+                    key)
+         (= (get-current-input-char input) key))
+        (do
+          (util/stop e)
+          (util/cursor-move-forward input 1))
+
+        (contains? (set (keys autopair-map)) key)
+        (do
+          (util/stop e)
+          (autopair input-id key format nil)
+          (cond
+            (surround-by? input "[[" "]]")
+            (do
+              (commands/handle-step [:editor/search-page])
+              (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+            (surround-by? input "((" "))")
+            (do
+              (commands/handle-step [:editor/search-block :reference])
+              (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+            :else
+            nil))
+
+        (let [sym "$"]
+          (and (= key sym)
+               (>= (count value) 1)
+               (> pos 0)
+               (= (nth value (dec pos)) sym)
+               (if (> (count value) pos)
+                 (not= (nth value pos) sym)
+                 true)))
+        (commands/simple-insert! input-id "$$" {:backward-pos 2})
+
+        (let [sym "^"]
+          (and (= key sym)
+               (>= (count value) 1)
+               (> pos 0)
+               (= (nth value (dec pos)) sym)
+               (if (> (count value) pos)
+                 (not= (nth value pos) sym)
+                 true)))
+        (commands/simple-insert! input-id "^^" {:backward-pos 2})
+
+        :else
+        nil))))
+
+;; key up
+(defn keyup-handler
+  [state input input-id search-timeout]
+  (fn [e key-code]
+    (let [k (gobj/get e "key")
+          format (:format (get-state state))]
+      (when-not (state/get-editor-show-input)
+        (when (and @*show-commands (not= key-code 191)) ; not /
+          (let [matched-commands (get-matched-commands input)]
+            (if (seq matched-commands)
+              (do
+                (reset! *show-commands true)
+                (reset! commands/*matched-commands matched-commands))
+              (reset! *show-commands false))))
+        (when (and @*show-block-commands (not= key-code 188)) ; not <
+          (let [matched-block-commands (get-matched-block-commands input)]
+            (if (seq matched-block-commands)
+              (cond
+                (= key-code 9)       ;tab
+                (when @*show-block-commands
+                  (util/stop e)
+                  (insert-command! input-id
+                                   (last (first matched-block-commands))
+                                   format
+                                   {:last-pattern commands/angle-bracket}))
+
+                :else
+                (reset! commands/*matched-block-commands matched-block-commands))
+              (reset! *show-block-commands false))))
+        (when (nil? @search-timeout)
+          (close-autocomplete-if-outside input))))))
