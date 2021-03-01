@@ -3,24 +3,19 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
+            [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler.file :as file]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.components.datetime :as datetime-comp]
-            [promesa.core :as p]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]
             [frontend.db :as db]
-            [frontend.config :as config]
-            [frontend.handler.web.nfs :as nfs]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [clojure.string :as string]
-            [clojure.set :as set]
             [cljs.core.match :refer-macros [match]]
             [frontend.commands :as commands
              :refer [*show-commands
@@ -29,11 +24,6 @@
                      *angle-bracket-caret-pos
                      *matched-block-commands
                      *show-block-commands]]
-            [medley.core :as medley]
-            [cljs-drag-n-drop.core :as dnd]
-            [frontend.text :as text]
-            [frontend.date :as date]
-            [frontend.handler.notification :as notification]
             ["/frontend/utils" :as utils]))
 
 (rum/defc commands < rum/reactive
@@ -194,7 +184,7 @@
                                   (reset! commands/*slash-caret-pos new-pos)
                                   (commands/handle-step [:editor/search-block]))})}
     "(())"]
-    [:button.font-extrabold.bottom-action.-mt-1
+   [:button.font-extrabold.bottom-action.-mt-1
     {:on-click #(commands/simple-insert! parent-id "/" {})}
     "/"]])
 
@@ -209,7 +199,7 @@
             (let [input-value (get state ::input-value)
                   input-option (get @state/state :editor/show-input)]
               (when (seq @input-value)
-                                   ;; no new line input
+                ;; no new line input
                 (util/stop e)
                 (let [[_id on-submit] (:rum/args state)
                       {:keys [pos]} @*slash-caret-pos
@@ -322,323 +312,43 @@
         false
         *slash-caret-pos)))])
 
+(defn- set-up-key-down!
+  [repo state input input-id format]
+  (mixins/on-key-down
+   state
+   {;; enter
+    13 (editor-handler/keydown-enter-handler state input)
+    ;; up
+    38 (editor-handler/keydown-up-down-handler input true)
+    ;; down
+    40 (editor-handler/keydown-up-down-handler input false)
+    ;; backspace
+    8 (editor-handler/keydown-backspace-handler repo input input-id)
+    ;; tab
+    9 (editor-handler/keydown-tab-handler input input-id)}
+   {:not-matched-handler (editor-handler/keydown-not-matched-handler input input-id format)}))
+
+(defn- set-up-key-up!
+  [state input input-id search-timeout]
+  (mixins/on-key-up
+   state
+   {}
+   (editor-handler/keyup-handler state input input-id search-timeout)))
+
 (def search-timeout (atom nil))
+
+(defn- setup-key-listener!
+  [state]
+  (let [{:keys [id format block]} (get-state state)
+        input-id id
+        input (gdom/getElement input-id)
+        repo (:block/repo block)]
+    (set-up-key-down! repo state input input-id format)
+    (set-up-key-up! state input input-id search-timeout)))
+
 (rum/defcs box < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (let [{:keys [id format block]} (get-state state)
-           input-id id
-           input (gdom/getElement input-id)
-           repo (:block/repo block)]
-       (mixins/on-key-down
-        state
-        {;; enter
-         13 (fn [state e]
-              (when (and (not (gobj/get e "ctrlKey"))
-                         (not (gobj/get e "metaKey"))
-                         (not (editor-handler/in-auto-complete? input)))
-                (let [{:keys [block config]} (get-state state)]
-                  (when (and block
-                             (not (:ref? config))
-                             (not (:custom-query? config))) ; in reference section
-                    (let [content (state/get-edit-content)]
-                      (if (and
-                           (> (:block/level block) 2)
-                           (string/blank? content))
-                        (do
-                          (util/stop e)
-                          (editor-handler/adjust-block-level! state :left))
-                        (let [shortcut (state/get-new-block-shortcut)
-                              insert? (cond
-                                        config/mobile?
-                                        true
-
-                                        (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                                        false
-
-                                        (gobj/get e "shiftKey")
-                                        false
-
-                                        :else
-                                        true)]
-                          (when (and
-                                 insert?
-                                 (not (editor-handler/in-auto-complete? input)))
-                            (util/stop e)
-                            (profile
-                             "Insert block"
-                             (editor-handler/insert-new-block! state))))))))))
-                          ;; up
-         38 (fn [state e]
-              (when (and
-                     (not (gobj/get e "ctrlKey"))
-                     (not (gobj/get e "metaKey"))
-                     (not (editor-handler/in-auto-complete? input)))
-                (editor-handler/on-up-down state e true)))
-                          ;; down
-         40 (fn [state e]
-              (when (and
-                     (not (gobj/get e "ctrlKey"))
-                     (not (gobj/get e "metaKey"))
-                     (not (editor-handler/in-auto-complete? input)))
-                (editor-handler/on-up-down state e false)))
-                          ;; backspace
-         8  (fn [state e]
-              (let [node (gdom/getElement input-id)
-                    current-pos (:pos (util/get-caret-pos node))
-                    value (gobj/get node "value")
-                    deleted (and (> current-pos 0)
-                                 (util/nth-safe value (dec current-pos)))
-                    selected-start (gobj/get node "selectionStart")
-                    selected-end (gobj/get node "selectionEnd")
-                    block-id (:block-id (first (:rum/args state)))
-                    page (state/get-current-page)]
-                (cond
-                  (not= selected-start selected-end)
-                  nil
-
-                  (and (zero? current-pos)
-                                        ;; not the top block in a block page
-                       (not (and page
-                                 (util/uuid-string? page)
-                                 (= (medley/uuid page) block-id))))
-                  (editor-handler/delete-block! state repo e)
-
-                  (and (> current-pos 1)
-                       (= (util/nth-safe value (dec current-pos)) commands/slash))
-                  (do
-                    (reset! *slash-caret-pos nil)
-                    (reset! *show-commands false))
-
-                  (and (> current-pos 1)
-                       (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
-                  (do
-                    (reset! *angle-bracket-caret-pos nil)
-                    (reset! *show-block-commands false))
-
-                                   ;; pair
-                  (and
-                   deleted
-                   (contains?
-                    (set (keys editor-handler/delete-map))
-                    deleted)
-                   (>= (count value) (inc current-pos))
-                   (= (util/nth-safe value current-pos)
-                      (get editor-handler/delete-map deleted)))
-
-                  (do
-                    (util/stop e)
-                    (commands/delete-pair! id)
-                    (cond
-                      (and (= deleted "[") (state/get-editor-show-page-search?))
-                      (state/set-editor-show-page-search! false)
-
-                      (and (= deleted "(") (state/get-editor-show-block-search?))
-                      (state/set-editor-show-block-search! false)
-
-                      :else
-                      nil))
-
-                                   ;; deleting hashtag
-                  (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-                  (state/set-editor-show-page-search-hashtag! false)
-
-                  :else
-                  nil)))
-                          ;; tab
-         9  (fn [state e]
-              (let [input-id (state/get-edit-input-id)
-                    input (and input-id (gdom/getElement id))
-                    pos (and input (:pos (util/get-caret-pos input)))]
-                (when (and (not (state/get-editor-show-input))
-                           (not (state/get-editor-show-date-picker?))
-                           (not (state/get-editor-show-template-search?)))
-                  (util/stop e)
-                  (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
-                                    :left
-                                    :right)]
-                    (p/let [_ (editor-handler/adjust-block-level! state direction)]
-                      (and input pos (js/setTimeout #(when-let [input (gdom/getElement input-id)]
-                                                       (util/move-cursor-to input pos))
-                                                    0)))))))}
-        {:not-matched-handler
-         (fn [e key-code]
-           (let [key (gobj/get e "key")
-                 value (gobj/get input "value")
-                 ctrlKey (gobj/get e "ctrlKey")
-                 metaKey (gobj/get e "metaKey")
-                 pos (util/get-input-pos input)]
-             (cond
-               (or ctrlKey metaKey)
-               nil
-
-               (or
-                (and (= key "#")
-                     (and
-                      (> pos 0)
-                      (= "#" (util/nth-safe value (dec pos)))))
-                (and (= key " ")
-                     (state/get-editor-show-page-search-hashtag?)))
-               (state/set-editor-show-page-search-hashtag! false)
-
-               (or
-                (editor-handler/surround-by? input "#" " ")
-                (editor-handler/surround-by? input "#" :end)
-                (= key "#"))
-               (do
-                 (commands/handle-step [:editor/search-page-hashtag])
-                 (state/set-last-pos! (:pos (util/get-caret-pos input)))
-                 (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-
-               (and
-                (= key " ")
-                (state/get-editor-show-page-search-hashtag?))
-               (state/set-editor-show-page-search-hashtag! false)
-
-               (and
-                (contains? (set/difference (set (keys editor-handler/reversed-autopair-map))
-                                           #{"`"})
-                           key)
-                (= (editor-handler/get-current-input-char input) key))
-               (do
-                 (util/stop e)
-                 (util/cursor-move-forward input 1))
-
-               (contains? (set (keys editor-handler/autopair-map)) key)
-               (do
-                 (util/stop e)
-                 (editor-handler/autopair input-id key format nil)
-                 (cond
-                   (editor-handler/surround-by? input "[[" "]]")
-                   (do
-                     (commands/handle-step [:editor/search-page])
-                     (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-                   (editor-handler/surround-by? input "((" "))")
-                   (do
-                     (commands/handle-step [:editor/search-block :reference])
-                     (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-                   :else
-                   nil))
-
-               (let [sym "$"]
-                 (and (= key sym)
-                      (>= (count value) 1)
-                      (> pos 0)
-                      (= (nth value (dec pos)) sym)
-                      (if (> (count value) pos)
-                        (not= (nth value pos) sym)
-                        true)))
-               (commands/simple-insert! input-id "$$" {:backward-pos 2})
-
-               (let [sym "^"]
-                 (and (= key sym)
-                      (>= (count value) 1)
-                      (> pos 0)
-                      (= (nth value (dec pos)) sym)
-                      (if (> (count value) pos)
-                        (not= (nth value pos) sym)
-                        true)))
-               (commands/simple-insert! input-id "^^" {:backward-pos 2})
-
-               :else
-               nil)))})
-       (mixins/on-key-up
-        state
-        {}
-        (fn [e key-code]
-          (let [k (gobj/get e "key")
-                format (:format (get-state state))]
-            (when-not (state/get-editor-show-input)
-              (when (and @*show-commands (not= key-code 191)) ; not /
-                (let [matched-commands (editor-handler/get-matched-commands input)]
-                  (if (seq matched-commands)
-                    (do
-                      (reset! *show-commands true)
-                      (reset! *matched-commands matched-commands))
-                    (reset! *show-commands false))))
-              (when (and @*show-block-commands (not= key-code 188)) ; not <
-                (let [matched-block-commands (editor-handler/get-matched-block-commands input)]
-                  (if (seq matched-block-commands)
-                    (cond
-                      (= key-code 9)       ;tab
-                      (when @*show-block-commands
-                        (util/stop e)
-                        (editor-handler/insert-command! input-id
-                                                        (last (first matched-block-commands))
-                                                        format
-                                                        {:last-pattern commands/angle-bracket}))
-
-                      :else
-                      (reset! *matched-block-commands matched-block-commands))
-                    (reset! *show-block-commands false))))
-              (when (nil? @search-timeout)
-                (editor-handler/close-autocomplete-if-outside input)))))))))
-  {:did-mount    (fn [state]
-                   (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
-                         content (get-in @state/state [:editor/content id])
-                         input (gdom/getElement id)]
-                     (when block-parent-id
-                       (state/set-editing-block-dom-id! block-parent-id))
-                     (if (= :indent-outdent (state/get-editor-op))
-                       (when input
-                         (when-let [pos (state/get-edit-pos)]
-                           (util/set-caret-pos! input pos)))
-                       (editor-handler/restore-cursor-pos! id content dummy?))
-
-                     (when input
-                       (dnd/subscribe!
-                        input
-                        :upload-images
-                        {:drop (fn [e files]
-                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))}))
-
-                                    ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
-                                    ;; which will hide the editor so no way for editing.
-                     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
-
-                     (when-let [element (gdom/getElement id)]
-                       (.focus element)))
-                   state)
-   :did-remount  (fn [_old-state state]
-                   (keyboards-handler/esc-save! state)
-                   state)
-   :will-unmount (fn [state]
-                   (let [{:keys [id value format block repo dummy? config]} (get-state state)
-                         file? (:file? config)]
-                     (when-let [input (gdom/getElement id)]
-                                      ;; (.removeEventListener input "paste" (fn [event]
-                                      ;;                                       (append-paste-doc! format event)))
-                       (let [s (str "cljs-drag-n-drop." :upload-images)
-                             a (gobj/get input s)
-                             timer (:timer a)]
-
-                         (and timer
-                              (dnd/unsubscribe!
-                               input
-                               :upload-images))))
-                     (editor-handler/clear-when-saved!)
-                     (if file?
-                       (let [path (:file-path config)
-                             content (db/get-file-no-sub path)
-                             value (some-> (gdom/getElement path)
-                                           (gobj/get "value"))]
-                         (when (and
-                                (not (string/blank? value))
-                                (not= (string/trim value) (string/trim content)))
-                           (let [old-page-name (db/get-file-page path false)
-                                 journal? (date/valid-journal-title? path)]
-                             (p/let [[journal? new-name] (page-handler/rename-when-alter-title-property! old-page-name path format content value)]
-                               (if (and journal? new-name (not= old-page-name (string/lower-case new-name)))
-                                 (notification/show! "Journal title can't be changed." :warning)
-                                 (let [new-name (if journal? (date/journal-title->default new-name) new-name)
-                                       new-path (if (= (string/lower-case new-name) (string/lower-case old-page-name))
-                                                  path
-                                                  (page-handler/compute-new-file-path path new-name))]
-                                   (file/alter-file (state/get-current-repo) new-path (string/trim value)
-                                                    {:re-render-root? true})))))))
-                       (when-not (contains? #{:insert :indent-outdent :auto-save} (state/get-editor-op))
-                         (editor-handler/save-block! (get-state state) value))))
-                   state)}
+  (mixins/event-mixin setup-key-listener!)
+  lifecycle/lifecycle
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}
           :as   option} id config]
