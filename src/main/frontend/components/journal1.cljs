@@ -52,7 +52,7 @@
                  (tree/move-subtree node parent-node nil)))
 
            :else
-           :no-extra-operate)))
+           :no-extra-operation)))
 
 
      :on-blur
@@ -77,10 +77,14 @@
     children]])
 
 (defn right-render
-  [node-tree children]
+  [children node-tree right]
   (if (empty? children)
-    [:div.right node-tree]
-    (into children [node-tree])))
+    [node-tree]
+    (let [new-children (into children [node-tree])
+          have-right? (tree/satisfied-inode? right)]
+      (if have-right?
+        new-children
+        [:div.right new-children]))))
 
 (def root-parent-id 1)
 (def root-left-id 1)
@@ -99,7 +103,7 @@
                                         (down-render node (render down nil)))
                                     (single-node-render node)))
                       right (tree/-get-right node)]
-                  (let [new-children (right-render node-tree children)]
+                  (let [new-children (right-render children node-tree right)]
                     (if (and (tree/satisfied-inode? right)
                           (pos? @number))
                       (do (swap! number dec)
