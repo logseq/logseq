@@ -802,15 +802,12 @@
             ;; create the file
             (let [content (util/default-content-with-title format (or
                                                                    (:page/original-name page)
-                                                                   (:page/name page)))]
-              (p/let [_ (fs/create-if-not-exists repo dir file-path content)
+                                                                   (:page/name page)))
+                  value (block-text-with-time nil format value)
+                  new-content (str content value "\n" snd-block-text)]
+              (p/let [_ (fs/create-if-not-exists repo dir file-path new-content)
                       _ (git-handler/git-add repo path)]
-                (let [value (block-text-with-time nil format value)]
-                  (file-handler/reset-file! repo path
-                                            (str content
-                                                 value
-                                                 "\n"
-                                                 snd-block-text)))
+                (file-handler/reset-file! repo path new-content)
                 (ui-handler/re-render-root!)
 
                 ;; Continue to edit the last block
