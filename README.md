@@ -95,9 +95,7 @@ yarn release
 Run ClojureScript tests
 
 ```bash
-yarn
-yarn cljs:test
-node static/tests.js
+yarn test
 ```
 
 Run Clojure tests. (Note: `.cljc` files may be tested both by ClojureScript, and Clojure.)
