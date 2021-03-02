@@ -17,6 +17,7 @@
             [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.state :as state]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -243,6 +244,21 @@
                     (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
        "?"])))
 
+(rum/defc settings-modal
+  [settings-open?]
+  (rum/use-effect!
+   (fn []
+     (if settings-open?
+       (state/set-modal!
+        (fn [close-fn]
+          (gobj/set close-fn "user-close" #(ui-handler/toggle-settings-modal!))
+          [:div.settings-modal (settings/settings)]))
+       (state/set-modal! nil))
+
+     (util/lock-global-scroll settings-open?)
+     #())
+   [settings-open?]) nil)
+
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -290,7 +306,8 @@
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         white? (= "white" (state/sub :ui/theme))
-        sidebar-open? (state/sub :ui/sidebar-open?)
+        settings-open? (state/sub :ui/settings-open?)
+        sidebar-open?  (state/sub :ui/sidebar-open?)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
         logged? (:name me)
@@ -337,6 +354,7 @@
 
         (ui/notification)
         (ui/modal)
+        (settings-modal settings-open?)
         (custom-context-menu)
         [:a#download.hidden]
         (when

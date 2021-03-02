@@ -46,7 +46,11 @@
     ;; custom shortcuts
     :shortcuts {:editor/new-block "enter"}
 
+    ;; modals
+    :modal/show? false
+
     ;; right sidebar
+    :ui/settings-open? false
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
@@ -897,7 +901,7 @@
 (defn set-modal!
   [modal-panel-content]
   (swap! state assoc
-         :modal/show? true
+         :modal/show? (boolean modal-panel-content)
          :modal/panel-content modal-panel-content))
 
 (defn close-modal!
@@ -1104,6 +1108,14 @@
 (defn clear-search-result!
   []
   (set-search-result! nil))
+
+(defn toggle!
+  [path]
+  (update-state! path not))
+
+(defn toggle-settings!
+  []
+  (toggle! :ui/settings-open?))
 
 ;; TODO: Move those to the uni `state`
 

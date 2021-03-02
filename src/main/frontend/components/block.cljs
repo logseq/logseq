@@ -625,6 +625,9 @@
       (match url
         ["Search" s]
         (cond
+          (string/blank? s)
+          [:span.warning {:title "Invalid link"} full_text]
+
           ;; image
           (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) s)) img-formats)
           (image-link config url s label metadata full_text)

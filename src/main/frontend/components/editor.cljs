@@ -32,7 +32,6 @@
             [medley.core :as medley]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.text :as text]
-            [frontend.template :as template]
             [frontend.date :as date]
             [frontend.handler.notification :as notification]
             ["/frontend/utils" :as utils]))
@@ -93,45 +92,11 @@
                  (when (> (count edit-content) current-pos)
                    (util/safe-subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
-                              (editor-handler/get-matched-pages q))
-              chosen-handler (if (state/sub :editor/show-page-search-hashtag?)
-                               (fn [chosen _click?]
-                                 (state/set-editor-show-page-search! false)
-                                 (let [chosen (if (re-find #"\s+" chosen)
-                                                (util/format "[[%s]]" chosen)
-                                                chosen)]
-                                   (editor-handler/insert-command! id
-                                                                   (str "#" chosen)
-                                                                   format
-                                                                   {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))})))
-                               (fn [chosen _click?]
-                                 (state/set-editor-show-page-search! false)
-                                 (let [page-ref-text (page-handler/get-page-ref-text chosen)]
-                                   (editor-handler/insert-command! id
-                                                                   page-ref-text
-                                                                   format
-                                                                   {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
-                                                                    :postfix-fn   (fn [s] (util/replace-first "]]" s ""))}))))
-              non-exist-page-handler (fn [_state]
-                                       (state/set-editor-show-page-search! false)
-                                       (if (state/org-mode-file-link? (state/get-current-repo))
-                                         (let [page-ref-text (page-handler/get-page-ref-text q)
-                                               value (gobj/get input "value")
-                                               old-page-ref (util/format "[[%s]]" q)
-                                               new-value (string/replace value
-                                                                         old-page-ref
-                                                                         page-ref-text)]
-                                           (state/set-edit-content! id new-value)
-                                           (let [new-pos (+ current-pos
-                                                            (- (count page-ref-text)
-                                                               (count old-page-ref))
-                                                            2)]
-                                             (util/move-cursor-to input new-pos)))
-                                         (util/cursor-move-forward input 2)))]
+                              (editor-handler/get-matched-pages q))]
           (ui/auto-complete
            matched-pages
-           {:on-chosen chosen-handler
-            :on-enter  non-exist-page-handler
+           {:on-chosen (page-handler/on-chosen-handler input id q pos format)
+            :on-enter #(page-handler/page-not-exists-handler input id q current-pos)
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
             :class     "black"}))))))
 
@@ -155,27 +120,8 @@
           matched-blocks (when-not (string/blank? q)
                            (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
       (when input
-        (let [chosen-handler (fn [chosen _click?]
-                               (state/set-editor-show-block-search! false)
-                               (let [uuid-string (str (:block/uuid chosen))]
-
-                                 ;; block reference
-                                 (editor-handler/insert-command! id
-                                                                 (util/format "((%s))" uuid-string)
-                                                                 format
-                                                                 {:last-pattern (str "((" (if @editor-handler/*selected-text "" q))
-                                                                  :postfix-fn   (fn [s] (util/replace-first "))" s ""))})
-
-                                 ;; Save it so it'll be parsed correctly in the future
-                                 (editor-handler/set-block-property! (:block/uuid chosen)
-                                                                     "ID"
-                                                                     uuid-string)
-
-                                 (when-let [input (gdom/getElement id)]
-                                   (.focus input))))
-              non-exist-block-handler (fn [_state]
-                                        (state/set-editor-show-block-search! false)
-                                        (util/cursor-move-forward input 2))]
+        (let [chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+              non-exist-block-handler (editor-handler/block-non-exist-handler input)]
           (ui/auto-complete
            matched-blocks
            {:on-chosen   chosen-handler
@@ -200,48 +146,11 @@
                    (subs edit-content pos current-pos))
                  "")
               matched-templates (editor-handler/get-matched-templates q)
-              chosen-handler (fn [[template db-id] _click?]
-                               (if-let [block (db/entity db-id)]
-                                 (let [new-level (:block/level edit-block)
-                                       properties (:block/properties block)
-                                       block-uuid (:block/uuid block)
-                                       including-parent? (not= (get properties "including-parent") "false")
-                                       template-parent-level (:block/level block)
-                                       pattern (config/get-block-pattern format)
-                                       content
-                                       (block-handler/get-block-full-content
-                                        (state/get-current-repo)
-                                        (:block/uuid block)
-                                        (fn [{:block/keys [uuid level content properties] :as block}]
-                                          (let [parent? (= uuid block-uuid)
-                                                ignore-parent? (and parent? (not including-parent?))]
-                                            (if ignore-parent?
-                                              ""
-                                              (let [new-level (+ new-level
-                                                                 (- level template-parent-level
-                                                                    (if (not including-parent?) 1 0)))
-                                                    properties' (dissoc (into {} properties) "id" "custom_id" "template" "including-parent")]
-                                                (-> content
-                                                   (string/replace-first (apply str (repeat level pattern))
-                                                                         (apply str (repeat new-level pattern)))
-                                                   text/remove-properties!
-                                                   (text/rejoin-properties properties')))))))
-                                       content (if (string/includes? (string/trim edit-content) "\n")
-                                                 content
-                                                 (text/remove-level-spaces content format))
-                                       content (template/resolve-dynamic-template! content)]
-                                   (state/set-editor-show-template-search! false)
-                                   (editor-handler/insert-command! id
-                                                                   content
-                                                                   format
-                                                                   {})))
-                               (when-let [input (gdom/getElement id)]
-                                 (.focus input)))
               non-exist-handler (fn [_state]
                                   (state/set-editor-show-template-search! false))]
           (ui/auto-complete
            matched-templates
-           {:on-chosen   chosen-handler
+           {:on-chosen   (editor-handler/template-on-chosen-handler input id q format edit-block edit-content)
             :on-enter    non-exist-handler
             :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a template"]
             :item-render (fn [[template _block-db-id]]
