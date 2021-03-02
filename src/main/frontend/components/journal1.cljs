@@ -11,9 +11,11 @@
 
 (def enter-key-code 13)
 (def tab-key-code 9)
+(def up-key-code 38)
+(def down-key-code 40)
 
 (def state
-  (atom {:editor/current-node nil
+  (atom {:editor/current-node  nil
          :outliner/node-number 10}))
 
 (defn sub
@@ -22,98 +24,163 @@
     (util/react (rum/cursor-in state ks))
     (util/react (rum/cursor state ks))))
 
-(defn textarea-option
+;;; helpers
+(defn textarea-focus!
+  [block-id]
+  (.focus
+   (.querySelector js/document
+                   (str "[data-bid='" block-id "'] > textarea"))))
+
+;;; handlers
+(defn set-current-node
+  [node]
+  (swap! state assoc :editor/current-node node))
+
+(defn on-bullet-zoom
+  "zoom in/out bullet"
+  [node]
+  (js/console.log "[zoom in/out] " (:data node)))
+
+(defn on-block-focus!
+  ([delta] (on-block-focus! (:editor/current-node @state) delta))
+  ([node delta]
+   ;; TODO: should get up/down block id by tree API !
+   (when-let [bid (:block/id (:data node))]
+     (let [js-bids (.map (.from js/Array (.querySelectorAll js/document "[data-bid]")) #(.. ^js % -dataset -bid))
+           current-index-of (.indexOf js-bids (.toString bid))]
+       (when-not (= -1 current-index-of)
+         (if-let [bid (aget js-bids (+ delta current-index-of))]
+           (textarea-focus! bid)))))))
+
+(defn block-save-with-content
+  [block content]
+  (let [new-block (-> (assoc block :block/content content)
+                      (outliner-core/block))]
+    (tree/-save new-block)))
+
+(defn block-indent
+  [block-node]
+  (let [parent-node (tree/-get-left block-node)]
+    (tree/move-subtree block-node parent-node nil)))
+
+(defn block-new
+  [block-node]
+  (let [left-id (tree/-get-id block-node)
+        parent-id (tree/-get-parent-id block-node)
+        new-node-id (outliner-core/gen-block-id)
+        new-node
+        (outliner-core/block
+         {:block/id        new-node-id
+          :block/left-id   [:block/id left-id]
+          :block/parent-id [:block/id parent-id]
+          :block/content   ""})]
+    (tree/insert-node-as-sibling new-node block-node)
+    (set-current-node new-node)))
+
+;;; components
+(rum/defc current-node-observer
+  [current-node]
+  (rum/use-effect!
+   (fn []
+     (when-let [block (:data current-node)]
+       (js/setTimeout
+        #(textarea-focus! (:block/id block))
+        16)
+       #()))
+   [current-node])
+  [:span {:key 0}])
+
+;;; FIXME: node should be associated with block Atom data
+;;; FIXME: for reactivity ?
+(rum/defc node-render
   [node]
   (let [old-block (:data node)
+        bid (:block/id old-block)
         content (:block/content old-block)]
-    {:on-key-down
-     (fn [e]
-       (let [pressed-code (.-keyCode e)]
-         (cond
-           (= enter-key-code pressed-code)
-           (do
-             (.blur (.-target e))
-             (.preventDefault e)
-             (let [left-id (tree/-get-id node)
-                   parent-id (tree/-get-parent-id node)
-                   new-node-id (outliner-core/gen-block-id)
-                   new-node
-                   (outliner-core/block
-                     {:block/id new-node-id
-                      :block/left-id [:block/id left-id]
-                      :block/parent-id [:block/id parent-id]
-                      :block/content (str new-node-id)})]
-               (tree/insert-node-as-sibling new-node node)))
+    [:div.block-node {:key bid :data-bid bid}
+     [:span.bullet {:on-click #(on-bullet-zoom node)}]
+     [:textarea
+      {:on-key-down   (fn [^js/MouseEvent e]
+                        (let [pressed-code (.-keyCode e)]
+                          (cond
+                            ;; create
+                            (= enter-key-code pressed-code)
+                            (do
+                              (.blur (.-target e))
+                              (block-new node)
+                              (.preventDefault e))
 
+                            ;; update
+                            (= tab-key-code pressed-code)
+                            (do (.blur (.-target e))
+                                (block-indent node))
 
-           (= tab-key-code pressed-code)
-           (do (.blur (.-target e))
-               (let [parent-node (tree/-get-left node)]
-                 (tree/move-subtree node parent-node nil)))
+                            ;; up
+                            (= up-key-code pressed-code)
+                            (on-block-focus! -1)
 
-           :else
-           :no-extra-operate)))
+                            ;; down
+                            (= down-key-code pressed-code)
+                            (on-block-focus! 1)
 
-
-     :on-blur
-     (fn [e]
-       (let [value (util/evalue e)
-             new-block (-> (assoc old-block :block/content value)
-                         (outliner-core/block))]
-         (tree/-save new-block)))
-     :default-value content}))
-
-(defn single-node-render
-  [node]
-  (let []
-    [:div.single-node
-     [:textarea (textarea-option node)]]))
+                            :else
+                            (js/console.debug "[KEY]" pressed-code))))
+       :on-focus      #(set-current-node node)
+       :on-blur       #(let [value (util/evalue %)]
+                         (set-current-node nil)
+                         (block-save-with-content old-block value))
+       :default-value content}]]))
 
 (defn down-render
   [node children]
-  [:div.down
-   [:div [:textarea (textarea-option node)]]
-   [:div.children
-    children]])
+  [:div.blocks
+   (node-render node)
+   (and children [:div.children children])])
 
 (defn right-render
   [node-tree children]
   (if (empty? children)
-    [:div.right node-tree]
+    [node-tree]
     (into children [node-tree])))
 
 (def root-parent-id 1)
 (def root-left-id 1)
 
-(rum/defc render-react-tree
-  < rum/reactive
-  [init-node]
+(rum/defcs render-react-tree <
+  {:did-mount (fn [state]
+                (let [[init-node] (:rum/args state)]
+                  (js/setTimeout #(set-current-node init-node) 10))
+                state)}
+  rum/reactive
+  [state init-node]
   (let [num (sub :outliner/node-number)
+        current-node (sub :editor/current-node)
         number (atom num)]
-    (letfn [(render [node children]
-              (when (tree/satisfied-inode? node)
-                (let [node-tree (let [down (tree/-get-down node)]
-                                  (if (and (tree/satisfied-inode? down)
-                                        (pos? @number))
-                                    (do (swap! number dec)
-                                        (down-render node (render down nil)))
-                                    (single-node-render node)))
-                      right (tree/-get-right node)]
-                  (let [new-children (right-render node-tree children)]
-                    (if (and (tree/satisfied-inode? right)
-                          (pos? @number))
-                      (do (swap! number dec)
-                          (render right new-children))
-                      new-children)))))]
 
-      (let [rs (render init-node nil)]
-        ;;(cljs.pprint/pprint rs)
-        rs))))
+    [:div.page
+     (current-node-observer current-node)
+     (letfn [(render [node children]
+               (when (tree/satisfied-inode? node)
+                 (let [node-tree (let [down (tree/-get-down node)]
+                                   (and (tree/satisfied-inode? down)
+                                        (swap! number dec))
+                                   (down-render node (render down nil)))
+                       right (tree/-get-right node)]
+                   (let [new-children (right-render node-tree children)]
+                     (if (and (tree/satisfied-inode? right)
+                              (pos? @number))
+                       (do (swap! number dec)
+                           (render right new-children))
+                       new-children)))))]
+
+       (let [rs (render init-node nil)]
+         ;;(cljs.pprint/pprint rs)
+         rs))]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
   (do (tt/build-db-records tt/node-tree)
       (let [init-node (outliner-state/get-block-and-ensure-position
-                        root-parent-id root-left-id)]
+                       root-parent-id root-left-id)]
         [:div.journal1
          (render-react-tree init-node)])))

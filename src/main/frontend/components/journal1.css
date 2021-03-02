@@ -1,7 +1,58 @@
 .journal1 {
+  .blocks {
+    .children {
+      position: relative;
+      margin-left: 20px;
 
-  .children {
-    margin-left: 20px;
+      &:before {
+        content: " ";
+        position: absolute;
+        background-color: #b5b5b5;
+        top: -12px;
+        left: -14px;
+        bottom: 6px;
+        width: 1px;
+      }
+    }
   }
 
+  .block-node {
+    position: relative;
+
+    .bullet {
+      position: absolute;
+      top: 13px;
+      left: 3px;
+
+      width: 8px;
+      height: 8px;
+      background-color: #919191;
+      border-radius: 100%;
+      transform: scale(.8);
+      user-select: none;
+      transition: transform .3s, background-color .2s;
+
+      &:hover {
+        transform: scale(1);
+        background-color: #646464;
+      }
+    }
+
+    textarea {
+      margin-left: 16px;
+      font-size: 16px;
+      border: none;
+      padding: 0 10px;
+      height: 32px;
+      line-height: 32px;
+      border-radius: 3px;
+      color: #555555;
+      transition: all .3s;
+
+      &:active, &:focus {
+        color: #222222;
+        background-color: rgba(219, 219, 219, 0.45);
+      }
+    }
+  }
 }
