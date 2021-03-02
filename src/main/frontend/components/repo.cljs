@@ -75,8 +75,7 @@
                                            "Sync with the local directory"
                                            "Clone again and re-index the db")
                                   :on-click (fn []
-                                              (repo-handler/re-index! nfs-handler/rebuild-index!)
-                                              )}
+                                              (repo-handler/re-index! nfs-handler/rebuild-index!))}
                  "Re-index"]
                 ;; [:a.control.ml-4 {:title "Export as JSON"
                 ;;                   :on-click (fn []
