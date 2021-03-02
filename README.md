@@ -126,6 +126,8 @@ yarn release-electron
 
 ## Alternative: Docker based development environment
 
+Basically it just pre-installs Java, Clojure and NodeJS for your convenience.
+
 ### 1. Fetch sources
 
 ```bash
