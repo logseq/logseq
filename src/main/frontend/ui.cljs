@@ -105,17 +105,18 @@
    opts))
 
 (defn button
-  [text & {:keys [background on-click href]
+  [text & {:keys [background href intent]
            :as   option}]
-  (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-700.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
+  (let [class (if intent (str "is-" intent) ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
         class (if background (string/replace class "indigo" background) class)]
     (if href
-      [:a.button (merge
-                  {:type  "button"
-                   :class (util/hiccup->class class)}
-                  (dissoc option :background))
+      [:a.ui__button.is-link
+       (merge
+        {:type  "button"
+         :class (util/hiccup->class class)}
+        (dissoc option :background))
        text]
-      [:button
+      [:button.ui__button
        (merge
         {:type  "button"
          :class (util/hiccup->class class)}
