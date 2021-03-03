@@ -106,18 +106,6 @@
     "hello\n:PROPERTIES:\n:id: f9873a81-07b9-4246-b910-53a6f5ec7e04\na: b\n:END:\n"
     "hello\n:PROPERTIES:\na: b\n:END:"))
 
-(defn remove-timestamp-property!
-  []
-  (are [x y] (= (text/remove-timestamp-property! x) y)
-    "hello\n:PROPERTIES:\n:created_at: 1\n:END:\n"
-    "hello\n:PROPERTIES:\n:END:"
-
-    "hello\n:PROPERTIES:\n:created_at: 1\n:last_modified_at: 2\n:END:\n"
-    "hello\n:PROPERTIES:\n:END:"
-
-    "hello\n:PROPERTIES:\n:a: b\n:created_at: 1\n:last_modified_at: 2\n:END:\n"
-    "hello\n:PROPERTIES:\n:a: b\n:END:"))
-
 (deftest re-construct-block-properties
   []
   (testing "block content without a title"
