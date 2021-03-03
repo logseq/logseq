@@ -58,7 +58,7 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [password (get state ::password)
           password-confirm (get state ::password-confirm)]
-      [:div
+      [:div.sm:w-96
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
          [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900.font-bold
@@ -110,7 +110,7 @@
 (rum/defcs encryption-setup-dialog-inner
   [state repo-url close-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div
+    [:div.sm:w-96
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
