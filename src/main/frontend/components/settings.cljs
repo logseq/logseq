@@ -81,10 +81,13 @@
   (let [update-pending? (state/sub :electron/updater-pending?)
         {:keys [type payload]} (state/sub :electron/updater)]
     [:div.cp__settings-app-updater
-     [:button.ui__button_base.is-logseq.check-update
-      {:disabled update-pending?
-       :on-click #(js/window.apis.checkForUpdates false)}
-      (if update-pending? "Checking ..." "Check for updates")]
+     (ui/button
+      (if update-pending? "Checking ..." "Check for updates")
+
+      :intent "logseq"
+      :class "check-update"
+      :disabled update-pending?
+      :on-click #(js/window.apis.checkForUpdates false))
      (when-not (or update-pending?
                    (string/blank? type))
        [:div.update-state
@@ -121,12 +124,12 @@
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
+        {:type     "button"
          :on-click user-handler/delete-account!}
         (t :user/delete-account)]]
       [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
+        {:type     "button"
          :on-click close-fn}
         "Cancel"]]]]))
 
@@ -197,10 +200,10 @@
                          (assoc :selected "selected"))
                (:label language)])]]]]
 
-        ;; config.edn
+                        ;; config.edn
         (when current-repo
           [:div.mt-5.text-sm
-           [:a {:href (rfe/href :file {:path (config/get-config-path)})
+           [:a {:href     (rfe/href :file {:path (config/get-config-path)})
                 :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
             (t :settings-page/edit-config-edn)]])]
 
@@ -257,12 +260,12 @@
                   (let [value (not enable-timetracking?)]
                     (config-handler/set-config! :feature/enable-timetracking? value))))
 
-        ;; (toggle "enable_block_time"
-        ;;         (t :settings-page/enable-block-time)
-        ;;         enable-block-time?
-        ;;         (fn []
-        ;;           (let [value (not enable-block-time?)]
-        ;;             (config-handler/set-config! :feature/enable-block-time? value))))
+                        ;; (toggle "enable_block_time"
+                        ;;         (t :settings-page/enable-block-time)
+                        ;;         enable-block-time?
+                        ;;         (fn []
+                        ;;           (let [value (not enable-block-time?)]
+                        ;;             (config-handler/set-config! :feature/enable-block-time? value))))
 
         (toggle "enable_journals"
                 (t :settings-page/enable-journals)
@@ -357,12 +360,11 @@
                                        (user-handler/set-cors! server)
                                        (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
            (ui/admonition
-             :important
-             [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-              [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
-                   :target "_blank"}
-               "https://github.com/isomorphic-git/cors-proxy"]])
-           ])
+            :important
+            [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
+             [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
+                  :target "_blank"}
+              "https://github.com/isomorphic-git/cors-proxy"]])])
 
         (when logged?
           [:div
