@@ -55,7 +55,8 @@
            (when (and (state/logged?) (not (util/electron?)))
              (ui/button
               "Add another git repo"
-              :href (rfe/href :repo-add nil {:graph-types "github"})))]
+              :href (rfe/href :repo-add nil {:graph-types "github"})
+              :intent "logseq"))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}
