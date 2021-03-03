@@ -684,9 +684,9 @@
                   (->elem
                    :a
                    (cond->
-                    {:href href
+                    {:href      (str "file://" href)
                      :data-href href
-                     :target "_blank"}
+                     :target    "_blank"}
                      title
                      (assoc :title title))
                    (map-inline config label)))))
