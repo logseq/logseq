@@ -16,12 +16,14 @@
 
 (defn collapse!
   [block]
-  (let [uuid (:block/uuid block)
+  (let [has-title? (seq (:block/title block))
+        uuid (:block/uuid block)
         nodes (array-seq (js/document.getElementsByClassName (str uuid)))]
     (doseq [node nodes]
       (d/add-class! node "collapsed")
-      (when-let [e (.querySelector node ".block-body")]
-        (hide! e))
+      (when has-title?
+        (when-let [e (.querySelector node ".block-body")]
+         (hide! e)))
       (when-let [e (.querySelector node ".block-children")]
         (hide! e)
         (let [elements (d/by-class node "ls-block")]

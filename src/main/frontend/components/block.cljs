@@ -1101,7 +1101,9 @@
                   (str "#" tag)])))
            tags))))
 
-(defn build-block-part
+(declare block-content)
+
+(defn build-block-title
   [{:keys [slide?] :as config} {:block/keys [uuid title tags marker level priority anchor meta format content pre-block? dummy? block-refs-count page properties]
                                 :as t}]
   (let [config (assoc config :block t)
@@ -1300,7 +1302,8 @@
 
       (if pre-block?
         (pre-block-cp config (string/trim content) format)
-        (build-block-part config block))
+        (when (seq title)
+          (build-block-title config block)))
 
       (when (and dragging? (not slide?))
         (dnd-separator block 0 -4 false true))
@@ -1318,13 +1321,14 @@
         (properties-cp config block))
 
       (when (and (not pre-block?) (seq body))
-        [:div.block-body {:style {:display (if collapsed? "none" "")}}
-         ;; TODO: consistent id instead of the idx (since it could be changed later)
-         (let [body (block/trim-break-lines! (:block/body block))]
-           (for [[idx child] (medley/indexed body)]
-             (when-let [block (markup-element-cp config child)]
-               (rum/with-key (block-child block)
-                 (str uuid "-" idx)))))])]
+        (do
+          [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
+          ;; TODO: consistent id instead of the idx (since it could be changed later)
+          (let [body (block/trim-break-lines! (:block/body block))]
+            (for [[idx child] (medley/indexed body)]
+              (when-let [block (markup-element-cp config child)]
+                (rum/with-key (block-child block)
+                  (str uuid "-" idx)))))]))]
      (when (and block-refs-count (> block-refs-count 0))
        [:div
         [:a.open-block-ref-link.bg-base-2

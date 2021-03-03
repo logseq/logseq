@@ -18,7 +18,7 @@
 (defn- build-block
   [config block]
   (let [body (:block/body block)
-        block (block/build-block-part config block)]
+        block (block/build-block-title config block)]
     [:div.block
      block
      (when (seq body)
