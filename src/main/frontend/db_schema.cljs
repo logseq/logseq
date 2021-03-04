@@ -5,7 +5,6 @@
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
    :file/content {}
-   :file/last-modified-at {}
    :file/size {}
    :file/handle {}})
 
@@ -16,7 +15,8 @@
   {:schema/version  {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
-
+   :db/encrypted?    {}
+   :db/encryption-keys {}
    ;; user
    :me/name  {}
    :me/email {}
@@ -50,8 +50,6 @@
                      :db/cardinality :db.cardinality/many}
    :page/journal?   {}
    :page/journal-day {}
-   :page/created-at {}
-   :page/last-modified-at {}
 
    ;; block
    :block/uuid   {:db/unique      :db.unique/identity}
@@ -64,6 +62,16 @@
    ;; referenced pages
    :block/ref-pages {:db/valueType   :db.type/ref
                      :db/cardinality :db.cardinality/many}
+   ;; referenced pages inherited from the parents
+   :block/path-ref-pages {:db/valueType   :db.type/ref
+                          :db/cardinality :db.cardinality/many}
+
+   ;; Referenced pages
+   ;; Notice: it's only for org mode, :tag1:tag2:
+   ;; Markdown tags will be only stored in :block/ref-pages
+   :block/tags {:db/valueType   :db.type/ref
+                :db/cardinality :db.cardinality/many}
+
    ;; referenced blocks
    :block/ref-blocks {:db/valueType   :db.type/ref
                       :db/cardinality :db.cardinality/many}
@@ -76,9 +84,6 @@
    :block/marker {}
    :block/priority {}
    :block/level {}
-   :block/tags {:db/valueType   :db.type/ref
-                :db/cardinality :db.cardinality/many
-                :db/isComponent true}
    ;; :start-pos :end-pos
    :block/meta {}
    :block/properties {}
@@ -92,7 +97,4 @@
    :block/scheduled-ast {}
    :block/deadline {}
    :block/deadline-ast {}
-   :block/repeated? {}
-
-   ;; For pages
-   :tag/name       {:db/unique :db.unique/identity}})
+   :block/repeated? {}})

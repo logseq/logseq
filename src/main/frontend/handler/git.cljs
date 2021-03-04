@@ -10,7 +10,9 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
             [frontend.config :as config]
-            [cljs-time.local :as tl]))
+            [cljs-time.local :as tl]
+            [clojure.string :as string]
+            [goog.object :as gobj]))
 
 (defn- set-git-status!
   [repo-url value]
@@ -30,7 +32,8 @@
   ([repo-url file]
    (git-add repo-url file true))
   ([repo-url file update-status?]
-   (when-not (config/local-db? repo-url)
+   (when (and (not (config/local-db? repo-url))
+              (not (util/electron?)))
      (-> (p/let [result (git/add repo-url file)]
            (when update-status?
              (common-handler/check-changed-files-status)))
@@ -57,6 +60,21 @@
   [repo-url {:keys [name email]}]
   (when (and name email)
     (git/set-username-email
-     (util/get-repo-dir repo-url)
+     (config/get-repo-dir repo-url)
      name
      email)))
+
+(defn show-commit-modal!
+  [modal]
+  (fn [e]
+    (when (and
+          (string/starts-with? (state/get-current-repo) "https://")
+          (not (util/input? (gobj/get e "target")))
+          (not (gobj/get e "shiftKey"))
+          (not (gobj/get e "ctrlKey"))
+          (not (gobj/get e "altKey"))
+          (not (gobj/get e "metaKey")))
+     (when-let [repo-url (state/get-current-repo)]
+       (when-not (state/get-edit-input-id)
+         (util/stop e)
+         (state/set-modal! modal))))))

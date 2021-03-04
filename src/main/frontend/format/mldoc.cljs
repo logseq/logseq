@@ -66,6 +66,17 @@
         (recur (rest ast)))
       nil)))
 
+(defn- ->vec
+  [s]
+  (if (string? s) [s] s))
+
+(defn- ->vec-concat
+  [& coll]
+  (->> (map ->vec coll)
+       (remove nil?)
+       (apply concat)
+       (distinct)))
+
 (defn collect-page-properties
   [ast]
   (if (seq ast)
@@ -75,9 +86,10 @@
           properties (->> (take-while directive? ast)
                           (map (fn [[_ k v]]
                                  (let [k (keyword (string/lower-case k))
-                                       v (if (contains? #{:title :description} k)
+                                       comma? (contains? #{:tags :alias :roam_tags} k)
+                                       v (if (contains? #{:title :description :roam_tags} k)
                                            v
-                                           (text/split-page-refs-without-brackets v))]
+                                           (text/split-page-refs-without-brackets v comma?))]
                                    [k v])))
                           (into {}))
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -94,23 +106,33 @@
                    {})
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
                           (into {}))
-          properties (if (:roam_alias properties)
-                       (assoc properties :alias (:roam_alias properties))
-                       properties)
           properties (if (seq properties)
                        (cond-> properties
                          (:roam_key properties)
                          (assoc :key (:roam_key properties)))
                        properties)
           definition-tags (get-tags-from-definition ast)
-          properties (if definition-tags
-                       (update properties :tags (fn [tags]
-                                                  (-> (concat tags definition-tags)
-                                                      distinct)))
-                       properties)
           properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
+          alias (->vec-concat (:roam_alias properties) (:alias properties))
+          filetags (if-let [org-file-tags (:filetags properties)]
+                     (->> (string/split org-file-tags ":")
+                          (remove string/blank?)))
+          roam-tags (if-let [org-roam-tags (:roam_tags properties)]
+                      (let [pat #"\"(.*?)\"" ;; note: lazy, capturing group
+                            quoted (map second (re-seq pat org-roam-tags))
+                            rest   (string/replace org-roam-tags pat "")
+                            rest (->> (string/split rest " ")
+                                      (remove string/blank?))]
+                        (concat quoted rest)))
+          tags (->vec-concat roam-tags (:tags properties) definition-tags filetags)
+          properties (assoc properties :tags tags :alias alias)
+          properties (-> properties
+                         (update :roam_alias ->vec)
+                         (update :roam_tags (constantly roam-tags))
+                         (update :filetags (constantly filetags)))
+          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
           other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
@@ -161,6 +183,7 @@
   (let [ast (->> (->edn content
                         (default-config format))
                  (map first))
+        properties (collect-page-properties ast)
         properties (let [properties (and (seq ast)
                                          (= "Properties" (ffirst ast))
                                          (last (first ast)))]

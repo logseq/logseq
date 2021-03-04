@@ -13,7 +13,9 @@
             [frontend.util :as util]
             [medley.core :as medley]
             [clojure.walk :as walk]
-            [clojure.core]))
+            [clojure.core]
+            [clojure.set :as set]
+            [frontend.template :as template]))
 
 ;; Query fields:
 
@@ -28,6 +30,7 @@
 ;; property (block)
 ;; todo (block)
 ;; priority (block)
+;; page
 ;; page-property (page)
 ;; page-tags (page)
 ;; all-page-tags
@@ -119,12 +122,12 @@
                  t/days)]
         (tc/to-long (t/plus (t/today) (tf duration)))))))
 
-#_(defn uniq-symbol
-    [counter prefix]
-    (let [result (symbol (str prefix (when-not (zero? @counter)
-                                       @counter)))]
-      (swap! counter inc)
-      result))
+(defn uniq-symbol
+  [counter prefix]
+  (let [result (symbol (str prefix (when-not (zero? @counter)
+                                     @counter)))]
+    (swap! counter inc)
+    result))
 
 (defn build-query
   ([repo e env]
@@ -135,17 +138,16 @@
          page-ref? (text/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'priority 'sort-by} fe))
+               (contains? #{'between 'property 'todo 'priority 'sort-by 'page} fe))
        (reset! blocks? true))
      (cond
        (nil? e)
        nil
 
        page-ref?
-       (let [page-name (text/page-ref-un-brackets! e)]
-         (when (and (not (string/blank? page-name))
-                    (some? (db-utils/entity repo [:page/name page-name])))
-           [['?b :block/ref-pages [:page/name page-name]]]))
+       (let [page-name (-> (text/page-ref-un-brackets! e)
+                           (string/lower-case))]
+         [['?b :block/path-ref-pages [:page/name page-name]]])
 
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]
@@ -209,8 +211,8 @@
              (when (and start end)
                (let [[start end] (sort [start end])
                      sym '?v]
-                 [['?b :block/properties '?p]
-                  [(list 'get '?p k) sym]
+                 [['?b :block/properties '?prop]
+                  [(list 'get '?prop k) sym]
                   [(list '>= sym start)]
                   [(list '< sym end)]])))))
 
@@ -218,9 +220,11 @@
             (= 3 (count e)))
        (let [v (some-> (name (nth e 2))
                        (text/page-ref-un-brackets!))
-             sym '?v]
-         [['?b :block/properties '?p]
-          [(list 'get '?p (name (nth e 1))) sym]
+             sym (if (= current-filter 'or)
+                   '?v
+                   (uniq-symbol counter "?v"))]
+         [['?b :block/properties '?prop]
+          [(list 'get '?prop (name (nth e 1))) sym]
           (list
            'or
            [(list '= sym v)]
@@ -228,8 +232,8 @@
 
        (and (= 'property fe)
             (= 2 (count e)))
-       [['?b :block/properties '?p]
-        [(list 'get '?p (name (nth e 1)))]]
+       [['?b :block/properties '?prop]
+        [(list 'get '?prop (name (nth e 1)))]]
 
        (= 'todo fe)
        (let [markers (if (coll? (first (rest e)))
@@ -267,6 +271,11 @@
                                                   comp))))
              nil)))
 
+       (= 'page fe)
+       (let [page-name (string/lower-case (first (rest e)))
+             page-name (text/page-ref-un-brackets! page-name)]
+         [['?b :block/page [:page/name page-name]]])
+
        (= 'page-property fe)
        (let [[k v] (rest e)]
          (if v
@@ -283,18 +292,21 @@
             [(list 'get '?prop (keyword (nth e 1)))]]))
 
        (= 'page-tags fe)
-       (let [tags (if (coll? (first (rest e)))
-                    (first (rest e))
-                    (rest e))]
-         (when (seq tags)
-           (let [tags (set (map (comp text/page-ref-un-brackets! name) tags))]
-             [['?p :page/tags '?t]
-              ['?t :tag/name '?tag]
-              [(list 'contains? tags '?tag)]])))
+       (do
+         (let [tags (if (coll? (first (rest e)))
+                      (first (rest e))
+                      (rest e))
+               tags (map (comp string/lower-case name) tags)]
+           (when (seq tags)
+             (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
+               (let [sym-1 (uniq-symbol counter "?t")
+                     sym-2 (uniq-symbol counter "?tag")]
+                 [['?p :page/tags sym-1]
+                  [sym-1 :page/name sym-2]
+                  [(list 'contains? tags sym-2)]])))))
 
        (= 'all-page-tags fe)
-       [['?t :tag/name '?tag]
-        ['?p :page/name '?tag]]
+       [['?e :page/tags '?p]]
 
        :else
        nil))))
@@ -315,6 +327,26 @@
                                                  (string/join " ")
                                                  (util/format "(between %s)"))))))
 
+(defn- add-bindings!
+  [q]
+  (let [syms ['?b '?p 'not]
+        [b? p? not?] (-> (set/intersection (set syms) (set (flatten q)))
+                         (map syms))]
+    (if not?
+      (cond
+        (and b? p?)
+        (concat [['?b :block/uuid] ['?p :page/name] ['?b :block/page '?p]] q)
+
+        b?
+        (concat [['?b :block/uuid]] q)
+
+        p?
+        (concat [['?p :page/name]] q)
+
+        :else
+        q)
+      q)))
+
 (defn parse
   [repo s]
   (when (and (string? s)
@@ -332,18 +364,13 @@
               result (when (seq result)
                        (let [key (if (coll? (first result))
                                    (keyword (ffirst result))
-                                   (keyword (first result)))]
-                         (case key
-                           :and
-                           (rest result)
+                                   (keyword (first result)))
+                             result (case key
+                                      :and
+                                      (rest result)
 
-                           :not
-                           (cons ['?b :block/uuid] result)
-
-                           :or
-                           result
-
-                           result)))]
+                                      result)]
+                         (add-bindings! result)))]
           {:query result
            :sort-by @sort-by
            :blocks? (boolean @blocks?)})
@@ -352,8 +379,9 @@
 
 (defn query
   [repo query-string]
-  (when query-string
-    (let [{:keys [query sort-by blocks?]} (parse repo query-string)]
+  (when (string? query-string)
+    (let [query-string (template/resolve-dynamic-template! query-string)
+          {:keys [query sort-by blocks?]} (parse repo query-string)]
       (when query
         (let [query (query-wrapper query blocks?)]
           (query-custom/react-query repo

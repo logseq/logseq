@@ -12,6 +12,7 @@
 (rum/defc current-page < rum/reactive
   {:did-mount    (fn [state]
                    (state/set-root-component! (:rum/react-component state))
+                   (state/setup-electron-updater!)
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
                    (let [teardown-fn (comp (ui/setup-patch-ios-fixed-bottom-position!))]
@@ -48,4 +49,4 @@
         ;;           :timeout {:enter 300
         ;;                     :exit 200}}
         ;;          (route-view view route-match)))))))
-         [:div "404 Page"])))))
+         )))))

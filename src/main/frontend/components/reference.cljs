@@ -93,7 +93,8 @@
           (ui/foldable
            [:div.flex.flex-row.flex-1.justify-between
             [:h2.font-bold.opacity-50 (let []
-                                        (str n-ref " Linked References"))]
+                                        (str n-ref " Linked Reference"
+                                             (if (> n-ref 1) "s")))]
             [:a {:title "Filter"
                  :on-click #(state/set-modal! (filter-dialog references page-name))}
               (svg/filter-icon (cond
@@ -101,6 +102,7 @@
                                  (every? true? (vals filter-state)) "text-green-500"
                                  (every? false? (vals filter-state)) "text-red-500"
                                  :else "text-yellow-200"))]]
+
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                              {:id page-name
@@ -145,7 +147,8 @@
           (ui/foldable
            [:h2.font-bold {:style {:opacity "0.3"}}
             (if @n-ref
-              (str @n-ref " Unlinked References")
+              (str @n-ref " Unlinked Reference" (if (> @n-ref 1)
+                                                  "s"))
               "Unlinked References")]
            (fn [] (unlinked-references-aux page-name n-ref))
            true)]]))))

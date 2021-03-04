@@ -9,16 +9,20 @@
    :modules {:main {:init-fn frontend.core/init}
              :code-editor
              {:entries [frontend.extensions.code]
+              :depends-on #{:main}}
+             :age-encryption
+             {:entries [frontend.extensions.age-encryption]
               :depends-on #{:main}}}
 
    :output-dir "./static/js"
    :asset-path "/static/js"
    :release {:asset-path "https://asset.logseq.com/static/js"}
    :compiler-options {:infer-externs :auto
-                      :output-feature-set :es6
-                      :source-map true
+                      :output-feature-set :es-next
+                      ;; :source-map true
                       :externs ["datascript/externs.js"
-                                "externs.js"]}
+                                "externs.js"]
+                      :warnings {:fn-deprecated false}}
    :closure-defines {goog.debug.LOGGING_ENABLED true
                      frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
@@ -32,6 +36,13 @@
     :watch-path   "static"
     :preloads     [devtools.preload]}}
 
+  :electron {:target :node-script
+             :output-to "static/electron.js"
+             :main electron.core/main
+             :devtools
+             {:before-load electron.core/stop
+              :after-load electron.core/start}}
+
   :test
   {:target :node-test
    :output-to "static/tests.js"
@@ -44,6 +55,9 @@
    :modules {:main {:init-fn frontend.publishing/init}
              :code-editor
              {:entries [frontend.extensions.code]
+              :depends-on #{:main}}
+             :age-encryption
+             {:entries [frontend.extensions.age-encryption]
               :depends-on #{:main}}}
 
    :output-dir "./static/js/publishing"
@@ -53,9 +67,10 @@
                      goog.debug.LOGGING_ENABLED true}
 
    :compiler-options {:infer-externs :auto
-                      :output-feature-set :es6
+                      :output-feature-set :es-next
                       :externs ["datascript/externs.js"
-                                "externs.js"]}
+                                "externs.js"]
+                      :warnings {:fn-deprecated false}}
    :devtools
    ;; before live-reloading any code call this function
    {:before-load frontend.core/stop

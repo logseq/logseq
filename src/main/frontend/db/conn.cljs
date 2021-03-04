@@ -2,6 +2,7 @@
   "Contains db connections."
   (:require [clojure.string :as string]
             [frontend.db-schema :as db-schema]
+            [frontend.db.default :as default-db]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.config :as config]
@@ -84,6 +85,8 @@
                              (assoc :db/type db-type))])
      (when me
        (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
+
+     (d/transact! db-conn default-db/built-in-pages)
 
      (when listen-handler (listen-handler repo)))))
 

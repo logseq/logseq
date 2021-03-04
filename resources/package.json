@@ -1,0 +1,33 @@
+{
+  "name": "Logseq",
+  "version": "0.0.1",
+  "main": "electron.js",
+  "author": "Logseq",
+  "description": "A privacy-first, open-source platform for knowledge sharing and management.",
+  "scripts": {
+    "electron:dev": "electron-forge start",
+    "electron:debug": "electron-forge start --inspect-electron",
+    "electron:make": "electron-forge make",
+    "electron:publish:github": "electron-forge publish"
+  },
+  "config": {
+    "forge": "./forge.config.js"
+  },
+  "dependencies": {
+    "electron-log": "^4.3.1",
+    "electron-squirrel-startup": "^1.0.0",
+    "update-electron-app": "^2.0.1",
+    "node-fetch": "^2.6.1",
+    "open": "^7.3.1",
+    "chokidar": "^3.5.1"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^6.0.0-beta.54",
+    "@electron-forge/maker-deb": "^6.0.0-beta.54",
+    "@electron-forge/maker-dmg": "^6.0.0-beta.54",
+    "@electron-forge/maker-rpm": "^6.0.0-beta.54",
+    "@electron-forge/maker-squirrel": "^6.0.0-beta.54",
+    "@electron-forge/maker-zip": "^6.0.0-beta.54",
+    "electron": "11.2.0"
+  }
+}

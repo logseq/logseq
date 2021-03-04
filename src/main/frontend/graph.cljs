@@ -98,7 +98,7 @@
                     arc-radius
                     (* arc-radius (js/Math.sqrt (js/Math.sqrt val)))) 0 (* 2 js/Math.PI) false)
     (set! (.-fillStyle ctx)
-          (if (= (gobj/get node "id") @hover-node)
+          (if (contains? @highlight-nodes label)
             (if dark? "#A3BFFA" "#4C51BF")
             (if dark? "#999" "#666")))
     (.fill ctx)))

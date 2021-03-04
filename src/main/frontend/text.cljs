@@ -13,36 +13,58 @@
 
 (defonce page-ref-re #"\[\[(.*?)\]\]")
 
+(defonce page-ref-re-2 #"(\[\[.*?\]\])")
+
 (defonce between-re #"\(between ([^\)]+)\)")
 
 (defn page-ref-un-brackets!
   [s]
   (when (string? s)
-    (let [s (if (page-ref? s)
-              (subs s 2 (- (count s) 2))
-              s)]
-      (string/lower-case s))))
+    (if (page-ref? s)
+      (subs s 2 (- (count s) 2))
+      s)))
 
-;; E.g "Foo Bar \"Bar Baz\""
-(defn- sep-by-comma-or-quote
+;; E.g "Foo Bar"
+(defn sep-by-comma
   [s]
   (when s
     (some->>
-     (string/split s #"[\"|\,|，]{1}")
+     (string/split s #"[\,|，]{1}")
      (remove string/blank?)
-     (map string/lower-case)
      (map string/trim))))
 
 (defn split-page-refs-without-brackets
-  [s]
-  (if (and (string? s)
-             (or (re-find #"[\"|\,|，]+" s)
-                 (re-find page-ref-re s)))
-      (->> s
-        (sep-by-comma-or-quote)
-        (map page-ref-un-brackets!)
-        (set))
-      s))
+  ([s]
+   (split-page-refs-without-brackets s false))
+  ([s comma?]
+   (if (and (string? s)
+            ;; Either a page ref, a tag or a comma separated collection
+            (or (re-find page-ref-re s)
+                (re-find (if comma? #"[\,|，|#]+" #"#") s)))
+     (let [result (->> (string/split s page-ref-re-2)
+                       (remove string/blank?)
+                       (mapcat (fn [s]
+                                 (if (page-ref? s)
+                                   [(page-ref-un-brackets! s)]
+                                   (sep-by-comma s))))
+                       (distinct))]
+       (if (or (coll? result)
+               (and (string? result)
+                    (string/starts-with? result "#")))
+         (let [result (if coll? result [result])
+               result (map (fn [s] (string/replace s #"^#+" "")) result)]
+           (set result))
+         (first result)))
+     s)))
+
+(defn extract-level-spaces
+  [text format]
+  (if-not (string/blank? text)
+    (let [pattern (util/format
+                   "^[%s]+\\s?"
+                   (config/get-block-pattern format))]
+      (re-find (re-pattern pattern) text))
+    ""))
 
 (defn remove-level-spaces
   ([text format]
@@ -61,7 +83,7 @@
   [text format]
   (if-not (string/blank? text)
     (let [pattern (util/format
-                   "^[%s]+\\s?"
+                   "^[%s]+\\s?\n?"
                    (config/get-block-pattern format))
           matched-text (re-find (re-pattern pattern) text)]
       (if matched-text
@@ -88,8 +110,10 @@
         [title-lines properties-and-body] (split-with (fn [l] (not (string/starts-with? (string/upper-case (string/triml l)) ":PROPERTIES:"))) lines)
         body (drop-while (fn [l]
                            (let [l' (string/lower-case (string/trim l))]
-                             (and (string/starts-with? l' ":")
-                                  (not (string/starts-with? l' ":end:")))))
+                             (or
+                              (and (string/starts-with? l' ":")
+                                   (not (string/starts-with? l' ":end:")))
+                              (string/blank? l))))
                          properties-and-body)
         body (if (and (seq body)
                       (string/starts-with? (string/lower-case (string/triml (first body))) ":end:"))
@@ -124,17 +148,24 @@
 
 (defn rejoin-properties
   ([content properties]
-   (rejoin-properties content properties true))
-  ([content properties remove-blank?]
-   (let [properties (if (= (get properties "heading") "false")
+   (rejoin-properties content properties {}))
+  ([content properties {:keys [remove-blank? block-with-title?]
+                        :or {remove-blank? true
+                             block-with-title? true}}]
+   (let [content (string/triml content)
+         properties (if (= (get properties "heading") "false")
                       (dissoc properties "heading")
                       properties)
          properties (if remove-blank?
                       (remove (fn [[k _v]] (string/blank? k)) properties)
                       properties)
-         [title body] (util/safe-split-first "\n" content)
+         [title body] (if block-with-title?
+                        (util/safe-split-first "\n" content)
+                        ["" content])
          properties (build-properties-str properties)]
-     (str title "\n" properties body))))
+     (if block-with-title?
+       (str title "\n" properties body)
+       (str properties body)))))
 
 (defn contains-properties?
   [s]
@@ -161,15 +192,22 @@
                   (let [[k v] (util/split-first ":" (subs line 1))]
                     (when (and k v)
                       (let [k (string/trim (string/lower-case k))
-                            v (string/trim (string/lower-case v))]
+                            v (string/trim v)]
                         (when-not (contains? #{"properties" "end"} k)
                           [k v])))))))
          (into {}))))
 
 (defn re-construct-block-properties
-  [content properties]
-  (-> (remove-properties! content)
-      (rejoin-properties properties)))
+  [format content properties block-with-title?]
+  (let [format (keyword format)
+        level-spaces (extract-level-spaces content format)
+        result (-> content
+                   (remove-level-spaces format)
+                   (remove-properties!)
+                   (rejoin-properties properties {:block-with-title? block-with-title?}))]
+    (str (when level-spaces (string/trim-newline level-spaces))
+         (when (not block-with-title?) "\n")
+         (string/triml result))))
 
 (defn insert-property
   [content key value]
@@ -205,3 +243,9 @@
               body (drop-while properties? properties-and-body)]
           (->> (concat title-lines new-properties body)
                (string/join "\n")))))))
+
+(defn build-data-value
+  [col]
+  (let [items (map (fn [item] (str "\"" item "\"")) col)]
+    (util/format "[%s]"
+                 (string/join ", " items))))

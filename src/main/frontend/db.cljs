@@ -10,6 +10,7 @@
             [frontend.state :as state]
             [promesa.core :as p]
             [frontend.db-schema :as db-schema]
+            [frontend.db.default :as default-db]
             [clojure.core.async :as async]
             [frontend.idb :as idb]))
 
@@ -37,7 +38,7 @@
  [frontend.db.model
   add-properties! block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks
   delete-file! delete-file-blocks! delete-file-pages! delete-file-tx delete-files delete-pages-by-files
-  filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages get-all-tags
+  filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-and-children-no-cache get-block-by-uuid get-block-children
   get-block-children-ids get-block-content get-block-file get-block-immediate-children get-block-page
   get-block-page-end-pos get-block-parent get-block-parents get-block-referenced-blocks get-block-refs-count
@@ -50,10 +51,11 @@
   get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
   get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
-  set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages]
+  set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages page-empty? get-alias-source-page
+  set-file-content!]
 
  [frontend.db.react
-  get-current-marker get-current-page get-current-priority get-handler-keys set-file-content! set-key-value
+  get-current-marker get-current-page get-current-priority get-handler-keys set-key-value
   transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
   query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value]
@@ -65,10 +67,12 @@
 (defn persist! [repo]
   (let [file-key (datascript-files-db repo)
         non-file-key (datascript-db repo)
-        file-db (d/db (get-files-conn repo))
-        non-file-db (d/db (get-conn repo false))
-        file-db-str (db->string file-db)
-        non-file-db-str (db->string non-file-db)]
+        files-conn (get-files-conn repo)
+        file-db (when files-conn (d/db files-conn))
+        non-file-conn (get-conn repo false)
+        non-file-db (d/db non-file-conn)
+        file-db-str (if file-db (db->string file-db) "")
+        non-file-db-str (if non-file-db (db->string non-file-db) "")]
     (p/let [_ (idb/set-batch! [{:key file-key :value file-db-str}
                                {:key non-file-key :value non-file-db-str}])]
       (state/set-last-persist-transact-id! repo true (get-max-tx-id file-db))
@@ -146,7 +150,8 @@
          (p/let [stored (idb/get-item db-name)
                  _ (when stored
                      (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                           attached-db (d/db-with stored-db
+                                                  [(me-tx stored-db me)])]
                        (conn/reset-conn! db-conn attached-db)))
                  db-name (datascript-db repo)
                  db-conn (d/create-conn db-schema/schema)
@@ -155,7 +160,9 @@
                  stored (idb/get-item db-name)
                  _ (if stored
                      (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                           attached-db (d/db-with stored-db (concat
+                                                             [(me-tx stored-db me)]
+                                                             default-db/built-in-pages))]
                        (conn/reset-conn! db-conn attached-db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]

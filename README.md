@@ -15,7 +15,8 @@ Use it to organize your todo list, to write your journals, or to record your uni
 
 ## Why Logseq?
 
-[Logseq](https://logseq.com) is an open-source platform for knowledge sharing and management. It focuses on privacy, longevity, and user control.
+[Logseq](https://logseq.com) is a platform for knowledge sharing and management. It focuses on privacy, longevity, and user control.
+Notice: the backend code will be open-sourced as soon as we’re sure that the backend service meets the security standards.
 
 The server will never store or analyze your private notes. Your data are plain text files and we currently support both Markdown and Emacs Org mode (more to be added soon).
 
@@ -24,11 +25,12 @@ In the unlikely event that the website is down or cannot be maintained, your dat
 ![Image of logseq](https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA)
 
 ## Feature requests
+
 Please go to https://discuss.logseq.com/c/feature-requests/7.
 
 ## How can I use it?
 
-1. Make sure you have registered a [GitHub account](https://github.com/join) and already created a repository (could be an old one). _Currently we only support GitHub, but more sync  options (e.g. Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon._
+1. Make sure you have registered a [GitHub account](https://github.com/join) and already created a repository (could be an old one). _Currently we only support GitHub, but more sync options (e.g. Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon._
 
 2. Visit our website <https://logseq.com/>.
 
@@ -59,7 +61,7 @@ Logseq is also made possible by the following projects:
 - Discord: https://discord.gg/KpN4eHY - Where we answer questions, disucss workflows and share tips
 - Github: https://github.com/logseq/logseq - everyone is encouraged to report issues!
 
-- - - -
+---
 
 The following is for developers and designers who want to build and run Logseq locally and contribute to this project.
 
@@ -68,11 +70,11 @@ The following is for developers and designers who want to build and run Logseq l
 ### 1. Requirements
 
 - [Node.js](https://nodejs.org/en/download/) & [Yarn](https://classic.yarnpkg.com/en/docs/install/)
-- [Java & Clojure](https://clojure.org/guides/getting_started)
+- [Java & Clojure](https://clojure.org/guides/getting_started). (If you run into `Execution error (FileNotFoundException) at java.io.FileInputStream/open0 (FileInputStream.java:-2). -M:cljs (No such file or directory)`, it means you have a wrong Clojure version installed. Please uninstall it and follow the instructions linked.)
 
 ### 2. Compile to JavaScript
 
-``` bash
+```bash
 git clone https://github.com/logseq/logseq
 yarn
 yarn watch
@@ -84,35 +86,75 @@ Open <http://localhost:3001>.
 
 ### 4. Build a release
 
-``` bash
+```bash
 yarn release
+```
+
+### 5. Run tests
+
+Run ClojureScript tests
+
+```bash
+yarn test
+```
+
+Run Clojure tests. (Note: `.cljc` files may be tested both by ClojureScript, and Clojure.)
+
+```bash
+clj -Mtest-clj
+```
+
+## Desktop app development
+
+### 1. Compile to JavaScript
+
+```bash
+yarn watch
+```
+
+### 2. Open the dev app
+
+```bash
+yarn dev-electron-app
+```
+
+### 3. Build a release
+
+```bash
+yarn release-electron
 ```
 
 ## Alternative: Docker based development environment
 
+Basically it just pre-installs Java, Clojure and NodeJS for your convenience.
+
 ### 1. Fetch sources
 
-``` bash
+```bash
 git clone https://github.com/logseq/logseq
 ```
 
 ### 2. Build Docker image
 
-``` bash
+```bash
 cd logseq
 docker build -t logseq-docker .
 ```
 
 ### 3. Run Docker container
 
-``` bash
+```bash
 docker run -v $(pwd):/home/logseq/logseq -p 3001:3001 -p 9630:9630 -p 8701:8701 --rm -it logseq-docker /bin/bash
 ```
 
 ### 4. Inside the container compile as described above
 
-``` bash
+```bash
 cd logseq
 yarn
 yarn watch
 ```
+
+## Thanks
+
+[![JetBrains](docs/assets/jetbrains.svg)](https://www.jetbrains.com/?from=logseq)

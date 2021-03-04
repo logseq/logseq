@@ -17,7 +17,12 @@ dummy.getRangeAt = function() {};
 dummy.getElementsByClassName = function() {};
 dummy.containsNode = function() {};
 dummy.select = function() {};
+dummy.search = function() {};
+dummy.add = function() {};
+dummy.remove = function() {};
+dummy.closest = function () {};
 dummy.setAttribute = function() {};
+dummy.getAttribute = function() {};
 dummy.font = function() {};
 dummy.measureText = function() {};
 dummy.fillStyle = function() {};
@@ -50,3 +55,18 @@ dummy.values = function() {};
 // Do we really need those?
 dummy.filter = function() {};
 dummy.concat = function() {};
+dummy.diff_main = function() {};
+dummy.patch_make = function() {};
+dummy.patch_apply = function() {};
+
+/**
+ * @typedef {{
+ *     recursive: (undefined | boolean),
+ * }}
+ */
+var openDirectoryOptions;
+/**
+ * @param {(undefined | openDirectoryOptions)} options
+ * @param {function} cb
+ */
+var openDirectory = function(options, cb) {};

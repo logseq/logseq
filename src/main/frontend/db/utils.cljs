@@ -35,8 +35,12 @@
 (defn group-by-page
   [blocks]
   (some->> blocks
-           (group-by :block/page)
-           (sort-by (fn [[p _blocks]] (:page/last-modified-at p)) >)))
+           (group-by :block/page)))
+
+(defn group-by-file
+  [blocks]
+  (some->> blocks
+           (group-by :block/file)))
 
 (defn get-tx-id [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))
@@ -72,8 +76,8 @@
    (when-let [conn (conn/get-conn repo)]
      (try
        (d/pull conn
-         selector
-         eid)
+               selector
+               eid)
        (catch js/Error e
          nil)))))
 
@@ -95,7 +99,7 @@
   ([repo-url tx-data]
    (when-not config/publishing?
      (let [tx-data (->> (util/remove-nils tx-data)
-                     (remove nil?))]
+                        (remove nil?))]
        (when (seq tx-data)
          (when-let [conn (conn/get-conn repo-url false)]
            (d/transact! conn (vec tx-data))))))))
@@ -106,4 +110,4 @@
   ([repo-url key]
    (when-let [db (conn/get-conn repo-url)]
      (some-> (d/entity db key)
-       key))))
+             key))))

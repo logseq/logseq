@@ -4,23 +4,32 @@
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.encrypt :as e]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.util :as util]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]
             [frontend.version :as version]
             [frontend.components.commit :as commit]
             [frontend.components.svg :as svg]
+            [frontend.components.encryption :as encryption]
             [frontend.context.i18n :as i18n]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [clojure.string :as str]))
 
 (rum/defc add-repo
-  []
-  (widgets/add-repo))
+  [args]
+  (if-let [graph-types (get-in args [:query-params :graph-types])]
+    (let [graph-types-s (->> (str/split graph-types #",")
+                             (mapv keyword))]
+      (when (seq graph-types-s)
+        (widgets/add-graph :graph-types graph-types-s)))
+    (widgets/add-graph)))
 
 (rum/defc repos < rum/reactive
   []
@@ -29,20 +38,25 @@
         repos (util/distinct-by :url repos)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (if (seq repos)
-        [:div#repos
-         [:h1.title "All Repos"]
+        [:div#graphs
+         [:h1.title "All Graphs"]
+         [:p.ml-2.opacity-70
+          (if (state/github-authed?)
+            "A \"graph\" in Logseq could be either a local directory or a git repo."
+            "A \"graph\" in Logseq means a local directory.")]
 
-         [:div.pl-1.content
+         [:div.pl-1.content.mt-3
           [:div.flex.flex-row.my-4
            (when (nfs-handler/supported?)
              [:div.mr-8
               (ui/button
                (t :open-a-directory)
-               :on-click nfs-handler/ls-dir-files)])
-           (when (state/logged?)
+               :on-click page-handler/ls-dir-files!)])
+           (when (and (state/logged?) (not (util/electron?)))
              (ui/button
               "Add another git repo"
-              :href (rfe/href :repo-add)))]
+              :href (rfe/href :repo-add nil {:graph-types "github"})
+              :intent "logseq"))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}
@@ -53,45 +67,44 @@
                       :href url}
                   (db/get-repo-path url)])
                [:div.controls
-                [:a.control {:title (if local?
-                                      "Sync with the local directory"
-                                      "Clone again and re-index the db")
-                             :on-click (fn []
-                                         (if local?
-                                           (nfs-handler/refresh! url
-                                                                 repo-handler/create-today-journal!)
-                                           (repo-handler/rebuild-index! url))
-                                         (js/setTimeout
-                                          (fn []
-                                            (route-handler/redirect! {:to :home}))
-                                          500))}
-                 "Re-index"]
-                [:a.control.ml-4 {:title "Clone again and re-index the db"
+                (when (e/encrypted-db? url)
+                  [:a.control {:title "Show encryption information about this graph"
+                               :on-click (fn []
+                                           (state/set-modal! (encryption/encryption-dialog url)))}
+                   "🔐"])
+                [:a.control.ml-4 {:title (if local?
+                                           "Sync with the local directory"
+                                           "Clone again and re-index the db")
                                   :on-click (fn []
-                                              (export-handler/export-repo-as-json! (:url repo)))}
-                 "Export as JSON"]
-                [:a.text-gray-400.ml-4 {:on-click (fn []
+                                              (repo-handler/re-index! nfs-handler/rebuild-index!))}
+                 "Re-index"]
+                ;; [:a.control.ml-4 {:title "Export as JSON"
+                ;;                   :on-click (fn []
+                ;;                               (export-handler/export-repo-as-json! (:url repo)))}
+                ;;  "Export as JSON"]
+                [:a.text-gray-400.ml-4 {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
+                                        :on-click (fn []
                                                     (repo-handler/remove-repo! repo))}
                  "Unlink"]]]))]
 
          [:a#download-as-json.hidden]]
-        (widgets/add-repo)))))
+        (widgets/add-graph)))))
 
 (rum/defc sync-status < rum/reactive
   {:did-mount (fn [state]
                 (js/setTimeout common-handler/check-changed-files-status 1000)
                 state)}
-  []
-  (when-let [repo (state/get-current-repo)]
+  [repo]
+  (when repo
     (let [nfs-repo? (config/local-db? repo)]
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
-            [:div.ml-2.mr-1.opacity-70.hover:opacity-100 {:class (if syncing? "loader" "initial")}
+            [:div.ml-2.mr-2.opacity-30.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
              [:a
               {:on-click #(nfs-handler/refresh! repo
                                                 repo-handler/create-today-journal!)
-               :title (str "Sync files with the local directory: " (config/get-local-dir repo) ".\nVersion: "
+               :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}
               svg/refresh]])
           (let [changed-files (state/sub [:repo/changed-files repo])
@@ -99,6 +112,13 @@
                 git-status (state/sub [:git/status repo])
                 pushing? (= :pushing git-status)
                 pulling? (= :pulling git-status)
+                git-failed? (contains?
+                             #{:push-failed
+                               :clone-failed
+                               :checkout-failed
+                               :fetch-failed
+                               :merge-failed}
+                             git-status)
                 push-failed? (= :push-failed git-status)
                 last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
                 ;; db-persisted? (state/sub [:db/persisted? repo])
@@ -109,7 +129,7 @@
               (fn [{:keys [toggle-fn]}]
                 [:div.cursor.w-2.h-2.sync-status.mr-2
                  {:class (cond
-                           push-failed?
+                           git-failed?
                            "bg-red-500"
                            (or
                             ;; (not db-persisted?)
@@ -185,8 +205,12 @@
           (> (count repos) 1)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch {:on-click toggle-fn}
-              [:span (get-repo-name current-repo)]
+             [:a#repo-switch.fade-link {:on-click toggle-fn}
+              (let [repo-name (get-repo-name current-repo)
+                    repo-name (if (util/electron?)
+                                (last (string/split repo-name #"/"))
+                                repo-name)]
+                [:span repo-name])
               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
            (mapv
             (fn [{:keys [id url]}]
@@ -208,8 +232,11 @@
           (and current-repo (not local-repo?))
           (let [repo-name (get-repo-name current-repo)]
             (if (config/local-db? current-repo)
-              repo-name
-              [:a
+              [:span.fade-link
+               (if (util/electron?)
+                 (last (string/split repo-name #"/"))
+                 repo-name)]
+              [:a.fade-link
                {:href current-repo
                 :target "_blank"}
                repo-name]))

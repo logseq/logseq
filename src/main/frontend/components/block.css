@@ -10,7 +10,79 @@
 
   img {
     max-width: 100%;
+
+    /* FIXME: img macros */
+
+    &.left {
+      float: left;
+    }
+
+    &.right {
+      float: right;
+    }
+
+    &.loading-asset {
+      width: 9px;
+    }
   }
+
+  .asset-container {
+    display: inline-block;
+    position: relative;
+    margin-top: .5rem;
+
+    .ctl {
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: 5px;
+      z-index: 1;
+      display: none;
+
+      > a {
+        padding: 3px;
+        border-radius: 4px;
+        opacity: .4;
+        user-select: none;
+        background: var(--ls-primary-background-color);
+
+        &.delete {
+          svg {
+            color: var(--ls-primary-text-color);
+
+            opacity: .5;
+            font-weight: normal;
+          }
+        }
+
+        &:hover {
+          opacity: 1;
+        }
+
+        &:active {
+          opacity: 1;
+        }
+      }
+    }
+
+    &:hover {
+      .ctl {
+        display: flex;
+      }
+    }
+  }
+
+  .resize {
+    display: flex;
+  }
+}
+
+.open-block-ref-link {
+  @apply py-0 px-1 rounded opacity-50 hover:opacity-100;
+  font-size: 12px;
+  line-height: 1em;
+  position: relative;
+  right: -4px;
 }
 
 .block-body {
@@ -22,16 +94,38 @@
 }
 
 .block-children {
-  border-left: 2px solid;
+  border-left: 1px solid;
   border-left-color: var(--ls-guideline-color, #ddd);
+
+  padding-top: 2px;
+  padding-bottom: 3px;
+
+  > .ls-block {
+    &:last-child {
+      margin-bottom: -5px;
+    }
+  }
+}
+
+.block-control,
+.block-control:hover {
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 10px;
+  color: initial;
+  user-select: none;
 }
 
 .block-ref {
-  color: var(--ls-link-text-color);
   padding-bottom: 2px;
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
+
+  &-wrap {
+    display: inline-block;
+  }
 
   &:hover {
     color: var(--ls-link-text-hover-color)
@@ -81,6 +175,7 @@
 
   &:hover {
     color: var(--ls-link-text-hover-color);
+    opacity: 1;
   }
 }
 
@@ -192,8 +287,8 @@
 
 .bullet-container {
   display: flex;
-  height: 13px;
-  width: 13px;
+  height: 12px;
+  width: 12px;
   border-radius: 50%;
   justify-content: center;
   align-items: center;
@@ -204,9 +299,16 @@
 
   .bullet {
     border-radius: 50%;
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
     background-color: var(--ls-block-bullet-color, #394b59);
+    transition: transform .2s;
+  }
+
+  &:hover {
+    .bullet {
+      transform: scale(1.2);
+    }
   }
 
   &.bullet-closed {

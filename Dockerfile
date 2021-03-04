@@ -1,4 +1,4 @@
-FROM clojure:openjdk-11-tools-deps
+FROM clojure:openjdk-11-tools-deps-1.10.0.442
 
 RUN curl -sL https://deb.nodesource.com/setup_15.x | bash - && \
     apt-get install -y nodejs

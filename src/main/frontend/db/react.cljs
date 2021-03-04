@@ -165,7 +165,6 @@
   []
   (let [match (:route-match @state/state)
         route-name (get-in match [:data :name])
-        tag? (= route-name :tag)
         page (case route-name
                :page
                (get-in match [:path-params :name])
@@ -173,15 +172,10 @@
                :file
                (get-in match [:path-params :path])
 
-               :tag
-               (get-in match [:path-params :name])
-
                (date/journal-name))]
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
-        (db-utils/entity (if tag?
-                           [:tag/name page-name]
-                           [:page/name page-name]))))))
+        (db-utils/entity [:page/name page-name])))))
 
 (defn get-current-priority
   []
@@ -297,7 +291,7 @@
                               (conn/get-files-conn repo-url)
                               (conn/get-conn repo-url false)))]
         (when (and (seq tx-data) (get-conn))
-          (let [tx-result (profile "Transact!" (d/transact! (get-conn) (vec tx-data)))
+          (let [tx-result (d/transact! (get-conn) (vec tx-data))
                 db (:db-after tx-result)
                 handler-keys (get-handler-keys handler-opts)]
             (doseq [handler-key handler-keys]
@@ -345,18 +339,3 @@
      (-> (q repo-url [:kv key] {} key key)
          react
          key))))
-
-(defn set-file-content!
-  [repo path content]
-  (when (and repo path)
-    (let [tx-data {:file/path path
-                   :file/content content
-                   :file/last-modified-at (util/time-ms)}
-          tx-data (if (config/local-db? repo)
-                    (dissoc tx-data :file/last-modified-at)
-                    tx-data)]
-      (transact-react!
-       repo
-       [tx-data]
-       {:key [:file/content path]
-        :files-db? true}))))

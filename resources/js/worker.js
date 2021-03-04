@@ -1,10 +1,10 @@
 importScripts(
   // Batched optimization
-  "/static/js/lightning-fs.min.js?v=0.0.2.3",
-  "https://cdn.jsdelivr.net/npm/isomorphic-git@1.7.4/index.umd.min.js",
-  "https://cdn.jsdelivr.net/npm/isomorphic-git@1.7.4/http/web/index.umd.js",
+  "./lightning-fs.min.js?v=0.0.2.3",
+  "./isomorphic-git/1.7.4/index.umd.min.js",
+  "./isomorphic-git/1.7.4/http-web-index.umd.js",
   // Fixed a bug
-  "/static/js/magic_portal.js"
+  "./magic_portal.js"
 );
 
 const detect = () => {

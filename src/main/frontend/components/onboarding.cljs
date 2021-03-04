@@ -177,6 +177,10 @@
             :target "_blank"}
         (t :help/about)]]
       [:li
+       [:a {:href "https://trello.com/b/8txSM12G/roadmap"
+            :target "_blank"}
+        (t :help/roadmap)]]
+      [:li
        [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
             :target "_blank"}
         (t :help/bug)]]
@@ -237,8 +241,8 @@
          [:tr [:td (t :help/new-line-in-block)] [:td "Shift-Enter"]]
          [:tr [:td (t :undo)] [:td (util/->platform-shortcut "Ctrl-z")]]
          [:tr [:td (t :redo)] [:td (util/->platform-shortcut "Ctrl-y")]]
-         [:tr [:td (t :help/zoom-in)] [:td (util/->platform-shortcut "Alt-Right")]]
-         [:tr [:td (t :help/zoom-out)] [:td (util/->platform-shortcut "Alt-left")]]
+         [:tr [:td (t :help/zoom-in)] [:td (util/->platform-shortcut (if util/mac? "Alt-." "Alt-Right"))]]
+         [:tr [:td (t :help/zoom-out)] [:td (util/->platform-shortcut (if util/mac? "Alt-," "Alt-left"))]]
          [:tr [:td (t :help/follow-link-under-cursor)] [:td (util/->platform-shortcut "Ctrl-o")]]
          [:tr [:td (t :help/open-link-in-sidebar)] [:td (util/->platform-shortcut "Ctrl-shift-o")]]
          [:tr [:td (t :expand)] [:td (util/->platform-shortcut "Ctrl-Down")]]
@@ -258,11 +262,13 @@
          [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
          [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
          [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
+         [:tr [:td (t :help/toggle-contents)] [:td "t c"]]
          [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
          [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
          [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
+         [:tr [:td (t :help/toggle-settings)] [:td "t s"]]
          [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
-         [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Alt-j")]]]]
+         [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Ctrl-j")]]]]
        [:table
         [:thead
          [:tr

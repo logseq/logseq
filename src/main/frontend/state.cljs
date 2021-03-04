@@ -3,6 +3,7 @@
             [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
             [clojure.string :as string]
+            [cljs-bean.core :as bean]
             [medley.core :as medley]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -25,7 +26,7 @@
     :repo/importing-to-db? nil
     :repo/sync-status {}
     :repo/changed-files nil
-    :nfs/loading-files? nil
+    :nfs/user-granted? {}
     :nfs/refreshing? nil
     ;; TODO: how to detect the network reliably?
     :network/online? true
@@ -45,7 +46,11 @@
     ;; custom shortcuts
     :shortcuts {:editor/new-block "enter"}
 
+    ;; modals
+    :modal/show? false
+
     ;; right sidebar
+    :ui/settings-open? false
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
@@ -70,6 +75,8 @@
     :editor/show-input nil
     :editor/last-saved-cursor nil
     :editor/editing? nil
+    :editor/last-edit-block-id nil
+    :editor/in-composition? false
     :editor/pos 0
     :editor/content {}
     :editor/block nil
@@ -95,6 +102,10 @@
 
     :preferred-language (storage/get :preferred-language)
 
+    ;; electron
+    :electron/updater-pending? false
+    :electron/updater {}
+
     ;; all notification contents as k-v pairs
     :notification/contents {}
     :graph/syncing? false}))
@@ -106,6 +117,10 @@
 (defn get-current-route
   []
   (get-in (get-route-match) [:data :name]))
+
+(defn home?
+  []
+  (= :home (get-current-route)))
 
 (defn get-current-page
   []
@@ -138,7 +153,7 @@
 
 (defn get-current-repo
   []
-  (:git/current-repo @state))
+  (or (:git/current-repo @state) "local"))
 
 (defn get-config
   ([]
@@ -177,10 +192,28 @@
   (not (false? (:feature/enable-timetracking?
                 (get (sub-config) (get-current-repo))))))
 
+(defn enable-journals?
+  [repo]
+  (not (false? (:feature/enable-journals?
+                (get (sub-config) repo)))))
+
+(defn enable-encryption?
+  [repo]
+  (:feature/enable-encryption?
+   (get (sub-config) repo)))
+
+(defn enable-git-auto-push?
+  [repo]
+  (not (false? (:git-auto-push
+                (get (sub-config) repo)))))
+
 (defn enable-block-time?
   []
-  (true? (:feature/enable-block-time?
-          (get (sub-config) (get-current-repo)))))
+  ;; (true? (:feature/enable-block-time?
+  ;;         (get (sub-config) (get-current-repo))))
+
+  ;; Disable block timestamps for now, because it doesn't work with undo/redo
+  false)
 
 ;; Enable by default
 (defn show-brackets?
@@ -191,6 +224,10 @@
 (defn get-default-home
   []
   (:default-home (get-config)))
+
+(defn sub-default-home-page
+  []
+  (get-in (sub-config) [(get-current-repo) :default-home :page] ""))
 
 (defn custom-home-page?
   []
@@ -343,6 +380,14 @@
 (defn get-edit-input-id
   []
   (ffirst (:editor/editing? @state)))
+
+(defn get-last-edit-input-id
+  []
+  (:editor/last-edit-block-id @state))
+
+(defn editing?
+  []
+  (some? (get-edit-input-id)))
 
 (defn get-edit-content
   []
@@ -605,9 +650,16 @@
 
 (defn sidebar-remove-block!
   [idx]
-  (update-state! :sidebar/blocks #(util/drop-nth idx %))
+  (update-state! :sidebar/blocks (fn [blocks]
+                                   (if (= (str idx) "contents")
+                                     (remove #(= (second %) "contents") blocks)
+                                     (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-block-exists?
+  [idx]
+  (some #(= (second %) idx) (:sidebar/blocks @state)))
 
 (defn get-sidebar-blocks
   []
@@ -621,7 +673,14 @@
 (defn set-editing!
   [edit-input-id content block cursor-range]
   (when edit-input-id
-    (let [content (or content "")]
+    (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+          {:keys [idx container]} (util/get-block-idx-inside-container block-element)
+          block (if (and idx container)
+                  (assoc block
+                         :block/idx idx
+                         :block/container (gobj/get container "id"))
+                  block)
+          content (or content "")]
       (swap! state
              (fn [state]
                (-> state
@@ -629,6 +688,7 @@
                    (assoc
                     :editor/block block
                     :editor/editing? {edit-input-id true}
+                    :editor/last-edit-block-id edit-input-id
                     :cursor-range cursor-range)))))))
 
 (defn clear-edit!
@@ -688,6 +748,17 @@
   []
   (get @state :ui/root-component))
 
+(defn setup-electron-updater!
+  []
+  (when (util/electron?)
+    (js/window.apis.setUpdatesCallback
+     (fn [_ args]
+       (let [data (bean/->clj args)
+             pending? (not= (:type data) "completed")]
+         (set-state! :electron/updater-pending? pending?)
+         (when pending? (set-state! :electron/updater data))
+         nil)))))
+
 (defn set-file-component!
   [component]
   (set-state! :ui/file-component component))
@@ -741,7 +812,7 @@
   (or
    (when-let [repo (get-current-repo)]
      (get-in @state [:config repo :date-formatter]))
-   ;; TODO:
+    ;; TODO:
    (get-in @state [:me :settings :date-formatter])
    "MMM do, yyyy"))
 
@@ -760,6 +831,10 @@
 (defn get-me
   []
   (:me @state))
+
+(defn github-authed?
+  []
+  (:github-authed? (get-me)))
 
 (defn get-name
   []
@@ -794,11 +869,9 @@
 
 (defn get-current-project
   []
-  (when-let [repo (get-current-repo)]
-    (let [projects (:projects (get-me))
-          project (:name (first (filter (fn [p] (= (:repo p) repo)) projects)))]
-      (when-not (string/blank? project)
-        project))))
+  (when-let [project (get-in (get-config) [:project :name])]
+    (when-not (string/blank? project)
+      project)))
 
 (defn update-current-project
   [& kv]
@@ -828,7 +901,7 @@
 (defn set-modal!
   [modal-panel-content]
   (swap! state assoc
-         :modal/show? true
+         :modal/show? (boolean modal-panel-content)
          :modal/panel-content modal-panel-content))
 
 (defn close-modal!
@@ -935,6 +1008,14 @@
   [value]
   (set-state! :graph/syncing? value))
 
+(defn set-editor-in-composition!
+  [value]
+  (set-state! :editor/in-composition? value))
+
+(defn editor-in-composition?
+  []
+  (:editor/in-composition? @state))
+
 (defn set-loading-files!
   [value]
   (set-state! :repo/loading-files? value))
@@ -980,8 +1061,8 @@
     (or
      (when-let [last-time (get-in @state [:editor/last-input-time repo])]
        (let [now (util/time-ms)]
-         (>= (- now last-time) 3000)))
-     ;; not in editing mode
+         (>= (- now last-time) 1000)))
+      ;; not in editing mode
      (not (get-edit-input-id)))))
 
 (defn set-last-persist-transact-id!
@@ -1003,7 +1084,7 @@
                                     (remove (fn [tx] (<= (:tx-id tx) last-persist-tx-id)) result)))
                        latest-txs)
           new-txs (update-in latest-txs [repo files?] (fn [result]
-                                                        (vec (conj result {:tx-id tx-id
+                                                        (vec (conj result {:tx-id   tx-id
                                                                            :tx-data tx-data}))))]
       (storage/set-transit! :db/latest-txs new-txs)
       (set-state! :db/latest-txs new-txs))))
@@ -1019,6 +1100,22 @@
 (defn nfs-refreshing?
   []
   (:nfs/refreshing? @state))
+
+(defn set-search-result!
+  [value]
+  (set-state! :search/result value))
+
+(defn clear-search-result!
+  []
+  (set-search-result! nil))
+
+(defn toggle!
+  [path]
+  (update-state! path not))
+
+(defn toggle-settings!
+  []
+  (toggle! :ui/settings-open?))
 
 ;; TODO: Move those to the uni `state`
 

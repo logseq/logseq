@@ -7,7 +7,13 @@
             [cljs-bean.core :as bean]
             [frontend.util :as util]
             [clojure.string :as string]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            ["chrono-node" :as chrono]))
+
+(defn nld-parse
+  [s]
+  (when (string? s)
+    ((gobj/get chrono "parseDate") s)))
 
 (defn format
   [date]
@@ -127,21 +133,7 @@
      (gobj/get js/window.navigator "language")
      (bean/->js {:hour "2-digit"
                  :minute "2-digit"
-                 :hour12 false}))))
-
-(defn journals-path
-  [year month preferred-format]
-  (let [month (if (< month 10) (str "0" month) month)
-        format (string/lower-case (name preferred-format))
-        format (if (= format "markdown") "md" format)]
-    (str "journals/" year "_" month "." format)))
-
-(defn current-journal-path
-  [preferred-format]
-  (when preferred-format
-    (let [{:keys [year month]} (get-date)
-          preferred-format preferred-format]
-      (journals-path year month preferred-format))))
+                 :hourCycle "h23"}))))
 
 (defn valid?
   [s]
@@ -156,7 +148,7 @@
 (defn valid-journal-title?
   [title]
   (and title
-       (valid? (string/capitalize title))))
+       (valid? (util/capitalize-all title))))
 
 (defn journal-title->
   [journal-title then-fn]
@@ -164,7 +156,7 @@
     (when-let [time (->> (map
                           (fn [formatter]
                             (try
-                              (tf/parse (tf/formatter formatter) journal-title)
+                              (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
                               (catch js/Error _e
                                 nil)))
                           (journal-title-formatters))
@@ -174,7 +166,9 @@
 
 (defn journal-title->int
   [journal-title]
-  (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))
+  (when journal-title
+    (let [journal-title (util/capitalize-all journal-title)]
+      (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))))
 
 (defn journal-title->long
   [journal-title]

@@ -1,6 +1,7 @@
 (ns frontend.publishing.html
   (:require-macros [hiccups.core])
   (:require [frontend.state :as state]
+            [frontend.util :as util]
             [hiccups.runtime]))
 
 (defn publishing-html
@@ -50,9 +51,8 @@
             {:description description}]]
           [:body
            [:div#root]
-           [:script (str "window.logseq_db=" transit-db)]
+           [:script (util/format "window.logseq_db=%s" (js/JSON.stringify (util/escape-html transit-db)))]
            [:script (str "window.logseq_state=" (js/JSON.stringify app-state))]
-           [:script {:src "/static/js/mldoc.min.js"}]
            [:script {:type "text/javascript"}
             "// Single Page Apps for GitHub Pages
       // https://github.com/rafgraph/spa-github-pages
@@ -83,4 +83,5 @@
       }(window.location))"]
             ;; TODO: should make this configurable
            [:script {:src "/static/js/highlight.min.js"}]
+           [:script {:src "/static/js/interact.min.js"}]
            [:script {:src "/static/js/publishing/main.js"}]]))))

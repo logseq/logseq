@@ -1,13 +1,14 @@
 {:paths ["src/main"]
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
+  cheshire/cheshire {:mvn/version "5.10.0"}
   rum/rum                     {:mvn/version "0.12.3"}
   ;; rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   ;; persistent-sorted-set       {:mvn/version "0.1.2"}
   ;; FIXME: doesn't work on my archlinux laptop (tienson)
   ;; The required namespace "datascript.core" is not available, it was required by "frontend/db.cljs".
   datascript/datascript       {:git/url "https://github.com/tiensonqin/datascript",
-                               :sha "7c2822565d9a114c7d8604c335af89de4640e2e5"}
+                               :sha "efde8d389e6703b6f60ca3538f484a579b0d6de0"}
   ;; datascript                  {:mvn/version "1.0.1"}
   datascript-transit/datascript-transit
   {:mvn/version "0.3.0"
@@ -20,7 +21,9 @@
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
   prismatic/dommy             {:mvn/version "1.1.0"}
   org.clojure/core.match      {:mvn/version "1.0.0"}
-  com.andrewmcveigh/cljs-time {:mvn/version "0.5.2"}
+  ;; fork
+  com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time",
+                               :sha "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
   cljs-drag-n-drop/cljs-drag-n-drop
   {:mvn/version "0.1.0"}
   borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
@@ -28,25 +31,26 @@
   hiccups/hiccups             {:mvn/version "0.3.0"}
   tongue/tongue               {:mvn/version "0.2.9"}
   org.clojure/core.async      {:mvn/version "1.3.610"}
-  thheller/shadow-cljs        {:mvn/version "2.8.81"}
+  thheller/shadow-cljs        {:mvn/version "2.11.14"}
   expound/expound             {:mvn/version "0.8.6"}
-  lambdaisland/glogi          {:mvn/version "1.0.74"}}
+  lambdaisland/glogi          {:mvn/version "1.0.74"}
+  binaryage/devtools          {:mvn/version "1.0.2"}}
 
- :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/"]
-                  :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.520"}
-                                thheller/shadow-cljs        {:mvn/version "2.8.81"}
-                                binaryage/devtools          {:mvn/version "0.9.10"}
+ :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
+                  :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.764"}
                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
-                                cider/cider-nrepl           {:mvn/version "0.23.0-SNAPSHOT"}}
+                                cider/cider-nrepl           {:mvn/version "0.25.5"}}
                   :main-opts ["-m" "shadow.cljs.devtools.cli"]}
            :test
            {:extra-paths ["src/test/"]
-            :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.520"}
+            :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.764"}
                           org.clojure/test.check {:mvn/version "RELEASE"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
-           :runner
-           {:extra-deps
+
+           :test-clj
+           {:extra-paths ["src/test/"]
+            :extra-deps
             {com.cognitect/test-runner
              {:git/url "https://github.com/cognitect-labs/test-runner",
               :sha "76568540e7f40268ad2b646110f237a60295fa3c"}},
-            :main-opts ["-m" "cognitect.test-runner" "-d" "test"]}}}
+            :main-opts ["-m" "cognitect.test-runner" "-d" "src/test"]}}}

@@ -10,7 +10,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (db/get-conn repo)]
       (when-let [result (query-dsl/query repo query-string)]
-        @result))))
+        (clj->js @result)))))
 
 (defn ^:export datascript_query
   [query & inputs]

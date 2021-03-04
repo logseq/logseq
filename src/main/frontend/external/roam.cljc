@@ -1,6 +1,7 @@
 (ns frontend.external.roam
-  (:require [frontend.external.protocol :as protocol]
-            [cljs-bean.core :as bean]
+  (:require #?(:cljs [cljs-bean.core :as bean]
+               :clj [cheshire.core :as json])
+            [frontend.external.protocol :as protocol]
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.string :as string]
@@ -42,6 +43,15 @@
                                              (util/format "{{%s %s}}" name arg))
                                            original)))))
 
+(defn- fenced-code-transform
+  [text]
+  (string/replace text
+                  #"```([a-z]*\n[\s\S]*?\n*)```"
+                  (fn [[_ match]]
+                    (str "```"
+                         (str match "\n")
+                         "```"))))
+
 (defn load-all-refed-uids!
   [data]
   (let [full-text (atom "")]
@@ -65,7 +75,8 @@
       (string/replace "{{[[TODO]]}}" "TODO")
       (string/replace "{{[[DONE]]}}" "DONE")
       (uid-transform)
-      (macro-transform)))
+      (macro-transform)
+      (fenced-code-transform)))
 
 (declare children->text)
 (defn child->text
@@ -119,11 +130,15 @@
                    (apply str))))
      files)))
 
+(defn json->edn
+  [raw-string]
+  #?(:cljs (-> raw-string js/JSON.parse bean/->clj)
+     :clj (-> raw-string json/parse-string clojure.walk/keywordize-keys)))
+
 (defrecord Roam []
   protocol/External
   (toMarkdownFiles [this content _config]
-    (let [data (bean/->clj (js/JSON.parse content))]
-      (->files data))))
+    (-> content json->edn ->files)))
 
 (comment
   (defonce test-roam-json (frontend.db/get-file "same.json"))

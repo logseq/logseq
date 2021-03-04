@@ -30,8 +30,10 @@
 
 (defn asset-uri
   [path]
-  (if dev? path
-      (str asset-domain path)))
+  (if (util/file-protocol?)
+    (string/replace path "/static/" "./")
+    (if dev? path
+        (str asset-domain path))))
 
 (goog-define GITHUB_APP_NAME "logseq-test")
 
@@ -268,13 +270,13 @@
   (util/starts-with? path default-draw-directory))
 
 (defonce local-repo "local")
+(defonce local-assets-dir "assets")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def metadata-file "metadata.edn")
 
 (def config-default-content
-  "
-  {:journal-basis \"daily\" \n\n :project {\n           ;; Selected public notes can be published to https://logseq.com/your-project-or-your-username.\n           :name \"\"\n           :alias \"\"\n           ;; your twitter handle\n           :twitter \"\"\n           ;; description supports both hiccup and html\n           :description \"\"}\n\n ;; Currently, we support either \"Markdown\" or \"Org\".\n ;; This can overwrite your global preference so that\n ;; maybe your personal preferred format is Org but you'd\n ;; need to use Markdown for some projects.\n ;; :preferred-format \"\"\n\n ;; Git settings\n :git-pull-secs 60\n :git-push-secs 10\n :git-auto-push true\n\n ;; The app will ignore those directories or files.\n ;; E.g. \"/archived\" \"/test.md\"\n :hidden []\n\n ;; When creating the new journal page, the app will use your template content here.\n ;; Example for Markdown users: \"## [[Work]]\\n###\\n## [[Family]]\\n###\\n\n ;; Example for Org mode users: \"** [[Work]]\\n***\\n** [[Family]]\\n***\\n\n :default-templates\n {:journals \"\"}\n\n ;; The app will show those queries in today's journal page,\n ;; the \"NOW\" query asks the tasks which need to be finished \"now\",\n ;; the \"NEXT\" query asks the future tasks.\n :default-queries\n {:journals\n  [{:title \"🔨 NOW\"\n    :query [:find (pull ?h [*])\n            :in $ ?start ?today\n            :where\n            [?h :block/marker ?marker]\n            [?h :block/page ?p]\n            [?p :page/journal? true]\n            [?p :page/journal-day ?d]\n            [(>= ?d ?start)]\n            [(<= ?d ?today)]\n            [(contains? #{\"NOW\" \"DOING\"} ?marker)]]\n    :inputs [:14d :today]\n    :result-transform (fn [result]\n                        (sort-by (fn [h]\n                                   (get h :block/priority \"Z\")) result))\n    :collapsed? false}\n   {:title \"📅 NEXT\"\n    :query [:find (pull ?h [*])\n            :in $ ?start ?next\n            :where\n            [?h :block/marker ?marker]\n            [?h :block/ref-pages ?p]\n            [?p :page/journal? true]\n            [?p :page/journal-day ?d]\n            [(> ?d ?start)]\n            [(< ?d ?next)]\n            [(contains? #{\"NOW\" \"LATER\" \"TODO\"} ?marker)]]\n    :inputs [:today :7d-after]\n    :collapsed? false}]}\n\n ;; Add your own commands to speedup.\n ;; E.g. [[\"js\" \"Javascript\"]]\n :commands\n []\n\n ;; Macros replace texts and will make you more productive.\n ;; For example:\n ;; Add this to the macros below:\n ;; {\"poem\" \"Rose is $1, violet's $2. Life's ordered: Org assists you.\"}\n ;; input \"{{{poem(red,blue)}}}\"\n ;; becomes\n ;; Rose is red, violet's blue. Life's ordered: Org assists you.\n :macros {}}\n")
+  "{:project {\n           ;; Selected public notes can be published to https://logseq.com/your-project-or-your-username.\n           :name \"\"\n           :alias \"\"\n           ;; your twitter handle\n           :twitter \"\"\n           ;; description supports both hiccup and html\n           :description \"\"}\n\n ;; Currently, we support either \"Markdown\" or \"Org\".\n ;; This can overwrite your global preference so that\n ;; maybe your personal preferred format is Org but you'd\n ;; need to use Markdown for some projects.\n ;; :preferred-format \"\"\n\n ;; Git settings\n :git-pull-secs 60\n :git-push-secs 10\n :git-auto-push true\n\n ;; The app will ignore those directories or files.\n ;; E.g. \"/archived\" \"/test.md\"\n :hidden []\n\n ;; When creating the new journal page, the app will use your template content here.\n ;; Example for Markdown users: \"## [[Work]]\\n###\\n## [[Family]]\\n###\\n\n ;; Example for Org mode users: \"** [[Work]]\\n***\\n** [[Family]]\\n***\\n\n :default-templates\n {:journals \"\"}\n\n ;; The app will show those queries in today's journal page,\n ;; the \"NOW\" query asks the tasks which need to be finished \"now\",\n ;; the \"NEXT\" query asks the future tasks.\n :default-queries\n {:journals\n  [{:title \"🔨 NOW\"\n    :query [:find (pull ?h [*])\n            :in $ ?start ?today\n            :where\n            [?h :block/marker ?marker]\n            [?h :block/page ?p]\n            [?p :page/journal? true]\n            [?p :page/journal-day ?d]\n            [(>= ?d ?start)]\n            [(<= ?d ?today)]\n            [(contains? #{\"NOW\" \"DOING\"} ?marker)]]\n    :inputs [:14d :today]\n    :result-transform (fn [result]\n                        (sort-by (fn [h]\n                                   (get h :block/priority \"Z\")) result))\n    :collapsed? false}\n   {:title \"📅 NEXT\"\n    :query [:find (pull ?h [*])\n            :in $ ?start ?next\n            :where\n            [?h :block/marker ?marker]\n            [?h :block/ref-pages ?p]\n            [?p :page/journal? true]\n            [?p :page/journal-day ?d]\n            [(> ?d ?start)]\n            [(< ?d ?next)]\n            [(contains? #{\"NOW\" \"LATER\" \"TODO\"} ?marker)]]\n    :inputs [:today :7d-after]\n    :collapsed? false}]}\n\n ;; Add your own commands to speedup.\n ;; E.g. [[\"js\" \"Javascript\"]]\n :commands\n []\n\n ;; Macros replace texts and will make you more productive.\n ;; For example:\n ;; Add this to the macros below:\n ;; {\"poem\" \"Rose is $1, violet's $2. Life's ordered: Org assists you.\"}\n ;; input \"{{{poem(red,blue)}}}\"\n ;; becomes\n ;; Rose is red, violet's blue. Life's ordered: Org assists you.\n :macros {}}\n")
 
 (def markers
   #{"now" "later" "todo" "doing" "done" "wait" "waiting"
@@ -287,8 +289,73 @@
 
 (defn local-db?
   [s]
-  (string/starts-with? s local-db-prefix))
+  (and (string? s)
+       (string/starts-with? s local-db-prefix)))
+
+(defn local-asset?
+  [s]
+  (re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
+
+(defn get-local-asset-absolute-path
+  [s]
+  (str "/" (string/replace s #"^[./]*" "")))
 
 (defn get-local-dir
   [s]
   (string/replace s local-db-prefix ""))
+
+(defn get-local-repo
+  [dir]
+  (str local-db-prefix dir))
+
+(defn get-repo-dir
+  [repo-url]
+  (if (and (util/electron?) (local-db? repo-url))
+    (get-local-dir repo-url)
+    (str "/"
+         (->> (take-last 2 (string/split repo-url #"/"))
+              (string/join "_")))))
+
+(defn get-repo-path
+  [repo-url path]
+  (if (and (util/electron?) (local-db? repo-url))
+    path
+    (str (get-repo-dir repo-url) "/" path)))
+
+(defn get-file-path
+  [repo-url relative-path]
+  (when (and repo-url relative-path)
+    (cond
+      (and (util/electron?) (local-db? repo-url))
+      (let [dir (get-repo-dir repo-url)]
+        (if (string/starts-with? relative-path dir)
+          relative-path
+          (str dir "/"
+               (string/replace relative-path #"^/" ""))))
+      (= "/" (first relative-path))
+      (subs relative-path 1)
+
+      :else
+      relative-path)))
+
+(defn get-config-path
+  ([]
+   (get-config-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" config-file)))))
+
+(defn get-metadata-path
+  ([]
+   (get-metadata-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo (str app-name "/" metadata-file)))))
+
+(defn get-custom-css-path
+  ([]
+   (get-custom-css-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo
+                    (str app-name "/" custom-css-file)))))

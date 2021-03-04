@@ -74,60 +74,62 @@ export var getSelectionText = function () {
     }
   }
 
-  return '';
+  return ''
 }
 
 // Modified from https://github.com/GoogleChromeLabs/browser-nativefs
 // because shadow-cljs doesn't handle this babel transform
 export var getFiles = async function (dirHandle, recursive, cb, path = dirHandle.name) {
-  const dirs = [];
-  const files = [];
+  const dirs = []
+  const files = []
   for await (const entry of dirHandle.values()) {
-    const nestedPath = `${path}/${entry.name}`;
+    const nestedPath = `${path}/${entry.name}`
     if (entry.kind === 'file') {
-      cb(nestedPath, entry);
+      cb(nestedPath, entry)
       files.push(
         entry.getFile().then((file) => {
-          Object.defineProperty(file, 'webkitRelativePath', {
-            configurable: true,
-            enumerable: true,
-            get: () => nestedPath,
-          });
-          Object.defineProperty(file, 'handle', {
-            configurable: true,
-            enumerable: true,
-            get: () => entry,
-          });
-          return file;
-        }
+            Object.defineProperty(file, 'webkitRelativePath', {
+              configurable: true,
+              enumerable: true,
+              get: () => nestedPath,
+            })
+            Object.defineProperty(file, 'handle', {
+              configurable: true,
+              enumerable: true,
+              get: () => entry,
+            })
+            return file
+          }
         )
-      );
+      )
     } else if (entry.kind === 'directory' && recursive) {
-      cb(nestedPath, entry);
-      dirs.push(getFiles(entry, recursive, cb, nestedPath));
+      cb(nestedPath, entry)
+      dirs.push(getFiles(entry, recursive, cb, nestedPath))
     }
   }
 
-  return [(await Promise.all(dirs)), (await Promise.all(files))];
-};
+  return [(await Promise.all(dirs)), (await Promise.all(files))]
+}
 
 export var verifyPermission = async function (handle, readWrite) {
-  const options = {};
+  const options = {}
   if (readWrite) {
-    options.mode = 'readwrite';
+    options.mode = 'readwrite'
   }
   // Check if permission was already granted.
   if ((await handle.queryPermission(options)) === 'granted') {
-    return;
+    return
   }
   // Request permission. If the user grants permission, just return.
   if ((await handle.requestPermission(options)) === 'granted') {
-    return;
+    return
   }
   // The user didn't grant permission, throw an error.
-  throw new Error("Permission is not granted");
+  throw new Error('Permission is not granted')
 }
 
+// NOTE: Need externs to prevent `options.recursive` been munged
+//       When building with release.
 export var openDirectory = async function (options = {}, cb) {
   options.recursive = options.recursive || false;
   const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
@@ -137,20 +139,25 @@ export var openDirectory = async function (options = {}, cb) {
 
 export var writeFile = async function (fileHandle, contents) {
   // Create a FileSystemWritableFileStream to write to.
-  const writable = await fileHandle.createWritable();
-  // Write the contents of the file to the stream.
-  await writable.write(contents);
-  // Close the file and write the contents to disk.
-  await writable.close();
-};
+  const writable = await fileHandle.createWritable()
+
+  if (contents instanceof ReadableStream) {
+    await contents.pipeTo(writable)
+  } else {
+    // Write the contents of the file to the stream.
+    await writable.write(contents)
+    // Close the file and write the contents to disk.
+    await writable.close()
+  }
+}
 
 export var nfsSupported = function () {
   if ('chooseFileSystemEntries' in self) {
-    return 'chooseFileSystemEntries';
+    return 'chooseFileSystemEntries'
   } else if ('showOpenFilePicker' in self) {
-    return 'showOpenFilePicker';
+    return 'showOpenFilePicker'
   }
-  return false;
+  return false
 }
 
 const inputTypes = [
@@ -171,3 +178,29 @@ export const triggerInputChange = (node, value = '', name = 'change') => {
     node.dispatchEvent(event)
   }
 }
+
+// Copied from https://github.com/google/diff-match-patch/issues/29#issuecomment-647627182
+export const reversePatch = patch => {
+  return patch.map(patchObj => ({
+    diffs: patchObj.diffs.map(([ op, val ]) => [
+      op * -1, // The money maker
+      val
+    ]),
+    start1: patchObj.start2,
+    start2: patchObj.start1,
+    length1: patchObj.length2,
+    length2: patchObj.length1
+  }));
+};
+
+// Copied from https://github.com/sindresorhus/path-is-absolute/blob/main/index.js
+export const win32 = path => {
+  // https://github.com/nodejs/node/blob/b3fcc245fb25539909ef1d5eaa01dbf92e168633/lib/path.js#L56
+  var splitDeviceRe = /^([a-zA-Z]:|[\\/]{2}[^\\/]+[\\/]+[^\\/]+)?([\\/])?([\s\S]*?)$/;
+  var result = splitDeviceRe.exec(path);
+  var device = result[1] || '';
+  var isUnc = Boolean(device && device.charAt(1) !== ':');
+
+  // UNC paths are always absolute
+  return Boolean(result[2] || isUnc);
+};

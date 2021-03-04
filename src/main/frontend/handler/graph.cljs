@@ -24,23 +24,26 @@
   [dark? current-page edges tags nodes]
   (let [pages (->> (set (flatten nodes))
                    (remove nil?))]
-    (mapv (fn [p]
-            (let [current-page? (= p current-page)
-                  color (case [dark? current-page?] ; FIXME: Put it into CSS
-                          [false false] "#222222"
-                          [false true]  "#045591"
-                          [true false]  "#8abbbb"
-                          [true true]   "#ffffff")
-                  color (if (contains? tags (string/lower-case p))
-                          (if dark? "orange" "green")
-                          color)]
-              {:id p
-               :name p
-               :val (get-connections p edges)
-               :autoColorBy "group"
-               :group (js/Math.ceil (* (js/Math.random) 12))
-               :color color}))
-          pages)))
+    (->>
+     (mapv (fn [p]
+             (when p
+               (let [current-page? (= p current-page)
+                     color (case [dark? current-page?] ; FIXME: Put it into CSS
+                             [false false] "#222222"
+                             [false true]  "#045591"
+                             [true false]  "#8abbbb"
+                             [true true]   "#ffffff")
+                     color (if (contains? tags (string/lower-case (str p)))
+                             (if dark? "orange" "green")
+                             color)]
+                 {:id p
+                  :name p
+                  :val (get-connections p edges)
+                  :autoColorBy "group"
+                  :group (js/Math.ceil (* (js/Math.random) 12))
+                  :color color})))
+           pages)
+     (remove nil?))))
 
 (defn- normalize-page-name
   [{:keys [nodes links] :as g}]
@@ -51,7 +54,7 @@
                        (map string/lower-case))
         names (db/pull-many '[:page/name :page/original-name] (mapv (fn [page] [:page/name page]) all-pages))
         names (zipmap (map :page/name names)
-                      (map (fn [x] (get x :page/original-name (util/capitalize-all (:page/name x)))) names))
+                      (map (fn [x] (get x :page/original-name (:page/name x))) names))
         nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
         links (mapv (fn [{:keys [source target]}]
                       {:source (get names source)
@@ -104,8 +107,7 @@
       (let [page (string/lower-case page)
             page-entity (db/entity [:page/name page])
             original-page-name (:page/original-name page-entity)
-            tags (->> (:page/tags page-entity)
-                      (map :tag/name))
+            tags (:tags (:page/properties page-entity))
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
             mentioned-pages (db/get-pages-that-mentioned-page repo page)

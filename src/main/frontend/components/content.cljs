@@ -62,30 +62,52 @@
       :on-click editor-handler/bulk-make-todos}
      (str "Make " (state/get-preferred-todo) "s"))]])
 
+;; FIXME: Make it configurable
 (def block-background-colors
-  ["rgb(83, 62, 125)"
-   "rgb(73, 125, 70)"
-   "rgb(120, 127, 151)"
-   "rgb(151, 134, 38)"
-   "rgb(73, 118, 123)"
-   "rgb(38, 76, 155)"
-   "rgb(121, 62, 62)"])
+  ["#533e7d"
+   "#497d46"
+   "#787f97"
+   "#978626"
+   "#49767b"
+   "#264c9b"
+   "#793e3e"])
 
-(rum/defcs block-template <
+(defonce *including-parent? (atom nil))
+
+(rum/defc template-checkbox
+  [including-parent?]
+  [:div.flex.flex-row
+   [:span.text-medium.mr-2 "Including the parent block in the template?"]
+   (ui/toggle including-parent?
+              #(swap! *including-parent? not))])
+
+(rum/defcs block-template < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input)
+  {:will-unmount (fn [state]
+                   (reset! *including-parent? nil)
+                   state)}
   [state block-id]
   (let [edit? (get state ::edit?)
-        input (get state ::input)]
+        input (get state ::input)
+        including-parent? (rum/react *including-parent?)
+        block-id (if (string? block-id) (uuid block-id) block-id)
+        block (db/entity [:block/uuid block-id])
+        has-children? (seq (:block/children block))]
+    (when (and (nil? including-parent?) has-children?)
+      (reset! *including-parent? true))
+
     (if @edit?
       (do
         (state/clear-edit!)
         [:div.px-4.py-2 {:on-click (fn [e] (util/stop e))}
          [:p "What's the template's name?"]
-         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.text-gray-700
+         [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
           {:auto-focus true
            :on-change (fn [e]
                         (reset! input (util/evalue e)))}]
+         (when has-children?
+           (template-checkbox including-parent?))
          (ui/button "Submit"
                     :on-click (fn []
                                 (let [title (string/trim @input)]
@@ -96,6 +118,8 @@
                                        :error)
                                       (do
                                         (editor-handler/set-block-property! block-id "template" title)
+                                        (when (false? including-parent?)
+                                          (editor-handler/set-block-property! block-id "including-parent" false))
                                         (state/hide-custom-context-menu!)))))))])
       (ui/menu-link
        {:key "Make template"
@@ -130,7 +154,9 @@
           (ui/menu-link
            {:key "Convert heading"
             :on-click (fn [_e]
-                        (editor-handler/set-block-as-a-heading! block-id (not heading?)))}
+                        (if heading?
+                          (editor-handler/remove-block-property! block-id "heading")
+                          (editor-handler/set-block-as-a-heading! block-id true)))}
            (if heading?
              "Convert back to a block"
              "Convert to a heading"))
@@ -147,7 +173,7 @@
                                     content (:block/content block)
                                     content (cond
                                               empty-properties?
-                                              (text/rejoin-properties content {"" ""} false)
+                                              (text/rejoin-properties content {"" ""} {:remove-blank? false})
                                               all-hidden?
                                               (let [idx (string/index-of content "\n:END:")]
                                                 (str

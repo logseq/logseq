@@ -48,32 +48,29 @@
 (defn create-draws-directory!
   [repo]
   (when repo
-    (let [repo-dir (util/get-repo-dir repo)]
-     (util/p-handle
-      (fs/mkdir (str repo-dir (str "/" config/default-draw-directory)))
-      (fn [_result] nil)
-      (fn [_error] nil)))))
+    (let [repo-dir (config/get-repo-dir repo)]
+      (util/p-handle
+       (fs/mkdir! (str repo-dir (str "/" config/default-draw-directory)))
+       (fn [_result] nil)
+       (fn [_error] nil)))))
 
 (defn save-excalidraw!
   [file data ok-handler]
   (let [path (str config/default-draw-directory "/" file)
         repo (state/get-current-repo)]
     (when repo
-      (let [repo-dir (util/get-repo-dir repo)]
+      (let [repo-dir (config/get-repo-dir repo)]
         (->
          (p/do!
           (create-draws-directory! repo)
-          (fs/write-file repo repo-dir path data)
+          (fs/write-file! repo repo-dir path data nil)
           (git-handler/git-add repo path)
           (ok-handler file)
-          (let [modified-at (tc/to-long (t/now))]
-            (db/transact! repo
-                          [{:file/path path
-                            :file/last-modified-at modified-at}
-                           {:page/name file
-                            :page/file path
-                            :page/last-modified-at (tc/to-long (t/now))
-                            :page/journal? false}])))
+          (db/transact! repo
+                        [{:file/path path
+                          :page/name file
+                          :page/file [:file/path path]
+                          :page/journal? false}]))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))
@@ -82,7 +79,7 @@
   [ok-handler]
   (when-let [repo (state/get-current-repo)]
     (p/let [_ (create-draws-directory! repo)]
-      (let [dir (str (util/get-repo-dir repo)
+      (let [dir (str (config/get-repo-dir repo)
                      "/"
                      config/default-draw-directory)]
         (util/p-handle
@@ -121,7 +118,7 @@
 (defn create-draw-with-default-content
   [current-file ok-handler]
   (when-let [repo (state/get-current-repo)]
-    (p/let [exists? (fs/file-exists? (util/get-repo-dir repo)
+    (p/let [exists? (fs/file-exists? (config/get-repo-dir repo)
                                      (str config/default-draw-directory current-file))]
       (when-not exists?
         (save-excalidraw! current-file default-content
