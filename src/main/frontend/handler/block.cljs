@@ -6,7 +6,9 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.date :as date]
             [frontend.config :as config]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [clojure.set :as set]
+            [medley.core :as medley]))
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
@@ -193,3 +195,40 @@
                              :block/pre-block? false})
                           default-option)]
          (conj blocks dummy))))))
+
+(defn filter-blocks
+  [repo ref-blocks filters group-by-page?]
+  (let [ref-pages (->> (if group-by-page?
+                         (mapcat last ref-blocks)
+                         ref-blocks)
+                       (mapcat :block/ref-pages)
+                       (distinct)
+                       (map :db/id)
+                       (db/pull-many repo '[:db/id :page/name]))
+
+        ref-pages (zipmap (map :page/name ref-pages) (map :db/id ref-pages))
+        exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
+                         (remove nil?)
+                         (set))
+        include-ids (->> (map (fn [page] (get ref-pages page)) (get filters true))
+                         (remove nil?)
+                         (set))]
+    (if (empty? filters)
+      ref-blocks
+      (let [filter-f (fn [ref-blocks]
+                       (cond->> ref-blocks
+                         (seq exclude-ids)
+                         (remove (fn [block]
+                                   (let [ids (set (map :db/id (:block/ref-pages block)))]
+                                     (seq (set/intersection exclude-ids ids)))))
+
+                         (seq include-ids)
+                         (remove (fn [block]
+                                   (let [ids (set (map :db/id (:block/ref-pages block)))]
+                                     (empty? (set/intersection include-ids ids)))))))]
+        (if group-by-page?
+          (->> (map (fn [[p ref-blocks]]
+                      [p (filter-f ref-blocks)]) ref-blocks)
+               (remove #(empty? (second %))))
+          (->> (filter-f ref-blocks)
+               (remove nil?)))))))

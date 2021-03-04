@@ -14,7 +14,8 @@
             [frontend.config :as config]
             [frontend.components.svg :as svg]
             [frontend.handler.page :as page-handler]
-            [frontend.filtering :as filtering]))
+            [frontend.handler.block :as block-handler]
+            [medley.core :as medley]))
 
 (rum/defc filter-dialog-inner < rum/reactive
   [close-fn references page-name]
@@ -54,12 +55,13 @@
           block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
+          repo (state/get-current-repo)
           ref-blocks (cond
                        priority?
-                       (db/get-blocks-by-priority (state/get-current-repo) page-name)
+                       (db/get-blocks-by-priority repo page-name)
 
                        marker?
-                       (db/get-marker-blocks (state/get-current-repo) page-name)
+                       (db/get-marker-blocks repo page-name)
                        block-id
                        (db/get-block-referenced-blocks block-id)
                        :else
@@ -67,10 +69,14 @@
           scheduled-or-deadlines (if journal?
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
-          references (remove #{page-name} (distinct (flatten (map filtering/get-nested-block-references (flatten (map val ref-blocks))))))
+          references (db/get-page-linked-refs-refed-pages repo page-name)
           filter-state (rum/react (page-handler/get-filter page-name))
-          filtered-ref-blocks (map #(filtering/filter-ref-block % filter-state) ref-blocks)
-          n-ref (count ref-blocks)]
+          included (filter (fn [[x v]]) filter-state)
+          filters (when (seq filter-state)
+                    (->> (group-by second filter-state)
+                         (medley/map-vals #(map first %))))
+          filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
+          n-ref (count filtered-ref-blocks)]
       (when (or (> n-ref 0)
                 (seq scheduled-or-deadlines))
         [:div.references.mt-6.flex-1.flex-row
@@ -111,7 +117,7 @@
                                               :breadcrumb-show? true
                                               :group-by-page? true
                                               :editor-box editor/box
-                                              :filter-state filter-state}
+                                              :filters filters}
                                              {})]
               (content/content page-name
                                {:hiccup ref-hiccup}))])]]))))

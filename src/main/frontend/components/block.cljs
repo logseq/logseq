@@ -48,8 +48,7 @@
             [frontend.commands :as commands]
             [lambdaisland.glogi :as log]
             [frontend.context.i18n :as i18n]
-            [frontend.template :as template]
-            [frontend.filtering :as filtering]))
+            [frontend.template :as template]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -1571,10 +1570,10 @@
      (when ref?
        (let [children (-> (db/get-block-immediate-children repo uuid)
                           db/sort-by-pos)
-             filtered-children (filtering/filter-blocks children (:filter-state config))]
-         (when (seq filtered-children)
+             children (block-handler/filter-blocks repo children (:filters config) false)]
+         (when (seq children)
            [:div.ref-children.ml-12
-            (blocks-container filtered-children (assoc config
+            (blocks-container children (assoc config
                                               :breadcrumb-show? false
                                               :ref? true))])))
 

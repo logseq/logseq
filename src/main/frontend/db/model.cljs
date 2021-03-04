@@ -836,6 +836,24 @@
                          db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
+(defn get-page-linked-refs-refed-pages
+  [repo page]
+  (when-let [conn (conn/get-conn repo)]
+    (->
+     (d/q
+       '[:find [?ref-page ...]
+         :in $ % ?page
+         :where
+         [?p :page/name ?page]
+         [?b :block/path-ref-pages ?p]
+         [?b :block/ref-pages ?other-p]
+         [(not= ?p ?other-p)]
+         [?other-p :page/name ?ref-page]]
+       conn
+       rules
+       page)
+     (distinct))))
+
 ;; Ignore files with empty blocks for now
 (defn get-empty-pages
   [repo]
