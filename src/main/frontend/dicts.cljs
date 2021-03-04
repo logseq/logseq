@@ -115,6 +115,7 @@ title: How to take dummy notes?
         :on-boarding/sci-desc " - Small Clojure Interpreter"
         :on-boarding/isomorphic-git-desc " - A pure JavaScript implementation of git for node and browsers!"
         :help/about "About Logseq"
+        :help/roadmap "Roadmap"
         :help/bug "Bug report"
         :help/feature "Feature request"
         :help/changelog "Changelog"

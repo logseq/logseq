@@ -177,6 +177,10 @@
             :target "_blank"}
         (t :help/about)]]
       [:li
+       [:a {:href "https://trello.com/b/8txSM12G/roadmap"
+            :target "_blank"}
+        (t :help/roadmap)]]
+      [:li
        [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
             :target "_blank"}
         (t :help/bug)]]
