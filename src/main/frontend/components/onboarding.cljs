@@ -268,7 +268,7 @@
          [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
          [:tr [:td (t :help/toggle-settings)] [:td "t s"]]
          [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
-         [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Alt-j")]]]]
+         [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Ctrl-j")]]]]
        [:table
         [:thead
          [:tr
