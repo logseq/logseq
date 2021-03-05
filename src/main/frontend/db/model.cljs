@@ -923,10 +923,8 @@
       (remove (fn [block] (contains? childrens (:db/id block))) blocks)
       blocks)))
 
-(defonce *blocks (atom nil))
 (defn with-children-refs
   [repo blocks]
-  (reset! *blocks blocks)
   (when-let [conn (conn/get-conn repo)]
     (when (seq blocks)
       (let [block-ids (set (map :db/id blocks))
