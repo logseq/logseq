@@ -18,6 +18,7 @@ title: $today
 :END:
 ## Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ sharing and management.
 ## This is a 3 minute tutorial on how to use Logseq. Let's get started!
+## (Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the **top-right** corner of the screen to connect LogSeq to either Github or local directory.)
 ## Here are some tips might be useful.
 #+BEGIN_TIP
 Click to edit any block.
@@ -545,8 +546,8 @@ title: How to take dummy notes?
         :export-json "Als JSON exportieren"
         :unlink "Verknüpfung aufheben"
         :search (if config/publishing?
-              "Suchen"
-              "Suchen oder Seite erstellen")
+                  "Suchen"
+                  "Suchen oder Seite erstellen")
         :new-page "Neue Seite"
         :new-file "Neue Datei"
         :graph "Graph"
