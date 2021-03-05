@@ -25,7 +25,7 @@
                           (outliner-u/->block-lookup-ref parent-id)
                           :block/left-id
                           (outliner-u/->block-lookup-ref left-id)
-                          :block/content (apply str (repeat 100 (str id)))})
+                          :block/content (str id)})
              (remove #(nil? (val %)))
              (into {}))]
      (outliner-u/->Block m))))

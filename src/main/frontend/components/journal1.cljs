@@ -150,29 +150,41 @@
 
 (defn right-render
   [node-tree children]
-  (if (empty? children)
-    [node-tree]
-    (into children [node-tree])))
+  (if children
+    [:div
+     node-tree
+     children]
+    [:div
+     node-tree]))
 
 (def root-parent-id 1)
 (def root-left-id 1)
 
-(defn render
-  [number node children]
+(declare render)
+
+(rum/defc down-component
+  [number node]
+  (let [down (tree/-get-down node)]
+    (if (and (tree/satisfied-inode? down)
+          (pos? @number))
+      (do (swap! number dec)
+          (down-render node (render number down)))
+      (down-render node nil))))
+
+(rum/defc right-component
+  [number node]
+  (let [right (tree/-get-right node)]
+    (when (and (tree/satisfied-inode? right)
+            (pos? @number))
+      (do (swap! number dec)
+          (render number right)))))
+
+(rum/defc render
+  [number node]
   (when (tree/satisfied-inode? node)
-    (let [node-tree (let [down (tree/-get-down node)]
-                      (if (and (tree/satisfied-inode? down)
-                            (pos? @number))
-                        (do (swap! number dec)
-                            (down-render node (render number down nil)))
-                        (down-render node nil)))
-          right (tree/-get-right node)]
-      (let [new-children (right-render node-tree children)]
-        (if (and (tree/satisfied-inode? right)
-              (pos? @number))
-          (do (swap! number dec)
-              (render number right new-children))
-          new-children)))))
+    (let [node-tree (down-component number node)]
+      (right-render node-tree
+        (right-component number node)))))
 
 (rum/defcs render-react-tree* <
   {:did-mount (fn [state]
@@ -187,7 +199,7 @@
     [:div.page
      (rum/with-key (current-node-observer current-node)
        (str "current-" (tree/-get-id init-node)))
-     (render number init-node nil)]))
+     (render number init-node)]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
