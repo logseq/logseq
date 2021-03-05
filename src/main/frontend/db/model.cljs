@@ -923,6 +923,7 @@
       (remove (fn [block] (contains? childrens (:db/id block))) blocks)
       blocks)))
 
+;; TODO: improve perf
 (defn with-children-refs
   [repo blocks]
   (when-let [conn (conn/get-conn repo)]
