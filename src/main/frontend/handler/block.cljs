@@ -200,11 +200,10 @@
   (let [ref-pages (->> (if group-by-page?
                          (mapcat last ref-blocks)
                          ref-blocks)
-                       (mapcat :block/ref-pages)
+                       (mapcat (fn [b] (concat (:block/ref-pages b) (:block/children-refs b))))
                        (distinct)
                        (map :db/id)
                        (db/pull-many repo '[:db/id :page/name]))
-
         ref-pages (zipmap (map :page/name ref-pages) (map :db/id ref-pages))
         exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
                          (remove nil?)
@@ -218,13 +217,16 @@
                        (cond->> ref-blocks
                          (seq exclude-ids)
                          (remove (fn [block]
-                                   (let [ids (set (map :db/id (:block/ref-pages block)))]
+                                   (let [ids (set (concat (map :db/id (:block/ref-pages block))
+                                                          (map :db/id (:block/children-refs block))))]
                                      (seq (set/intersection exclude-ids ids)))))
 
                          (seq include-ids)
                          (remove (fn [block]
-                                   (let [ids (set (map :db/id (:block/ref-pages block)))]
-                                     (empty? (set/intersection include-ids ids)))))))]
+                                   (let [ids (set (concat (map :db/id (:block/ref-pages block))
+                                                          (map :db/id (:block/children-refs block))))]
+                                     (empty? (set/intersection include-ids ids)))))
+                         ))]
         (if group-by-page?
           (->> (map (fn [[p ref-blocks]]
                       [p (filter-f ref-blocks)]) ref-blocks)

@@ -32,8 +32,8 @@
       (for [reference references]
         (let [filtered (get (rum/react filter-state) reference)
               color (condp = filtered
-                      true "text-green-500"
-                      false "text-red-500"
+                      true "text-green-400"
+                      false "text-red-400"
                       nil)]
           [:button.border.rounded.px-1 {:key reference :class color :style {:border-color "currentColor"}
                                         :on-click (fn [e]
@@ -101,13 +101,14 @@
             [:h2.font-bold.opacity-50 (let []
                                         (str n-ref " Linked Reference"
                                              (if (> n-ref 1) "s")))]
-            [:a {:title "Filter"
-                 :on-click #(state/set-modal! (filter-dialog references page-name))}
+            [:a.opacity-50.hover:opacity-100
+             {:title "Filter"
+              :on-click #(state/set-modal! (filter-dialog references page-name))}
               (svg/filter-icon (cond
                                  (empty? filter-state) nil
-                                 (every? true? (vals filter-state)) "text-green-500"
-                                 (every? false? (vals filter-state)) "text-red-500"
-                                 :else "text-yellow-200"))]]
+                                 (every? true? (vals filter-state)) "text-green-400"
+                                 (every? false? (vals filter-state)) "text-red-400"
+                                 :else "text-yellow-400"))]]
 
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup filtered-ref-blocks

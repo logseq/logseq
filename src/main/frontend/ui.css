@@ -66,8 +66,7 @@
   }
 
   &-panel {
-    @apply relative bg-white rounded-md px-4 pt-5
-    pb-4 shadow-xl;
+    @apply relative bg-white rounded-md p-8 shadow-xl;
   }
 
   &-close {
