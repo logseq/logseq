@@ -836,6 +836,24 @@
                          db-utils/seq-flatten)]
       (mapv (fn [page] [page (get-page-alias repo page)]) ref-pages))))
 
+(defn get-page-linked-refs-refed-pages
+  [repo page]
+  (when-let [conn (conn/get-conn repo)]
+    (->
+     (d/q
+       '[:find [?ref-page ...]
+         :in $ % ?page
+         :where
+         [?p :page/name ?page]
+         [?b :block/path-ref-pages ?p]
+         [?b :block/ref-pages ?other-p]
+         [(not= ?p ?other-p)]
+         [?other-p :page/name ?ref-page]]
+       conn
+       rules
+       page)
+     (distinct))))
+
 ;; Ignore files with empty blocks for now
 (defn get-empty-pages
   [repo]
@@ -905,6 +923,27 @@
       (remove (fn [block] (contains? childrens (:db/id block))) blocks)
       blocks)))
 
+;; TODO: improve perf
+(defn with-children-refs
+  [repo blocks]
+  (when-let [conn (conn/get-conn repo)]
+    (when (seq blocks)
+      (let [block-ids (set (map :db/id blocks))
+            refs (d/q
+                   '[:find ?p ?ref
+                     :in $ % ?block-ids
+                     :where
+                     (parent ?p ?b)
+                     [(contains? ?block-ids ?p)]
+                     [?b :block/ref-pages ?ref]]
+                   conn
+                   rules
+                   block-ids)
+            refs (->> (group-by first refs)
+                      (medley/map-vals #(set (map (fn [[_ id]] {:db/id id}) %))))]
+        (map (fn [block] (assoc block :block/children-refs
+                                (get refs (:db/id block)))) blocks)))))
+
 (defn get-page-referenced-blocks
   ([page]
    (get-page-referenced-blocks (state/get-current-repo) page))
@@ -941,13 +980,15 @@
                          db-utils/seq-flatten
                          (remove (fn [block]
                                    (= page-id (:db/id (:block/page block)))))
+                         (remove-children!)
+                         (with-children-refs repo)
                          sort-blocks
                          db-utils/group-by-page
                          (map (fn [[k blocks]]
                                 (let [k (if (contains? aliases (:db/id k))
                                           (assoc k :page/alias? true)
                                           k)]
-                                  [k (remove-children! blocks)]))))]
+                                  [k blocks]))))]
          result)))))
 
 (defn get-date-scheduled-or-deadlines
@@ -1265,4 +1306,4 @@
                    [(contains? ?refs ?b-ref)]))]
        (conn/get-conn)
        rules
-       page-ids))
+    page-ids))

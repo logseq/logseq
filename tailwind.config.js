@@ -29,7 +29,7 @@ module.exports = {
         800: '#075985',
         900: '#0c4a6e',
       },
-      red: colors.rose,
+      red: colors.red,
       yellow: colors.amber,
       orange: colors.orange,
       rose: colors.rose

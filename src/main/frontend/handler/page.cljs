@@ -26,6 +26,7 @@
             [frontend.format.mldoc :as mldoc]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
+            [cljs.reader :as reader]
             [goog.object :as gobj]))
 
 (defn- get-directory
@@ -515,6 +516,17 @@
   [repo]
   (->> (db/get-modified-pages repo)
        (remove util/file-page?)))
+
+(defn save-filter!
+  [page-name filter-state]
+  (if (empty? filter-state)
+    (page-remove-property! page-name "filters")
+    (page-add-properties! page-name {"filters" filter-state})))
+
+(defn get-filter
+  [page-name]
+  (let [properties (db/get-page-properties page-name)]
+    (atom (reader/read-string (get-in properties [:filters] "{}")))))
 
 (defn page-exists?
   [page-name]
