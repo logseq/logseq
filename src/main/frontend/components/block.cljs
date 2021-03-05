@@ -1181,7 +1181,7 @@
           only-title? (and (= 1 (count ast))
                            (= "Properties" (ffirst ast))
                            (let [m (second (first ast))]
-                             (= (keys m) [:title])))
+                             (every? #(contains? #{:title :filters} %) (keys m))))
           block-cp [:div {:class (if only-title?
                                    (util/hiccup->class "pre-block.opacity-50")
                                    (util/hiccup->class "pre-block.bg-base-2.p-2.rounded"))}
@@ -1569,7 +1569,8 @@
 
      (when ref?
        (let [children (-> (db/get-block-immediate-children repo uuid)
-                          db/sort-by-pos)]
+                          db/sort-by-pos)
+             children (block-handler/filter-blocks repo children (:filters config) false)]
          (when (seq children)
            [:div.ref-children.ml-12
             (blocks-container children (assoc config
@@ -1839,7 +1840,8 @@
        (let [format (:block/format config)]
          (for [[k v] (dissoc m :roam_alias :roam_tags)]
            (when (and (not (and (= k :macros) (empty? v))) ; empty macros
-)
+                      (not (= k :title))
+                      (not (= k :filters)))
              [:div.property
               [:span.font-medium.mr-1 (str (name k) ": ")]
               (if (coll? v)

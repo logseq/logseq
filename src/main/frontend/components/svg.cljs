@@ -483,7 +483,7 @@
      :stroke-width "2"
      :stroke-linejoin "round"
      :stroke-linecap "round"}]])
-     
+
 (def page
   [:svg.h-5.w-4 {:viewBox "0 0 24 24", :fill "none", :xmlns "http://www.w3.org/2000/svg"}
    [:path {:d "M2 0.5H6.78272L13.5 7.69708V18C13.5 18.8284 12.8284 19.5 12 19.5H2C1.17157 19.5 0.5 18.8284 0.5 18V2C0.5 1.17157 1.17157 0.5 2 0.5Z", :fill "var(--ls-active-primary-color)"}]
@@ -491,6 +491,18 @@
 
 (def online
   (hero-icon "M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"))
+
+(rum/defc filter-icon
+  [class]
+  [:svg
+   {:stroke "currentColor"
+    :fill "currentColor"
+    :view-box "0 0 16.06 16.06"
+    :width "16"
+    :height "16"
+    :class class }
+   [:path
+    {:d "M.53.53h15l-5 7v8h-5v-8z" :stroke-width "1.06" :stroke-linejoin "round"}]])
 
 (def collapse-right
   (hero-icon "M4 6h16M4 12h16m-7 6h7"))
