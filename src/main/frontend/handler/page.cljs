@@ -520,13 +520,13 @@
 (defn save-filter!
   [page-name filter-state]
   (if (empty? filter-state)
-    (page-remove-property! page-name "filter")
-    (page-add-properties! page-name {"filter" filter-state})))
+    (page-remove-property! page-name "filters")
+    (page-add-properties! page-name {"filters" filter-state})))
 
 (defn get-filter
   [page-name]
   (let [properties (db/get-page-properties page-name)]
-    (atom (reader/read-string (get-in properties [:filter] "{}")))))
+    (atom (reader/read-string (get-in properties [:filters] "{}")))))
 
 (defn page-exists?
   [page-name]

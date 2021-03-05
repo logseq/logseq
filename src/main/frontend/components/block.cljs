@@ -1181,7 +1181,7 @@
           only-title? (and (= 1 (count ast))
                            (= "Properties" (ffirst ast))
                            (let [m (second (first ast))]
-                             (every? #(util/in? % [:title :filter]) (keys m))))
+                             (every? #(contains? #{:title :filters} %) (keys m))))
           block-cp [:div {:class (if only-title?
                                    (util/hiccup->class "pre-block.opacity-50")
                                    (util/hiccup->class "pre-block.bg-base-2.p-2.rounded"))}
@@ -1841,7 +1841,7 @@
          (for [[k v] (dissoc m :roam_alias :roam_tags)]
            (when (and (not (and (= k :macros) (empty? v))) ; empty macros
                       (not (= k :title))
-                      (not (= k :filter)))
+                      (not (= k :filters)))
              [:div.property
               [:span.font-medium.mr-1 (str (name k) ": ")]
               (if (coll? v)

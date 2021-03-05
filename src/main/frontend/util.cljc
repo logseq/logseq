@@ -1151,12 +1151,6 @@
      []
      (contains? (set (system-locales)) "zh-CN")))
 
-;; Modified from https://stackoverflow.com/a/3249777/8213163
-(defn in?
-  "true if coll contains elm"
-  [elm coll]
-  (true? (some #(= elm %) coll)))
-
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
      "../pages/grant_ideas.org")
