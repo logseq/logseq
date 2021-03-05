@@ -6,7 +6,9 @@
             [frontend.db :as db]
             [frontend.idb :as idb]
             [promesa.core :as p]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.handler.notification :as notification]
+            [frontend.ui :as ui]))
 
 (defn listen-to-open-dir!
   []
@@ -27,17 +29,27 @@
 (defn listen-persistent-dbs!
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
-  (js/window.apis.on "persistent-dbs"
-                     (fn [req]
-                       (p/let [repos (idb/get-nfs-dbs)
-                               repos (-> repos
-                                         (conj (state/get-current-repo))
-                                         (distinct))]
-                         (-> (p/all (map db/persist! repos))
-                             (p/then (fn []
-                                       (ipc/ipc "persistent-dbs-saved")))
-                             (p/catch (fn [error]
-                                        (js/console.dir error))))))))
+  (js/window.apis.on
+   "persistent-dbs"
+   (fn [req]
+     (p/let [repos (idb/get-nfs-dbs)
+             repos (-> repos
+                       (conj (state/get-current-repo))
+                       (distinct))]
+       (if (seq repos)
+         (do
+           (notification/show!
+            (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
+            :warning)
+           (js/setTimeout
+            (fn []
+              (-> (p/all (map db/persist! repos))
+                 (p/then (fn []
+                           (ipc/ipc "persistent-dbs-saved")))
+                 (p/catch (fn [error]
+                            (js/console.dir error)))))
+            100))
+         (ipc/ipc "persistent-dbs-saved"))))))
 
 (defn listen!
   []
