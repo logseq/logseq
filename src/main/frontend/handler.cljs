@@ -124,6 +124,39 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
+(defn- get-repos
+  []
+  (let [logged? (state/logged?)
+        me (state/get-me)]
+    (p/let [nfs-dbs (idb/get-nfs-dbs)
+            nfs-dbs (map (fn [db]
+                           {:url db :nfs? true}) nfs-dbs)]
+      (cond
+        logged?
+        (concat
+         nfs-dbs
+         (:repos me))
+
+        (seq nfs-dbs)
+        nfs-dbs
+
+        :else
+        [{:url config/local-repo
+          :example? true}]))))
+
+(defn persist-dbs-when-reload!
+  []
+  (p/let [repos (get-repos)]
+    (let [repos (-> (map :url repos)
+                    (conj (state/get-current-repo))
+                    (distinct))
+          repos (remove nil? repos)]
+      (-> (p/all (map db/persist! repos))
+          (p/then (fn []
+                    (println "DB persisted.")))
+          (p/catch (fn [error]
+                     (js/console.dir error)))))))
+
 (defn start!
   [render]
   (let [{:keys [me logged? repos]} (get-me-and-repos)]
@@ -138,26 +171,17 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
-    (p/let [nfs-dbs (idb/get-nfs-dbs)
-            nfs-dbs (map (fn [db]
-                           {:url db :nfs? true}) nfs-dbs)]
-      (let [repos (cond
-                    logged?
-                    (concat
-                     nfs-dbs
-                     (:repos me))
-
-                    (seq nfs-dbs)
-                    nfs-dbs
-
-                    :else
-                    [{:url config/local-repo
-                      :example? true}])]
-        (state/set-repos! repos)
-        (restore-and-setup! me repos logged?)))
+    (p/let [repos (get-repos)]
+      (state/set-repos! repos)
+      (restore-and-setup! me repos logged?))
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
     (editor-handler/periodically-save!)
     (when (util/electron?)
-      (el/listen!))))
+      (el/listen!))
+    ;; Disable reload
+    (set! (.-onbeforeunload js/window)
+          (fn [^js e]
+            (persist-dbs-when-reload!)
+            (set! (.-returnValue e) false)))))

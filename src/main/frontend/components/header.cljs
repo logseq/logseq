@@ -87,7 +87,9 @@
           :options {:href (rfe/href :graph)}
           :icon svg/graph-sm})
 
-       (when (or logged? (and (nfs/supported?) current-repo))
+       (when (or logged?
+                 (util/electron?)
+                 (and (nfs/supported?) current-repo))
          {:title (t :all-graphs)
           :options {:href (rfe/href :repos)}
           :icon svg/repos-sm})

@@ -40,19 +40,8 @@
                (> mtime last-modified-at)))
 
         (let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                              :from-disk? true})]
+                                                            :from-disk? true})]
           (db/set-file-last-modified-at! repo path mtime))
-
-        ;; (= "unlink" type)
-        ;; (when-let [page-name (db/get-file-page path)]
-        ;;   (page-handler/delete!
-        ;;    page-name
-        ;;    (fn []
-        ;;      (notification/show! (str "Page " page-name " was deleted on disk.")
-        ;;                          :success)
-        ;;      (when (= (state/get-current-page) page-name)
-        ;;        ;; redirect to home
-        ;;        (route-handler/redirect-to-home!)))))
 
         (contains? #{"add" "change" "unlink"} type)
         nil
