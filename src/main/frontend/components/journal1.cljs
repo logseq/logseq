@@ -148,15 +148,6 @@
     [:div.blocks
      (node-render node)]))
 
-(defn right-render
-  [node-tree children]
-  (if children
-    [:div
-     node-tree
-     children]
-    [:div
-     node-tree]))
-
 (def root-parent-id 1)
 (def root-left-id 1)
 
@@ -179,12 +170,15 @@
       (do (swap! number dec)
           (render number right)))))
 
-(rum/defc render
+(defn render
   [number node]
   (when (tree/satisfied-inode? node)
-    (let [node-tree (down-component number node)]
-      (right-render node-tree
-        (right-component number node)))))
+    (let [node-tree (rum/with-key
+                      (down-component number node)
+                      (str "down-" (tree/-get-id node)))]
+      [node-tree (rum/with-key
+                   (right-component number node)
+                   (str "right-" (tree/-get-id node)))])))
 
 (rum/defcs render-react-tree* <
   {:did-mount (fn [state]
