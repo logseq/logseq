@@ -7,14 +7,17 @@
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.state :as outliner-state]
             [frontend.util :as util]
-            [frontend.modules.outliner.tree-test :as tt]))
+            [frontend.modules.outliner.generator :as tg]
+            [frontend.modules.outliner.tree-test :as tt]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (def enter-key-code 13)
 (def tab-key-code 9)
 (def up-key-code 38)
 (def down-key-code 40)
 
-(def state
+(defonce state
   (atom {:editor/current-node  nil
          :outliner/node-number 10}))
 
@@ -23,6 +26,10 @@
   (if (coll? ks)
     (util/react (rum/cursor-in state ks))
     (util/react (rum/cursor state ks))))
+
+(defn update-node-num
+  [num]
+  (swap! state assoc :outliner/node-number num))
 
 ;;; helpers
 (defn textarea-focus!
@@ -92,7 +99,7 @@
 
 ;;; FIXME: node should be associated with block Atom data
 ;;; FIXME: for reactivity ?
-(rum/defc node-render
+(defn node-render
   [node]
   (let [old-block (:data node)
         bid (:block/id old-block)
@@ -133,9 +140,13 @@
 
 (defn down-render
   [node children]
-  [:div.blocks
-   (node-render node)
-   (and children [:div.children children])])
+  (if (some? children)
+    [:div.blocks
+     (node-render node)
+     [:div.children children]]
+
+    [:div.blocks
+     (node-render node)]))
 
 (defn right-render
   [node-tree children]
@@ -146,7 +157,24 @@
 (def root-parent-id 1)
 (def root-left-id 1)
 
-(rum/defcs render-react-tree <
+(defn render
+  [number node children]
+  (when (tree/satisfied-inode? node)
+    (let [node-tree (let [down (tree/-get-down node)]
+                      (if (and (tree/satisfied-inode? down)
+                            (pos? @number))
+                        (do (swap! number dec)
+                            (down-render node (render number down nil)))
+                        (down-render node nil)))
+          right (tree/-get-right node)]
+      (let [new-children (right-render node-tree children)]
+        (if (and (tree/satisfied-inode? right)
+              (pos? @number))
+          (do (swap! number dec)
+              (render number right new-children))
+          new-children)))))
+
+(rum/defcs render-react-tree* <
   {:did-mount (fn [state]
                 (let [[init-node] (:rum/args state)]
                   (js/setTimeout #(set-current-node init-node) 10))
@@ -156,31 +184,19 @@
   (let [num (sub :outliner/node-number)
         current-node (sub :editor/current-node)
         number (atom num)]
-
     [:div.page
-     (current-node-observer current-node)
-     (letfn [(render [node children]
-               (when (tree/satisfied-inode? node)
-                 (let [node-tree (let [down (tree/-get-down node)]
-                                   (and (tree/satisfied-inode? down)
-                                        (swap! number dec))
-                                   (down-render node (render down nil)))
-                       right (tree/-get-right node)]
-                   (let [new-children (right-render node-tree children)]
-                     (if (and (tree/satisfied-inode? right)
-                              (pos? @number))
-                       (do (swap! number dec)
-                           (render right new-children))
-                       new-children)))))]
-
-       (let [rs (render init-node nil)]
-         ;;(cljs.pprint/pprint rs)
-         rs))]))
+     (rum/with-key (current-node-observer current-node)
+       (str "current-" (tree/-get-id init-node)))
+     (render number init-node nil)]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
-  (do (tt/build-db-records tt/node-tree)
-      (let [init-node (outliner-state/get-block-and-ensure-position
-                       root-parent-id root-left-id)]
+  (do
+    ;(tg/generate-random-tree 1000)
+    ;(tg/generate-random-block 10e4)
+    (tt/build-db-records tt/node-tree)
+    (let [init-node (outliner-state/get-block-and-ensure-position
+                      "1" "1")]
         [:div.journal1
-         (render-react-tree init-node)])))
+         (rum/with-key (render-react-tree* init-node)
+           (str "id-" (tree/-get-id init-node)))])))

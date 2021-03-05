@@ -7,6 +7,7 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.core]
             [frontend.fixtures :as fixtures]
+            [nano-id.core :as nano]
             [cljs-run-test]))
 
 (use-fixtures :each
@@ -24,7 +25,7 @@
                           (outliner-u/->block-lookup-ref parent-id)
                           :block/left-id
                           (outliner-u/->block-lookup-ref left-id)
-                          :block/content (str id)})
+                          :block/content (apply str (repeat 100 (str id)))})
              (remove #(nil? (val %)))
              (into {}))]
      (outliner-u/->Block m))))
@@ -52,8 +53,10 @@
               (tree/-save block)
               (when (seq queue)
                 (build (first queue) (rest queue)))))]
-    (let [root (assoc tree-record :left nil :parent nil)]
+    (let [root (assoc tree-record :left "1" :parent "1")]
+      (tree/-save (build-block "1"))
       (build root '()))))
+
 
 (def tree [1 [[2 [[3 [[4]
                       [5]]]
@@ -386,3 +389,5 @@
                        [15]]]
                   [16 [[17]]]]]]
             @result)))))
+
+
