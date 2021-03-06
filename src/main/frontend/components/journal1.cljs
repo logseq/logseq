@@ -154,6 +154,7 @@
 (declare render)
 
 (rum/defc down-component
+  < rum/static
   [number node]
   (let [down (tree/-get-down node)]
     (if (and (tree/satisfied-inode? down)
@@ -163,6 +164,7 @@
       (down-render node nil))))
 
 (rum/defc right-component
+  < rum/static
   [number node]
   (let [right (tree/-get-right node)]
     (when (and (tree/satisfied-inode? right)
