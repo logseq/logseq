@@ -138,6 +138,10 @@
 
      ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]
+
+     ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
+                                                        :backward-pos 2}]]]
+
      ["Html Inline " (->inline "html")]
 
      ;; TODO:

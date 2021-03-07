@@ -800,6 +800,23 @@
                     :height height
                     :width width}])))))
 
+        (= name "vimeo")
+        (let [url (first arguments)]
+          (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
+            (when-let [vimeo-id (nth (re-find Vimeo-regex url) 5)]
+              (when-not (string/blank? vimeo-id)
+                (let [width (min (- (util/get-width) 96)
+                                 560)
+                      height (int (* width (/ 315 560)))]
+                  [:iframe
+                   {:allow-full-screen "allowfullscreen"
+                    :allow
+                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    :frame-border "0"
+                    :src (str "https://player.vimeo.com/video/" vimeo-id)
+                    :height height
+                    :width width}])))))
+
         ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
         (= name "bilibili")
         (let [url (first arguments)
