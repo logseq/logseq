@@ -572,7 +572,10 @@
           (editor-handler/insert-command! id
                                           (str "#" chosen)
                                           format
-                                          {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))})))
+                                          {:last-pattern (let [q (if @editor-handler/*selected-text "" q)]
+                                                           (if (and q (string/starts-with? q "#"))
+                                                             q
+                                                             (str "#" q)))})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [page-ref-text (get-page-ref-text chosen)]
