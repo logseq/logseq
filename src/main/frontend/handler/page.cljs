@@ -26,6 +26,7 @@
             [frontend.format.mldoc :as mldoc]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
+            [cljs.reader :as reader]
             [goog.object :as gobj]))
 
 (defn- get-directory
@@ -90,22 +91,27 @@
 (defn page-add-properties!
   [page-name properties]
   (let [page (db/entity [:page/name page-name])
-        page-format (db/get-page-format page-name)
-        properties-content (db/get-page-properties-content page-name)
-        properties-content (if properties-content
-                             (string/trim properties-content)
-                             (config/properties-wrapper page-format))]
-    (let [file (db/entity (:db/id (:page/file page)))
-          file-path (:file/path file)
-          file-content (db/get-file file-path)
-          after-content (subs file-content (inc (count properties-content)))
-          new-properties-content (db/add-properties! page-format properties-content properties)
-          full-content (str new-properties-content "\n\n" (string/trim after-content))]
-      (file-handler/alter-file (state/get-current-repo)
-                               file-path
-                               full-content
-                               {:reset? true
-                                :re-render-root? true}))))
+        page-title (:or (:page/original-name page) (:page/name page))
+        file (:page/file page)]
+    (if file
+      (let [page-format (db/get-page-format page-name)
+            properties-content (db/get-page-properties-content page-name)
+            properties-content (if properties-content
+                                 (string/trim properties-content)
+                                 (config/properties-wrapper page-format))
+            file (db/entity (:db/id (:page/file page)))
+            file-path (:file/path file)
+            file-content (db/get-file file-path)
+            after-content (subs file-content (inc (count properties-content)))
+            new-properties-content (db/add-properties! page-format properties-content properties)
+            full-content (str new-properties-content "\n\n" (string/trim after-content))]
+        (file-handler/alter-file (state/get-current-repo)
+                                 file-path
+                                 full-content
+                                 {:reset? true
+                                  :re-render-root? true}))
+      (p/let [_ (create! page-name)]
+        (page-add-properties! page-name properties)))))
 
 (defn page-remove-property!
   [page-name k]
@@ -516,6 +522,17 @@
   (->> (db/get-modified-pages repo)
        (remove util/file-page?)))
 
+(defn save-filter!
+  [page-name filter-state]
+  (if (empty? filter-state)
+    (page-remove-property! page-name "filters")
+    (page-add-properties! page-name {"filters" filter-state})))
+
+(defn get-filter
+  [page-name]
+  (let [properties (db/get-page-properties page-name)]
+    (atom (reader/read-string (get-in properties [:filters] "{}")))))
+
 (defn page-exists?
   [page-name]
   (when page-name
@@ -560,7 +577,10 @@
           (editor-handler/insert-command! id
                                           (str "#" chosen)
                                           format
-                                          {:last-pattern (str "#" (if @editor-handler/*selected-text "" q))})))
+                                          {:last-pattern (let [q (if @editor-handler/*selected-text "" q)]
+                                                           (if (and q (string/starts-with? q "#"))
+                                                             q
+                                                             (str "#" q)))})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [page-ref-text (get-page-ref-text chosen)]

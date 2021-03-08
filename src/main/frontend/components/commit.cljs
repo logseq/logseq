@@ -35,7 +35,7 @@
     [:div
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
-       [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+       [:h3#modal-headline.text-lg.leading-6.font-medium
         "Your commit message:"]]]
 
      [:input#commit-message.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2

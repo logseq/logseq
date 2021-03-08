@@ -155,7 +155,7 @@
             :stroke-linejoin "round"
             :stroke-linecap "round"}]]]
         [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+         [:h3#modal-headline.text-lg.leading-6.font-medium
           (t :page/delete-confirmation)]]]
 
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
@@ -179,7 +179,7 @@
       [:div.w-full.sm:max-w-lg.sm:w-96
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+         [:h3#modal-headline.text-lg.leading-6.font-medium
           (t :page/rename-to page-name)]]]
 
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
@@ -237,8 +237,8 @@
         repo (or repo current-repo)
         encoded-page-name (or (get-page-name state)
                               (state/get-current-page))
-        page-name (string/lower-case (util/url-decode encoded-page-name))
-        path-page-name page-name
+        path-page-name (util/url-decode encoded-page-name)
+        page-name (string/lower-case path-page-name)
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
         block? (util/uuid-string? page-name)
@@ -272,7 +272,8 @@
                           (db/entity repo))
                      (db/entity repo [:page/name page-name]))
               page (if page page (do
-                                   (db/transact! repo [{:page/name page-name}])
+                                   (db/transact! repo [{:page/name page-name
+                                                        :page/original-name path-page-name}])
                                    (db/entity repo [:page/name page-name])))
               properties (:page/properties page)
               page-name (:page/name page)

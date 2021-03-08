@@ -369,17 +369,23 @@
                                                     :idx idx
                                                     :container (gobj/get container "id")})))
 
-     (when (seq files)
-       (file-handler/alter-files repo files opts))
+     ;; try catch so that if db transaction failed, it'll not write to the files
+     (try
+       (do
+         (db/transact-react!
+          repo
+          tx
+          transact-option)
 
-     (db/transact-react!
-      repo
-      tx
-      transact-option)
-     (when (seq pages)
-       (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
-         (when (seq children-tx)
-           (db/transact! repo children-tx)))))))
+         (when (seq pages)
+           (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
+             (when (seq children-tx)
+               (db/transact! repo children-tx))))
+
+         (when (seq files)
+           (file-handler/alter-files repo files opts)))
+       (catch js/Error e
+         (log/error :transact-react/failed e))))))
 
 (declare push)
 

@@ -178,7 +178,7 @@
   (when-not (util/electron?)
     (fn [close-fn]
       [:div
-       [:p.text-gray-700
+       [:p
         "Grant native filesystem permission for directory: "
         [:b (config/get-local-dir repo)]]
        (ui/button

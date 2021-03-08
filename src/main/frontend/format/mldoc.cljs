@@ -115,7 +115,8 @@
           properties (cond-> properties
                        (seq macros)
                        (assoc :macros macros))
-          alias (->vec-concat (:roam_alias properties) (:alias properties))
+          alias (->> (->vec-concat (:roam_alias properties) (:alias properties))
+                     (remove string/blank?))
           filetags (if-let [org-file-tags (:filetags properties)]
                      (->> (string/split org-file-tags ":")
                           (remove string/blank?)))
@@ -126,7 +127,8 @@
                             rest (->> (string/split rest " ")
                                       (remove string/blank?))]
                         (concat quoted rest)))
-          tags (->vec-concat roam-tags (:tags properties) definition-tags filetags)
+          tags (->> (->vec-concat roam-tags (:tags properties) definition-tags filetags)
+                    (remove string/blank?))
           properties (assoc properties :tags tags :alias alias)
           properties (-> properties
                          (update :roam_alias ->vec)

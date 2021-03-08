@@ -73,7 +73,7 @@
     {:for label-for}
     name]
    [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md.sm:max-w-xs
+    [:div.rounded-md.sm:max-w-xs
      (ui/toggle state on-toggle true)]]])
 
 (rum/defcs app-updater < rum/reactive
@@ -162,7 +162,7 @@
           {:for "toggle_theme"}
           (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
          [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md.sm:max-w-xs
+          [:div.rounded-md.sm:max-w-xs
            (ui/toggle dark?
                       (fn []
                         (state/set-theme! switch-theme))
@@ -174,7 +174,7 @@
           {:for "show_brackets"}
           (t :settings-page/show-brackets)]
          [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md.sm:max-w-xs
+          [:div.rounded-md.sm:max-w-xs
            (ui/toggle show-brackets?
                       config-handler/toggle-ui-show-brackets!
                       true)]
@@ -332,7 +332,7 @@
           (t :settings-page/developer-mode)]
 
          [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md.sm:max-w-xs
+          [:div.rounded-md.sm:max-w-xs
            (ui/toggle developer-mode?
                       #(state/set-developer-mode! (not developer-mode?))
                       true)]]]

@@ -65,45 +65,46 @@
                           page-list (when-let [list-content (:list properties)]
                                       (extract-page-list list-content))]
                       (cond->
-                       (util/remove-nils
-                        {:page/name (string/lower-case page)
-                         :page/original-name page
-                         :page/file [:file/path file]
-                         :page/journal? journal?
-                         :page/journal-day (if journal?
-                                             (date/journal-title->int page)
-                                             0)})
+                        (util/remove-nils
+                         {:page/name (string/lower-case page)
+                          :page/original-name page
+                          :page/file [:file/path file]
+                          :page/journal? journal?
+                          :page/journal-day (if journal?
+                                              (date/journal-title->int page)
+                                              0)})
                         (seq properties)
                         (assoc :page/properties properties)
 
                         aliases
                         (assoc :page/alias
                                (map
-                                (fn [alias]
-                                  (let [page-name (string/lower-case alias)
-                                        aliases (distinct
-                                                 (conj
-                                                  (remove #{alias} aliases)
-                                                  page))
-                                        aliases (if (seq aliases)
-                                                  (map
-                                                   (fn [alias]
-                                                     {:page/name alias})
-                                                   aliases))]
-                                    (if (seq aliases)
-                                      {:page/name page-name
-                                       :page/alias aliases}
-                                      {:page/name page-name})))
-                                aliases))
+                                 (fn [alias]
+                                   (let [page-name (string/lower-case alias)
+                                         aliases (distinct
+                                                  (conj
+                                                   (remove #{alias} aliases)
+                                                   page))
+                                         aliases (if (seq aliases)
+                                                   (map
+                                                     (fn [alias]
+                                                       {:page/name alias})
+                                                     aliases))]
+                                     (if (seq aliases)
+                                       {:page/name page-name
+                                        :page/alias aliases}
+                                       {:page/name page-name})))
+                                 aliases))
 
                         (:tags properties)
-                        (assoc :page/tags (let [tags (:tags properties)]
+                        (assoc :page/tags (let [tags (->> (:tags properties)
+                                                          (remove string/blank?))]
                                             (swap! ref-tags set/union (set tags))
                                             (map (fn [tag] {:page/name (string/lower-case tag)
                                                             :page/original-name tag})
-                                                 tags))))))
+                                              tags))))))
                   (->> (map first pages)
-                       (remove nil?))))
+                       (remove string/blank?))))
           pages (concat
                  pages
                  (map
