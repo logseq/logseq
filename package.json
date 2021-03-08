@@ -56,6 +56,7 @@
         "cljs:build-electron": "clojure -A:cljs compile app electron"
     },
     "dependencies": {
+        "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
         "chokidar": "^3.5.1",
         "chrono-node": "^2.2.1",
