@@ -55,10 +55,6 @@
 .settings-modal {
   max-height: 80vh;
   overflow-y: auto;
-
-  @screen sm {
-    width: 768px;
-  }
 }
 
 .cp__sidebar-layout {
