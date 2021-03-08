@@ -5,7 +5,9 @@
             [clojure.string :as string]
             ["fs" :as fs]
             ["path" :as path]
-            ["electron" :refer [BrowserWindow app protocol ipcMain] :as electron]))
+            ["electron" :refer [BrowserWindow app protocol ipcMain] :as electron]
+            [clojure.core.async :as async]
+            [electron.state :as state]))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
 (def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "electron-dev.html" "electron.html"))))
@@ -91,13 +93,20 @@
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain call-app-channel))))
 
+(defonce *win (atom nil))
+
+(defn- destroy-window!
+  [^js win]
+  (.destroy win))
+
 (defn main
   []
-  (.on app "window-all-closed" #(when-not mac? (.quit app)))
+  (.on app "window-all-closed" (fn []
+                                 (when-not mac? (.quit app))))
   (.on app "ready"
        (fn []
          (let [^js win (create-main-window)
-               *win (atom win)
+               _ (reset! *win win)
                *quitting? (atom false)]
 
            (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
@@ -117,11 +126,20 @@
            (@*setup-fn)
 
            ;; main window events
-           (.on win "close" #(if (or @*quitting? (not mac?))
-                               (reset! *win nil)
-                               (do (.preventDefault ^js/Event %)
-                                   (.hide win))))
-           (.on app "before-quit" #(reset! *quitting? true))
+           (.on win "close" (fn [e]
+                              (.preventDefault e)
+                              (let [web-contents (. win -webContents)]
+                                (.send web-contents "persistent-dbs"))
+                              (async/go
+                                ;; FIXME: What if persistence failed?
+                                (let [_ (async/<! state/persistent-dbs-chan)]
+                                  (if (or @*quitting? (not mac?))
+                                    (when-let [win @*win]
+                                      (destroy-window! win)
+                                      (reset! *win nil))
+                                    (do (.preventDefault ^js/Event e)
+                                        (.hide win)))))))
+           (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
            (.on app "activate" #(if @*win (.show win)))))))
 
 (defn start []

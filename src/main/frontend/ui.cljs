@@ -138,7 +138,7 @@
                 :stroke-linejoin "round"
                 :stroke-linecap  "round"}]]]
             :warning
-            ["text-gray-900"
+            ["text-gray-900 dark:text-gray-300 "
              [:svg.h-6.w-6.text-yellow-500
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path

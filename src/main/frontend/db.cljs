@@ -108,10 +108,11 @@
   [repo conn files-db?]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (let [tx-id (get-tx-id tx-report)]
-                 (state/set-last-transact-time! repo (util/time-ms))
-                 ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
-                 (persist-if-idle! repo))
+               (when-not (util/electron?)
+                (let [tx-id (get-tx-id tx-report)]
+                  (state/set-last-transact-time! repo (util/time-ms))
+                  ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
+                  (persist-if-idle! repo)))
 
                ;; rebuild search indices
                (when-not files-db?

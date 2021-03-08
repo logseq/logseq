@@ -7,7 +7,9 @@
             [promesa.core :as p]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [electron.utils :as utils]))
+            [electron.utils :as utils]
+            [electron.state :as state]
+            [clojure.core.async :as async]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -78,6 +80,10 @@
 
 (defmethod handle :getFiles [window [_ path]]
   (get-files path))
+
+(defmethod handle :persistent-dbs-saved [window _]
+  (async/put! state/persistent-dbs-chan true )
+  true)
 
 (defn- get-file-ext
   [file]
