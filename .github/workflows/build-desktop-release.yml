@@ -110,14 +110,23 @@ jobs:
         run: yarn install --frozen-lockfile && yarn electron:make
         working-directory: ./static
 
-      - name: Change Artifact Name
+      - name: Change Artifact Name For ZIP File
         run: mv static/out/make/zip/linux/x64/Logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
 
-      - name: Cache Artifact
+      - name: Change Artifact Name For AppImage File
+        run: mv static/out/make/Logseq-*.AppImage  static/out/make/Logseq-linux.AppImage
+
+      - name: Cache Artifact With ZIP format
         uses: actions/upload-artifact@v1
         with:
           name: Logseq-linux.zip
           path: static/out/make/zip/linux/x64/Logseq-linux.zip
+
+      - name: Cache Artifact With AppImage format
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-linux.AppImage
+          path: static/out/make/Logseq-linux.AppImage
 
   build-windows:
     runs-on: windows-latest
@@ -232,10 +241,16 @@ jobs:
           name: Logseq-x64.zip
           path: ./
 
-      - name: Download The Linux Artifact
+      - name: Download The Linux Artifact In Zip format
         uses: actions/download-artifact@v1
         with:
           name: Logseq-linux.zip
+          path: ./
+
+      - name: Download The Linux Artifact In AppImage format
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-linux.AppImage
           path: ./
 
       - name: Download The Windows Artifact
@@ -280,8 +295,8 @@ jobs:
           asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
           asset_content_type: application/x-apple-diskimage
 
-      - name: Upload Linux Artifact
-        id: upload-linux-artifact
+      - name: Upload Linux Artifact With Zip format
+        id: upload-linux-artifact-with-zip-format
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -290,6 +305,17 @@ jobs:
           asset_path: ./Logseq-linux.zip
           asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
           asset_content_type: application/zip
+
+      - name: Upload Linux Artifact With AppImage format
+        id: upload-linux-artifact-with-appimage-format
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Logseq-linux.AppImage
+          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
+          asset_content_type: application/octet-stream
 
       - name: Upload Windows Artifact
         id: upload-win-artifact
