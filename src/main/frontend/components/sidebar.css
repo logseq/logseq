@@ -53,12 +53,8 @@
 }
 
 .settings-modal {
-  background-color: var(--ls-primary-background-color);
-
   max-height: 80vh;
-  overflow: auto;
-  margin: -25px;
-  padding: 20px;
+  overflow-y: auto;
 
   @screen sm {
     width: 768px;

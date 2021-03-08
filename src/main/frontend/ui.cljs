@@ -425,7 +425,7 @@
 
 (rum/defc modal-panel
   [panel-content transition-state close-fn]
-  [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm.p-6
+  [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
    {:class (case transition-state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
@@ -444,7 +444,8 @@
         :stroke-linejoin "round"
         :stroke-linecap  "round"}]]]]
 
-   (panel-content close-fn)])
+   [:div.panel-content
+    (panel-content close-fn)]])
 
 (rum/defc modal < rum/reactive
   (mixins/event-mixin
