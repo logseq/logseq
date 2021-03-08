@@ -20,7 +20,7 @@
 (rum/defc filter-dialog-inner < rum/reactive
   [close-fn references page-name]
   (let [filter-state (page-handler/get-filter page-name)]
-    [:div
+    [:div.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (svg/filter-icon)]
