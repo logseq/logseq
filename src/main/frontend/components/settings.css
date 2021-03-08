@@ -1,7 +1,5 @@
 .cp__settings {
   &-main {
-    padding: 24px;
-
     > h1.title {
       margin-bottom: 2rem;
     }

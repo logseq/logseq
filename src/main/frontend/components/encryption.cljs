@@ -22,7 +22,7 @@
       [:div
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+         [:h3#modal-headline.text-lg.leading-6.font-medium
           "This graph is encrypted with " [:a {:href "https://age-encryption.org/" :target "_blank" :rel "noopener"} "age-encryption.org/v1"]]]]
 
        [:div.mt-1
@@ -113,7 +113,7 @@
     [:div.sm:w-96
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+       [:h3#modal-headline.text-lg.leading-6.font-medium
         "Do you want to create an encrypted graph?"]]]
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
@@ -145,7 +145,7 @@
       [:div
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900
+         [:h3#modal-headline.text-lg.leading-6.font-medium
           "Enter your password"]]]
 
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
