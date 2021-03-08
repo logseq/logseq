@@ -28,20 +28,21 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
        [:span.text-xs
         "Click to include and shift-click to exclude. Click again to remove."]]]
-     [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
-      (for [reference references]
-        (let [filtered (get (rum/react filter-state) reference)
-              color (condp = filtered
-                      true "text-green-400"
-                      false "text-red-400"
-                      nil)]
-          [:button.border.rounded.px-1 {:key reference :class color :style {:border-color "currentColor"}
-                                        :on-click (fn [e]
-                                                    (swap! filter-state #(if (nil? (get @filter-state reference))
-                                                                           (assoc % reference (not (.-shiftKey e)))
-                                                                           (dissoc % reference)))
-                                                    (page-handler/save-filter! page-name @filter-state))}
-           reference]))]]))
+     (when (seq references)
+       [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
+        (for [reference references]
+          (let [filtered (get (rum/react filter-state) reference)
+                color (condp = filtered
+                        true "text-green-400"
+                        false "text-red-400"
+                        nil)]
+            [:button.border.rounded.px-1.mb-1 {:key reference :class color :style {:border-color "currentColor"}
+                                               :on-click (fn [e]
+                                                           (swap! filter-state #(if (nil? (get @filter-state reference))
+                                                                                  (assoc % reference (not (.-shiftKey e)))
+                                                                                  (dissoc % reference)))
+                                                           (page-handler/save-filter! page-name @filter-state))}
+             reference]))])]))
 
 (defn filter-dialog
   [references page-name]
