@@ -66,6 +66,7 @@
   }
 
   &-panel {
+      max-width: 768px;
       @apply relative rounded-md shadow-xl;
       background: var(--ls-secondary-background-color);
       .panel-content {
