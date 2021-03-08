@@ -53,8 +53,7 @@
 }
 
 .settings-modal {
-  max-height: 80vh;
-  overflow-y: auto;
+  margin: -15px;
 }
 
 .cp__sidebar-layout {

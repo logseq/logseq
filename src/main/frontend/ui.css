@@ -66,12 +66,17 @@
   }
 
   &-panel {
+    @apply relative rounded-md shadow-xl;
+
+    overflow: hidden;
+    background: var(--ls-secondary-background-color);
+
+    .panel-content {
+      overflow-y: auto;
+      max-height: 80vh;
       max-width: 768px;
-      @apply relative rounded-md shadow-xl;
-      background: var(--ls-secondary-background-color);
-      .panel-content {
-          padding: 2rem;
-      }
+      padding: 2rem;
+    }
   }
 
   &-close {
