@@ -4,9 +4,8 @@
             [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [clojure.string :as string]
-            [frontend.db :as db]
             [frontend.text :as text]
-            [frontend.db.query-custom :as query-custom]
+            [frontend.db.query-react :as react]
             [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -384,10 +383,27 @@
           {:keys [query sort-by blocks?]} (parse repo query-string)]
       (when query
         (let [query (query-wrapper query blocks?)]
-          (query-custom/react-query repo
-                                    {:query query}
-                                    (if sort-by
-                                      {:transform-fn sort-by})))))))
+          (react/react-query repo
+                             {:query query}
+                             (if sort-by
+                               {:transform-fn sort-by})))))))
+
+(defn custom-query
+  [repo query-m query-opts]
+  (when (seq (:query query-m))
+    (let [query-string (pr-str (:query query-m))
+          query-string (template/resolve-dynamic-template! query-string)
+          {:keys [query sort-by blocks?]} (parse repo query-string)]
+      (when query
+        (let [query (query-wrapper query blocks?)]
+          (react/react-query repo
+                             (merge
+                              query-m
+                              {:query query})
+                             (merge
+                              query-opts
+                              (if sort-by
+                                {:transform-fn sort-by}))))))))
 
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}

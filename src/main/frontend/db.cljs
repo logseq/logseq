@@ -5,6 +5,7 @@
             [frontend.db.model]
             [frontend.db.react]
             [frontend.db.query-custom]
+            [frontend.db.query-react]
             [frontend.util :as util]
             [datascript.core :as d]
             [frontend.state :as state]
@@ -61,7 +62,11 @@
   query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value]
 
  [frontend.db.query-custom
-  custom-query custom-query-result-transform])
+  custom-query]
+
+ [frontend.db.query-react
+  react-query custom-query-result-transform]
+ )
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
