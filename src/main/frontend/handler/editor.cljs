@@ -2015,7 +2015,8 @@
                 ;;         :last-start-pos @last-start-pos})
                 file-path (:file/path file)
                 file-content (db/get-file file-path)
-                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))]
+                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
+                blocks (map (fn [b] (dissoc b :block/children)) blocks)]
             (profile
              "Indent/outdent: "
              (repo-handler/transact-react-and-alter-file!

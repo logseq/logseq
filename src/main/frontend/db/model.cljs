@@ -604,9 +604,11 @@
   (when-let [conn (conn/get-conn repo)]
     (let [eid (:db/id (db-utils/entity repo [:block/uuid block-uuid]))]
       (->> (d/q
-            '[:find ?c
+            '[:find ?id
               :in $ ?p %
-              :where (parent ?p ?c)]
+              :where
+              (parent ?p ?c)
+              [?c :block/uuid ?id]]
             conn
             eid
             rules)
@@ -623,7 +625,8 @@
 (defn get-block-children
   [repo block-uuid]
   (when-let [conn (conn/get-conn repo)]
-    (let [ids (get-block-children-ids repo block-uuid)]
+    (let [ids (get-block-children-ids repo block-uuid)
+          ids (map (fn [id] [:block/uuid id]) ids)]
       (when (seq ids)
         (db-utils/pull-many repo '[*] ids)))))
 
