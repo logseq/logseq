@@ -561,7 +561,7 @@
 
 (defn get-page-properties-content
   [page]
-  (when-let [content (let [blocks (get-page-blocks page)]
+  (when-let [content (let [blocks (get-page-blocks-no-cache page)]
                        (and (:block/pre-block? (first blocks))
                             (:block/content (first blocks))))]
     (let [format (get-page-format page)]
