@@ -10,7 +10,6 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.draw :as draw]
             [frontend.handler.expand :as expand]
             [frontend.handler.block :as block-handler]
             [frontend.format.mldoc :as mldoc]
@@ -2112,22 +2111,6 @@
                          (get-link format link label)
                          format
                          {:last-pattern (str commands/slash "link")})))
-    :draw
-    (when-not (string/blank? (:title m))
-      (let [file (draw/title->file-name (:title m))
-            value (util/format
-                   "[[%s]]\n<iframe class=\"draw-iframe\" src=\"/#/draw?file=%s\" width=\"100%\" height=\"400\" frameborder=\"0\" allowfullscreen></iframe>"
-                   file
-                   file)]
-        (insert-command! id
-                         value
-                         format
-                         {:last-pattern (str commands/slash "draw ")})
-        (draw/create-draw-with-default-content
-         file
-         (fn []
-           (let [input (gdom/getElement "download")]
-             (.click input))))))
     nil)
 
   (state/set-editor-show-input! nil)

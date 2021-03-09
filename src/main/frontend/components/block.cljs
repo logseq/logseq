@@ -16,7 +16,6 @@
             [goog.dom :as gdom]
             [frontend.handler.expand :as expand]
             [frontend.components.svg :as svg]
-            [frontend.components.draw :as draw]
             [frontend.components.datetime :as datetime-comp]
             [frontend.ui :as ui]
             [frontend.handler.editor :as editor-handler]
@@ -48,7 +47,8 @@
             [frontend.commands :as commands]
             [lambdaisland.glogi :as log]
             [frontend.context.i18n :as i18n]
-            [frontend.template :as template]))
+            [frontend.template :as template]
+            [shadow.loader :as loader]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -385,32 +385,41 @@
         full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))]
     [:a.asset-ref {:target "_blank" :href full-path} (or title path)]))
 
+(defonce excalidraw-loaded? (atom false))
+(rum/defc excalidraw < rum/reactive
+  {:init (fn [state]
+           (p/let [_ (loader/load :excalidraw)]
+             (reset! excalidraw-loaded? true))
+           state)}
+  [file]
+  (let [loaded? (rum/react excalidraw-loaded?)
+        draw-component (if loaded?
+                         (resolve 'frontend.extensions.excalidraw/draw))]
+    (when draw-component
+      (draw-component {:file file}))))
+
 (rum/defc page-reference < rum/reactive
   [html-export? s config label]
   (let [show-brackets? (state/show-brackets?)
         nested-link? (:nested-link? config)
-        contents-page? (= "contents" (string/lower-case (str (:id config))))]
-    [:span.page-reference
-     (when (and (or show-brackets? nested-link?)
-                (not html-export?)
-                (not contents-page?))
-       [:span.text-gray-500.bracket "[["])
-     (if (string/ends-with? s ".excalidraw")
-       [:a.page-ref
-        {:on-click (fn [e]
-                     (util/stop e)
-                     (set! (.-href js/window.location)
-                           (rfe/href :draw nil {:file (string/replace s (str config/default-draw-directory "/") "")})))}
-        [:span
-         (svg/excalidraw-logo)
-         (string/capitalize (draw/get-file-title s))]]
+        contents-page? (= "contents" (string/lower-case (str (:id config))))
+        draw? (string/ends-with? s ".excalidraw")]
+    (if (string/ends-with? s ".excalidraw")
+      [:div.draw {:on-click (fn [e]
+                              (.stopPropagation e))}
+       (excalidraw s)]
+      [:span.page-reference
+       (when (and (or show-brackets? nested-link?)
+                  (not html-export?)
+                  (not contents-page?))
+         [:span.text-gray-500.bracket "[["])
        (page-cp (assoc config
                        :label (mldoc/plain->text label)
-                       :contents-page? contents-page?) {:page/name s}))
-     (when (and (or show-brackets? nested-link?)
-                (not html-export?)
-                (not contents-page?))
-       [:span.text-gray-500.bracket "]]"])]))
+                       :contents-page? contents-page?) {:page/name s})
+       (when (and (or show-brackets? nested-link?)
+                  (not html-export?)
+                  (not contents-page?))
+         [:span.text-gray-500.bracket "]]"])])))
 
 (defn- latex-environment-content
   [name option content]

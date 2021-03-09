@@ -54,6 +54,7 @@
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
+    :ui/wide-mode? false
     ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
     :ui/collapsed-blocks {}
@@ -899,10 +900,13 @@
   (set-state! :indexeddb/support? value))
 
 (defn set-modal!
-  [modal-panel-content]
-  (swap! state assoc
-         :modal/show? (boolean modal-panel-content)
-         :modal/panel-content modal-panel-content))
+  ([modal-panel-content]
+   (set-modal! modal-panel-content false))
+  ([modal-panel-content fullscreen?]
+   (swap! state assoc
+          :modal/show? (boolean modal-panel-content)
+          :modal/panel-content modal-panel-content
+          :modal/fullscreen? fullscreen?)))
 
 (defn close-modal!
   []
@@ -991,6 +995,14 @@
 (defn get-changed-files
   []
   (get-in @state [:repo/changed-files (get-current-repo)]))
+
+(defn get-wide-mode?
+  []
+  (:ui/wide-mode? @state))
+
+(defn toggle-wide-mode!
+  []
+  (update-state! :ui/wide-mode? not))
 
 (defn set-online!
   [value]

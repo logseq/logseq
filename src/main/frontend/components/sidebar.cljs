@@ -131,7 +131,7 @@
            (ui/loading (t :loading))]]
 
          :else
-         [:div {:style {:margin-bottom (if global-graph-pages? 0 120)}}
+         [:div.max-w-7xl.mx-auto {:style {:margin-bottom (if global-graph-pages? 0 120)}}
           main-content])]]
      (right-sidebar/sidebar)]))
 
@@ -176,7 +176,7 @@
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.max-w-7xl.mx-auto
+      [:div
        (cond
          (and default-home
               (= :home (state/get-current-route))

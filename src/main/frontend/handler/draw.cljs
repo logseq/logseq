@@ -14,37 +14,6 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]))
 
-;; state
-(defonce *files (atom nil))
-(defonce *current-file (atom nil))
-(defonce *current-title (atom ""))
-(defonce *file-loading? (atom nil))
-(defonce *elements (atom nil))
-(defonce *unsaved? (atom false))
-(defonce *search-files (atom []))
-(defonce *saving-title (atom nil))
-(defonce *excalidraw (atom nil))
-
-;; TODO: refactor
-(defonce draw-state :draw-state)
-
-(defn get-draw-state []
-  (storage/get draw-state))
-(defn set-draw-state! [value]
-  (storage/set draw-state value))
-
-(defn set-k
-  [k v]
-  (when-let [repo (state/get-current-repo)]
-    (let [state (get-draw-state)]
-      (let [new-state (assoc-in state [repo k] v)]
-        (set-draw-state! new-state)))))
-
-(defn set-last-file!
-  [value]
-  (set-k :last-file value))
-
-;; excalidraw
 (defn create-draws-directory!
   [repo]
   (when repo
@@ -55,8 +24,8 @@
        (fn [_error] nil)))))
 
 (defn save-excalidraw!
-  [file data ok-handler]
-  (let [path (str config/default-draw-directory "/" file)
+  [file data]
+  (let [path file
         repo (state/get-current-repo)]
     (when repo
       (let [repo-dir (config/get-repo-dir repo)]
@@ -65,7 +34,6 @@
           (create-draws-directory! repo)
           (fs/write-file! repo repo-dir path data nil)
           (git-handler/git-add repo path)
-          (ok-handler file)
           (db/transact! repo
                         [{:file/path path
                           :page/name file
@@ -75,58 +43,30 @@
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))
 
-(defn get-all-excalidraw-files
-  [ok-handler]
-  (when-let [repo (state/get-current-repo)]
-    (p/let [_ (create-draws-directory! repo)]
-      (let [dir (str (config/get-repo-dir repo)
-                     "/"
-                     config/default-draw-directory)]
-        (util/p-handle
-         (fs/readdir dir)
-         (fn [files]
-           (let [files (-> (filter #(string/ends-with? % ".excalidraw") files)
-                           (distinct)
-                           (sort)
-                           (reverse))]
-             (ok-handler files)))
-         (fn [error]
-           (js/console.dir error)))))))
-
 (defn load-excalidraw-file
   [file ok-handler]
   (when-let [repo (state/get-current-repo)]
     (util/p-handle
-     (file-handler/load-file repo (str config/default-draw-directory "/" file))
+     (file-handler/load-file repo file)
      (fn [content]
        (ok-handler content))
      (fn [error]
-       (prn "Error loading " file ": "
-            error)))))
+       (println "Error loading " file ": "
+                error)))))
 
 (defonce default-content
   (util/format
    "{\n  \"type\": \"excalidraw\",\n  \"version\": 2,\n  \"source\": \"%s\",\n  \"elements\": [],\n  \"appState\": {\n    \"viewBackgroundColor\": \"#FFF\",\n    \"gridSize\": null\n  }\n}"
    config/website))
 
-(defn title->file-name
-  [title]
-  (when (not (string/blank? title))
-    (let [title (string/lower-case (string/replace title " " "-"))]
-      (str (date/get-date-time-string-2) "-" title ".excalidraw"))))
+(defn file-name
+  []
+  (str (date/get-date-time-string-2) ".excalidraw"))
 
 (defn create-draw-with-default-content
-  [current-file ok-handler]
+  [current-file]
   (when-let [repo (state/get-current-repo)]
     (p/let [exists? (fs/file-exists? (config/get-repo-dir repo)
                                      (str config/default-draw-directory current-file))]
       (when-not exists?
-        (save-excalidraw! current-file default-content
-                          (fn [file]
-                            (reset! *files
-                                    (distinct (conj @*files file)))
-                            (reset! *current-file file)
-                            (reset! *unsaved? false)
-                            (set-last-file! file)
-                            (reset! *saving-title nil)
-                            (ok-handler)))))))
+        (save-excalidraw! current-file default-content)))))

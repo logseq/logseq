@@ -14,8 +14,9 @@
 
 (defn content-encrypted?
   [content]
-  (or (str/starts-with? content age-pem-header-line)
-      (str/starts-with? content age-version-line)))
+  (when content
+    (or (str/starts-with? content age-pem-header-line)
+        (str/starts-with? content age-version-line))))
 
 (defn encrypted-db?
   [repo-url]

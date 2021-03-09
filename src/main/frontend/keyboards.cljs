@@ -51,6 +51,8 @@
        (enable-when-not-editing-mode! ui-handler/toggle-contents!)
        (or (shortcut :editor/toggle-settings) "t s")
        (enable-when-not-editing-mode! ui-handler/toggle-settings-modal!)
+       (or (shortcut :ui/toggle-wide-mode) "t w")
+       (enable-when-not-editing-mode! ui-handler/toggle-wide-mode!)
        (or (shortcut :ui/toggle-between-page-and-file) "s")
        (enable-when-not-editing-mode! route-handler/toggle-between-page-and-file!)
        (or (shortcut :git/commit) "c")

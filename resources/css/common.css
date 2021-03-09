@@ -789,3 +789,12 @@ a {
     font-weight: 600;
     font-size: 13px;
 }
+
+/* excalidraw */
+.Island > div > div > div {
+    width: 44px;
+}
+
+.excalidraw hr {
+    margin: 0;
+}

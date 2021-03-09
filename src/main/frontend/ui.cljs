@@ -424,7 +424,7 @@
    [:div.absolute.inset-0.opacity-75]])
 
 (rum/defc modal-panel
-  [panel-content transition-state close-fn]
+  [panel-content transition-state close-fn fullscreen?]
   [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
    {:class (case transition-state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
@@ -444,7 +444,7 @@
         :stroke-linejoin "round"
         :stroke-linecap  "round"}]]]]
 
-   [:div.panel-content
+   [:div {:class (if fullscreen? "" "panel-content")}
     (panel-content close-fn)]])
 
 (rum/defc modal < rum/reactive
@@ -458,6 +458,7 @@
       :outside? false)))
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
+        fullscreen? (state/sub :modal/fullscreen?)
         show? (boolean modal-panel-content)
         close-fn #(state/close-modal!)
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
@@ -470,7 +471,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel modal-panel-content state close-fn)))]))
+        (modal-panel modal-panel-content state close-fn fullscreen?)))]))
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm] :as opts}]
