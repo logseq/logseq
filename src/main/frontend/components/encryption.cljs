@@ -27,17 +27,17 @@
 
        [:div.mt-1
         [:div.max-w-2xl.rounded-md.shadow-sm.sm:max-w-xl
-         [:div.cursor-pointer.block.w-full.rounded-sm.p-2.text-gray-900
+         [:div.cursor-pointer.block.w-full.rounded-sm.p-2
           {:on-click (fn []
                        (when (not @reveal-secret-phrase?)
                          (reset! reveal-secret-phrase? true)))}
-          [:div.font-medium.text-gray-900 "Public Key:"]
+          [:div.font-medium "Public Key:"]
           [:div public-key]
           (if @reveal-secret-phrase?
             [:div
-             [:div.mt-1.font-medium.text-gray-900 "Private Key:"]
+             [:div.mt-1.font-medium "Private Key:"]
              [:div private-key]]
-            [:div.text-gray-500 "click to view the private key"])]]]
+            [:div "click to view the private key"])]]]
 
        [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
         [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
@@ -61,24 +61,22 @@
       [:div.sm:w-96
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium.text-gray-900.font-bold
+         [:h3#modal-headline.text-lg.leading-6.font-medium.font-bold
           "Enter a password"]]]
 
        (ui/admonition
         :warning
-        [:div.text-gray-700
+        [:div.opacity-70
          "Choose a strong and hard to guess password.\nIf you lose your password, all the data can't be decrypted!! Please make sure you remember the password you have set, or you can keep a secure backup of the password."])
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:type "password"
          :placeholder "Password"
          :auto-focus true
-         :style {:color "#000"}
          :on-change (fn [e]
                       (reset! password (util/evalue e)))}]
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:type "password"
          :placeholder "Re-enter the password"
-         :style {:color "#000"}
          :on-change (fn [e]
                       (reset! password-confirm (util/evalue e)))}]
 

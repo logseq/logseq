@@ -548,7 +548,7 @@
       [:div#page-new.flex-1.flex-col {:style {:flex-wrap "wrap"}}
        [:div.mt-10.mb-2 {:style {:font-size "1.5rem"}}
         (t :page/new-title)]
-       [:input#page-title.focus:outline-none.ml-1.text-gray-900
+       [:input#page-title.focus:outline-none.ml-1
         {:style {:border "none"
                  :font-size "1.8rem"
                  :max-width 300}
