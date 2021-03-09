@@ -8,7 +8,9 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.format :as format]
-            [frontend.handler.common :as common-handler]))
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.draw :as draw]
+            [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -102,10 +104,13 @@
      ["Scheduled" [[:editor/clear-current-slash]
                    [:editor/show-date-picker]]]
      ["Query" [[:editor/input "{{query }}" {:backward-pos 2}]]]
-     ["Draw" [[:editor/input "/draw "]
-              [:editor/show-input [{:command :draw
-                                    :id :title
-                                    :placeholder "Draw title"}]]]]
+     ["Draw" (fn []
+               (let [file (draw/file-name)
+                     path (str config/default-draw-directory "/" file)
+                     text (util/format "[[%s]]" path)]
+                 (p/let [_ (draw/create-draw-with-default-content path)]
+                   (println "draw file created, " path))
+                 text))]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
      ["Tomorrow" #(get-page-ref-text (date/tomorrow))]

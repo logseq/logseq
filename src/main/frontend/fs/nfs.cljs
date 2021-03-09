@@ -133,11 +133,13 @@
                   not-changed? (= last-modified-at local-last-modified-at)
                   format (-> (util/get-file-ext path)
                              (config/get-file-format))
-                  pending-writes (state/get-write-chan-length)]
+                  pending-writes (state/get-write-chan-length)
+                  draw? (and path (string/ends-with? path ".excalidraw"))]
             (if (and local-content (or old-content
                                        ;; temporally fix
-                                       (and path (string/ends-with? path ".excalidraw"))) new?
+                                       draw?) new?
                      (or
+                      draw?
                       ;; Writing not finished
                       (> pending-writes 0)
                       ;; not changed by other editors
