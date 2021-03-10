@@ -1846,6 +1846,7 @@
                     "important" svg/important
                     "caution" svg/caution
                     "warning" svg/warning
+                    "pinned" svg/tip
                     nil)]
     [:div.flex.flex-row.admonitionblock.align-items {:class type}
      [:div.pr-4.admonition-icon.flex.flex-col.justify-center
@@ -1973,6 +1974,9 @@
 
       ["Custom" "warning" options result content]
       (admonition config "warning" options result)
+      
+      ["Custom" "pinned" options result content]
+      (admonition config "pinned" options result)
 
       ["Custom" name options l content]
       (->elem
