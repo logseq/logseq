@@ -8,14 +8,14 @@
             [goog.object :as gobj]
             [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.handler.ui :as ui-handler]))
+            [frontend.handler.ui :as ui-handler]
+            [frontend.date :as date]))
 
 ;; Undo && Redo that works with files
 
 ;; TODO:
-;; 1. preserve cursor positions when undo/redo
-;; 2. undo-tree
-;; 3. db-only version, store transactions instead of file patches
+;; 1. undo-tree
+;; 2. db-only version, store transactions instead of file patches
 
 ;; repo file -> contents transactions sequence
 (defonce history (atom {}))
@@ -66,6 +66,20 @@
 
 (defonce *undoing? (atom false))
 
+(defn- open-pages-in-sidebar!
+  [paths]
+  (when-let [repo (state/get-current-repo)]
+    (let [current-page (some->
+                        (or (state/get-current-page)
+                            (date/today))
+                        (string/lower-case))]
+      (doseq [path paths]
+        (when-let [page (db/get-file-page path false)]
+          (when (not= page current-page)
+            (let [db-id (:db/id (db/entity [:page/name page]))]
+              (state/sidebar-add-block! repo db-id :page {:page page}))))))))
+
+;; TODO: history should ignore rename transactions
 (defn undo!
   [repo alter-file restore-cursor]
   (let [idx (get @history-idx repo 0)]
@@ -74,6 +88,8 @@
             tx (get-in @history [repo idx'])
             {:keys [data]} tx
             _ (reset! *undoing? true)
+            drag-and-drop? (> (count data) 1)
+            _ (open-pages-in-sidebar! (map first data))
             promises (for [[path {:keys [old]}] data]
                        (let [current-content (db/get-file-no-sub path)]
                          (alter-file repo path old
