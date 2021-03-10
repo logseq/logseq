@@ -61,6 +61,9 @@
               :depends-on #{:main}}
              :age-encryption
              {:entries [frontend.extensions.age-encryption]
+              :depends-on #{:main}}
+             :excalidraw
+             {:entries [frontend.extensions.excalidraw]
               :depends-on #{:main}}}
 
    :output-dir "./static/js/publishing"

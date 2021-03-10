@@ -144,5 +144,6 @@
   [option]
   (let [repo (state/get-current-repo)
         granted? (state/sub [:nfs/user-granted? repo])]
-    (when-not (and (config/local-db? repo) (not granted?))
+    ;; Web granted
+    (when-not (and (config/local-db? repo) (not granted?) (not (util/electron?)))
       (draw-container option))))
