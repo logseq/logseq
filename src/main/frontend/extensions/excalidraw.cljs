@@ -59,6 +59,7 @@
   (rum/local true ::zen-mode?)
   (rum/local false ::view-mode?)
   (rum/local nil ::elements)
+  {:did-mount update-draw-content-width}
   {:did-update update-draw-content-width}
   [state data option]
   (let [current-repo (state/sub :git/current-repo)
