@@ -144,19 +144,6 @@
         [{:url config/local-repo
           :example? true}]))))
 
-(defn persist-dbs-when-reload!
-  []
-  (p/let [repos (get-repos)]
-    (let [repos (-> (map :url repos)
-                    (conj (state/get-current-repo))
-                    (distinct))
-          repos (remove nil? repos)]
-      (-> (p/all (map db/persist! repos))
-          (p/then (fn []
-                    (println "DB persisted.")))
-          (p/catch (fn [error]
-                     (js/console.dir error)))))))
-
 (defn start!
   [render]
   (let [{:keys [me logged? repos]} (get-me-and-repos)]
@@ -179,9 +166,4 @@
     (file-handler/run-writes-chan!)
     (editor-handler/periodically-save!)
     (when (util/electron?)
-      (el/listen!))
-    ;; Disable reload
-    (set! (.-onbeforeunload js/window)
-          (fn [^js e]
-            (persist-dbs-when-reload!)
-            (set! (.-returnValue e) false)))))
+      (el/listen!))))

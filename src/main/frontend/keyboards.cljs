@@ -26,6 +26,10 @@
     ;; and stop event from bubbling
     false))
 
+(defn disable!
+  [e]
+  false)
+
 (defn enable-when-not-editing-mode!
   [f]
   (fn [e]
@@ -38,7 +42,11 @@
 (def re-index! #(repo-handler/re-index! nfs-handler/rebuild-index!))
 
 (defonce chords
-  (-> {;; non-editing mode
+  (-> {;; disable reload
+       "f5" disable!
+       "mod+r" disable!
+       "mod+shift+r" disable!
+       ;; non-editing mode
        (or (shortcut :editor/toggle-document-mode) "t d")
        (enable-when-not-editing-mode! state/toggle-document-mode!)
        (or (shortcut :ui/toggle-theme) "t t")
