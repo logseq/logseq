@@ -582,6 +582,7 @@
                       "important" svg/important
                       "caution" svg/caution
                       "warning" svg/warning
+                      "pinned" svg/pinned
                       nil)]
       [:div.flex.flex-row.admonitionblock.align-items {:class type}
        [:div.pr-4.admonition-icon.flex.flex-col.justify-center
