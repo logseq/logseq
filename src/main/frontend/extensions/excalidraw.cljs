@@ -46,13 +46,24 @@
          (.getBoundingClientRect)
          (gobj/get "width")))))
 
+(defn- update-draw-content-width
+  [state]
+  (let [el ^js (rum/dom-node state)
+        el (and el (.querySelector el ".draw-wrap"))
+        width (and el (.-clientWidth el))]
+    (reset! (::draw-width state) width)
+    state))
+
 (rum/defcs draw-inner < rum/reactive
+  (rum/local 800 ::draw-width)
   (rum/local true ::zen-mode?)
   (rum/local false ::view-mode?)
   (rum/local nil ::elements)
+  {:did-update update-draw-content-width}
   [state data option]
   (let [current-repo (state/sub :git/current-repo)
         bounding-width (rum/react *bounding-width)
+        *draw-width (get state ::draw-width)
         *zen-mode? (get state ::zen-mode?)
         *view-mode? (get state ::view-mode?)
         wide-mode? (state/sub :ui/wide-mode?)
@@ -67,7 +78,7 @@
          (util/format "Zen Mode (%s)" (if @*zen-mode? "ON" "OFF"))]
         [:a.mr-2 {:on-click #(swap! *view-mode? not)}
          (util/format "View Mode (%s)" (if @*view-mode? "ON" "OFF"))]]
-       [:div
+       [:div.draw-wrap
         (excalidraw
          (merge
           {:on-change (fn [elements state]
@@ -88,11 +99,11 @@
            :zen-mode-enabled @*zen-mode?
            :view-mode-enabled @*view-mode?
            :grid-mode-enabled false
-           :initial-data data}
+           :initial-data data
+           :width  @*draw-width}
           (if wide-mode?
             {:height 650}
-            {:width 800
-             :height 500})))]])))
+            {:height 500})))]])))
 
 (rum/defcs draw-container < rum/reactive
   {:init (fn [state]
