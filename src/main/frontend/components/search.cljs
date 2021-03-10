@@ -152,7 +152,8 @@
                  :width 500})}
        (ui/auto-complete
         result
-        {:on-chosen (fn [{:keys [type data]}]
+        {:class "search-results"
+         :on-chosen (fn [{:keys [type data]}]
                       (search-handler/clear-search!)
                       (leave-focus)
                       (case type

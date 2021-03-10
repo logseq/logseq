@@ -39,7 +39,7 @@
                         (clj->js {:keys ["uuid" "content"]
                                   :shouldSort true
                                   :minMatchCharLength 2
-                                  :threshold 0.4}))]
+                                  :threshold 0.2}))]
       (swap! indices assoc-in [repo :blocks] indice)
       indice)))
 
