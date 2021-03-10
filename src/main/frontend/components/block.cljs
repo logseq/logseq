@@ -1317,12 +1317,17 @@
         (not slide?)
         (merge attrs))
 
-      (if pre-block?
+      (cond
+        pre-block?
         (pre-block-cp config (string/trim content) format)
-        (when (seq title)
-          (build-block-title config block)))
 
-      (when (and dragging? (not slide?))
+        dummy?
+        [:span.opacity-50 "Click here to start writing"]
+
+        (seq title)
+        (build-block-title config block))
+
+      (when (and dragging? (not slide?) (not dummy?))
         (dnd-separator block 0 -4 false true))
 
       (when (and deadline deadline-ast)
@@ -1398,7 +1403,7 @@
   [block slide? top?]
   (let [dragging? (rum/react *dragging?)]
     (cond
-      (and dragging? (not slide?))
+      (and dragging? (not slide?) (not (:block/dummy? block)))
       (dnd-separator block 20 0 top? false)
 
       :else

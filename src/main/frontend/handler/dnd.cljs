@@ -299,6 +299,7 @@
         target-file-path (:file/path target-file)
         target-file-content (db/get-file repo target-file-path)
         to-file (db/entity repo (:db/id (:block/file to-block)))
+        to-block (assoc to-block :block/meta (:block/meta (db/entity (:db/id to-block))))
         to-file-path (:file/path to-file)
         target-block-end-pos (block-handler/get-block-end-pos-rec repo target-block)
         to-block-start-pos (get-start-pos to-block)
@@ -364,7 +365,13 @@
   2. Sometimes we might need to move a parent block to it's own child.
   "
   [target-block to-block target-dom-id top? nested?]
-  (when (and target-block to-block (:block/format target-block) (:block/format to-block))
+  (when (and
+         target-block
+         to-block
+         (:block/format target-block)
+         (:block/format to-block)
+         (not (:block/dummy? to-block))
+         (not (:block/dummy? target-block)))
     (cond
       (not= (:block/format target-block)
             (:block/format to-block))
