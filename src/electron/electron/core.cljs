@@ -101,7 +101,7 @@
 
 (defn main
   []
-  (.on app "window-all-closed" (fn [] (.quit app)))
+  (.on app "window-all-closed" (fn [] (when-not mac? (.quit app))))
   (.on app "ready"
        (fn []
          (let [^js win (create-main-window)
