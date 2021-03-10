@@ -12,6 +12,7 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.util :as util]
+            [frontend.config :as config]
             [medley.core :as medley]
             ["mousetrap" :as mousetrap]
             [goog.object :as gobj]))
@@ -26,9 +27,9 @@
     ;; and stop event from bubbling
     false))
 
-(defn disable!
-  [e]
-  false)
+(defn only-enable-when-dev!
+  [_e]
+  (boolean config/dev?))
 
 (defn enable-when-not-editing-mode!
   [f]
@@ -42,10 +43,10 @@
 (def re-index! #(repo-handler/re-index! nfs-handler/rebuild-index!))
 
 (defonce chords
-  (-> {;; disable reload
-       "f5" disable!
-       "mod+r" disable!
-       "mod+shift+r" disable!
+  (-> {;; disable reload on production release
+       "f5" only-enable-when-dev!
+       "mod+r" only-enable-when-dev!
+       "mod+shift+r" only-enable-when-dev!
        ;; non-editing mode
        (or (shortcut :editor/toggle-document-mode) "t d")
        (enable-when-not-editing-mode! state/toggle-document-mode!)
