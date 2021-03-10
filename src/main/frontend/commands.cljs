@@ -201,6 +201,7 @@
      ["Tip" (->block "tip")]
      ["Important" (->block "important")]
      ["Caution" (->block "caution")]
+     ["Pinned" (->block "pinned")]
      ["Warning" (->block "warning")]
      ["Example" (->block "example")]
      ["Export" (->block "export")]
