@@ -19,7 +19,7 @@
 (when (js/require "electron-squirrel-startup") (.quit app))
 
 (defn create-main-window
-  "create main app window"
+  "Creates main app window"
   []
   (let [win-opts {:width         980
                   :height        700
@@ -101,14 +101,12 @@
 
 (defn main
   []
-  (.on app "window-all-closed" (fn []
-                                 (when-not mac? (.quit app))))
+  (.on app "window-all-closed" (fn [] (.quit app)))
   (.on app "ready"
        (fn []
          (let [^js win (create-main-window)
                _ (reset! *win win)
                *quitting? (atom false)]
-
            (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
            (vreset! *setup-fn
