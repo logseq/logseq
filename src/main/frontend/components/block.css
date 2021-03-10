@@ -75,6 +75,12 @@
   .resize {
     display: flex;
   }
+
+  .draw [aria-labelledby="shapes-title"] {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%);
+  }
 }
 
 .open-block-ref-link {
