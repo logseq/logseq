@@ -88,7 +88,6 @@
             tx (get-in @history [repo idx'])
             {:keys [data]} tx
             _ (reset! *undoing? true)
-            drag-and-drop? (> (count data) 1)
             _ (open-pages-in-sidebar! (map first data))
             promises (for [[path {:keys [old]}] data]
                        (let [current-content (db/get-file-no-sub path)]
