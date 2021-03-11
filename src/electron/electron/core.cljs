@@ -1,7 +1,7 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [mac? win32? prod? dev? logger open]]
+            [electron.utils :refer [mac? linux? win32? prod? dev? logger open]]
             [clojure.string :as string]
             ["fs" :as fs]
             ["path" :as path]
@@ -23,7 +23,7 @@
   []
   (let [win-opts {:width         980
                   :height        700
-                  :frame         win32?
+                  :frame         (or win32? linux?)
                   :autoHideMenuBar win32?
                   :titleBarStyle (if mac? "hidden" nil)
                   :webPreferences
@@ -34,6 +34,7 @@
                    :preload                 (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
+    (when linux?  (.removeMenu win))
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))
