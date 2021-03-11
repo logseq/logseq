@@ -1,0 +1,16 @@
+.Tooltip {
+    position:relative;
+}
+
+.Tooltip__label {--arrow-size: 4px;visibility:hidden;width:10ch;background:#000;color:#fff;text-align:center;border-radius:4px;padding:4px;position:absolute;z-index:10;font-size:0.7rem;line-height:1.5;top:calc(100% + var(--arrow-size) + 3px);left:calc(-50% + var(--arrow-size) / 2 - 1px);word-wrap:break-word}
+.Tooltip__label::after {content:"";border:var(--arrow-size) solid transparent;border-bottom-color:#000;position:absolute;bottom:100%;left:calc(50% - var(--arrow-size))}
+
+/* .Tooltip:not(:hover) {pointer-events:none} */
+
+.Tooltip:hover .Tooltip__label {
+    visibility:visible
+}
+
+.Tooltip__label:hover {
+    visibility:visible
+}

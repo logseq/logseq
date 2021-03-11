@@ -10,5 +10,6 @@
 @import "./table.css";
 @import "./datepicker.css";
 @import "./highlight.css";
+@import "./tooltip.css";
 @import "./tailwind.core.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
 @import "./common.css";

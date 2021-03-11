@@ -777,6 +777,10 @@ a {
     transition: .3s;
 }
 
+a.tooltip-priority {
+    transition: none;
+}
+
 .page-reference:hover {
     background: var(--ls-secondary-background-color);
 }
