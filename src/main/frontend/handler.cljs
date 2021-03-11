@@ -24,7 +24,8 @@
             [frontend.idb :as idb]
             [lambdaisland.glogi :as log]
             [frontend.handler.common :as common-handler]
-            [electron.listener :as el]))
+            [electron.listener :as el]
+            [frontend.version :as version]))
 
 (defn- watch-for-date!
   []
@@ -144,13 +145,26 @@
         [{:url config/local-repo
           :example? true}]))))
 
+(defn init-sentry
+  []
+  (let [cfg
+        {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
+         :release (util/format "logseq@%s" version/version)}]
+    (.init js/window.Sentry (clj->js cfg))))
+
+(defn on-load-events
+  []
+  (let [f (fn []
+            (init-sentry))]
+   (set! js/window.onload f)))
+
 (defn start!
   [render]
   (let [{:keys [me logged? repos]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
     (state/set-db-restoring! true)
     (render)
-
+    (on-load-events)
     (set-network-watcher!)
 
     (util/indexeddb-check?
