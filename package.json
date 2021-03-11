@@ -65,6 +65,7 @@
         "diff-match-patch": "^1.0.5",
         "electron": "^11.2.0",
         "fs": "^0.0.1-security",
+        "fs-extra": "^9.1.0",
         "fuse.js": "^6.4.6",
         "gulp-cached": "^1.1.1",
         "ignore": "^5.1.8",
