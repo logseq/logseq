@@ -44,7 +44,7 @@
     ;;            [(identity ?vs) [?v ...]]
     ;;            (not-join [?e ?v]
     ;;                      [?e ?a ?v]))]
-])
+    ])
 
 (defn transact-files-db!
   ([tx-data]
@@ -156,7 +156,7 @@
             :where
             [?file :file/path ?path]
             ;; [?file :file/last-modified-at ?modified-at]
-]
+            ]
           conn)
          (seq)
          ;; (sort-by last)
@@ -845,17 +845,17 @@
   (when-let [conn (conn/get-conn repo)]
     (->
      (d/q
-       '[:find [?ref-page ...]
-         :in $ % ?page
-         :where
-         [?p :page/name ?page]
-         [?b :block/path-ref-pages ?p]
-         [?b :block/ref-pages ?other-p]
-         [(not= ?p ?other-p)]
-         [?other-p :page/name ?ref-page]]
-       conn
-       rules
-       page)
+      '[:find [?ref-page ...]
+        :in $ % ?page
+        :where
+        [?p :page/name ?page]
+        [?b :block/path-ref-pages ?p]
+        [?b :block/ref-pages ?other-p]
+        [(not= ?p ?other-p)]
+        [?other-p :page/name ?ref-page]]
+      conn
+      rules
+      page)
      (distinct))))
 
 ;; Ignore files with empty blocks for now
@@ -934,15 +934,15 @@
     (when (seq blocks)
       (let [block-ids (set (map :db/id blocks))
             refs (d/q
-                   '[:find ?p ?ref
-                     :in $ % ?block-ids
-                     :where
-                     (parent ?p ?b)
-                     [(contains? ?block-ids ?p)]
-                     [?b :block/ref-pages ?ref]]
-                   conn
-                   rules
-                   block-ids)
+                  '[:find ?p ?ref
+                    :in $ % ?block-ids
+                    :where
+                    (parent ?p ?b)
+                    [(contains? ?block-ids ?p)]
+                    [?b :block/ref-pages ?ref]]
+                  conn
+                  rules
+                  block-ids)
             refs (->> (group-by first refs)
                       (medley/map-vals #(set (map (fn [[_ id]] {:db/id id}) %))))]
         (map (fn [block] (assoc block :block/children-refs
@@ -1147,7 +1147,7 @@
        '[:find ?p
          :where
          [?p :page/properties ?d]
-         [(get ?d :public) ?pub]
+         [(get ?d :publishable) ?pub]
          [(= "true" ?pub)]]
        db)
       (db-utils/seq-flatten)))
@@ -1178,8 +1178,8 @@
      @blocks-count-cache
      (when-let [conn (conn/get-conn)]
        (let [n (count (d/datoms conn :avet :block/uuid))]
-        (reset! blocks-count-cache n)
-        n)))))
+         (reset! blocks-count-cache n)
+         n)))))
 
 ;; block/uuid and block/content
 (defn get-all-block-contents
@@ -1310,4 +1310,4 @@
                    [(contains? ?refs ?b-ref)]))]
        (conn/get-conn)
        rules
-    page-ids))
+       page-ids))

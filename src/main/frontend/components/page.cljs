@@ -284,7 +284,7 @@
                       (= page-name (string/lower-case (date/journal-name))))
               developer-mode? (state/sub [:ui/developer-mode?])
               published? (= "true" (:published properties))
-              public? (= "true" (:public properties))]
+              publishable? (= "true" (:publishable properties))]
           [:div.flex-1.page.relative (if (seq (:page/tags page))
                                        (let [page-names (model/get-page-names-by-ids (map :db/id (:page/tags page)))]
                                          {:data-page-tags (text/build-data-value page-names)})
@@ -314,38 +314,13 @@
                               {:title (t :page/delete)
                                :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-                            {:title   (t :page/action-publish)
+                            {:title  (t (if publishable? :page/make-private :page/make-public))
                              :options {:on-click
                                        (fn []
-                                         (state/set-modal!
-                                          (fn []
-                                            [:div.cp__page-publish-actions
-                                             (mapv (fn [{:keys [title options]}]
-                                                     (when title
-                                                       [:div.it
-                                                        (apply (partial ui/button title) (flatten (seq options)))]))
-                                                   [(if published?
-                                                      {:title   (t :page/unpublish)
-                                                       :options {:on-click (fn []
-                                                                             (page-handler/unpublish-page! page-name))}}
-                                                      {:title   (t :page/publish)
-                                                       :options {:on-click (fn []
-                                                                             (page-handler/publish-page!
-                                                                              page-name project/add-project
-                                                                              html-export/export-page))}})
-                                                    (when-not published?
-                                                      {:title   (t :page/publish-as-slide)
-                                                       :options {:on-click (fn []
-                                                                             (page-handler/publish-page-as-slide!
-                                                                              page-name project/add-project
-                                                                              html-export/export-page))}})
-                                                    {:title   (t (if public? :page/make-private :page/make-public))
-                                                     :options {:background (if public? "gray" "indigo")
-                                                               :on-click (fn []
-                                                                           (page-handler/update-public-attribute!
-                                                                            page-name
-                                                                            (if public? false true))
-                                                                           (state/close-modal!))}}])])))}}
+                                         (page-handler/update-public-attribute!
+                                          page-name
+                                          (if publishable? false true))
+                                         (state/close-modal!))}}
 
                             (when file
                               {:title (t :page/re-index)
