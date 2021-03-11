@@ -59,24 +59,27 @@
 (defn export-repo-as-html!
   [repo]
   (when-let [db (db/get-conn repo)]
-    (let [db (if (state/all-pages-public?)
-               (db/clean-export! db)
-               (db/filter-only-public-pages-and-blocks db))
-          db-str (db/db->string db)
-          state (select-keys @state/state
-                             [:ui/theme :ui/cycle-collapse
-                              :ui/collapsed-blocks
-                              :ui/sidebar-collapsed-blocks
-                              :ui/show-recent?
-                              :config])
-          state (update state :config (fn [config]
-                                        {"local" (get config repo)}))
-          html-str (str "data:text/html;charset=UTF-8,"
-                        (js/encodeURIComponent (html/publishing-html db-str (pr-str state))))]
-      (when-let [anchor (gdom/getElement "download-as-html")]
-        (.setAttribute anchor "href" html-str)
-        (.setAttribute anchor "download" "index.html")
-        (.click anchor)))))
+    (let [db           (if (state/all-pages-publishable?)
+                         (db/clean-export! db)
+                         (db/filter-only-public-pages-and-blocks db))
+          db-str       (db/db->string db)
+          state        (select-keys @state/state
+                                    [:ui/theme :ui/cycle-collapse
+                                     :ui/collapsed-blocks
+                                     :ui/sidebar-collapsed-blocks
+                                     :ui/show-recent?
+                                     :config])
+          state        (update state :config (fn [config]
+                                               {"local" (get config repo)}))
+          raw-html-str (html/publishing-html db-str (pr-str state))
+          html-str     (str "data:text/html;charset=UTF-8,"
+                            (js/encodeURIComponent raw-html-str))]
+      (if (util/electron?)
+        (js/window.apis.exportPublishAssets raw-html-str)
+        (when-let [anchor (gdom/getElement "download-as-html")]
+          (.setAttribute anchor "href" html-str)
+          (.setAttribute anchor "download" "index.html")
+          (.click anchor))))))
 
 (defn export-repo-as-zip!
   [repo]

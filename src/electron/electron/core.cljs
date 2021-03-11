@@ -3,9 +3,10 @@
             [electron.updater :refer [init-updater]]
             [electron.utils :refer [mac? win32? prod? dev? logger open]]
             [clojure.string :as string]
-            ["fs" :as fs]
+            [promesa.core :as p]
+            ["fs-extra" :as fs]
             ["path" :as path]
-            ["electron" :refer [BrowserWindow app protocol ipcMain] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
             [clojure.core.async :as async]
             [electron.state :as state]))
 
@@ -54,10 +55,35 @@
        (callback #js {:path path}))))
   #(.unregisterProtocol protocol "assets"))
 
+(defn- handle-export-publish-assets [_event html]
+  (let
+   [app-path (. app getAppPath)
+    paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
+    (if (vector? paths)
+      (let [published-dir (str "published-at-" (.toString (.getTime (js/Date.))))
+            root-dir (path/join
+                      (first (js->clj paths))
+                      published-dir)
+            static-dir (path/join root-dir "static")
+            path (path/join root-dir "index.html")]
+        (p/let [_ (. fs ensureDir static-dir)]
+          (let  [_ (p/all  (concat
+                            [(. fs writeFile
+                                path
+                                html)]
+                            [(. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
+
+                            (map
+                             (fn [part]
+                               (. fs copy (path/join app-path part) (path/join static-dir part)))
+                             ["css" "fonts" "icons" "img" "js" "dev.html"])))]
+
+            (. dialog showMessageBox (clj->js {:message (str "Export publish assets to " root-dir " successfully")}))))))))
 (defn setup-app-manager!
   [^js win]
   (let [toggle-win-channel "toggle-max-or-min-active-win"
         call-app-channel "call-application"
+        export-publish-assets "export-publish-assets"
         web-contents (. win -webContents)]
     (doto ipcMain
       (.handle toggle-win-channel
@@ -70,6 +96,9 @@
                      (if (.isMaximized active-win)
                        (.unmaximize active-win)
                        (.maximize active-win))))))
+
+      (.handle export-publish-assets handle-export-publish-assets)
+
       (.handle call-app-channel
                (fn [_ type & args]
                  (try
@@ -91,9 +120,11 @@
       (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
 
     #(do (.removeHandler ipcMain toggle-win-channel)
+         (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain call-app-channel))))
 
 (defonce *win (atom nil))
+
 
 (defn- destroy-window!
   [^js win]
