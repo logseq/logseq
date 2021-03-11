@@ -5,7 +5,7 @@ const { ipcRenderer, contextBridge, shell, clipboard } = require('electron')
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
 
-function getFilePathFromClipboard () {
+function getFilePathFromClipboard() {
   if (IS_WIN32) {
     const rawFilePath = clipboard.read('FileNameW')
     return rawFilePath.replace(new RegExp(String.fromCharCode(0), 'g'), '')
@@ -16,7 +16,7 @@ function getFilePathFromClipboard () {
   }
 }
 
-function isClipboardHasImage () {
+function isClipboardHasImage() {
   return !clipboard.readImage().isEmpty()
 }
 
@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('apis', {
     await ipcRenderer.invoke('check-for-updates', ...args)
   },
 
-  setUpdatesCallback (cb) {
+  setUpdatesCallback(cb) {
     if (typeof cb !== 'function') return
 
     const channel = 'updates-callback'
@@ -42,24 +42,33 @@ contextBridge.exposeInMainWorld('apis', {
     ipcRenderer.on(channel, cb)
   },
 
-  installUpdatesAndQuitApp () {
+  installUpdatesAndQuitApp() {
     ipcRenderer.invoke('install-updates', true)
   },
 
-  async openExternal (url, options) {
+  async openExternal(url, options) {
     await shell.openExternal(url, options)
   },
 
-  async openPath (path) {
+  async openPath(path) {
     await shell.openPath(path)
   },
 
-  showItemInFolder (fullpath) {
+  showItemInFolder(fullpath) {
     if (IS_WIN32) {
       shell.openPath(path.dirname(fullpath))
     } else {
       shell.showItemInFolder(fullpath)
     }
+  },
+
+  /**
+   * save all publish assets to disk
+   *
+   * @param {string} html html file with embedded state
+   */
+  exportPublishAssets(html) {
+    ipcRenderer.invoke('export-publish-assets', html)
   },
 
   /**
@@ -70,7 +79,7 @@ contextBridge.exposeInMainWorld('apis', {
    * @param from?
    * @returns {Promise<void>}
    */
-  async copyFileToAssets (repoPathRoot, to, from) {
+  async copyFileToAssets(repoPathRoot, to, from) {
     if (from && fs.statSync(from).isDirectory()) {
       throw new Error('not support copy directory')
     }
@@ -105,7 +114,7 @@ contextBridge.exposeInMainWorld('apis', {
     }
   },
 
-  toggleMaxOrMinActiveWindow (isToggleMin = false) {
+  toggleMaxOrMinActiveWindow(isToggleMin = false) {
     ipcRenderer.invoke('toggle-max-or-min-active-win', isToggleMin)
   },
 
@@ -115,10 +124,10 @@ contextBridge.exposeInMainWorld('apis', {
    * @param args
    * @private
    */
-  async _callApplication (type, ...args) {
+  async _callApplication(type, ...args) {
     return await ipcRenderer.invoke('call-application', type, ...args)
   },
 
   getFilePathFromClipboard,
-  isClipboardHasImage
+  isClipboardHasImage,
 })
