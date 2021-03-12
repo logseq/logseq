@@ -82,8 +82,12 @@
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
-          directive? (fn [item] (= "directive" (string/lower-case (first item))))
-          properties (->> (take-while directive? ast)
+          directive?
+          (fn [[item _]] (= "directive" (string/lower-case (first item))))
+          grouped-ast (group-by directive? original-ast)
+          [directive-ast other-ast]
+          [(get grouped-ast true) (get grouped-ast false)]
+          properties (->> (map first directive-ast)
                           (map (fn [[_ k v]]
                                  (let [k (keyword (string/lower-case k))
                                        comma? (contains? #{:tags :alias :roam_tags} k)
@@ -134,8 +138,7 @@
                          (update :roam_alias ->vec)
                          (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
-          other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
+          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))
