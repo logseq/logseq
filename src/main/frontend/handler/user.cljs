@@ -55,6 +55,7 @@
 (defn set-preferred-workflow!
   [workflow]
   (when workflow
+    (config-handler/set-config! :preferred-workflow workflow)
     (state/set-preferred-workflow! workflow)
     (when (:name (:me @state/state))
       (util/post (str config/api "set_preferred_workflow")
