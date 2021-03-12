@@ -235,9 +235,8 @@
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         repo (or repo current-repo)
-        encoded-page-name (or (get-page-name state)
-                              (state/get-current-page))
-        path-page-name (util/url-decode encoded-page-name)
+        path-page-name (or (get-page-name state)
+                           (state/get-current-page))
         page-name (string/lower-case path-page-name)
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
