@@ -237,13 +237,11 @@
           [:div.max-w-lg.rounded-md
            [:select.form-select.is-small
             {:on-change (fn [e]
-                          (let [workflow (-> (util/evalue e)
-                                             (string/lower-case)
-                                             keyword)
-                                workflow (if (= workflow :now/later)
-                                           :now
-                                           :todo)]
-                            (user-handler/set-preferred-workflow! workflow)))}
+                          (-> (util/evalue e)
+                              string/lower-case
+                              keyword
+                              (#(if (= % :now/later) :now :todo))
+                              user-handler/set-preferred-workflow!))}
             (for [workflow [:now :todo]]
               [:option (cond->
                         {:key (name workflow)}
