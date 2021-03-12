@@ -22,7 +22,7 @@
    :release {:asset-path "https://asset.logseq.com/static/js"}
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es-next
-                      ;; :source-map true
+                      :source-map true
                       :externs ["datascript/externs.js"
                                 "externs.js"]
                       :warnings {:fn-deprecated false}}
