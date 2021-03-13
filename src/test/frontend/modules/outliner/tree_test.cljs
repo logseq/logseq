@@ -7,8 +7,7 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.core]
             [frontend.fixtures :as fixtures]
-            [nano-id.core :as nano]
-            [cljs-run-test]))
+            [nano-id.core :as nano]))
 
 (use-fixtures :each
   fixtures/react-impl
@@ -389,5 +388,3 @@
                        [15]]]
                   [16 [[17]]]]]]
             @result)))))
-
-
