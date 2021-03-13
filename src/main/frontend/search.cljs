@@ -215,17 +215,17 @@
   (when (seq datoms)
     (when-let [repo (state/get-current-repo)]
       (let [datoms (group-by :a datoms)
-            pages (:page/name datoms)
+            pages (:block/name datoms)
             blocks (:block/content datoms)]
         (when (seq pages)
-          (let [pages-result (db/pull-many '[:db/id :page/name :page/original-name] (set (map :e pages)))
+          (let [pages-result (db/pull-many '[:db/id :block/name :block/original-name] (set (map :e pages)))
                 pages-to-add-set (->> (filter :added pages)
                                       (map :e)
                                       (set))
                 pages-to-add (->> (filter (fn [page]
                                             (contains? pages-to-add-set (:db/id page))) pages-result)
-                                  (map (fn [p] {:name (or (:page/original-name p)
-                                                          (:page/name p))})))
+                                  (map (fn [p] {:name (or (:block/original-name p)
+                                                          (:block/name p))})))
                 pages-to-remove-set (->> (remove :added pages)
                                          (map :v))]
             (swap! search-db/indices update-in [repo :pages]

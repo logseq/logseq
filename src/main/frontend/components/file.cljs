@@ -82,7 +82,7 @@
                                   :href (rfe/href :page {:name page})
                                   :on-click (fn [e]
                                               (when (gobj/get e "shiftKey")
-                                                (when-let [page (db/entity [:page/name (string/lower-case page)])]
+                                                (when-let [page (db/entity [:block/name (string/lower-case page)])]
                                                   (state/sidebar-add-block!
                                                    (state/get-current-repo)
                                                    (:db/id page)

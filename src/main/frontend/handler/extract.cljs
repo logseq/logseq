@@ -45,10 +45,10 @@
                                     (assoc :block/content (db/get-block-content utf8-content block)
                                            :block/file [:file/path file]
                                            :block/format format
-                                           :block/page [:page/name (string/lower-case page)]
+                                           :block/page [:block/name (string/lower-case page)]
                                            :block/ref-pages (mapv
                                                              (fn [page]
-                                                               (block/page-with-journal page))
+                                                               (block/page-name->map page))
                                                              block-ref-pages)
                                            :block/path-ref-pages block-path-ref-pages))))
                             blocks)))
@@ -66,18 +66,18 @@
                                       (extract-page-list list-content))]
                       (cond->
                         (util/remove-nils
-                         {:page/name (string/lower-case page)
-                          :page/original-name page
-                          :page/file [:file/path file]
-                          :page/journal? journal?
-                          :page/journal-day (if journal?
+                         {:block/name (string/lower-case page)
+                          :block/original-name page
+                          :block/file [:file/path file]
+                          :block/journal? journal?
+                          :block/journal-day (if journal?
                                               (date/journal-title->int page)
                                               0)})
                         (seq properties)
-                        (assoc :page/properties properties)
+                        (assoc :block/properties properties)
 
                         aliases
-                        (assoc :page/alias
+                        (assoc :block/alias
                                (map
                                  (fn [alias]
                                    (let [page-name (string/lower-case alias)
@@ -88,20 +88,20 @@
                                          aliases (if (seq aliases)
                                                    (map
                                                      (fn [alias]
-                                                       {:page/name alias})
+                                                       {:block/name alias})
                                                      aliases))]
                                      (if (seq aliases)
-                                       {:page/name page-name
-                                        :page/alias aliases}
-                                       {:page/name page-name})))
+                                       {:block/name page-name
+                                        :block/alias aliases}
+                                       {:block/name page-name})))
                                  aliases))
 
                         (:tags properties)
-                        (assoc :page/tags (let [tags (->> (:tags properties)
+                        (assoc :block/tags (let [tags (->> (:tags properties)
                                                           (remove string/blank?))]
                                             (swap! ref-tags set/union (set tags))
-                                            (map (fn [tag] {:page/name (string/lower-case tag)
-                                                            :page/original-name tag})
+                                            (map (fn [tag] {:block/name (string/lower-case tag)
+                                                            :block/original-name tag})
                                               tags))))))
                   (->> (map first pages)
                        (remove string/blank?))))
@@ -109,13 +109,13 @@
                  pages
                  (map
                   (fn [page]
-                    {:page/original-name page
-                     :page/name (string/lower-case page)})
+                    {:block/original-name page
+                     :block/name (string/lower-case page)})
                   @ref-tags)
                  (map
                   (fn [page]
-                    {:page/original-name page
-                     :page/name (string/lower-case page)})
+                    {:block/original-name page
+                     :block/name (string/lower-case page)})
                   @ref-pages))
           block-ids (mapv (fn [block]
                             {:block/uuid (:block/uuid block)})
@@ -162,7 +162,7 @@
         (let [[pages block-ids blocks] (apply map concat result)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               ;; To prevent "unique constraint" on datascript
-              pages-index (map #(select-keys % [:page/name]) pages)
+              pages-index (map #(select-keys % [:block/name]) pages)
               blocks (map (fn [b]
                             (-> b
                                 (update :block/ref-blocks #(set/intersection (set %) block-ids-set))

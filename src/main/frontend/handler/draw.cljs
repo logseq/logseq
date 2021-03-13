@@ -34,9 +34,9 @@
           (fs/write-file! repo repo-dir path data nil)
           (db/transact! repo
                         [{:file/path path
-                          :page/name file
-                          :page/file [:file/path path]
-                          :page/journal? false}]))
+                          :block/name file
+                          :block/file [:file/path path]
+                          :block/journal? false}]))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))

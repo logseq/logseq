@@ -178,8 +178,8 @@
       (do
         (when-let [page-id (db/get-file-page-id path)]
           (db/transact! repo
-            [[:db/retract page-id :page/alias]
-             [:db/retract page-id :page/tags]]))
+            [[:db/retract page-id :block/alias]
+             [:db/retract page-id :block/tags]]))
         (reset-file! repo path content))
       (db/set-file-content! repo path content))
     (util/p-handle (write-file!)

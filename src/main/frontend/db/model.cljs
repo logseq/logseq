@@ -78,10 +78,10 @@
     (d/q '[:find ?original-name ?name
            :in $ ?tag
            :where
-           [?e :page/name ?tag]
-           [?page :page/tags ?e]
-           [?page :page/original-name ?original-name]
-           [?page :page/name ?name]]
+           [?e :block/name ?tag]
+           [?page :block/tags ?e]
+           [?page :block/original-name ?original-name]
+           [?page :block/name ?name]]
          (conn/get-conn repo)
          (string/lower-case tag-name))))
 
@@ -89,9 +89,9 @@
   [repo]
   (d/q '[:find ?page-name ?tag
          :where
-         [?page :page/tags ?e]
-         [?e :page/name ?tag]
-         [?page :page/name ?page-name]]
+         [?page :block/tags ?e]
+         [?e :block/name ?tag]
+         [?page :block/name ?page-name]]
        (conn/get-conn repo)))
 
 (defn get-pages
@@ -99,8 +99,8 @@
   (->> (d/q
         '[:find ?page-original-name
           :where
-          [?page :page/name ?page-name]
-          [(get-else $ ?page :page/original-name ?page-name) ?page-original-name]]
+          [?page :block/name ?page-name]
+          [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
         (conn/get-conn repo))
        (map first)))
 
@@ -109,7 +109,7 @@
   (-> (d/q
        '[:find ?page-name
          :where
-         [?page :page/original-name ?page-name]]
+         [?page :block/original-name ?page-name]]
        (conn/get-conn repo))
       (db-utils/seq-flatten)))
 
@@ -119,8 +119,8 @@
     (some->> (d/q '[:find ?alias
                     :in $ ?page-name
                     :where
-                    [?page :page/name ?page-name]
-                    [?page :page/alias ?alias]]
+                    [?page :block/name ?page-name]
+                    [?page :block/alias ?alias]]
                   conn
                   page-name)
              db-utils/seq-flatten
@@ -133,14 +133,14 @@
                  (d/q '[:find (pull ?p [*])
                         :in $ ?alias
                         :where
-                        [?a :page/name ?alias]
-                        [?p :page/alias ?a]]
+                        [?a :block/name ?alias]
+                        [?p :block/alias ?a]]
                       conn
                       alias)
                  (db-utils/seq-flatten))]
       (when (seq pages)
         (some (fn [page]
-                (let [aliases (->> (get-in page [:page/properties :alias])
+                (let [aliases (->> (get-in page [:block/properties :alias])
                                    (map string/lower-case)
                                    set)]
                   (when (contains? aliases alias)
@@ -222,7 +222,7 @@
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?page :page/file ?file]]
+             [?page :block/file ?file]]
            (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
@@ -305,28 +305,28 @@
 
 (defn get-page-format
   [page-name]
-  (when-let [file (:page/file (db-utils/entity [:page/name page-name]))]
+  (when-let [file (:block/file (db-utils/entity [:block/name page-name]))]
     (when-let [path (:file/path (db-utils/entity (:db/id file)))]
       (format/get-format path))))
 
 (defn page-alias-set
   [repo-url page]
-  (when-let [page-id (:db/id (db-utils/entity repo-url [:page/name page]))]
+  (when-let [page-id (:db/id (db-utils/entity repo-url [:block/name page]))]
     (->>
      (d/q '[:find ?e
             :in $ ?page-name %
             :where
-            [?page :page/name ?page-name]
+            [?page :block/name ?page-name]
             (alias ?page ?e)]
           (conn/get-conn repo-url)
           page
           '[[(alias ?e2 ?e1)
-             [?e2 :page/alias ?e1]]
+             [?e2 :block/alias ?e1]]
             [(alias ?e2 ?e1)
-             [?e1 :page/alias ?e2]]
+             [?e1 :block/alias ?e2]]
             [(alias ?e3 ?e1)
-             [?e1 :page/alias ?e2]
-             [?e2 :page/alias ?e3]]])
+             [?e1 :block/alias ?e2]
+             [?e2 :block/alias ?e3]]])
      db-utils/seq-flatten
      (set)
      (set/union #{page-id}))))
@@ -336,8 +336,8 @@
    (get-page-names-by-ids (state/get-current-repo) ids))
   ([repo ids]
    (when repo
-     (->> (db-utils/pull-many repo '[:page/name] ids)
-          (map :page/name)))))
+     (->> (db-utils/pull-many repo '[:block/name] ids)
+          (map :block/name)))))
 
 (defn get-page-ids-by-names
   ([names]
@@ -345,7 +345,7 @@
   ([repo names]
    (when repo
      (let [lookup-refs (map (fn [name]
-                              [:page/name (string/lower-case name)]) names)]
+                              [:block/name (string/lower-case name)]) names)]
        (->> (db-utils/pull-many repo '[:db/id] lookup-refs)
             (mapv :db/id))))))
 
@@ -386,7 +386,7 @@
 (defn sort-blocks
   [blocks]
   (let [pages-ids (map (comp :db/id :block/page) blocks)
-        pages (db-utils/pull-many '[:db/id :page/name :page/original-name :page/journal-day] pages-ids)
+        pages (db-utils/pull-many '[:db/id :block/name :block/original-name :block/journal-day] pages-ids)
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]
@@ -417,8 +417,8 @@
 
 (defn get-page-properties
   [page]
-  (when-let [page (db-utils/entity [:page/name page])]
-    (:page/properties page)))
+  (when-let [page (db-utils/entity [:block/name page])]
+    (:block/properties page)))
 
 (defn add-properties!
   [page-format properties-content properties]
@@ -469,8 +469,8 @@
                    :or {use-cache? true
                         pull-keys '[*]}}]
    (let [page (string/lower-case page)
-         page-id (or (:db/id (db-utils/entity repo-url [:page/name page]))
-                     (:db/id (db-utils/entity repo-url [:page/original-name page])))
+         page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
+                     (:db/id (db-utils/entity repo-url [:block/original-name page])))
          db (conn/get-conn repo-url)]
      (when page-id
        (some->
@@ -492,8 +492,8 @@
   ([repo-url page {:keys [pull-keys]
                    :or {pull-keys '[*]}}]
    (let [page (string/lower-case page)
-         page-id (or (:db/id (db-utils/entity repo-url [:page/name page]))
-                     (:db/id (db-utils/entity repo-url [:page/original-name page])))
+         page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
+                     (:db/id (db-utils/entity repo-url [:block/original-name page])))
          db (conn/get-conn repo-url)]
      (when page-id
        (let [datoms (d/datoms db :avet :block/page page-id)
@@ -533,7 +533,7 @@
 (defn get-block-page-end-pos
   [repo page-name]
   (or
-   (when-let [page-id (:db/id (db-utils/entity repo [:page/name (string/lower-case page-name)]))]
+   (when-let [page-id (:db/id (db-utils/entity repo [:block/name (string/lower-case page-name)]))]
      (when-let [db (conn/get-conn repo)]
        (let [block-eids (->> (d/datoms db :avet :block/page page-id)
                              (mapv :e))]
@@ -690,29 +690,29 @@
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?page :page/file ?file]
-             [?page :page/original-name ?page-name]]
+             [?page :block/file ?file]
+             [?page :block/original-name ?page-name]]
            '[:find ?page-name
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?page :page/file ?file]
-             [?page :page/name ?page-name]])
+             [?page :block/file ?file]
+             [?page :block/name ?page-name]])
          conn file-path)
         db-utils/seq-flatten
         first)))))
 
 (defn get-page-file
   [page-name]
-  (some-> (db-utils/entity [:page/name page-name])
-          :page/file))
+  (some-> (db-utils/entity [:block/name page-name])
+          :block/file))
 
 (defn get-block-file
   [block-id]
   (let [page-id (some-> (db-utils/entity [:block/uuid block-id])
                         :block/page
                         :db/id)]
-    (:page/file (db-utils/entity page-id))))
+    (:block/file (db-utils/entity page-id))))
 
 (defn get-file-page-id
   [file-path]
@@ -724,7 +724,7 @@
           :in $ ?path
           :where
           [?file :file/path ?path]
-          [?page :page/file ?file]]
+          [?page :block/file ?file]]
         conn file-path)
        db-utils/seq-flatten
        first))))
@@ -733,7 +733,7 @@
   [page-name]
   (if (util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
-    (db-utils/entity [:page/name page-name])))
+    (db-utils/entity [:block/name page-name])))
 
 (defn- heading-block?
   [block]
@@ -765,9 +765,9 @@
 (defn get-page-original-name
   [page-name]
   (when page-name
-    (let [page (db-utils/pull [:page/name (string/lower-case page-name)])]
-      (or (:page/original-name page)
-          (:page/name page)))))
+    (let [page (db-utils/pull [:block/name (string/lower-case page-name)])]
+      (or (:block/original-name page)
+          (:block/name page)))))
 
 (defn get-block-content
   [utf8-content block]
@@ -785,8 +785,8 @@
     (d/q '[:find (count ?page) .
            :in $ ?today
            :where
-           [?page :page/journal? true]
-           [?page :page/journal-day ?journal-day]
+           [?page :block/journal? true]
+           [?page :block/journal-day ?journal-day]
            [(<= ?journal-day ?today)]]
          (conn/get-conn (state/get-current-repo))
          today)))
@@ -804,9 +804,9 @@
                            '[:find ?page-name ?journal-day
                              :in $ ?today
                              :where
-                             [?page :page/name ?page-name]
-                             [?page :page/journal? true]
-                             [?page :page/journal-day ?journal-day]
+                             [?page :block/name ?page-name]
+                             [?page :block/journal? true]
+                             [?page :block/journal-day ?journal-day]
                              [(<= ?journal-day ?today)]]
                            today)
                   (react)
@@ -825,7 +825,7 @@
   [repo page]
   (when (conn/get-conn repo)
     (let [pages (page-alias-set repo page)
-          page-id (:db/id (db-utils/entity [:page/name page]))
+          page-id (:db/id (db-utils/entity [:block/name page]))
           ref-pages (->> (react/q repo [:page/ref-pages page-id] {:use-cache? false}
                                   '[:find ?ref-page-name
                                     :in $ ?pages
@@ -833,7 +833,7 @@
                                     [?block :block/page ?p]
                                     [(contains? ?pages ?p)]
                                     [?block :block/ref-pages ?ref-page]
-                                    [?ref-page :page/name ?ref-page-name]]
+                                    [?ref-page :block/name ?ref-page-name]]
                                   pages)
                          react
                          db-utils/seq-flatten)]
@@ -847,11 +847,11 @@
        '[:find [?ref-page ...]
          :in $ % ?page
          :where
-         [?p :page/name ?page]
+         [?p :block/name ?page]
          [?b :block/path-ref-pages ?p]
          [?b :block/ref-pages ?other-p]
          [(not= ?p ?other-p)]
-         [?other-p :page/name ?ref-page]]
+         [?other-p :block/name ?ref-page]]
        conn
        rules
        page)
@@ -865,15 +865,15 @@
      (d/q
       '[:find ?page
         :where
-        [?p :page/name ?page]
-        (not [?p :page/file])]
+        [?p :block/name ?page]
+        (not [?p :block/file])]
       conn)
      (db-utils/seq-flatten)
      (distinct))))
 
 (defn page-empty?
   [repo page]
-  (nil? (:page/file (db-utils/entity repo [:page/name (string/lower-case page)]))))
+  (nil? (:block/file (db-utils/entity repo [:block/name (string/lower-case page)]))))
 
 (defn get-pages-relation
   [repo with-journal?]
@@ -881,17 +881,17 @@
     (let [q (if with-journal?
               '[:find ?page ?ref-page-name
                 :where
-                [?p :page/name ?page]
+                [?p :block/name ?page]
                 [?block :block/page ?p]
                 [?block :block/ref-pages ?ref-page]
-                [?ref-page :page/name ?ref-page-name]]
+                [?ref-page :block/name ?ref-page-name]]
               '[:find ?page ?ref-page-name
                 :where
-                [?p :page/journal? false]
-                [?p :page/name ?page]
+                [?p :block/journal? false]
+                [?p :block/name ?page]
                 [?block :block/page ?p]
                 [?block :block/ref-pages ?ref-page]
-                [?ref-page :page/name ?ref-page-name]])]
+                [?ref-page :block/name ?ref-page-name]])]
       (->>
        (d/q q conn)
        (map (fn [[page ref-page-name]]
@@ -901,7 +901,7 @@
 (defn get-pages-that-mentioned-page
   [repo page]
   (when (conn/get-conn repo)
-    (let [page-id (:db/id (db-utils/entity [:page/name page]))
+    (let [page-id (:db/id (db-utils/entity [:block/name page]))
           pages (page-alias-set repo page)
           mentioned-pages (->> (react/q repo [:page/mentioned-pages page-id] {:use-cache? false}
                                         '[:find ?mentioned-page-name
@@ -910,7 +910,7 @@
                                           [?block :block/ref-pages ?p]
                                           [(contains? ?pages ?p)]
                                           [?block :block/page ?mentioned-page]
-                                          [?mentioned-page :page/name ?mentioned-page-name]]
+                                          [?mentioned-page :block/name ?mentioned-page-name]]
                                         pages
                                         page)
                                react
@@ -953,7 +953,7 @@
   ([repo page]
    (when repo
      (when (conn/get-conn repo)
-       (let [page-id (:db/id (db-utils/entity [:page/name page]))
+       (let [page-id (:db/id (db-utils/entity [:block/name page]))
              pages (page-alias-set repo page)
              aliases (set/difference pages #{page-id})
              query-result (if (seq aliases)
@@ -989,7 +989,7 @@
                          db-utils/group-by-page
                          (map (fn [[k blocks]]
                                 (let [k (if (contains? aliases (:db/id k))
-                                          (assoc k :page/alias? true)
+                                          (assoc k :block/alias? true)
                                           k)]
                                   [k blocks]))))]
          result)))))
@@ -1022,7 +1022,7 @@
               :where
               [?block :block/ref-pages ?page-id]
               [?block :block/page ?p]
-              [?p :page/file ?f]
+              [?p :block/file ?f]
               [?f :file/path ?path]]
             db
             page-id)
@@ -1032,7 +1032,7 @@
   [page]
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (conn/get-conn repo)]
-      (let [page-id (:db/id (db-utils/entity [:page/name page]))
+      (let [page-id (:db/id (db-utils/entity [:block/name page]))
             pages (page-alias-set repo page)
             pattern (re-pattern (str "(?i)" page))]
         (->> (d/q
@@ -1091,7 +1091,7 @@
                                  :block/content
                                  :block/properties
                                  :block/format
-                                 {:block/page [:page/name]}])))))
+                                 {:block/page [:block/name]}])))))
 
 ;; TODO: Does the result preserves the order of the arguments?
 (defn get-blocks-contents
@@ -1102,7 +1102,7 @@
 
 (defn journal-page?
   [page-name]
-  (:page/journal? (db-utils/entity [:page/name page-name])))
+  (:block/journal? (db-utils/entity [:block/name page-name])))
 
 (defn mark-repo-as-cloned!
   [repo-url]
@@ -1145,7 +1145,7 @@
   (-> (d/q
        '[:find ?p
          :where
-         [?p :page/properties ?d]
+         [?p :block/properties ?d]
          [(get ?d :public) ?pub]
          [(= "true" ?pub)]]
        db)
@@ -1259,18 +1259,18 @@
   (let [pages (->> (mapv get-file-page files)
                    (remove nil?))]
     (when (seq pages)
-      (mapv (fn [page] [:db.fn/retractEntity [:page/name page]]) (map string/lower-case pages)))))
+      (mapv (fn [page] [:db.fn/retractEntity [:block/name page]]) (map string/lower-case pages)))))
 
 (defn remove-all-aliases!
   [repo]
   (let [page-ids (->>
                   (d/q '[:find ?e
                          :where
-                         [?e :page/alias]]
+                         [?e :block/alias]]
                        (conn/get-conn repo))
                   (apply concat)
                   (distinct))
-        tx-data (map (fn [page-id] [:db/retract page-id :page/alias]) page-ids)]
+        tx-data (map (fn [page-id] [:db/retract page-id :block/alias]) page-ids)]
     (when (seq tx-data)
       (db-utils/transact! repo tx-data))))
 

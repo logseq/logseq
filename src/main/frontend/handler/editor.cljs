@@ -215,7 +215,7 @@
   [repo block]
   (if (:block/dummy? block)
     (if-let [page-id (:db/id (:block/page block))]
-      (let [page-name (:page/name (db/entity repo page-id))
+      (let [page-name (:block/name (db/entity repo page-id))
             end-pos (db/get-block-page-end-pos repo page-name)]
         (assoc block :block/meta {:start-pos end-pos
                                   :end-pos end-pos}))
@@ -309,7 +309,7 @@
 (defn compute-retract-refs
   "Computes old references to be retracted."
   [eid {:block/keys [ref-pages ref-blocks]} old-ref-pages old-ref-blocks]
-  (let [ref-pages-id    (map #(:db/id (db/get-page (:page/name %))) ref-pages)
+  (let [ref-pages-id    (map #(:db/id (db/get-page (:block/name %))) ref-pages)
         retracted-pages (reduce (fn [done current]
                                   (if (some #(= (:db/id current) %) ref-pages-id)
                                     done
@@ -434,7 +434,7 @@
 (defn- create-file-if-not-exists!
   [repo format page value]
   (let [format (name format)
-        title (string/capitalize (:page/name page))
+        title (string/capitalize (:block/name page))
         journal-page? (date/valid-journal-title? title)
         path (str
               (if journal-page?
@@ -443,7 +443,7 @@
               "/"
               (if journal-page?
                 (date/journal-title->default title)
-                (-> (:page/name page)
+                (-> (:block/name page)
                     (util/page-name-sanity))) "."
               (if (= format "markdown") "md" format))
         file-path (str "/" path)
@@ -459,15 +459,15 @@
         ;; create the file
         (let [value (re-build-block-value nil format value)
               content (str (util/default-content-with-title format
-                             (or (:page/original-name page)
-                                 (:page/name page)))
+                             (or (:block/original-name page)
+                                 (:block/name page)))
                            value)]
           (p/let [_ (fs/create-if-not-exists repo dir file-path content)]
             (file-handler/reset-file! repo path content)
             (ui-handler/re-render-root!)
 
             ;; Continue to edit the last block
-            (let [blocks (db/get-page-blocks repo (:page/name page))
+            (let [blocks (db/get-page-blocks repo (:block/name page))
                   last-block (last blocks)]
               (edit-last-block-for-new-page! last-block :max)
               (state/set-editor-op! nil))))))))
@@ -507,38 +507,38 @@
         page-id (:db/id page)
         page-properties (when pre-block?
                           (if (seq new-properties)
-                            [[:db/retract page-id :page/properties]
+                            [[:db/retract page-id :block/properties]
                              {:db/id page-id
-                              :page/properties new-properties}]
-                            [[:db/retract page-id :page/properties]]))
+                              :block/properties new-properties}]
+                            [[:db/retract page-id :block/properties]]))
         page-tags (when-let [tags (:tags new-properties)]
-                    (mapv (fn [tag] {:page/name (string/lower-case tag)
-                                     :page/original-name tag}) tags))
+                    (mapv (fn [tag] {:block/name (string/lower-case tag)
+                                     :block/original-name tag}) tags))
         page-alias (when-let [alias (:alias new-properties)]
                      (map
                       (fn [alias]
-                        {:page/original-name alias
-                         :page/name (string/lower-case alias)})
-                      (remove #{(:page/name page)} alias)))
+                        {:block/original-name alias
+                         :block/name (string/lower-case alias)})
+                      (remove #{(:block/name page)} alias)))
         pages (if (seq page-tags)
                 (concat pages page-tags)
                 pages)
         pages (remove
                (fn [page]
-                 (string/blank? (:page/name page)))
+                 (string/blank? (:block/name page)))
                pages)
         page-tags (when (and pre-block? (seq page-tags))
                     (if (seq page-tags)
-                      [[:db/retract page-id :page/tags]
+                      [[:db/retract page-id :block/tags]
                        {:db/id page-id
-                        :page/tags page-tags}]
-                      [[:db/retract page-id :page/tags]]))
+                        :block/tags page-tags}]
+                      [[:db/retract page-id :block/tags]]))
         page-alias (when (and pre-block? (seq page-alias))
                      (if (seq page-alias)
-                       [[:db/retract page-id :page/alias]
+                       [[:db/retract page-id :block/alias]
                         {:db/id page-id
-                         :page/alias page-alias}]
-                       [[:db/retract page-id :page/alias]]))]
+                         :block/alias page-alias}]
+                       [[:db/retract page-id :block/alias]]))]
     (profile
      "Save block: "
      (repo-handler/transact-react-and-alter-file!
@@ -591,7 +591,7 @@
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
          [old-properties new-properties] (when pre-block?
-                                           [(:page/properties (db/entity (:db/id page)))
+                                           [(:block/properties (db/entity (:db/id page)))
                                             (mldoc/parse-properties value format)])
          properties (compute-new-properties block new-properties value
                                             {:init-properties init-properties
@@ -1089,7 +1089,7 @@
          [[file-path new-content]])
         (when top-block?
           (route-handler/redirect! {:to :page
-                                    :path-params {:name (:page/name page)}})
+                                    :path-params {:name (:block/name page)}})
           (ui-handler/re-render-root!))
         (repo-handler/push-if-auto-enabled! repo)))))
 
@@ -1303,7 +1303,7 @@
           (let [page-id (-> (db/entity [:block/uuid block-id])
                             :block/page
                             :db/id)]
-            (when-let [page-name (:page/name (db/entity repo page-id))]
+            (when-let [page-name (:block/name (db/entity repo page-id))]
               (route-handler/redirect! {:to :page
                                         :path-params {:name page-name}})))))
       (js/window.history.back))))
@@ -1720,7 +1720,7 @@
   (let [block (state/get-edit-block)
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
-                            (:page/name (db/entity page-id))))]
+                            (:block/name (db/entity page-id))))]
     (let [pages (search/page-search q 20)]
       (if editing-page
         ;; To prevent self references

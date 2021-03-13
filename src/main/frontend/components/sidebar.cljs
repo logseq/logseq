@@ -139,7 +139,7 @@
   []
   (when-let [default-home (state/get-default-home)]
     (when-let [page (:page default-home)]
-      (when (db/entity [:page/name (string/lower-case page)])
+      (when (db/entity [:block/name (string/lower-case page)])
         default-home))))
 
 (defonce sidebar-inited? (atom false))

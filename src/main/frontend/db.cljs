@@ -124,7 +124,7 @@
                  (let [data (:tx-data tx-report)
                        datoms (filter
                                (fn [datom]
-                                 (contains? #{:page/name :block/content} (:a datom)))
+                                 (contains? #{:block/name :block/content} (:a datom)))
                                data)]
                    (when-let [f @*sync-search-indice-f]
                      (f datoms)))))))
@@ -183,3 +183,7 @@
         (f))
       (recur))
     chan))
+
+(defn new-block-id
+  []
+  (d/squuid))

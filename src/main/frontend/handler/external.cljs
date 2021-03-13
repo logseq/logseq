@@ -44,9 +44,9 @@
                              (map
                               (fn [title]
                                 (let [page-name (string/lower-case title)]
-                                  {:page/name page-name
-                                   :page/journal? true
-                                   :page/journal-day (date/journal-title->int title)}))
+                                  {:block/name page-name
+                                   :block/journal? true
+                                   :block/journal-day (date/journal-title->int title)}))
                               titles))]
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))

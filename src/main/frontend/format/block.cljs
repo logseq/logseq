@@ -219,13 +219,6 @@
                               (assoc :repeated? true))))))]
     (apply merge m)))
 
-(defn block-tags->pages
-  [{:keys [tags] :as block}]
-  (if (seq tags)
-    (assoc block :tags (map (fn [tag]
-                              [:page/name (string/lower-case tag)]) tags))
-    block))
-
 (defn with-page-refs
   [{:keys [title body tags ref-pages] :as block}]
   (let [ref-pages (->> (concat tags ref-pages)
@@ -322,10 +315,17 @@
                                 (map string/lower-case)
                                 (distinct)
                                 (map (fn [p]
-                                       {:page/name p})))]
+                                       {:block/name p})))]
         (recur (rest blocks)
                (conj acc (assoc block :block/path-ref-pages path-ref-pages))
                parents)))))
+
+(defn block-tags->pages
+  [{:keys [tags] :as block}]
+  (if (seq tags)
+    (assoc block :tags (map (fn [tag]
+                              [:block/name (string/lower-case tag)]) tags))
+    block))
 
 (defn extract-blocks
   [blocks last-pos encoded-content]
@@ -359,7 +359,7 @@
                                (let [custom-id (string/trim custom-id)]
                                  (when (util/uuid-string? custom-id)
                                    (uuid custom-id))))
-                             (d/squuid))
+                             (db/new-block-id))
                       ref-pages-in-properties (:page-refs properties)
                       block (second block)
                       level (:level block)
@@ -409,12 +409,10 @@
                           (> first-block-start-pos 1)))
                    (cons
                     (merge
-                     (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                           uuid (d/squuid)]
+                     (let [content (utf8/substring encoded-content 0 first-block-start-pos)]
                        (->
-                        {:uuid uuid
+                        {:uuid (db/new-block-id)
                          :content content
-                         :anchor (str uuid)
                          :level 2
                          :meta {:start-pos 0
                                 :end-pos (or first-block-start-pos
@@ -427,17 +425,22 @@
                    blocks)]
       (with-path-refs blocks))))
 
-(defn- page-with-journal
+(defn- page-name->map
   [original-page-name]
   (when original-page-name
-    (let [page-name (string/lower-case original-page-name)]
+    (let [page-name (string/lower-case original-page-name)
+          id-m (if-let [block (db/entity [:block/name page-name])]
+                 {}
+                 {:block/uuid (db/new-block-id)})
+          m (merge
+             {:block/name page-name
+              :block/original-name original-page-name}
+             id-m)]
       (if-let [d (date/journal-title->int page-name)]
-        {:page/name page-name
-         :page/original-name original-page-name
-         :page/journal? true
-         :page/journal-day d}
-        {:page/name page-name
-         :page/original-name original-page-name}))))
+        (merge m
+         {:block/journal? true
+          :block/journal-day d})
+        m))))
 
 (defn parse-block
   ([block format]
@@ -459,7 +462,7 @@
                       (let [path-ref-pages (->> ref-pages
                                                 (remove string/blank?)
                                                 (map string/lower-case)
-                                                (map (fn [p] [:page/name p]))
+                                                (map (fn [p] [:block/name p]))
                                                 (concat parent-ref-pages))
                             block (merge
                                    block
@@ -480,7 +483,7 @@
                                      {:block/ref-pages
                                       (mapv
                                        (fn [page]
-                                         (let [page (page-with-journal page)]
+                                         (let [page (page-name->map page)]
                                            (swap! ref-pages-atom conj page)
                                            page))
                                        ref-pages)}))]

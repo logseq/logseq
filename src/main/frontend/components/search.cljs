@@ -173,7 +173,7 @@
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              page (:page/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                              page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
                           (route/redirect! {:to :page
                                             :path-params {:name page}
                                             :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))
@@ -181,7 +181,7 @@
          :on-shift-chosen (fn [{:keys [type data]}]
                             (case type
                               :page
-                              (let [page (db/entity [:page/name (string/lower-case data)])]
+                              (let [page (db/entity [:block/name (string/lower-case data)])]
                                 (state/sidebar-add-block!
                                  (state/get-current-repo)
                                  (:db/id page)
@@ -222,8 +222,8 @@
 
                           :block
                           (let [{:block/keys [page content indexes]} data
-                                page (or (:page/original-name page)
-                                         (:page/name page))]
+                                page (or (:block/original-name page)
+                                         (:block/name page))]
                             [:div.flex-1
                              [:div.text-sm.font-medium (str "-> " page)]
                              (highlight-exact-query content search-q)])

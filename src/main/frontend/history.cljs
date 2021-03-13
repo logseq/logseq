@@ -76,7 +76,7 @@
       (doseq [path paths]
         (when-let [page (db/get-file-page path false)]
           (when (not= page current-page)
-            (let [db-id (:db/id (db/entity [:page/name page]))]
+            (let [db-id (:db/id (db/entity [:block/name page]))]
               (state/sidebar-add-block! repo db-id :page {:page page}))))))))
 
 ;; TODO: history should ignore rename transactions

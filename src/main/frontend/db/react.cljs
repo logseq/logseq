@@ -175,7 +175,7 @@
                (date/journal-name))]
     (when page
       (let [page-name (util/url-decode (string/lower-case page))]
-        (db-utils/entity [:page/name page-name])))))
+        (db-utils/entity [:block/name page-name])))))
 
 (defn get-current-priority
   []
@@ -240,7 +240,7 @@
                              (apply concat
                                     (for [{:block/keys [ref-pages]} blocks]
                                       (map (fn [page]
-                                             (when-let [page (db-utils/entity [:page/name (:page/name page)])]
+                                             (when-let [page (db-utils/entity [:block/name (:block/name page)])]
                                                [:page/refed-blocks (:db/id page)]))
                                            ref-pages)))
 

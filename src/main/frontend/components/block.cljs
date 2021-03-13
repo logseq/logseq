@@ -131,7 +131,7 @@
   (let [path (string/replace path "file:" "")
         block-id (:block/uuid config)
         current-file (and block-id
-                          (:file/path (:page/file (:block/page (db/entity [:block/uuid block-id])))))]
+                          (:file/path (:block/file (:block/page (db/entity [:block/uuid block-id])))))]
     (when current-file
       (let [parts (string/split current-file #"/")
             parts-2 (string/split path #"/")
@@ -327,20 +327,20 @@
 
 (defn page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
-  (when-let [page-name (:page/name page)]
+  (when-let [page-name (:block/name page)]
     (let [source-page (model/get-alias-source-page (state/get-current-repo)
                                                    (string/lower-case page-name))
-          original-page-name (get page :page/original-name page-name)
+          original-page-name (get page :block/original-name page-name)
           original-page-name (if (date/valid-journal-title? original-page-name)
                                (string/capitalize original-page-name)
                                original-page-name)
           page (string/lower-case page-name)
           redirect-page-name (cond
-                               (:page/alias? config)
+                               (:block/alias? config)
                                page
 
                                (db/page-empty? (state/get-current-repo) page-name)
-                               (or (when source-page (:page/name source-page))
+                               (or (when source-page (:block/name source-page))
                                    page)
 
                                :else
@@ -354,7 +354,7 @@
         :on-click (fn [e]
                     (util/stop e)
                     (if (gobj/get e "shiftKey")
-                      (when-let [page-entity (db/entity [:page/name redirect-page-name])]
+                      (when-let [page-entity (db/entity [:block/name redirect-page-name])]
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page-entity)
@@ -415,7 +415,7 @@
          [:span.text-gray-500.bracket "[["])
        (page-cp (assoc config
                        :label (mldoc/plain->text label)
-                       :contents-page? contents-page?) {:page/name s})
+                       :contents-page? contents-page?) {:block/name s})
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
@@ -449,7 +449,7 @@
      {:class (if (:sidebar? config) "in-sidebar")}
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
-      (page-cp config {:page/name page-name})]
+      (page-cp config {:block/name page-name})]
      (when (and
             (not= (string/lower-case (or current-page ""))
                   page-name)
@@ -470,7 +470,7 @@
 (defn- get-page
   [label]
   (when-let [label-text (get-label-text label)]
-    (db/entity [:page/name (string/lower-case label-text)])))
+    (db/entity [:block/name (string/lower-case label-text)])))
 
 (defn- macro->text
   [name arguments]
@@ -551,7 +551,7 @@
      (let [page-name (subs content 2 (- (count content) 2))]
        (page-cp (assoc config
                        :children children
-                       :nested-link? true) {:page/name page-name}))
+                       :nested-link? true) {:block/name page-name}))
      (when (and show-brackets?
                 (not html-export?)
                 (not (= (:id config) "contents")))
@@ -576,7 +576,7 @@
                :href (rfe/href :page {:name s})
                :on-click (fn [e]
                            (let [repo (state/get-current-repo)
-                                 page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
+                                 page (db/pull repo '[*] [:block/name (string/lower-case (util/url-decode s))])]
                              (when (gobj/get e "shiftKey")
                                (state/sidebar-add-block!
                                 repo
@@ -680,7 +680,7 @@
               (image-link config url href label metadata full_text)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
-                           {:page/name (db/get-file-page (string/replace href "file:" ""))}
+                           {:block/name (db/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
                 (if (and page
                          (when-let [ext (util/get-file-ext href)]
@@ -884,7 +884,7 @@
                                    (:block/page)
                                    (:db/id)
                                    (db/entity)
-                                   :page/properties
+                                   :block/properties
                                    :macros
                                    (get name))
                                (get (state/get-macros) name)
@@ -1120,7 +1120,7 @@
      {:class "block-tags"}
      (mapv (fn [tag]
              (when-let [page (db/entity (:db/id tag))]
-               (let [tag (:page/name page)]
+               (let [tag (:block/name page)]
                  [:a.tag.mx-1 {:data-ref tag
                                :key (str "tag-" (:db/id tag))
                                :href (rfe/href :page {:name tag})}
@@ -1232,11 +1232,11 @@
             (let [v (->> (remove string/blank? v)
                          (filter string?))
                   vals (for [v-item v]
-                         (page-cp config {:page/name v-item}))]
+                         (page-cp config {:block/name v-item}))]
               (interpose [:span ", "] vals))
             (let [page-name (string/lower-case (str v))]
-              (if (db/entity [:page/name page-name])
-                (page-cp config {:page/name page-name})
+              (if (db/entity [:block/name page-name])
+                (page-cp config {:block/name page-name})
                 (inline-text (:block/format block) (str v)))))])])))
 
 (rum/defcs timestamp-cp < rum/reactive
@@ -1431,7 +1431,7 @@
   ([config repo block-id format show-page?]
    (let [parents (db/get-block-parents repo block-id 3)
          page (db/get-block-page repo block-id)
-         page-name (:page/name page)]
+         page-name (:block/name page)]
      (when (or (seq parents)
                show-page?
                page-name)
@@ -1439,8 +1439,8 @@
              component [:div.block-parents.flex-row.flex-1
                         (when show-page?
                           [:a {:href (rfe/href :page {:name page-name})}
-                           (or (:page/original-name page)
-                               (:page/name page))])
+                           (or (:block/original-name page)
+                               (:block/name page))])
 
                         (when (and show-page? (seq parents))
                           [:span.mx-2.opacity-50 "➤"])
@@ -1782,7 +1782,7 @@
           only-blocks? (:block/uuid (first result))
           blocks-grouped-by-page? (and (seq result)
                                        (coll? (first result))
-                                       (:page/name (ffirst result))
+                                       (:block/name (ffirst result))
                                        (:block/uuid (first (second (first result))))
                                        true)
           built-in? (built-in-custom-query? title)]
@@ -1817,9 +1817,9 @@
 
             ;; page list
             (and (seq result)
-                 (:page/name (first result)))
+                 (:block/name (first result)))
             [:ul#query-pages.mt-1
-             (for [{:page/keys [name original-name] :as page-entity} result]
+             (for [{:block/keys [name original-name] :as page-entity} result]
                [:li.mt-1
                 [:a {:href (rfe/href :page {:name name})
                      :on-click (fn [e]
@@ -1880,8 +1880,8 @@
                 (let [vals (for [item v]
                              (if (coll? v)
                                (let [config (if (= k :alias)
-                                              (assoc config :page/alias? true))]
-                                 (page-cp config {:page/name item}))
+                                              (assoc config :block/alias? true))]
+                                 (page-cp config {:block/name item}))
                                (inline-text format item)))]
                   (interpose [:span ", "] vals))
                 (inline-text format v))])))]
@@ -1983,7 +1983,7 @@
 
       ["Custom" "warning" options result content]
       (admonition config "warning" options result)
-      
+
       ["Custom" "pinned" options result content]
       (admonition config "pinned" options result)
 
@@ -2108,9 +2108,9 @@
      (assoc :class "doc-mode"))
    (if (:group-by-page? config)
      [:div.flex.flex-col
-      (let [blocks (sort-by (comp :page/journal-day first) > blocks)]
+      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (let [alias? (:page/alias? page)
+          (let [alias? (:block/alias? page)
                 page (db/entity (:db/id page))]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)

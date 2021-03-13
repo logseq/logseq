@@ -135,7 +135,7 @@
            path (str config/default-journals-directory "/" file-name "."
                      (config/get-file-extension format))
            file-path (str "/" path)
-           page-exists? (db/entity repo-url [:page/name (string/lower-case title)])
+           page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
            empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
        (when (or empty-blocks?
                  (not page-exists?))

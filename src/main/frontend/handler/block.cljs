@@ -143,7 +143,7 @@
 (defn pre-block-with-only-title?
   [repo block-id]
   (when-let [block (db/entity repo [:block/uuid block-id])]
-    (let [properties (:page/properties (:block/page block))
+    (let [properties (:block/properties (:block/page block))
           property-names (keys properties)]
       (and (every? #(contains? #{:title :filters} %) property-names)
            (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
@@ -178,20 +178,18 @@
        (let [last-block (last blocks)
              end-pos (get-in last-block [:block/meta :end-pos] 0)
              dummy (merge last-block
-                          (let [uuid (d/squuid)]
-                            {:block/uuid uuid
-                             :block/title ""
-                             :block/content (config/default-empty-block format)
-                             :block/format format
-                             :block/level 2
-                             :block/priority nil
-                             :block/anchor (str uuid)
-                             :block/meta {:start-pos end-pos
-                                          :end-pos end-pos}
-                             :block/body nil
-                             :block/dummy? true
-                             :block/marker nil
-                             :block/pre-block? false})
+                          {:block/uuid (db/new-block-id)
+                           :block/title ""
+                           :block/content (config/default-empty-block format)
+                           :block/format format
+                           :block/level 2
+                           :block/priority nil
+                           :block/meta {:start-pos end-pos
+                                        :end-pos end-pos}
+                           :block/body nil
+                           :block/dummy? true
+                           :block/marker nil
+                           :block/pre-block? false}
                           default-option)]
          (conj blocks dummy))))))
 
@@ -203,8 +201,8 @@
                        (mapcat (fn [b] (concat (:block/ref-pages b) (:block/children-refs b))))
                        (distinct)
                        (map :db/id)
-                       (db/pull-many repo '[:db/id :page/name]))
-        ref-pages (zipmap (map :page/name ref-pages) (map :db/id ref-pages))
+                       (db/pull-many repo '[:db/id :block/name]))
+        ref-pages (zipmap (map :block/name ref-pages) (map :db/id ref-pages))
         exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
                          (remove nil?)
                          (set))

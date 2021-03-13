@@ -18,7 +18,7 @@ title: $today
 :END:
 ## Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ sharing and management.
 ## This is a 3 minute tutorial on how to use Logseq. Let's get started!
-## (Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the **top-right** corner of the screen to connect LogSeq to either Github or local directory.)
+## (Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the **top-right** corner of the screen to connect Logseq to either Github or local directory.)
 ## Here are some tips might be useful.
 #+BEGIN_TIP
 Click to edit any block.
@@ -240,7 +240,7 @@ title: How to take dummy notes?
         :page/show-journals "Show Journals"
         :page/show-name "Show page name"
         :page/hide-name "Hide page name"
-        :page/name "Page name"
+        :block/name "Page name"
         :page/last-modified "Last modified at"
         :page/new-title "What's your new page title?"
         :publishing/pages "Pages"
@@ -476,7 +476,7 @@ title: How to take dummy notes?
         :page/show-journals "Journal anzeigen"
         :page/show-name "Seitennamen anzeigen"
         :page/hide-name "Seitennamen verbergen"
-        :page/name "Seitenname"
+        :block/name "Seitenname"
         :page/last-modified "Zuletzt geändert am"
         :page/new-title "Wie lautet der neue Seitenname?"
         :publishing/pages "Seiten"
@@ -701,7 +701,7 @@ title: How to take dummy notes?
         :page/show-journals "Afficher le Journal"
         :page/show-name "Afficher le nom de la page"
         :page/hide-name "Cacher le nom de la page"
-        :page/name "Nom de la page"
+        :block/name "Nom de la page"
         :page/last-modified "Dernières modifications à"
         :page/new-title "Quel est le nouveau titre de la page ?"
         :publishing/pages "Pages"
@@ -967,7 +967,7 @@ title: How to take dummy notes?
            :page/show-journals "显示日志"
            :page/show-name "显示页面名"
            :page/hide-name "隐藏页面名"
-           :page/name "页面名称"
+           :block/name "页面名称"
            :page/last-modified "最后更改于"
            :page/new-title "请输入新页面的名字:"
            :publishing/pages "页面"
@@ -1238,7 +1238,7 @@ title: How to take dummy notes?
              :page/show-journals "顯示日志"
              :page/show-name "顯示頁面名"
              :page/hide-name "隱藏頁面名"
-             :page/name "頁面名稱："
+             :block/name "頁面名稱："
              :page/last-modified "最後更改於"
              :page/new-title "請輸入新頁面的名字:"
              :publishing/pages "頁面"
@@ -1488,7 +1488,7 @@ title: How to take dummy notes?
         :page/show-journals "Wys joernale"
         :page/show-name "Wys blad naam"
         :page/hide-name "Steek bladnaam weg"
-        :page/name "Page name"
+        :block/name "Page name"
         :page/last-modified "Laaste verander op"
         :page/new-title "Wat is die nuwe blad se titel?"
         :publishing/pages "Pages"

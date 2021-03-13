@@ -136,11 +136,11 @@ parent: child page 2
   (testing "Single page query"
     (are [x y] (= (q-count x) y)
       "[[page 1]]"
-      {:query '[[?b :block/path-ref-pages [:page/name "page 1"]]]
+      {:query '[[?b :block/path-ref-pages [:block/name "page 1"]]]
        :count 6}
 
       "[[page 2]]"
-      {:query '[[?b :block/path-ref-pages [:page/name "page 2"]]]
+      {:query '[[?b :block/path-ref-pages [:block/name "page 2"]]]
        :count 4}))
 
   (testing "Block properties query"
@@ -252,45 +252,45 @@ parent: child page 2
   (testing "all-page-tags queries"
     (are [x y] (= (q-count x) y)
       "(all-page-tags)"
-      {:query '[[?e :page/tags ?p]]
+      {:query '[[?e :block/tags ?p]]
        :count 3}))
 
   (testing "page-tags queries"
     (are [x y] (= (q-count x) y)
       "(page-tags [[page-tag-1]])"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1"} ?tag1)]]
        :count 1}
 
       "(page-tags page-tag-2)"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags page-tag-1 page-tag-2)"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags page-TAG-1 page-tag-2)"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags [page-tag-1 page-tag-2])"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}))
 
   (testing "page-property queries"
     (are [x y] (= (q-count x) y)
       "(page-property parent [[child page 1]])"
-      {:query '[[?p :page/properties ?prop]
+      {:query '[[?p :block/properties ?prop]
                 [(get ?prop :parent) ?v]
                 (or
                  [(= ?v "child page 1")]
@@ -298,7 +298,7 @@ parent: child page 2
        :count 2}
 
       "(page-property parent \"child page 1\")"
-      {:query '[[?p :page/properties ?prop]
+      {:query '[[?p :block/properties ?prop]
                 [(get ?prop :parent) ?v]
                 (or
                  [(= ?v "child page 1")]
@@ -306,7 +306,7 @@ parent: child page 2
        :count 2}
 
       "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-      {:query '([?p :page/properties ?prop]
+      {:query '([?p :block/properties ?prop]
                 [(get ?prop :parent) ?v]
                 (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])
                 (or [(= ?v "child page 2")] [(contains? ?v "child page 2")]))
@@ -314,11 +314,11 @@ parent: child page 2
 
       "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
       {:query '(or (and
-                    [?p :page/properties ?prop]
+                    [?p :block/properties ?prop]
                     [(get ?prop :parent) ?v]
                     (or [(= ?v "child page 1")] [(contains? ?v "child page 1")]))
                    (and
-                    [?p :page/properties ?prop]
+                    [?p :block/properties ?prop]
                     [(get ?prop :parent) ?v]
                     (or [(= ?v "child page 2")] [(contains? ?v "child page 2")])))
        :count 3}))
@@ -327,29 +327,29 @@ parent: child page 2
   (testing "AND queries"
     (are [x y] (= (q-count x) y)
       "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-ref-pages [:page/name "tag1"]]
-                [?b :block/path-ref-pages [:page/name "page 2"]])
+      {:query '([?b :block/path-ref-pages [:block/name "tag1"]]
+                [?b :block/path-ref-pages [:block/name "page 2"]])
        :count 1})
 
     (are [x y] (= (q-count x) y)
       "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-ref-pages [:page/name "tag1"]]
-                [?b :block/path-ref-pages [:page/name "page 2"]])
+      {:query '([?b :block/path-ref-pages [:block/name "tag1"]]
+                [?b :block/path-ref-pages [:block/name "page 2"]])
        :count 1}))
 
   (testing "OR queries"
     (are [x y] (= (q-count x) y)
       "(or [[tag1]] [[page 2]])"
       {:query '(or
-                (and [?b :block/path-ref-pages [:page/name "tag1"]])
-                (and [?b :block/path-ref-pages [:page/name "page 2"]]))
+                (and [?b :block/path-ref-pages [:block/name "tag1"]])
+                (and [?b :block/path-ref-pages [:block/name "page 2"]]))
        :count 4}))
 
   (testing "NOT queries"
     (are [x y] (= (q-count x) y)
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
-                (not [?b :block/path-ref-pages [:page/name "page 1"]]))
+                (not [?b :block/path-ref-pages [:block/name "page 1"]]))
        :count 8}))
 
   (testing "Between query"
@@ -375,15 +375,15 @@ parent: child page 2
       {:query '([?b :block/uuid]
                 [?b :block/marker ?marker]
                 [(contains? #{"DONE"} ?marker)]
-                (not [?b :block/path-ref-pages [:page/name "page 1"]]))
+                (not [?b :block/path-ref-pages [:block/name "page 1"]]))
        :count 0})
 
     (are [x y] (= (q-count x) y)
       "(and (todo now later) (or [[page 1]] [[page 2]]))"
       {:query '([?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER"} ?marker)]
-                (or (and [?b :block/path-ref-pages [:page/name "page 1"]])
-                    (and [?b :block/path-ref-pages [:page/name "page 2"]])))
+                (or (and [?b :block/path-ref-pages [:block/name "page 1"]])
+                    (and [?b :block/path-ref-pages [:block/name "page 2"]])))
        :count 3})
 
     (are [x y] (= (q-count x) y)
@@ -393,8 +393,8 @@ parent: child page 2
                  [?b :block/marker ?marker]
                  [(contains? #{"NOW" "LATER"} ?marker)]
                  (or
-                  (and [?b :block/path-ref-pages [:page/name "page 1"]])
-                  (and [?b :block/path-ref-pages [:page/name "page 2"]]))))
+                  (and [?b :block/path-ref-pages [:block/name "page 1"]])
+                  (and [?b :block/path-ref-pages [:block/name "page 2"]]))))
        :count 11})
 
     ;; FIXME: not working
@@ -412,8 +412,8 @@ parent: child page 2
                 [?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
                 (or
-                 (and [?b :block/path-ref-pages [:page/name "page 1"]])
-                 (and (not [?b :block/path-ref-pages [:page/name "page 1"]]))))
+                 (and [?b :block/path-ref-pages [:block/name "page 1"]])
+                 (and (not [?b :block/path-ref-pages [:block/name "page 1"]]))))
        :count 5}))
 
   (testing "sort-by (created_at defaults to desc)"

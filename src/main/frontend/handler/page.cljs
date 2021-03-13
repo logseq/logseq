@@ -88,16 +88,16 @@
 
 (defn page-add-properties!
   [page-name properties]
-  (let [page (db/entity [:page/name page-name])
-        page-title (:or (:page/original-name page) (:page/name page))
-        file (:page/file page)]
+  (let [page (db/entity [:block/name page-name])
+        page-title (:or (:block/original-name page) (:block/name page))
+        file (:block/file page)]
     (if file
       (let [page-format (db/get-page-format page-name)
             properties-content (db/get-page-properties-content page-name)
             properties-content (if properties-content
                                  (string/trim properties-content)
                                  (config/properties-wrapper page-format))
-            file (db/entity (:db/id (:page/file page)))
+            file (db/entity (:db/id (:block/file page)))
             file-path (:file/path file)
             file-content (db/get-file file-path)
             after-content (subs file-content (inc (count properties-content)))
@@ -114,8 +114,8 @@
 (defn page-remove-property!
   [page-name k]
   (when-let [properties-content (string/trim (db/get-page-properties-content page-name))]
-    (let [page (db/entity [:page/name page-name])
-          file (db/entity (:db/id (:page/file page)))
+    (let [page (db/entity [:block/name page-name])
+          file (db/entity (:db/id (:block/file page)))
           file-path (:file/path file)
           file-content (db/get-file file-path)
           after-content (subs file-content (count properties-content))
@@ -290,7 +290,7 @@
                (p/catch (fn [err]
                           (js/console.error "error: " err))))))
 
-          (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
+          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])
 
           (ok-handler))))))
 
@@ -338,16 +338,16 @@
   (when (and old-name new-name
              (not= (string/lower-case old-name) (string/lower-case new-name)))
     (when-let [repo (state/get-current-repo)]
-      (if (db/entity [:page/name (string/lower-case new-name)])
+      (if (db/entity [:block/name (string/lower-case new-name)])
         (notification/show! "Page already exists!" :error)
-        (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
-          (let [old-original-name (:page/original-name page)
-                file (:page/file page)
-                journal? (:page/journal? page)]
+        (when-let [page (db/entity [:block/name (string/lower-case old-name)])]
+          (let [old-original-name (:block/original-name page)
+                file (:block/file page)
+                journal? (:block/journal? page)]
             (d/transact! (db/get-conn repo false)
                          [{:db/id (:db/id page)
-                           :page/name (string/lower-case new-name)
-                           :page/original-name new-name}])
+                           :block/name (string/lower-case new-name)
+                           :block/original-name new-name}])
 
             (when (and file (not journal?))
               (rename-file! file new-name
@@ -437,7 +437,7 @@
                                    :file/path)]
       (if (and edit-block-file-path
                (state/org-mode-file-link? (state/get-current-repo)))
-        (if-let [ref-file-path (:file/path (:page/file (db/entity [:page/name page-name])))]
+        (if-let [ref-file-path (:file/path (:block/file (db/entity [:block/name page-name])))]
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
                        page)
@@ -534,7 +534,7 @@
 (defn page-exists?
   [page-name]
   (when page-name
-    (db/entity [:page/name page-name])))
+    (db/entity [:block/name page-name])))
 
 ;; Editor
 (defn page-not-exists-handler

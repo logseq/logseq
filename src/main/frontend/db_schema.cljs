@@ -2,19 +2,19 @@
 
 (defonce version "0.0.1")
 
+;; TODO: remove files db schema
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
    :file/content {}
    :file/size {}
    :file/handle {}})
 
-;; A page can corresponds to multiple files (same title),
-;; a month journal file can have multiple pages,
-;; also, each block can be treated as a page too.
+;; A page is a special block, a page can corresponds to multiple files with the same ":page/name".
 (def schema
   {:schema/version  {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
+
    :db/encrypted?    {}
    :db/encryption-keys {}
 
@@ -25,38 +25,15 @@
 
    ;; Git
    :repo/url {:db/unique :db.unique/identity}
-   :repo/cloned? {}
-   :git/status {}
-   :git/last-pulled-at {}
-   ;; last error, better we should record all the errors
-   :git/error {}
-
-   ;; file
-   :file/path {:db/unique :db.unique/identity}
-   :file/created-at {}
-   :file/last-modified-at {}
-
-   ;; toggle to comment this line to force to clone
-   :release/re-clone? {}
 
    :recent/pages {}
 
-   :page/name {:db/unique :db.unique/identity}
-   :page/original-name {:db/unique :db.unique/identity}
-   :page/file {:db/valueType :db.type/ref}
-   :page/properties {}
-   :page/alias {:db/valueType :db.type/ref
-                :db/cardinality :db.cardinality/many}
-   :page/tags {:db/valueType :db.type/ref
-               :db/cardinality :db.cardinality/many}
-   :page/journal? {}
-   :page/journal-day {}
-
-   ;; block
    :block/uuid {:db/unique :db.unique/identity}
-   :block/file {:db/valueType :db.type/ref}
    :block/format {}
+
+   ;; mldoc parsed ast
    :block/title {}
+
    ;; belongs to which page
    :block/page {:db/valueType :db.type/ref
                 :db/index true}
@@ -67,25 +44,25 @@
    :block/path-ref-pages {:db/valueType   :db.type/ref
                           :db/cardinality :db.cardinality/many}
 
-   ;; Referenced pages
-   ;; Notice: it's only for org mode, :tag1:tag2:
-   ;; Markdown tags will be only stored in :block/ref-pages
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
+
+   :block/alias {:db/valueType :db.type/ref
+                 :db/cardinality :db.cardinality/many}
 
    ;; referenced blocks
    :block/ref-blocks {:db/valueType :db.type/ref
                       :db/cardinality :db.cardinality/many}
    :block/embed-blocks {:db/valueType :db.type/ref
                         :db/cardinality :db.cardinality/many}
+
    :block/embed-pages {:db/valueType :db.type/ref
                        :db/cardinality :db.cardinality/many}
    :block/content {}
-   :block/anchor {}
    :block/marker {}
    :block/priority {}
    :block/level {}
-   ;; :start-pos :end-pos
+   ;; TODO: remove :block/meta, :start-pos :end-pos
    :block/meta {}
    :block/properties {}
    :block/body {}
@@ -98,7 +75,34 @@
    :block/scheduled-ast {}
    :block/deadline {}
    :block/deadline-ast {}
-   :block/repeated? {}})
+   :block/repeated? {}
+
+   :block/created-at {}
+   :block/updated-at {}
+
+   ;; page additional attributes
+   :block/name {:db/unique :db.unique/identity}
+   :block/original-name {:db/unique :db.unique/identity}
+   :block/journal? {}
+   :block/journal-day {}
+
+   :block/file {:db/valueType :db.type/ref}
+
+   ;; file
+   :file/path {:db/unique :db.unique/identity}
+   :file/created-at {}
+   :file/last-modified-at {}
+   :file/size {}
+   :file/handle {}
+
+   ;; git
+   :repo/cloned? {}
+   :git/status {}
+   :git/last-pulled-at {}
+   ;; last error, better we should record all the errors
+   :git/error {}
+
+   })
 
 (def outline-schema
   {:schema/version {}

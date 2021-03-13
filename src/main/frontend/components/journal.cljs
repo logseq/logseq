@@ -77,9 +77,9 @@
                     (not (config/local-db? repo))
                     (not config/publishing?)
                     today?)
-        page-entity (db/pull [:page/name (string/lower-case title)])
-        data-page-tags (when (seq (:page/tags page-entity))
-                         (let [page-names (model/get-page-names-by-ids (map :db/id (:page/tags page)))]
+        page-entity (db/pull [:block/name (string/lower-case title)])
+        data-page-tags (when (seq (:block/tags page-entity))
+                         (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]
     [:div.flex-1.journal.page (cond->
                                {:class (if intro? "intro" "")}

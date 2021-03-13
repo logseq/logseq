@@ -65,9 +65,9 @@
                       (if (empty? raw-page-blocks)
                         (let [content (db/get-file repo file-path)]
                           {:block/page {:db/id (:db/id page)}
-                           :block/file {:db/id (:db/id (:page/file page))}
+                           :block/file {:db/id (:db/id (:block/file page))}
                            :block/meta
-                           (let [file-id (:db/id (:page/file page))]
+                           (let [file-id (:db/id (:block/file page))]
                              {:start-pos (utf8/length (utf8/encode content))
                               :end-pos nil})}))
                       {:journal? journal?
@@ -99,7 +99,7 @@
        (str encoded-page-name "-hiccup"))]))
 
 (defn contents-page
-  [{:page/keys [name original-name file] :as contents}]
+  [{:block/keys [name original-name file] :as contents}]
   (when-let [repo (state/get-current-repo)]
     (let [format (db/get-page-format name)
           file-path (:file/path file)]
@@ -244,7 +244,7 @@
         block? (util/uuid-string? page-name)
         block-id (and block? (uuid page-name))
         format (let [page (if block-id
-                            (:page/name (:block/page (db/entity [:block/uuid block-id])))
+                            (:block/name (:block/page (db/entity [:block/uuid block-id])))
                             page-name)]
                  (db/get-page-format page))
         journal? (db/journal-page? page-name)
@@ -270,15 +270,15 @@
               page (if block?
                      (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                           (db/entity repo))
-                     (db/entity repo [:page/name page-name]))
+                     (db/entity repo [:block/name page-name]))
               page (if page page (do
-                                   (db/transact! repo [{:page/name page-name
-                                                        :page/original-name path-page-name}])
-                                   (db/entity repo [:page/name page-name])))
-              properties (:page/properties page)
-              page-name (:page/name page)
-              page-original-name (:page/original-name page)
-              file (:page/file page)
+                                   (db/transact! repo [{:block/name page-name
+                                                        :block/original-name path-page-name}])
+                                   (db/entity repo [:block/name page-name])))
+              properties (:block/properties page)
+              page-name (:block/name page)
+              page-original-name (:block/original-name page)
+              file (:block/file page)
               file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
               today? (and
                       journal?
@@ -286,8 +286,8 @@
               developer-mode? (state/sub [:ui/developer-mode?])
               published? (= "true" (:published properties))
               public? (= "true" (:public properties))]
-          [:div.flex-1.page.relative (if (seq (:page/tags page))
-                                       (let [page-names (model/get-page-names-by-ids (map :db/id (:page/tags page)))]
+          [:div.flex-1.page.relative (if (seq (:block/tags page))
+                                       (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                                          {:data-page-tags (text/build-data-value page-names)})
                                        {})
            [:div.relative
@@ -387,7 +387,7 @@
               [:a {:on-click (fn [e]
                                (.preventDefault e)
                                (when (gobj/get e "shiftKey")
-                                 (when-let [page (db/pull repo '[*] [:page/name page-name])]
+                                 (when-let [page (db/pull repo '[*] [:block/name page-name])]
                                    (state/sidebar-add-block!
                                     repo
                                     (:db/id page)
@@ -512,7 +512,7 @@
            [:table.table-auto
             [:thead
              [:tr
-              [:th (t :page/name)]
+              [:th (t :block/name)]
               [:th (t :file/last-modified-at)]]]
             [:tbody
              (for [page pages]
@@ -520,7 +520,7 @@
                  [:tr {:key encoded-page}
                   [:td [:a {:on-click (fn [e]
                                         (let [repo (state/get-current-repo)
-                                              page (db/pull repo '[*] [:page/name (string/lower-case page)])]
+                                              page (db/pull repo '[*] [:block/name (string/lower-case page)])]
                                           (when (gobj/get e "shiftKey")
                                             (state/sidebar-add-block!
                                              repo
