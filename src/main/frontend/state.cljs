@@ -652,8 +652,8 @@
 (defn sidebar-remove-block!
   [idx]
   (update-state! :sidebar/blocks (fn [blocks]
-                                   (if (= (str idx) "contents")
-                                     (remove #(= (second %) "contents") blocks)
+                                   (if (string? idx)
+                                     (remove #(= (second %) idx) blocks)
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))

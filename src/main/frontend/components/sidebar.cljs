@@ -292,7 +292,7 @@
        ;; ?
        191 (fn [state e]
              (when-not (util/input? (gobj/get e "target"))
-               (state/sidebar-add-block! (state/get-current-repo) "help" :help nil)))})))
+               (ui-handler/toggle-help!)))})))
   {:did-mount (fn [state]
                 (keyboards/bind-shortcuts!)
                 state)}
